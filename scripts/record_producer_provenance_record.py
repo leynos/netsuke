@@ -129,7 +129,7 @@ def record(
     """
     mapping = {
         release_producer_provenance.SCHEMA_MEMBER: (
-            release_producer_provenance.SCHEMA_VERSION
+            release_producer_provenance_decode.SCHEMA_VERSION
         ),
         release_producer_provenance.COMMIT_MEMBER: identity.commit,
         release_producer_provenance.RUN_ID_MEMBER: identity.run_id,

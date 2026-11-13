@@ -13,16 +13,18 @@ kept, not how it arrives -- it is never derived from the downloaded bytes it
 describes, and a tree that reaches publication without it is refused rather
 than trusted.
 
-This module owns the claim a record makes: which schema versions are
-understood, what a commit and a run identity look like, which platforms can be
-packaged, and that the record names at least one asset. Reading the *document*
--- that it is an object, that it carries its members, that each member is text
--- is :mod:`release_producer_provenance_decode`'s, so a value arriving here is
+This module owns the claim a record makes: what a commit and a run identity
+look like, which platforms can be packaged, and that the record names at least
+one asset. Reading the *document* -- that it is an object, that it carries its
+members, that each member is the type the format defines, and that its schema
+version is one this release understands -- is
+:mod:`release_producer_provenance_decode`'s, so a value arriving here is
 already the right type and every refusal below is about the claim rather than
-about the wire. The asset map it carries is :mod:`release_producer_assets`'s,
-cross-record checks belong to :mod:`release_producer_provenance_checks`, the
-refusal vocabulary to :mod:`release_producer_provenance_errors`, and JSON,
-hashing, and tree scanning to the adapters.
+about the wire. The asset map it carries is
+:mod:`release_producer_assets`'s, cross-record checks belong to
+:mod:`release_producer_provenance_checks`, the refusal vocabulary to
+:mod:`release_producer_provenance_errors`, and JSON, hashing, and tree
+scanning to the adapters.
 
 The record binds bytes to a claim *by the producer*: evidence the job running
 under a given commit produced these digests, not proof the commit was honest.
@@ -37,9 +39,7 @@ import release_producer_assets
 from release_producer_provenance_errors import (
     MalformedCommitError,
     MalformedRunIdentityError,
-    SchemaNotIntegerError,
     UnknownPlatformError,
-    UnknownSchemaError,
 )
 
 __all__ = [
@@ -49,21 +49,15 @@ __all__ = [
     "RUN_ATTEMPT_MEMBER",
     "RUN_ID_MEMBER",
     "SCHEMA_MEMBER",
-    "SCHEMA_VERSION",
     "TARGET_MEMBER",
     "ProducerProvenance",
     "RecordedMembers",
     "validated_provenance",
 ]
 
-#: The record schema this module understands. A producer writing a newer schema
-#: is refused rather than partially read.
-SCHEMA_VERSION = 1
-
-#: The record's member names. They are the wire's vocabulary rather than the
-#: claim's, but the writer composes a document from them and the reader is
-#: handed their values, so the names live beside the version that defines the
-#: document they belong to.
+#: The record's member names. The writer composes a document from them and the
+#: decoder reads it back, so they live here rather than in either: one
+#: spelling, shared by the two halves that would otherwise drift apart.
 SCHEMA_MEMBER = "schema"
 COMMIT_MEMBER = "commit"
 RUN_ID_MEMBER = "run_id"
@@ -85,10 +79,13 @@ _RUN_IDENTITY = re.compile(r"\A[1-9][0-9]*\Z")
 class ProducerProvenance:
     """One producer's claim about the artefacts it built.
 
+    The record's schema version is not a member: it describes the *document*
+    the claim arrived in, and the decoder has already refused a version this
+    reader does not understand by the time a claim exists. Carrying it here
+    would invite a caller to compare it against something.
+
     Attributes
     ----------
-    schema
-        Record schema version, equal to :data:`SCHEMA_VERSION`.
     commit
         The full lowercase commit the producer checked out and built.
     run_id
@@ -104,7 +101,6 @@ class ProducerProvenance:
         Published name mapped to its lowercase SHA-256 digest.
     """
 
-    schema: int
     commit: str
     run_id: str
     run_attempt: str
@@ -123,8 +119,6 @@ class RecordedMembers:
 
     Attributes
     ----------
-    schema
-        The record's declared schema version, still unjudged.
     commit
         The commit the producer claims to have built.
     run_id
@@ -139,7 +133,6 @@ class RecordedMembers:
         The decoded asset map, whose shape the policy decides.
     """
 
-    schema: int
     commit: str
     run_id: str
     run_attempt: str
@@ -172,18 +165,16 @@ def validated_provenance(members: RecordedMembers) -> ProducerProvenance:
 
     The members arrive already typed by
     :func:`release_producer_provenance_decode.decode_provenance`, so every
-    refusal here is about the *claim*: a schema nobody writes, a commit that
-    is not hexadecimal, a platform with no package format. A caller holding a
-    raw document decodes it first rather than reaching this function.
+    refusal here is about the *claim*: a commit that is not hexadecimal, a
+    run identity that is not a counter, a platform with no package format.
+    A caller holding a raw document decodes it first rather than reaching
+    this function.
 
     Those refusals come from the private helpers below, so none appears in a
     ``Raises`` section -- Ruff's DOC501 reserves that section for exceptions a
     function raises itself -- but each is listed here so the contract is
     stated in one place:
 
-    - :class:`SchemaNotIntegerError`: the schema is not an integer.
-    - :class:`UnknownSchemaError`: the schema is not a version this reader
-      understands.
     - :class:`MalformedCommitError`: the commit is not a full lowercase
       hexadecimal commit.
     - :class:`MalformedRunIdentityError`: a run identity is not
@@ -196,14 +187,13 @@ def validated_provenance(members: RecordedMembers) -> ProducerProvenance:
     Examples
     --------
     >>> validated_provenance(RecordedMembers(
-    ...     schema=1, commit="a" * 40, run_id="7", run_attempt="1",
+    ...     commit="a" * 40, run_id="7", run_attempt="1",
     ...     target="linux-x86_64", platform="linux",
     ...     assets={"netsuke.deb": "b" * 64},
     ... )).target
     'linux-x86_64'
     """
     return ProducerProvenance(
-        schema=_schema_version(members.schema),
         commit=_commit(members.commit),
         run_id=_required_run_identity(members.run_id, RUN_ID_MEMBER),
         run_attempt=_required_run_identity(members.run_attempt, RUN_ATTEMPT_MEMBER),
@@ -213,33 +203,6 @@ def validated_provenance(members: RecordedMembers) -> ProducerProvenance:
             members.assets, target=members.target
         ),
     )
-
-
-def _schema_version(schema: int) -> int:
-    """Return the schema version, or refuse one this reader does not know.
-
-    Returns
-    -------
-    int
-        The validated schema version.
-
-    Raises
-    ------
-    SchemaNotIntegerError
-        If the schema is not an integer.
-    UnknownSchemaError
-        If the schema is not the version this reader understands.
-
-    Examples
-    --------
-    >>> _schema_version(1)
-    1
-    """
-    if not isinstance(schema, int) or isinstance(schema, bool):
-        raise SchemaNotIntegerError(schema)
-    if schema != SCHEMA_VERSION:
-        raise UnknownSchemaError(schema, SCHEMA_VERSION)
-    return schema
 
 
 def _commit(commit: str) -> str:

@@ -102,7 +102,7 @@ def require_target_claims(
     --------
     >>> from release_producer_provenance import ProducerProvenance
     >>> provenance = ProducerProvenance(
-    ...     schema=1, commit="a" * 40, run_id="7", run_attempt="1",
+    ...     commit="a" * 40, run_id="7", run_attempt="1",
     ...     target="linux-x86_64", platform="linux",
     ...     assets={"pkg-gnu.tar.gz": "b" * 64, "pkg-gnu.tar.gz.sha256": "c" * 64,
     ...             "pkg.deb": "d" * 64, "pkg.rpm": "e" * 64},

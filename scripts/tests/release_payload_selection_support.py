@@ -64,7 +64,6 @@ def record(
         A record for the candidate and run the cases declare.
     """
     return ProducerProvenance(
-        schema=1,
         commit=CANDIDATE,
         run_id=RUN_ID,
         run_attempt="1",
@@ -106,7 +105,6 @@ def x86_record(**overrides: object) -> ProducerProvenance:
     vary two and read the wrong refusal.
     """
     fields: dict[str, object] = {
-        "schema": 1,
         "commit": CANDIDATE,
         "run_id": RUN_ID,
         "run_attempt": "1",

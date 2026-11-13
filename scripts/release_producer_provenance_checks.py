@@ -73,7 +73,7 @@ def require_candidate(
     Examples
     --------
     >>> provenance = ProducerProvenance(
-    ...     schema=1, commit="a" * 40, run_id="7", run_attempt="1",
+    ...     commit="a" * 40, run_id="7", run_attempt="1",
     ...     target="linux-x86_64", platform="linux", assets={"a.deb": "b" * 64},
     ... )
     >>> require_candidate(provenance, commit="a" * 40, run_id="7")
@@ -114,7 +114,7 @@ def require_target_coverage(
     Examples
     --------
     >>> provenance = ProducerProvenance(
-    ...     schema=1, commit="a" * 40, run_id="7", run_attempt="1",
+    ...     commit="a" * 40, run_id="7", run_attempt="1",
     ...     target="linux-x86_64", platform="linux", assets={"a.deb": "b" * 64},
     ... )
     >>> require_target_coverage([provenance], expected_targets=["linux-x86_64"])
@@ -159,7 +159,7 @@ def declared_names(
     Examples
     --------
     >>> provenance = ProducerProvenance(
-    ...     schema=1, commit="a" * 40, run_id="7", run_attempt="1",
+    ...     commit="a" * 40, run_id="7", run_attempt="1",
     ...     target="linux-x86_64", platform="linux",
     ...     assets={"b.deb": "b" * 64, "a.rpm": "c" * 64},
     ... )
@@ -199,7 +199,7 @@ def trusted_digests(
     Examples
     --------
     >>> provenance = ProducerProvenance(
-    ...     schema=1, commit="a" * 40, run_id="7", run_attempt="1",
+    ...     commit="a" * 40, run_id="7", run_attempt="1",
     ...     target="linux-x86_64", platform="linux", assets={"a.deb": "b" * 64},
     ... )
     >>> trusted_digests([provenance])

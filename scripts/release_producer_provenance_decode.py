@@ -1,18 +1,19 @@
 """Decode a producer record's wire shape into a validated provenance claim.
 
 A producer record is a JSON document written by one job and read by another, so
-between the bytes and the value publication decides over there sit three
+between the bytes and the value publication decides over there sit four
 questions that are about the *document* rather than about the release: is this
-a string-keyed object, does it carry every member, and is each member a string
-the domain can be handed. They are answered here.
+a string-keyed object, does it carry every member, is its schema version one
+this release understands, and is each member the type the format defines. They
+are answered here.
 
-:mod:`release_producer_provenance` owns the claim itself -- which schema
-versions are understood, what a commit looks like, which platforms can be
-packaged, and which asset names and digests a record may claim. This module
-reads the document and passes its members on; it never decides whether a value
-is *acceptable*, only whether it is *present and of the right text type*. That
-split is what makes the refusals legible: a malformed document and a document
-making an unacceptable claim are different diagnoses with different remedies.
+:mod:`release_producer_provenance` owns the claim itself -- what a commit
+looks like, which platforms can be packaged, and which asset names and digests
+a record may claim. This module reads the document and passes its members on;
+it never decides whether a value is *acceptable*, only whether it is *present,
+of the right type, and written under a schema this reader knows*. That split is
+what makes the refusals legible: a malformed document and a document making an
+unacceptable claim are different diagnoses with different remedies.
 
 Nothing here reads a file or parses JSON. The decoded object arrives from
 :mod:`release_payload_tree`, which owns the tree scan, and the refusal
@@ -40,12 +41,18 @@ from release_producer_provenance_errors import (
     MissingMemberError,
     NonMappingRecordError,
     SchemaNotIntegerError,
+    UnknownSchemaError,
 )
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
-__all__ = ["decode_provenance"]
+__all__ = ["SCHEMA_VERSION", "decode_provenance"]
+
+#: The record schema this release understands. A producer writing a newer
+#: schema is refused rather than partially read, so the version lives with the
+#: reader that decides that, not with the claim.
+SCHEMA_VERSION = 1
 
 #: Every member a producer record must carry, in the order the writer emits
 #: them. Restated from the policy module's vocabulary so a reader sees the
@@ -84,16 +91,20 @@ def decode_provenance(record: object) -> release_producer_provenance.ProducerPro
     - :class:`NonMappingRecordError`: the document is not a string-keyed
       object.
     - :class:`MissingMemberError`: a required member is absent.
-    - :class:`MalformedRecordError`: a required member is not a non-empty
-      string.
+    - :class:`SchemaNotIntegerError`: the schema is not an integer.
+    - :class:`UnknownSchemaError`: the schema is a version this release does
+      not understand.
+    - :class:`MalformedRecordError`: a text member is not a non-empty string,
+      or the asset member is not an object.
     - :class:`release_producer_provenance_errors.ProvenanceError` and its
       subclasses: a member is present and textual but the claim it makes is
       unacceptable. Those come from the policy module, which is where the
       *claim* rather than the wire is judged.
 
-    The asset map is passed on undecoded. It is a nested object whose *keys*
-    are data rather than members, so judging it is the policy module's
-    business, and doing it here would put half of one validation in each file.
+    The asset map's *container* is checked here -- it must be an object --
+    but its entries are passed on undecoded. Each key is data rather than a
+    member, so judging a name and a digest is the policy module's business,
+    and doing it here would put half of one validation in each file.
 
     Examples
     --------
@@ -107,15 +118,15 @@ def decode_provenance(record: object) -> release_producer_provenance.ProducerPro
     """
     mapping = _string_keyed_mapping(record)
     _require_members(mapping)
+    _require_understood_schema(mapping)
     return release_producer_provenance.validated_provenance(
         release_producer_provenance.RecordedMembers(
-            schema=_required_integer(mapping, SCHEMA_MEMBER),
             commit=_required_text(mapping, COMMIT_MEMBER),
             run_id=_required_text(mapping, RUN_ID_MEMBER),
             run_attempt=_required_text(mapping, RUN_ATTEMPT_MEMBER),
             target=_required_text(mapping, TARGET_MEMBER),
             platform=_required_text(mapping, PLATFORM_MEMBER),
-            assets=mapping[ASSETS_MEMBER],
+            assets=_required_object(mapping, ASSETS_MEMBER),
         )
     )
 
@@ -162,39 +173,47 @@ def _require_members(record: cabc.Mapping[str, object]) -> None:
         raise MissingMemberError(missing)
 
 
-def _required_integer(record: cabc.Mapping[str, object], member: str) -> int:
-    """Return an integer member, or refuse the document's own type.
-
-    Returns
-    -------
-    int
-        The member's value.
+def _require_understood_schema(record: cabc.Mapping[str, object]) -> None:
+    """Refuse a record whose schema version this release does not understand.
 
     Raises
     ------
     SchemaNotIntegerError
-        If the member is not an integer, or is a boolean.
+        If the schema is not an integer, or is a boolean.
+    UnknownSchemaError
+        If the schema is an integer but not the version this reader knows.
 
     Notes
     -----
+    The version is judged here rather than carried into the claim because it
+    describes the *document*: a claim has no schema, only values. Every caller
+    that reads a record has to answer this question before any member means
+    anything, so answering it once, at the decode step, is what keeps a newer
+    producer's record from being partially read.
+
     ``True`` is an ``int`` in Python, so it is excluded explicitly: a record
     written by a template that substituted ``true`` for the version is not a
     record this reader may read as version one.
 
     Examples
     --------
-    >>> _required_integer({"schema": 1}, "schema")
-    1
+    >>> _require_understood_schema({"schema": 1})
     >>> try:
-    ...     _required_integer({"schema": True}, "schema")
+    ...     _require_understood_schema({"schema": True})
     ... except SchemaNotIntegerError:
     ...     print("refused")
     refused
+    >>> try:
+    ...     _require_understood_schema({"schema": 2})
+    ... except UnknownSchemaError:
+    ...     print("unknown")
+    unknown
     """
-    value = record[member]
+    value = record[SCHEMA_MEMBER]
     if not isinstance(value, int) or isinstance(value, bool):
         raise SchemaNotIntegerError(value)
-    return value
+    if value != SCHEMA_VERSION:
+        raise UnknownSchemaError(value, SCHEMA_VERSION)
 
 
 def _required_text(record: cabc.Mapping[str, object], member: str) -> str:
@@ -230,5 +249,44 @@ def _required_text(record: cabc.Mapping[str, object], member: str) -> str:
     value = record[member]
     if not isinstance(value, str) or not value:
         msg = f"the producer record {member} must be a non-empty string, got {value!r}"
+        raise MalformedRecordError(msg)
+    return value
+
+
+def _required_object(record: cabc.Mapping[str, object], member: str) -> object:
+    """Return a member the format defines as an object, or refuse the document.
+
+    Returns
+    -------
+    object
+        The member's value, known to be a mapping but not yet judged.
+
+    Raises
+    ------
+    MalformedRecordError
+        If the member is not a mapping.
+
+    Notes
+    -----
+    This is a *shape* check, not a claim check: the asset map's keys and values
+    are data rather than members, so whether each names a publishable file or
+    carries a hexadecimal digest is
+    :func:`release_producer_assets.validated_assets`'s. Refusing the container
+    here is what lets that function be typed over a mapping instead of
+    testing its argument's type in a policy module.
+
+    Examples
+    --------
+    >>> _required_object({"assets": {"a.deb": "b" * 64}}, "assets")
+    {'a.deb': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'}
+    >>> try:
+    ...     _required_object({"assets": ["a.deb"]}, "assets")
+    ... except MalformedRecordError as refusal:
+    ...     print("mapping" in str(refusal))
+    True
+    """
+    value = record[member]
+    if not isinstance(value, dict):
+        msg = f"the producer record {member} must be a mapping, got {value!r}"
         raise MalformedRecordError(msg)
     return value

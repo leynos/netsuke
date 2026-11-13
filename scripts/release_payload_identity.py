@@ -126,7 +126,7 @@ def _require_bound(
     >>> _require_bound([], ReleaseIdentity("a" * 40, "7", {}))
     >>> from release_producer_provenance import ProducerProvenance
     >>> stale = ProducerProvenance(
-    ...     schema=1, commit="b" * 40, run_id="7", run_attempt="1",
+    ...     commit="b" * 40, run_id="7", run_attempt="1",
     ...     target="t", platform="linux", assets={"a.deb": "c" * 64},
     ... )
     >>> try:
@@ -163,7 +163,7 @@ def _require_platforms(
     --------
     >>> from release_producer_provenance import ProducerProvenance
     >>> wrong = ProducerProvenance(
-    ...     schema=1, commit="a" * 40, run_id="7", run_attempt="1",
+    ...     commit="a" * 40, run_id="7", run_attempt="1",
     ...     target="linux-x86_64", platform="macos", assets={"a.deb": "b" * 64},
     ... )
     >>> try:

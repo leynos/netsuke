@@ -18,22 +18,29 @@ a value that is not a string cannot be quoted as one.
 
 Nothing here reads a file, parses JSON, or hashes bytes: the values arrive
 already decoded, and the refusals live in
-:mod:`release_producer_provenance_errors`.
+:mod:`release_producer_provenance_errors`. Nor does anything here test the
+map's *type*: that the record's ``assets`` member is an object rather than a
+list or a string is a wire-shape question, and
+:func:`release_producer_provenance_decode.decode_provenance` answers it before
+this module is reached.
 
-Run via :func:`release_producer_provenance.validate_provenance`; behavioural
+Run via :func:`release_producer_provenance.validated_provenance`; behavioural
 coverage lives in ``scripts/tests/test_release_producer_provenance.py``.
 """
 
 import re
+import typing as typ
 
 import release_asset_names
 import release_digest
 from release_producer_provenance_errors import (
     EmptyAssetsError,
     InvalidDigestError,
-    MalformedRecordError,
     UnsafeAssetNameError,
 )
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 __all__ = ["validated_assets"]
 
@@ -42,7 +49,9 @@ __all__ = ["validated_assets"]
 _DIGEST = re.compile(rf"\A[0-9a-f]{{{release_digest.DIGEST_HEX_LENGTH}}}\Z")
 
 
-def validated_assets(declared: object, *, target: str) -> dict[str, str]:
+def validated_assets(
+    declared: cabc.Mapping[str, object], *, target: str
+) -> dict[str, str]:
     """Return a validated name-to-digest mapping for one producer.
 
     Returns
@@ -52,13 +61,17 @@ def validated_assets(declared: object, *, target: str) -> dict[str, str]:
 
     Raises
     ------
-    MalformedRecordError
-        If ``declared`` is not a mapping.
     EmptyAssetsError
-        If it holds no entry.
+        If the mapping holds no entry.
 
     Notes
     -----
+    The mapping's *shape* -- that the record's ``assets`` member is an object
+    rather than a list or a string -- is :func:`decode_provenance`'s, so this
+    function is never handed a value of another type and does not test for
+    one. Every refusal here is about a claim: a name that is not a bare file
+    name, a digest that is not hexadecimal, or an empty set.
+
     ``UnsafeAssetNameError`` and ``InvalidDigestError`` surface from the two
     helpers below.
 
@@ -67,12 +80,6 @@ def validated_assets(declared: object, *, target: str) -> dict[str, str]:
     >>> validated_assets({"a.deb": "b" * 64}, target="linux-x86_64")
     {'a.deb': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'}
     """
-    if not isinstance(declared, dict):
-        msg = (
-            f"the producer record assets must be a mapping, got "
-            f"{type(declared).__name__}"
-        )
-        raise MalformedRecordError(msg)
     if not declared:
         raise EmptyAssetsError(target)
     return {

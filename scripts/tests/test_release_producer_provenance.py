@@ -2,13 +2,14 @@
 
 A producer record is the only evidence that the bytes a job uploaded were the
 bytes that job built. These tests pin the *claim* a record may make and the
-comparisons publication performs before trusting it: which schema versions are
-read, what a commit and a run identity look like, which platforms can be
-packaged, and which asset names and digests a producer may declare.
+comparisons publication performs before trusting it: what a commit and a run
+identity look like, which platforms can be packaged, and which asset names and
+digests a producer may declare.
 
 Reading the document itself -- that it is an object, that it carries its
-members, that each member is text -- is a different boundary with different
-diagnoses, and is covered by
+members, that its schema version is understood, and that each member is the
+type the format defines -- is a different boundary with different diagnoses,
+and is covered by
 ``scripts/tests/test_release_producer_provenance_decode.py``. Keeping the two
 apart is what lets a failure here name a bad *claim* rather than a bad file.
 
@@ -38,13 +39,10 @@ from release_producer_provenance_errors import (
     ForeignRunError,
     InvalidDigestError,
     MalformedCommitError,
-    MalformedRecordError,
     MalformedRunIdentityError,
     MissingTargetError,
-    SchemaNotIntegerError,
     StaleCandidateError,
     UnknownPlatformError,
-    UnknownSchemaError,
     UnsafeAssetNameError,
 )
 
@@ -67,7 +65,6 @@ def _members(**overrides: object) -> RecordedMembers:
         The decoded members, with the requested ones replaced.
     """
     members: dict[str, object] = {
-        "schema": 1,
         "commit": COMMIT,
         "run_id": "1234",
         "run_attempt": "1",
@@ -86,7 +83,6 @@ def _provenance(
 ) -> ProducerProvenance:
     """Return a validated producer claim for the coverage helpers."""
     return ProducerProvenance(
-        schema=1,
         commit=COMMIT,
         run_id="1234",
         run_attempt="1",
@@ -108,26 +104,6 @@ def test_a_complete_record_is_projected_onto_the_claim() -> None:
     assert claim.assets == {"netsuke_1_amd64.deb": DIGEST}, (
         "the claim must carry the digests verbatim"
     )
-
-
-@pytest.mark.parametrize("schema", [True, 1.0], ids=repr)
-def test_a_schema_of_the_wrong_type_is_refused_as_a_shape_fault(
-    schema: object,
-) -> None:
-    """Refuse a schema whose type is not the integer the format defines.
-
-    ``True`` is the case worth naming: it is an ``int`` to Python, so a check
-    that only asked ``isinstance(value, int)`` would read a template's
-    ``true`` as schema version one.
-    """
-    with pytest.raises(SchemaNotIntegerError):
-        validated_provenance(_members(schema=schema))
-
-
-def test_an_unknown_schema_version_is_refused() -> None:
-    """Refuse a record written to a format this reader does not know."""
-    with pytest.raises(UnknownSchemaError):
-        validated_provenance(_members(schema=2))
 
 
 @pytest.mark.parametrize(
@@ -166,13 +142,6 @@ def test_a_platform_with_no_package_format_is_refused() -> None:
         validated_provenance(_members(platform="solaris"))
 
     assert "solaris" in str(refusal.value), "the diagnosis must name the platform"
-
-
-@pytest.mark.parametrize("assets", [[], "assets", 3], ids=repr)
-def test_assets_that_are_not_a_mapping_are_refused(assets: object) -> None:
-    """Refuse a digest table that cannot be keyed by published name."""
-    with pytest.raises(MalformedRecordError):
-        validated_provenance(_members(assets=assets))
 
 
 def test_a_producer_that_claims_no_assets_is_refused() -> None:
@@ -223,7 +192,6 @@ def test_a_record_from_another_run_is_refused_as_foreign() -> None:
 def test_a_later_attempt_of_the_same_run_is_accepted() -> None:
     """Accept a retried producer, which replaces bytes from the same commit."""
     retried = ProducerProvenance(
-        schema=1,
         commit=COMMIT,
         run_id="1234",
         run_attempt="3",

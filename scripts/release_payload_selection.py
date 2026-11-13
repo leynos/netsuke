@@ -172,7 +172,7 @@ def select_payload[Source](
     --------
     >>> from release_producer_provenance import ProducerProvenance
     >>> provenance = ProducerProvenance(
-    ...     schema=1, commit="a" * 40, run_id="7", run_attempt="1",
+    ...     commit="a" * 40, run_id="7", run_attempt="1",
     ...     target="linux-x86_64", platform="linux",
     ...     assets={"pkg.deb": "b" * 64, "pkg.rpm": "c" * 64,
     ...             "pkg.tar.gz": "d" * 64, "pkg.tar.gz.sha256": "e" * 64},

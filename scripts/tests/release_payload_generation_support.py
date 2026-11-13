@@ -107,7 +107,6 @@ def claims(
             for name in (archive, f"{archive}.sha256", deb, rpm)
         }
         record = ProducerProvenance(
-            schema=1,
             commit=CANDIDATE,
             run_id=RUN_ID,
             run_attempt="1",

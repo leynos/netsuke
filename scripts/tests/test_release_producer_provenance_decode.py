@@ -1,11 +1,12 @@
 """Hold the producer record's wire boundary to its own refusals.
 
 A producer record arrives as JSON written by another job. Between those bytes
-and the claim publication reasons about there are three questions about the
+and the claim publication reasons about there are four questions about the
 document rather than about the release: is it a string-keyed object, does it
-carry every member, and is each member the type the policy expects. Those are
-answered by :mod:`release_producer_provenance_decode`, and each failure gets
-its own diagnosis here.
+carry every member, is its schema version one this release understands, and is
+each member the type the format defines. Those are answered by
+:mod:`release_producer_provenance_decode`, and each failure gets its own
+diagnosis here.
 
 The *claim* refusals -- a commit that is not hexadecimal, a platform with no
 package format, an unsafe asset name -- are deliberately not re-tested here.
@@ -60,7 +61,6 @@ def test_a_complete_document_decodes_to_the_claim_it_describes() -> None:
     """Carry every member through to the claim, changing none of them."""
     claim = decode_provenance(_document())
 
-    assert claim.schema == 1, claim
     assert claim.commit == COMMIT, claim
     assert claim.run_id == "1234", claim
     assert claim.run_attempt == "1", claim
@@ -153,17 +153,21 @@ def test_a_text_member_of_the_wrong_type_is_refused_at_the_wire(
 
 
 @pytest.mark.parametrize("assets", [[], "assets", 3, None], ids=repr)
-def test_an_asset_map_that_is_not_an_object_is_refused_by_the_policy(
+def test_an_asset_map_that_is_not_an_object_is_refused_at_the_wire(
     assets: object,
 ) -> None:
-    """Pass the asset map through, and let the policy refuse its shape.
+    """Refuse an asset member that is not an object, before the policy sees it.
 
-    The map's keys are data rather than members, so judging it is the policy's
-    business. That the refusal is still the policy's own is what this case
-    pins: the decoder must not half-validate it here.
+    The map's *entries* are data rather than members, so judging a name and a
+    digest belongs to the policy. Its *container* is not: an ``assets`` member
+    that is a list or a string is a document of the wrong shape, and refusing
+    that here is what lets the policy be typed over a mapping rather than
+    testing its argument's type in a module that owns no wire format.
     """
-    with pytest.raises(MalformedRecordError):
+    with pytest.raises(MalformedRecordError) as refusal:
         decode_provenance(_document(assets=assets))
+
+    assert "assets" in str(refusal.value), "the diagnosis must name the member"
 
 
 def test_an_empty_asset_map_is_refused_by_the_policy() -> None:
@@ -189,12 +193,13 @@ def test_a_malformed_commit_is_refused_by_the_policy_not_the_wire() -> None:
         decode_provenance(_document(commit="not-a-commit"))
 
 
-def test_an_unknown_schema_is_refused_by_the_policy_not_the_wire() -> None:
-    """Accept schema ``2`` at the wire and refuse it as a claim.
+def test_an_unknown_schema_is_refused_by_the_decoder() -> None:
+    """Refuse a record written to a format this release does not understand.
 
-    A newer producer writing a format this reader does not understand is a
-    version-skew diagnosis, not a malformed document, and the two must not
-    collapse into one message.
+    The version describes the *document*, so the reader decides it before any
+    member means anything: a newer producer's record is refused as a whole
+    rather than partially read, and the claim that reaches the policy has no
+    schema member left to disagree about.
     """
     with pytest.raises(UnknownSchemaError):
         decode_provenance(_document(schema=2))
@@ -208,6 +213,7 @@ def test_the_decoder_is_the_one_name_the_tree_adapter_imports() -> None:
     responsible for checking members itself, and the two call paths would
     drift.
     """
-    assert release_producer_provenance_decode.__all__ == ["decode_provenance"], (
-        "the decoder must expose exactly one entry point"
-    )
+    assert release_producer_provenance_decode.__all__ == [
+        "SCHEMA_VERSION",
+        "decode_provenance",
+    ], "the decoder exposes its one entry point and the version it knows"
