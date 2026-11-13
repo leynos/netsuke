@@ -1,5 +1,6 @@
 //! Ninja build-edge display rendering.
 
+use super::CONSOLE_POOL;
 use super::escape::NinjaValue;
 use super::join;
 use crate::ir::BuildEdge;
@@ -14,6 +15,8 @@ pub(crate) struct DisplayEdge<'a> {
     pub(crate) action_name: &'a str,
     /// Whether the action sets `restat`, suppressing the edge-level override.
     pub(crate) action_restat: bool,
+    /// Pool selected by the shared action rule, if any.
+    pub(crate) action_pool: Option<&'a str>,
     /// Dependencies rendered after `|`, either the edge's implicit deps or lowered serial gates.
     pub(crate) implicit_deps: &'a [Utf8PathBuf],
     /// Optional localized inline-recipe progress description, escaped for Ninja.
@@ -39,6 +42,13 @@ impl Display for DisplayEdge<'_> {
         writeln!(output)?;
         write_flag!(output, "restat", self.edge.always && !self.action_restat);
         write_kv!(output, "description", self.description);
+        if self.edge.output_visibility == crate::ir::EdgeOutputVisibility::Immediate {
+            writeln!(output, "  pool = {CONSOLE_POOL}")?;
+        } else if self.action_pool == Some(CONSOLE_POOL) {
+            // Rule bindings are inherited by edges, so clear a rule-level
+            // console pool on edges that did not opt in themselves.
+            writeln!(output, "  pool =")?;
+        }
         writeln!(output)
     }
 }

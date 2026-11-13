@@ -9,8 +9,9 @@ The reading that matters most is the per-test one. nextest warns once
 per ``period`` and terminates after ``terminate-after`` of them, so the
 budget is their product. Every period in this repository is 60 s, so a
 reader taking the period alone would report a 60 s allowance where the
-real maximum is 2,400 s: five periods by default and forty for the mutation
-compile gate in its dedicated profile.
+real maximum is 2,400 s: five periods by default, fifteen for the Kani
+mutation prewarm and forty for the patch sweep, both in the profile dedicated
+to that gate.
 The contract uses the largest value in the selected profile, because its
 whole-run cap has to sit above it. A ``slow-timeout`` naming no
 ``terminate-after`` terminates nothing at all, so that form is refused rather

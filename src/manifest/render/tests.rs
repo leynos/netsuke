@@ -28,6 +28,7 @@ fn sample_manifest() -> Result<NetsukeManifest> {
         vars: target_vars,
         phony: false,
         always: false,
+        console: false,
         conditional: false,
         description: Some("{{ message }}".into()),
     };
@@ -220,6 +221,7 @@ fn render_manifest_renders_script_and_rule_ref_recipes() -> Result<()> {
         vars: target_vars,
         phony: false,
         always: false,
+        console: false,
         conditional: false,
         description: None,
     };

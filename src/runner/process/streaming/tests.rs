@@ -4,8 +4,9 @@
 //! these parser checks cover only the progress-enabled stdout path.
 
 use super::{
-    NinjaStatusLineState, NinjaStatusParsingReader, NinjaTaskProgressTracker, forward_child_output,
-    forward_child_output_with_ninja_status,
+    ForwardFailure, ForwardFailureKind, ForwardRoute, ForwardStream, NinjaStatusLineState,
+    NinjaStatusParsingReader, NinjaTaskProgressTracker, forward_child_output,
+    forward_child_output_with_ninja_status, record_failure,
 };
 use proptest::prelude::*;
 use std::{
@@ -16,13 +17,33 @@ use std::{
     },
 };
 
+/// Reporter that records each classified failure in the shared counter.
+///
+/// The forwarding helpers take their reporter as a parameter, so these cases
+/// pass the production reporter deliberately: they exercise the same metric
+/// path production uses, through an explicit dependency rather than a hidden
+/// global call inside the copy loop.
+pub(super) fn record_each(stream: ForwardStream, failure: &ForwardFailure) {
+    record_failure(stream, failure.kind);
+}
+
+#[path = "tests/failure_tests.rs"]
+mod failure_tests;
+#[path = "tests/flush_tests.rs"]
+mod flush_tests;
+#[path = "tests/reporter_tests.rs"]
+mod reporter_tests;
+#[cfg(unix)]
+#[path = "tests/rss_tests.rs"]
+mod rss_tests;
+
 #[derive(Clone)]
-struct FailingWriter {
+pub(super) struct FailingWriter {
     writes: Arc<AtomicUsize>,
 }
 
 impl FailingWriter {
-    fn new(writes: Arc<AtomicUsize>) -> Self {
+    pub(super) fn new(writes: Arc<AtomicUsize>) -> Self {
         Self { writes }
     }
 }
@@ -111,7 +132,7 @@ where
         reader,
         &mut output,
         |current, total, description| updates.push((current, total, description.to_owned())),
-        "stdout",
+        ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
     );
 
     assert_eq!(stats.bytes_read, input.len());
@@ -124,61 +145,19 @@ where
     assert_eq!(updates, expected_update_strings);
 }
 
-/// Generate a large stream without retaining its forwarded bytes in memory.
-#[cfg(unix)]
-struct RepeatingByteReader {
-    /// Bytes still available to read.
-    remaining: usize,
-}
-
-#[cfg(unix)]
-impl RepeatingByteReader {
-    /// Construct a reader producing `byte_count` bytes without newlines.
-    const fn new(byte_count: usize) -> Self {
-        Self {
-            remaining: byte_count,
-        }
-    }
-}
-
-#[cfg(unix)]
-impl Read for RepeatingByteReader {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let count = self.remaining.min(buf.len());
-        let Some(destination) = buf.get_mut(..count) else {
-            return Err(io::Error::other(
-                "repeating reader destination range is invalid",
-            ));
-        };
-        destination.fill(b'x');
-        self.remaining = self.remaining.saturating_sub(count);
-        Ok(count)
-    }
-}
-
-/// Return the process's current peak resident-set size in bytes.
-#[cfg(unix)]
-fn peak_rss_bytes() -> io::Result<u64> {
-    let usage = nix::sys::resource::getrusage(nix::sys::resource::UsageWho::RUSAGE_SELF)
-        .map_err(io::Error::other)?;
-    let resident_set = u64::try_from(usage.max_rss())
-        .map_err(|_| io::Error::other("getrusage returned a negative RSS"))?;
-    #[cfg(target_os = "macos")]
-    let bytes = resident_set;
-    #[cfg(not(target_os = "macos"))]
-    let bytes = resident_set.saturating_mul(1024);
-    Ok(bytes)
-}
-
 #[test]
 fn forward_output_writes_all_bytes_when_parent_alive() {
     let input = b"alpha\nbravo\ncharlie\n".to_vec();
     let reader = BufReader::new(Cursor::new(input.clone()));
-    let stats = forward_child_output(reader, Vec::new(), "stdout");
+    let stats = forward_child_output(
+        reader,
+        Vec::new(),
+        ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
+    );
 
     assert_eq!(stats.bytes_read, input.len());
     assert_eq!(stats.bytes_written, input.len());
-    assert!(!stats.write_failed);
+    assert_eq!(stats.failure, None);
 }
 
 #[test]
@@ -187,11 +166,15 @@ fn forward_output_continues_draining_after_write_failure() {
     let reader = BufReader::new(Cursor::new(input.clone()));
     let write_attempts = Arc::new(AtomicUsize::new(0));
     let failing_writer = FailingWriter::new(write_attempts.clone());
-    let stats = forward_child_output(reader, failing_writer, "stdout");
+    let stats = forward_child_output(
+        reader,
+        failing_writer,
+        ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
+    );
 
     assert_eq!(stats.bytes_read, input.len());
     assert_eq!(write_attempts.load(Ordering::SeqCst), 1);
-    assert!(stats.write_failed);
+    assert_eq!(stats.failure, Some(ForwardFailureKind::Write));
     assert_eq!(stats.bytes_written, 0);
 }
 
@@ -212,7 +195,7 @@ fn forward_output_with_ninja_status_parses_monotonic_updates() {
         |current, total, description| {
             updates.push((current, total, description.to_owned()));
         },
-        "stdout",
+        ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
     );
 
     assert_eq!(stats.bytes_read, input.len());
@@ -254,7 +237,7 @@ fn bounded_status_reader_forwards_large_unterminated_output() {
         ChunkedReader::new(input.clone(), vec![127; 4096]),
         &mut forwarded,
         |_current, _total, _description| {},
-        "stdout",
+        ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
     );
 
     assert_eq!(forwarded, input);
@@ -294,7 +277,7 @@ fn split_status_line_updates_once_and_eof_partial_line_stays_bounded() {
         reader,
         &mut output,
         |current, total, description| updates.push((current, total, description.to_owned())),
-        "stdout",
+        ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
     );
 
     assert_eq!(stats.bytes_read, input.len());
@@ -346,34 +329,4 @@ proptest! {
 
         prop_assert_eq!(forwarded, input);
     }
-}
-
-#[cfg(unix)]
-#[test]
-#[ignore = "getrusage is process-global and varies with allocator and OS accounting"]
-fn status_parsing_peak_rss_does_not_scale_with_a_large_unterminated_stream() {
-    const STREAM_BYTES: usize = 256 * 1024 * 1024;
-    const RSS_ALLOWANCE_BYTES: u64 = 4 * 1024 * 1024;
-
-    let plain_before = peak_rss_bytes().expect("getrusage should report initial RSS");
-    let plain_stats =
-        forward_child_output(RepeatingByteReader::new(STREAM_BYTES), io::sink(), "stdout");
-    let plain_after = peak_rss_bytes().expect("getrusage should report plain forwarding RSS");
-    let status_before = peak_rss_bytes().expect("getrusage should report status forwarding RSS");
-    let status_stats = forward_child_output_with_ninja_status(
-        RepeatingByteReader::new(STREAM_BYTES),
-        io::sink(),
-        |_current, _total, _description| {},
-        "stdout",
-    );
-    let status_after = peak_rss_bytes().expect("getrusage should report status parsing RSS");
-
-    assert_eq!(plain_stats.bytes_read, STREAM_BYTES);
-    assert_eq!(status_stats.bytes_read, STREAM_BYTES);
-    assert!(plain_after >= plain_before);
-    assert!(status_after >= status_before);
-    assert!(
-        status_after.saturating_sub(status_before) <= RSS_ALLOWANCE_BYTES,
-        "status parsing should add only a fixed RSS allowance, not one proportional to {STREAM_BYTES} bytes"
-    );
 }

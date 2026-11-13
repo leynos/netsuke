@@ -2,7 +2,7 @@
 
 The ordering contract compares four numbers, and its assertions over the
 repository's own files are satisfied by several plausibly wrong readings:
-every `terminate-after` here is 5 or 10 and every period is 60 s, so a
+every `terminate-after` here is 5, 15, or 40 and every period is 60 s, so a
 reading that confused the two would still order the tiers correctly. The
 tests below drive the readings with synthetic configurations and
 synthetic workflows instead, where a wrong reading has nowhere to hide.

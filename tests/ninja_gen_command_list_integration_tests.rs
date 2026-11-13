@@ -10,7 +10,7 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::ast::{CommandIsolation, Recipe, StringOrList};
-use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
+use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder, EdgeOutputVisibility};
 use netsuke::ninja_gen::{NinjaGenError, generate};
 use std::process::Command;
 use tempfile::TempDir;
@@ -36,6 +36,7 @@ fn run_command_list(
         progress_label: None,
         phony: false,
         always: false,
+        output_visibility: EdgeOutputVisibility::default(),
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("chain".into(), action);

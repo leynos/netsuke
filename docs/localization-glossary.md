@@ -80,6 +80,7 @@ Table 2: manifest and build-model terms
 | order-only dependency | `order-only dependency` | —                                            | `weak dependency`             |
 | build graph           | `build graph`           | `dependency graph`; `graph`                  | —                             |
 | build edge            | `build edge`            | `edge`                                       | —                             |
+| pool                  | `pool`                  | `Ninja pool`; `console pool`; `custom pool`  | `queue`; `thread pool`        |
 | phony target          | `phony target`          | `implicitly phony target`                    | `fake target`; `false target` |
 | default target        | `default target`        | `manifest default`                           | —                             |
 | build                 | `build` (noun and verb) | `build run`                                  | `compilation` (generic use)   |
@@ -2171,8 +2172,9 @@ gerund, e.g. "A compilar…" for "Building…".
 
 Several Netsuke terms stay as English loanwords in European Portuguese
 technical prose: `cache` (feminine, written in italics per Priberam and the
-[translatewiki.net Portuguese cheatsheet](https://translatewiki.net/wiki/Portal:Pt/Cheatsheet/pt))
-and `macro` (feminine, unchanged). Product and syntax identifiers (Netsuke,
+[translatewiki.net Portuguese cheatsheet](https://translatewiki.net/wiki/Portal:Pt/Cheatsheet/pt)),
+`macro` (feminine, unchanged), and Ninja's `pool` (masculine; use "pool da
+consola" and "pool personalizado"). Product and syntax identifiers (Netsuke,
 Ninja, Fluent, Jinja, YAML, `stdout`, `stderr`, `dyndep`) are invariant and
 carry no diacritics or gender marking.
 
@@ -2210,6 +2212,7 @@ Table 30: Portuguese, Portugal terminology
 | action                 | ação                        | AO90 spelling (not "acção"); distinct word from "alvo" and "regra" per Netsuke's three-way distinction.                                                                                                                                                                     |
 | rule                   | regra                       | Matches the [GNU Make Portuguese manual](https://www.ecoop.net/coop/translated/GNUMake4.4/ch09.pt.html) ("regra").                                                                                                                                                          |
 | dependency             | dependência                 | Standard software term.                                                                                                                                                                                                                                                     |
+| pool                   | pool                        | Retain Ninja's English scheduling term; use "pool da consola" and "pool personalizado".                                                                                                                                                                                     |
 | order-only dependency  | dependência apenas de ordem | Compositional; no established Portuguese precedent found for this Ninja-specific concept.                                                                                                                                                                                   |
 | build (noun)           | compilação                  | Use "build" as an unmarked loan only when referring to a specific numbered build artefact, not the process.                                                                                                                                                                 |
 | build (verb)           | compilar                    | "Gerar" is acceptable when the build does not compile source code, mirroring the same ambiguity in English.                                                                                                                                                                 |
@@ -2248,7 +2251,7 @@ inappropriately casual for a build tool's diagnostics.
 Several Netsuke terms conventionally stay as English loan words in Romanian
 technical writing: **build** (as a noun, e.g. "un build reușit"), **cache**,
 **template** (though "șablon" is also common and preferred for Netsuke's Jinja
-templates), **stdlib**, **dyndep**, **phony**, and **pipeline**.
+templates), **stdlib**, **dyndep**, **phony**, **pool**, and **pipeline**.
 **Allowlist**/**blocklist** are calqued, not borrowed, per Microsoft's
 inclusive-language table (see below). **Macro** and **glob** are established
 loans that need no gloss. Loans are written in Latin script with standard
@@ -2284,6 +2287,7 @@ Table 31: Romanian terminology
 | target                 | țintă                               | Distinct from acțiune/regulă; standard in Romanian Makefile/build tutorials.                                                             |
 | action                 | acțiune                             | Netsuke's implicitly phony target; keep distinct from țintă and regulă.                                                                  |
 | rule                   | regulă                              | The Ninja rule construct a target references.                                                                                            |
+| pool                   | pool                                | Loan word, like "build" and "cache", whose definite article also takes a hyphen: "pool-ul consolei", "pool-ul personalizat".             |
 | dependency             | dependență (pl. dependențe)         | Standard Romanian computing term.                                                                                                        |
 | order-only dependency  | dependență doar-de-ordine           | Calque; gloss as "dependență ce `impune` doar ordinea" on first use if needed.                                                           |
 | build (noun)           | build                               | Loan word; widely used untranslated in Romanian developer writing, e.g. "un build reușit".                                               |
@@ -2801,6 +2805,7 @@ Table 37: Vietnamese terminology
 | target                 | mục tiêu                       | Follows [Bazel Vietnamese docs](https://bazel.build/versions/7.4.0/extending/rules?hl=vi); "đích" also seen in GNU Make/manpage translations              |
 | action                 | hành động                      | Follows [Bazel Action docs](https://bazel.build/rules/lib/builtins/Action?hl=vi); distinct from "thao tác" (operation)                                    |
 | rule                   | quy tắc                        | Confirmed across Bazel, gcc, and Poedit `vi.po` translations                                                                                              |
+| pool                   | pool                           | Loan word; compounds stay uninflected: "pool console", "pool tùy chỉnh". Avoid "nhóm" (generic group).                                                    |
 | dependency             | phần phụ thuộc                 | Confirmed in Bazel, Git, and Debian apt `vi.po` translations                                                                                              |
 | order-only dependency  | phần phụ thuộc chỉ theo thứ tự | Calque; Ninja's order-only concept has no established Vietnamese term                                                                                     |
 | build (noun)           | bản dựng                       | Confirmed in [Bazel Vietnamese user manual](https://bazel.build/versions/8.1.0/docs/user-manual?hl=vi)                                                    |

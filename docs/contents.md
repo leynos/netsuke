@@ -322,6 +322,9 @@ operator, user, and contributor references are easier to find.
   moving package verification into `make test-package-verify`.
 - [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md):
   Bounded, localized Ninja progress labels for inline recipe edges.
+- [ADR-0061](adrs/adr-0061-select-ninja-console-pool-per-build-edge.md):
+  Select Ninja's console pool on individual build edges while preserving action
+  identity and rejecting incompatible scheduling annotations.
 - [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md):
   Include every prerequisite kind in whole-manifest cycle detection while
   keeping output aliases and serial scheduling semantics explicit.
@@ -337,6 +340,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0072](adrs/adr-0072-display-policy-contract-and-terminal-verification.md):
   One resolved terminal display plan shared by status, tracing, diagnostics,
   and help, with policy snapshots and terminal-rendering tests.
+- [ADR-0073](adrs/adr-0073-split-the-kani-mutation-compile-gate.md): Splitting
+  the Kani mutation compile gate into a prewarm, a negative-compile check, and
+  a patch sweep, with the cold dependency build paid once.
 - [ADR-0074](adrs/adr-0074-typed-records-for-release-policy-boundaries.md):
   Frozen slotted records at release policy boundaries, with adapters owning
   external record shapes and domain-shaped mappings retained.

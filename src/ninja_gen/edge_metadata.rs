@@ -16,6 +16,8 @@ pub(super) struct EdgeMetadata<'a> {
     pub(super) action_name: &'a str,
     /// Whether Ninja should remove the output before running the recipe.
     pub(super) restat: bool,
+    /// Pool selected by the shared action, if any.
+    pub(super) pool: Option<&'a str>,
     /// Optional, validated edge-level description with Ninja dollars escaped.
     pub(super) description: Option<NinjaValue>,
 }
@@ -61,6 +63,7 @@ pub(super) fn for_edge<'a>(
     Ok(EdgeMetadata {
         action_name,
         restat: action.restat,
+        pool: action.pool.as_deref(),
         description,
     })
 }

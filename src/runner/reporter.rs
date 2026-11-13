@@ -24,3 +24,12 @@ pub(super) fn make_reporter(plan: DisplayPlan, verbose: bool) -> Box<dyn StatusR
         base
     }
 }
+
+/// Adapt the reporter's task-progress method into a mutable callback.
+pub(super) fn on_task_progress_callback(
+    reporter: &dyn StatusReporter,
+) -> impl FnMut(u32, u32, &str) + '_ {
+    move |current: u32, total: u32, description: &str| {
+        reporter.report_task_progress(current, total, description);
+    }
+}

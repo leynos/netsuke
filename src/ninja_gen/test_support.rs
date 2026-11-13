@@ -52,6 +52,7 @@ fn single_edge_graph(action_id: &str, action: Action, output: &str, phony: bool)
             progress_label: None,
             phony,
             always: false,
+            output_visibility: crate::ir::EdgeOutputVisibility::default(),
         })
         .expect("fixture outputs are unique");
     graph

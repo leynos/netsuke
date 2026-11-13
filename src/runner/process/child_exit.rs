@@ -102,28 +102,28 @@ pub(super) fn ninja_exit_error(
 }
 
 /// Join stderr forwarding and surface the child's wait result.
+///
+/// Forwarding loss never changes the reported build result: the child's exit
+/// status remains authoritative, and a truncated output stream is reported
+/// through the classified forwarding-failure counter and a warning event
+/// instead. This policy keeps a closed parent pipe, as produced by
+/// `netsuke build | head`, from being reported as a build failure.
+///
+/// The stderr statistics are returned rather than discarded because the caller
+/// is the only layer that can tell whether the stderr destination itself
+/// rejected the write, and so whether the warning needs a second channel.
 pub(super) fn finalize_streaming(
     wait_result: io::Result<ExitStatus>,
     stdout_stats: ForwardStats,
     err_handle: thread::JoinHandle<(ForwardStats, Option<CommandListFailure>)>,
-) -> io::Result<(ExitStatus, Option<CommandListFailure>)> {
-    handle_forwarding_stats(stdout_stats, "stdout");
-    let command_list_failure = match err_handle.join() {
-        Ok((stats, context)) => {
-            handle_forwarding_stats(stats, "stderr");
-            context
-        }
+) -> io::Result<(ExitStatus, Option<CommandListFailure>, ForwardStats)> {
+    let _ = stdout_stats;
+    let (stderr_stats, command_list_failure) = match err_handle.join() {
+        Ok((stderr_stats, context)) => (stderr_stats, context),
         Err(error) => {
             tracing::warn!("stderr forwarding thread panicked: {error:?}");
-            None
+            (ForwardStats::default(), None)
         }
     };
-    wait_result.map(|status| (status, command_list_failure))
-}
-
-/// Log a truncation debug event when a forwarding stream hit a closed pipe.
-fn handle_forwarding_stats(stats: ForwardStats, stream_name: &str) {
-    if stats.write_failed {
-        tracing::debug!("{stream_name} forwarding encountered closed pipe; output truncated");
-    }
+    wait_result.map(|status| (status, command_list_failure, stderr_stats))
 }

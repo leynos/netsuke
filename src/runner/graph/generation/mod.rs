@@ -19,14 +19,14 @@ use monotony::MonotonicClock;
 
 /// Supply the dependencies that select and measure graph generation.
 ///
-/// Keep this runner-internal composition boundary limited to graph generation
-/// so unrelated command dispatch does not acquire a clock dependency.
+/// Keep this runner-internal composition boundary limited to the build
+/// pipeline. The same clock also measures its Ninja invocation.
 pub(in crate::runner) struct GraphGenerationContext<'a> {
     /// Select the legacy-recipe interpreter used during graph generation.
     pub(in crate::runner) recipe_shell: crate::recipe_shell::RecipeShell,
     /// Bind generated recipes to the interpreter the runner resolved.
     pub(in crate::runner) interpreter_binding: Option<InterpreterExecutable>,
-    /// Measure graph generation with a runner-provided monotonic clock.
+    /// Measure graph generation and Ninja execution with a runner-provided clock.
     pub(in crate::runner) clock: &'a dyn MonotonicClock,
 }
 

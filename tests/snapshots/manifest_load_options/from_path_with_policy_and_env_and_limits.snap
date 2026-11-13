@@ -1,5 +1,6 @@
 ---
-source: tests/manifest_load_options/wrapper_equivalence.rs
+source: tests/manifest_load_options/wrapper_equivalence/path_rows.rs
+assertion_line: 62
 expression: document
 ---
 === pure ===
@@ -17,6 +18,7 @@ observer: ManifestIngestion, InitialYamlParsing, TemplateExpansion, FinalRenderi
       },
       "always": false,
       "conditional": false,
+      "console": false,
       "dependency_order": "parallel",
       "deps": null,
       "description": "joined a-b",
@@ -45,6 +47,7 @@ observer: ManifestIngestion, InitialYamlParsing, TemplateExpansion, FinalRenderi
       },
       "always": false,
       "conditional": false,
+      "console": false,
       "dependency_order": "parallel",
       "deps": null,
       "description": "profile characterization",
@@ -77,6 +80,7 @@ observer: ManifestIngestion, InitialYamlParsing, TemplateExpansion, FinalRenderi
       },
       "always": false,
       "conditional": false,
+      "console": false,
       "dependency_order": "parallel",
       "deps": null,
       "description": "literals: true/false",
@@ -108,6 +112,7 @@ observer: ManifestIngestion, InitialYamlParsing, TemplateExpansion, FinalRenderi
       },
       "always": false,
       "conditional": false,
+      "console": false,
       "dependency_order": "parallel",
       "deps": null,
       "description": null,
@@ -126,6 +131,7 @@ observer: ManifestIngestion, InitialYamlParsing, TemplateExpansion, FinalRenderi
       },
       "always": false,
       "conditional": false,
+      "console": false,
       "dependency_order": "parallel",
       "deps": null,
       "description": null,

@@ -389,7 +389,7 @@ jobs:
       ${{ (github.event.pull_request.head.repo.fork
       || github.event.pull_request.user.login == 'dependabot[bot]')
       && 'ubuntu-latest' || 'ubicloud-standard-2-ubuntu-2404' }}
-    # Sixty minutes, not thirty. The compile gate at the end of this job
+    # One hundred minutes, not thirty. The compile gate at the end of this job
     # builds the whole dependency graph through the Kani frontend, and a cold
     # `CARGO_TARGET_DIR` plus the frontend's own toolchain download is what the
     # ceiling has to contain. See "Test timeouts: the tiers this repository
@@ -397,11 +397,20 @@ jobs:
     #
     # Run 41840367244 spent 824s before nextest started the mutation test and
     # hit the former 600s test cap. A later local run also reached the 900s
-    # cap without a compiler diagnostic. The Kani profile now allows 2,400s
-    # for the test and 2,520s for the full nextest run; including the measured
-    # 824s setup and 7s finalisation totals 3,351s. The 3,600s job ceiling leaves
-    # 249s for runner variance and post-step reporting.
-    timeout-minutes: 60
+    # cap without a compiler diagnostic. The gate now runs a prewarm, a
+    # negative control, and a patch sweep as two Nextest invocations under the
+    # `kani` profile: the prewarm and the negative check carry 900s each, the
+    # sweep 2,400s, and each invocation gets a 2,520s whole-run cap. Sizing the
+    # ceiling from one cap would cancel the job while the second invocation
+    # was still reporting, and a cancellation discards the log that
+    # explains the overrun. Including the measured 824s setup and 7s
+    # finalisation, two capped runs total 5,871s; the 6,000s job ceiling
+    # leaves 129s for runner variance and post-step reporting. The ceiling is
+    # sized from those caps rather than from the per-test allowances: an
+    # allowance bounds one test's own duration and does not sum to a budget,
+    # so this timeout is the backstop for a gate that has hung, not a cost
+    # the ceiling contains.
+    timeout-minutes: 100
     permissions:
       contents: read
     env:

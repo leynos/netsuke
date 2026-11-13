@@ -186,6 +186,7 @@ manifest.glob.unknown_io_error = eroare de intrare/ieșire necunoscută.
 manifest.command_list_empty = Câmpul „command” nu trebuie să fie gol: furnizați un șir de comandă sau o listă nevidă.
 manifest.command_isolation_recipe = Câmpul „command_isolation” necesită o rețetă cu o listă de comenzi.
 manifest.command_isolation_scalar = „command_isolation: isolated” necesită o listă de comenzi.
+manifest.console_dependency_only = Intrările care declară doar dependențe nu pot selecta pool-ul consolei.
 
 # Erori ale reprezentării intermediare.
 ir.rule_not_found = Regula „{ $rule }” la care face referire ținta „{ $target }” nu a fost găsită.
@@ -199,6 +200,8 @@ ir.ambiguous_substitution_boundary = Limită ambiguă a substituției de comand�
 
 # Erori la generarea fișierelor Ninja.
 ninja_gen.missing_action = Lipsește acțiunea „{ $id }” la care face referire o muchie de construire.
+ninja_gen.console_dependency_only = Muchia de construire „{ $output }” nu poate selecta pool-ul consolei, deoarece acțiunea sa conține doar dependențe.
+ninja_gen.console_pool_conflict = Muchia de construire „{ $output }” selectează pool-ul consolei, dar acțiunea sa solicită pool-ul personalizat „{ $pool }”.
 ninja_gen.format = Ieșirea manifestului Ninja nu a putut fi formatată.
 ninja_gen.dyndep_files_required = Această operație necesită un pachet Ninja generat; utilizați `netsuke build`, `netsuke clean` sau `netsuke generate` pentru a materializa fișierele dyndep.
 ninja_gen.reserved_output_path = Calea '{ $path }' este rezervată pentru starea dependențelor seriale Netsuke.

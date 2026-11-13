@@ -1156,6 +1156,17 @@ failed subcommand's stderr on its own stdout, build runs retain only a fixed
 512-byte stdout tail and use its parsed marker only after a non-zero exit.
 Ordinary child stdout streams forward directly and must not use this tail.
 
+Forwarding loss never changes the reported build result, so the process layer
+reports it rather than failing. `finalize_streaming` returns the joined stderr
+statistics beside the exit status, because only the caller can tell whether the
+stderr destination itself rejected a write. When it did, that closed pipe
+cannot carry the warning Ninja's loss would normally produce, so
+`report_unwritable_stderr` repeats a bounded line on stdout from the main
+thread, after the worker has joined and therefore without interleaving risk.
+Only a `write` or `flush` failure triggers the fallback: a `read` or `drain`
+failure says nothing about the destination's health. JSON mode drains both
+child streams to `io::sink()`, so it cannot take this path.
+
 The lowest-layer shell-word quoting used for input/output paths during IR
 lowering, and for the `shell_quote` and `shell_join` template filters, is
 [`src/shell_word.rs`](../src/shell_word.rs). `quote_word` is its one entry
@@ -6323,18 +6334,30 @@ as an opaque read error.
 two module shapes and that diagnostic against a synthetic tree, so the check
 does not depend on this revision happening to contain an absent property.
 
-A fourth check is gated, because it costs one Kani codegen per patch:
+A fourth check is gated, because it costs one Kani frontend compile per patch:
 `compile_guard::every_patched_tree_compiles_under_denied_warnings` applies each
 patch, compiles the patched tree under `-D warnings`, and reverts it through a
 fallible `revert()` whose failure is aggregated and reported, so a failed
 reverse cannot pass quietly as a green run with a mutation still applied. A
 `Drop` guard remains as the unwind fallback for an assertion failure mid-patch.
-Run it with `make test-kani-mutations`, which drives nextest with
-`--run-ignored ignored-only`; `kani-smoke` runs the same target on every pull
-request. Applying cleanly is not enough on its own: `make kani-full` denies
-warnings, so a patch that seeds its fault by leaving a binding or helper unused
-is a hard compile error, `cargo kani` never reaches the harness, and the patch
-contributes no evidence while still looking healthy to `git apply --check`.
+Run it with `make test-kani-mutations`, whose first Nextest invocation runs the
+ignored `prewarm::prewarm_kani_mutation_target` and
+`negative::compile_kani_tree_rejects_trees_that_do_not_compile` tests, and
+whose second runs the patch sweep. The cold dependency build therefore has its
+own timeout window; both invocations use `--run-ignored ignored-only` and the
+same target directory. The negative test is what keeps the sweep from being
+vacuous: it compiles the unmodified tree, then two deliberately broken ones —
+an ordinary type error and one behind `#[cfg(kani)]` that `cargo check` cannot
+see — and requires the same compile path to reject each, naming the seeded
+marker. `kani-smoke` runs the target on a pull request only when the
+proof-scope step selects that pull request, and unconditionally on a push to
+`main`, the nightly schedule, and a dispatch. A pull request outside the scope
+therefore reports a green job without compiling the patches; that is the
+ADR-0039 behaviour, not evidence that the patches were compiled. Applying
+cleanly is not enough on its own: `make kani-full` denies warnings, so a patch
+that seeds its fault by leaving a binding or helper unused is a hard compile
+error, `cargo kani` never reaches the harness, and the patch contributes no
+evidence while still looking healthy to `git apply --check`.
 
 The tree it patches is not the checkout it runs in. `sandbox.rs` exports the
 current revision with `git archive` into `target/kani-mutation-sandbox/`, and
@@ -6343,10 +6366,14 @@ revert a tidiness step rather than a safety one: nextest terminates a timed-out
 test by signalling its process group, so `Drop` cannot run, and a mutation
 seeded into the working checkout would survive the run as a change nobody made.
 An isolated copy is simply discarded, so termination cannot leave one behind.
-`GIT_CEILING_DIRECTORIES` is pinned to the sandbox root, because the sandbox
-sits inside the checkout and an unceiled `git` would walk up into the real
-repository; the gate asserts that the sandbox resolves no repository before it
-applies anything. The revision is the working tree captured with
+The child Cargo invocation enables incremental compilation for these one-file
+package mutations and keeps the build-script override non-incremental, because
+Kani's build-script compilation fails with incremental enabled. Ordinary
+workspace builds keep incremental compilation disabled to limit their build
+artefacts. `GIT_CEILING_DIRECTORIES` is pinned to the sandbox root, because the
+sandbox sits inside the checkout and an unceiled `git` would walk up into the
+real repository; the gate asserts that the sandbox resolves no repository
+before it applies anything. The revision is the working tree captured with
 `git stash create`, not `HEAD`, so an uncommitted patch edit is what gets
 compiled — compiling `HEAD` would report a committed patch healthy while the
 developer was editing it, the same shape as the dead override below. On CI the
@@ -6359,51 +6386,80 @@ a new patch before running `make test-kani-mutations`. A patch that is both
 untracked and ignored is not reported — an ignored file is not evidence the
 gate was asked to read.
 
-The gate compiles through the Kani frontend (`cargo kani --only-codegen`)
-rather than `cargo check`, and it runs in `kani-smoke` rather than
-`build-test`, for one reason: only Kani parses `#[cfg(kani)]` code.
-`cargo check` leaves that surface unparsed, so a patch that seeds its fault
-inside a Kani-gated item is invisible to it — measured on
-`ir__cycle__verification__self_dependency_reports_cycle`, whose only changed
-line is a `cfg(kani)` match arm, `cargo check --lib --all-features` exits 0 and
-reports the tree healthy while `cargo kani` rejects that same tree with
-`variant Present is never constructed`. `--only-codegen` is a full compile under
-`cfg(kani)` with verification skipped, so it subsumes the check it replaced
-rather than joining it.
+The gate compiles through the Kani frontend
+(`cargo kani --no-codegen -Z unstable-options`) rather than `cargo check`, and
+it runs in `kani-smoke` rather than `build-test`, for one reason: only Kani
+parses `#[cfg(kani)]` code. `cargo check` leaves that surface unparsed, so a
+patch that seeds its fault inside a Kani-gated item is invisible to it —
+measured on `ir__cycle__verification__self_dependency_reports_cycle`, whose
+only changed line is a `cfg(kani)` match arm,
+`cargo check --lib --all-features` exits 0 and reports the tree healthy while
+`cargo kani` rejects that same tree with `variant Present is never constructed`.
+`--no-codegen` checks compilation under `cfg(kani)` and skips translation to
+Kani's model-checking backend. The mutation gate catches frontend and warning
+failures; `make kani-full` performs the model codegen and verification.
 
-The mutation compile gate has its own `slow-timeout` in the `kani` profile,
-forty 60-second periods. The test compiles into `target/kani-mutation-compile`,
+The mutation gate's allowances live in the dedicated `kani` profile. The patch
+sweep gets forty 60-second periods, the largest allowance the profile's
+42-minute whole-run cap contains, and the prewarm and its negative-compile
+check get fifteen each. All three compile into `target/kani-mutation-compile`,
 which no cache restores — `kani-cache` holds the Kani payloads, not a build
-tree — so every run pays a cold build of the whole dependency graph plus 30
-incremental recompiles. With the original 18 patches, two CI runs passed at
-257.7 s and 261.5 s; a third failed at 300.008 s on a head whose only
-difference was eight lines of Markdown.
+tree — so a run without the prewarm pays a cold build of the whole dependency
+graph plus a recompile per patch. Splitting the work gives that cold cost its
+own invocation and its own allowance, so the sweep compiles against a warm
+target while incremental reuse is preserved.
 
-The 30-patch candidate timed out at 600 s on hosted run 41840367244 and at
+The measurements that sized these allowances all predate the split. With the
+original 18 patches, two CI runs passed at 257.7 s and 261.5 s and a third
+failed at 300.008 s on a head whose only difference was eight lines of
+Markdown; a 38 s margin is not a budget but the difference between two runners,
+and the failure names nextest's cap rather than the patch that was slow. The
+30-patch candidate then timed out at 600 s on hosted run 41840367244 and at
 900.093 s in a warm local run, both while compiling the first sorted patch and
-without a compiler diagnostic. A separate one-patch cold compile completed in
-1,864 s while shared compiler admission was heavily queued. That is evidence
-for allowing more time, not a stable runtime prediction. The Kani profile gives
-the test 2,400 s and the whole run 2,520 s: the latter exceeds the per-test
+without a compiler diagnostic, and the prewarm alone was measured at 762.60 s
+on a local host carrying 149+ queued `rustc` requests at load 22 on 6 cores.
+That is evidence for allowing more time, not a stable runtime prediction. Every
+other test uses the 300 s default, because ADR-0059 moved the compiler work
+that once needed 900 s out of the suite.
+
+The Kani profile gives the sweep 2,400 s, the prewarm 900 s, and each
+invocation a whole-run cap of 2,520 s: the cap exceeds the largest per-test
 allowance by the default 70-second termination window plus a 50-second margin.
 The ordinary and coverage profiles retain their 300 s per-test allowance and
 the coverage CI run remains 960 s.
 
 The hosted run spent 824 s before nextest started the mutation test and 7 s
-finalizing. Setup, the full 2,520 s Kani run allowance, and finalization total
-3,351 s. The 60-minute `kani-smoke` job leaves 249 s for runner variance and
-post-step reporting. The mutation filter uses the anchored `compile_guard::`
-submodule test name, so the Kani-specific timeout is applied to the intended
-test rather than falling through to the 300 s default. A filter selecting
-nothing leaves its override out of the test-groups listing, which makes
-`cargo nextest show-config test-groups --profile kani` a cheap binding check.
+finalizing. The gate runs two nextest invocations, so the ceiling has to
+contain two whole-run caps rather than one: 824 s of setup, two 2,520 s caps,
+and 7 s of finalization total 5,871 s. The 100-minute `kani-smoke` job leaves
+129 s for runner variance and post-step reporting. Sizing the ceiling from a
+single cap would cancel the job while the second invocation was still
+reporting, and a cancellation discards the log that explains the overrun.
 
-Regenerate a rotted patch *in place*: swap an operator, comparator, index, or
-literal rather than deleting a statement or redirecting a call. Deleting the
-only use of a helper, or the only reassignment of a `mut` binding, is what
-turns the mutation into a compile error under denied warnings. Then re-validate
-the regenerated file by applying the patch, confirming the patched tree
-compiles, and watching the harness fail under the mutation before committing.
+The mutation filters use the anchored `compile_guard::`, `prewarm::`, and
+`negative::` submodule test names, so the Kani-specific timeouts are applied to
+the intended tests rather than falling through to the 300 s default. A filter
+selecting nothing leaves its override out of the test-groups listing, which
+makes `cargo nextest show-config test-groups --profile kani` a cheap binding
+check.
+
+That widening was inert when it first landed, which is why the override is
+worth reading as a worked example of the trap above. Its filter named the bare
+test name, and the test is declared in a submodule, so the anchor never matched
+and the override applied to nothing: the intended 600 s was never in force, and
+the two passing CI runs at 257.7 s and 261.5 s cannot show otherwise, because
+both sit inside the 300 s default an inert override predicts. The filter now
+carries the `compile_guard::` prefix. The general rule is that a filter for a
+test in a submodule must name the module path Nextest prefixes onto the
+qualified name it matches against; `cargo nextest show-config test-groups` is
+the cheap way to see whether an override binds, since a filter selecting
+nothing leaves its override out of that listing entirely. Regenerate a rotted
+patch *in place*: swap an operator, comparator, index, or literal rather than
+deleting a statement or redirecting a call. Deleting the only use of a helper,
+or the only reassignment of a `mut` binding, is what turns the mutation into a
+compile error under denied warnings. Then re-validate the regenerated file by
+applying the patch, confirming the patched tree compiles, and watching the
+harness fail under the mutation before committing.
 
 ### Kani cfg compile-time checks
 
@@ -6443,7 +6499,7 @@ Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
 `build-test` job. When the proofs run, the job installs the pinned, checksummed
 `cargo-kani` front-end and Kani release bundle, checks the reported version,
 and then runs the bounded harness suite through `make kani-ir` and the mutation
-compile gate through `make test-kani-mutations`, both under a 60-minute job
+compile gate through `make test-kani-mutations`, both under a 100-minute job
 timeout; it does not run `make verus`, coverage, CodeScene upload, or the
 normal build matrix. Its cache entry owns the job-local Kani Cargo,
 support-file, and Rust toolchain homes separately from ordinary Cargo build
@@ -6701,12 +6757,14 @@ twice and give that baseline two writers.
 `kani-smoke` carries two test sets that share only the lane. `make kani-ir`
 verifies the harnesses under the Kani configuration with warnings allowed;
 `make test-kani-mutations` compiles patched trees through the same frontend
-with warnings denied. They are separate because they answer different
-questions: the first asks whether the harnesses hold, the second whether they
-can still be reached at all. The gate compiles each patch into one shared
-`CARGO_TARGET_DIR`, so successive patches reuse a single compiled dependency
-graph rather than rebuilding it apiece: each patch touches one file, so only
-that crate and its dependants recompile.
+with warnings denied. That target uses two sequential Nextest invocations:
+`prewarm::prewarm_kani_mutation_target` compiles the unpatched tree first, then
+`compile_guard::every_patched_tree_compiles_under_denied_warnings` compiles
+every patch. Both use the same fixed sandbox and `CARGO_TARGET_DIR`, so the
+sweep reuses the prewarm's dependency build. The test sets are separate because
+they answer different questions: the first asks whether the harnesses hold, the
+second whether they can still be reached at all. The two invocations separate
+the cold build from the patch sweep's own timeout window.
 
 `netsukefile` and `kani-smoke` differ in platform or in purpose, so neither is
 a candidate for folding. The Windows gate keeps its own `cargo nextest` pass
@@ -6779,8 +6837,8 @@ governs the non-doctest pass only, and deliberately stays small:
   signalled, so such a grandchild is not itself killed. The module is
   Unix-tested and platform-neutral in use. Mark a new spawn of this kind with
   the helper and a `nested-cargo-allow: timed` comment naming it.
-- **No cold builds inside tests.** Cargo's publish verification build runs as
-  `make test-package-verify` rather than inside
+- **Cold builds stay out of ordinary tests.** Cargo's publish verification
+  build runs as `make test-package-verify` rather than inside
   `packaged_manifest_retains_build_script_sources`, which keeps only the
   `cargo package --list` assertions. Under shared compiler admission that build
   reached a 600s cap, then a 720s one, so no per-test allowance could bound it.
@@ -6791,7 +6849,11 @@ governs the non-doctest pass only, and deliberately stays small:
   `test_support`'s doctest phase. The fixture libraries have no nested Cargo
   invocation or widened timeout; doctests run outside Nextest's per-test
   allowance. The remaining targeted allowances stay below the 960s CI whole-run
-  cap; none adds retries or widens timeouts for unrelated tests.
+  cap; none adds retries or widens timeouts for unrelated tests. The explicit
+  `make test-kani-mutations` target is the bounded exception: its ignored
+  prewarm test pays the cold Kani frontend build, its ignored negative-compile
+  check proves that same path rejects a seeded fault, and its separate ignored
+  sweep reuses the target directory.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
@@ -6811,18 +6873,19 @@ governs the non-doctest pass only, and deliberately stays small:
   `test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)` names a
   test whose real name is
   `compile_guard::every_patched_tree_compiles_under_denied_warnings` and
-  selects nothing. The static contracts cannot see this one, because they
-  compare bare names to bare names and the written name resolves; the accepted
-  grammar admits an optional `module::` prefix and captures only the bare name
-  so that comparison stays bare-to-bare, which leaves the prefix itself to be
-  proved at run time. Nextest's `~` substring form is unanchored and
-  over-matches, so it is not used.
-  `tests/workflow_contracts/nextest_child_cargo_group_test.py` holds these
-  contracts, including that every filtered name resolves to a declared test.
-  The rule is applied to every filter, not only this group's, because the same
-  edit that unhooks a test from its policy is invisible until someone adds a
-  `#[case]` attribute. Two test-only modules sit behind that contract, split by
-  what they read.
+  selects nothing. The same module-qualified rule applies to the prewarm
+  selector, `prewarm::prewarm_kani_mutation_target`. The static contracts
+  cannot see the missing module prefix, because they compare bare names to bare
+  names and the written name resolves; the accepted grammar admits an optional
+  `module::` prefix and captures only the bare name so that comparison stays
+  bare-to-bare, which leaves the prefix itself to be proved at run time.
+  Nextest's `~` substring form is unanchored and over-matches, so it is not
+  used. `tests/workflow_contracts/nextest_child_cargo_group_test.py` holds
+  these contracts, including that every filtered name resolves to a declared
+  test. The rule is applied to every filter, not only this group's, because the
+  same edit that unhooks a test from its policy is invisible until someone adds
+  a `#[case]` attribute. Two test-only modules sit behind that contract, split
+  by what they read.
   `tests/workflow_contracts/nextest_child_cargo_group_invariants.py` reads the
   Nextest configuration and constrains the accepted selector grammar;
   `tests/workflow_contracts/nextest_rust_test_discovery.py` classifies the Rust
@@ -7373,6 +7436,43 @@ variants, and `parallel` remains the default. The ordering policy applies only
 to a manifest `deps` list; never infer it from the number or shape of graph
 edges, and do not apply it to inputs or order-only dependencies.
 
+The manifest `console` Boolean lowers to `BuildEdge.output_visibility`, using
+`EdgeOutputVisibility::Immediate` for `true` and `Buffered` for `false`. This
+backend-neutral request belongs to the edge because two targets can share one
+action and rule while only one target needs streamed output. `Action.pool`
+remains unchanged, so console selection does not alter action identity or
+action deduplication. `src/ninja_gen/display_edge.rs` emits `pool = console` on
+that edge. If a shared action rule already declares `pool = console`, ordinary
+edges get an empty edge-level `pool =` binding to clear that inherited
+selection. Shared console-scheduling validation runs before both direct Ninja
+generation and dyndep-bundle generation. That validation rejects
+dependency-only edges and custom action pools that conflict with `console`; it
+accepts an existing `Action.pool` value of `console`. Synthetic serial gates
+and dyndep sidecars never inherit either binding.
+
+`ninja_gen::CONSOLE_POOL` is the single production spelling of Ninja's built-in
+pool. Keep its use within the edge renderer and shared console-scheduling
+validator; tests continue to assert the emitted `console` value directly.
+
+The emitted `pool = console` binding requires Ninja 1.5 or newer. This minimum
+is separate from the conditional Ninja 1.10 requirement for staged serial
+dependency bundles described below.
+
+`IrGenError::InvalidManifest` retains its stable English schema diagnostic when
+formatted. Manifest loading localizes that diagnostic at the parsing boundary;
+its formatting must not resolve the process-wide active locale. That
+prohibition is scoped to this variant: every other `IrGenError` variant carries
+a `LocalizedMessage`, whose `Display` resolves the active localizer by design,
+so the localized path stays as it is.
+
+Manifest validation keeps stable diagnostic details separate from localized
+display text. `src/manifest/mod.rs` maps a recognized detail to the localized
+parse message. Direct IR lowering retains the stable detail in
+`IrGenError::InvalidManifest`, whose formatting does not consult global locale
+state. Ninja generator errors use an output-specific message when an edge is
+available; the build-script localization slice does not depend on either
+library-side path.
+
 `src/ir/cycle/detector.rs::CycleDetector::visit_known_edge` traverses `inputs`,
 `implicit_deps`, and `order_only_deps` when detecting cycles. Order-only
 dependencies do not trigger a rebuild when they change, but they still have to
@@ -7474,12 +7574,12 @@ to telemetry.
 
 The runner-internal `GraphGenerationContext` in
 `src/runner/graph/generation/mod.rs` groups the selected `RecipeShell`, an
-optional preflighted `InterpreterExecutable`, and injected monotonic clock
-solely for this graph-generation composition path. Build, Ninja-tool, and CLI
-`generate` operations attach the runtime binding after preflight; query-only
-target discovery leaves it absent. It is not a general runner context, shared
-state container, or reusable public API; keep unrelated runner inputs and
-concerns outside it.
+optional preflighted `InterpreterExecutable`, and injected monotonic clock for
+the graph-generation composition path. The build runner also uses that clock to
+measure its Ninja invocation. Build, Ninja-tool, and CLI `generate` operations
+attach the runtime binding after preflight; query-only target discovery leaves
+it absent. It is not a general runner context, shared state container, or
+reusable public API; keep unrelated runner inputs and concerns outside it.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
@@ -8346,6 +8446,29 @@ never echo the payload.
 The production generator has its own `netsuke::ninja_gen::GeneratedNinja`
 output type; `test_support::ninja_semantics::GeneratedNinja` is the test-side
 borrowed view of generated text.
+
+### `test_support::ninja_edge`
+
+`test_support::ninja_edge::edge_has_console_pool`
+(`test_support/src/ninja_edge.rs`) checks edge-local pool metadata on a named
+generated `build` statement. Snapshot, BDD, and documentation-example tests use
+this shared helper, so their assertions agree about which edge owns an indented
+`pool = console` binding. Its scope is deliberately narrow: it inspects the
+generated text used by these tests and does not parse general Ninja syntax.
+Permitted call sites are test-support and test code only; production code must
+not depend on `test_support`.
+
+`test_support::ninja_edge::edge_pool_bindings` returns the named edge's exact
+`pool =` bindings. It distinguishes `pool = console` for an opted-in edge, an
+empty `pool =` binding that clears an inherited console pool, and no binding
+for an ordinary edge. The property test in
+`src/ninja_gen/property_tests/console.rs` uses it for user-edge, serial-parent
+and synthetic-gate assertions. Keep this helper within test-support and test
+code; it does not parse general Ninja syntax.
+
+The local `edge_factory` fixture in `src/ninja_gen/tests/console.rs` constructs
+parallel, single-output edges for console generator tests. Keep it within that
+module; other graph shapes use their own fixtures.
 
 ### Temporary Ninja build files
 
@@ -11201,7 +11324,9 @@ success envelope; diagnostic serialization remains in
 generator metadata from the private `src/json_envelope.rs` module. Within
 process execution, `forward_stdout` is the single composition point for
 choosing status-aware or plain child-output draining, and its callers select
-either the terminal or a JSON-mode sink.
+either the terminal or a JSON-mode sink. The copy loop itself, and the
+forwarding-failure vocabulary around it, are owned by
+[`runner::process::streaming`](#module-runnerprocessstreaming).
 
 `ExecutionContext` is the private dispatch context shared by build and clean
 handlers. `run_with_ninja_program` constructs it from the resolved
@@ -11291,6 +11416,38 @@ no fixture sentinel text. The governing decision record is
 `docs/adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md`,
 which forbids unbounded or caller-controlled values in metric labels and trace
 fields.
+
+### Module: `runner::console_telemetry`
+
+`src/runner/console_telemetry/mod.rs` instruments only the actual Ninja build
+invocation in `execute_build`. It supplements the complete legacy-recipe
+operation timing with subprocess duration and outcome grouped by
+`console_scheduling=enabled|disabled`. Its `runner.ninja.build` span and
+completion event include the aggregate `console_edge_count`, scheduling state,
+`outcome=success|error`, and `error_category=none|io`. Paths, action
+identities, recipe contents, and process error text never enter this boundary.
+The runner's injected monotonic clock supplies the duration measurement.
+
+The generator stores the count of selected user edges privately in
+`GeneratedNinja`; the runner reads that aggregate before consuming the bundle.
+Synthetic serial gates and dyndep sidecars do not contribute to it. The count
+describes configured edges in each attempted build graph, rather than edges
+that Ninja actually executed or time spent in its pool. The subprocess boundary
+emits `netsuke_runner_ninja_build_executions_total`,
+`netsuke_runner_ninja_build_execution_duration_seconds`, and
+`netsuke_runner_ninja_build_console_edges_total`. The first two use scheduling,
+outcome, and error-category labels; the edge counter uses only outcome.
+
+Bundle-generation telemetry records the same scheduling state and aggregate
+count. `netsuke_ninja_dyndep_bundle_generations_total` and
+`netsuke_ninja_dyndep_bundle_generation_duration_seconds` carry scheduling,
+outcome, and the generator's fixed error category, including
+`console_dependency_only` and `console_pool_conflict`.
+`netsuke_ninja_dyndep_bundle_console_edges_total` counts configured console
+edges by generation outcome. `src/observability/recorder/console.rs` owns the
+production retention policy for these six series: it admits their exact kinds
+and finite label sets, rejecting unknown values, extra labels, and missing
+labels. Both emission and retention tests use local recorders.
 
 ### Module: `runner::recipe_shell::telemetry`
 
@@ -11402,6 +11559,73 @@ exits, safely records its resource usage through `RUSAGE_CHILDREN` rather than
 measuring the parent test process. It compares progress parsing with
 `--progress never` and permits a fixed 16 MiB overhead, rejecting memory growth
 proportional to the payload.
+
+### Module: `runner::process::streaming`
+
+`src/runner/process/streaming/` owns the only byte-for-byte copy loop between a
+child's standard streams and a forwarding writer, the bounded Ninja
+status-parsing adapter, and the closed forwarding-failure vocabulary in
+`forward_failure.rs`. No other module may add a second copy loop.
+
+#### Streaming reuse boundary
+
+- **Ownership:** the streaming module owns chunk reads, per-chunk writes and
+  flushes, interrupted-read retries, draining after a failure, the
+  `ForwardStats` record, and the failure classification that telemetry
+  publishes.
+- **Permitted call-sites:** exactly two. `output_forwarding`'s
+  `StdoutForwarding::forward` forwards stdout, choosing
+  `forward_child_output_with_ninja_status` when progress updates are wanted and
+  `forward_child_output` otherwise.
+  `failure_attribution::forward_stderr_with_attribution` forwards stderr
+  through its marker-observing writer. Both pass a `ForwardRoute`, which pairs
+  the stream identity with the reporter for that stream; no caller may invent a
+  stream label, and none can pair a label with another stream's reporter.
+- **Composition rules:** flush each chunk before reading the next one, so a
+  flush failure cannot cause already-accepted bytes to be written again. Retry
+  `io::ErrorKind::Interrupted` reads rather than reporting them. Treat a reader
+  that reports more bytes than the buffer holds as a read failure, because the
+  count is only meaningful as a read result. After any failure, drain the
+  remaining child output so the child cannot block on a full pipe.
+
+#### Failure classification and telemetry
+
+A forwarding failure is classified as one of `read`, `write`, `flush`, or
+`drain`, and attributed to `stdout` or `stderr`. A drain failure after an
+earlier failure is counted separately and never replaces the failure that
+stopped forwarding. The counter `netsuke_ninja_forward_failures_total` carries
+exactly the two labels `stream` and `failure_kind`, whose permitted values are
+the closed arrays `FORWARD_STREAM_VALUES` and `FORWARD_FAILURE_KIND_VALUES`.
+`ConfigMetricsRecorder` admits only those exact series, so a widened label
+value is dropped rather than retained. Each failure also emits a warning event
+carrying the same two fields plus the I/O error. Neither label admits output
+content, paths, or reader and writer types. Adding a failure kind means adding
+an enum variant and its array entry together, never passing a raw string.
+
+The copy loop does not publish telemetry itself. It classifies the failure and
+hands it to the reporter carried by the `ForwardRoute` it was given:
+`output_forwarding`'s `report_forward_failure` is the single production
+reporter, and it records the counter and emits the warning in one place, at the
+process boundary that owns what a failure means for the run. A test passes its
+own reporter, so the reporting contract is exercised through an explicit
+dependency instead of a global recorder reached from inside the byte-moving
+code.
+
+#### Result policy
+
+Forwarding loss never changes the reported build result. The child's exit
+status remains authoritative, and a truncated output stream is reported through
+the classified counter and warning event instead. This keeps a deliberately
+closed parent pipe, as produced by `netsuke build | head`, from being reported
+as a build failure. `finalize_streaming` therefore joins the stderr forwarding
+thread for its command-list attribution and returns that thread's forwarding
+statistics, discarding the stdout statistics it is also given.
+`spawn_and_stream_output` inspects the returned stderr statistics and, when the
+failure kind is a rejected write or flush on the stderr stream, writes the
+warning to stdout instead, because the destination that would normally carry it
+is the one that failed. The policy tests in `src/runner/process/tests/mod.rs`
+cover a successful child, a failing child, and a failed wait, each with
+forwarding loss.
 
 ### Module: `runner::process::ninja::program`
 
@@ -11821,12 +12045,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default and CI; 2,400 s Kani mutation   |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                        | 960 s CI; 2,520 s Kani; unset locally         |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 60 m Kani; 100 m coverage                     |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                   |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default and CI; 900 s Kani prewarm and negative check; 2,400 s Kani sweep |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                        | 960 s CI; 2,520 s Kani; unset locally                                           |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                   |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m Kani and coverage                                                         |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -11845,11 +12069,13 @@ comparison against the tiers above rests on that reading, and the contract
 asserts it explicitly rather than leaving it implied.
 
 The default and CI profiles give five periods — 300 s — to every test no
-override matches, which is almost all of them. The mutation compile gate gets
-forty periods, 2,400 s, only in the dedicated `kani` profile. That profile sets
-a 42-minute whole-run cap, and `make test-kani-mutations` selects it
-explicitly. The 2,520 s whole-run cap is above the mutation test's 2,400 s
-allowance; the coverage profile remains at 960 s above its own 300 s maximum.
+override matches, which is almost all of them. The Kani profile widens three
+allowances and nothing else: the prewarm and its negative-compile check get
+fifteen periods, 900 s, and the patch sweep forty, 2,400 s. That profile sets a
+42-minute whole-run cap, and `make test-kani-mutations` selects it explicitly.
+The 2,520 s cap is above the sweep's 2,400 s allowance; the coverage profile
+remains at 960 s above its own 300 s maximum, so no Kani allowance can leak
+into a lane that does not select the profile.
 
 No test the default suite runs needs an allowance of its own any longer. The
 production module slice, the embedder-facing public API, and the `test_support`
@@ -11871,6 +12097,16 @@ reading as the worked example of it. The gate passed twice at 257.7 s and 261.5
 s and then failed at 300.008 s on a head whose only diff was eight lines of
 Markdown. The code was not slow; the cap was too near the cost, and a margin of
 38 s is the difference between one runner and another rather than a budget. The
+gate later passed in 480.264 s on the pre-rebase base and reached its 600.019 s
+cap on the rebased base (CI runs 41782146443 and 41826968891). That cap covered
+a cold dependency build as well as the patch sweep, so the target now runs a
+prewarm and a patch sweep in separate Nextest invocations against the same
+sandbox path and target, under the `kani` profile: 900 s each for the prewarm
+and its negative-compile check, and 2,400 s for the sweep. The profile's 2,520
+s whole-run cap contains any of those allowances together with the window
+nextest needs to stop the run, and the two invocations are capped separately.
+The job's ceiling is a backstop sized from those two caps rather than a sum of
+the per-test allowances, which bound one test each and add up to no budget. The
 packaging smoke test once carried a 900 s override of the same kind: under a
 private-target harness it passed at 145 s and timed out at 300.047 s on heads
 that differed by a word in a plan, and later full-suite runs passed at 208.921

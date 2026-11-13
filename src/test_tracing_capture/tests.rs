@@ -54,18 +54,21 @@ fn snapshot_is_readable_concurrently_from_cloned_handles() {
 #[test]
 fn snapshot_recovers_from_a_poisoned_lock() {
     let captured = CapturedEvents {
-        fields: Arc::new(Mutex::new(vec!["seeded=1".to_owned()])),
+        events: Arc::new(Mutex::new(vec![CapturedEvent {
+            fields: "seeded=1".to_owned(),
+            scope: Vec::new(),
+        }])),
         span_fields: Arc::new(Mutex::new(BTreeMap::new())),
     };
 
-    let poisoner = Arc::clone(&captured.fields);
+    let poisoner = Arc::clone(&captured.events);
     let handle = std::thread::spawn(move || {
         let _guard = poisoner.lock().expect("lock should be held");
         panic!("poison the capture lock");
     });
     assert!(handle.join().is_err(), "the thread should have panicked");
     assert!(
-        captured.fields.is_poisoned(),
+        captured.events.is_poisoned(),
         "the lock should now be poisoned"
     );
 
@@ -151,6 +154,34 @@ fn span_fields_are_captured_by_name_and_recording_point() {
     );
 }
 
+/// An event records the span scope it was emitted inside, root first.
+#[test]
+fn event_spans_name_the_enclosing_scope_for_each_event() {
+    let (outside, nested) = with_test_subscriber(LevelFilter::TRACE, |captured| {
+        tracing::info!("outside every span");
+        let outer = tracing::info_span!("outer_span");
+        let _outer = outer.enter();
+        // Creating the span after entering the outer one is what records the
+        // parent link, so the scope below has two entries rather than one.
+        let inner = tracing::info_span!("inner_span");
+        tracing::info!("inside the outer span");
+        let _inner = inner.enter();
+        tracing::info!("inside both spans");
+        (captured.snapshot(), captured.event_spans())
+    });
+
+    assert_eq!(outside.len(), nested.len(), "one scope entry per event");
+    assert_eq!(
+        nested,
+        vec![
+            Vec::<String>::new(),
+            vec!["outer_span".to_owned()],
+            vec!["outer_span".to_owned(), "inner_span".to_owned()],
+        ],
+        "each event must name the spans enclosing it, ordered from the root"
+    );
+}
+
 /// A same-callsite DEBUG-to-TRACE transition refreshes cached interest.
 #[test]
 fn callsite_interest_refreshes_when_capture_level_becomes_trace() {
@@ -161,7 +192,7 @@ fn callsite_interest_refreshes_when_capture_level_becomes_trace() {
     test_support::tracing_capture::ensure_test_interest_anchors_registered();
     let layer = CapturedEventsLayer::default();
     let captured = CapturedEvents {
-        fields: Arc::clone(&layer.events),
+        events: Arc::clone(&layer.events),
         span_fields: Arc::clone(&layer.span_fields),
     };
     let subscriber = tracing_subscriber::registry().with(layer.with_filter(LevelFilter::DEBUG));

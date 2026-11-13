@@ -9,6 +9,11 @@ retired. Cargo's package verification build runs as `make test-package-verify`
 on the Linux gate rather than inside a test. Supersedes
 [ADR-0033](adr-0033-record-split-build-cargo-messages.md).
 
+Amended by [ADR-0073](adr-0073-split-the-kani-mutation-compile-gate.md)
+(2026-11-06): the mutation compile gate named below is now a prewarm, a
+negative-compile check, and a patch sweep, with 900 s for the prewarm and the
+negative check and 2,400 s for the sweep.
+
 ## Date
 
 2026-10-23.
@@ -131,8 +136,10 @@ _Table 1: Where each kind of compile-time contract runs under each option._
   harness tests, and the packaging test leave `nested-cargo-builds`, along with
   the three 900 s allowances they carried. With no build left in the default
   suite, the generated-completion readers leave the group too, and the
-  `#[ignore]`-gated mutation compile gate is its only member. Its 600 s is now
-  the largest per-test allowance.
+  `#[ignore]`-gated Kani prewarm and mutation compile sweep are its only
+  members; they run as separate Nextest invocations so the cold dependency
+  build does not consume the sweep's budget. The prewarm carries 900 s and the
+  sweep 2,400 s, in the `kani` profile that runs this gate and nothing else.
 - **Discovery.** The child-Cargo discovery used by the workflow contracts no
   longer treats `cargo package --list` as build-capable, and a contract now
   requires that no test outside the mutation compile gate starts a
@@ -225,3 +232,24 @@ bound.
   [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs it.
 - [`docs/developers-guide.md`](../developers-guide.md), section "Compile-time
   contracts live in the build graph", states the practice for contributors.
+
+## Amendments
+
+### Amendment 1: the mutation compile gate is split (2026-11-06)
+
+[ADR-0073](adr-0073-split-the-kani-mutation-compile-gate.md) amends the
+decision outcome above. The text is preserved as written, including its
+statement that the `#[ignore]`-gated mutation compile gate is the group's only
+member with a 600 s allowance because that is what this ADR decided at the time.
+
+The gate now runs as three `#[ignore]`-gated tests in two Nextest invocations:
+a prewarm that compiles the unpatched sandbox, a negative check that requires
+the same compile path to reject seeded faults, and the patch sweep. The prewarm
+and the negative check carry 900 s each and share one invocation, so the cold
+dependency build is paid once; the sweep then runs against that warm target
+with the 2,400 s allowance the 2026-11-05 reassessment records. The reason is
+measured rather than theoretical: the single-invocation gate passed at 257.7 s
+and 261.5 s, failed at 300.008 s, passed at 480.264 s on one base, and reached
+its 600 s cap on the rebased base (CI runs 41782146443 and 41826968891). The
+placement decision this ADR records is unchanged; only the gate's internal
+shape and its allowance moved.

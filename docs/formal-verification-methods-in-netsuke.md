@@ -348,7 +348,7 @@ When the proofs run, it:
 - restores `.kani-cargo`, `.kani-home`, and `.kani-rustup` together under a key
   containing the runner lane and Kani version, and saves only on a cache miss
   from a push to `main`,
-- is bounded by a 30-minute job timeout (`timeout-minutes: 30`).
+- is bounded by a 100-minute job timeout (`timeout-minutes: 100`).
 
 The dispatch trigger can measure a warm restore only after a trusted push to
 `main` has populated the cache key. A dispatch cannot publish a generation

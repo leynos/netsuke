@@ -45,7 +45,6 @@ targets:
     }
     Ok(())
 }
-
 #[test]
 fn missing_required_fields() -> Result<()> {
     {

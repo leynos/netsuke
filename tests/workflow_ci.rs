@@ -458,20 +458,24 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
     );
     let install_kani = named_step(steps, "Install prebuilt Kani")?;
     ensure_kani_install_uses_shared_tool(install_kani)?;
-    // Sixty, not thirty. The job includes a mutation compile gate, which
+    // One hundred, not thirty. The job includes a mutation compile gate, which
     // builds the whole dependency graph through the Kani frontend into a cold
     // `CARGO_TARGET_DIR`; the ceiling has to contain that on top of the harness
     // run and retained-metrics finalization. The earlier warm measurements
     // (152.952s warm over all 18 tracked patches; runs 35796798133 at 257.703s
     // and 35800582469 at 261.514s cold) sized the former thirty minutes, but
     // run 41840367244 spent 824s before nextest even started the mutation test,
-    // and that test then hit its former 600s cap. The Kani nextest profile now
-    // allows 2,400s for the test and 2,520s for the run, which with the 824s
-    // setup and a few seconds of finalisation totals about 3,351s; sixty
-    // minutes leaves roughly 249s for runner variance and post-step reporting.
+    // and that test then hit its former 600s cap. The Kani profile now allows
+    // 900s each for the prewarm and its negative check, 2,400s for the sweep,
+    // and a 2,520s whole-run cap for each of the gate's two invocations; with
+    // the measured 824s of setup and 7s of finalisation, two capped runs total
+    // 5,871s, so the 6,000s ceiling leaves 129s for runner variance and
+    // post-step reporting. The ceiling is sized from those two caps rather than
+    // from the per-test allowances, which bound one test each and add up to no
+    // budget.
     ensure!(
-        mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(60),
-        "Kani smoke job should enforce the 60-minute cold-run ceiling"
+        mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(100),
+        "Kani smoke job should enforce the 100-minute cold-run ceiling"
     );
     Ok(())
 }
