@@ -888,7 +888,7 @@ therefore stops a release asset from being sent, not the job's first request.
 
 Release-shaped files are named by suffix, and a suffix describes a file rather
 than its origin, so the count and suffix checks narrow what can reach the
-upload; they do not prove where those bytes came from. Each package *is* also
+upload; they do not prove where those bytes came from. Each package _is_ also
 checked against where the download put it: the action records the target
 subtree each published package was found in, and a record claiming a package a
 sibling's subtree staged is refused. That is an observation of the tree the run
