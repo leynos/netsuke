@@ -3402,6 +3402,67 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the module is registered in four places rather than one: each registration is
   a separate reachability claim.
 
+- [x] (2026-11-13) Closed the four findings of the review over `13e935517`.
+  All four were about *where* a thing lives rather than what it computes, so
+  each was repaired by moving a responsibility to the module that already owned
+  the neighbouring half of it.
+
+  **Domain Architecture: the wire and the claim were one function.**
+  `validated_provenance` took seven keyword parameters and both judged the
+  claim and described the document, so a second caller that read a record from
+  somewhere else had to restate the wire rules or reach through the policy.
+  `scripts/release_producer_provenance_decode.py` now owns the document -- that
+  it is an object, that it is string-keyed, that every member is present, that
+  the schema is an integer and the text members are text -- and hands over a
+  `RecordedMembers`, so every refusal left in the policy is about the claim.
+  The seven parameters became one struct for the reason the finding gave: a
+  caller that transposed `run_id` and `run_attempt` would still type-check and
+  would silently claim another attempt's artefacts. Both call paths now share
+  the one decoder -- the tree adapter in `release_payload_tree` and the
+  producer's own self-check in `record_producer_provenance_record` -- so a
+  record the producer accepts is one publication can read, by construction
+  rather than by two implementations agreeing today.
+
+  **Unit Architecture: the runner measured, named, and accumulated at once.**
+  `TimedRunner` decided a call's boundary name from a mutable `self._listings`
+  counter, which made the same call answer differently depending on how many
+  listings preceded it. Naming became `release_upload_boundaries.boundary_of`,
+  a total stateless function taking the *phase* as an argument; accumulation
+  became `BoundaryTimings.with_measurement`; and the per-call record became
+  `release_upload_trace.record_for_call` over a `CallReadings` struct, so the
+  three clock readings travel together instead of as three adjacent integers.
+  The writers also gained the guarantee the finding asked for: `_record_one`
+  reports each diagnostic write independently, so an unwritable timings file
+  cannot suppress the trace and neither can change the run's exit status.
+
+  **Tests: three new suites, each at a boundary that had none.**
+  `test_release_producer_provenance_decode.py` holds the wire refusals apart
+  from the claim refusals, so a change to either cannot be covered by the
+  other's cases; `test_release_upload_boundaries.py` pins the naming table,
+  including that a repeated listing in one phase keeps its name -- the property
+  the counter violated; and `test_upload_declared_assets_diagnostics.py` drives
+  the CLI with an unwritable destination and asserts both records still land
+  and the exit status is unchanged. All three are registered in
+  `SECTION_MODULES` and the `test-release-publication` recipe, and the two new
+  source modules in `SOURCE_MODULES` plus exactly one of
+  `POLICY_MODULES`/`ADAPTER_MODULES`: `release_upload_boundaries` is policy,
+  `release_producer_provenance_decode` is an adapter, because it reads a
+  document rather than judging a claim.
+
+  **Docs: the partition is now stated where a maintainer looks for it.**
+  `docs/developers-guide.md` names all seven modules the finding listed plus
+  the two new ones, describes the policy/adapter split and the contract test
+  that enforces it, and explains why the decoder was split -- "malformed
+  document" and "claim nobody built" send an operator to different files. The
+  timings paragraph now says `TimedRunner` only *measures*, and that neither
+  diagnostic can fail the run.
+
+  Gate evidence for `1a6fbe27a` and `b5004ddf1`:
+  `make test-release-publication` 1193 passed; `make test-workflow-contracts`
+  2062 passed, 3 skipped, plus 30 in the follow-on invocation; `make check-fmt`,
+  `make fmt`, `make spelling`, and `make lint-python` (Pylint 10.00/10) all
+  exit 0.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
