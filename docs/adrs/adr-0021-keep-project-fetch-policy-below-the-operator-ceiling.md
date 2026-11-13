@@ -152,3 +152,33 @@ primary file last. Only operator-controlled configuration can enable project
 grants; no project-chain occurrence can self-authorize. Without operator trust,
 project grants are ignored, `true` can tighten default-deny, and `false` cannot
 weaken an existing restriction.
+
+## Addendum (2026-11-12): Reject blocklist reset values before merging
+
+Issue #995 closed a residual gap in the boundary above. A project-chain
+`fetch_block_host` value that was not an array could reach the generic
+configuration merger. The `ortho_config` 0.10.0 pipeline converts a non-finite
+TOML float to JSON `null`, because `serde_json` cannot represent `NaN` or
+infinity, and its append merge treats a `null` collection value as a reset. A
+project layer supplying `nan`, `inf`, `-inf`, `null`, or a scalar could
+therefore clear operator block entries. That contradicts the promise that
+project blocklists only add restrictions.
+
+Discovery now validates `fetch_block_host` as an array of host patterns for
+each occurrence with project scope, and validates `env_block_var` as an array
+of strings for each environment-chain occurrence, before generic merging. A
+malformed value records an `OrthoError::Validation` naming the field. Any
+discovery error keeps every discovered file layer out of the merge, so the
+boundary fails closed instead of dropping only the offending layer. Validation
+neither rewrites nor removes the value; valid arrays, including `[]`, remain
+cumulative restrictions.
+
+Validation is independent of operator trust and of the occurrence's position in
+the chain: it applies to a selected project primary and to every automatically
+discovered occurrence, while operator-authority occurrences keep their existing
+semantics. The reset behaviour was confirmed against the published
+`ortho_config` 0.10.0, `figment` 0.10.19, and `serde_json` 1.0.154 sources, but
+the validation depends on none of those internals: it rejects the malformed
+input shape before it can be interpreted as a reset. End-to-end coverage runs
+only on Unix, because the configuration-discovery integration harness injects
+XDG environment variables.
