@@ -54,19 +54,21 @@ fn snapshot_is_readable_concurrently_from_cloned_handles() {
 #[test]
 fn snapshot_recovers_from_a_poisoned_lock() {
     let captured = CapturedEvents {
-        fields: Arc::new(Mutex::new(vec!["seeded=1".to_owned()])),
+        events: Arc::new(Mutex::new(vec![CapturedEvent {
+            fields: "seeded=1".to_owned(),
+            scope: Vec::new(),
+        }])),
         span_fields: Arc::new(Mutex::new(BTreeMap::new())),
-        event_spans: Arc::new(Mutex::new(Vec::new())),
     };
 
-    let poisoner = Arc::clone(&captured.fields);
+    let poisoner = Arc::clone(&captured.events);
     let handle = std::thread::spawn(move || {
         let _guard = poisoner.lock().expect("lock should be held");
         panic!("poison the capture lock");
     });
     assert!(handle.join().is_err(), "the thread should have panicked");
     assert!(
-        captured.fields.is_poisoned(),
+        captured.events.is_poisoned(),
         "the lock should now be poisoned"
     );
 
@@ -190,9 +192,8 @@ fn callsite_interest_refreshes_when_capture_level_becomes_trace() {
     test_support::tracing_capture::ensure_test_interest_anchors_registered();
     let layer = CapturedEventsLayer::default();
     let captured = CapturedEvents {
-        fields: Arc::clone(&layer.events),
+        events: Arc::clone(&layer.events),
         span_fields: Arc::clone(&layer.span_fields),
-        event_spans: Arc::clone(&layer.event_spans),
     };
     let subscriber = tracing_subscriber::registry().with(layer.with_filter(LevelFilter::DEBUG));
     let transition_interests = Arc::new(Mutex::new(Vec::new()));

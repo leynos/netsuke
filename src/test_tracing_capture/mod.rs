@@ -72,15 +72,26 @@ pub(crate) fn is_manifest_summary_metadata(metadata: &Metadata<'_>) -> bool {
         && metadata.fields().field("message").is_some()
 }
 
+/// One captured event: its rendered fields and the scope it was emitted in.
+///
+/// The two travel together so that a snapshot and the span scopes read from it
+/// stay aligned, however many threads emit while a capture is installed.
+#[derive(Debug, Clone)]
+struct CapturedEvent {
+    /// Fields rendered as `name=value`, joined by single spaces.
+    fields: String,
+    /// Enclosing span names, ordered from the root span outwards.
+    scope: Vec<String>,
+}
+
 /// Captured tracing event fields.
 ///
 /// Obtain an instance through [`with_test_subscriber`]; it shares the capture
 /// buffer with the installed layer.
 #[derive(Debug, Clone)]
 pub struct CapturedEvents {
-    fields: Arc<Mutex<Vec<String>>>,
+    events: Arc<Mutex<Vec<CapturedEvent>>>,
     span_fields: Arc<Mutex<BTreeMap<String, Vec<String>>>>,
-    event_spans: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
 impl CapturedEvents {
@@ -90,10 +101,12 @@ impl CapturedEvents {
     /// another test thread does not cascade into this snapshot.
     #[must_use]
     pub fn snapshot(&self) -> Vec<String> {
-        self.fields
+        self.events
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .clone()
+            .iter()
+            .map(|event| event.fields.clone())
+            .collect()
     }
 
     /// Return the fields carried by every instance of a named span.
@@ -124,14 +137,17 @@ impl CapturedEvents {
     /// An event emitted inside a span must be attributable to it, so the
     /// enclosing scope is recorded rather than inferred from the event fields.
     /// Each entry is ordered from the root span outwards, and an event emitted
-    /// outside every span contributes an empty entry, keeping the entries
-    /// aligned with [`Self::snapshot`].
+    /// outside every span contributes an empty entry. Each event and its scope
+    /// are appended under one lock, so the entries stay aligned with
+    /// [`Self::snapshot`] even when several threads emit at once.
     #[must_use]
     pub fn event_spans(&self) -> Vec<Vec<String>> {
-        self.event_spans
+        self.events
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .clone()
+            .iter()
+            .map(|event| event.scope.clone())
+            .collect()
     }
 }
 
@@ -141,9 +157,8 @@ impl CapturedEvents {
 /// so both observe the same captured events.
 #[derive(Debug, Clone, Default)]
 struct CapturedEventsLayer {
-    events: Arc<Mutex<Vec<String>>>,
+    events: Arc<Mutex<Vec<CapturedEvent>>>,
     span_fields: Arc<Mutex<BTreeMap<String, Vec<String>>>>,
-    event_spans: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
 impl CapturedEventsLayer {
@@ -177,20 +192,19 @@ where
     fn on_event(&self, event: &Event<'_>, ctx: LayerContext<'_, S>) {
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
-        self.events
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(visitor.fields.join(" "));
         let scope = ctx.event_scope(event).map_or(Vec::new(), |scope| {
             scope
                 .from_root()
                 .map(|span| span.name().to_owned())
                 .collect()
         });
-        self.event_spans
+        self.events
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .push(scope);
+            .push(CapturedEvent {
+                fields: visitor.fields.join(" "),
+                scope,
+            });
     }
 
     /// Capture the fields a span is created with.
@@ -304,9 +318,8 @@ pub(crate) fn uninstalled_test_subscriber(
 ) -> (impl Subscriber + Send + Sync + 'static, CapturedEvents) {
     let layer = CapturedEventsLayer::default();
     let captured = CapturedEvents {
-        fields: Arc::clone(&layer.events),
+        events: Arc::clone(&layer.events),
         span_fields: Arc::clone(&layer.span_fields),
-        event_spans: Arc::clone(&layer.event_spans),
     };
     let subscriber = tracing_subscriber::registry().with(layer.with_filter(level_filter));
     (subscriber, captured)
