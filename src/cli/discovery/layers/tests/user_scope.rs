@@ -11,6 +11,7 @@ use super::{TestEnv, utf8_directory};
 use crate::cli::Cli;
 use anyhow::{Context, Result, ensure};
 use pretty_assertions::assert_eq;
+use rstest::rstest;
 use std::path::{Path, PathBuf};
 use tempfile::{TempDir, tempdir};
 
@@ -43,48 +44,84 @@ fn project_cli(root: &Path) -> Result<Cli> {
     })
 }
 
-/// Isolated project, home, and system roots for one user-scope case.
+/// How a case names the user's home directory to the child discovery pass.
+#[derive(Clone, Copy, Debug)]
+enum HomeArrangement {
+    /// Only `USERPROFILE` is set, so home resolution must fall back to it.
+    UserProfileOnly,
+    /// `HOME` is set and `XDG_CONFIG_HOME` is empty, which discovery treats as
+    /// unset.
+    EmptyXdgConfigHome,
+    /// `HOME` and `USERPROFILE` name different roots, and `HOME` must win.
+    HomeAndUserProfile,
+}
+
+/// Isolated project, home, profile, and system roots for one user-scope case.
 ///
 /// The system root always holds a valid configuration, so a case that passes
 /// only because the system file went unread shows up as the wrong layer
-/// winning.
+/// winning. The profile root holds a second user file whose values differ from
+/// the home dotfile's, so a case cannot pass by reading the wrong one.
 struct Case {
     /// Keeps the scenario directories alive for the whole case.
-    temp: TempDir,
+    _temp: TempDir,
     cli: Cli,
     home: PathBuf,
+    profile: PathBuf,
     system: PathBuf,
 }
 
 impl Case {
-    /// Build a project CLI plus home and system roots.
+    /// Build the isolated roots and their configuration files.
     fn new() -> Result<Self> {
         let temp = tempdir().context("create temp dir")?;
         let cli = project_cli(temp.path())?;
         let home = temp.path().join("home");
-        test_support::fs::create_dir(&home).context("create home directory")?;
+        let profile = temp.path().join("profile");
+        for directory in [&home, &profile] {
+            test_support::fs::create_dir(directory)
+                .with_context(|| format!("create {}", directory.display()))?;
+        }
+        test_support::fs::write(profile.join(".netsuke.toml"), "jobs = 7\n")
+            .context("write profile config")?;
         let system = temp.path().join("system");
         write_system_config(&system)?;
         Ok(Self {
-            temp,
+            _temp: temp,
             cli,
             home,
+            profile,
             system,
         })
     }
 
-    /// Return the scenario root that holds the home and system directories.
-    fn root(&self) -> &Path {
-        self.temp.path()
+    /// Write `contents` to `$HOME/.netsuke.toml` and return its path.
+    fn write_home_dotfile(&self, contents: &str) -> Result<PathBuf> {
+        let path = self.home.join(".netsuke.toml");
+        test_support::fs::write(&path, contents)
+            .with_context(|| format!("write home config {}", path.display()))?;
+        Ok(path)
     }
 
-    /// Route the system scope at this case's system root.
-    fn with_system_scope(&self, env: TestEnv) -> TestEnv {
-        env.with_var("XDG_CONFIG_DIRS", self.system.as_os_str())
+    /// Build the discovery environment for `arrangement` with the system root
+    /// redirected at this case's system directory.
+    fn environment(&self, arrangement: HomeArrangement) -> TestEnv {
+        let user_variables = match arrangement {
+            HomeArrangement::UserProfileOnly => {
+                TestEnv::default().with_var("USERPROFILE", self.home.as_os_str())
+            }
+            HomeArrangement::EmptyXdgConfigHome => TestEnv::default()
+                .with_var("HOME", self.home.as_os_str())
+                .with_var("XDG_CONFIG_HOME", ""),
+            HomeArrangement::HomeAndUserProfile => TestEnv::default()
+                .with_var("HOME", self.home.as_os_str())
+                .with_var("USERPROFILE", self.profile.as_os_str()),
+        };
+        user_variables.with_var("XDG_CONFIG_DIRS", self.system.as_os_str())
     }
 
-    /// Discover configuration from `env` and return the single layer path.
-    fn discover(&self, env: &TestEnv) -> Result<String> {
+    /// Discover from `env` and require `expected` to be the only layer.
+    fn assert_single_layer(&self, env: &TestEnv, expected: &Path) -> Result<()> {
         let discovered = discover_file_layers(&self.cli, env);
         ensure!(
             discovered.first_error().is_none(),
@@ -95,62 +132,29 @@ impl Case {
             layers.len() == 1,
             "expected exactly one discovered layer, got {layers:?}"
         );
-        layers
+        let recorded = layers
             .first()
             .context("discovered layer should be present")?
             .path()
-            .map(|path| path.as_str().to_owned())
-            .context("discovered layer should record its path")
+            .map(|path| path.as_str().to_owned());
+        assert_eq!(recorded, Some(canonical(expected)?));
+        Ok(())
     }
 }
 
-/// `USERPROFILE` supplies the home directory when `HOME` is unset, and that
-/// user file must outrank a valid system file.
-#[test]
-fn userprofile_home_fallback_outranks_system_scope() -> Result<()> {
+/// A user file must outrank a valid system file however the user root reaches
+/// discovery.
+///
+/// The `USERPROFILE` case proves the home fallback works when `HOME` is
+/// absent; the empty `XDG_CONFIG_HOME` case proves an empty value is treated
+/// as unset; the two-root case proves `HOME` outranks `USERPROFILE`.
+#[rstest]
+#[case::userprofile_only(HomeArrangement::UserProfileOnly)]
+#[case::empty_xdg_config_home(HomeArrangement::EmptyXdgConfigHome)]
+#[case::home_outranks_userprofile(HomeArrangement::HomeAndUserProfile)]
+fn home_user_file_outranks_system_scope(#[case] arrangement: HomeArrangement) -> Result<()> {
     let case = Case::new()?;
-    let user_config = case.home.join(".netsuke.toml");
-    test_support::fs::write(&user_config, "jobs = 4\n").context("write user config")?;
-    let env =
-        case.with_system_scope(TestEnv::default().with_var("USERPROFILE", case.home.as_os_str()));
+    let home_config = case.write_home_dotfile("jobs = 4\n")?;
 
-    assert_eq!(case.discover(&env)?, canonical(&user_config)?);
-    Ok(())
-}
-
-/// An empty `XDG_CONFIG_HOME` is treated as unset, so the home user file must
-/// still outrank a valid system file.
-#[test]
-fn empty_xdg_config_home_falls_back_to_home_user_file() -> Result<()> {
-    let case = Case::new()?;
-    let user_config = case.home.join(".netsuke.toml");
-    test_support::fs::write(&user_config, "jobs = 4\n").context("write user config")?;
-    let env = case.with_system_scope(
-        TestEnv::default()
-            .with_var("HOME", case.home.as_os_str())
-            .with_var("XDG_CONFIG_HOME", ""),
-    );
-
-    assert_eq!(case.discover(&env)?, canonical(&user_config)?);
-    Ok(())
-}
-
-/// `HOME` outranks `USERPROFILE` when both name a user configuration file.
-#[test]
-fn home_outranks_userprofile_for_user_candidates() -> Result<()> {
-    let case = Case::new()?;
-    let home_config = case.home.join(".netsuke.toml");
-    test_support::fs::write(&home_config, "jobs = 4\n").context("write home config")?;
-    let profile = case.root().join("profile");
-    test_support::fs::create_dir(&profile).context("create profile directory")?;
-    test_support::fs::write(profile.join(".netsuke.toml"), "jobs = 7\n")
-        .context("write profile config")?;
-    let env = case.with_system_scope(
-        TestEnv::default()
-            .with_var("HOME", case.home.as_os_str())
-            .with_var("USERPROFILE", profile.as_os_str()),
-    );
-
-    assert_eq!(case.discover(&env)?, canonical(&home_config)?);
-    Ok(())
+    case.assert_single_layer(&case.environment(arrangement), &home_config)
 }
