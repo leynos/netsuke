@@ -5259,3 +5259,50 @@ release-publication tests (1,113 passed), documentation contracts (15 passed,
 and Mermaid validation. All four required hosted checks pass and the pull
 request is `CLEAN`; review approval is outstanding. Stage C remains partial; no
 live exchange or release has been exercised.
+
+Draft 29, 2026-11-13: closed the three rows of the `13e935517` pre-merge
+assessment by moving the responsibilities each row named, not by restating them.
+
+- **Domain Architecture.** The record's wire shape left
+  `release_producer_provenance.py` for a new
+  `scripts/release_producer_provenance_decode.py`, which answers whether the
+  document is a string-keyed object, carries every member, and carries each
+  member as the type the format defines. The policy now takes a
+  `RecordedMembers` struct, so the seven transposable parameters the row named
+  are one value, and both readers -- the tree adapter and the producer's own
+  self-check -- call the one decoder. `SCHEMA_VERSION` and the member names
+  stay in the policy because the writer composes its document from them: the
+  row asked for the *checks* to move, and moving the vocabulary would have
+  split one document's definition across two files.
+- **Unit Architecture.** `TimedRunner` kept a `self._listings` counter to
+  decide a boundary's name, so the fourth listing in a run was named
+  differently from the first. The name is now
+  `release_upload_boundaries.boundary_of` over an explicit phase, the
+  accumulation is `BoundaryTimings.with_measurement`, and the per-call record is
+  `release_upload_trace.record_for_call` over a `CallReadings` struct. The
+  writers raise `OSError` and the CLI's `_record_one` prints and continues per
+  write, so one unwritable diagnostic cannot suppress the other or change the
+  exit status.
+- **Tests.** Three suites were added for the three seams the rows created:
+  `test_release_producer_provenance_decode.py` for the wire refusals,
+  `test_release_upload_boundaries.py` for the naming table, and
+  `test_upload_declared_assets_diagnostics.py` for the CLI's non-fatal
+  diagnostic path.
+
+One row remains disposed of rather than repaired, and the disposition is
+evidence-backed. The Linked Issues check asks either for a finalizer consumer in
+`release.yml` or for the issue owner's recorded acceptance of the split. The
+first is out of scope: #1067, #1068, and #1069 are open for the verifier, the
+finalizer, and the consumer smoke, and each is an independent behaviour with
+its own failure modes. What #1111 owes the acceptance criteria is the
+retention, and it has it: the record is retained before the upload as
+`declared-assets-<job>-<attempt>`, the plan after it under `always()`, so a
+later job can consume both.
+
+The eight local gates passed sequentially on `471881228` with an unmoved tree:
+formatting, lint (Pylint 10.00/10), typecheck (`ty` clean and `cargo check`
+clean), Markdown lint (0 issues in 220 files, no `typos.toml` drift), Mermaid
+validation, Rust tests (5,252 passed, 7 skipped, plus doctests), workflow
+contracts (2,062 passed, 3 skipped, plus 30 script-helper checks), and
+documentation coverage (98.14%, 6,058/6,173). Stage C remains partial; no live
+exchange or release has been exercised.
