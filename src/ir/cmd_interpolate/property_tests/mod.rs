@@ -13,12 +13,13 @@ use super::{
     interpolate_script_with_bindings,
 };
 
+use boundary::{HashBoundary, hash_boundary_strategy};
 use support::{
-    HashBoundary, POSIX_SEPARATORS, adversarial_template_strategy, assert_matches_specification,
+    POSIX_SEPARATORS, adversarial_template_strategy, assert_matches_specification,
     context_sentinel_bindings, eight_placeholder_template_strategy, has_odd_backticks,
-    hash_boundary_strategy, interpolation_template_strategy, is_valid_posix_command,
-    non_separator_character_strategy, posix_bindings, power_shell_path_strategy,
-    power_shell_template_strategy, raw_binding_strategy, safe_text_strategy,
+    interpolation_template_strategy, is_valid_posix_command, non_separator_character_strategy,
+    posix_bindings, power_shell_path_strategy, power_shell_template_strategy, raw_binding_strategy,
+    safe_text_strategy,
 };
 
 proptest! {
@@ -323,23 +324,24 @@ proptest! {
     /// applies, so this compares both POSIX traversals against POSIX token
     /// recognition rather than against the scanner. The template's `"` sits
     /// immediately after `#`: when `#` starts a comment the quote and the
-    /// marker are inert, so the template must survive byte-for-byte, and when
-    /// `#` stays in the word the quote opens a region around the marker, so the
-    /// marker must take the double-quoted encoding. Both branches keep the
-    /// quote pair balanced, so the command-syntax guard accepts either reading.
+    /// marker are inert, so they must survive byte-for-byte, and when `#` stays
+    /// in the word the quote opens a region around the marker, so the marker
+    /// must take the double-quoted encoding. A second marker follows `tail`, and
+    /// it interpolates as soon as the comment no longer covers it. Every branch
+    /// keeps the quote pairs balanced, so the command-syntax guard accepts any
+    /// reading.
     #[test]
     fn hash_boundary_follows_the_posix_comment_rule(boundary in hash_boundary_strategy()) {
         let HashBoundary {
             prefix,
             tail,
             starts_comment,
+            tail_marker_is_commented,
         } = boundary;
-        let template = format!("{prefix}#\"{INS_TOKEN}\"{tail}");
-        let expected = if starts_comment {
-            template.clone()
-        } else {
-            format!("{prefix}#\"DBL\"{tail}")
-        };
+        let template = format!("{prefix}#\"{INS_TOKEN}\"{tail}\"{INS_TOKEN}\"");
+        let leading = if starts_comment { INS_TOKEN } else { "DBL" };
+        let trailing = if tail_marker_is_commented { INS_TOKEN } else { "DBL" };
+        let expected = format!("{prefix}#\"{leading}\"{tail}\"{trailing}\"");
         let bindings = context_sentinel_bindings();
 
         for interpolate in [
@@ -364,4 +366,5 @@ proptest! {
     }
 }
 
+mod boundary;
 mod support;

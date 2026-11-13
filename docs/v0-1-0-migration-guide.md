@@ -372,7 +372,9 @@ line is body text now, and the recipe must either spell the whole delimiter on
 the closing line or change the delimiter.
 
 Recipes that do not place `#` directly after a substitution closer are
-unaffected. The
+unaffected by the ambiguity rejection. The heredoc delimiter rule above applies
+independently of `)#`, so a recipe whose delimiter carries a non-ASCII space
+changes behaviour whether or not it places `#` after a substitution closer. The
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary)
 describes the full comment and substitution rules.
 

@@ -2381,7 +2381,7 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   vertical tab, or form feed stays part of the delimiter, so the closing line
   must spell the complete word. For a delimiter written `EOF` followed by a
   no-break space and `X`, a body line spelling only `EOF` stays body text, and
-  the heredoc ends only at the line spelling all three characters. Netsuke also
+  the heredoc ends only at the line spelling all three components. Netsuke also
   rejects a marker that directly follows an unpaired backslash, because that
   backslash would escape the first character of the substituted path; write
   `\\{{ outs }}` to keep one literal backslash, or place the marker inside
