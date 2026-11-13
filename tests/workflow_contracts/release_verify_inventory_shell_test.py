@@ -133,8 +133,12 @@ def test_an_operator_ends_the_word_before_a_hash(operator: str) -> None:
     word, so ``true;# '`` ignores the rest of the line. A reader that waits for
     whitespace reads the apostrophe as an opening quote and swallows the
     command after it -- which is the command a check needs to see.
+
+    The command after the comment is a continued ``gh a\`` / ``pi`` call, so
+    the same case covers both traps: a quote invented at the apostrophe would
+    keep the continuation open and the POST would never reach the scan.
     """
-    script = f"true{operator}# 'x\ngh api --method POST repos/o/r/releases\n"
+    script = f"true{operator}# '\ngh a\\\npi --method POST repos/o/r/releases\n"
     assert logical_lines(script) == [
         f"true{operator}",
         "gh api --method POST repos/o/r/releases",
