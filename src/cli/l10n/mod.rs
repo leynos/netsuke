@@ -1,9 +1,11 @@
 //! Keep Clap localization logic separate from core CLI definitions.
 
+use crate::cli::config::ColourPolicy;
 use crate::localization::keys;
 use clap::{Arg, Command};
 use ortho_config::{LocalizationArgs, Localizer};
 use std::ffi::OsString;
+use std::str::FromStr;
 
 mod flag_keys;
 pub(crate) use flag_keys::top_level_flag_help_key;
@@ -292,22 +294,27 @@ const fn help_topic_about_key(topic: HelpTopicName) -> &'static str {
     }
 }
 
-/// Inspect raw arguments and extract the `--locale` value when present.
+/// Find the last value for a valued pre-parse option before `--`.
 ///
-/// When multiple `--locale` flags are provided, the last one is used.
-/// This valued scanner intentionally remains separate from the bare
-/// `json_hint_from_args` flag scanner. Extract `find_option_value` only when a
-/// second valued pre-clap option needs the same handling.
+/// Accept both `--option value` and `--option=value`. A `--` argument ends the
+/// scan, and a following `--` is not consumed as the option's value.
+///
+/// # Examples
+///
+/// ```text
+/// find_option_value(&args, "--locale") -> Some("en-GB")
+/// ```
 #[must_use]
-pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
-    let mut hint = None;
+fn find_option_value(args: &[OsString], option: &str) -> Option<String> {
+    let equals_prefix = format!("{option}=");
+    let mut value = None;
     let mut iter = args.iter().peekable();
     while let Some(arg) = iter.next() {
         let text = arg.to_string_lossy();
         if text == "--" {
             break;
         }
-        if text == "--locale" {
+        if text == option {
             let Some(next) = iter.peek() else {
                 break;
             };
@@ -315,15 +322,23 @@ pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
             if next_text == "--" {
                 break;
             }
-            hint = Some(next_text.into_owned());
+            value = Some(next_text.into_owned());
             iter.next();
             continue;
         }
-        if let Some(value) = text.strip_prefix("--locale=") {
-            hint = Some(value.to_owned());
+        if let Some(next_value) = text.strip_prefix(&equals_prefix) {
+            value = Some(next_value.to_owned());
         }
     }
-    hint
+    value
+}
+
+/// Inspect raw arguments and extract the `--locale` value when present.
+///
+/// When multiple `--locale` flags are provided, the last one is used.
+#[must_use]
+pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
+    find_option_value(args, "--locale")
 }
 
 /// Parse a user-supplied boolean value, returning `None` for unrecognized input.
@@ -354,6 +369,15 @@ pub fn json_hint_from_args(args: &[OsString]) -> Option<bool> {
         }
     }
     None
+}
+
+/// Inspect raw arguments and extract a valid `--color` policy when present.
+///
+/// When multiple `--color` flags are provided, the last value is used. Values
+/// after `--` are ignored, matching Clap's option parsing.
+#[must_use]
+pub fn colour_hint_from_args(args: &[OsString]) -> Option<ColourPolicy> {
+    find_option_value(args, "--color").and_then(|value| ColourPolicy::from_str(&value).ok())
 }
 
 #[cfg(test)]

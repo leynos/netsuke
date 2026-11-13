@@ -73,3 +73,61 @@ fn clippy_gate_covers_every_workspace_target_and_feature() -> Result<()> {
     );
     Ok(())
 }
+
+/// Keep terminal probing confined to the process entrypoint.
+///
+/// `IsTerminal::is_terminal` is denied so a presentation decision cannot be
+/// re-derived from ambient state deep in a call tree; the entrypoint captures
+/// each stream once and passes the result as `TerminalFacts`. This holds both
+/// halves of that policy: the denial exists, and the one sanctioned exception
+/// is the narrowest scope that can supply it.
+///
+/// A trybuild-style compile-fail case would test Clippy's own lint machinery,
+/// which the workspace does not shadow; the contract that can regress here is
+/// the configuration and the exception's placement, and both are readable.
+#[test]
+fn clippy_confines_terminal_probing_to_the_entrypoint() -> Result<()> {
+    let policy_path = repository_path("clippy.toml");
+    let paths = disallowed_method_paths(&policy_path)?;
+    ensure!(
+        paths
+            .iter()
+            .any(|path| path == "std::io::IsTerminal::is_terminal"),
+        "clippy.toml must disallow std::io::IsTerminal::is_terminal, found {paths:?}"
+    );
+
+    let main_source = test_fs::read_to_string(repository_path("src/main.rs"))?;
+    let exception = main_source
+        .split("#[expect(")
+        .find(|block| block.contains("clippy::disallowed_methods"))
+        .context("src/main.rs should carry one disallowed_methods exception")?;
+    // Only the item the attribute decorates counts. Searching the whole rest
+    // of the file would pass on any later `fn main()` even after the exception
+    // moved onto a helper, so the header is cut off at the attribute's closing
+    // `)]` and read up to the item's opening brace.
+    let header = exception
+        .split_once(")]")
+        .map(|(_, rest)| rest)
+        .context("the disallowed_methods exception should close its attribute")?
+        .split_once('{')
+        .map(|(header, _)| header)
+        .context("the disallowed_methods exception should decorate an item")?;
+    ensure!(
+        header.contains("fn main()"),
+        "the terminal-probe exception must sit on `main`, not on a helper that \
+         could be called from anywhere, found {header:?}"
+    );
+    ensure!(
+        header.matches("fn ").count() == 1,
+        "the terminal-probe exception must decorate exactly one item, found \
+         {header:?}"
+    );
+    // The reason is part of the contract: an unexplained suppression is what
+    // the repository's suppression policy forbids, and a later edit that drops
+    // the reason while keeping the exception would otherwise pass.
+    ensure!(
+        exception.contains("reason ="),
+        "the terminal-probe exception must state why it is permitted"
+    );
+    Ok(())
+}

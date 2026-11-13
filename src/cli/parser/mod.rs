@@ -16,7 +16,7 @@
 use camino::Utf8PathBuf;
 use clap::builder::{TypedValueParser, ValueParser};
 use clap::error::{ContextKind, ContextValue, ErrorKind};
-use clap::{ArgMatches, CommandFactory, FromArgMatches};
+use clap::{ArgMatches, ColorChoice, CommandFactory, FromArgMatches};
 use ortho_config::{LocalizationArgs, Localizer, localize_clap_error_with_command};
 use std::ffi::{OsStr, OsString};
 use std::sync::Arc;
@@ -32,7 +32,7 @@ use super::policy::values::{
 };
 use super::value_parser::LocalizedValueParser;
 use crate::cli::l10n::localize_command;
-pub use crate::cli::l10n::{json_hint_from_args, locale_hint_from_args};
+pub use crate::cli::l10n::{colour_hint_from_args, json_hint_from_args, locale_hint_from_args};
 use crate::cli_localization::build_localizer;
 use crate::localization::keys;
 
@@ -95,12 +95,13 @@ pub(super) fn validation_message(
 pub fn parse_with_localizer_from<I, T>(
     iter: I,
     localizer: &Arc<dyn Localizer>,
+    color_choice: ColorChoice,
 ) -> Result<(Cli, ArgMatches), clap::Error>
 where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
-    let mut command = configured_command(Some(localizer));
+    let mut command = configured_command(Some(localizer)).color(color_choice);
     let active_localizer = localizer.as_ref();
     let matches = command
         .try_get_matches_from_mut(iter)

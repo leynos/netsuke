@@ -7,7 +7,7 @@ use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::cli::{Cli, Commands, HelpArgs, HelpTargetsArgs, HelpTopic};
-use netsuke::output_prefs;
+use netsuke::display_plan::{TerminalFacts, resolve_display_plan};
 use netsuke::runner::run;
 use rstest::{fixture, rstest};
 use test_support::{fluent::normalize_fluent_isolates, localizer_test_lock, set_en_localizer};
@@ -65,7 +65,11 @@ fn help_targets_manifest() -> Result<(tempfile::TempDir, Utf8PathBuf)> {
 fn run_help_targets(cli: &Cli) -> Result<()> {
     let _lock = localizer_test_lock().map_err(|e| anyhow::anyhow!("{e}"))?;
     let _guard = set_en_localizer();
-    run(cli, output_prefs::resolve(None)).context("running help targets subcommand")
+    run(
+        cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+    )
+    .context("running help targets subcommand")
 }
 
 /// Reject graph export without root JSON before resolving a manifest path.

@@ -9,7 +9,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::cli::ColourPolicy;
-use crate::output_mode::{OutputMode, no_color_active_with};
+use crate::output_mode::{EnvSignals, OutputMode};
 use serde::{Deserialize, Serialize};
 
 /// User-facing theme preference for CLI presentation.
@@ -63,6 +63,40 @@ impl ThemePreference {
             "unicode" => Ok(Self::Unicode),
             "ascii" => Ok(Self::Ascii),
             _ => Err(Self::VALID_OPTIONS),
+        }
+    }
+
+    /// Name the theme variant that a forced emoji decision selects.
+    ///
+    /// Every caller that turns an emoji policy into a theme preference goes
+    /// through here, so exactly one place decides which variant `true` and
+    /// `false` name. The callers own the separate question of whether the
+    /// policy is forced at all, which they answer with
+    /// `EmojiPolicy::unicode_override`; this only names the variants for the
+    /// forced cases. Passing `None` yields `None` rather than `Auto`, because
+    /// an unforced policy leaves the choice to the theme facade.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::theme::ThemePreference;
+    ///
+    /// assert_eq!(
+    ///     ThemePreference::from_unicode_override(Some(true)),
+    ///     Some(ThemePreference::Unicode),
+    /// );
+    /// assert_eq!(
+    ///     ThemePreference::from_unicode_override(Some(false)),
+    ///     Some(ThemePreference::Ascii),
+    /// );
+    /// assert_eq!(ThemePreference::from_unicode_override(None), None);
+    /// ```
+    #[must_use]
+    pub const fn from_unicode_override(forced: Option<bool>) -> Option<Self> {
+        match forced {
+            None => None,
+            Some(true) => Some(Self::Unicode),
+            Some(false) => Some(Self::Ascii),
         }
     }
 }
@@ -231,13 +265,6 @@ const COLOURS: ColourTokens = ColourTokens {
     timing: SemanticColour::Timing,
 };
 
-/// Environment signals that may force ASCII symbols.
-#[derive(Debug, Clone, Copy)]
-struct EnvSignals {
-    /// Whether the `NO_COLOR` environment signal is set.
-    no_color: bool,
-}
-
 /// Determine whether Unicode symbols should be used based on theme configuration.
 ///
 /// This helper encapsulates the precedence logic for symbol selection:
@@ -248,7 +275,7 @@ struct EnvSignals {
 const fn should_use_unicode(
     theme: Option<ThemePreference>,
     no_emoji: Option<bool>,
-    env: EnvSignals,
+    no_color_active: bool,
     mode: OutputMode,
 ) -> bool {
     match theme {
@@ -258,7 +285,7 @@ const fn should_use_unicode(
             if let Some(true) = no_emoji {
                 return false;
             }
-            if env.no_color {
+            if no_color_active {
                 return false;
             }
             // Default: Unicode for Standard mode, ASCII for Accessible
@@ -297,10 +324,41 @@ pub fn resolve_theme<F>(
 where
     F: Fn(&str) -> Option<String>,
 {
-    let env = EnvSignals {
-        no_color: no_color_active_with(context.colour_policy, &read_env),
-    };
-    let use_unicode = should_use_unicode(theme, context.no_emoji, env, context.mode);
+    resolve_theme_from_signals(theme, context, EnvSignals::read(read_env))
+}
+
+/// Resolve a theme from environment signals that a caller already reduced.
+///
+/// [`resolve_theme`] reads the environment itself, which is right for a caller
+/// holding an environment seam but wrong for one holding an [`EnvSignals`]: a
+/// second reading would have to reconstruct environment strings from the
+/// reduced facts. This entry point takes the facts as they are.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::theme::{ThemeContext, resolve_theme_from_signals};
+/// use netsuke::output_mode::{EnvSignals, OutputMode};
+///
+/// let signals = EnvSignals {
+///     no_color_set: true,
+///     ..EnvSignals::default()
+/// };
+/// let theme = resolve_theme_from_signals(None, ThemeContext::new(None, None, OutputMode::Standard), signals);
+/// assert_eq!(theme.tokens.symbols.success, "+");
+/// ```
+#[must_use]
+pub const fn resolve_theme_from_signals(
+    theme: Option<ThemePreference>,
+    context: ThemeContext,
+    env: EnvSignals,
+) -> ResolvedTheme {
+    let use_unicode = should_use_unicode(
+        theme,
+        context.no_emoji,
+        env.no_color_active(context.colour_policy),
+        context.mode,
+    );
 
     let symbols = if use_unicode {
         UNICODE_SYMBOLS

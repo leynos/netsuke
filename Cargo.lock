@@ -3081,6 +3081,7 @@ dependencies = [
  "cap-std 3.4.6",
  "mockable",
  "netsuke-build",
+ "nix",
  "proptest",
  "regex",
  "rstest",

@@ -1,0 +1,292 @@
+---
+source: tests/cli_tests/display_plan_contract.rs
+expression: rows_for_policy(colour_cases())
+---
+- policy: auto
+  facts: pipe
+  plan:
+    output_mode: standard
+    emoji_allowed: true
+    reporter: standard
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: true
+      links: false
+- policy: auto
+  facts: stdout terminal
+  plan:
+    output_mode: standard
+    emoji_allowed: true
+    reporter: standard
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: false
+    stdout_colour: true
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: true
+      links: false
+- policy: auto
+  facts: stderr terminal
+  plan:
+    output_mode: standard
+    emoji_allowed: true
+    reporter: standard
+    progress:
+      enabled: true
+      live: true
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: true
+    diagnostics:
+      colour: true
+      unicode: true
+      links: true
+- policy: auto
+  facts: terminal with NO_COLOR
+  plan:
+    output_mode: accessible
+    emoji_allowed: false
+    reporter: accessible
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: false
+      links: false
+- policy: auto
+  facts: dumb terminal
+  plan:
+    output_mode: accessible
+    emoji_allowed: false
+    reporter: accessible
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: false
+      links: false
+- policy: auto
+  facts: JSON pipe
+  plan:
+    output_mode: standard
+    emoji_allowed: true
+    reporter: silent
+    progress:
+      enabled: false
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: true
+      links: false
+- policy: always
+  facts: pipe
+  plan:
+    output_mode: standard
+    emoji_allowed: true
+    reporter: standard
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: true
+    stdout_colour: true
+    stderr_colour: true
+    diagnostics:
+      colour: true
+      unicode: true
+      links: true
+- policy: always
+  facts: stdout terminal
+  plan:
+    output_mode: standard
+    emoji_allowed: true
+    reporter: standard
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: false
+    stdout_colour: true
+    stderr_colour: true
+    diagnostics:
+      colour: true
+      unicode: true
+      links: true
+- policy: always
+  facts: stderr terminal
+  plan:
+    output_mode: standard
+    emoji_allowed: true
+    reporter: standard
+    progress:
+      enabled: true
+      live: true
+      force_text_task_updates: true
+    stdout_colour: true
+    stderr_colour: true
+    diagnostics:
+      colour: true
+      unicode: true
+      links: true
+- policy: always
+  facts: terminal with NO_COLOR
+  plan:
+    output_mode: standard
+    emoji_allowed: true
+    reporter: standard
+    progress:
+      enabled: true
+      live: true
+      force_text_task_updates: false
+    stdout_colour: true
+    stderr_colour: true
+    diagnostics:
+      colour: true
+      unicode: true
+      links: true
+- policy: always
+  facts: dumb terminal
+  plan:
+    output_mode: accessible
+    emoji_allowed: false
+    reporter: accessible
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: true
+    stdout_colour: true
+    stderr_colour: true
+    diagnostics:
+      colour: true
+      unicode: false
+      links: false
+- policy: always
+  facts: JSON pipe
+  plan:
+    output_mode: standard
+    emoji_allowed: true
+    reporter: silent
+    progress:
+      enabled: false
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: true
+      links: false
+- policy: never
+  facts: pipe
+  plan:
+    output_mode: accessible
+    emoji_allowed: false
+    reporter: accessible
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: false
+      links: false
+- policy: never
+  facts: stdout terminal
+  plan:
+    output_mode: accessible
+    emoji_allowed: false
+    reporter: accessible
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: false
+      links: false
+- policy: never
+  facts: stderr terminal
+  plan:
+    output_mode: accessible
+    emoji_allowed: false
+    reporter: accessible
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: false
+      links: false
+- policy: never
+  facts: terminal with NO_COLOR
+  plan:
+    output_mode: accessible
+    emoji_allowed: false
+    reporter: accessible
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: false
+      links: false
+- policy: never
+  facts: dumb terminal
+  plan:
+    output_mode: accessible
+    emoji_allowed: false
+    reporter: accessible
+    progress:
+      enabled: true
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: false
+      links: false
+- policy: never
+  facts: JSON pipe
+  plan:
+    output_mode: accessible
+    emoji_allowed: false
+    reporter: silent
+    progress:
+      enabled: false
+      live: false
+      force_text_task_updates: true
+    stdout_colour: false
+    stderr_colour: false
+    diagnostics:
+      colour: false
+      unicode: false
+      links: false

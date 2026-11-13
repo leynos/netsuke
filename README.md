@@ -363,7 +363,6 @@ Known limitations include:
   not yet part of the manifest model;
 - `--json` emits exactly one versioned result or diagnostic document for each
   command, but the schema may still change before 1.0;
-- colour rendering is not implemented;
 - accessibility still needs assistive-technology verification.
 
 The beta3 release fixes beta2's shell-dollar limitation with Ninja-aware

@@ -335,7 +335,6 @@ Limitações conhecidas incluem:
   GCC, estão planejadas, mas ainda não fazem parte do modelo de manifesto;
 - `--json` emite exatamente um documento versionado de resultado ou
   diagnóstico para cada comando, mas o esquema ainda pode mudar antes da 1.0;
-- a renderização de cores não está implementada;
 - a acessibilidade ainda precisa de verificação com tecnologia assistiva.
 
 A release beta3 corrige a limitação do cifrão de shell da beta2 com escape

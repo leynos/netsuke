@@ -22,7 +22,7 @@ struct ThemeResolutionCase<'a> {
 #[case::false_defers_to_no_color(Some(false), Some("1"), false)]
 #[case::explicit_false_allows_unicode(Some(false), None, true)]
 #[case::no_color_disables_emoji(None, Some("1"), false)]
-#[case::no_color_empty_disables_emoji(None, Some(""), false)]
+#[case::no_color_empty_leaves_emoji_enabled(None, Some(""), true)]
 #[case::default_allows_unicode(None, None, true)]
 fn resolve_output_prefs(
     no_color_env: NoColorEnv,

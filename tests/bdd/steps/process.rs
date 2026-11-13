@@ -5,7 +5,7 @@ use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use mockable::{DefaultEnv, Env};
 #[cfg(unix)]
-use netsuke::output_prefs;
+use netsuke::display_plan::{TerminalFacts, resolve_display_plan};
 use netsuke::runner::{self, BuildTargets, CommandEnv, NINJA_PROGRAM};
 use rstest_bdd_macros::{given, then, when};
 use std::fs;
@@ -301,7 +301,10 @@ fn run_subcommand(world: &TestWorld) -> Result<()> {
     );
     let result = world
         .cli
-        .with_ref(|cli| runner::run_with_ninja_program(cli, output_prefs::resolve(None), &program))
+        .with_ref(|cli| {
+            let plan = resolve_display_plan(cli.display_policies(), TerminalFacts::default());
+            runner::run_with_ninja_program(cli, plan, &program)
+        })
         .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?
         .map_err(|e| format!("{e:#}"));
     record_result(world, result);

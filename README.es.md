@@ -352,7 +352,6 @@ Las limitaciones conocidas incluyen:
 - `--json` emite exactamente un documento de resultado o diagnóstico
   versionado por cada comando, pero el esquema aún puede cambiar antes de la
   versión 1.0;
-- la representación en color no está implementada;
 - la accesibilidad todavía necesita verificación con tecnología de
   asistencia.
 

@@ -1,9 +1,6 @@
 //! Runtime diagnostics for failed entries in command-list recipes.
 
-use super::support::{
-    human_error_fragment, normalized_diagnostic_fragment, normalized_human_error_fragment,
-    open_workspace,
-};
+use super::support::{CommandListDiagnostics, open_workspace};
 use crate::command_list_failure_support::{
     FAILURE_PREFIX, contains_full_fingerprint, contains_target_clause, identifies_entry,
 };
@@ -89,7 +86,9 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
         "a failing list entry must fail the build"
     );
     let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
-    let human_error = human_error_fragment(&stderr, FAILURE_PREFIX)
+    let diagnostics = CommandListDiagnostics::new(&stderr);
+    let human_error = diagnostics
+        .human_error_fragment()
         .with_context(|| format!("rendered human error should contain its marker: {stderr}"))?;
     ensure!(
         identifies_entry(human_error, 2),
@@ -105,7 +104,8 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
     );
     insta::assert_snapshot!(
         "command_list_failure_human_diagnostic",
-        normalized_human_error_fragment(&stderr, FAILURE_PREFIX)
+        diagnostics
+            .normalized_human_error_fragment()
             .context("human diagnostic should contain a stable error fragment")?
     );
     let output_file = open_workspace(&temp)?
@@ -161,7 +161,8 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
                 .find(|cause| cause.contains(FAILURE_PREFIX))
         })
         .context("JSON diagnostic should preserve its command-list cause")?;
-    let normalized_cause = normalized_diagnostic_fragment(command_list_cause, FAILURE_PREFIX)
+    let normalized_cause = CommandListDiagnostics::new(command_list_cause)
+        .normalized_failure_marker_fragment()
         .context("JSON command-list cause should have a stable marker fragment")?;
     let schema_version = diagnostics
         .get("schema_version")
@@ -208,7 +209,8 @@ fn failed_command_list_entry_is_attributed_in_tracing_output() -> Result<()> {
     );
     insta::assert_snapshot!(
         "command_list_failure_tracing_diagnostic",
-        normalized_diagnostic_fragment(&stderr, "command_list_action=")
+        CommandListDiagnostics::new(&stderr)
+            .normalized_tracing_fragment()
             .context("tracing should contain the target field")?
     );
     Ok(())

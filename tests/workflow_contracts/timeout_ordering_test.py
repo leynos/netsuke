@@ -19,10 +19,9 @@ ordering assertion does not.
 The per-test allowance is ``period`` multiplied by ``terminate-after``,
 not ``period`` alone. Every period here is 60 seconds and every platform
 uses the same multipliers, so the profile's own five periods give 300 s,
-and the mutation compile gate gets 600 s.
-The largest allowance is therefore 600 s, and it is that figure the whole-run
-budget has to clear; reading the period as the budget would understate either by its
-multiplier.
+and the Kani-only profile grants its mutation gate 2,400 s. Coverage ordering
+uses the 300 s allowance effective in the CI profile, so its 960 s whole-run
+budget can contain every matching test.
 
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``, and the canonical wording in
@@ -255,9 +254,9 @@ def test_the_largest_per_test_allowance_counts_the_multiplier(
     This is the reading that decides every comparison above, and it is
     the one easy to get wrong: the periods here are all 60 s, so a
     contract reading the period alone would report a 60 s largest
-    allowance where the real figure is 600 s.
+    allowance where the effective coverage-profile figure is 300 s.
     """
-    largest = largest_test_allowance(nextest_config)
+    largest = largest_test_allowance(nextest_config, profile=CAPPED_PROFILE)
     periods = [
         seconds(match[1])
         for match in re.finditer(r'period\s*=\s*"([^"]+)"', nextest_config)

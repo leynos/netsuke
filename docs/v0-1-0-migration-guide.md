@@ -252,6 +252,68 @@ case-insensitive and are listed in the users' guide's
 [policy values and parsing](users-guide.md#policy-values-and-parsing) section.
 Clap-specific validation and help metadata remain an internal CLI concern.
 
+## Colour, emoji and progress are resolved once
+
+Netsuke now resolves colour, emoji, progress, accessibility and JSON into a
+single display plan before any output is written. Existing command lines and
+configuration files keep working; the change is visible in behaviour and in the
+Rust API.
+
+Behaviour users should know about:
+
+- `--color always` styles Netsuke's own tracing messages, Miette diagnostics,
+  and Clap help and version output even when the stream is a pipe. Generated
+  artefacts and forwarded subprocess output stay unstyled.
+- `--color always` overrides colour suppression from both `NO_COLOR` and
+  `TERM=dumb`, so Netsuke's own output is still styled. Output mode is a
+  separate decision: with `--accessibility auto` a dumb terminal still selects
+  accessible mode, because it cannot render live redraws. Use
+  `--accessibility off` to force standard mode against it; live redraws stay
+  disabled.
+- `--accessibility on` and `--accessibility off` name the output mode directly
+  and take precedence over every inferred choice.
+- An empty `NO_COLOR` no longer suppresses colour. The variable counts as set
+  only when it has a non-empty value, which is what the `NO_COLOR` convention
+  asks for; a bare `NO_COLOR=` in a shell or CI environment now leaves colour
+  and accessible mode alone. Previously any presence of the variable was enough.
+- Usage errors and the human-readable configuration-load error stay plain under
+  every policy, because the configuration that would select a policy has not
+  been read yet. The structured `tracing` events emitted beside them do follow
+  `--color`.
+
+See [Colour](users-guide.md#colour) and
+[Accessible output](users-guide.md#accessible-output) for the full precedence
+rules.
+
+Rust callers of the output API must migrate:
+
+- `netsuke::output_prefs::resolve_from_theme` is removed. Use
+  `resolve_from_signals` with captured `EnvSignals`, or the existing `resolve`
+  and `resolve_with` when an environment seam is what you hold.
+  `resolve_from_signals` takes the reduced signals directly so captured facts
+  are not turned back into environment strings and reduced a second time.
+  `resolve_from_theme_with` remains available for callers that hold a theme
+  preference and an environment reader rather than captured signals.
+- `netsuke::display_plan` is new. `resolve_display_plan` is a `const fn` over
+  `DisplayPolicies` and `TerminalFacts` that returns the whole `DisplayPlan`,
+  so a caller can make every presentation decision once instead of re-deriving
+  it per adapter.
+- `netsuke::output_mode::resolve` is removed, because it read the environment
+  itself and so could not take part in the single resolution above. Capture
+  `EnvSignals::read` with the caller's own environment seam and pass it to
+  `EnvSignals::resolve_output_mode`, or use `resolve_with`, which keeps its
+  signature and now delegates to those two steps.
+- `netsuke::runner::run` and `run_with_ninja_program` take a `DisplayPlan` in
+  place of the `OutputPrefs` they used to accept. Pass the plan the caller has
+  already resolved; the runner reads the reporter, progress, and colour
+  decisions from it rather than re-deriving them.
+- `netsuke::cli::parse_with_localizer_from` takes a third argument, the Clap
+  `ColorChoice` for help and version output. `netsuke::cli::ColorChoice` is
+  re-exported so a caller need not depend on Clap directly.
+- `Cli::display_policies` is new, and `AccessibilityPolicy::explicit_override`,
+  `EmojiPolicy::unicode_override` and `ProgressPolicy::is_enabled` expose the
+  policy values a caller needs to build `DisplayPolicies` by hand.
+
 ## Opting into ordered command lists
 
 Existing scalar `command` recipes remain valid, and command lists remain

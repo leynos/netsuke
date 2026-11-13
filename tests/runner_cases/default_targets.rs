@@ -8,7 +8,7 @@
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use netsuke::cli::{BuildArgs, Cli, Commands};
-use netsuke::output_prefs;
+use netsuke::display_plan::{TerminalFacts, resolve_display_plan};
 use netsuke::runner::{
     BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, StderrMode, run_ninja_with,
     run_with_ninja_program,
@@ -95,7 +95,7 @@ fn run_build_uses_cli_default_targets_when_no_targets_are_requested(
 
     run_with_ninja_program(
         &cli,
-        output_prefs::resolve(None),
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
         Utf8Path::from_path(&fixture.ninja_path).context("fake ninja path is not valid UTF-8")?,
     )
     .context("run build with cli default targets")?;
@@ -139,7 +139,7 @@ fn configured_targets_cannot_replace_the_generated_build_file(
 
     run_with_ninja_program(
         &cli,
-        output_prefs::resolve(None),
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
         Utf8Path::from_path(&fixture.ninja_path).context("fake ninja path is not valid UTF-8")?,
     )
     .context("run build with configured option-like targets")?;
@@ -187,7 +187,7 @@ fn explicit_targets_cannot_change_ninjas_working_directory(
 
     run_with_ninja_program(
         &cli,
-        output_prefs::resolve(None),
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
         Utf8Path::from_path(&fixture.ninja_path).context("fake ninja path is not valid UTF-8")?,
     )
     .context("run build with explicit option-like targets")?;

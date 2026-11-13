@@ -8,7 +8,64 @@
 
 use super::command::Cli;
 use super::{AccessibilityPolicy, EmojiPolicy, ProgressPolicy};
+use crate::display_plan::DisplayPolicies;
 use crate::theme::ThemePreference;
+
+impl AccessibilityPolicy {
+    /// Return the forced accessible-mode value, or `None` for automatic mode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::cli::AccessibilityPolicy;
+    ///
+    /// assert_eq!(AccessibilityPolicy::On.explicit_override(), Some(true));
+    /// ```
+    #[must_use]
+    pub const fn explicit_override(self) -> Option<bool> {
+        match self {
+            Self::Auto => None,
+            Self::On => Some(true),
+            Self::Off => Some(false),
+        }
+    }
+}
+
+impl EmojiPolicy {
+    /// Return the forced Unicode-symbol choice, or `None` for automatic mode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::cli::EmojiPolicy;
+    ///
+    /// assert_eq!(EmojiPolicy::Always.unicode_override(), Some(true));
+    /// ```
+    #[must_use]
+    pub const fn unicode_override(self) -> Option<bool> {
+        match self {
+            Self::Auto => None,
+            Self::Always => Some(true),
+            Self::Never => Some(false),
+        }
+    }
+}
+
+impl ProgressPolicy {
+    /// Return whether this policy permits progress reporting.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::cli::ProgressPolicy;
+    ///
+    /// assert!(!ProgressPolicy::Never.is_enabled());
+    /// ```
+    #[must_use]
+    pub const fn is_enabled(self) -> bool {
+        !matches!(self, Self::Never)
+    }
+}
 
 impl Cli {
     /// Return the effective theme preference for emoji policy resolution.
@@ -28,11 +85,7 @@ impl Cli {
     /// ```
     #[must_use]
     pub const fn theme_preference(&self) -> Option<ThemePreference> {
-        match self.emoji {
-            EmojiPolicy::Auto => None,
-            EmojiPolicy::Always => Some(ThemePreference::Unicode),
-            EmojiPolicy::Never => Some(ThemePreference::Ascii),
-        }
+        ThemePreference::from_unicode_override(self.emoji.unicode_override())
     }
 
     /// Return an explicit accessible-output override, if configured.
@@ -51,10 +104,27 @@ impl Cli {
     /// ```
     #[must_use]
     pub const fn accessibility_override(&self) -> Option<bool> {
-        match self.accessibility {
-            AccessibilityPolicy::Auto => None,
-            AccessibilityPolicy::On => Some(true),
-            AccessibilityPolicy::Off => Some(false),
+        self.accessibility.explicit_override()
+    }
+
+    /// Collect the presentation policies consumed by the display-plan resolver.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::cli::Cli;
+    ///
+    /// let policies = Cli::default().display_policies();
+    /// assert!(!policies.json);
+    /// ```
+    #[must_use]
+    pub const fn display_policies(&self) -> DisplayPolicies {
+        DisplayPolicies {
+            colour: self.color,
+            emoji: self.emoji,
+            progress: self.progress,
+            accessibility: self.accessibility,
+            json: self.json,
         }
     }
 
@@ -88,6 +158,6 @@ impl Cli {
     /// ```
     #[must_use]
     pub const fn progress_enabled(&self) -> bool {
-        !matches!(self.progress, ProgressPolicy::Never)
+        self.progress.is_enabled()
     }
 }

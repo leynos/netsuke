@@ -162,43 +162,7 @@ impl OutputPrefs {
     }
 }
 
-/// Resolve output preferences from theme and output mode.
-///
-/// This is the primary resolution function introduced in roadmap 3.12.1.
-/// It delegates to [`resolve_from_theme_with`] and ultimately to
-/// [`theme::resolve_theme`]. That shared resolution path also honours the
-/// `NO_COLOR` environment variable.
-///
-/// Precedence (highest to lowest):
-/// 1. Explicit theme preference (if not `Auto`)
-/// 2. An explicit internal ASCII-symbol preference
-/// 3. `NO_COLOR` environment variable
-/// 4. Output mode (Accessible uses ASCII, Standard uses Unicode)
-///
-/// # Examples
-///
-/// ```
-/// use netsuke::output_prefs::resolve_from_theme;
-/// use netsuke::theme::ThemePreference;
-/// use netsuke::theme::ThemeContext;
-/// use netsuke::output_mode::OutputMode;
-///
-/// let prefs = resolve_from_theme(
-///     Some(ThemePreference::Ascii),
-///     ThemeContext::new(None, None, OutputMode::Standard)
-/// );
-/// assert!(!prefs.emoji_allowed());
-/// ```
-#[must_use]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: supplies the process environment to the read_env seam"
-)]
-pub fn resolve_from_theme(theme: Option<ThemePreference>, context: ThemeContext) -> OutputPrefs {
-    resolve_from_theme_with(theme, context, |key| env::var(key).ok())
-}
-
-/// Testable variant of `resolve_from_theme` with custom environment lookup.
+/// Resolve explicit theme preferences with custom environment lookup.
 #[must_use]
 pub fn resolve_from_theme_with<F>(
     theme: Option<ThemePreference>,
@@ -212,11 +176,41 @@ where
     OutputPrefs::from_theme(resolved_theme)
 }
 
+/// Resolve preferences from environment signals a caller already reduced.
+///
+/// Use this when the caller holds an [`crate::output_mode::EnvSignals`] rather
+/// than an environment seam, so the facts are not converted back into
+/// environment strings only to be reduced a second time.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::output_prefs::resolve_from_signals;
+/// use netsuke::output_mode::{EnvSignals, OutputMode};
+/// use netsuke::theme::ThemeContext;
+///
+/// let signals = EnvSignals {
+///     no_color_set: true,
+///     ..EnvSignals::default()
+/// };
+/// let prefs = resolve_from_signals(None, ThemeContext::new(None, None, OutputMode::Standard), signals);
+/// assert!(!prefs.emoji_allowed());
+/// ```
+#[must_use]
+pub const fn resolve_from_signals(
+    theme: Option<ThemePreference>,
+    context: ThemeContext,
+    env: crate::output_mode::EnvSignals,
+) -> OutputPrefs {
+    let resolved_theme = theme::resolve_theme_from_signals(theme, context, env);
+    OutputPrefs::from_theme(resolved_theme)
+}
+
 /// Resolve output preferences from explicit configuration and environment.
 ///
 /// Precedence:
 /// 1. Explicit `Some(true)` forces emoji off unconditionally.
-/// 2. `NO_COLOR` environment variable (any value, including empty):
+/// 2. A non-empty `NO_COLOR` environment variable:
 ///    emoji off.
 /// 3. Default: emoji allowed.
 ///

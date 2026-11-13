@@ -81,19 +81,26 @@ def document(*tables: str, profile: str = "default") -> str:
 
 
 def test_the_repository_s_own_per_test_budgets_are_the_documented_ones() -> None:
-    """300 s ordinarily, up to 600 s for the mutation compile gate.
+    """Keep ordinary, coverage, and Kani profiles at their documented limits.
 
-    Read the checked-in nextest configuration so drift from the documented
-    budget is visible; the synthetic profile also keeps the default figure
-    covered independently.
+    The long mutation compile allowance is confined to the profile that runs
+    the dedicated Kani gate; it does not enlarge local or coverage suites.
     """
     configured = NEXTEST_CONFIG.read_text(encoding="utf-8")
-    assert largest_test_allowance(configured) == pytest.approx(600.0), (
-        "ten warning periods of sixty seconds is a 600s budget"
+    ordinary_budget = largest_test_allowance(configured, profile="default")
+    assert ordinary_budget == pytest.approx(300.0), (
+        f"the default profile's per-test budget changed: {ordinary_budget}"
     )
-    base_only = (
-        '[profile.default]\nslow-timeout = { period = "60s", terminate-after = 5 }\n'
+    coverage_budget = largest_test_allowance(configured, profile="ci")
+    assert coverage_budget == pytest.approx(300.0), (
+        f"the CI coverage per-test budget changed: {coverage_budget}"
     )
+    kani_budget = largest_test_allowance(configured, profile="kani")
+    assert kani_budget == pytest.approx(2400.0), (
+        f"the Kani mutation per-test budget changed: {kani_budget}"
+    )
+
+    base_only = document('slow-timeout = { period = "60s", terminate-after = 5 }')
     assert largest_test_allowance(base_only) == pytest.approx(300.0), (
         "five warning periods of sixty seconds is a 300s budget"
     )

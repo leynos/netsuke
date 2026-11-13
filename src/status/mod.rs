@@ -52,8 +52,9 @@ pub use pipeline::{PipelineStage, report_pipeline_stage};
 pub use timing::VerboseTimingReporter;
 
 mod indicatif;
+mod render;
 pub use self::indicatif::IndicatifReporter;
-use self::indicatif::{format_completion_line, stage_label, task_progress_update};
+use self::render::{format_completion_line, stage_label, task_progress_update};
 
 /// Reports pipeline stage transitions and completion.
 ///

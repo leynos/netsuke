@@ -325,6 +325,8 @@ fn run_with_config_metrics(
         system_locale: &NoSystemLocale,
         configuration_clock: &clock,
         config_env: &context_env_tests::EmptyConfigEnv,
+        stdout_is_terminal: false,
+        stderr_is_terminal: false,
     };
     let mut exit = None;
     let startup_writer = StartupWriter::buffering();

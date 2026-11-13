@@ -289,10 +289,19 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
   `✖` symbol) so that they are identifiable in plain text. Output colours are
   selected with **high contrast** against both dark and light backgrounds
   (ensuring compliance with colour contrast guidelines[^1]). Additionally, the
-  CLI respects the standard `NO_COLOR` environment variable to disable coloured
-  output entirely, falling back to pure text indicators[^2]. This ensures users
+  CLI respects a non-empty `NO_COLOR` environment variable to disable automatic
+  coloured output, falling back to pure text indicators[^2]. This ensures users
   with monochrome displays or those who prefer no colour (including many screen
   reader setups that ignore colour) get the full meaning of the output.
+
+- **Terminal display-policy interface:** The implementation captures
+  `NO_COLOR`, `TERM`, and stdout/stderr terminal status at startup. The pure
+  `DisplayPlan` combines those `TerminalFacts` with the CLI policies, then the
+  status reporter, tracing formatter, Miette hook, and Clap help renderer apply
+  its projections. These adapters do not probe terminal status or re-read the
+  environment.
+  [ADR-0072](adrs/adr-0072-display-policy-contract-and-terminal-verification.md)
+  records the policy and verification contract.
 
 - **Screen Reader-Friendly Output:** CLI output is structured to be as linear
   and “screen-reader digestible” as possible. A known issue with many CLIs is
@@ -532,8 +541,8 @@ spinner might be read as “vertical bar, slash, dash…” each frame), accessi
 mode falls back to simpler characters. The CLI also respects user preferences:
 for instance, if emoji output is disabled (via `--emoji never`, env
 `NETSUKE_EMOJI=never`, or the legacy `NETSUKE_NO_EMOJI` alias), plain text
-“OK”/“FAIL” replaces check/cross. Similarly, if `NO_COLOR` is set, coloured
-bars or coloured symbols are omitted [^2].
+“OK”/“FAIL” replaces check/cross. Similarly, if `NO_COLOR` is non-empty,
+coloured bars or coloured symbols are omitted [^2].
 
 Animations are disabled or simplified in **non-interactive contexts**. If
 output is being piped to a file or a continuous integration (CI) system

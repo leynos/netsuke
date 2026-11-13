@@ -138,6 +138,44 @@ _Table 1: Where each kind of compile-time contract runs under each option._
   requires that no test outside the mutation compile gate starts a
   build-capable Cargo command at all.
 
+## Reassessment (2026-11-04)
+
+The terminal-rendering branch adds the display-plan module to Kani's proof
+scope, increasing the mutation patch set to 30 trees. Hosted run 41840367244
+and a local run of the same candidate both reached the previous 600-second
+nextest limit while compiling the first sorted patch, without a compiler
+diagnostic. The preserved local sandbox confirms that this was the first patch,
+not a later patch accumulating slow work.
+
+## Reassessment (2026-11-05)
+
+The targeted 900-second allowance also timed out locally at 900.093 seconds
+without a compiler diagnostic. A separate one-patch cold compile completed in
+1,864 seconds while shared compiler admission was heavily queued; this is
+evidence for a longer allowance but not a stable runtime estimate. Keep the
+300-second default and coverage limits unchanged. Give the mutation test 2,400
+seconds in a dedicated Nextest profile, with a 2,520-second whole-run cap. The
+latter contains the test allowance, Nextest's 70-second termination window, and
+a 50-second margin. Hosted run 41840367244 spent 824 seconds before the test
+and 7 seconds finalizing. A 60-minute Kani job contains that setup, the full
+whole-run allowance, and finalization in 3,351 seconds, with 249 seconds
+remaining. The workflow contracts and a successful Kani run must confirm this
+budget before it is treated as validated.
+
+## Reassessment (2026-11-09)
+
+The 2026-11-05 addendum is the record that the mutation test's allowance is no
+longer 600 seconds. The _Decision outcome_ section still states 600 seconds as
+the largest per-test allowance, because that was true of the decision as
+accepted, and the terminal-rendering branch briefly edited it in place before
+restoring it here. Accepted decision text is a historical record: a later
+measurement belongs in an addendum beside it, where a reader can see both what
+was decided and what has since changed, and can tell which one a given sentence
+is describing. The dedicated Kani profile in `.config/nextest.toml` gives the
+same test 2,400 seconds under a 42-minute whole-run cap; that figure now lives
+in the 2026-11-05 addendum alone, so these two sections no longer give
+competing values for the same limit.
+
 ## Known risks and limitations
 
 - A `compile_fail` doctest asserts an error code, not the diagnostic text the

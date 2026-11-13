@@ -124,6 +124,7 @@ sources = [
   "src/ninja_gen/",
   "src/output/mod.rs",
   "src/output/mode.rs",
+  "src/output/plan/mod.rs",
   "src/output/prefs/mod.rs",
   "src/power_shell_location/mod.rs",
   "src/recipe_shell/mod.rs",

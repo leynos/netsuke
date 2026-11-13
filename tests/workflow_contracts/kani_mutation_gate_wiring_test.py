@@ -26,8 +26,13 @@ What this module deliberately does not re-assert is the gate's own guard. Its
 Run via ``make test-workflow-contracts``.
 """
 
+import tomllib
+
 from cache_contract_data import WORKFLOW_DIR
 from makefile_recipes import makefile_target
+from nextest_budgets import global_timeout
+from nextest_durations import seconds
+from timeout_budgets import NEXTEST_CONFIG
 from workflow_loading import job_steps, load_workflow, named_step
 
 #: The CI job that owns the gate, and the step that invokes it.
@@ -81,9 +86,34 @@ def test_the_gate_target_denies_warnings_through_the_kani_frontend() -> None:
     )
     for fragment in (
         "--test kani_mutation_evidence_tests",
+        "--profile kani",
         "$(GATE_RUSTFLAGS)",
         "--all-features",
     ):
         assert fragment in recipe, (
             f"the gate target must pass {fragment!r}; got {recipe!r}"
         )
+
+
+def test_the_kani_profile_covers_the_cold_compile_budget() -> None:
+    """Keep the Kani test and whole-run limits in order.
+
+    The job's own ``timeout-minutes`` ceiling is a different contract, held
+    by ``runner_shape_test`` so that one place owns job timeouts.
+    """
+    config_text = NEXTEST_CONFIG.read_text(encoding="utf-8")
+    config = tomllib.loads(config_text)
+    profile = config["profile"]["kani"]
+    whole_run = global_timeout(config_text, profile="kani")
+    assert whole_run == 42 * 60, f"the Kani run budget changed: {whole_run}"
+
+    (override,) = profile["overrides"]
+    # Read the period through the shared duration reader; stripping a trailing
+    # "s" by hand turns a future "1m" into a bare ValueError that names no
+    # contract.
+    period_seconds = seconds(override["slow-timeout"]["period"])
+    test_budget = period_seconds * override["slow-timeout"]["terminate-after"]
+    assert test_budget == 40 * 60, f"the mutation test allowance changed: {test_budget}"
+    assert whole_run > test_budget, (
+        "the Kani whole-run budget must exceed the test allowance"
+    )

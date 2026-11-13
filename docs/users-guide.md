@@ -1982,10 +1982,19 @@ netsuke generate > build.ninja
 
 ### Accessible output
 
-Accessible mode uses static, labelled status lines instead of animated
-progress. It is enabled automatically when `TERM=dumb` or `NO_COLOR` is
-present. Select it explicitly with `--accessibility on`, or force standard
-output with `--accessibility off`.
+Accessible mode uses static, labelled status lines instead of animated progress.
+`--accessibility auto` selects it when `TERM=dumb`, when `NO_COLOR` has a
+non-empty value, or when `--color never` is selected. Select it explicitly with
+`--accessibility on`, or force standard output with `--accessibility off`.
+
+Precedence is explicit configuration first, then the environment.
+`--color always` and `NETSUKE_COLOR=always` suppress the `NO_COLOR` trigger,
+because an operator who asked for colour has overridden that ambient hint.
+`TERM=dumb` is not a colour hint, though: it says the terminal cannot render
+live redraws, so it still selects accessible mode under `--color always`. Use
+`--accessibility off` to force standard output against it. `--accessibility on`
+and `--accessibility off` take precedence over all of them: they name the
+output mode directly rather than inferring it from colour.
 
 A typical accessible build reports:
 
@@ -2023,9 +2032,60 @@ colour alone. Emoji policy values are:
 - `never`: ASCII-safe prefixes.
 - `auto`: Unicode in standard output and ASCII in accessible output.
 
-The colour policy is separate. Colour rendering is not implemented in beta4, so
-`color` currently affects mode selection but does not add coloured terminal
-text.
+### Colour
+
+`--color` controls ANSI styling in Netsuke's own tracing messages on stderr,
+Miette diagnostics on stderr, and Clap help and version output on stdout. It
+does not recolour generated artefacts or output forwarded from Ninja or another
+subprocess.
+
+- `auto` styles a stream only when that stream is a terminal, `TERM` is not
+  `dumb`, and `NO_COLOR` is absent or empty.
+- `always` styles Netsuke-controlled output even when its stream is a pipe.
+- `never` disables ANSI styling and acts like an internal `NO_COLOR` for
+  automatic accessibility selection.
+
+All three help routes take their colour from the last `--color` value on the
+command line, then `NETSUKE_COLOR`, then `auto`; configuration files are never
+read to choose it. They do not all render in the same layer, though, and that
+decides what `--json` can suppress:
+
+- Clap renders `--help` and `--version` during parsing, before Netsuke starts.
+  Their colour follows the startup hint, so `--color always --json --help`
+  still styles that text.
+- Netsuke renders `help` and `help <subcommand>` itself and returns before the
+  configuration merge, so it applies the startup plan's colour. `--json`
+  suppresses colour for these, but it does not turn them into a structured
+  document: they still print help text, because a help topic has no JSON form.
+  Ask for `help targets` when you want JSON output.
+
+An explicit `--color always` can override the automatic colour suppression from
+`NO_COLOR` and `TERM=dumb`, on either layer. Treat `--help` as a parser-level
+question and `help` as a Netsuke command when scripting either.
+
+`help targets` is the exception. It loads and validates the manifest, so it
+takes the ordinary configuration path and resolves colour from the merged
+configuration. It renders a plain catalogue with no ANSI styling under every
+policy, including `--color always`: the styling it applies is limited to the
+default and conditional markers and their emoji-or-ASCII form. JSON mode
+suppresses colour for it as well, because `--json` selects the structured
+document rather than the text catalogue.
+
+Usage errors stay plain under every policy. So does the human-readable
+configuration-load error message, because the configuration that would select a
+colour policy has not been read yet. The structured `tracing` events emitted
+alongside such a message — the ones carrying `operation` and `error_category` —
+do follow `--color`, so `--color always` styles them even on a pipe. The
+distinction is deliberate: the message is the guarantee, the diagnostic stream
+is an implementation detail with its own documented policy.
+
+### Progress policy
+
+`--progress auto` and `--progress always` both request stage reporting.
+`always` does not force animation into a pipe or a dumb terminal, and it does
+not override accessible mode. Live redraws require standard output mode, a
+terminal on stderr, and a redraw-capable `TERM`; otherwise progress is static
+text. Task updates use plain text when stdout is not a terminal.
 
 Verbose mode adds per-stage timing after a successful command. Failed commands
 do not print a timing summary.

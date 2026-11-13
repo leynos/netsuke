@@ -346,7 +346,6 @@ Zu den bekannten Einschränkungen zählen:
   aber noch nicht Teil des Manifestmodells;
 - `--json` gibt für jeden Befehl genau ein versioniertes Ergebnis- oder
   Diagnosedokument aus, aber das Schema kann sich vor 1.0 noch ändern;
-- Farbdarstellung ist nicht implementiert;
 - die Barrierefreiheit erfordert noch eine Überprüfung mit assistiven
   Technologien.
 

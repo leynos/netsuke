@@ -12,8 +12,8 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use netsuke::cli::{Cli, Commands};
+use netsuke::display_plan::{TerminalFacts, resolve_display_plan};
 use netsuke::localization::{self, keys};
-use netsuke::output_prefs;
 use netsuke::runner::{run, run_with_ninja_program};
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
@@ -63,7 +63,7 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
 
     let Err(err) = run_with_ninja_program(
         &cli,
-        output_prefs::resolve(None),
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
         Utf8Path::from_path(&ninja_path).context("fake ninja path is not valid UTF-8")?,
     ) else {
         bail!("expected run to fail when ninja exits non-zero");
@@ -107,7 +107,7 @@ fn assert_subcommand_succeeds_without_persisting_file(
 
     run_with_ninja_program(
         &cli,
-        output_prefs::resolve(None),
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
         Utf8Path::from_path(&ninja_path).context("fake ninja path is not valid UTF-8")?,
     )
     .with_context(|| format!("expected {name} subcommand to succeed"))?;
@@ -137,7 +137,10 @@ fn assert_subcommand_fails_with_invalid_manifest(
         ..Cli::default()
     };
 
-    let Err(err) = run(&cli, output_prefs::resolve(None)) else {
+    let Err(err) = run(
+        &cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+    ) else {
         bail!("expected {name} to fail for invalid manifest");
     };
     let messages: Vec<String> = err

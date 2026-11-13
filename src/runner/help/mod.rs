@@ -11,13 +11,12 @@ use std::borrow::Cow;
 use unicode_width::UnicodeWidthStr;
 
 use crate::cli::{Cli, configured_command};
+use crate::display_plan::DisplayPlan;
 use crate::json_envelope::{GeneratorInfo, SCHEMA_VERSION};
 use crate::localization::{self, keys};
-use crate::output_mode;
-use crate::output_prefs::{self, OutputPrefs};
+use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use crate::terminal_text::terminal_safe;
-use crate::theme::ThemeContext;
 
 use super::{RunnerError, process};
 use telemetry::instrument_help_targets;
@@ -44,6 +43,7 @@ use query::{HelpEntry, HelpTargetsQueryFailure, query_help_targets};
 pub(super) fn handle_help_targets(
     cli: &Cli,
     edges: bool,
+    plan: DisplayPlan,
     reporter: &dyn StatusReporter,
 ) -> Result<()> {
     if edges && !cli.json {
@@ -69,7 +69,7 @@ pub(super) fn handle_help_targets(
         let rendered = render_json(&query.entries, query.graph.as_ref())?;
         process::write_text_stdout(&rendered)?;
     } else {
-        let rendered = render_text(&query.entries, resolved_prefs(cli));
+        let rendered = render_text(&query.entries, resolved_prefs(plan));
         process::write_text_stdout(&rendered)?;
     }
     reporter.report_complete(status_key);
@@ -95,10 +95,10 @@ fn report_query_failure_stages(reporter: &dyn StatusReporter, error: &anyhow::Er
 /// # Errors
 ///
 /// Returns an error when the help text cannot be written to stdout.
-pub(super) fn render_root_help() -> Result<()> {
+pub(super) fn render_root_help(colour: bool) -> Result<()> {
     let localizer = localization::localizer();
     let mut command = configured_command(Some(&localizer));
-    let text = command.render_long_help().to_string();
+    let text = render_long_help(&mut command, colour);
     process::write_text_stdout(&text)
 }
 
@@ -108,24 +108,34 @@ pub(super) fn render_root_help() -> Result<()> {
 ///
 /// Returns an error when the subcommand is unknown or the help text cannot be
 /// written to stdout.
-pub(super) fn render_subcommand_help(name: &str) -> Result<()> {
+pub(super) fn render_subcommand_help(name: &str, colour: bool) -> Result<()> {
     let localizer = localization::localizer();
     let mut command = configured_command(Some(&localizer));
     let subcommand = command
         .find_subcommand_mut(name)
         .with_context(|| format!("unknown subcommand '{name}'"))?;
-    let text = subcommand.render_long_help().to_string();
+    let text = render_long_help(subcommand, colour);
     process::write_text_stdout(&text)
 }
 
-/// Resolve the same output preferences the rest of the CLI uses, so emoji and
-/// accessibility settings drive the catalogue's marker glyph.
-fn resolved_prefs(cli: &Cli) -> OutputPrefs {
-    let mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
-    output_prefs::resolve_from_theme(
-        cli.theme_preference(),
-        ThemeContext::new(None, Some(cli.color), mode),
-    )
+/// Render a command's long help with or without the styling clap embedded.
+///
+/// `render_long_help` always embeds clap's styles in the returned buffer;
+/// whether they reach the terminal is the renderer's decision.
+/// `StyledStr::Display` strips them, and [`clap::builder::StyledStr::ansi`]
+/// keeps them, so the resolved colour decides which form is written.
+fn render_long_help(command: &mut clap::Command, colour: bool) -> String {
+    let styled = command.render_long_help();
+    if colour {
+        styled.ansi().to_string()
+    } else {
+        styled.to_string()
+    }
+}
+
+/// Return the theme preferences already selected by the display plan.
+const fn resolved_prefs(plan: DisplayPlan) -> OutputPrefs {
+    plan.prefs()
 }
 
 /// Render the text catalogue: an "Actions:" section followed by a "Targets:"
