@@ -2738,11 +2738,11 @@ again after it, so the retained file describes what the release holds. The
 retention therefore cannot join the record above -- the plan's final content
 does not exist until the run has finished, and a second retention under the
 record's name would collide. The attempt suffix keeps a job re-run from
-colliding with the first attempt's record, which v7 refuses to overwrite.
-The shared action remains in use by the rehearsal, so the same `dry-run`
-expression decides both lanes' mode. `publish-release` checks out the candidate
-commit rather than the triggering ref because the selection, the declaration,
-and the uploader all read repository files and those files must be the ones the
+colliding with the first attempt's record, which v7 refuses to overwrite. The
+shared action remains in use by the rehearsal, so the same `dry-run` expression
+decides both lanes' mode. `publish-release` checks out the candidate commit
+rather than the triggering ref because the selection, the declaration, and the
+uploader all read repository files and those files must be the ones the
 producers built.
 
 Only *the upload step itself* defers its failure; the action as a whole can
