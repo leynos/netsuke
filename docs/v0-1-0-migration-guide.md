@@ -249,10 +249,13 @@ child remain platform-native and are not subject to this path restriction.
 
 The beta3 release tightens the Jinja `glob()` helper. A manifest that expands a
 matched path containing whitespace, control characters, or shell punctuation
-now fails during manifest loading. ASCII letters, digits, `/`, `:`, full stop,
-underscore, and hyphen remain accepted. This beta3 change prevents a checkout
-filename from becoming executable shell syntax when a `foreach` item is
-interpolated into a `command` or `script`.
+now fails during manifest loading. Beta3 accepted ASCII letters, digits, `/`,
+`:`, full stop, underscore, hyphen, and comma. The
+[beta5 subsection](#reject-commas-in-glob-matched-paths) drops the comma from
+that set, so only ASCII letters, digits, `/`, `:`, full stop, underscore, and
+hyphen remain accepted. This beta3 change prevents a checkout filename from
+becoming executable shell syntax when a `foreach` item is interpolated into a
+`command` or `script`.
 
 Published beta2 does not reject these non-portable unquoted paths.
 
