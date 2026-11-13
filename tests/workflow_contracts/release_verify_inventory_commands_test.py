@@ -90,18 +90,37 @@ def test_a_continued_command_is_scanned_after_joining() -> None:
         'api=gh; "$api" api --method POST "repos/o/r/releases"',
         'body=$(api=gh; "$api" api --method POST "repos/o/r/releases")',
         'method=gh; ${method} api --method POST "repos/o/r/releases"',
+        'api=gh; command "$api" api --method POST "repos/o/r/releases"',
+        'api=gh; env EXTRA=1 "$api" api --method POST "repos/o/r/releases"',
+        'api=gh; xargs -n 1 "$api" api --method POST < releases.txt',
     ],
 )
 def test_a_command_word_built_from_a_variable_is_rejected(line: str) -> None:
     """Reject a command the literal scan cannot name, wherever it sits.
 
     Each line executes a POST while naming no ``gh api`` call the scan can
-    read, so the count and flag checks both pass. The last two spellings place
-    the call inside a command substitution and behind a braced expansion, which
-    a scan of command words has to reach rather than assume away.
+    read, so the count and flag checks both pass. The fourth spelling places
+    the call inside a command substitution, the fifth behind a braced
+    expansion, and the last three behind a wrapper -- ``command``, ``env`` and
+    ``xargs`` -- whose options and assignments come before the word that is
+    actually run. A scan of command words has to reach each of those rather
+    than assume away the ones it does not model.
     """
     indirect = indirect_command_words(line)
     assert indirect, f"{line!r} builds a command from a variable"
+
+
+def test_a_wrapper_around_a_literal_command_is_not_indirect() -> None:
+    """Accept a wrapper whose operand is written out.
+
+    The control for the wrapper cases above: they must be refused because the
+    command word is an expansion, not because a wrapper appeared. Without it,
+    refusing every wrapped command would satisfy them while rejecting the
+    wording a step may legitimately use.
+    """
+    assert not indirect_command_words(
+        'command gh api --method GET "repos/o/r/releases"\n'
+    ), "a wrapper around a literal command must not read as indirect"
 
 
 def test_a_test_expression_operand_is_not_a_command() -> None:

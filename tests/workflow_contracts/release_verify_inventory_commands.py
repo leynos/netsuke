@@ -6,7 +6,8 @@ the verifier invocation has its tokens pinned, and a token-bearing step must
 name its commands literally. Each check starts from the step's ``run`` text, and
 a scan of the raw lines misses three shapes bash does not: a call continued
 across a backslash-newline, a call inside a command substitution, and a command
-word built from a variable that an earlier assignment set.
+word built from a variable that an earlier assignment set -- directly, or as the
+operand of a command that runs it.
 
 This module owns the joining and tokenizing those checks share -- the reading
 side of the contract. The documents the checks read and the values they pin
@@ -69,6 +70,20 @@ COMMAND_SEPARATORS = frozenset({
 #: operand and must not be read as a command word.
 TEST_OPEN = "[["
 TEST_CLOSE = "]]"
+#: Commands that run the word after them rather than doing work themselves, so
+#: that word names a command too: ``command "$api" api ...`` executes whatever
+#: ``api`` holds. The rest of a wrapped command is read as command position,
+#: without modelling which options consume a value, because the safe direction
+#: is to refuse a word the scan cannot place.
+COMMAND_WRAPPERS = frozenset({
+    "builtin",
+    "command",
+    "env",
+    "exec",
+    "nohup",
+    "time",
+    "xargs",
+})
 
 
 def script_lines(run: str) -> list[str]:
@@ -118,6 +133,22 @@ def _words(line: str) -> list[str]:
         raise AssertionError(msg) from error
 
 
+def _runs_a_command(word: str, *, starts_command: bool, wrapped: bool) -> bool:
+    """Return whether ``word`` is a command whose text is an expansion.
+
+    A word qualifies when it sits where bash reads a command name -- at the
+    start of a command, or as the operand of a wrapper that runs it -- and
+    begins with ``$``, which is the one spelling the literal scan can see but
+    cannot resolve.
+
+    Returns
+    -------
+    bool
+        ``True`` when the word names a command through a variable.
+    """
+    return (starts_command or wrapped) and word.startswith("$")
+
+
 def indirect_command_words(run: str) -> list[str]:
     """Return each command word a step builds from a variable expansion.
 
@@ -125,9 +156,11 @@ def indirect_command_words(run: str) -> list[str]:
     step does for the release number, but its *commands* must be literal. A
     command word that is an expansion can hide a write behind the literal scan:
     ``api=gh; "$api" api --method POST ...`` executes a POST the scan, looking
-    for ``gh api``, never sees. The scan reads bash's own tokenization, so a
-    variable used as an operand -- ``[[ -n "$value" ]]`` -- is not mistaken for
-    one.
+    for ``gh api``, never sees. Wrapping the expansion in a command that runs
+    its operand hides it the same way -- ``command "$api" api ...`` -- so a
+    word in :data:`COMMAND_WRAPPERS` puts the rest of its command in command
+    position as well. The scan reads bash's own tokenization, so a variable
+    used as an operand -- ``[[ -n "$value" ]]`` -- is not mistaken for one.
 
     Parameters
     ----------
@@ -143,14 +176,21 @@ def indirect_command_words(run: str) -> list[str]:
     for line in script_lines(run):
         starts_command = True
         in_test = False
+        wrapped = False
         for word in _words(line):
             if word == TEST_OPEN:
                 in_test = True
+                wrapped = False
             elif word == TEST_CLOSE:
                 in_test = False
-            elif starts_command and word.startswith("$"):
+            elif _runs_a_command(word, starts_command=starts_command, wrapped=wrapped):
                 indirect.append(word)
+                wrapped = False
+            elif starts_command and word in COMMAND_WRAPPERS:
+                wrapped = True
             starts_command = not in_test and word in COMMAND_SEPARATORS
+            if starts_command:
+                wrapped = False
     return indirect
 
 

@@ -72,13 +72,17 @@ SUBSTITUTION_QUOTE_MUTATIONS = {
 #: Bash runs the POST, but the literal scan finds only the GET the step already
 #: contains, so only a check on the command word itself sees it. The second
 #: spelling puts the assignment and the call inside a command substitution,
-#: which bash parses as a fresh command.
+#: which bash parses as a fresh command, and the third hands the variable to a
+#: wrapper that runs it, where the command word is no longer the first word.
 INDIRECT_COMMAND_MUTATIONS = {
     "gh-api-indirect-command": (
         'api=gh; "$api" api --method POST "repos/o/r/releases"'
     ),
     "gh-api-indirect-substitution": (
         'body=$(api=gh; "$api" api --method POST "repos/o/r/releases")'
+    ),
+    "gh-api-wrapped-command": (
+        'api=gh; command "$api" api --method POST "repos/o/r/releases"'
     ),
 }
 #: Each write-implying argument a mutation adds to the listing call, in the
