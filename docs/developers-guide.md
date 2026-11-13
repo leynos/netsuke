@@ -3452,6 +3452,27 @@ in the policy module rather than in either adapter, so the two adapters apply
 one rule without importing each other, and a new check of the same kind belongs
 there rather than in a third copy of the comparison.
 
+The modules behind that command line are split by what a reader has to know to
+change them. `finalize_github_release_io.py` holds every effect — the one
+allowlisted `gh` command and the staged JSON records — beside the exit-status
+vocabulary and the `FinalizeError` type that carries a status with its
+diagnosis. `finalize_github_release_records.py` performs the reads and writes
+around the edit, `finalize_github_release_operations.py` decides whether the
+edit may be made, and `finalize_github_release_reconcile.py` re-applies the
+planner's own reconciliation to a snapshot taken later in the same run.
+`finalize_github_release_stage_records.py` writes what the two read-only
+commands observed, so a reader asking what a refusal might have left on disk
+need not open the module that surrounds the edit.
+`finalize_github_release_plan.py` and `finalize_github_release_state.py` decide
+from decoded values and touch no file. Fallibility is in each helper's
+signature rather than in a process effect a reader has to trace: every helper
+that cannot continue raises `FinalizeError`, declaring it under *Raises* where
+it raises directly and under *Notes* where it only propagates one, and only
+`finalize_github_release.py` turns that status into the step's exit.
+`make test-release-publication` names all of them on its doctest command line,
+so deleting either the module or its example fails the bank rather than quietly
+dropping coverage.
+
 Its PEP 723 block pins `cyclopts` and `cuprum` to exact versions, as the
 `scripts/ci` helpers do, rather than to the ranges most scripts declare. The
 pins cover those two direct dependencies only, so their transitive closure
@@ -4206,6 +4227,16 @@ those operations at the file or transport boundary:
   the split exists to keep honest.
 - `finalize_github_release_cli` normalizes GitHub's `sha256:` digest prefix;
   `release_reconcile_github` receives bare digests and only plans actions.
+- `finalize_github_release_io` owns the finalizer's one allowlisted `gh` call
+  and the `FinalizeError` type that carries an exit status with its diagnosis;
+  `finalize_github_release_records` reads and writes the records around the
+  edit and `finalize_github_release_stage_records` writes the ones the
+  read-only commands produce. `finalize_github_release_operations` decides
+  whether the edit may be made, `finalize_github_release_reconcile` re-applies
+  the planner's policy to a snapshot taken later, and
+  `finalize_github_release_plan` and `finalize_github_release_state` decide
+  from decoded values alone. `finalize_github_release.py` is the only module
+  that turns a status into a process exit.
 
 External record shapes cross the boundary exactly once. A module that already
 owns a file, stream, or provider response decodes its field names and shape

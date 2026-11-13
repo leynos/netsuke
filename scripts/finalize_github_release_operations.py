@@ -97,15 +97,15 @@ def assessment(path: pathlib.Path) -> release_plan.PlanAssessment:
         The verdict, the assets each verdict rests on, and the reason a
         refused plan gives.
 
-    Notes
-    -----
-    A plan whose shape supports no decision stops the run with
-    :data:`EXIT_INPUT_UNREADABLE` instead of being read as permission to
-    proceed.
+    Raises
+    ------
+    FinalizeError
+        With :data:`EXIT_INPUT_UNREADABLE` when the plan's shape supports no
+        decision, instead of reading it as permission to proceed.
     """
     result = release_plan.assess_plan(release_io.read_json(path))
     if result.verdict is release_plan.PlanVerdict.UNREADABLE:
-        release_io.fail(
+        raise release_io.FinalizeError(
             release_io.EXIT_INPUT_UNREADABLE,
             f"{path} is not a usable plan: {result.detail}",
         )
@@ -132,17 +132,18 @@ def require_verified(
         Whether a read taken for this run established that the release is
         still a draft. Only then may the refusal say so.
 
-    Notes
-    -----
-    Only a verified assessment returns. One that still owes an upload stops
-    the run with :data:`EXIT_UPLOAD_REQUIRED`, pointing at the declared upload
-    contract; a conflicting or unverifiable one stops it with
-    :data:`EXIT_REFUSED`; an unreadable one with :data:`EXIT_INPUT_UNREADABLE`.
-    Each stops the run before the edit, so each can say this run has not
-    edited the release. A refusal made from the plan alone has read nothing,
-    and a retry may begin after an earlier attempt published the release, so
-    only an assessment made after :func:`_require_draft` passes
-    ``draft_confirmed``.
+    Raises
+    ------
+    FinalizeError
+        With :data:`EXIT_UPLOAD_REQUIRED` when the assessment still owes an
+        upload, pointing at the declared upload contract; with
+        :data:`EXIT_REFUSED` when it conflicts or cannot be verified; and with
+        :data:`EXIT_INPUT_UNREADABLE` when it could not be decoded. Each is
+        raised before the edit, so each can say this run has not edited the
+        release; only an assessment made after :func:`_require_draft` passes
+        ``draft_confirmed``, because a refusal made from the plan alone has
+        read nothing and a retry may begin after an earlier attempt published
+        the release.
 
     Examples
     --------
@@ -152,7 +153,7 @@ def require_verified(
     ...     require_verified(
     ...         PlanAssessment(PlanVerdict.REFUSED, conflicts=("a.tar.gz",))
     ...     )
-    ... except SystemExit as refusal:
+    ... except release_io.FinalizeError as refusal:
     ...     refusal.code
     1
     """
@@ -160,7 +161,7 @@ def require_verified(
         return
     state = _draft_state(draft_confirmed=draft_confirmed)
     if result.verdict is release_plan.PlanVerdict.UPLOAD_REQUIRED:
-        release_io.fail(
+        raise release_io.FinalizeError(
             release_io.EXIT_UPLOAD_REQUIRED,
             f"{source} still requires uploads ("
             + ", ".join(result.uploads)
@@ -168,12 +169,12 @@ def require_verified(
             + state,
         )
     if result.verdict is release_plan.PlanVerdict.UNREADABLE:
-        release_io.fail(release_io.EXIT_INPUT_UNREADABLE, result.detail)
+        raise release_io.FinalizeError(release_io.EXIT_INPUT_UNREADABLE, result.detail)
     reason = (
         release_upload_messages.blocked_message(result.conflicts, result.unverifiable)
         or result.detail
     )
-    release_io.fail(release_io.EXIT_REFUSED, f"{reason}; {state}")
+    raise release_io.FinalizeError(release_io.EXIT_REFUSED, f"{reason}; {state}")
 
 
 def _draft_state(*, draft_confirmed: bool) -> str:
@@ -205,18 +206,17 @@ def publish_release(request: PublishRequest) -> None:
 
     Notes
     -----
-    Every guard runs before the single mutating call. A candidate from another
-    revision, a plan that still owes an upload, a conflict, or a public
-    release with the wrong prerelease flag stops the run with
+    Every guard this function calls raises instead of returning a verdict, so
+    the ``FinalizeError`` it propagates unchanged carries
     :data:`EXIT_REFUSED`, :data:`EXIT_UPLOAD_REQUIRED`, or
-    :data:`EXIT_INPUT_UNREADABLE`, leaving the release unedited by this run. A
-    failed call or an unreadable readback stops it with
-    :data:`EXIT_REMOTE_FAILED`, and an outcome that cannot be recorded with
-    :data:`EXIT_OUTPUT_UNWRITABLE` after the edit has landed. Those two are the
-    only failures that cannot promise the release is unedited: once the edit
-    has been attempted, GitHub may have applied it before the response was
-    lost, so the run reports the state as unknown and names the two ways to
-    establish it.
+    :data:`EXIT_INPUT_UNREADABLE` from a guard that runs before the single
+    mutating call, leaving the release unedited by this run; it carries
+    :data:`EXIT_REMOTE_FAILED` when a call fails or a read-back cannot be read;
+    and it carries :data:`EXIT_OUTPUT_UNWRITABLE` when the outcome cannot be
+    recorded after the edit has landed. The last two are the only failures that
+    cannot promise the release is unedited: once the edit has been attempted,
+    GitHub may have applied it before the response was lost, so the run reports
+    the state as unknown and names the two ways to establish it.
 
     A release already public with the candidate's own flag is recorded as
     ``already-finalized`` without a second edit, so an interrupted retry
@@ -224,13 +224,13 @@ def publish_release(request: PublishRequest) -> None:
 
     The plan answers for the snapshot the planner read, not for the release as
     it is at the edit. So the fresh snapshot is reconciled again against the
-    same trusted record before the call: a declared asset that vanished is an
-    :data:`EXIT_UPLOAD_REQUIRED` refusal, one whose bytes changed is an
-    :data:`EXIT_REFUSED` refusal, and an undeclared extra is still ignored
-    exactly as the planner ignores it. A record that cannot be read stops the
-    run with :data:`EXIT_INPUT_UNREADABLE`. Every one of those leaves the
-    release unedited, and each is reached after a read that saw it is still a
-    draft, so each may say so.
+    same trusted record before the call: a declared asset that vanished raises
+    :data:`EXIT_UPLOAD_REQUIRED`, one whose bytes changed raises
+    :data:`EXIT_REFUSED`, and an undeclared extra is still ignored exactly as
+    the planner ignores it. A record that cannot be read raises
+    :data:`EXIT_INPUT_UNREADABLE`. Every one of those leaves the release
+    unedited, and each is reached after a read that saw it is still a draft,
+    so each may say so.
 
     The window between that read and the edit cannot be closed: GitHub offers
     no conditional edit, so a writer that changes the draft in those
@@ -274,9 +274,11 @@ def _edit_release(
 
     Notes
     -----
-    This is the only mutating call the feature makes. A failure stops the run
-    with :data:`EXIT_REMOTE_FAILED` and reports the state as unknown, because
-    GitHub may have applied the edit before the response was lost.
+    This is the only mutating call the feature makes. A failed edit raises
+    through :func:`finalize_github_release_records.report_remote_failure`,
+    which propagates :data:`EXIT_REMOTE_FAILED` and reports the state as
+    unknown because GitHub may have applied the edit before the response was
+    lost.
     """
     edited = release_io.run_gh(
         "release",
@@ -299,15 +301,16 @@ def _confirm_published(
 ) -> None:
     """Read the release back and record the outcome that read supports.
 
-    Notes
-    -----
-    A read-back that cannot be taken stops the run with
-    :data:`EXIT_REMOTE_FAILED` and reports the state as unknown. A release that
-    is still a draft, or public with the wrong prerelease flag, is a failure
-    the run cannot repair: GitHub does not allow a public release to become a
-    draft again. A public release whose flag is right but whose inventory no
-    longer matches the trusted record is refused for the same reason, through
-    :func:`finalize_github_release_reconcile.refuse_published_mismatch`.
+    Raises
+    ------
+    FinalizeError
+        With :data:`EXIT_REMOTE_FAILED` when the read-back cannot be taken,
+        reporting the state as unknown; and with :data:`EXIT_REFUSED` when the
+        release is still a draft, or public with the wrong prerelease flag, or
+        public with an inventory that no longer matches the trusted record.
+        None of those can be repaired, because GitHub does not allow a public
+        release to become a draft again. The inventory case is decided by
+        :func:`finalize_github_release_reconcile.refuse_published_mismatch`.
     """
     published = release_records.snapshot_release(
         request.tag, request.repository, after_edit=True
@@ -324,13 +327,13 @@ def _confirm_published(
                 request.result_path, request.github_output, "finalized", identity
             )
         case release_state.Readback.STILL_DRAFT:
-            release_io.fail(
+            raise release_io.FinalizeError(
                 release_io.EXIT_REMOTE_FAILED,
                 "gh accepted the edit but the release is still a draft; no "
                 "asset was replaced and the release was not published",
             )
         case release_state.Readback.PRERELEASE_MISMATCH:
-            release_io.fail(
+            raise release_io.FinalizeError(
                 release_io.EXIT_REFUSED,
                 "the release is public but its prerelease state contradicts "
                 "the validated candidate; it cannot be made a draft again",
@@ -344,10 +347,15 @@ def _require_draft(state: release_state.ReleaseState) -> None:
     prerelease flag cannot be corrected without making it a draft again, which
     GitHub does not allow. The run therefore stops before the call rather than
     acting on a state it must not touch.
+
+    Raises
+    ------
+    FinalizeError
+        With :data:`EXIT_REFUSED` when the release is already public.
     """
     if state.is_draft:
         return
-    release_io.fail(
+    raise release_io.FinalizeError(
         release_io.EXIT_REFUSED,
         "the release is public but its prerelease state contradicts the "
         "validated candidate; a public release cannot be made a draft again",

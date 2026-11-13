@@ -102,10 +102,10 @@ def run_finalizer(*arguments: str) -> None:
 
     Notes
     -----
-    The adapter exits through ``SystemExit`` for every refusal, so a test
-    asserts on the status it raises rather than on a return value.
+    The entry point turns a refusal into ``SystemExit``, so a test asserts on
+    the status it raises rather than on a return value.
     """
-    release_script.app(list(arguments), result_action="return_value")
+    release_script.main(list(arguments))
 
 
 def edit_arguments(tag: str, *, is_prerelease: bool) -> tuple[str, ...]:

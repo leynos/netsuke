@@ -53,6 +53,11 @@ def reconcile(
     release_plan.PlanAssessment
         The verdict the planner would have reached for this listing.
 
+    Raises
+    ------
+    FinalizeError
+        With :data:`EXIT_INPUT_UNREADABLE` when the record cannot be read.
+
     Notes
     -----
     The record is re-read rather than taken from the plan, so the comparison is
@@ -61,17 +66,14 @@ def reconcile(
     :func:`release_github_assets_adapter.normalise_github_digest`, the same one
     the planner uses, so an unusable digest is unverifiable here for the same
     reason it was there.
-
-    A record that cannot be read stops the run with
-    :data:`EXIT_INPUT_UNREADABLE`.
     """
     try:
         expected = release_digest_record_files.read_digest_record(digest_record_path)
     except release_digest_record.DigestRecordError as error:
-        release_io.fail(
+        raise release_io.FinalizeError(
             release_io.EXIT_INPUT_UNREADABLE,
             f"{digest_record_path} is not a usable digest record: {error}",
-        )
+        ) from error
     present = {
         name: release_github_assets_adapter.normalise_github_digest(digest)
         for name, digest in state.assets.items()
@@ -95,6 +97,33 @@ def inventory_mismatch(
         against the release. An assessment that threatens no upload but names
         no disagreement is described by how many declared assets are missing,
         so a verdict with no conflicts still produces a diagnosis.
+
+    Notes
+    -----
+    The ``FinalizeError`` that :func:`reconcile` raises propagates unchanged,
+    with :data:`EXIT_INPUT_UNREADABLE` when the record cannot be read.
+
+    Examples
+    --------
+    >>> import json
+    >>> import pathlib
+    >>> import tempfile
+    >>> from finalize_github_release_state import ReleaseState
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     record = pathlib.Path(directory) / "digests.json"
+    ...     _ = record.write_text(
+    ...         json.dumps({"assets": {"a.deb": "ab" * 32}}), encoding="utf-8"
+    ...     )
+    ...     trusted = ReleaseState(
+    ...         "v1.2.3", True, False, {"a.deb": "sha256:" + "ab" * 32}
+    ...     )
+    ...     print(inventory_mismatch(record, trusted))
+    ...     changed = ReleaseState(
+    ...         "v1.2.3", True, False, {"a.deb": "sha256:" + "cd" * 32}
+    ...     )
+    ...     print(inventory_mismatch(record, changed))
+    None
+    the release holds assets that disagree with the trusted record: a.deb
     """
     result = reconcile(digest_record_path, state)
     if result.verdict is release_plan.PlanVerdict.VERIFIED:
@@ -121,6 +150,14 @@ def refuse_published_mismatch(
     state
         The public release as the most recent read reported it.
 
+    Raises
+    ------
+    FinalizeError
+        With :data:`EXIT_REFUSED` when the release is public and its inventory
+        disagrees with the record. GitHub cannot make a public release a draft
+        again, so the run cannot undo the edit; it names what disagrees
+        instead of recording a success nobody can rely on.
+
     Notes
     -----
     The pre-edit read and the edit are two calls, and GitHub offers no
@@ -129,16 +166,11 @@ def refuse_published_mismatch(
     race into a reported mismatch. The same check runs on a retry that finds
     the release already public, so a mismatch a lost race published is reported
     by the next pass rather than standing until an operator happens to find it.
-
-    Both callers reach this with the release already public, which GitHub
-    cannot make a draft again, so the run cannot undo the edit. It stops with
-    :data:`EXIT_REFUSED` and names what disagrees instead of recording a
-    success nobody can rely on.
     """
     mismatch = inventory_mismatch(digest_record_path, state)
     if mismatch is None:
         return
-    release_io.fail(
+    raise release_io.FinalizeError(
         release_io.EXIT_REFUSED,
         f"release {identity.tag} is public, but {mismatch}; GitHub cannot make "
         "a public release a draft again, so this run cannot repair it: replace "

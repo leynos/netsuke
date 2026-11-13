@@ -40,6 +40,10 @@ Exit statuses are the vocabulary the workflow branches on:
 ``5``
     A GitHub call failed or answered with something unusable.
 
+Each helper below raises :class:`finalize_github_release_io.FinalizeError`
+carrying one of those statuses, and :func:`main` is the only place a status
+becomes a process exit.
+
 Run via ``.github/actions/finalize-github-release``; behavioural coverage
 lives in ``scripts/tests/test_finalize_github_release.py``.
 """
@@ -47,12 +51,20 @@ lives in ``scripts/tests/test_finalize_github_release.py``.
 # Cyclopts resolves these annotations when it builds the command, so the
 # module needs ``pathlib`` at runtime rather than only for type checking.
 import pathlib  # ruff: ignore[typing-only-standard-library-import]
+import sys
 import typing as typ
 
+import finalize_github_release_io as release_io
 import finalize_github_release_operations as operations
-import finalize_github_release_records as records
+import finalize_github_release_stage_records as stage_records
 
 from cyclopts import App, Parameter
+
+if typ.TYPE_CHECKING:
+    # Only :func:`main`'s signature names the sequence, and that value is
+    # never inspected at run time, so the import costs a start-up it earns
+    # nothing from.
+    import collections.abc as cabc
 
 app = App(help="Reconcile and un-draft a verified GitHub release.")
 
@@ -80,10 +92,13 @@ def resolve(
 
     Notes
     -----
-    Exits ``3`` when the record cannot be read or decoded, and ``1`` when it
-    names another tag or revision. Nothing is written in either case.
+    The ``FinalizeError`` that
+    :func:`finalize_github_release_stage_records.record_candidate` raises propagates
+    unchanged, because the status it carries is the one this step reports:
+    ``3`` when the record cannot be read or decoded, and ``1`` when it names
+    another tag or revision. Nothing is written in either case.
     """
-    records.record_candidate(identity, tag=tag, commit=commit, output=output)
+    stage_records.record_candidate(identity, tag=tag, commit=commit, output=output)
 
 
 @app.command
@@ -109,11 +124,13 @@ def snapshot(
 
     Notes
     -----
-    Exits ``5`` when GitHub cannot be read, and ``4`` when either record cannot
-    be written. This command only reads GitHub, so a failure never changes the
-    release.
+    The ``FinalizeError`` that
+    :func:`finalize_github_release_stage_records.record_snapshot` raises propagates
+    unchanged: ``5`` when GitHub cannot be read, and ``4`` when either record
+    cannot be written. This command only reads GitHub, so a failure never
+    changes the release.
     """
-    records.record_snapshot(
+    stage_records.record_snapshot(
         tag, repository, state_path=state_path, assets_path=assets_path
     )
 
@@ -137,14 +154,58 @@ def publish(
 
     Notes
     -----
-    Exits ``0`` when the release is public with the candidate's prerelease
-    state, ``1`` when the plan, the candidate, or the release refuses
-    publication, ``2`` when the plan still requires an upload, ``3`` when an
-    input record cannot be read, ``4`` when the outcome cannot be recorded, and
-    ``5`` when a GitHub call fails or answers with something unusable.
+    The ``FinalizeError`` that
+    :func:`finalize_github_release_operations.publish_release` raises
+    propagates unchanged, with the status it carries: ``1`` when the plan, the
+    candidate, or the release refuses publication, ``2`` when the plan still
+    requires an upload, ``3`` when an input record cannot be read, ``4`` when
+    the outcome cannot be recorded, and ``5`` when a GitHub call fails or
+    answers with something unusable. Status ``0`` is not a failure: it is this
+    command returning after the release became public with the candidate's
+    prerelease state.
     """
     operations.publish_release(request)
 
 
+def main(argv: cabc.Sequence[str] | None = None) -> None:
+    """Run one finalizer command, mapping a refusal to the workflow's status.
+
+    Parameters
+    ----------
+    argv
+        The command line after the program name, or ``None`` to read the
+        process's own arguments, as the workflow step invokes it.
+
+    Raises
+    ------
+    SystemExit
+        With the status the refusal carries, after its diagnosis reaches
+        standard error. The helpers raise :class:`FinalizeError` instead of
+        exiting, so this is the one place the exit vocabulary becomes a
+        process status.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     source = pathlib.Path(directory) / "identity.json"
+    ...     _ = source.write_text("{}", encoding="utf-8")
+    ...     try:
+    ...         main([
+    ...             "resolve", "--identity", str(source), "--tag", "v1.2.3",
+    ...             "--commit", "0" * 40,
+    ...             "--output", str(pathlib.Path(directory) / "candidate.json"),
+    ...         ])
+    ...     except SystemExit as refusal:
+    ...         refusal.code
+    3
+    """
+    try:
+        app(argv, result_action="return_value")
+    except release_io.FinalizeError as failure:
+        print(failure, file=sys.stderr)
+        raise SystemExit(failure.code) from None
+
+
 if __name__ == "__main__":
-    app()
+    main()

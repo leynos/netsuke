@@ -366,6 +366,7 @@ that leaves the release unpublished for an operator.
 **Status.** Implemented, with job and action contracts in
 `tests/workflow_contracts/release_finalize_contract_test.py` and
 recorded-response suites for the adapter and planner. Not yet exercised by a
-live release, tag, or credential. This addendum supersedes the sentence in the
-2026-11-12 addendum above that names the finalizer as open; that addendum
-records the state before this stage existed, and is left as it was written.
+live release, tag, or credential. This addendum supersedes the sentences in the
+2026-11-09 *the GitHub asset publisher* addendum's **Status** and in the
+2026-11-12 addendum above that name the finalizer as open; both record the
+state before this stage existed and are left as they were written.
