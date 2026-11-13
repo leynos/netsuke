@@ -3332,6 +3332,33 @@ reachability is computed independently in
 and a publisher skip for each publisher, plus the realistic dry run in which
 both are skipped while the rehearsal job runs.
 
+### Release-inventory verifier telemetry
+
+The `verify-release-inventory` job records the `verify_release_inventory`
+operation defined in `scripts/release_operation_catalog.py`. The catalogue
+gives the operation three phases, and they run in order: `release_listing`
+spans the two listing steps, `release_download` spans the attachment downloads,
+and `inventory_verification` spans the verifier. The composite action times the
+phases itself because the boundaries fall inside it: the workflow cannot see
+where the first listing ends, and only the action knows which listing step
+supplied the outcome the phase reports.
+
+Each phase reports its outcome and start and end timestamps as action outputs.
+The listing phase publishes `release-listing-outcome`,
+`release-listing-started-ns` and `release-listing-ended-ns`; the download phase
+publishes `release-download-outcome`, `release-download-started-ns` and
+`release-download-ended-ns`; and the verification phase publishes
+`inventory-verification-outcome`, `inventory-verification-started-ns` and
+`inventory-verification-ended-ns`. The listing phase's outcome is the release
+listing's whenever that step did not succeed, because the asset listing never
+runs then and reports only that it was skipped.
+
+The job writes its summary under `if: always()`, so a refused verification
+still reports the phases that led to the refusal, and the summary and uploaded
+JSONL carry only fixed operation, phase, outcome, and error-category labels.
+They name no asset, tag, path, or raw error text, and the record omits the
+upload error because the verifier never uploads.
+
 ### Crate-package operation telemetry
 
 The `package-crate` job records the `release_package` operation through
