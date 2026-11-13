@@ -86,13 +86,10 @@ const CATEGORY_LABEL: &str = "category";
 
 /// Counter recording filtered manifest targets during normal manifest loading.
 const FILTERED_TARGETS_TOTAL: &str = "netsuke_manifest_filtered_targets_total";
-
 /// Counter recording filtered manifest actions during normal manifest loading.
 const FILTERED_ACTIONS_TOTAL: &str = "netsuke_manifest_filtered_actions_total";
-
 /// Counter recording filtering records omitted from bounded manifest reports.
 const OMITTED_FILTERED_ENTRIES_TOTAL: &str = "netsuke_manifest_omitted_filtered_entries_total";
-
 /// Counter recording bounded manifest-structure summaries emitted by the runner.
 const MANIFEST_STRUCTURES_TOTAL: &str = "netsuke_runner_manifest_structures_total";
 /// Bounded runner-operation values emitted by legacy-recipe telemetry.
