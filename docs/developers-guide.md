@@ -2731,10 +2731,14 @@ retains all three files as the
 `declared-assets-${{ github.job }}-${{ github.run_attempt }}` workflow
 artefact, and only then uploads the declared names. The upload plan it wrote,
 which names the assets of a refusing run, is retained afterwards as a separate
-`declared-assets-plan-${{ github.job }}-${{ github.run_attempt }}` artefact,
-because it only exists once the upload has run and a second retention of the
-same name would collide with the record. The attempt suffix keeps a job re-run
-from colliding with the first attempt's record, which v7 refuses to overwrite.
+`declared-assets-plan-${{ github.job }}-${{ github.run_attempt }}` artefact.
+The uploader writes that plan twice: once before the first byte moves, so a
+transfer that raises still leaves an operator what the run set out to do, and
+again after it, so the retained file describes what the release holds. The
+retention therefore cannot join the record above -- the plan's final content
+does not exist until the run has finished, and a second retention under the
+record's name would collide. The attempt suffix keeps a job re-run from
+colliding with the first attempt's record, which v7 refuses to overwrite.
 The shared action remains in use by the rehearsal, so the same `dry-run`
 expression decides both lanes' mode. `publish-release` checks out the candidate
 commit rather than the triggering ref because the selection, the declaration,

@@ -183,12 +183,16 @@ runs:
 
     - name: Retain the upload plan
       id: retain-plan
-      # The plan only exists once the upload has run, so it cannot join the
-      # earlier retention. `always()` keeps it when the upload was refused:
-      # the plan is what names the assets that disagreed, which is exactly the
-      # case an operator needs it for. `if-no-files-found: warn` rather than
-      # `error` because a failure before the uploader ran leaves no plan, and
-      # that must not mask the uploader's own diagnostic as a second failure.
+      # The plan is written before the transfer and rewritten after it, and a
+      # transfer that raises leaves the earlier copy, which is why this is a
+      # separate retention rather than joining the record above: the plan's
+      # final content does not exist until the run has finished, and a second
+      # retention under the record's name would collide. `always()` keeps it
+      # when the upload was refused or failed partway: the plan is what names
+      # the assets that disagreed, which is exactly the case an operator needs
+      # it for. `if-no-files-found: warn` rather than `error` because a failure
+      # before the uploader ran leaves no plan, and that must not mask the
+      # uploader's own diagnostic as a second failure.
       if: always()
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       with:
