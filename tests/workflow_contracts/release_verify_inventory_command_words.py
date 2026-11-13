@@ -51,9 +51,11 @@ TEST_OPEN = "[["
 TEST_CLOSE = "]]"
 #: Commands that run the word after them rather than doing work themselves, so
 #: that word names a command too: ``command "$api" api ...`` executes whatever
-#: ``api`` holds. The rest of a wrapped command is read as command position,
-#: without modelling which options consume a value, because the safe direction
-#: is to refuse a word the scan cannot place.
+#: ``api`` holds. The scan cannot know which of a wrapper's options consume a
+#: value -- ``command -p`` takes none, ``xargs -n`` takes the next word -- so
+#: both the wrapper's own position and an option's value are read as places a
+#: command word can appear, because the safe direction is to refuse a word the
+#: scan cannot place.
 COMMAND_WRAPPERS = frozenset({
     "builtin",
     "command",
@@ -62,6 +64,28 @@ COMMAND_WRAPPERS = frozenset({
     "nohup",
     "time",
     "xargs",
+})
+#: Commands that run text the scan cannot read: a shell or an interpreter
+#: handed a run-time string, and the builtins that evaluate one. No word
+#: position model can bound what such a command runs -- ``bash -c "$cmd"``
+#: names no command the scan sees, however carefully the wrapper itself is
+#: placed -- so the contract refuses the class rather than trying to read the
+#: string. The action needs none of them, and its own script file is run by
+#: ``uv`` from a pinned path rather than handed to an interpreter by name.
+FORBIDDEN_EXECUTORS = frozenset({
+    ".",
+    "bash",
+    "dash",
+    "eval",
+    "ksh",
+    "node",
+    "perl",
+    "python",
+    "python3",
+    "ruby",
+    "sh",
+    "source",
+    "zsh",
 })
 #: The ``NAME=value`` word ``env`` accepts before the command it runs.
 ENVIRONMENT_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
@@ -130,12 +154,28 @@ class _Position(enum.Enum):
     TEST = enum.auto()
 
 
+#: The positions where a word can name the command bash ultimately runs: the
+#: start of a command, the operand of a wrapper, and the word after a wrapper's
+#: option, which is either that option's value or the command. Both checks
+#: below read the same positions, so a word hidden at any of them is refused.
+_COMMAND_POSITIONS = frozenset({
+    _Position.COMMAND,
+    _Position.WRAPPED,
+    _Position.OPTION_VALUE,
+})
+
+
 def _names_expansion(word: str, position: _Position) -> bool:
     """Return whether ``word`` names a command through a variable expansion.
 
     Only a word bash reads as a command name qualifies: one that begins a
-    command, or one that a wrapper will run. The same expansion after a literal
-    command is an argument, which a step may legitimately use.
+    command, one that a wrapper will run, or one sitting where a wrapper's
+    option expects its value. The last is a command position because the scan
+    cannot know which options consume a value: ``command -p`` takes none, so
+    ``command -p "$api" api ...`` runs whatever ``api`` holds, while
+    ``xargs -n 1 "$api"`` runs it after a value that was consumed. Refusing
+    both is the safe direction. The same expansion after a literal command is
+    an argument, which a step may legitimately use.
 
     The expansion may sit anywhere in the word rather than opening it: bash
     joins adjacent quoted and unquoted parts, so ``g"$suffix"`` names ``gh``
@@ -143,8 +183,8 @@ def _names_expansion(word: str, position: _Position) -> bool:
     A quoted ``$`` that bash would not expand is refused too, because the scan
     cannot tell the two apart and refusing is the safe direction.
 
-    A ``NAME=value`` word is an assignment rather than a command, in either
-    position: bash stores its value in the variable and runs nothing, so the
+    A ``NAME=value`` word is an assignment rather than a command, wherever it
+    sits: bash stores its value in the variable and runs nothing, so the
     expansion it carries is a value and not a command name. The step's own
     ``trusted_root=$(canonical "$TRUSTED_DIRECTORY")`` is that shape.
 
@@ -153,7 +193,7 @@ def _names_expansion(word: str, position: _Position) -> bool:
     bool
         ``True`` when the word is a command name spelt as an expansion.
     """
-    if position not in {_Position.COMMAND, _Position.WRAPPED}:
+    if position not in _COMMAND_POSITIONS:
         return False
     if ENVIRONMENT_ASSIGNMENT.match(word) is not None:
         return False
@@ -222,15 +262,20 @@ def _wrapped_successor(word: str) -> _Position:
     """Return the position of the word after one among a wrapper's operands.
 
     The scan does not know which of a wrapper's options take a value, so an
-    option leaves its own value to be read as part of the wrapper, and a
-    ``NAME=value`` assignment that ``env`` accepts is part of it too. Anything
-    else is the command the wrapper runs.
+    option leaves the next word in option-value position, where an expansion is
+    refused rather than trusted, and a ``NAME=value`` assignment that ``env``
+    accepts is part of the wrapper too. A second wrapper is still a wrapper,
+    because ``command env "$api" ...`` runs what ``env`` runs and the nesting
+    has no bound a word count could reach. Anything else is the command the
+    wrapper runs.
 
     Returns
     -------
     _Position
         The position of the following word.
     """
+    if word in COMMAND_WRAPPERS:
+        return _Position.WRAPPED
     if word.startswith("-"):
         return _Position.OPTION_VALUE
     if ENVIRONMENT_ASSIGNMENT.match(word) is not None:
@@ -255,6 +300,23 @@ def _indirect_words(line: str) -> list[str]:
     return indirect
 
 
+def _executor_words(line: str) -> list[str]:
+    """Return the words in one joined line that would execute text unread.
+
+    Returns
+    -------
+    list[str]
+        The offending words, in the order they appear.
+    """
+    position = _Position.COMMAND
+    executors: list[str] = []
+    for word in _words(line):
+        if position in _COMMAND_POSITIONS and word in FORBIDDEN_EXECUTORS:
+            executors.append(word)
+        position = _next_position(word, position)
+    return executors
+
+
 def indirect_command_words(run: str) -> list[str]:
     """Return each command word a step builds from a variable expansion.
 
@@ -266,9 +328,14 @@ def indirect_command_words(run: str) -> list[str]:
     ``suffix=h; g"$suffix" api ...`` builds ``gh`` from a prefix and a variable
     -- and wrapping it in a command that runs its operand hides it the same way,
     ``command "$api" api ...``, so a word in :data:`COMMAND_WRAPPERS` puts the
-    word it runs in command position as well. The scan reads bash's own
-    tokenization, so a variable used as an operand -- ``[[ -n "$value" ]]`` --
-    is not mistaken for one.
+    word it runs in command position as well, and so does the word after one of
+    the wrapper's options, which may be either the option's value or the
+    command: ``command -p "$api" api ...`` takes no value and runs ``api``,
+    where ``xargs -n 1 "$api"`` does. Wrappers nest, so ``command env "$api"
+    api ...`` keeps the wrapped position past ``env`` rather than treating the
+    second wrapper as the command. The scan reads bash's own tokenization, so a
+    variable used as an operand -- ``[[ -n "$value" ]]`` -- is not mistaken for
+    one.
 
     Parameters
     ----------
@@ -281,3 +348,41 @@ def indirect_command_words(run: str) -> list[str]:
         The offending command words, in the order they appear.
     """
     return [word for line in script_lines(run) for word in _indirect_words(line)]
+
+
+def forbidden_executor_words(run: str) -> list[str]:
+    """Return each command word that would run text the scan cannot read.
+
+    Reading a command word answers the question of *where* bash looks for the
+    command; it cannot answer what an interpreter is then told to run.
+    ``bash -c "$script"``, ``eval "$line"``, ``sh <<<"$body"``, and
+    ``python -c "$code"`` all execute text that the step assembles at run time,
+    so no amount of position modelling reaches the ``gh api`` call they make.
+    :data:`FORBIDDEN_EXECUTORS` names that class, and the check refuses it
+    wherever such a command can be written: at the start of a command, as the
+    operand of a wrapper, or as the word after a wrapper's option.
+
+    The class is refused wholesale rather than per spelling because the
+    spelling is unbounded -- a shell has several ways to feed a string to an
+    interpreter, and the action needs none of them. Its own checks stay
+    readable: the step runs a pinned script path through ``uv`` and calls
+    ``gh``, ``cat``, and ``read`` directly.
+
+    Parameters
+    ----------
+    run
+        The step's ``run`` text, as the action manifest carries it.
+
+    Returns
+    -------
+    list[str]
+        The offending command words, in the order they appear.
+
+    Examples
+    --------
+    >>> forbidden_executor_words('body=POST; bash -c "$body"')
+    ['bash']
+    >>> forbidden_executor_words("uv run --no-project script.py")
+    []
+    """
+    return [word for line in script_lines(run) for word in _executor_words(line)]

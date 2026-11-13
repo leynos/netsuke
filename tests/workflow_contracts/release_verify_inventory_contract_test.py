@@ -17,6 +17,7 @@ import pytest
 from release_publish_path_scenarios import SCENARIOS
 from release_publish_path_verification import check_verify_inventory
 from release_verify_inventory_command_words import (
+    forbidden_executor_words,
     indirect_command_words,
     script_lines,
 )
@@ -104,6 +105,14 @@ def _assert_gh_api_calls(steps: list[dict[str, object]]) -> None:
         assert not indirect, (
             f"{name} must name its commands literally; {indirect!r} is built "
             "from a variable, which can hide a write behind the scan"
+        )
+        # Reading a command word cannot reach text an interpreter is handed at
+        # run time, so the class of commands that execute such text is refused
+        # by name rather than by position.
+        executors = forbidden_executor_words(run)
+        assert not executors, (
+            f"{name} must not hand a run-time string to an interpreter; "
+            f"{executors!r} would run text the scan cannot read"
         )
         invocations = gh_api_invocations(run)
         expected = 1 if name in NETWORK_STEPS else 0

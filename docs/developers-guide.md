@@ -3185,9 +3185,12 @@ declared in `release.yml` itself because crates.io Trusted Publishing
 identifies the workflow that requests the OIDC token. It has exactly
 `contents: read` and `id-token: write`, plus the `crates-io` environment. The
 short-lived token is exchanged only after the registry decision says `publish`.
-`publish-release` alone has `contents: write`; neither publishing job receives
-the other's authority. `release-admission-canaries` additionally takes
-`actions: read` to inspect prior runs.
+`publish-release` and `verify-release-inventory` are the only jobs with
+`contents: write`; no other job holds it, and neither publishing job receives
+the other's authority. The verifier holds the scope only because a draft's
+assets are invisible without it, while its own calls stay read-only, as the
+verification section below describes. `release-admission-canaries` additionally
+takes `actions: read` to inspect prior runs.
 
 `release` and `publish-release` carry the same five-job dependency list and
 mutually exclusive guards, so a run is a rehearsal or a publication and never
@@ -3325,8 +3328,11 @@ check for exactly the dependencies this job must observe.
 
 `tests/workflow_contracts/release_verify_inventory_contract_test.py` pins the
 action's shape, the job's wiring, and the credential routing, and proves each
-assertion against a deliberate mutation of the checked documents. The job's
-reachability is computed independently in
+assertion against a deliberate mutation of the checked documents. It also reads
+each step's shell text as bash does, and refuses two shapes the literal scan
+could not check: a command word built from a variable, including one reached
+through nested wrappers, and any command that would hand a run-time string to
+an interpreter. The job's reachability is computed independently in
 `release_publish_path_verification.py`, from the scenario table in
 `release_publish_path_scenarios.py`; that table includes a publisher failure
 and a publisher skip for each publisher, plus the realistic dry run in which

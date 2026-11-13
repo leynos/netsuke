@@ -3,8 +3,9 @@
 The contract test asserts that the verification step's scans pass over the
 checked-in action. Each such assertion is only as good as its reach: a scan
 anchored at the start of a line misses a call inside a substitution, a scan of
-raw lines misses a command continued across a backslash-newline, and a scan of
-command names misses one built from a variable. These cases are the controls
+raw lines misses a command continued across a backslash-newline, a scan of
+command names misses one built from a variable, and no scan of positions can
+tell what an interpreter is handed. These cases are the controls
 for the ``release_verify_inventory_command_words`` and
 ``release_verify_inventory_commands`` modules -- they show the scans do reach
 those shapes, and refuse the ones they cannot read rather than passing them
@@ -15,6 +16,7 @@ Run via ``make test-workflow-contracts``.
 
 import pytest
 from release_verify_inventory_command_words import (
+    forbidden_executor_words,
     indirect_command_words,
     script_lines,
 )
@@ -99,6 +101,12 @@ def test_a_continued_command_is_scanned_after_joining() -> None:
         'suffix=h; g"$suffix" api --method POST "repos/o/r/releases"',
         'suffix=h; command g"$suffix" api --method POST "repos/o/r/releases"',
         'api=gh; EXTRA=1 command "$api" api --method POST "repos/o/r/releases"',
+        'api=gh; command -p "$api" api --method POST "repos/o/r/releases"',
+        'api=gh; env -i "$api" api --method POST "repos/o/r/releases"',
+        'api=gh; xargs -r "$api" api --method POST < releases.txt',
+        'api=gh; command env "$api" api --method POST "repos/o/r/releases"',
+        'api=gh; env command "$api" api --method POST "repos/o/r/releases"',
+        'api=gh; nohup env -u HOME "$api" api --method POST "repos/o/r/releases"',
     ],
 )
 def test_a_command_word_built_from_a_variable_is_rejected(line: str) -> None:
@@ -109,11 +117,15 @@ def test_a_command_word_built_from_a_variable_is_rejected(line: str) -> None:
     the call inside a command substitution, the fifth behind a braced
     expansion, and the next three behind a wrapper -- ``command``, ``env`` and
     ``xargs`` -- whose options and assignments come before the word that is
-    actually run. The last three reach the word by other routes: a command
+    actually run. The next three reach the word by other routes: a command
     word that carries the expansion after a literal prefix, the same word
-    behind a wrapper, and a wrapper behind an environment assignment. A scan
-    of command words has to reach each of those rather than assume away the
-    ones it does not model.
+    behind a wrapper, and a wrapper behind an environment assignment. The last
+    three put a valueless option first, which a scan that assumed every option
+    consumed the next word would read as that word rather than as the command.
+    The last three nest one wrapper inside another, where a scan that read the
+    second wrapper as the command would take the expansion after it for an
+    argument. A scan of command words has to reach each of those rather than
+    assume away the ones it does not model.
     """
     indirect = indirect_command_words(line)
     assert indirect, f"{line!r} builds a command from a variable"
@@ -130,6 +142,54 @@ def test_a_wrapper_around_a_literal_command_is_not_indirect() -> None:
     assert not indirect_command_words(
         'command gh api --method GET "repos/o/r/releases"\n'
     ), "a wrapper around a literal command must not read as indirect"
+    assert not indirect_command_words(
+        'command -p gh api --method GET "repos/o/r/releases"\n'
+    ), "a valueless wrapper option must not make a literal command indirect"
+    assert not indirect_command_words(
+        'command env gh api --method GET "repos/o/r/releases"\n'
+    ), "a nested wrapper around a literal command must not read as indirect"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'body=POST; bash -c "$body"',
+        'body=POST; sh -c "$body"',
+        'body=POST; eval "$body"',
+        'body=POST; command eval "$body"',
+        'body=POST; command -p bash -c "$body"',
+        'body=POST; xargs -r bash -c "$body" < releases.txt',
+        'body=POST; python3 -c "$body"',
+        'body=POST; source "$body"',
+    ],
+)
+def test_a_command_that_runs_unread_text_is_rejected(line: str) -> None:
+    """Refuse a step that hands a run-time string to an interpreter.
+
+    Placing a command word answers where bash looks for the command, not what
+    an interpreter is then told to run: each line above assembles a ``gh api``
+    call at run time, so the literal scan sees nothing to check however
+    carefully the words before it are placed. The spells vary in how the
+    interpreter is reached -- directly, behind ``eval``, behind a wrapper, or
+    behind a wrapper's option -- because a rule that only refused the first
+    would be satisfied by the rest.
+    """
+    refused = forbidden_executor_words(line)
+    assert refused, f"{line!r} runs text the scan cannot read"
+
+
+def test_a_pinned_script_path_is_not_an_interpreter_invocation() -> None:
+    """Accept the action's own verifier call, which names its script by path.
+
+    The control for the cases above: they must be refused because the command
+    executes a run-time string, not because an interpreter's name appeared.
+    ``uv`` runs a file from the repository, whose commands the contract reads
+    directly.
+    """
+    assert not forbidden_executor_words(
+        "uv run --no-project --python 3.14 "
+        "scripts/verify_release_inventory_cli.py --directory d\n"
+    ), "a pinned script path is not a run-time string"
 
 
 def test_a_test_expression_operand_is_not_a_command() -> None:

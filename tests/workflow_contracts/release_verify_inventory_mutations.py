@@ -74,8 +74,12 @@ SUBSTITUTION_QUOTE_MUTATIONS = {
 #: spelling puts the assignment and the call inside a command substitution,
 #: which bash parses as a fresh command, the third hands the variable to a
 #: wrapper that runs it, where the command word is no longer the first word,
-#: and the fourth builds the command from a literal prefix and a variable,
-#: which bash joins into one word rather than reading as an expansion.
+#: the fourth builds the command from a literal prefix and a variable, which
+#: bash joins into one word rather than reading as an expansion, and the fifth
+#: puts a valueless wrapper option first, where a scan that assumed every
+#: option consumed the next word would read the variable as that value, and the
+#: sixth nests one wrapper inside another, where a scan that read the second
+#: wrapper as the command would take the variable for an argument to it.
 INDIRECT_COMMAND_MUTATIONS = {
     "gh-api-indirect-command": (
         'api=gh; "$api" api --method POST "repos/o/r/releases"'
@@ -89,6 +93,21 @@ INDIRECT_COMMAND_MUTATIONS = {
     "gh-api-prefixed-command": (
         'suffix=h; command g"$suffix" api --method POST "repos/o/r/releases"'
     ),
+    "gh-api-wrapper-option": (
+        'api=gh; command -p "$api" api --method POST "repos/o/r/releases"'
+    ),
+    "gh-api-nested-wrapper": (
+        'api=gh; command env "$api" api --method POST "repos/o/r/releases"'
+    ),
+}
+#: Commands a mutation appends to show that a run-time string handed to an
+#: interpreter is refused by name. The ``eval`` spelling needs no separate
+#: program, and the ``bash`` one is what a step reaches for once ``eval`` is
+#: refused; both build the ``gh api`` call from a variable, so neither leaves a
+#: word the position scan could place.
+EXECUTOR_MUTATIONS = {
+    "gh-api-eval": 'api="gh api --method POST repos/o/r/releases"; eval "$api"',
+    "gh-api-shell": 'api="gh api --method POST repos/o/r/releases"; bash -c "$api"',
 }
 #: Each write-implying argument a mutation adds to the listing call, in the
 #: spellings that whole-token matching would accept.
@@ -161,6 +180,7 @@ APPENDING_MUTATIONS = {
     **ESCAPED_SPACE_MUTATIONS,
     **SUBSTITUTION_QUOTE_MUTATIONS,
     **INDIRECT_COMMAND_MUTATIONS,
+    **EXECUTOR_MUTATIONS,
 }
 
 #: Each action mutation, paired with the change it makes to the steps.

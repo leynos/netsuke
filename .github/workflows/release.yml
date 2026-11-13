@@ -812,7 +812,8 @@ jobs:
       needs.build-macos.result == 'success' &&
       needs.windows-native-recipe-smoke.result == 'success' &&
       needs.metadata.outputs.should_publish == 'true'
-    # Only publication needs contents: write access to the release API.
+    # Publication writes the release. The verifier holds this scope too, but
+    # only to read a draft release's listing.
     permissions:
       contents: write
     needs:
@@ -828,7 +829,8 @@ jobs:
     # number would name an artefact this job never uploaded.
     outputs:
       trusted-artifact: declared-assets-publish-release-${{ github.run_attempt }}
-    # Only publication needs contents: write access to the release API.
+    # Publication writes the release. The verifier holds this scope too, but
+    # only to read a draft release's listing.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
