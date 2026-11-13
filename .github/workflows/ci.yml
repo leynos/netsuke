@@ -509,18 +509,15 @@ jobs:
           use-sccache: 'false'
       - name: Install prebuilt Kani
         if: steps.scope.outputs.run-proofs == 'true'
-        # The shared tool reads the version file and owns the archive digests.
-        # Keep its front-end and archive cache inside the restored job-local
-        # homes, then publish the executable directory for following steps.
-        run: |
-          KANI_INSTALL_FLAGS="--version-file tools/kani/VERSION"
-          KANI_INSTALL_FLAGS="$KANI_INSTALL_FLAGS --install-dir '$CARGO_HOME/bin'"
-          KANI_INSTALL_FLAGS="$KANI_INSTALL_FLAGS --cache-dir '$KANI_HOME/archives'"
-          make install-kani KANI_INSTALL_FLAGS="$KANI_INSTALL_FLAGS"
-          printf '%s\n' "$CARGO_HOME/bin" >> "$GITHUB_PATH"
-      - name: Kani version check
-        if: steps.scope.outputs.run-proofs == 'true'
-        run: make kani-check
+        # The shared action reads tools/kani/VERSION, installs through the
+        # pinned rust-prover-tools (which owns the archive digests), checks the
+        # installed version, and puts the install directory on PATH. It lands in
+        # the job-local Cargo home that `kani-cache` restores.
+        uses: leynos/shared-actions/.github/actions/install-prover-tools@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
+        with:
+          tools: kani
+          runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
+          kani-install-dir: ${{ env.CARGO_HOME }}/bin
       - name: Start the user manager
         if: steps.scope.outputs.run-proofs == 'true'
         # A hosted runner's job does not run inside a login session, so the

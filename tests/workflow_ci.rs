@@ -176,46 +176,23 @@ fn ensure_kani_cache_contract(steps: &[Value]) -> Result<()> {
     Ok(())
 }
 
-/// Require the Kani install step to use the shared installer and cached paths.
+/// Require the Kani install step to call the shared action, pinned by SHA.
 fn ensure_kani_install_uses_shared_tool(install_step: &Mapping) -> Result<()> {
-    let command = mapping_get(install_step, YamlKey("run"))
+    const INSTALL_ACTION: &str = "leynos/shared-actions/.github/actions/install-prover-tools";
+    let uses = mapping_get(install_step, YamlKey("uses"))
         .and_then(Value::as_str)
-        .context("Kani release installation should run the shared Make target")?;
+        .context("Kani installation should call the shared install-prover-tools action")?;
     ensure!(
-        command.contains("make install-kani"),
-        "Kani smoke job should install through make install-kani"
+        is_pinned_action_ref(uses, INSTALL_ACTION),
+        "Kani smoke job should call {INSTALL_ACTION} pinned by full commit SHA"
     );
     ensure!(
-        command.contains("--version-file tools/kani/VERSION"),
-        "Kani smoke job should use the repository's pinned version file"
+        step_input(install_step, YamlKey("tools")) == Some("kani"),
+        "Kani smoke job should ask the action for Kani only"
     );
     ensure!(
-        command.contains("--install-dir '$CARGO_HOME/bin'"),
-        "Kani smoke job should install into the cached Cargo home"
-    );
-    ensure!(
-        command.contains("--cache-dir '$KANI_HOME/archives'"),
-        "Kani smoke job should store verified archives under KANI_HOME"
-    );
-    ensure!(
-        !command.contains("cargo install"),
-        "Kani smoke job should not compile the verifier from source"
-    );
-    let install_position = command
-        .find("make install-kani")
-        .context("Kani install command should be present")?;
-    let path_position = command
-        .find("printf '%s\\n' \"$CARGO_HOME/bin\" >> \"$GITHUB_PATH\"")
-        .context("Kani smoke job should publish the installed Cargo bin directory")?;
-    ensure!(
-        install_position < path_position,
-        "Kani smoke job should publish its install directory after installation"
-    );
-    ensure!(
-        !command.contains("INPUT_KANI_VERSION")
-            && !command.contains("INPUT_FRONTEND_SHA256")
-            && !command.contains("INPUT_BUNDLE_SHA256"),
-        "Kani smoke job should not pass obsolete installer bindings"
+        mapping_get(install_step, YamlKey("run")).is_none(),
+        "Kani smoke job should keep no install commands of its own"
     );
     Ok(())
 }
@@ -469,39 +446,16 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
     ensure_kani_cache_contract(steps)?;
 
     let install_kani_index = step_index(steps, "Install prebuilt Kani")?;
-    let kani_check_index = steps
-        .iter()
-        .position(|step| step_name(step, "Kani version check").is_some())
-        .context("Kani smoke job should check the installed Kani version")?;
     let kani_ir_index = steps
         .iter()
         .position(|step| step_has(step, StepField::Runs, "make kani-ir"))
         .context("Kani smoke job should run the bounded Kani harnesses through the Make target")?;
     ensure!(
-        install_kani_index < kani_check_index && kani_check_index < kani_ir_index,
-        "Kani smoke job should install Kani, check its version, then run the bounded harnesses"
-    );
-    let kani_check = named_step(steps, "Kani version check")?;
-    let kani_check_command = mapping_get(kani_check, YamlKey("run"))
-        .and_then(Value::as_str)
-        .context("Kani smoke job should use the shared version check")?;
-    ensure!(
-        kani_check_command.trim() == "make kani-check",
-        "Kani smoke job should check the installed version through make kani-check"
+        install_kani_index < kani_ir_index,
+        "Kani smoke job should install Kani, which the action version-checks, then run the \
+         bounded harnesses"
     );
     let install_kani = named_step(steps, "Install prebuilt Kani")?;
-    let setup_uv = named_step(steps, "Setup uv")?;
-    let setup_uv_action = mapping_get(setup_uv, YamlKey("uses"))
-        .and_then(Value::as_str)
-        .context("Kani smoke job should set up uv before its shared installer")?;
-    ensure!(
-        setup_uv_action.starts_with("astral-sh/setup-uv@"),
-        "Kani smoke job should set up uv before its shared installer"
-    );
-    ensure!(
-        step_index(steps, "Setup uv")? < install_kani_index,
-        "Kani smoke job should set up uv before installing Kani"
-    );
     ensure_kani_install_uses_shared_tool(install_kani)?;
     // Thirty, not twenty. The job includes a mutation compile gate, which
     // builds the whole dependency graph through the Kani frontend into a cold
