@@ -35,6 +35,19 @@ FAULTS: dict[str, dict[str, str]] = {
     "declaration-equals-trusted": {"declaration-file": "trusted"},
     "record-equals-trusted": {"trusted-record-file": "trusted"},
     "declaration-outside-trusted": {"declaration-file": "declaration.txt"},
+    # A `..` component changes which directory the parts after it name. Written
+    # out, each of these starts inside the trusted directory, or beside it, and
+    # only the collapsed path shows that it does not stay there.
+    "declaration-traverses-out-of-trusted": {
+        "declaration-file": "trusted/../declaration.txt",
+    },
+    "record-traverses-out-of-trusted": {
+        "trusted-record-file": "trusted/../outside.json",
+    },
+    "download-traverses-into-trusted": {"download-directory": "other/../trusted"},
+    "output-traverses-into-trusted": {
+        "output-path": "other/../trusted/verified.json",
+    },
 }
 
 
@@ -57,3 +70,14 @@ def test_the_job_inputs_are_disjoint() -> None:
     every call would still satisfy their expectations.
     """
     assert_disjoint_inputs(_with({}))
+
+
+def test_a_parent_component_that_steps_back_into_itself_is_accepted() -> None:
+    """Accept a `..` that collapses onto the directory the path already names.
+
+    The traversal cases above must be refused because the parent component
+    leaves the directory, not because a `..` appeared at all. Refusing every
+    one would pass those cases while rejecting a path that names exactly the
+    contracted directory.
+    """
+    assert_disjoint_inputs(_with({"download-directory": "release-download/tmp/.."}))

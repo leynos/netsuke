@@ -9,19 +9,33 @@ manifest cannot be read as safe when it is not.
 
 The comparison is made on normalized path parts rather than on a string prefix,
 because two spellings of one directory -- with a trailing slash, a redundant
-separator, or a `.` component -- are one directory, and a prefix test accepts
-some of those. This module owns that comparison; the contract test supplies the
-inputs and the accepted default.
+separator, a `.` component, or a `..` component that steps back out of one --
+are one directory, and a prefix test accepts some of those. This module owns
+that comparison; the contract test supplies the inputs and the accepted default.
 
 Run via ``make test-workflow-contracts``.
 """
 
 import pathlib
+import posixpath
 
 
 def _normalised(value: object) -> pathlib.PurePath:
-    """Return one input path with redundant separators and components removed."""
-    return pathlib.PurePosixPath(str(value))
+    """Return one input path with redundant separators and components removed.
+
+    ``PurePosixPath`` alone keeps a ``..`` component, so ``trusted/../outside``
+    would still list ``trusted`` among its parents and read as inside it.
+    Collapsing each ``..`` against the component before it is what makes the
+    comparison a statement about the directory a path names rather than about
+    the order its parts happen to be written in.
+
+    Returns
+    -------
+    pathlib.PurePath
+        The path with its redundant separators, `.` components and parent
+        components collapsed.
+    """
+    return pathlib.PurePosixPath(posixpath.normpath(str(value)))
 
 
 def _inside(parent: pathlib.PurePath, child: pathlib.PurePath) -> bool:
