@@ -20,6 +20,7 @@ Run via ``make test-workflow-contracts``.
 import enum
 import re
 import shlex
+import typing as typ
 
 import release_verify_inventory_shell as shell
 
@@ -283,38 +284,61 @@ def _wrapped_successor(word: str) -> _Position:
     return _Position.ARGUMENT
 
 
-def _indirect_words(line: str) -> list[str]:
-    """Return the words in one joined line that name a command by expansion.
+def _placed_words(line: str) -> list[tuple[str, _Position]]:
+    """Return each word on one joined line with the position bash reads it in.
+
+    Both command-word checks ask a different question of the same reading, so
+    the traversal is written once and each check supplies its own predicate.
+
+    Returns
+    -------
+    list[tuple[str, _Position]]
+        The line's words and their positions, in order.
+    """
+    placed: list[tuple[str, _Position]] = []
+    position = _Position.COMMAND
+    for word in _words(line):
+        placed.append((word, position))
+        position = _next_position(word, position)
+    return placed
+
+
+def _is_unread_executor(word: str, position: _Position) -> bool:
+    """Return whether ``word`` would run text the scan cannot read.
+
+    Returns
+    -------
+    bool
+        ``True`` when the word names a forbidden executor in a command
+        position.
+    """
+    return position in _COMMAND_POSITIONS and word in FORBIDDEN_EXECUTORS
+
+
+def _command_words(
+    run: str, matches: cabc.Callable[[str, _Position], bool]
+) -> list[str]:
+    """Return every word in a step that ``matches`` accepts, in order.
+
+    Parameters
+    ----------
+    run
+        The step's ``run`` text, as the action manifest carries it.
+    matches
+        The predicate deciding whether a word, at the position bash reads it
+        in, is one the caller is looking for.
 
     Returns
     -------
     list[str]
-        The offending words, in the order they appear.
+        The accepted words, in the order they appear.
     """
-    position = _Position.COMMAND
-    indirect: list[str] = []
-    for word in _words(line):
-        if _names_expansion(word, position):
-            indirect.append(word)
-        position = _next_position(word, position)
-    return indirect
-
-
-def _executor_words(line: str) -> list[str]:
-    """Return the words in one joined line that would execute text unread.
-
-    Returns
-    -------
-    list[str]
-        The offending words, in the order they appear.
-    """
-    position = _Position.COMMAND
-    executors: list[str] = []
-    for word in _words(line):
-        if position in _COMMAND_POSITIONS and word in FORBIDDEN_EXECUTORS:
-            executors.append(word)
-        position = _next_position(word, position)
-    return executors
+    return [
+        word
+        for line in script_lines(run)
+        for word, position in _placed_words(line)
+        if matches(word, position)
+    ]
 
 
 def indirect_command_words(run: str) -> list[str]:
@@ -347,7 +371,7 @@ def indirect_command_words(run: str) -> list[str]:
     list[str]
         The offending command words, in the order they appear.
     """
-    return [word for line in script_lines(run) for word in _indirect_words(line)]
+    return _command_words(run, _names_expansion)
 
 
 def forbidden_executor_words(run: str) -> list[str]:
@@ -385,4 +409,8 @@ def forbidden_executor_words(run: str) -> list[str]:
     >>> forbidden_executor_words("uv run --no-project script.py")
     []
     """
-    return [word for line in script_lines(run) for word in _executor_words(line)]
+    return _command_words(run, _is_unread_executor)
+
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
