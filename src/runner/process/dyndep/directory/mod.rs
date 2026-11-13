@@ -134,13 +134,10 @@ fn create_component(parent: &Dir, name: &str, display: &Utf8Path) -> Result<Dir>
         Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
         Err(error) => return Err(error).with_context(|| create_error(display)),
     }
-    match open_component(parent, name, display)? {
-        Some(dir) => Ok(dir),
-        // A concurrent remover can delete the component between the create and
-        // the open. Reporting the open failure is honest: the directory this
-        // call promised to establish is not there.
-        None => Err(anyhow!(open_error(display))),
-    }
+    // A concurrent remover can delete the component between the create and
+    // the open. Reporting the open failure is honest: the directory this call
+    // promised to establish is not there.
+    open_component(parent, name, display)?.map_or_else(|| Err(anyhow!(open_error(display))), Ok)
 }
 
 /// Open `name` beneath `parent` without following a final-component alias.
