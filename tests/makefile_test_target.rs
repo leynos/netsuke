@@ -374,15 +374,17 @@ fn ensure_the_prewarm_outranks_its_negative_check() -> Result<()> {
 
 /// Read the `priority` of the override whose filter names `test_name`.
 ///
-/// Nextest treats a missing `priority` as zero, so an override that only
-/// inherits the default reports `0`.
+/// Both tests are overridden in the Kani profile, which is the one this gate
+/// selects, so that profile is where their ordering is read. Nextest treats a
+/// missing `priority` as zero, so an override that only inherits the default
+/// reports `0`.
 fn override_priority(config: &Value, test_name: &str) -> Result<i64> {
     let overrides = config
         .get("profile")
-        .and_then(|profile| profile.get("default"))
+        .and_then(|profile| profile.get("kani"))
         .and_then(|profile| profile.get("overrides"))
         .and_then(Value::as_array)
-        .context("nextest configuration should declare profile.default.overrides")?;
+        .context("nextest configuration should declare profile.kani.overrides")?;
     let entry = overrides
         .iter()
         .find(|entry| {

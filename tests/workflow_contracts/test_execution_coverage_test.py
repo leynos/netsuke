@@ -259,14 +259,15 @@ def test_the_kani_prewarm_is_scheduled_before_its_negative_check() -> None:
     The `nested-cargo-builds` group serializes the two tests but does not order
     them, so the priority is what puts the prewarm first. Without it a cold
     target charges the dependency build to the negative check's allowance,
-    which is the cost the split exists to avoid.
+    which is the cost the split exists to avoid. Both overrides live in the
+    Kani profile, which is the one the gate selects.
     """
     config = tomllib.loads(
         (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
     )
     priorities = {
         override["filter"]: override.get("priority", 0)
-        for override in config["profile"]["default"]["overrides"]
+        for override in config["profile"]["kani"]["overrides"]
     }
     prewarm = "test(/^prewarm::prewarm_kani_mutation_target($|::)/)"
     negative = (
@@ -279,10 +280,6 @@ def test_the_kani_prewarm_is_scheduled_before_its_negative_check() -> None:
         "the prewarm must be scheduled before the negative check that shares "
         "its invocation"
     )
-
-
-
-
 
 
 def test_packaging_list_check_compiles_nothing() -> None:
@@ -382,4 +379,3 @@ def test_instrumented_lanes_budget_for_a_cold_build(
         f"{CARGO_WAIT_TIMEOUT}s for one instrumented cargo run, got "
         f"{env.get('RUN_RUST_CARGO_WAIT_TIMEOUT')!r}"
     )
-# weave: run 'weave explain tests/workflow_contracts/test_execution_coverage_test.py' for per-hunk detail, 'weave check' to verify your resolution
