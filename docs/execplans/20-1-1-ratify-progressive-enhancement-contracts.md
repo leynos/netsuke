@@ -378,11 +378,12 @@ decision D-15.
     `check-fmt` failure the first attempt recorded was a real formatting fault
     in two files, fixed by `make fmt` and amended into the same unpushed
     commit.
-  - (2026-11-12) Three commits preceded it. `d76b6064e` gave each rejection
-    class its own `RejectionSummary` variant carrying a phrase only that
-    class's summary renders, added a positive control for the admission-span
-    test (asserting a query opens no span proves nothing if the subscriber
-    captured nothing), narrowed the documented counting claim to command loads
+  - (2026-11-12) Three commits preceded `4e62b7c70`. `d76b6064e` gave each
+    rejection class its own `RejectionSummary` variant carrying a phrase only
+    that class's summary renders, added a positive control for the
+    admission-span test (asserting a query opens no span proves nothing if the
+    subscriber captured nothing), narrowed the documented counting claim to
+    command loads
     across the users' guide, developers' guide, ADR-0009 addendum and
     `record_admission`, and recorded that batch in this plan. `5e092ce42`
     folded the admitted and rejected admission cases into one `#[rstest]` table
