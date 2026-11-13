@@ -101,10 +101,15 @@ pub(super) fn spawn_and_stream_output(
         return Err(io::Error::other("child process missing stderr pipe"));
     };
 
+    // Tracing spans are thread-local, so the forwarding thread starts outside
+    // the caller's `ninja_subprocess` span. Carrying the span across the spawn
+    // keeps a stderr forwarding warning attributable to the command that
+    // produced the output, which is the whole point of entering it.
+    let span = tracing::Span::current();
     let err_handle = thread::spawn(move || {
         let mut report = report_forward_failure;
         let route = ForwardRoute::new(ForwardStream::Stderr, &mut report);
-        match stderr_mode {
+        span.in_scope(|| match stderr_mode {
             // Avoid a long-lived stderr lock: status observers invoked while
             // draining stdout may emit task updates to stderr, and that path
             // must not block behind stderr forwarding. In JSON diagnostics mode
@@ -116,7 +121,7 @@ pub(super) fn spawn_and_stream_output(
             StderrMode::Forward => {
                 forward_stderr_with_attribution(BufReader::new(stderr), io::stderr(), route)
             }
-        }
+        })
     });
 
     // Intentionally drain stdout on the main thread when `status_observer` is
@@ -234,6 +239,10 @@ fn report_unwritable_stderr(stats: ForwardStats, out: &mut impl Write) -> io::Re
 #[cfg(test)]
 mod tests {
     //! Cover the fallback warning's stream selection and its own failure path.
+
+    mod reporter_tests;
+    mod span_tests;
+    mod support;
 
     use super::{ForwardFailureKind, ForwardStats, report_unwritable_stderr};
     use rstest::rstest;

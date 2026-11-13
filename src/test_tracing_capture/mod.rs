@@ -80,6 +80,7 @@ pub(crate) fn is_manifest_summary_metadata(metadata: &Metadata<'_>) -> bool {
 pub struct CapturedEvents {
     fields: Arc<Mutex<Vec<String>>>,
     span_fields: Arc<Mutex<BTreeMap<String, Vec<String>>>>,
+    event_spans: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
 impl CapturedEvents {
@@ -117,6 +118,21 @@ impl CapturedEvents {
     pub fn discovery_span_fields(&self) -> Vec<String> {
         self.span_fields(DISCOVERY_SPAN)
     }
+
+    /// Return the span names enclosing each captured event, in capture order.
+    ///
+    /// An event emitted inside a span must be attributable to it, so the
+    /// enclosing scope is recorded rather than inferred from the event fields.
+    /// Each entry is ordered from the root span outwards, and an event emitted
+    /// outside every span contributes an empty entry, keeping the entries
+    /// aligned with [`Self::snapshot`].
+    #[must_use]
+    pub fn event_spans(&self) -> Vec<Vec<String>> {
+        self.event_spans
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
 }
 
 /// [`Layer`] that appends each event's rendered fields to a shared buffer.
@@ -127,6 +143,7 @@ impl CapturedEvents {
 struct CapturedEventsLayer {
     events: Arc<Mutex<Vec<String>>>,
     span_fields: Arc<Mutex<BTreeMap<String, Vec<String>>>>,
+    event_spans: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
 impl CapturedEventsLayer {
@@ -156,14 +173,24 @@ where
         Interest::always()
     }
 
-    /// Render `event`'s fields and append them to the shared buffer.
-    fn on_event(&self, event: &Event<'_>, _ctx: LayerContext<'_, S>) {
+    /// Render `event`'s fields and its enclosing span scope into the buffer.
+    fn on_event(&self, event: &Event<'_>, ctx: LayerContext<'_, S>) {
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
         self.events
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(visitor.fields.join(" "));
+        let scope = ctx.event_scope(event).map_or(Vec::new(), |scope| {
+            scope
+                .from_root()
+                .map(|span| span.name().to_owned())
+                .collect()
+        });
+        self.event_spans
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(scope);
     }
 
     /// Capture the fields a span is created with.
@@ -279,6 +306,7 @@ pub(crate) fn uninstalled_test_subscriber(
     let captured = CapturedEvents {
         fields: Arc::clone(&layer.events),
         span_fields: Arc::clone(&layer.span_fields),
+        event_spans: Arc::clone(&layer.event_spans),
     };
     let subscriber = tracing_subscriber::registry().with(layer.with_filter(level_filter));
     (subscriber, captured)
