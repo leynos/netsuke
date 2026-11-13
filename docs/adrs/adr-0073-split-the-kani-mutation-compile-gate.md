@@ -125,7 +125,7 @@ caps rather than one. The gate's third test, the negative check, shares the
 first invocation instead of adding one.
 
 Run 41840367244 spent 824 s before nextest started the mutation test, and the
-job's finalisation costs 7 s. Two capped runs plus that setup and finalisation
+job's finalization costs 7 s. Two capped runs plus that setup and finalization
 total 5,871 s. The 100-minute ceiling is 6,000 s, which leaves 129 s for runner
 variance and post-step reporting. Sizing the ceiling from a single cap would
 cancel the job while the second invocation was still reporting, and a
