@@ -278,7 +278,7 @@ Before changing `netsuke_version`, verify that the reader supports the schema
 features used by the manifest. Changing the declaration alone does not migrate
 unsupported syntax.
 
-## Nothing to change for existing callers
+## Rust callers may need migration changes
 
 The convenience wrappers keep their child-process behaviour: the child inherits
 the calling process's environment, and Ninja is resolved exactly as before.

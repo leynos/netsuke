@@ -1710,8 +1710,10 @@ Behavioural acceptance after EP-M3:
 mkdir -p /tmp/schema-gate-netsuke
 printf 'netsuke_version: "1.1.0"\ntargets:\n  - name: hello.txt\n    command: "echo hi > hello.txt"\n' \
   > /tmp/schema-gate-netsuke/Netsukefile
+rm -f /tmp/schema-gate-netsuke/out.ninja
 cargo run --quiet -- --directory /tmp/schema-gate-netsuke generate --output /tmp/schema-gate-netsuke/out.ninja
 echo "exit=$?"; test -e /tmp/schema-gate-netsuke/out.ninja && echo written || echo absent
+rm -f /tmp/schema-gate-netsuke/out.ninja
 ```
 
 Expected: a diagnostic containing `netsuke::manifest::schema_version` and the

@@ -1,6 +1,8 @@
 //! Verify runner and contained-report selection in human diagnostics.
 
 use super::*;
+use rstest::rstest;
+use test_support::{EnLocalizer, en_localizer};
 
 /// Remove bidi isolates and terminal wrapping from localized output.
 fn flatten_localized_text(rendered: &str) -> String {
@@ -33,8 +35,9 @@ fn runner_failure() -> anyhow::Error {
 /// Removing the runner-error branch from `select_diagnostic` leaves this chain
 /// without a selected diagnostic, so the code, summary, and help assertions
 /// fail together.
-#[test]
-fn runner_failures_render_their_own_diagnostic() -> Result<()> {
+#[rstest]
+fn runner_failures_render_their_own_diagnostic(en_localizer: EnLocalizer) -> Result<()> {
+    let _en_localizer = en_localizer;
     let rendered = render_failure(
         &runner_failure(),
         &theme_for(presentation_style(false, true)),
