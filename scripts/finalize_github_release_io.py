@@ -30,9 +30,17 @@ Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
 import json
 import pathlib
 import tempfile
+import typing as typ
 
+import release_digest_record
+import release_digest_record_files
 from cuprum import CommandResult, Program, ProgramCatalogue, sh
 from cuprum.catalogue import ProjectSettings
+
+if typ.TYPE_CHECKING:
+    # The alias is evaluated lazily, so naming ``Callable`` here costs a
+    # start-up import nothing.
+    import collections.abc as cabc
 
 GITHUB_CATALOGUE = ProgramCatalogue(
     projects=(
@@ -55,6 +63,11 @@ EXIT_REMOTE_FAILED = 5
 #: Fields the snapshot needs. Naming them keeps ``gh`` from returning the
 #: asset body or author metadata this stage would only discard.
 VIEW_FIELDS = "tagName,isDraft,isPrerelease,assets"
+
+#: The shape of the one process effect a run performs. Every adapter that runs
+#: ``gh`` takes one of these, so a decision can be exercised with a plain
+#: function that returns recorded answers and no process is started.
+type Runner = cabc.Callable[..., CommandResult]
 
 
 class FinalizeError(Exception):
@@ -163,6 +176,49 @@ def read_json(path: pathlib.Path) -> object:
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise FinalizeError(
             EXIT_INPUT_UNREADABLE, f"{path} could not be read as JSON: {error}"
+        ) from error
+
+
+def load_digest_record(path: pathlib.Path) -> release_digest_record.DigestRecord:
+    """Decode the trusted digest record the declaration stage wrote.
+
+    Reading the record is an adapter's job, so the decision layer receives a
+    validated value and never a path. That is what lets a test ask what a run
+    decides about a changed asset without writing a file.
+
+    Parameters
+    ----------
+    path
+        The record the declaration stage retained before upload.
+
+    Returns
+    -------
+    release_digest_record.DigestRecord
+        The validated record with lowercase digests.
+
+    Raises
+    ------
+    FinalizeError
+        With :data:`EXIT_INPUT_UNREADABLE` when the record is absent, is not
+        JSON text, or does not describe a usable digest record. An absent
+        record would reconcile nothing, and none of those shapes is a verified
+        release.
+
+    Examples
+    --------
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     source = pathlib.Path(directory) / "digests.json"
+    ...     _ = source.write_text(
+    ...         '{"assets": {"a.deb": "' + "ab" * 32 + '"}}', encoding="utf-8"
+    ...     )
+    ...     load_digest_record(source).as_mapping()["a.deb"] == "ab" * 32
+    True
+    """
+    try:
+        return release_digest_record_files.read_digest_record(path)
+    except release_digest_record.DigestRecordError as error:
+        raise FinalizeError(
+            EXIT_INPUT_UNREADABLE, f"{path} is not a usable digest record: {error}"
         ) from error
 
 

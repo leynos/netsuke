@@ -14,11 +14,13 @@ the trusted digest. It never uploads, deletes, or clobbers an asset; a missing
 or conflicting asset is a refusal that leaves the release as a draft.
 
 Both properties are enforced below the command line, in
-``finalize_github_release_operations`` and
-``finalize_github_release_records``; this module only names the three
-operations the composite action invokes and the options each one takes. The
-command set is therefore part of the action's contract, and the example below
-is what the action's coverage asserts:
+``finalize_github_release_operations`` and ``finalize_github_release_remote``;
+this module names the three operations the composite action invokes, the
+options each one takes, and the words an operator reads. Reading the input
+records, recording the outcome, and mapping a verdict to an exit status all
+happen here, because those are the only steps that belong to the process edge.
+The command set is therefore part of the action's contract, and the example
+below is what the action's coverage asserts:
 
 >>> sorted(name for name in app.resolved_commands() if not name.startswith("-"))
 ['publish', 'resolve', 'snapshot']
@@ -40,13 +42,19 @@ Exit statuses are the vocabulary the workflow branches on:
 ``5``
     A GitHub call failed or answered with something unusable.
 
-Each helper below raises :class:`finalize_github_release_io.FinalizeError`
-carrying one of those statuses, and :func:`main` is the only place a status
-becomes a process exit.
+:class:`finalize_github_release_io.FinalizeError` carries the status of a
+failure in the input and output effects, and :func:`main` turns it into a
+process exit. A publishing decision travels as a
+:class:`finalize_github_release_decisions.PublishOutcome` instead, which
+:func:`finalize_github_release_messages.describe` renders and
+:func:`_exit_status` maps. Keeping those two apart means changing how a
+refusal reads cannot change what the step does.
 
 Run via ``.github/actions/finalize-github-release``; behavioural coverage
 lives in ``scripts/tests/test_finalize_github_release.py``.
 """
+
+import dataclasses
 
 # Cyclopts resolves these annotations when it builds the command, so the
 # module needs ``pathlib`` at runtime rather than only for type checking.
@@ -54,8 +62,11 @@ import pathlib  # ruff: ignore[typing-only-standard-library-import]
 import sys
 import typing as typ
 
+import finalize_github_release_decisions as decisions
 import finalize_github_release_io as release_io
+import finalize_github_release_messages as messages
 import finalize_github_release_operations as operations
+import finalize_github_release_records as release_records
 import finalize_github_release_stage_records as stage_records
 
 from cyclopts import App, Parameter
@@ -67,6 +78,29 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
 app = App(help="Reconcile and un-draft a verified GitHub release.")
+
+#: The verdicts that mean the release is now public, and so whose outcome is
+#: recorded rather than reported as a refusal.
+_PUBLIC = frozenset({
+    decisions.PublishVerdict.FINALIZED,
+    decisions.PublishVerdict.ALREADY_FINALIZED,
+})
+
+#: The status each verdict reports. A decision names what happened; this table
+#: is the one place that spelling becomes the workflow's vocabulary.
+_STATUS = {
+    decisions.PublishVerdict.FINALIZED: release_io.EXIT_OK,
+    decisions.PublishVerdict.ALREADY_FINALIZED: release_io.EXIT_OK,
+    decisions.PublishVerdict.UPLOAD_REQUIRED: release_io.EXIT_UPLOAD_REQUIRED,
+    decisions.PublishVerdict.INPUT_UNREADABLE: release_io.EXIT_INPUT_UNREADABLE,
+    decisions.PublishVerdict.REMOTE_FAILED: release_io.EXIT_REMOTE_FAILED,
+    decisions.PublishVerdict.STILL_DRAFT: release_io.EXIT_REMOTE_FAILED,
+    decisions.PublishVerdict.REFUSED: release_io.EXIT_REFUSED,
+    decisions.PublishVerdict.NOT_A_DRAFT: release_io.EXIT_REFUSED,
+    decisions.PublishVerdict.PRERELEASE_MISMATCH: release_io.EXIT_REFUSED,
+    decisions.PublishVerdict.PUBLISHED_MISMATCH: release_io.EXIT_REFUSED,
+    decisions.PublishVerdict.VERIFIED: release_io.EXIT_OK,
+}
 
 
 @app.command
@@ -93,12 +127,14 @@ def resolve(
     Notes
     -----
     The ``FinalizeError`` that
-    :func:`finalize_github_release_stage_records.record_candidate` raises propagates
-    unchanged, because the status it carries is the one this step reports:
-    ``3`` when the record cannot be read or decoded, and ``1`` when it names
-    another tag or revision. Nothing is written in either case.
+    :func:`finalize_github_release_stage_records.record_candidate` raises
+    propagates unchanged, because the status it carries is the one this step
+    reports: ``3`` when the record cannot be read or decoded, and ``1`` when it
+    names another tag or revision. Nothing is written in either case.
     """
-    stage_records.record_candidate(identity, tag=tag, commit=commit, output=output)
+    print(
+        stage_records.record_candidate(identity, tag=tag, commit=commit, output=output)
+    )
 
 
 @app.command
@@ -125,14 +161,59 @@ def snapshot(
     Notes
     -----
     The ``FinalizeError`` that
-    :func:`finalize_github_release_stage_records.record_snapshot` raises propagates
-    unchanged: ``5`` when GitHub cannot be read, and ``4`` when either record
-    cannot be written. This command only reads GitHub, so a failure never
-    changes the release.
+    :func:`finalize_github_release_stage_records.record_snapshot` raises
+    propagates unchanged: ``5`` when GitHub cannot be read, and ``4`` when
+    either record cannot be written. This command only reads GitHub, so a
+    failure never changes the release.
     """
-    stage_records.record_snapshot(
-        tag, repository, state_path=state_path, assets_path=assets_path
+    print(
+        stage_records.record_snapshot(
+            tag,
+            repository,
+            paths=stage_records.SnapshotPaths(state=state_path, assets=assets_path),
+            runner=release_io.run_gh,
+        )
     )
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class PublishRequest:
+    """Name the inputs and outputs one ``publish`` invocation works with.
+
+    The paths live here, at the process edge, and nowhere below it: the
+    decision takes the decoded records these paths name, so it never needs to
+    know that a file was involved.
+
+    Attributes
+    ----------
+    tag
+        The release the workflow is finalizing.
+    commit
+        The revision the candidate must have been built from.
+    repository
+        The ``OWNER/REPO`` the release belongs to.
+    candidate_path
+        The candidate record ``resolve`` wrote.
+    plan_path
+        The reconciliation plan ``finalize_github_release_cli`` wrote.
+    digest_record_path
+        The trusted digest record the declaration stage wrote before upload.
+        Re-read here so the release is reconciled against the same record the
+        planner used, not against the plan's restatement of it.
+    result_path
+        Where the outcome record is written.
+    github_output
+        The workflow's output file, when the step asked for outputs.
+    """
+
+    tag: str
+    commit: str
+    repository: str
+    candidate_path: pathlib.Path
+    plan_path: pathlib.Path
+    digest_record_path: pathlib.Path
+    result_path: pathlib.Path
+    github_output: pathlib.Path | None = None
 
 
 # `Parameter(name="*")` flattens the request into one flag per field, so the
@@ -141,7 +222,7 @@ def snapshot(
 # required, which is what the action's contract asserts.
 @app.command
 def publish(
-    request: typ.Annotated[operations.PublishRequest, Parameter(name="*")],
+    request: typ.Annotated[PublishRequest, Parameter(name="*")],
 ) -> None:
     """Un-draft a fully verified release, or report why it is left unedited.
 
@@ -152,19 +233,80 @@ def publish(
         field is a flag of its own, so the command line stays ``--tag``,
         ``--commit``, ``--candidate-path`` and so on.
 
+    Raises
+    ------
+    SystemExit
+        With the status the outcome names, after its diagnosis reaches
+        standard error, when the release was not made public by this run.
+
     Notes
     -----
-    The ``FinalizeError`` that
-    :func:`finalize_github_release_operations.publish_release` raises
-    propagates unchanged, with the status it carries: ``1`` when the plan, the
-    candidate, or the release refuses publication, ``2`` when the plan still
-    requires an upload, ``3`` when an input record cannot be read, ``4`` when
-    the outcome cannot be recorded, and ``5`` when a GitHub call fails or
-    answers with something unusable. Status ``0`` is not a failure: it is this
-    command returning after the release became public with the candidate's
-    prerelease state.
+    The three input records are read here, so a record that cannot be decoded
+    stops the run before any API call and reports the status its own reader
+    carries. The decision itself is made by
+    :func:`finalize_github_release_operations.publish_release` from the decoded
+    values, and this command either records the public outcome or renders the
+    refusal.
     """
-    operations.publish_release(request)
+    identity = release_records.candidate(
+        request.candidate_path, tag=request.tag, commit=request.commit
+    )
+    trusted = release_io.load_digest_record(request.digest_record_path)
+    plan_document = release_io.read_json(request.plan_path)
+    outcome = operations.publish_release(
+        operations.PublishInputs(
+            identity=identity,
+            trusted=trusted,
+            plan_document=plan_document,
+            repository=request.repository,
+            runner=release_io.run_gh,
+        )
+    )
+    if outcome.verdict in _PUBLIC:
+        print(
+            release_records.record_outcome(
+                request.result_path,
+                request.github_output,
+                outcome.verdict.value,
+                identity,
+            )
+        )
+        return
+    # ``release_records.candidate`` has already refused a record that names no
+    # tag or another one, so the invocation's tag and the candidate's are the
+    # same string here; naming the request keeps that equality explicit rather
+    # than asking the reader to remember it.
+    print(
+        messages.describe(
+            outcome,
+            plan_path=request.plan_path,
+            tag=request.tag,
+            is_prerelease=identity.is_prerelease,
+        ),
+        file=sys.stderr,
+    )
+    raise SystemExit(_exit_status(outcome))
+
+
+def _exit_status(outcome: decisions.PublishOutcome) -> int:
+    """Map a verdict to the status the workflow step reports.
+
+    Parameters
+    ----------
+    outcome
+        The verdict being reported.
+
+    Returns
+    -------
+    int
+        The status from :mod:`finalize_github_release_io`'s exit vocabulary.
+
+    Examples
+    --------
+    >>> _exit_status(decisions.PublishOutcome(decisions.PublishVerdict.STILL_DRAFT))
+    5
+    """
+    return _STATUS[outcome.verdict]
 
 
 def main(argv: cabc.Sequence[str] | None = None) -> None:
@@ -180,9 +322,9 @@ def main(argv: cabc.Sequence[str] | None = None) -> None:
     ------
     SystemExit
         With the status the refusal carries, after its diagnosis reaches
-        standard error. The helpers raise :class:`FinalizeError` instead of
-        exiting, so this is the one place the exit vocabulary becomes a
-        process status.
+        standard error. The effects raise :class:`FinalizeError` instead of
+        exiting, and :func:`publish` raises this for a decision, so this is the
+        one place the exit vocabulary becomes a process status.
 
     Examples
     --------

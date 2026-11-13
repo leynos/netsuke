@@ -1,362 +1,359 @@
-"""Decide and perform the two operations a publishing run is built from.
+"""Orchestrate the one publishing decision a finalizing run makes.
 
-Un-drafting a release is irreversible, so the guards here run before any API
-call: a candidate built from another revision, a plan that still owes an
-upload, and a plan whose bytes were never established each stop the run before
-it touches the release. Only a release in which every declared asset already
-holds the trusted digest reaches the one edit this feature performs.
+Un-drafting a release is irreversible, so the guards run before any API call: a
+plan that still owes an upload, a plan whose bytes were never established, and a
+release that is already public each stop the run before it touches anything.
+Only a release in which every declared asset already holds the trusted digest
+reaches the one edit this feature performs.
 
 The plan answers for the snapshot the planner read, so the release is
 reconciled a second time against the trusted record immediately before the
-edit. That second pass is the planner's own policy, not a cheaper copy of it:
-a draft that lost or replaced an asset between the two reads is judged exactly
-as a first read would judge it. The same reconciliation runs on the read-back
-after the edit, and on a retry that finds the release already public, so a
-change made in the window between the pre-edit read and the edit is reported
-rather than recorded as a success.
+edit. That second pass is the planner's own policy, not a cheaper copy of it: a
+draft that lost or replaced an asset between the two reads is judged exactly as
+a first read would judge it. The same reconciliation runs on the read-back after
+the edit, and on a retry that finds the release already public, so a change made
+in the window between the pre-edit read and the edit is reported rather than
+recorded as a success.
 
-The plan is read from the file ``finalize_github_release_cli`` wrote, and the
-candidate from the record ``package-crate`` wrote. The inventory verifier's
-output is deliberately not an input: comparing GitHub against a record derived
-from GitHub would agree with itself however the upload was tampered with.
+Every branch here returns a
+:class:`finalize_github_release_decisions.PublishOutcome`. Nothing in this
+module raises for a decision, prints, or names an exit status: the command layer
+renders the outcome. The two effects it depends on — reading the release and
+un-drafting it — are injected ports, defaulting to the Cuprum adapters, so a
+test can state what the run decides with no process at all.
+
+The inventory verifier's output is deliberately not an input: comparing GitHub
+against a record derived from GitHub would agree with itself however the upload
+was tampered with.
 
 Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
-``scripts/tests/test_finalize_github_release_publish.py`` and
-``scripts/tests/test_finalize_github_release_publish_failures.py``.
-
-What GitHub answered, what this run recorded, and the candidate record it read
-live in ``finalize_github_release_records``. This module decides from those
-records; it does not produce them.
+``scripts/tests/test_finalize_github_release_publish.py``,
+``scripts/tests/test_finalize_github_release_publish_decisions.py`` and
+``scripts/tests/test_finalize_github_release_publish_ports.py``.
 """
 
 import dataclasses
 
-# ``PublishRequest`` reads these annotations from the class at runtime.
-import pathlib  # ruff: ignore[typing-only-standard-library-import]
-import typing as typ
-
+# ``PublishInputs`` reads its field annotations from the class at run time, so
+# the types it names are imported here rather than for type checking alone.
+import finalize_github_release_decisions as decisions
 import finalize_github_release_io as release_io
 import finalize_github_release_plan as release_plan
-import finalize_github_release_reconcile as release_reconcile
-import finalize_github_release_records as release_records
+import finalize_github_release_ports as release_ports  # ruff: ignore[typing-only-third-party-import] - a field annotation names it
+import finalize_github_release_remote as release_remote
 import finalize_github_release_state as release_state
-import release_upload_messages
-
-if typ.TYPE_CHECKING:
-    # Only the helper signatures name the identity; nothing here constructs one.
-    import release_candidate
+import release_candidate  # ruff: ignore[typing-only-third-party-import] - a field annotation names it
+import release_digest_record  # ruff: ignore[typing-only-third-party-import] - a field annotation names it
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class PublishRequest:
-    """Name every input and output one ``publish`` run works with.
+class PublishInputs:
+    """Name the values one publishing decision is made from.
+
+    Grouping them keeps :func:`publish_release` a one-argument command: the
+    decision reads a value, and a test supplies the same value with its own
+    ports.
 
     Attributes
     ----------
-    tag
-        The release the workflow is finalizing.
-    commit
-        The revision the candidate must have been built from.
+    identity
+        The validated candidate, which supplies the tag, the revision the
+        record was checked against, and the prerelease flag.
+    trusted
+        The decoded digest record the build declared before upload.
+    plan_document
+        The decoded reconciliation plan ``finalize_github_release_cli`` wrote.
     repository
         The ``OWNER/REPO`` the release belongs to.
-    candidate_path
-        The candidate record ``resolve`` wrote.
-    plan_path
-        The reconciliation plan ``finalize_github_release_cli`` wrote.
-    digest_record_path
-        The trusted digest record the declaration stage wrote before upload.
-        Re-read here so the release is reconciled against the same record the
-        planner used, not against the plan's restatement of it.
-    result_path
-        Where the outcome record is written.
-    github_output
-        The workflow's output file, when the step asked for outputs.
+    runner
+        The process effect the default ports are built from. It is consulted
+        only when ``reader`` or ``editor`` is omitted, so a test that supplies
+        both never starts a process.
+    reader
+        Reads the release. Defaults to the Cuprum adapter.
+    editor
+        Un-drafts the release. Defaults to the Cuprum adapter.
     """
 
-    tag: str
-    commit: str
+    identity: release_candidate.ReleaseIdentity
+    trusted: release_digest_record.DigestRecord
+    plan_document: object
     repository: str
-    candidate_path: pathlib.Path
-    plan_path: pathlib.Path
-    digest_record_path: pathlib.Path
-    result_path: pathlib.Path
-    github_output: pathlib.Path | None = None
+    runner: release_io.Runner = release_io.run_gh
+    reader: release_ports.ReleaseReader | None = None
+    editor: release_ports.ReleaseEditor | None = None
 
 
-def assessment(path: pathlib.Path) -> release_plan.PlanAssessment:
-    """Read the reconciliation plan and classify what it permits.
-
-    Parameters
-    ----------
-    path
-        The plan ``finalize_github_release_cli`` wrote for this run.
-
-    Returns
-    -------
-    release_plan.PlanAssessment
-        The verdict, the assets each verdict rests on, and the reason a
-        refused plan gives.
-
-    Raises
-    ------
-    FinalizeError
-        With :data:`EXIT_INPUT_UNREADABLE` when the plan's shape supports no
-        decision, instead of reading it as permission to proceed.
-    """
-    result = release_plan.assess_plan(release_io.read_json(path))
-    if result.verdict is release_plan.PlanVerdict.UNREADABLE:
-        raise release_io.FinalizeError(
-            release_io.EXIT_INPUT_UNREADABLE,
-            f"{path} is not a usable plan: {result.detail}",
-        )
-    return result
-
-
-def require_verified(
-    result: release_plan.PlanAssessment,
-    *,
-    source: str = "the reconciliation plan",
-    draft_confirmed: bool = False,
-) -> None:
-    """Stop unless the assessment says every declared asset is already correct.
-
-    Parameters
-    ----------
-    result
-        The assessment :func:`assessment` or
-        :func:`finalize_github_release_reconcile.reconcile` produced.
-    source
-        What the assessment was made from, named in the refusal so an operator
-        can tell a stale plan from a release that changed under the run.
-    draft_confirmed
-        Whether a read taken for this run established that the release is
-        still a draft. Only then may the refusal say so.
-
-    Raises
-    ------
-    FinalizeError
-        With :data:`EXIT_UPLOAD_REQUIRED` when the assessment still owes an
-        upload, pointing at the declared upload contract; with
-        :data:`EXIT_REFUSED` when it conflicts or cannot be verified; and with
-        :data:`EXIT_INPUT_UNREADABLE` when it could not be decoded. Each is
-        raised before the edit, so each can say this run has not edited the
-        release; only an assessment made after :func:`_require_draft` passes
-        ``draft_confirmed``, because a refusal made from the plan alone has
-        read nothing and a retry may begin after an earlier attempt published
-        the release.
-
-    Examples
-    --------
-    >>> from finalize_github_release_plan import PlanAssessment, PlanVerdict
-    >>> require_verified(PlanAssessment(PlanVerdict.VERIFIED))
-    >>> try:
-    ...     require_verified(
-    ...         PlanAssessment(PlanVerdict.REFUSED, conflicts=("a.tar.gz",))
-    ...     )
-    ... except release_io.FinalizeError as refusal:
-    ...     refusal.code
-    1
-    """
-    if result.verdict is release_plan.PlanVerdict.VERIFIED:
-        return
-    state = _draft_state(draft_confirmed=draft_confirmed)
-    if result.verdict is release_plan.PlanVerdict.UPLOAD_REQUIRED:
-        raise release_io.FinalizeError(
-            release_io.EXIT_UPLOAD_REQUIRED,
-            f"{source} still requires uploads ("
-            + ", ".join(result.uploads)
-            + "); run the declared upload contract before finalizing; "
-            + state,
-        )
-    if result.verdict is release_plan.PlanVerdict.UNREADABLE:
-        raise release_io.FinalizeError(release_io.EXIT_INPUT_UNREADABLE, result.detail)
-    reason = (
-        release_upload_messages.blocked_message(result.conflicts, result.unverifiable)
-        or result.detail
-    )
-    raise release_io.FinalizeError(release_io.EXIT_REFUSED, f"{reason}; {state}")
-
-
-def _draft_state(*, draft_confirmed: bool) -> str:
-    """Name the release state only as far as this run has established it.
-
-    A refusal made from the plan alone has not read the release, and a retry
-    can begin after an earlier attempt already published it, so it may not
-    claim the release is a draft. A refusal made after the pre-edit read may,
-    because that read saw ``isDraft: true``.
-
-    Returns
-    -------
-    str
-        The clause a refusal appends, claiming a draft only when a read
-        established one.
-    """
-    if draft_confirmed:
-        return "the release remains a draft"
-    return "this run has not edited the release"
-
-
-def publish_release(request: PublishRequest) -> None:
+def publish_release(inputs: PublishInputs) -> decisions.PublishOutcome:
     """Un-draft a fully verified release, or report why it is left unedited.
 
     Parameters
     ----------
-    request
-        The tag, revision, repository, and record locations for this run.
+    inputs
+        The validated candidate, the trusted record, the plan, and the effects
+        the decision asks.
+
+    Returns
+    -------
+    decisions.PublishOutcome
+        :attr:`PublishVerdict.FINALIZED` or
+        :attr:`PublishVerdict.ALREADY_FINALIZED` when the release is public,
+        and otherwise the first verdict that stopped the run. Every verdict
+        other than those two leaves the release unedited, except the ones only
+        reachable after the edit was attempted.
 
     Notes
     -----
-    Every guard this function calls raises instead of returning a verdict, so
-    the ``FinalizeError`` it propagates unchanged carries
-    :data:`EXIT_REFUSED`, :data:`EXIT_UPLOAD_REQUIRED`, or
-    :data:`EXIT_INPUT_UNREADABLE` from a guard that runs before the single
-    mutating call, leaving the release unedited by this run; it carries
-    :data:`EXIT_REMOTE_FAILED` when a call fails or a read-back cannot be read;
-    and it carries :data:`EXIT_OUTPUT_UNWRITABLE` when the outcome cannot be
-    recorded after the edit has landed. The last two are the only failures that
-    cannot promise the release is unedited: once the edit has been attempted,
-    GitHub may have applied it before the response was lost, so the run reports
-    the state as unknown and names the two ways to establish it.
+    The plan is judged first, from the recorded document alone, so an upload
+    still owed or an undecodable plan stops the run before any API call. Only
+    then is the release read, and only a draft is reconciled and edited.
 
-    A release already public with the candidate's own flag is recorded as
-    ``already-finalized`` without a second edit, so an interrupted retry
-    converges instead of re-publishing.
+    A release already public with the candidate's own flag is reconciled
+    against the trusted record and reported as ``already-finalized`` without a
+    second edit, so an interrupted retry converges instead of re-publishing.
 
-    The plan answers for the snapshot the planner read, not for the release as
-    it is at the edit. So the fresh snapshot is reconciled again against the
-    same trusted record before the call: a declared asset that vanished raises
-    :data:`EXIT_UPLOAD_REQUIRED`, one whose bytes changed raises
-    :data:`EXIT_REFUSED`, and an undeclared extra is still ignored exactly as
-    the planner ignores it. A record that cannot be read raises
-    :data:`EXIT_INPUT_UNREADABLE`. Every one of those leaves the release
-    unedited, and each is reached after a read that saw it is still a draft,
-    so each may say so.
-
-    The window between that read and the edit cannot be closed: GitHub offers
-    no conditional edit, so a writer that changes the draft in those
+    The window between the pre-edit read and the edit cannot be closed: GitHub
+    offers no conditional edit, so a writer that changes the draft in those
     milliseconds is not observed. What the run can do is notice afterwards. The
     post-edit read-back is reconciled against the same trusted record, and a
     retry that finds the release already public is reconciled too, so a
     mismatch a lost race published is reported by the run that lost it and by
-    every pass after it. The release is public by then and GitHub cannot make
-    it a draft again, so the run refuses with :data:`EXIT_REFUSED` rather than
-    record a success nobody can rely on.
+    every pass after it.
+
+    Examples
+    --------
+    >>> from release_candidate import ReleaseIdentity
+    >>> from release_digest_record import DigestRecord
+    >>> inputs = PublishInputs(
+    ...     identity=ReleaseIdentity("v1.2.3", "0" * 40, "p", "1.2.3", "b", False),
+    ...     trusted=DigestRecord.from_mapping({"a.deb": "ab" * 32}),
+    ...     plan_document={"actions": [["a.deb", "upload"]]},
+    ...     repository="o/r",
+    ... )
+    >>> publish_release(inputs).verdict.value
+    'upload-required'
     """
-    identity = release_records.candidate(
-        request.candidate_path, tag=request.tag, commit=request.commit
-    )
-    require_verified(assessment(request.plan_path))
-    current = release_records.snapshot_release(request.tag, request.repository)
-    if release_state.is_already_finalized(
-        current, is_prerelease=identity.is_prerelease
-    ):
-        release_reconcile.refuse_published_mismatch(
-            request.digest_record_path, identity, current
-        )
-        release_records.record_outcome(
-            request.result_path, request.github_output, "already-finalized", identity
-        )
-        return
-    _require_draft(current)
-    require_verified(
-        release_reconcile.reconcile(request.digest_record_path, current),
-        source="the release's current inventory",
-        draft_confirmed=True,
-    )
-    _edit_release(request, identity)
-    _confirm_published(request, identity)
+    plan_outcome = decisions.assess(release_plan.assess_plan(inputs.plan_document))
+    if plan_outcome.verdict is not decisions.PublishVerdict.VERIFIED:
+        return plan_outcome
+    read, edit = _bound_ports(inputs)
+    inspected = _inspect_draft(inputs, read)
+    if inspected.verdict is not decisions.PublishVerdict.VERIFIED:
+        return inspected
+    return _edit_and_confirm(inputs, read, edit)
 
 
-def _edit_release(
-    request: PublishRequest, identity: release_candidate.ReleaseIdentity
-) -> None:
-    """Un-draft the release with the candidate's own prerelease flag.
+def _bound_ports(
+    inputs: PublishInputs,
+) -> tuple[release_ports.ReleaseReader, release_ports.ReleaseEditor]:
+    """Bind the two effects to the release the candidate names.
+
+    Parameters
+    ----------
+    inputs
+        The candidate, which supplies the tag both effects are bound to, and
+        the ports a caller may have supplied instead.
+
+    Returns
+    -------
+    tuple[release_ports.ReleaseReader, release_ports.ReleaseEditor]
+        The read and the edit this run uses, in that order.
 
     Notes
     -----
-    This is the only mutating call the feature makes. A failed edit raises
-    through :func:`finalize_github_release_records.report_remote_failure`,
-    which propagates :data:`EXIT_REMOTE_FAILED` and reports the state as
-    unknown because GitHub may have applied the edit before the response was
-    lost.
+    Only a port left unset consults the runner, so a caller that supplied both
+    never starts a process.
     """
-    edited = release_io.run_gh(
-        "release",
-        "edit",
-        request.tag,
-        "--repo",
-        request.repository,
-        "--draft=false",
-        f"--prerelease={'true' if identity.is_prerelease else 'false'}",
-        echo=True,
+    read = (
+        inputs.reader
+        if inputs.reader is not None
+        else _reader(inputs.identity.tag, inputs.repository, inputs.runner)
     )
-    if edited.exit_code != 0:
-        release_records.report_remote_failure(
-            edited.exit_code, edited.stderr, "gh release edit", after_edit=True
+    edit = (
+        inputs.editor
+        if inputs.editor is not None
+        else _editor(inputs.identity.tag, inputs.repository, inputs.runner)
+    )
+    return read, edit
+
+
+def _inspect_draft(
+    inputs: PublishInputs, read: release_ports.ReleaseReader
+) -> decisions.PublishOutcome:
+    """Judge the release as the read before any edit found it.
+
+    Parameters
+    ----------
+    inputs
+        The candidate and the trusted record the release is judged against.
+    read
+        The effect that reads the release.
+
+    Returns
+    -------
+    decisions.PublishOutcome
+        ``VERIFIED`` only for a draft holding the trusted inventory; any other
+        verdict stops the run and is reported unchanged.
+    """
+    current = read(after_edit=False)
+    if current.state is None:
+        return decisions.remote_failure(current.detail, after_edit=False)
+    if release_state.is_already_finalized(
+        current.state, is_prerelease=inputs.identity.is_prerelease
+    ):
+        return _published(inputs.trusted, current.state)
+    gate = decisions.draft_gate(current.state)
+    if gate.verdict is not decisions.PublishVerdict.VERIFIED:
+        return gate
+    return decisions.draft_inventory(inputs.trusted, current.state)
+
+
+def _edit_and_confirm(
+    inputs: PublishInputs,
+    read: release_ports.ReleaseReader,
+    edit: release_ports.ReleaseEditor,
+) -> decisions.PublishOutcome:
+    """Perform the one edit, then judge the release it left behind.
+
+    Parameters
+    ----------
+    inputs
+        The candidate, which supplies the flag the edit carries, and the
+        trusted record the read-back is reconciled against.
+    read
+        The effect that reads the release back.
+    edit
+        The effect that un-drafts the release.
+
+    Returns
+    -------
+    decisions.PublishOutcome
+        The verdict the read-back supports, or a remote failure when a call
+        did not answer.
+
+    Notes
+    -----
+    A failed edit is not read back: the state is unknown either way. Only an
+    accepted edit is confirmed against GitHub.
+    """
+    answer = edit(is_prerelease=inputs.identity.is_prerelease)
+    if answer.exit_code != 0:
+        return decisions.remote_failure(answer.detail, after_edit=True)
+    published = read(after_edit=True)
+    if published.state is None:
+        return decisions.remote_failure(published.detail, after_edit=True)
+    return decisions.readback(
+        published.state,
+        is_prerelease=inputs.identity.is_prerelease,
+        trusted=inputs.trusted,
+    )
+
+
+def _published(
+    trusted: release_digest_record.DigestRecord,
+    state: release_state.ReleaseState,
+) -> decisions.PublishOutcome:
+    """Judge the inventory of a release an earlier attempt already published.
+
+    Returns
+    -------
+    decisions.PublishOutcome
+        :attr:`PublishVerdict.ALREADY_FINALIZED` when the inventory still
+        matches the trusted record, otherwise
+        :attr:`PublishVerdict.PUBLISHED_MISMATCH`.
+
+    Notes
+    -----
+    The mismatch case must not be recorded as a success: the release is public
+    and cannot be made a draft again, so the run reports the disagreement
+    rather than leaving it for the next reader to discover.
+
+    Examples
+    --------
+    >>> from finalize_github_release_state import ReleaseState
+    >>> from release_digest_record import DigestRecord
+    >>> trusted = DigestRecord.from_mapping({"a.deb": "ab" * 32})
+    >>> state = ReleaseState("v1.2.3", False, False, {"a.deb": "sha256:" + "ab" * 32})
+    >>> _published(trusted, state).verdict.value
+    'already-finalized'
+    """
+    inventory = decisions.published_inventory(trusted, state)
+    if inventory.verdict is not decisions.PublishVerdict.VERIFIED:
+        return inventory
+    return decisions.already_finalized()
+
+
+def _reader(
+    tag: str | None, repository: str, runner: release_io.Runner
+) -> release_ports.ReleaseReader:
+    """Bind the release read to one tag and repository.
+
+    Parameters
+    ----------
+    tag
+        The release to read. ``require_candidate`` has already refused a
+        tagless identity, so the ``None`` branch is defensive only.
+    repository
+        The ``OWNER/REPO`` the release belongs to.
+    runner
+        The process effect that answers the read.
+
+    Returns
+    -------
+    release_ports.ReleaseReader
+        A callable taking only the ``after_edit`` fact, so the orchestrator
+        names no argument vector.
+
+    Raises
+    ------
+    ValueError
+        If no tag is bound, which no validated candidate can reach.
+    """
+    if tag is None:
+        msg = "a release read needs a tag"
+        raise ValueError(msg)
+
+    def read(*, after_edit: bool) -> release_ports.ReleaseRead:
+        """Read the bound release."""
+        del after_edit  # A read answers the same way whenever it is asked.
+        return release_remote.read_release(tag, repository, runner=runner)
+
+    return read
+
+
+def _editor(
+    tag: str | None, repository: str, runner: release_io.Runner
+) -> release_ports.ReleaseEditor:
+    """Bind the un-drafting edit to one tag and repository.
+
+    Parameters
+    ----------
+    tag
+        The release to un-draft, already validated against the candidate.
+    repository
+        The ``OWNER/REPO`` the release belongs to.
+    runner
+        The process effect that performs the edit.
+
+    Returns
+    -------
+    release_ports.ReleaseEditor
+        A callable taking only the prerelease flag, so the flag is the only
+        decision the orchestrator has to make about the call.
+
+    Raises
+    ------
+    ValueError
+        If no tag is bound, which no validated candidate can reach.
+    """
+    if tag is None:
+        msg = "a release edit needs a tag"
+        raise ValueError(msg)
+
+    def edit(*, is_prerelease: bool) -> release_ports.RemoteAnswer:
+        """Un-draft the bound release."""
+        return release_remote.edit_release(
+            tag, repository, is_prerelease=is_prerelease, runner=runner
         )
 
-
-def _confirm_published(
-    request: PublishRequest, identity: release_candidate.ReleaseIdentity
-) -> None:
-    """Read the release back and record the outcome that read supports.
-
-    Raises
-    ------
-    FinalizeError
-        With :data:`EXIT_REMOTE_FAILED` when the read-back cannot be taken,
-        reporting the state as unknown; and with :data:`EXIT_REFUSED` when the
-        release is still a draft, or public with the wrong prerelease flag, or
-        public with an inventory that no longer matches the trusted record.
-        None of those can be repaired, because GitHub does not allow a public
-        release to become a draft again. The inventory case is decided by
-        :func:`finalize_github_release_reconcile.refuse_published_mismatch`.
-    """
-    published = release_records.snapshot_release(
-        request.tag, request.repository, after_edit=True
-    )
-    readback = release_state.classify_readback(
-        published, is_prerelease=identity.is_prerelease
-    )
-    match readback:
-        case release_state.Readback.FINALIZED:
-            release_reconcile.refuse_published_mismatch(
-                request.digest_record_path, identity, published
-            )
-            release_records.record_outcome(
-                request.result_path, request.github_output, "finalized", identity
-            )
-        case release_state.Readback.STILL_DRAFT:
-            raise release_io.FinalizeError(
-                release_io.EXIT_REMOTE_FAILED,
-                "gh accepted the edit but the release is still a draft; no "
-                "asset was replaced and the release was not published",
-            )
-        case release_state.Readback.PRERELEASE_MISMATCH:
-            raise release_io.FinalizeError(
-                release_io.EXIT_REFUSED,
-                "the release is public but its prerelease state contradicts "
-                "the validated candidate; it cannot be made a draft again",
-            )
-
-
-def _require_draft(state: release_state.ReleaseState) -> None:
-    """Refuse to edit a release that has already been published.
-
-    A public release has nothing to un-draft, and one with the wrong
-    prerelease flag cannot be corrected without making it a draft again, which
-    GitHub does not allow. The run therefore stops before the call rather than
-    acting on a state it must not touch.
-
-    Raises
-    ------
-    FinalizeError
-        With :data:`EXIT_REFUSED` when the release is already public.
-    """
-    if state.is_draft:
-        return
-    raise release_io.FinalizeError(
-        release_io.EXIT_REFUSED,
-        "the release is public but its prerelease state contradicts the "
-        "validated candidate; a public release cannot be made a draft again",
-    )
+    return edit

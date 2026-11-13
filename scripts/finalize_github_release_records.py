@@ -11,7 +11,10 @@ unknown, because GitHub may have applied the edit before the response was lost.
 
 The split is also a size boundary. ``finalize_github_release_operations``
 answers "may this release be un-drafted, and with which flag", and the module
-here answers "what did GitHub say, and what did this run read or record".
+here answers "what did GitHub say, and what did this run read or record". The
+calls themselves are written in ``finalize_github_release_remote``, so this
+module decodes their answers and records the outcome rather than assembling an
+argument vector.
 Keeping them apart lets each stay small enough to read in one sitting. The
 writers for the two read-only stages — ``resolve``'s candidate record and
 ``snapshot``'s state record — live in
@@ -23,24 +26,29 @@ Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
 ``scripts/tests/test_finalize_github_release.py``.
 """
 
-import json
-import sys
 import typing as typ
 
 import finalize_github_release_io as release_io
-import finalize_github_release_state as release_state
+import finalize_github_release_remote as release_remote
 import release_candidate
 import release_identity_record
 
 if typ.TYPE_CHECKING:
-    # The path annotations are lazy on the Python 3.14 baseline and nothing
-    # here reads them at runtime, so importing the module would only cost
-    # start-up on a path that every finalization run takes.
+    # These annotations are lazy on the Python 3.14 baseline and nothing here
+    # reads them at runtime, so importing either would only cost start-up on a
+    # path that every finalization run takes. The release state is decoded by
+    # ``finalize_github_release_remote``, never constructed here.
     import pathlib
+
+    import finalize_github_release_state as release_state
 
 
 def snapshot_release(
-    tag: str, repository: str, *, after_edit: bool = False
+    tag: str,
+    repository: str,
+    *,
+    after_edit: bool = False,
+    runner: release_io.Runner = release_io.run_gh,
 ) -> release_state.ReleaseState:
     """Read GitHub's current view of the release and decode it.
 
@@ -55,6 +63,11 @@ def snapshot_release(
         Whether an un-drafting call has already been attempted for this run.
         A read that fails then cannot promise the release is unedited, because
         GitHub may have applied the edit before the response was lost.
+    runner
+        The process effect that answers the read. The command line supplies the
+        Cuprum-backed one; a test supplies a function returning recorded
+        answers, which is why no test needs a mocked process to exercise a
+        decision.
 
     Returns
     -------
@@ -64,31 +77,17 @@ def snapshot_release(
 
     Notes
     -----
-    A ``FinalizeError`` from :func:`report_remote_failure` or
+    This is the raising wrapper around
+    :func:`finalize_github_release_remote.read_release`, kept for the
+    ``snapshot`` stage, which only records: a read that established nothing is
+    a failure there rather than a decision. A ``FinalizeError`` from
     :func:`release_state_failure` propagates unchanged, with
     :data:`EXIT_REMOTE_FAILED`; nothing is decided from an unread release.
     """
-    result = release_io.run_gh(
-        "release",
-        "view",
-        tag,
-        "--repo",
-        repository,
-        "--json",
-        release_io.VIEW_FIELDS,
-    )
-    if result.exit_code != 0:
-        report_remote_failure(
-            result.exit_code, result.stderr, "gh release view", after_edit=after_edit
-        )
-    try:
-        payload = json.loads(result.stdout or "")
-        return release_state.parse_release_state(payload, tag=tag)
-    except (json.JSONDecodeError, release_state.FinalizePolicyError) as error:
-        release_state_failure(
-            f"gh release view returned an unusable response: {error}",
-            after_edit=after_edit,
-        )
+    read = release_remote.read_release(tag, repository, runner=runner)
+    if read.state is None:
+        release_state_failure(read.detail, after_edit=after_edit)
+    return read.state
 
 
 def release_state_failure(message: str, *, after_edit: bool) -> typ.NoReturn:
@@ -112,57 +111,14 @@ def release_state_failure(message: str, *, after_edit: bool) -> typ.NoReturn:
     reports it as a draft. A retry can begin after an earlier attempt already
     published the release, and this attempt's first read is exactly what
     failed; an operator told the release was still a draft might then edit it
-    by hand. Both cases therefore report the state as unknown, with the two
-    ways to establish it: inspect the release, or re-run the finalizer, which
-    records ``already-finalized`` without a second edit when the release did
-    become public. They still differ in what they say about this run, because
-    an attempted edit may already have landed and an operator should weigh
-    that possibility.
+    by hand. The sentence therefore comes from
+    :func:`finalize_github_release_remote.unknown_state_message`, which the
+    command layer uses for the same failure, so the two cannot drift apart.
     """
-    if after_edit:
-        raise release_io.FinalizeError(
-            release_io.EXIT_REMOTE_FAILED,
-            f"{message}. The release state is unknown: an edit was attempted, "
-            "so it may already be public. Inspect the release, or re-run the "
-            "finalizer, which records an already-public release without "
-            "editing it again",
-        )
     raise release_io.FinalizeError(
         release_io.EXIT_REMOTE_FAILED,
-        f"{message}. This run has not edited the release, but its state is "
-        "unknown: the read that would establish it failed. Inspect the "
-        "release, or re-run the finalizer, which records an already-public "
-        "release without editing it again",
+        f"{message}. {release_remote.unknown_state_message(after_edit=after_edit)}",
     )
-
-
-def report_remote_failure(
-    exit_code: int, stderr: str | None, command: str, *, after_edit: bool = False
-) -> None:
-    """Relay the command's own diagnosis, then fail with the remote status.
-
-    Parameters
-    ----------
-    exit_code
-        The status ``gh`` reported, which the diagnosis carries through.
-    stderr
-        Whatever ``gh`` wrote to standard error, relayed unchanged so its own
-        wording reaches the log rather than a paraphrase.
-    command
-        The command as it was written, so the log names what failed.
-    after_edit
-        Whether the failed command was the un-drafting edit, or a read taken
-        after one was attempted.
-
-    Notes
-    -----
-    The ``FinalizeError`` that :func:`release_state_failure` raises propagates
-    unchanged; see it for why neither case can promise anything about the
-    release's state.
-    """
-    if stderr:
-        print(stderr, end="", file=sys.stderr)
-    release_state_failure(f"{command} exited {exit_code}", after_edit=after_edit)
 
 
 def candidate(
@@ -263,7 +219,7 @@ def record_outcome(
     github_output: pathlib.Path | None,
     outcome: str,
     identity: release_candidate.ReleaseIdentity,
-) -> None:
+) -> str:
     """Record the outcome atomically, then publish it to the workflow.
 
     Parameters
@@ -278,6 +234,13 @@ def record_outcome(
         The validated candidate, which supplies the tag and prerelease flag
         the record and the outputs carry.
 
+    Returns
+    -------
+    str
+        The sentence an operator should read now that the release is public.
+        Returning it rather than printing it keeps the decision about output in
+        the command layer.
+
     Notes
     -----
     A ``FinalizeError`` from either write propagates unchanged, with
@@ -289,6 +252,7 @@ def record_outcome(
 
     Examples
     --------
+    >>> import json
     >>> import pathlib
     >>> import tempfile
     >>> identity = release_candidate.ReleaseIdentity(
@@ -296,7 +260,7 @@ def record_outcome(
     ... )
     >>> with tempfile.TemporaryDirectory() as directory:
     ...     result = pathlib.Path(directory) / "result.json"
-    ...     record_outcome(result, None, "finalized", identity)
+    ...     print(record_outcome(result, None, "finalized", identity))
     ...     json.loads(result.read_text(encoding="utf-8"))["prerelease"]
     release v1.2.3 is public (outcome finalized, prerelease False)
     False
@@ -313,7 +277,7 @@ def record_outcome(
     release_io.write_github_output(
         github_output, outcome, is_prerelease=identity.is_prerelease
     )
-    print(
+    return (
         f"release {identity.tag} is public (outcome {outcome}, "
         f"prerelease {identity.is_prerelease})"
     )

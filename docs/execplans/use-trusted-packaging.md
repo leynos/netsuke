@@ -4003,6 +4003,66 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   showed no help for their flags — and drops `Notes` from `--help`, so the
   command-line surface is unchanged.
 
+- [x] (2026-11-13) Answered the eighth review: the finalizer now partitions
+  into policy and adapter modules, and a refusal is a value rather than an
+  exception.
+
+  **The finding.** `finalize_github_release_operations` both decided whether a
+  release may be un-drafted and performed the effects that decision needed, so
+  a test could only reach a decision through a mocked process, and the module
+  was the one place where a policy branch and a shell invocation sat in the
+  same function. The four new modules keep the partition the workflow-contract
+  suite asserts: `..._decisions` and `..._ports` are policy, `..._remote` and
+  `..._messages` are adapters, and exactly one side owns each.
+
+  **The policy half.** `finalize_github_release_decisions` decides from values
+  alone: it takes the planner's document and the trusted record, and every
+  branch returns a `PublishOutcome` naming a verdict, the assets it rests on,
+  and whether an edit was attempted. `finalize_github_release_ports` holds the
+  two value types a port answers with — `ReleaseRead` and `RemoteAnswer` — and
+  the `ReleaseReader`/`ReleaseEditor` protocols they satisfy. Neither module
+  prints, raises for a decision, or names an exit status.
+
+  **The adapter half.** `finalize_github_release_remote` is the only module
+  that invokes `gh release view` or `gh release edit`, and it hands both back
+  as values, so its failures are inputs to the decision rather than exceptions
+  thrown past it. `finalize_github_release_messages` is the only module that
+  turns an outcome into a sentence, which is what keeps the operator-facing
+  prose in one place and lets the verdicts change without touching it. The
+  process effect itself is the injected `release_io.Runner`, defaulting to the
+  Cuprum adapter, so a test that supplies both ports never starts a process.
+  The raising wrapper the `snapshot` stage needs survives as
+  `records.release_state_failure`, and it composes the same
+  `remote.unknown_state_message` the CLI uses, so the two diagnoses cannot
+  drift.
+
+  **What shaped the split.** Three lint limits decided the shape rather than
+  the other way round. `max-args = 4` made a seven-parameter `publish` a grouped
+  `PublishInputs`, and the same limit grouped the stage writers' arguments into
+  `SnapshotPaths`. `max-complexity = 8` measured the nine-arm `describe` match
+  as complexity 9, so each verdict's sentence became its own named function
+  behind a `_RENDERERS` table, which also made "which sentence does this
+  verdict get" a single readable mapping. The 400-line module cap split
+  `publish_release` into `_bound_ports`, `_inspect_draft`, and
+  `_edit_and_confirm`, each of which answers one question: which effects does
+  this run use, may this release be edited, and what did the edit leave behind.
+
+  **Evidence and prose.** Every operator-visible sentence is byte-identical to
+  the one it replaced; the refactor moved where the words live, not what they
+  say. `test_finalize_github_release_publish_decisions.py` exercises the 15
+  decisions through scripted ports with no process at all, and
+  `test_finalize_github_release_publish_ports.py` asserts the 9 argument
+  vectors the adapters build and the answers they decode. Both suites are in
+  the Makefile recipe and in the contract module's `SECTION_MODULES`, and the
+  developers' guide's module map and boundary bullet now describe the four new
+  modules and their allowed directions.
+
+  **Paths at the edge.** The path-bearing `PublishRequest` moved from
+  `finalize_github_release_operations` to `finalize_github_release.py`, so the
+  decision module names no filesystem path at all: `PublishInputs` carries the
+  decoded records and the two ports, and the operations module no longer imports
+  `pathlib`.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

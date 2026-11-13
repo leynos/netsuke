@@ -3453,22 +3453,38 @@ one rule without importing each other, and a new check of the same kind belongs
 there rather than in a third copy of the comparison.
 
 The modules behind that command line are split by what a reader has to know to
-change them. `finalize_github_release_io.py` holds every effect — the one
-allowlisted `gh` command and the staged JSON records — beside the exit-status
+change them. `finalize_github_release_io.py` holds every effect — the
+allowlisted `gh` runner, the staged JSON records — beside the exit-status
 vocabulary and the `FinalizeError` type that carries a status with its
-diagnosis. `finalize_github_release_records.py` performs the reads and writes
-around the edit, `finalize_github_release_operations.py` decides whether the
-edit may be made, and `finalize_github_release_reconcile.py` re-applies the
-planner's own reconciliation to a snapshot taken later in the same run.
+diagnosis. `finalize_github_release_remote.py` writes the only two GitHub calls
+a run makes, one read and one edit, and returns what they answered as values
+rather than as exceptions; the process is an injected `release_io.Runner`, so a
+test supplies recorded answers and starts no `gh`.
+`finalize_github_release_decisions.py` decides from those values alone: it
+reads no file, starts no process, composes no prose, and names no exit status.
+`finalize_github_release_ports.py` states the two shapes that decision
+exchanges with its adapters, `ReleaseRead` and `RemoteAnswer`, and the
+protocols a caller injects to replace either call.
+`finalize_github_release_operations.py` orchestrates the one publishing
+decision from a `PublishInputs` value of decoded records and ports, never
+paths, and `finalize_github_release_records.py` performs the reads and writes
+around the edit. The path-bearing `PublishRequest` is the `publish` command's
+own parameter in `finalize_github_release.py`.
 `finalize_github_release_stage_records.py` writes what the two read-only
 commands observed, so a reader asking what a refusal might have left on disk
 need not open the module that surrounds the edit.
+`finalize_github_release_reconcile.py` re-applies the planner's own
+reconciliation to a snapshot taken later in the same run, and
 `finalize_github_release_plan.py` and `finalize_github_release_state.py` decide
-from decoded values and touch no file. Fallibility is in each helper's
-signature rather than in a process effect a reader has to trace: every helper
-that cannot continue raises `FinalizeError`, declaring it under *Raises* where
-it raises directly and under *Notes* where it only propagates one, and only
-`finalize_github_release.py` turns that status into the step's exit.
+from decoded values and touch no file. `finalize_github_release_messages.py` is
+the only module that turns an outcome into the sentence an operator reads, so
+changing how a refusal reads cannot change what the step decides. Fallibility
+is in each helper's signature rather than in a process effect a reader has to
+trace: every helper that cannot continue raises `FinalizeError`, declaring it
+under *Raises* where it raises directly and under *Notes* where it only
+propagates one, and only `finalize_github_release.py` turns that status into
+the step's exit. A publishing decision travels as a `PublishOutcome` instead,
+which `_exit_status` maps and `messages.describe` renders.
 `make test-release-publication` names all of them on its doctest command line,
 so deleting either the module or its example fails the bank rather than quietly
 dropping coverage.
@@ -4227,16 +4243,22 @@ those operations at the file or transport boundary:
   the split exists to keep honest.
 - `finalize_github_release_cli` normalizes GitHub's `sha256:` digest prefix;
   `release_reconcile_github` receives bare digests and only plans actions.
-- `finalize_github_release_io` owns the finalizer's one allowlisted `gh` call
+- `finalize_github_release_io` owns the finalizer's allowlisted `gh` runner
   and the `FinalizeError` type that carries an exit status with its diagnosis;
+  `finalize_github_release_remote` builds the one read and one edit from that
+  runner and returns their answers as values;
+  `finalize_github_release_decisions` decides from those values alone and
+  `finalize_github_release_ports` states the shapes it exchanges with them;
+  `finalize_github_release_messages` renders the outcome as prose.
   `finalize_github_release_records` reads and writes the records around the
   edit and `finalize_github_release_stage_records` writes the ones the
-  read-only commands produce. `finalize_github_release_operations` decides
-  whether the edit may be made, `finalize_github_release_reconcile` re-applies
-  the planner's policy to a snapshot taken later, and
+  read-only commands produce. `finalize_github_release_operations` orchestrates
+  the publishing decision, `finalize_github_release_reconcile` re-applies the
+  planner's policy to a snapshot taken later, and
   `finalize_github_release_plan` and `finalize_github_release_state` decide
   from decoded values alone. `finalize_github_release.py` is the only module
-  that turns a status into a process exit.
+  that reads the input records, records the public outcome, and turns a status
+  into a process exit.
 
 External record shapes cross the boundary exactly once. A module that already
 owns a file, stream, or provider response decodes its field names and shape

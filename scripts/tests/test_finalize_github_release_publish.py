@@ -291,7 +291,7 @@ def test_publish_refuses_an_unreadable_digest_record(
     tmp_path: pathlib.Path, cmd_mox: CmdMox, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Never reconcile against a record that cannot support a decision."""
-    gh = sequenced_gh(cmd_mox, release_views((True, False)))
+    gh = sequenced_gh(cmd_mox, ())
     arguments = publish_arguments(tmp_path)
     _ = (tmp_path / "trusted.json").write_text('{"assets": {}}', encoding="utf-8")
 
@@ -301,9 +301,10 @@ def test_publish_refuses_an_unreadable_digest_record(
     assert error.value.code == EXIT_INPUT_UNREADABLE, (
         "an empty trusted record must be an input fault, not a verified release"
     )
-    assert [invocation_arguments(invocation)[:2] for invocation in gh.invocations] == [
-        ("release", "view")
-    ], "an unreadable record must stop the run before the edit"
+    assert gh.invocations == [], (
+        "the record is decoded at the command edge, so an unusable one must "
+        "stop the run before GitHub is read at all"
+    )
     assert "digest record" in capsys.readouterr().err, (
         "the diagnosis must name the record that could not be used"
     )

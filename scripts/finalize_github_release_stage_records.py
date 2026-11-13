@@ -18,23 +18,40 @@ Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
 ``scripts/tests/test_finalize_github_release.py``.
 """
 
-import typing as typ
+import dataclasses
+
+# ``SnapshotPaths`` reads its field annotations from the class at runtime.
+import pathlib  # ruff: ignore[typing-only-standard-library-import]
 
 import finalize_github_release_io as release_io
 import finalize_github_release_records as release_records
 import release_candidate
 import release_identity_record
 
-if typ.TYPE_CHECKING:
-    # The path annotations are lazy on the Python 3.14 baseline and nothing
-    # here reads them at runtime, so importing the module would only cost
-    # start-up on a path that every finalization run takes.
-    import pathlib
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class SnapshotPaths:
+    """Name the two records one snapshot writes.
+
+    Grouping them keeps :func:`record_snapshot` to the values it decides from
+    and the effect it asks, rather than a growing list of sibling paths.
+
+    Attributes
+    ----------
+    state
+        Where the whole state record is written.
+    assets
+        Where the bare name-to-digest mapping is written for the planner, which
+        has no business reading a draft flag.
+    """
+
+    state: pathlib.Path
+    assets: pathlib.Path
 
 
 def record_candidate(
     identity: pathlib.Path, *, tag: str, commit: str, output: pathlib.Path
-) -> None:
+) -> str:
     """Check the package record's identity, then record the candidate.
 
     The package record nests the identity under ``identity`` beside the crate
@@ -51,6 +68,12 @@ def record_candidate(
         The revision being published, which the record must name.
     output
         Where the candidate record is written for the later steps to read.
+
+    Returns
+    -------
+    str
+        The sentence an operator should read. Returning it rather than printing
+        it keeps output in the command layer.
 
     Raises
     ------
@@ -80,7 +103,11 @@ def record_candidate(
     ...         json.dumps({"identity": identity}), encoding="utf-8"
     ...     )
     ...     output = pathlib.Path(directory) / "candidate.json"
-    ...     record_candidate(source, tag="v1.2.3", commit="0" * 40, output=output)
+    ...     print(
+    ...         record_candidate(
+    ...             source, tag="v1.2.3", commit="0" * 40, output=output
+    ...         )
+    ...     )
     ...     json.loads(output.read_text(encoding="utf-8"))["version"]
     recorded candidate v1.2.3 at 0000000000000000000000000000000000000000
     '1.2.3'
@@ -102,16 +129,16 @@ def record_candidate(
     if reason is not None:
         raise release_io.FinalizeError(release_io.EXIT_REFUSED, reason)
     release_io.write_json(output, recorded.as_record())
-    print(f"recorded candidate {recorded.tag} at {recorded.commit}")
+    return f"recorded candidate {recorded.tag} at {recorded.commit}"
 
 
 def record_snapshot(
     tag: str,
     repository: str,
     *,
-    state_path: pathlib.Path,
-    assets_path: pathlib.Path,
-) -> None:
+    paths: SnapshotPaths,
+    runner: release_io.Runner = release_io.run_gh,
+) -> str:
     """Record the release's draft flag, prerelease flag, and reported digests.
 
     Parameters
@@ -120,11 +147,18 @@ def record_snapshot(
         The release to read.
     repository
         The ``OWNER/REPO`` the release belongs to.
-    state_path
-        Where the whole state record is written.
-    assets_path
-        Where the bare name-to-digest mapping is written for the planner, which
-        has no business reading a draft flag.
+    paths
+        The two records this stage writes.
+    runner
+        The process effect that answers the read. The command line supplies the
+        Cuprum-backed one; a test supplies a function returning recorded
+        answers.
+
+    Returns
+    -------
+    str
+        The sentence an operator should read. Returning it rather than printing
+        it keeps output in the command layer.
 
     Notes
     -----
@@ -134,9 +168,9 @@ def record_snapshot(
     This function only reads GitHub, so an interrupted snapshot never leaves
     the release in a different state.
     """
-    state = release_records.snapshot_release(tag, repository)
+    state = release_records.snapshot_release(tag, repository, runner=runner)
     release_io.write_json(
-        state_path,
+        paths.state,
         {
             "assets": state.assets,
             "isDraft": state.is_draft,
@@ -144,8 +178,8 @@ def record_snapshot(
             "tag": state.tag,
         },
     )
-    release_io.write_json(assets_path, state.assets)
-    print(
+    release_io.write_json(paths.assets, state.assets)
+    return (
         f"release {tag}: draft={state.is_draft} "
         f"prerelease={state.is_prerelease} assets={len(state.assets)}"
     )
