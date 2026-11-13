@@ -3258,18 +3258,24 @@ credential behind.
 *Table 2: The verification action's steps and credential routing.*
 
 The listings are read with `--slurp`, which wraps every page in one array, and
-the selection and download-plan policy lives in
-`scripts/release_draft_assets.py` rather than in shell. A name the plan cannot
-carry — one holding a tab, a line feed, or a carriage return — is refused when
-planning, because the step reads the plan line by line and splits each line on
-tabs, so a line feed in a name would forge a second record and download an
-asset the listing never named. The download step sets `noclobber`, so a name
-repeated in the plan fails rather than letting the second download replace the
-first. It refuses an entry that carries an id but no name, before the redirect
-can fail as a write to the directory itself, and it keeps a final line with no
-trailing newline, which a plain `while read` would silently skip. It does not
-retry: a partial download must stop the job, because the verifier cannot
-distinguish a truncated attachment from one that somehow matched.
+no `jq` expression in the shell decides anything from them. Three modules share
+that work. `scripts/release_github_draft_listing.py` translates the page shape
+and GitHub's field names — `tag_name`, `draft`, `state`, `size` — into release
+and asset records, refusing an entry whose field is missing or of the wrong
+type. `scripts/release_draft_assets.py` decides from those records alone, so a
+field renamed upstream is an adapter change rather than a change to a rule, and
+`scripts/release_download_plan.py` renders the plan text. A name the plan
+cannot carry — one holding a tab, a line feed, or a carriage return — is
+refused as the plan is rendered, because the step reads the plan line by line
+and splits each line on tabs, so a line feed in a name would forge a second
+record and download an asset the listing never named. The download step sets
+`noclobber`, so a name repeated in the plan fails rather than letting the
+second download replace the first. It refuses an entry that carries an id but
+no name, before the redirect can fail as a write to the directory itself, and
+it keeps a final line with no trailing newline, which a plain `while read`
+would silently skip. It does not retry: a partial download must stop the job,
+because the verifier cannot distinguish a truncated attachment from one that
+somehow matched.
 
 Two inputs decide what the verifier trusts. `trusted-directory` must be
 disjoint from `download-directory` and from `output-path`, and both

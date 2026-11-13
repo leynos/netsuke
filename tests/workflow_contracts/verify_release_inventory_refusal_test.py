@@ -8,6 +8,11 @@ matching default, vary one input, and hold three things to account: the run
 stops at the validation step, the diagnostic names what is wrong, and nothing
 reaches the network.
 
+The cases here vary one declared input at a time. The properties that vary the
+*path* — nesting, equality, and symbolic links, including the accepted controls
+that keep a refusal from simply refusing everything — live in
+``verify_release_inventory_overlap_property_test.py``.
+
 The harness lives in ``verify_release_inventory_harness.py`` and the defaults
 these cases vary in ``verify_release_inventory_cases.py``.
 
@@ -18,8 +23,6 @@ import dataclasses
 import typing as typ
 
 import pytest
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
 from verify_release_inventory_cases import (
     JOB_INPUTS,
     default_publisher,
@@ -189,109 +192,3 @@ def test_an_input_the_action_cannot_use_is_refused(
     assert not run.gh_log, "a refused input must not reach the network"
     assert not run.output_path.exists(), "a refused input must leave no record"
     _assert_trusted_inputs_survive(run)
-
-
-#: A directory name the property cases generate. The alphabet is deliberately
-#: narrow: the point is that the refusal holds for *any* name, not that it
-#: handles exotic ones, and a bounded alphabet keeps each example cheap.
-_DIRECTORY_NAME = st.from_regex(r"[a-z][a-z0-9]{0,7}", fullmatch=True)
-
-#: Hypothesis does not reset a function-scoped fixture between examples. Each
-#: example runs in its own ``runs/run-N`` directory inside the fixture's tree,
-#: so sharing the fixture is deliberate: the examples must not see each other's
-#: workspace, and they do not.
-PROPERTY_SETTINGS = settings(
-    max_examples=8,
-    deadline=None,
-    suppress_health_check=[HealthCheck.function_scoped_fixture],
-)
-
-
-def _link(directory: str, target: str) -> cabc.Callable[[pathlib.Path], None]:
-    """Return a hook that makes ``directory`` a symlink to ``target``.
-
-    Returns
-    -------
-    cabc.Callable[[pathlib.Path], None]
-        A hook taking the staged workspace.
-    """
-
-    def link(workspace: pathlib.Path) -> None:
-        """Point the directory at the trusted tree through a symlink."""
-        (workspace / directory).symlink_to(target, target_is_directory=True)
-
-    return link
-
-
-@PROPERTY_SETTINGS
-@given(name=_DIRECTORY_NAME)
-def test_a_download_directory_inside_the_trusted_tree_is_refused(
-    tmp_path: pathlib.Path, name: str
-) -> None:
-    """Refuse any download directory nested inside the trusted tree.
-
-    The property is over the name rather than a fixed example: whatever the
-    directory is called, a download that lands inside the trusted tree would
-    let a downloaded file stand in for a trusted input.
-    """
-    scenario = default_scenario(inputs=Inputs(download_directory=f"trusted/{name}"))
-    run = execute(tmp_path, scenario)
-    assert len(run.completed) == 1, "no later step may run on a refused input"
-    assert "must be disjoint" in final_diagnostic(run), final_diagnostic(run)
-    assert not run.gh_log, "a refused input must not reach the network"
-
-
-@PROPERTY_SETTINGS
-@given(name=_DIRECTORY_NAME)
-def test_an_output_path_inside_the_download_directory_is_refused(
-    tmp_path: pathlib.Path, name: str
-) -> None:
-    """Refuse any output path written into the download directory.
-
-    The verifier walks the download directory to build the observed inventory,
-    so a record written there would be counted as an attachment of the release
-    it is meant to judge.
-    """
-    scenario = default_scenario(
-        inputs=Inputs(output_path=f"release-download/{name}.json")
-    )
-    run = execute(tmp_path, scenario)
-    assert len(run.completed) == 1, "no later step may run on a refused input"
-    assert "must be disjoint" in final_diagnostic(run), final_diagnostic(run)
-    assert not run.gh_log, "a refused input must not reach the network"
-
-
-@PROPERTY_SETTINGS
-@given(name=_DIRECTORY_NAME)
-def test_a_download_directory_beside_the_trusted_tree_is_accepted(
-    tmp_path: pathlib.Path, name: str
-) -> None:
-    """Accept any download directory that is disjoint from the trusted tree.
-
-    This is the control for the two refusals above: without it, a validation
-    step that refused every path would satisfy them and still be wrong.
-    """
-    scenario = default_scenario(inputs=Inputs(download_directory=f"downloads/{name}"))
-    run = execute(tmp_path, scenario)
-    assert run.completed[-1].returncode == 0, final_diagnostic(run)
-    assert run.verified_record, "an accepted release must write its record"
-
-
-@PROPERTY_SETTINGS
-@given(name=_DIRECTORY_NAME)
-def test_a_symlink_to_the_trusted_tree_is_refused(
-    tmp_path: pathlib.Path, name: str
-) -> None:
-    """Refuse a download directory that only reaches the trusted tree by link.
-
-    The comparison is made on resolved paths, so a symlink cannot smuggle the
-    download directory inside the trusted tree while looking disjoint.
-    """
-    scenario = default_scenario(
-        inputs=Inputs(download_directory=name),
-        prepare=_link(name, "trusted"),
-    )
-    run = execute(tmp_path, scenario)
-    assert len(run.completed) == 1, "no later step may run on a refused input"
-    assert "must be disjoint" in final_diagnostic(run), final_diagnostic(run)
-    assert not run.gh_log, "a refused input must not reach the network"

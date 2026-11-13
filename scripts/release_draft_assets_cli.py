@@ -6,6 +6,13 @@ the identifier of the draft release to verify, and the ordered plan of assets
 to download. Keeping both decisions here means the shell step contains no
 ``jq`` expression that could disagree with :mod:`release_draft_assets`.
 
+Reading GitHub's own field names is
+:mod:`release_github_draft_listing`'s work and the plan's text format is
+:mod:`release_download_plan`'s, so this module only composes them: translate the
+decoded listing, decide, render, record. All three modules fail through
+:class:`release_draft_assets.DraftAssetError`, which is what keeps the
+rejection status one value.
+
 The status codes follow inventory verification, because both commands stop the
 same release for the same classes of fault:
 
@@ -38,7 +45,9 @@ import sys
 import tempfile
 import typing as typ
 
+import release_download_plan
 import release_draft_assets
+import release_github_draft_listing
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -154,30 +163,18 @@ def _record(output: pathlib.Path, text: str) -> int:
     return EXIT_OK
 
 
-def _format_plan(plan: cabc.Sequence[tuple[int, str]]) -> str:
-    r"""Render a download plan as the tab-separated lines the step reads.
-
-    Returns
-    -------
-    str
-        One newline-terminated ``id<TAB>name`` line per planned asset.
-
-    Examples
-    --------
-    >>> _format_plan([(11, "a.tar.gz"), (12, "b.deb")])
-    '11\ta.tar.gz\n12\tb.deb\n'
-    """
-    return "".join(f"{identifier}\t{name}\n" for identifier, name in plan)
-
-
 def _render_selection(pages: object, tag: str) -> str:
     """Render the selected draft release's identifier as the record's text."""
-    return f"{release_draft_assets.select_draft_release(pages, tag=tag)}\n"
+    releases = release_github_draft_listing.releases_from_pages(pages)
+    return f"{release_draft_assets.select_draft_release(releases, tag=tag)}\n"
 
 
 def _render_plan(pages: object) -> str:
     """Render the planned downloads as the record's tab-separated text."""
-    return _format_plan(release_draft_assets.plan_downloads(pages))
+    assets = release_draft_assets.plan_downloads(
+        release_github_draft_listing.assets_from_pages(pages)
+    )
+    return release_download_plan.format_plan(assets)
 
 
 def _record_decision(

@@ -2,39 +2,41 @@
 
 The release workflow has to find the draft it just populated and fetch every
 attachment back before it can compare those bytes with the trusted record. The
-network calls belong to the workflow step that holds the token; this module
-decides, from the already-parsed JSON ``gh api --slurp`` produced, whether that
-listing can support the decision at all.
+network calls belong to the workflow step that holds the token, and reading
+GitHub's JSON belongs to :mod:`release_github_draft_listing`; this module
+decides from the *translated* listing whether it can support the decision at
+all. Its inputs are :class:`Release` and :class:`Asset` values, so a GitHub
+field renamed upstream is an adapter change rather than a change to a rule
+here.
 
 Two refusals are deliberately stricter than GitHub's own behaviour. Selecting a
 release requires exactly one *draft* with the requested tag, because a published
 release carrying it means the draft this job was asked to verify is gone, and
 two drafts do not identify one release. Planning downloads requires every asset
-to be an uploaded, non-empty attachment with a bare, safe name the tab-separated
-plan can carry: a name that could escape the download directory would place
-attacker-chosen bytes beside the trusted inputs.
+to be a stored, non-empty attachment with a bare, safe name: a name that could
+escape the download directory would place attacker-chosen bytes beside the
+trusted inputs.
+
+Each rule is a query returning the messages for the conditions that do not
+hold, and the command raises once with all of them. An operator then learns
+every way the listing is unusable from one run instead of one per attempt.
 
 Nothing here parses JSON, touches a file, or reaches the network:
-:mod:`release_draft_assets_cli` owns those effects, and
+:mod:`release_draft_assets_cli` owns the command, and
 :mod:`release_asset_names` supplies the name judgement it shares with inventory
-verification. Run via ``scripts/release_draft_assets_cli.py``; behavioural
-coverage lives in ``scripts/tests/test_release_draft_assets.py``.
+verification. The download plan's text format is likewise an adapter concern,
+and lives in :mod:`release_download_plan`. Behavioural coverage lives in
+``scripts/tests/test_release_draft_assets.py``.
 """
 
 import collections
+import dataclasses
 import typing as typ
 
 import release_asset_names
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
-
-#: The asset state GitHub reports for a fully uploaded attachment.
-UPLOADED_STATE = "uploaded"
-
-#: Characters that would split or truncate one line of the download plan, which
-#: is written as ``id<TAB>name<NEWLINE>`` and read back field by field.
-PLAN_DELIMITERS = ("\t", "\n", "\r")
 
 
 class DraftAssetError(ValueError):
@@ -49,128 +51,101 @@ class AssetListingError(DraftAssetError):
     """Report an asset listing whose entries cannot be downloaded safely."""
 
 
-def _is_integer(value: object) -> bool:
-    """Report whether ``value`` is an integer rather than a boolean.
+@dataclasses.dataclass(frozen=True, slots=True)
+class Release:
+    """Name one release as the selection rule needs to judge it.
 
-    ``bool`` subclasses ``int``, so an unguarded check would pass ``True`` to
-    ``gh`` as an identifier.
-
-    Returns
-    -------
-    bool
-        ``True`` when the value is an integer and not a boolean.
-
-    Examples
-    --------
-    >>> _is_integer(7), _is_integer(True), _is_integer("7")
-    (True, False, False)
+    Parameters
+    ----------
+    identifier
+        The release number ``gh api`` addresses its assets by.
+    tag
+        The git tag the release carries.
+    is_draft
+        Whether the release is still an unpublished draft.
     """
-    match value:
-        case bool():
-            return False
-        case int():
-            return True
-        case _:
-            return False
+
+    identifier: int
+    tag: str
+    is_draft: bool
 
 
-def _entries(pages: object, *, what: str) -> list[cabc.Mapping[str, object]]:
-    """Flatten the pages ``gh api --paginate --slurp`` produced into objects.
+@dataclasses.dataclass(frozen=True, slots=True)
+class Asset:
+    """Name one release attachment as the plan rule needs to judge it.
 
-    Returns
-    -------
-    list[collections.abc.Mapping[str, object]]
-        Every object the pages hold, in listing order.
-
-    Raises
-    ------
-    DraftAssetError
-        If the decoded value is not the array-of-arrays shape ``--slurp``
-        produces, or any page holds something other than objects.
-
-    Notes
-    -----
-    An empty listing is not refused here: no draft matching the tag and a
-    release with no attachments are different problems, so each caller decides
-    after flattening.
-
-    Examples
-    --------
-    >>> _entries([[{"id": 1}], [{"id": 2}]], what="release")
-    [{'id': 1}, {'id': 2}]
+    Parameters
+    ----------
+    identifier
+        The asset number the download endpoint addresses.
+    name
+        The attachment name, as the download will write it.
+    is_stored
+        Whether the provider reports the upload complete.
+    size
+        The attachment's byte count as the provider reports it.
     """
-    match pages:
-        case list() as page_list:
-            pass
-        case _:
-            msg = f"the {what} listing is not the array of pages --slurp produces"
-            raise DraftAssetError(msg)
-    entries: list[cabc.Mapping[str, object]] = []
-    for page in page_list:
-        match page:
-            case list() as entry_list:
-                pass
-            case _:
-                msg = f"one page of the {what} listing is not an array"
-                raise DraftAssetError(msg)
-        for entry in entry_list:
-            match entry:
-                case dict() as mapping:
-                    entries.append(mapping)
-                case _:
-                    msg = f"one entry in the {what} listing is not an object"
-                    raise DraftAssetError(msg)
-    return entries
 
-
-def _draft_identifier(entry: cabc.Mapping[str, object], *, tag: str) -> int:
-    """Return the identifier of a draft release or refuse the entry.
-
-    Returns
-    -------
-    int
-        The release identifier ``gh api`` needs for the asset listing.
-
-    Raises
-    ------
-    ReleaseSelectionError
-        If the entry carries no integer ``id``.
-    """
-    identifier = entry.get("id")
-    if not _is_integer(identifier):
-        msg = f"the draft release tagged {tag!r} carries no integer id: {identifier!r}"
-        raise ReleaseSelectionError(msg)
-    return typ.cast("int", identifier)
+    identifier: int
+    name: str
+    is_stored: bool
+    size: int
 
 
 def _partition_drafts(
-    matching: list[cabc.Mapping[str, object]],
-) -> tuple[list[cabc.Mapping[str, object]], int]:
+    matching: cabc.Sequence[Release],
+) -> tuple[list[Release], int]:
     """Split the tagged releases into the drafts and a count of the rest.
 
     Returns
     -------
-    tuple[list[collections.abc.Mapping[str, object]], int]
-        The draft entries in listing order, and the count of the rest.
+    tuple[list[Release], int]
+        The draft releases in listing order, and the count of the rest.
     """
-    drafts: list[cabc.Mapping[str, object]] = []
-    published = 0
-    for entry in matching:
-        if entry.get("draft") is True:
-            drafts.append(entry)
-        else:
-            published += 1
-    return drafts, published
+    drafts = [release for release in matching if release.is_draft]
+    return drafts, len(matching) - len(drafts)
 
 
-def select_draft_release(pages: object, *, tag: str) -> int:
+def _selection_problems(
+    drafts: cabc.Sequence[Release], published: int, tag: str
+) -> list[str]:
+    """Return every way the tagged releases fail to identify one draft.
+
+    Returns
+    -------
+    list[str]
+        One diagnostic per condition that holds, empty when the listing
+        identifies exactly one draft carrying ``tag``.
+
+    Notes
+    -----
+    Each pair is a *defect* condition and its diagnostic, so the rule reads as
+    "report the defects that are present" rather than "report the guarantees
+    that are missing". ``published`` is a count of the tagged releases that are
+    not drafts.
+    """
+    defects = (
+        (
+            published,
+            (
+                f"the release tagged {tag!r} is published, not a draft, so "
+                "there is no draft inventory to verify"
+            ),
+        ),
+        (not drafts, f"no draft release is tagged {tag!r}"),
+        (len(drafts) > 1, f"{len(drafts)} draft releases are tagged {tag!r}, not one"),
+    )
+    return [message for is_defect, message in defects if is_defect]
+
+
+def select_draft_release(releases: cabc.Sequence[Release], *, tag: str) -> int:
     """Return the identifier of the one draft release carrying ``tag``.
 
     Parameters
     ----------
-    pages
-        Decoded ``gh api --method GET --paginate --slurp`` release pages. The
-        list endpoint is used because the single-release endpoint refuses
+    releases
+        Releases translated from a ``gh api --paginate --slurp`` listing. The
+        list endpoint is read because the single-release endpoint refuses
         draft releases, which are the only ones this job may verify.
     tag
         Release tag the draft must carry.
@@ -183,67 +158,45 @@ def select_draft_release(pages: object, *, tag: str) -> int:
     Raises
     ------
     ReleaseSelectionError
-        If ``tag`` does not identify exactly one draft with an integer id.
+        If ``tag`` does not identify exactly one draft.
 
     Examples
     --------
-    >>> pages = [[{"id": 7, "tag_name": "v1.2.3", "draft": True}]]
-    >>> select_draft_release(pages, tag="v1.2.3")
+    >>> releases = [Release(7, "v1.2.3", is_draft=True)]
+    >>> select_draft_release(releases, tag="v1.2.3")
     7
-    >>> select_draft_release(pages, tag="v9.9.9")
+    >>> select_draft_release(releases, tag="v9.9.9")
     Traceback (most recent call last):
         ...
     release_draft_assets.ReleaseSelectionError: no draft release is tagged 'v9.9.9'
     """
-    matching = [
-        entry
-        for entry in _entries(pages, what="release")
-        if entry.get("tag_name") == tag
-    ]
+    matching = [release for release in releases if release.tag == tag]
     drafts, published = _partition_drafts(matching)
-    if published:
-        msg = (
-            f"the release tagged {tag!r} is published, not a draft, so there is "
-            "no draft inventory to verify"
-        )
-        raise ReleaseSelectionError(msg)
-    if not drafts:
-        msg = f"no draft release is tagged {tag!r}"
-        raise ReleaseSelectionError(msg)
-    if len(drafts) > 1:
-        msg = f"{len(drafts)} draft releases are tagged {tag!r}, not one"
-        raise ReleaseSelectionError(msg)
-    return _draft_identifier(drafts[0], tag=tag)
+    problems = _selection_problems(drafts, published, tag)
+    if problems:
+        raise ReleaseSelectionError("; ".join(problems))
+    return drafts[0].identifier
 
 
-def _asset_name(entry: cabc.Mapping[str, object]) -> str:
-    """Return one asset entry's name or refuse the entry.
+def _quoted(names: cabc.Sequence[str]) -> str:
+    """Render names for a diagnostic, quoting each one.
 
     Returns
     -------
     str
-        The attachment name, as the download plan will use it.
-
-    Raises
-    ------
-    AssetListingError
-        If the entry carries no string ``name``.
+        The names separated by commas, each in ``repr`` form so a name holding
+        whitespace or control characters cannot be misread as several names.
     """
-    match entry.get("name"):
-        case str() as name:
-            return name
-        case other:
-            msg = f"a release asset entry carries no string name: {other!r}"
-            raise AssetListingError(msg)
+    return ", ".join(repr(name) for name in names)
 
 
-def _require_safe_names(names: list[str]) -> None:
-    """Refuse names that are not bare file names inside the download directory.
+def _name_problems(names: cabc.Sequence[str]) -> list[str]:
+    """Return every way the names cannot be written into the download directory.
 
-    Raises
-    ------
-    AssetListingError
-        If a name could resolve outside the download directory, or is not a
+    Returns
+    -------
+    list[str]
+        One diagnostic per unusable group of names, empty when every name is a
         bare file name.
 
     Notes
@@ -252,49 +205,25 @@ def _require_safe_names(names: list[str]) -> None:
     :func:`release_inventory.validate_inventory`: traversal is the diagnosis.
     """
     escaping, malformed = release_asset_names.rejected_names(names)
-    if escaping:
-        msg = (
-            "release asset names could resolve outside the download directory: "
-            + ", ".join(repr(name) for name in escaping)
-        )
-        raise AssetListingError(msg)
-    if malformed:
-        msg = "release asset names are not bare file names: " + ", ".join(
-            repr(name) for name in malformed
-        )
-        raise AssetListingError(msg)
+    groups = (
+        ("could resolve outside the download directory", escaping),
+        ("are not bare file names", malformed),
+    )
+    return [
+        f"release asset names {problem}: {_quoted(group)}"
+        for problem, group in groups
+        if group
+    ]
 
 
-def _require_plan_safe(names: list[str]) -> None:
-    """Refuse names the tab-separated download plan cannot represent.
+def _duplicate_problems(names: cabc.Sequence[str]) -> list[str]:
+    """Return a diagnostic for every name two assets both claim.
 
-    Raises
-    ------
-    AssetListingError
-        If any name contains a tab, a line feed, or a carriage return.
-
-    Notes
-    -----
-    A line feed would forge an extra ``id<TAB>name`` record, so the download
-    step would fetch an asset the listing never planned; a tab or carriage
-    return would truncate the name it writes. Both are refused, not escaped.
-    """
-    unrepresentable = [name for name in names if set(name) & set(PLAN_DELIMITERS)]
-    if unrepresentable:
-        msg = (
-            "release asset names cannot be represented in the download plan: "
-            + ", ".join(repr(name) for name in unrepresentable)
-        )
-        raise AssetListingError(msg)
-
-
-def _require_unique(names: list[str]) -> None:
-    """Refuse two assets claiming one attachment name.
-
-    Raises
-    ------
-    AssetListingError
-        If any name appears more than once.
+    Returns
+    -------
+    list[str]
+        One diagnostic naming every repeated name, empty when each name appears
+        once.
 
     Notes
     -----
@@ -303,94 +232,79 @@ def _require_unique(names: list[str]) -> None:
     """
     counts = collections.Counter(names)
     repeated = sorted(name for name, count in counts.items() if count > 1)
-    if repeated:
-        msg = "release asset names are duplicated: " + ", ".join(
-            repr(name) for name in repeated
-        )
-        raise AssetListingError(msg)
+    if not repeated:
+        return []
+    return [f"release asset names are duplicated: {_quoted(repeated)}"]
 
 
-def _entry_problems(entry: cabc.Mapping[str, object], name: str) -> list[str]:
-    """Return every way one asset entry cannot be downloaded as claimed.
+def _entry_problems(asset: Asset) -> list[str]:
+    """Return every way one asset cannot be downloaded as claimed.
 
     Returns
     -------
     list[str]
-        One diagnostic per defect, empty when the entry is usable.
+        One diagnostic per defect, empty when the asset is usable.
 
     Notes
     -----
-    Assets are addressed by number, and an attachment not finished storing, or
-    one with no bytes, is not the artefact the trusted record describes.
+    Assets are addressed by number, and an attachment the provider has not
+    finished storing, or one with no bytes, is not the artefact the trusted
+    record describes.
     """
-    identifier = entry.get("id")
-    state = entry.get("state")
-    size = entry.get("size")
-    checks = (
-        (_is_integer(identifier), f"{name!r} carries no integer id: {identifier!r}"),
-        (state == UPLOADED_STATE, f"{name!r} is not uploaded (state {state!r})"),
+    defects = (
+        (not asset.is_stored, f"{asset.name!r} is not an uploaded attachment"),
         (
-            _is_integer(size) and size != 0,
-            f"{name!r} does not report a usable byte size: {size!r}",
+            asset.size <= 0,
+            f"{asset.name!r} does not report a usable byte size: {asset.size!r}",
         ),
     )
-    return [message for holds, message in checks if not holds]
+    return [message for is_defect, message in defects if is_defect]
 
 
-def _require_usable(entries: list[cabc.Mapping[str, object]], names: list[str]) -> None:
-    """Refuse the listing if any entry cannot be downloaded as claimed.
-
-    Raises
-    ------
-    AssetListingError
-        If one or more entries report a defect, naming every one of them.
-    """
-    problems = [
-        problem
-        for entry, name in zip(entries, names, strict=True)
-        for problem in _entry_problems(entry, name)
-    ]
-    if problems:
-        msg = "the release asset listing is unusable: " + "; ".join(problems)
-        raise AssetListingError(msg)
-
-
-def plan_downloads(pages: object) -> list[tuple[int, str]]:
-    """Return the ordered ``(asset_id, name)`` pairs to download.
-
-    Parameters
-    ----------
-    pages
-        Decoded ``gh api --method GET --paginate --slurp`` asset pages.
+def _usable_problems(assets: cabc.Sequence[Asset]) -> list[str]:
+    """Return every way one or more assets cannot be downloaded as claimed.
 
     Returns
     -------
-    list[tuple[int, str]]
-        Each asset's identifier and name, in listing order.
+    list[str]
+        One diagnostic per defect across every asset, empty when each can be
+        downloaded as the trusted record describes it.
+    """
+    return [problem for asset in assets for problem in _entry_problems(asset)]
+
+
+def plan_downloads(assets: cabc.Sequence[Asset]) -> list[Asset]:
+    """Return the assets to download, in listing order.
+
+    Parameters
+    ----------
+    assets
+        Assets translated from a ``gh api --paginate --slurp`` listing.
+
+    Returns
+    -------
+    list[Asset]
+        Every asset, in listing order, once each.
 
     Raises
     ------
     AssetListingError
-        If the listing is empty, or any name or entry cannot be downloaded as
+        If the listing is empty, or any name or asset cannot be downloaded as
         claimed.
 
     Examples
     --------
-    >>> pages = [[{"id": 11, "name": "a.tar.gz", "state": "uploaded",
-    ...            "size": 5}]]
-    >>> plan_downloads(pages)
-    [(11, 'a.tar.gz')]
+    >>> plan_downloads([Asset(11, "a.tar.gz", is_stored=True, size=5)])
+    [Asset(identifier=11, name='a.tar.gz', is_stored=True, size=5)]
     """
-    entries = _entries(pages, what="asset")
-    if not entries:
+    if not assets:
         msg = "the release lists no assets, so there is nothing to verify"
         raise AssetListingError(msg)
-    names = [_asset_name(entry) for entry in entries]
-    _require_safe_names(names)
-    _require_plan_safe(names)
-    _require_unique(names)
-    _require_usable(entries, names)
-    return [
-        (typ.cast("int", entry["id"]), name)
-        for entry, name in zip(entries, names, strict=True)
-    ]
+    names = [asset.name for asset in assets]
+    problems = (
+        _name_problems(names) + _duplicate_problems(names) + _usable_problems(assets)
+    )
+    if problems:
+        msg = "the release asset listing is unusable: " + "; ".join(problems)
+        raise AssetListingError(msg)
+    return list(assets)

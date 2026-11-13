@@ -273,17 +273,46 @@ developers' guides rather than implied.
 
 **Status.** Implemented and exercised by an executed-shell harness in
 `tests/workflow_contracts/`; not yet exercised by a live release. The inventory
-verifier is delivered in *inventory verification stage implemented* above, and
-it is what consumes the retained records: `verify-release-inventory` downloads
-the publisher's artefact and hands the declaration and the trusted record to
-the verifier. The GitHub release finalizer is the part still unwired -- it
-depends on verification and would un-draft the release -- and it and the
-consumer smoke test remain open in the trusted-packaging ExecPlan, so the
-verified digests have no consumer yet and the release is not published by this
-decision.
+verifier, the GitHub release finalizer, and the consumer smoke test remain open
+in the trusted-packaging ExecPlan, so the retained records have no consumer in
+the workflow yet and the release is not published by this decision.
 
 Only a release the workflow *creates* is a draft: `ensure_draft_release.py`
 returns as soon as the tag already has a release, without checking whether it
 is public. A rerun therefore attaches assets to whatever release the tag
 already names, which may well be public by then. Nothing here can widen that
 guarantee, so it is recorded rather than assumed.
+
+## Addendum (2026-11-12): the downloaded inventory verifier implemented
+
+The verifier that the *inventory verification stage implemented* addendum
+declared is now built: `./.github/actions/verify-release-inventory` performs
+the stage's five steps, and the decisions it makes from the listings live in
+`scripts/` rather than in shell. This supersedes the status line of the
+2026-11-09 *the GitHub asset publisher* addendum, which records the verifier as
+not yet written.
+
+**Decision.** The action reads both listings with
+`gh api --method GET --paginate --slurp`, downloads each planned asset, and
+hands the downloaded tree, the publisher's declaration, and the trusted digest
+record to `verify_release_inventory_cli.py`. Three modules keep the listing
+decisions out of the shell:
+
+- `release_github_draft_listing.py` translates GitHub's page shape and field
+  names into release and asset records, refusing an entry whose field is
+  missing or of the wrong type.
+- `release_draft_assets.py` decides from those records alone: exactly one draft
+  carries the tag, no published release does, and every asset is a stored,
+  non-empty attachment with a unique, bare, safe name. A published release
+  carrying the tag is refused outright, because it means the draft this job was
+  asked to verify is gone.
+- `release_download_plan.py` renders the plan text and refuses a name holding a
+  tab, a line feed, or a carriage return. The step reads the plan line by line
+  and splits each line on tabs, so a line feed would forge a record and
+  download an asset the listing never named.
+
+`verify-release-inventory` is wired to `publish-release`'s retained artefact
+and is its consumer. The GitHub release finalizer and the consumer smoke test
+remain open in the trusted-packaging ExecPlan, so nothing un-drafts a release
+on the strength of a verified inventory yet, and no live release has exercised
+this stage.
