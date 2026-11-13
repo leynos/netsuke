@@ -12,10 +12,14 @@ D-20 audit passes at the EP-M3 boundary: the conservative range from the last
 EP-M2 commit through the post-EP-M3/EP-M4 checkpoint is within the approved
 line and file ceilings. The larger count through the current candidate included
 later milestones and follow-up work and does not measure EP-M3 scope. The full
-local gate sequence passed on `f32a657f`; this correction is receiving its
-documentation gates. The milestones and their acceptance evidence remain
-complete. The user approved this plan on 2026-10-24 and selected D-19 Option A;
-approval authorized drafting the decision records, and it did not accept them.
+local seven-gate sequence passed on the current candidate, `ebc2418c`. The
+exact-head hosted CI, Netsukefile, and release dry-run workflows also passed;
+the PR remains `IN PROGRESS` because its formal review decision is still
+`CHANGES_REQUESTED` on an older CodeRabbit review. A fresh review is pending a
+user decision about bounding `identity.files` reads in the accepted contract.
+The milestones and their acceptance evidence remain complete. The user approved
+this plan on 2026-10-24 and selected D-19 Option A; approval authorized
+drafting the decision records, and it did not accept them.
 
 Acceptance was given by the user on 2026-11-09 as a direct instruction to
 accept the seven records and mark the roadmap item complete, and no amendment
@@ -363,8 +367,23 @@ decision D-15.
   and 32-file ceilings. The earlier 2,710/878/56 count ended at the later
   `f32a657f` candidate and included EP-M5 ADR acceptance and post-milestone
   follow-up work; it was not an EP-M3 scope measurement. The full local gate
-  sequence passed on `f32a657f`; this correction is receiving documentation
-  gates.
+  sequence passed on `f32a657f`; the correction's `check-fmt`, `markdownlint`,
+  and `nixie` gates subsequently passed.
+- [x] (2026-11-13) All seven local gates passed on the exact tree committed as
+  `ebc2418c`: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.25%,
+  6,470/6,585), `test` (5,627 nextest cases passed, 9 skipped, doctests passed),
+  `markdownlint` (233 files, zero issues), and `nixie`. The gate run covered
+  the three pending paths later committed as `ebc2418c`, with no intervening
+  edits. The stop-hook `module-max-lines` failure was already repaired by
+  `e67fa25fa`; the current recorder module is 399 lines.
+- [x] (2026-11-13) Live GitHub readback confirms PR #808 is open and not draft
+  at head `ebc2418c`, based on `main` at `8b38ac377`. All required checks pass;
+  the Release Dry Run also completed successfully with publication jobs
+  skipped. CodeScene review `5896368246` approved this exact head. All 21
+  review threads are resolved. The formal decision remains `CHANGES_REQUESTED`
+  because CodeRabbit review `5892190015` is bound to stale head `2e665651`; no
+  CodeRabbit review is bound to `ebc2418c`. A fresh review remains pending the
+  user decision on the `identity.files` bound.
 - [x] EP-M3: reader-side schema version gate, users' guide, CHANGELOG. OBL-1 to
   OBL-5 are discharged by the artefacts listed in the verification plan; the
   gate sequence this milestone names passed at `bd7e6f123`, and the later
@@ -1092,6 +1111,15 @@ explicitly. Holding the `Accepted` status behind a named precondition kept a
 drafted decision from being presented as a settled one, and the plan's
 `Progress` entries were specific enough to resume after context loss without
 re-deriving the four gate failures that drove the telemetry module's move.
+
+Implementation and acceptance milestones are complete, but PR delivery is not.
+The current head passes every local and required hosted gate, and its release
+dry-run succeeded. The formal review decision still reflects a stale CodeRabbit
+request for changes. A current-head review is needed after the user decides
+whether `identity.files` receives an 8 MiB aggregate read limit with explicit
+`unknown` outcomes for symlink, non-regular, and over-limit inputs, or whether
+that rule is deferred to the future implementation ADR. The plan remains
+`IN PROGRESS` until that review path reaches equilibrium.
 
 ## Context and orientation
 
