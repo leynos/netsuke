@@ -235,7 +235,7 @@ fn collect_file_layers_with_env(
             let (project_scope, outcome) = collect_file_layers_with_normalizer_and_trace(
                 cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
                 normalizer,
-                discovery_env_source(env),
+                &discovery_env_source(env),
             );
             (FileLayerTrace::Automatic { project_scope }, None, outcome)
         },

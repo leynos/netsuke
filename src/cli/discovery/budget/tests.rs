@@ -252,7 +252,7 @@ fn budget_quarantine_reuses_discovered_chain_metadata() -> Result<()> {
     let (_, loaded) = layers::collect_file_layers_with_normalizer_and_trace(
         Some(temp.path()),
         &paths::FsPathNormalizer,
-        discovery_env_source(&env),
+        &discovery_env_source(&env),
     );
     let chain = loaded.context("discover project chain")?;
     test_support::fs::write(&primary, "extends = \"missing.toml\"\n")?;

@@ -110,7 +110,8 @@ pub(super) fn collect_file_layers_with_normalizer(
     // Leave selector and home variables unset so this test cannot inherit the
     // host configuration; XDG_CONFIG_DIRS points at an isolated absent path.
     test_env.insert("XDG_CONFIG_DIRS", isolated_config_dirs.into_os_string());
-    collect_file_layers_with_normalizer_and_trace(directory, normalizer, Arc::new(test_env))
+    let env_source: SharedEnvSource = Arc::new(test_env);
+    collect_file_layers_with_normalizer_and_trace(directory, normalizer, &env_source)
         .1
         .map(|layers| layers.into_iter().map(|scoped| scoped.layer).collect())
 }
@@ -119,9 +120,9 @@ pub(super) fn collect_file_layers_with_normalizer(
 pub(super) fn collect_file_layers_with_normalizer_and_trace(
     directory: Option<&Path>,
     normalizer: &impl PathNormalizer,
-    env_source: SharedEnvSource,
+    env_source: &SharedEnvSource,
 ) -> (Option<ProjectScopeTrace>, OrthoResult<Vec<ScopedFileLayer>>) {
-    let base_layers = match discover_base_layers(directory, &env_source) {
+    let base_layers = match discover_base_layers(directory, env_source) {
         Ok(layers) => layers,
         Err(error) => return (None, Err(error)),
     };
@@ -172,7 +173,7 @@ fn discover_base_layers(
         directory.map(PathBuf::from).as_ref(),
         Arc::clone(env_source),
     );
-    discovery_base_layers(discovery)
+    discovery_base_layers(&discovery)
 }
 
 /// Load the first user-scope configuration file, if one exists.
@@ -202,7 +203,7 @@ fn user_scope_base_layers(
 ///
 /// Returns the first required error, or the first optional error when the scan
 /// produced no layers at all.
-fn discovery_base_layers(discovery: ConfigDiscovery) -> OrthoResult<Vec<MergeLayer<'static>>> {
+fn discovery_base_layers(discovery: &ConfigDiscovery) -> OrthoResult<Vec<MergeLayer<'static>>> {
     let mut file_layers = discovery.compose_layers();
     let mut errors = file_layers.required_errors;
     if file_layers.value.is_empty() {
@@ -313,10 +314,7 @@ fn project_scope_layers(project_file: Option<&Path>) -> OrthoResult<Vec<MergeLay
     let Some(path) = project_file else {
         return Ok(Vec::new());
     };
-    match load_config_file_as_chain(path)? {
-        Some(chain) => Ok(chain_to_layers(chain)),
-        None => Ok(Vec::new()),
-    }
+    Ok(load_config_file_as_chain(path)?.map_or_else(Vec::new, chain_to_layers))
 }
 
 #[cfg(test)]
