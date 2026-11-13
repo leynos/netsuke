@@ -24,14 +24,6 @@ use test_support::fs as test_fs;
 
 use rstest::rstest;
 
-//! Runner-boundary coverage for bounded recipe and console telemetry.
-//!
-//! Each case invokes [`netsuke::runner::run_with_ninja_program`] with an
-//! injected executable and local metrics recorder. This verifies the complete
-//! build or Ninja-tool orchestration boundary, not merely its helper.
-};
-};
-
 /// Represent one drained local metrics snapshot.
 type Snapshot = Vec<(
     CompositeKey,
