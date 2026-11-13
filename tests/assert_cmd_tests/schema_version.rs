@@ -102,7 +102,12 @@ fn human_output_renders_the_schema_version_rejection(
     let temp = unsupported_schema_workspace?;
 
     let output = create_netsuke_command(temp.path())
-        .args(["generate", "--output", "out.ninja"])
+        // The context line is the `runner.context.load_manifest` catalogue
+        // phrase, and all 35 catalogues translate it — German renders "Das
+        // Manifest unter … konnte nicht geladen werden.". Netsuke negotiates
+        // the interface locale from `LANG`, so without this the assertion
+        // below would fail on a non-English host despite a correct rejection.
+        .args(["--locale", "en-GB", "generate", "--output", "out.ninja"])
         .output()
         .context("run generate without JSON diagnostics")?;
     ensure!(
