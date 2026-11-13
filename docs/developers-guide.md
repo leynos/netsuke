@@ -1025,22 +1025,24 @@ The lowering stages have deliberately separate responsibilities:
   markers; POSIX lexical scanning can preserve their internal tokens in
   comments and heredoc bodies rather than resolving them. Comment and heredoc
   recognition ends a word only at the shell's own separators, so a non-ASCII
-  character before `#` cannot hide a later quote transition. A `)` that closes
-  a substitution stays in the word, but a `)` that terminates a `case` pattern
-  is an operator; because the two are lexically identical without the `case`
-  grammar, a substitution whose source contains `case` is rejected when a `)`
-  is immediately followed by `#`, whatever the enclosing quote context, because
-  a substitution is parsed as its own script; PowerShell keeps the narrower
+  character before `#` cannot hide a later quote transition and a delimiter
+  word never ends at Unicode whitespace. A `)` that closes a substitution stays
+  in the word, but a `)` that terminates a `case` pattern is an operator;
+  because the two are lexically identical without the `case` grammar, a
+  substitution whose source contains `case` is rejected when a `)` is
+  immediately followed by `#`, whatever the enclosing quote context, because a
+  substitution is parsed as its own script; PowerShell keeps the narrower
   unquoted-only rule. The pattern terminator is matched at the parenthesis
   depth where its `case` opened, so a `case` inside a nested group is not
-  confused with the group's own closer. Literal `$in`, `$out`, `$ins`, and
-  `$outs` remain shell variables and are escaped for Ninja pass-through. POSIX
-  lowering tracks unquoted, single-quoted, and double-quoted text, and rejects
-  markers within command substitutions because it cannot lower them safely.
-  Script recipes therefore retain heredocs and comments without accepting an
-  unsafe marker context. The resulting action contains lowered command text and
-  no Ninja rule variables; an inert region may still retain an internal Netsuke
-  marker token.
+  confused with the group's own closer. Heredoc delimiters the tracker cannot
+  model are rejected rather than approximated. Literal `$in`, `$out`, `$ins`,
+  and `$outs` remain shell variables and are escaped for Ninja pass-through.
+  POSIX lowering tracks unquoted, single-quoted, and double-quoted text, and
+  rejects markers within command substitutions because it cannot lower them
+  safely. Script recipes therefore retain heredocs and comments without
+  accepting an unsafe marker context. The resulting action contains lowered
+  command text and no Ninja rule variables; an inert region may still retain an
+  internal Netsuke marker token.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen/recipe_shell/`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each
@@ -8016,10 +8018,31 @@ A closer's position survives into the next comment check because the `)` that
 ends `$()` stays part of the surrounding word, while a `)` that ends a subshell
 or a `case` pattern is an operator. Both modules are split out of their parents
 to stay inside the module-size cap; they are not separate shell parsers and
-have no callers outside command interpolation.
+have no callers outside command interpolation. `substitution/quotes.rs` is
+split out for the same reason: it holds the quote-context queries and updates,
+each of which has to name the innermost active shell region rather than the
+traversal's own state, because a substitution carries its own quote context.
+
+Heredoc declaration handling is also shared rather than duplicated: the helper
+decides what a declaration is, and each traversal supplies only the context
+around it. `substitution/posix.rs` performs that step for
+`SubstitutionTraversal`, and the sibling `script_substitution/heredoc.rs` does
+the same for the `script:` traversal, which differs only in which quote context
+counts as plain text and in how it reports "not a declaration" to its caller.
+`script_substitution.rs` is now `script_substitution/mod.rs`; that split, like
+the sibling `delimiters.rs`, keeps each file inside the 400-line limit without
+introducing a second shell parser. The tests follow the same shape:
+`src/ir/cmd_interpolate/tests/heredoc/` is a directory module holding the
+shared assertions in `support.rs` and the delimiter, expansion, and property
+test groups, and `tests/ninja_dollar_escaping_tests/heredoc.rs` checks the same
+contract end to end by running the generated Ninja build through a real child
+shell.
 
 The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
-single-pass recognition of POSIX comments and heredoc inert regions. It copies
+single-pass recognition of POSIX comments and heredoc inert regions. Its
+`declaration.rs` child parses and queues one heredoc declaration, and its
+`delimiter.rs` child owns the delimiter word's quoting grammar; the split keeps
+each module inside the workspace's 400-line limit. The parent module copies
 those comments and heredoc bodies byte-for-byte, so internal marker tokens in
 them are not expanded and can remain in the generated recipe; markers in
 heredoc delimiters are expanded. It queues declarations FIFO, including quoted
@@ -8028,21 +8051,68 @@ surrounding quote context. This is a command-interpolation helper, not a
 general shell parser, and is not intended for reuse outside that boundary.
 
 The helper ends an unquoted POSIX word only at a space, tab, newline, or one of
-the operator characters `;`, `&`, `|`, `(`, `)`, `<`, and `>`. The
-`is_word_terminator` predicate is the single boundary definition behind both
-comment detection and heredoc delimiter termination. It deliberately avoids
-Rust's Unicode `char::is_whitespace`, because `sh`, `dash`, and Bash treat
-characters such as U+00A0 as ordinary word data rather than as locale-dependent
-multibyte blanks. Using the Unicode rule would let `#` after such a character
-start a false comment, skip a real quote transition, and select the wrong path
-encoding for a later marker. A CRLF script therefore treats a carriage return
-before `#` as word data, matching those shells. The traversals that track `$()`
-also pass the position of the `)` that closed the innermost substitution, so
-the boundary check does not mistake that delimiter for a separator. A `)`
-closing a subshell remains an operator and still permits a comment.
+the operator characters `;`, `&`, `|`, `(`, `)`, `<`, and `>`. The `SourceChar`
+newtype in that module owns `is_blank` and `is_word_terminator`; that predicate
+is the single boundary definition behind both comment detection and heredoc
+delimiter termination. It deliberately avoids Rust's Unicode
+`char::is_whitespace`, because `sh`, `dash`, and Bash treat characters such as
+U+00A0 as ordinary word data rather than as locale-dependent multibyte blanks.
+Using the Unicode rule would let `#` after such a character start a false
+comment, skip a real quote transition, and select the wrong path encoding for a
+later marker. A CRLF script therefore treats a carriage return before `#` as
+word data, matching those shells. The traversals that track `$()` also pass the
+position of the `)` that closed the innermost substitution, so the boundary
+check does not mistake that delimiter for a separator. A `)` closing a subshell
+remains an operator and still permits a comment.
 `src/lint/rules/shellscan/mod.rs` and the property-test oracle in
 `src/ir/cmd_interpolate/property_tests/boundary.rs` keep separate boundary
 models; neither controls path encoding, so neither is part of this contract.
+
+`HeredocDeclaration` separates "not a declaration", "copied", and "rejected"; a
+rejection propagates through both traversals as an `IrGenError::InvalidCommand`
+naming the unsupported syntax, so a delimiter the tracker cannot model never
+lets marker lowering resume inside shell heredoc data. The rejected forms are a
+missing delimiter, a leading unquoted `#`, an unclosed quote, a trailing
+backslash, a backslash-newline continuation whether unquoted or inside double
+quotes, and an unescaped `$` or backtick outside single quotes. A
+backslash-escaped `\$` or backslash-escaped backtick is accepted, because the
+shell removes the escape and performs no expansion on the result; single quotes
+remain the spelling to recommend, since they are the only context in which no
+escape is needed.
+
+The rendered word is reparsed under the same grammar after marker lowering, so
+a path that would split the word, or introduce a rejected form, fails closed;
+the quoting recorded for body matching is the rendered word's, because a path
+that needs quoting can turn an unquoted source delimiter into a quoted one.
+`<<` also queues no declaration inside a `$(( ))` arithmetic expansion, where
+it is the left-shift operator: both traversals mark a `$(` as arithmetic when
+the next character is a second `(`, and suspend heredoc detection while the
+innermost active substitution is arithmetic, because a delimiter queued there
+would consume the next source line as body text. A nested `$( )` inside such an
+expansion pushes a non-arithmetic frame, so a heredoc declared by a genuine
+nested substitution is still tracked.
+
+Body termination follows the shell's own unit: because an unquoted delimiter
+leaves the body subject to expansion, a physical line ending in an odd
+backslash run is joined to the next line before the tracker compares it, with a
+leading tab stripped only at the start of a logical line; a quoted delimiter,
+and an even backslash run, keep the physical line as the unit. An empty
+continued logical line still begins a logical line, so its tab stripping
+applies to the next physical line.
+
+`parameter_expansion.rs` suspends comment recognition inside an open `${ }`,
+where `#` is expansion syntax as in `${name# #}`, and counts the open
+expansions per command-substitution region rather than once for the whole line:
+a brace inside `$( )` or backticks belongs to the substitution, and the
+enclosing count is restored when that region closes. A single shared count
+would let that brace close an outer expansion and read a following `#` as a
+comment, losing a heredoc declared there. The arithmetic guard in the same
+predicate keeps the script traversal on the command traversal's contract, so
+`#` is never a comment inside `$(( ))`. The opener is recognized across an
+unquoted backslash-newline, because the shell removes that pair before it lexes:
+`$\` followed by a newline and `{` opens the expansion, so the number signs
+after it stay expansion text rather than becoming a comment that hides the
+declaration.
 
 A `)` that terminates a `case` pattern is an operator, so a `#` immediately
 after it starts a comment, while the `)` that closes `$()` stays in the
@@ -8128,7 +8198,24 @@ backtick-delimited region is rejected before it can evade lowering. PowerShell
 uses backticks as escapes and does not enter that protected region. POSIX and
 Bash scanning also preserves comments and heredoc bodies verbatim; keep markers
 out of those regions, where their internal tokens can remain in generated
-recipe text. Heredoc delimiters are scanned for markers and expand normally.
+recipe text. Heredoc delimiters are scanned for markers and expand normally;
+the delimiter word ends only where the shell ends it, so Unicode whitespace
+cannot shorten it, and a delimiter form whose quote removal or expansion the
+tracker cannot reproduce is rejected with an invalid-command diagnostic rather
+than approximated. An unquoted heredoc body has its backslash-newline
+continuations removed before terminator matching, so the tracker accumulates a
+logical line and compares only a completed one; a quoted delimiter suppresses
+both expansion and joining. A `<<` inside `$(( ))` is a left shift, so both
+traversals suspend heredoc and comment detection while an arithmetic frame is
+innermost. A `#` inside a `${ }` parameter expansion is expansion syntax rather
+than a comment, so both traversals also suspend comment detection while a
+parameter expansion is open; otherwise a pattern such as `${name# #}` would
+hide the rest of its line, including any heredoc declared there. The count is
+per region: each command-substitution region, `$()` or backticks, starts its
+own and restores the enclosing one when it closes, because a brace inside the
+substitution does not close an outer `${ }`, while a `#` inside the
+substitution is still a comment. See
+`src/ir/cmd_interpolate/posix_lexical/parameter_expansion.rs`.
 
 A marker directly after an unpaired backslash is rejected in `command:`,
 `script:`, and heredoc-delimiter traversal alike. The substituted encoding

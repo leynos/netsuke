@@ -4,7 +4,7 @@
 //! prevents their contents from changing the context of surrounding recipe
 //! markers.
 
-use super::posix_lexical::is_word_terminator;
+use super::posix_lexical::{SourceChar, SubstitutionKind};
 use super::{IrGenError, QuoteContext};
 use crate::localization::{self, keys};
 
@@ -24,6 +24,8 @@ pub(super) struct CommandSubstitution {
     pub(super) quote_context: QuoteContext,
     /// Count this substitution's opening parenthesis and nested grouped forms.
     pub(super) parenthesis_depth: usize,
+    /// Record what the delimiter opened: a command list or an arithmetic body.
+    kind: SubstitutionKind,
     /// Record the `$` that opened this substitution for source-range checks.
     pub(super) start: usize,
     /// Track `case ... esac` nesting so a pattern terminator is not a closer.
@@ -32,13 +34,25 @@ pub(super) struct CommandSubstitution {
 
 impl CommandSubstitution {
     /// Initialise the state required after a `$(` delimiter.
-    pub(super) const fn new(start: usize) -> Self {
+    ///
+    /// `start` is the `$` that opened the substitution, kept for source-range
+    /// checks. `kind` records whether the delimiter was `$((`, so a caller can
+    /// keep arithmetic operators such as `<<` away from shell heredoc tracking.
+    /// Arithmetic bodies expand numbers, so they never hold a heredoc
+    /// declaration.
+    pub(super) const fn new(start: usize, kind: SubstitutionKind) -> Self {
         Self {
             quote_context: QuoteContext::Unquoted,
             parenthesis_depth: 1,
+            kind,
             start,
             case_nesting: CaseNesting::new(),
         }
+    }
+
+    /// Report whether this substitution's body is an arithmetic expansion.
+    pub(super) const fn is_arithmetic(&self) -> bool {
+        matches!(self.kind, SubstitutionKind::Arithmetic)
     }
 }
 
@@ -244,7 +258,7 @@ impl CaseNesting {
 /// it. Both categories are kept in one predicate because the caller treats them
 /// identically.
 const fn ends_word(ch: char) -> bool {
-    is_word_terminator(ch) || matches!(ch, '\'' | '"' | '`')
+    SourceChar::new(ch).is_word_terminator() || matches!(ch, '\'' | '"' | '`')
 }
 
 /// Report whether `ch` is an unquoted blank that leaves token position alone.
@@ -354,9 +368,12 @@ fn is_case_keyword_at(chars: &[char], pos: usize) -> bool {
     if chars.get(pos..pos + KEYWORD.len()) != Some(KEYWORD.as_slice()) {
         return false;
     }
-    let starts_word = pos == 0 || chars.get(pos - 1).is_some_and(|ch| is_word_terminator(*ch));
+    let starts_word = pos == 0
+        || chars
+            .get(pos - 1)
+            .is_some_and(|ch| SourceChar::new(*ch).is_word_terminator());
     let ends_word = chars
         .get(pos + KEYWORD.len())
-        .is_none_or(|ch| is_word_terminator(*ch));
+        .is_none_or(|ch| SourceChar::new(*ch).is_word_terminator());
     starts_word && ends_word
 }

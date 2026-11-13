@@ -178,7 +178,10 @@ Ninja将美元符号加倍，使所选shell收到的内容保持不变；它不�
 | `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no          | no          |
 
 [^inert]: 在 POSIX 和 Bash 路径中，Netsuke 会将注释和 heredoc 正文中的标记原样
-    复制为内部令牌，而不会展开；heredoc 分隔符中的标记会展开。PowerShell 的
+    复制为内部令牌，而不会展开；heredoc 分隔符中的标记会展开。关于 heredoc 分隔符和
+    正文的规则（包括 Netsuke 拒绝的形式），请参阅
+    [用户指南中的安全边界](docs/users-guide.md#review-the-safety-boundary)。
+    PowerShell 的
     `command:` 和 `script:` 配方都会拒绝单引号或双引号字符串、here-string、`$()`
     以及反引号后紧跟的标记。紧邻 PowerShell 识别为单引号的字符（包括排版引号）
     或另一个标记的标记也会被拒绝，因为独立的单引号字面量可能与相邻字符串或参数文本合并。

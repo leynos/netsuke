@@ -21,6 +21,7 @@ mod posix_lexical;
 mod script_substitution;
 mod substitution;
 
+use posix_lexical::DelimiterRejection;
 use script_substitution::ScriptSubstitutionTraversal;
 use substitution::SubstitutionTraversal;
 
@@ -123,11 +124,13 @@ fn record_binding_preparation() {
 #[cfg(not(test))]
 const fn record_binding_preparation() {}
 
+/// Reset the test-only count of binding preparations on this thread.
 #[cfg(test)]
 pub(crate) fn reset_binding_preparations() {
     BINDING_PREPARATIONS.with(|count| count.set(0));
 }
 
+/// Report how many times this thread prepared command bindings.
 #[cfg(test)]
 pub(crate) fn binding_preparations() -> usize {
     BINDING_PREPARATIONS.with(Cell::get)
@@ -210,6 +213,22 @@ pub(crate) fn interpolate_script_with_bindings(
 /// Builds the diagnostic for a command rejected during placeholder expansion.
 fn invalid_command_error(command: String) -> IrGenError {
     let snippet = command.chars().take(160).collect();
+    let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
+    IrGenError::InvalidCommand {
+        command,
+        snippet,
+        message,
+    }
+}
+
+/// Builds the diagnostic for a heredoc delimiter the tracker cannot model.
+///
+/// The rejection reason occupies the snippet argument so the existing localized
+/// message names the offending syntax. That keeps the fail-closed path on the
+/// same diagnostic channel as other interpolation rejections without adding a
+/// locale entry per internal variant.
+fn invalid_heredoc_delimiter_error(command: String, reason: DelimiterRejection) -> IrGenError {
+    let snippet = reason.description().to_owned();
     let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
     IrGenError::InvalidCommand {
         command,
@@ -329,6 +348,7 @@ fn substitute_posix_script(
     }
     Ok(traversal.finish())
 }
+
 /// Internal token emitted for the `{{ ins }}` marker during manifest rendering and
 /// consumed during command interpolation; it is not general template syntax.
 pub const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";

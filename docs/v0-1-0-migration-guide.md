@@ -195,6 +195,7 @@ impact
 | Cycle detection              | **Breaking:** cycles through `sources`, `deps`, or `order_only_deps` are rejected during IR validation, even when Ninja would not be asked to build the affected target. Remove latent prerequisite cycles; the whole manifest is checked before Ninja starts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Dependency and build-graph semantics](users-guide.md#dependency-and-build-graph-semantics)                              |
 | Release packaging            | The release workflow validates the packaged candidate offline before upload: the identity, the archive digest, and the packaged manifest must agree, and a dry run must record no release tag.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Release packaging validation](#release-packaging-validates-its-candidate-offline)                                       |
 | Release upload               | The publishing lane uploads only the assets this run declared: producer records are bound to the candidate commit and the workflow run, and a stale, missing, doubled, or undeclared release-shaped artefact is refused before any release asset is transferred. The job may already have checked for or created the draft release, which touches the release API; selection and declaration come after that and before the upload. An attached asset with the recorded digest is skipped; one with different bytes stops the run and is never replaced.                                                                                                                                                                                                                                                                                                                                                                                                                                                | [Release uploads](#release-uploads-only-the-assets-this-run-declared)                                                    |
+| POSIX heredoc delimiters     | **Breaking:** a delimiter form whose quote removal Netsuke cannot reproduce now fails closed instead of being copied: a missing delimiter, a leading unquoted `#`, an unclosed quote, a trailing backslash, a line continuation, and an unescaped `$` or backtick outside single quotes. Quote the literal part instead, for example `<<'$DELIM'`; quoting any part of the delimiter also stops expansion in the body, so keep an unquoted literal delimiter such as `<<END` when the body must expand.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Heredoc delimiters](#update-heredoc-delimiters-the-tracker-cannot-model)                                                |
 
 ## Remove order-only dependency cycles
 
@@ -486,6 +487,58 @@ independently of `)#`, so a recipe whose delimiter carries a non-ASCII space
 changes behaviour whether or not it places `#` after a substitution closer. The
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary)
 describes the full comment and substitution rules.
+
+## Update heredoc delimiters the tracker cannot model
+
+Netsuke tracks POSIX heredoc bodies so it never lowers a path marker into text
+the shell still expands. The tracker now reproduces the shell's own word and
+line rules and fails closed instead of copying a delimiter it cannot model. A
+recipe that used one of the rejected forms below now fails at IR lowering with
+an `ir.invalid_command` diagnostic naming the reason, for example
+`unsupported heredoc delimiter syntax: unclosed quote`.
+
+- **Missing delimiter**, or a leading unquoted `#` that the shell reads as a
+  comment: `cat <<` and `cat <<#EOF`. Write the delimiter immediately after
+  `<<` or `<<-`, and keep comments on their own line.
+- **Unclosed quote**: `cat <<'EOF`. Close every quote in the word, as in
+  `cat <<'EOF'`.
+- **Trailing backslash**, or a backslash-newline continuation whether it is
+  unquoted or inside double quotes: `cat <<EOF\`, an unquoted delimiter split
+  across two lines, and `cat <<"EO\` followed by a newline and `F"`. Write the
+  whole delimiter on one line.
+- **Unescaped `$` or backtick outside single quotes**: `cat <<$DELIM`,
+  `` cat <<`delim` ``, `cat <<"$DELIM"`, and `` cat <<"`delim`" ``. The shell
+  performs quote removal on a delimiter word and no expansion, so these words
+  are valid shell. Netsuke rejects them because its tracker does not model an
+  expansion in a delimiter word, and double quotes do not change that. Use an
+  unquoted literal delimiter, such as `cat <<END` with a terminating `END`
+  line, when the body needs parameter expansion, command substitution, or
+  arithmetic expansion. Quoting or escaping the delimiter, as in
+  `cat <<'$DELIM'`, `` cat <<'`delim`' ``, or `cat <<\$DELIM`, suppresses those
+  expansions throughout the body, because the shell treats a delimiter word
+  with any quoted part as quoted. Use a quoted or escaped delimiter only when
+  the body must stay literal.
+
+The comment and unclosed-quote entries also apply to a rendered delimiter: if a
+marker inside the delimiter lowers to a path that would introduce one of those
+forms, Netsuke rejects the substitution too. A rendered delimiter must also
+stay one word. A marker expands to every bound path, joined by blanks, so a
+marker that binds more than one path renders a delimiter the shell would split;
+Netsuke rejects that rather than guessing which word the shell keeps. Use a
+literal delimiter when the word must stay unambiguous.
+
+Three rules are unchanged in intent and now stated explicitly. A delimiter word
+ends only at a POSIX blank, a newline, or a shell operator, so Unicode
+whitespace such as a no-break space stays inside the delimiter and a line
+reading only the visible prefix does not end the body. A `<<` inside a `$(( ))`
+arithmetic expansion is a left shift, not a heredoc, so arithmetic expressions
+pass through unchanged. A `#` inside a `${ }` parameter expansion is expansion
+syntax rather than a comment — `${name# #}` is one such pattern removal — so a
+heredoc declared later on that line is still tracked.
+
+See the
+[users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
+the full heredoc contract.
 
 ## Resolve build-graph outputs through the accessors
 
