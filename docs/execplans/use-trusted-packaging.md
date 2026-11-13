@@ -5167,3 +5167,34 @@ skipped, plus doctests), workflow contracts (2,008 passed plus 30 script-helper
 checks), release-publication tests (1,037 passed), documentation contracts,
 Markdown lint (0 issues), and Mermaid validation. Stage C remains partial; no
 live exchange or release has been exercised.
+
+Draft 28, 2026-11-13: closed the three inline findings of review `5871328314`
+and the two follow-ups from the `124aa9f41` assessment, each proved by a
+mutation that fails the repaired case and leaves the others green.
+
+- Record agreement now parametrizes both directions. A selection naming an
+  asset the declaration omits, and the reverse, are separate cases; narrowing
+  the comparison to one record's keys fails the `declaration-only` case with
+  `DID NOT RAISE RecordedDigestMismatchError`.
+- `scripts/ensure_draft_release.py` is registered in `SOURCE_MODULES` and
+  `ADAPTER_MODULES` and joins `PROCESS_MODULES`, and `PROCESS_LAUNCHERS` is now
+  `{cuprum, subprocess}`. A contract that recognized only `subprocess` left the
+  draft-creation route, which runs `gh release view` and `gh release create`
+  through cuprum, unaudited. The Makefile recipe gained the two PEP 723
+  dependencies the script declares, because `--doctest-modules` imports it.
+- The unverifiable case now asserts the plan retains the bounded reason for a
+  name it could not read, so an empty `unverifiable_reasons` mapping fails it.
+- The hand-off suite reads the calling step's `id:` from `publish-release`
+  instead of restating it, and a new case requires both the failure step's
+  guard and its `env:` expression to address it. Renaming the step alone fails
+  three cases; previously it failed none.
+
+The ten local gates passed sequentially on the final candidate, tree dirty with
+the single intended file: formatting, lint, typecheck, documentation coverage
+(98.14%, 6,058/6,173), Rust tests (5,252 passed, 7 skipped, plus doctests),
+workflow contracts (2,053 passed, 3 skipped, plus 30 script-helper checks),
+release-publication tests (1,113 passed), documentation contracts (15 passed,
+48 skipped), Markdown lint (0 issues in 220 files) with no `typos.toml` drift,
+and Mermaid validation. All four required hosted checks pass and the pull
+request is `CLEAN`; review approval is outstanding. Stage C remains partial; no
+live exchange or release has been exercised.
