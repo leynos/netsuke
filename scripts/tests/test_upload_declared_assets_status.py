@@ -223,10 +223,17 @@ def test_a_payload_entry_the_system_will_not_describe_is_unreadable_input(
 def test_main_reports_an_unwritable_plan(
     scenario: Scenario, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Exit distinctly when the plan cannot be recorded."""
+    """Exit distinctly when the plan cannot be recorded.
+
+    The plan is written before the transfer, so a run that cannot record what
+    it is about to do must not go on to do it. The status is the output one
+    rather than the input one: nothing was unreadable, the record was
+    unwritable.
+    """
+    exchange = Exchange(attached={})
     status = run_cli(
         scenario,
-        Exchange(attached={}),
+        exchange,
         monkeypatch,
         invocation=Invocation(
             destinations=Destinations(
@@ -236,6 +243,9 @@ def test_main_reports_an_unwritable_plan(
     )
     assert status == EXIT_OUTPUT_UNWRITABLE, (
         "an unwritable plan must report output trouble, not success"
+    )
+    assert not exchange.uploads(), (
+        "a run that cannot record its plan must not transfer anything"
     )
 
 
@@ -247,6 +257,27 @@ def test_main_reports_a_transport_failure_with_its_own_status(
     assert run_cli(scenario, exchange, monkeypatch) == EXIT_UPLOAD_FAILED, (
         "a failed transfer must report its own status"
     )
+
+
+def test_a_failed_transfer_still_leaves_the_plan_it_attempted(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Retain the plan a failed transfer never got to rewrite.
+
+    The run records the decided plan before the first byte moves, so a
+    transfer that raises still leaves an operator the record of what it set
+    out to do. Without that write the plan would be absent from exactly the
+    run it is needed for, and the retention step would find nothing.
+    """
+    exchange = Exchange(attached={}, fail_upload=True)
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_UPLOAD_FAILED, (
+        "the case must fail the transfer to be about a failed transfer"
+    )
+
+    assert scenario.stored_plan()["actions"] == [
+        ["b.rpm", "upload"],
+        [DEB, "upload"],
+    ], "the plan written before the transfer must survive its failure"
 
 
 def test_main_reports_an_asset_absent_after_upload_as_a_failed_upload(

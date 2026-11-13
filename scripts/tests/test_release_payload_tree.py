@@ -10,6 +10,7 @@ Run via ``make test-release-publication``.
 """
 
 import json
+import os
 import typing as typ
 
 import pytest
@@ -92,6 +93,25 @@ def test_read_provenances_reports_an_unusable_record(tmp_path: pathlib.Path) -> 
     _ = (tmp_path / RECORD_NAME).write_text("not json", encoding="utf-8")
     with pytest.raises(json.JSONDecodeError):
         release_payload_tree.read_provenances(tmp_path)
+
+
+def test_a_producer_record_that_is_not_a_regular_file_is_never_read(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Skip a staged entry named like a record that is not one.
+
+    A FIFO in a downloaded tree would block ``read_text`` waiting for a writer,
+    which a release job cannot distinguish from a slow disk. The name alone
+    must not be enough to reach the reader.
+    """
+    os.mkfifo(tmp_path / RECORD_NAME)
+
+    assert release_payload_tree.read_provenances(tmp_path) == [], (
+        "a non-regular entry must be skipped, not read"
+    )
+    assert release_payload_tree.read_provenance_by_path(tmp_path) == {}, (
+        "the by-path view must apply the same regularity rule"
+    )
 
 
 def test_copy_verified_copies_the_bytes(tmp_path: pathlib.Path) -> None:

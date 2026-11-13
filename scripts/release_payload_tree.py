@@ -136,6 +136,13 @@ def read_provenance_by_path(
     A malformed record surfaces the reader's own diagnosis rather than being
     skipped, so a broken producer is reported against the file that holds it.
 
+    Only a regular file is read. A staged tree is downloaded input, so an entry
+    named like a record need not be one: a FIFO given that name would block
+    ``read_text`` waiting for a writer rather than refusing it, and the run
+    would hang where the operator needed a diagnosis. This is the same
+    regularity rule :func:`observe_payload` applies to the assets beside it,
+    applied here before the first read rather than only at copy time.
+
     Examples
     --------
     >>> import tempfile
@@ -147,7 +154,7 @@ def read_provenance_by_path(
     return {
         path: _read_provenance(path)
         for path in hoist_binstall_discovery.walk_files(dist_dir)
-        if path.name == RECORD_NAME
+        if path.name == RECORD_NAME and has_mode(path, stat.S_ISREG)
     }
 
 

@@ -33,6 +33,7 @@ import release_digest_record_files
 import release_payload_handoff
 import release_reconcile_github
 import release_upload_observation
+import release_upload_plan
 import release_upload_remote
 
 if typ.TYPE_CHECKING:
@@ -102,12 +103,38 @@ def settle(
         request, settlement.actions, pending
     ):
         return settlement
+    # Record the decided plan before the first byte moves. A transfer that
+    # raises leaves by exception, so a plan written only afterwards would be
+    # absent from exactly the run an operator most needs it for: the one that
+    # failed partway. Writing here costs a second, smaller write when the
+    # transfer succeeds, which is the price of the plan surviving a failure.
+    _record_plan(request, settlement)
     release_upload_remote.upload(
         request.tag, pending, request.payload_dir, runner=runner
     )
     # A second observation of the same release, not a second decision
     # procedure: the returned plan has to describe what GitHub holds now.
     return _observed_settlement(request.tag, expected, runner=runner)
+
+
+def _record_plan(
+    request: UploadRequest, settlement: release_upload_observation.Settlement
+) -> None:
+    """Write the plan this run has decided, before it is acted on.
+
+    Raises
+    ------
+    release_upload_plan.UnwritablePlanError
+        If the destination cannot be written. Raised rather than swallowed: a
+        run that cannot record what it is about to do must not go on to do it,
+        and the refusal table gives this its own status so the diagnosis does
+        not read as an unreadable payload.
+    """
+    blockers = release_upload_plan.Blockers.of(settlement.actions, settlement.failures)
+    try:
+        release_upload_plan.write_plan(request.plan_path, settlement.actions, blockers)
+    except OSError as error:
+        raise release_upload_plan.UnwritablePlanError(str(error)) from error
 
 
 def _observed_settlement(

@@ -26,6 +26,7 @@ Run via ``make test-release-publication``; exercised through its only caller,
 import release_digest_record
 import release_payload_errors
 import release_payload_handoff
+import release_upload_plan
 import release_upload_remote
 
 EXIT_OK = 0
@@ -84,6 +85,11 @@ REFUSAL_LABELS: tuple[tuple[type[Exception], int, str], ...] = (
         release_upload_remote.UploadError,
         EXIT_UPLOAD_FAILED,
         "the upload could not be completed",
+    ),
+    (
+        release_upload_plan.UnwritablePlanError,
+        EXIT_OUTPUT_UNWRITABLE,
+        "the upload plan could not be recorded",
     ),
     (OSError, EXIT_INPUT_UNREADABLE, "the payload could not be read"),
 )

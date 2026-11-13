@@ -89,7 +89,34 @@ def staged_assets() -> dict[str, str]:
     }
 
 
-def x86_record(**overrides: object) -> ProducerProvenance:
+class _ProvenanceFields(typ.TypedDict):
+    """Name the fields one producer record carries, with their real types.
+
+    The record's members are ``str`` and ``dict[str, str]``; a plain
+    ``dict[str, object]`` would let a case pass any value and only fail at
+    construction, so the bag is typed to the record it fills.
+    """
+
+    commit: str
+    run_id: str
+    run_attempt: str
+    target: str
+    platform: str
+    assets: dict[str, str]
+
+
+class _ProvenanceOverrides(typ.TypedDict, total=False):
+    """Name the fields a case may replace, one at a time."""
+
+    commit: str
+    run_id: str
+    run_attempt: str
+    target: str
+    platform: str
+    assets: dict[str, str]
+
+
+def x86_record(**overrides: typ.Unpack[_ProvenanceOverrides]) -> ProducerProvenance:
     """Build the x86_64 record over :func:`staged_assets`, field by field.
 
     Returns
@@ -104,7 +131,7 @@ def x86_record(**overrides: object) -> ProducerProvenance:
     platform, or the claims -- and naming all four would invite a caller to
     vary two and read the wrong refusal.
     """
-    fields: dict[str, object] = {
+    fields: _ProvenanceFields = {
         "commit": CANDIDATE,
         "run_id": RUN_ID,
         "run_attempt": "1",

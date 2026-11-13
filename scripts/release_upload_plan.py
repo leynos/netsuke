@@ -36,6 +36,7 @@ __all__ = [
     "PLAN_NAME",
     "Blockers",
     "PlanRecord",
+    "UnwritablePlanError",
     "UploadRequest",
     "read_plan",
     "write_plan",
@@ -43,6 +44,18 @@ __all__ = [
 
 #: Name of the JSON plan the step exposes to the job.
 PLAN_NAME = "upload-plan.json"
+
+
+class UnwritablePlanError(OSError):
+    """Report a plan that could not be recorded, named apart from its cause.
+
+    A run's plan is written twice: once before the transfer, so a failed
+    transfer still leaves the operator what it attempted, and once after, so
+    the file describes what the release holds. A write that fails is output
+    trouble, not an unreadable *input*, and the two take different exit
+    statuses -- this subclass lets the refusal table tell them apart without
+    inspecting a message.
+    """
 
 
 class PlanRecord(typ.TypedDict):
