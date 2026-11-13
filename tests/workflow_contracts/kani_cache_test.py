@@ -1,10 +1,11 @@
 """Hold the Kani smoke job's shared-installer and cache contract.
 
 The shared ``install-prover-tools`` action, pinned by SHA, owns Kani's
-installation and its verified prebuilt archives. The job keeps its Cargo front-end, Kani files and supporting Rust
-toolchain inside three cached workspace homes, publishes the front-end to
-following steps, and uses a new cache generation for the changed layout. These
-checks keep CI on that shared path and prevent stale binaries or a source build.
+installation and its verified prebuilt archives. The job keeps its Cargo
+front-end, Kani files and supporting Rust toolchain inside three cached
+workspace homes, publishes the front-end to following steps, and uses a new
+cache generation for the changed layout. These checks keep CI on that shared
+path and prevent stale binaries or a source build.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -111,7 +112,7 @@ FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 def test_kani_installs_through_the_shared_action() -> None:
-    """Require CI to install Kani through the shared action, and keep no local plumbing."""
+    """Require CI to install Kani through the shared action, with no local plumbing."""
     workflow = load_workflow()
     steps = job_steps(workflow, "kani-smoke")
     install_step = named_step(steps, "Install prebuilt Kani")
