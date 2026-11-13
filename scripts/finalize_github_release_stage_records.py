@@ -49,6 +49,40 @@ class SnapshotPaths:
     assets: pathlib.Path
 
 
+def _recorded_identity(source: pathlib.Path) -> release_candidate.ReleaseIdentity:
+    """Decode the identity the package record nests, or refuse the record.
+
+    Parameters
+    ----------
+    source
+        The package record ``package-crate`` retained.
+
+    Returns
+    -------
+    release_candidate.ReleaseIdentity
+        The identity the record names, decoded and validated.
+
+    Raises
+    ------
+    FinalizeError
+        With :data:`EXIT_INPUT_UNREADABLE` when the record is not a package
+        record, nests no identity object, or holds no usable identity.
+    """
+    envelope = release_io.read_json(source)
+    if not isinstance(envelope, dict) or not isinstance(envelope.get("identity"), dict):
+        raise release_io.FinalizeError(
+            release_io.EXIT_INPUT_UNREADABLE,
+            f"{source} is not a package record with an identity object",
+        )
+    try:
+        return release_identity_record.identity_from_mapping(envelope["identity"])
+    except release_candidate.IdentityError as error:
+        raise release_io.FinalizeError(
+            release_io.EXIT_INPUT_UNREADABLE,
+            f"{source} is not a usable candidate: {error}",
+        ) from error
+
+
 def record_candidate(
     identity: pathlib.Path, *, tag: str, commit: str, output: pathlib.Path
 ) -> str:
@@ -112,19 +146,7 @@ def record_candidate(
     recorded candidate v1.2.3 at 0000000000000000000000000000000000000000
     '1.2.3'
     """
-    envelope = release_io.read_json(identity)
-    if not isinstance(envelope, dict) or not isinstance(envelope.get("identity"), dict):
-        raise release_io.FinalizeError(
-            release_io.EXIT_INPUT_UNREADABLE,
-            f"{identity} is not a package record with an identity object",
-        )
-    try:
-        recorded = release_identity_record.identity_from_mapping(envelope["identity"])
-    except release_candidate.IdentityError as error:
-        raise release_io.FinalizeError(
-            release_io.EXIT_INPUT_UNREADABLE,
-            f"{identity} is not a usable candidate: {error}",
-        ) from error
+    recorded = _recorded_identity(identity)
     reason = release_candidate.identity_refusal(recorded, tag=tag, commit=commit)
     if reason is not None:
         raise release_io.FinalizeError(release_io.EXIT_REFUSED, reason)
