@@ -11,11 +11,13 @@ use crate::cli_tests::merge_probe::{
     XdgConfigHomeMode, environment_with_system_scope, environment_with_xdg_mode, merge_in_child,
 };
 use anyhow::{Context, Result, ensure};
+use netsuke::cli::Cli;
 use netsuke::cli::config::{ColourPolicy, EmojiPolicy};
 use rstest::rstest;
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tempfile::tempdir;
+use tempfile::{TempDir, tempdir};
 
 /// User configuration file a scenario writes before merging.
 #[derive(Clone, Copy, Debug)]
@@ -52,8 +54,44 @@ fn write_user_config(path: &Path, contents: &str) -> Result<()> {
     fs::write(path, contents).with_context(|| format!("write user config {}", path.display()))
 }
 
+/// Isolated project, home, and system roots for one discovery scenario.
+///
+/// Every scenario starts with a valid system file installed, so a case that
+/// passes only because the system layer went unread is visible as the wrong
+/// layer supplying the merged values.
+struct Scenario {
+    project: TempDir,
+    home: TempDir,
+    system: TempDir,
+}
+
+impl Scenario {
+    /// Create three isolated roots and install the shared system configuration.
+    fn new() -> Result<Self> {
+        let project = tempdir().context("create temporary project directory")?;
+        let home = tempdir().context("create temporary home directory")?;
+        let system = tempdir().context("create temporary system directory")?;
+        write_system_config(system.path())?;
+        Ok(Self {
+            project,
+            home,
+            system,
+        })
+    }
+
+    /// Build an environment whose system scope is this scenario's system root.
+    fn system_scope_environment(&self) -> Vec<(OsString, OsString)> {
+        environment_with_system_scope(self.home.path(), self.system.path(), &[])
+    }
+
+    /// Merge configuration in a child process rooted at the scenario project.
+    fn merge(&self, environment: &[(OsString, OsString)]) -> Result<Cli> {
+        merge_in_child(&["netsuke"], self.project.path(), environment)
+    }
+}
+
 /// Assert that the user layer won and no system-only field merged through.
-fn assert_user_precedence_applied(merged: &netsuke::cli::Cli) -> Result<()> {
+fn assert_user_precedence_applied(merged: &Cli) -> Result<()> {
     ensure!(
         merged.file.as_path() == Path::new("Netsukefile"),
         "manifest path should fall back to the default when the system layer loses, got {:?}",
@@ -93,14 +131,15 @@ fn user_scope_config_takes_precedence_without_usable_xdg_config_home(
     #[case] location: UserFileLocation,
     #[case] mode: XdgConfigHomeMode,
 ) -> Result<()> {
-    let project = tempdir().context("create temporary project directory")?;
-    let home = tempdir().context("create temporary home directory")?;
-    let system = tempdir().context("create temporary system directory")?;
-    write_system_config(system.path())?;
-    write_user_config(&location.path(home.path()), "emoji = \"never\"\njobs = 4\n")?;
+    let scenario = Scenario::new()?;
+    write_user_config(
+        &location.path(scenario.home.path()),
+        "emoji = \"never\"\njobs = 4\n",
+    )?;
 
-    let environment = environment_with_xdg_mode(home.path(), system.path(), mode, &[]);
-    let merged = merge_in_child(&["netsuke"], project.path(), &environment)?;
+    let environment =
+        environment_with_xdg_mode(scenario.home.path(), scenario.system.path(), mode, &[]);
+    let merged = scenario.merge(&environment)?;
 
     assert_user_precedence_applied(&merged)
 }
@@ -109,21 +148,18 @@ fn user_scope_config_takes_precedence_without_usable_xdg_config_home(
 /// home fallback.
 #[rstest]
 fn xdg_config_home_user_file_outranks_home_dotfile() -> Result<()> {
-    let project = tempdir().context("create temporary project directory")?;
-    let home = tempdir().context("create temporary home directory")?;
-    let system = tempdir().context("create temporary system directory")?;
-    write_system_config(system.path())?;
+    let scenario = Scenario::new()?;
     write_user_config(
-        &home.path().join(".config/netsuke/config.toml"),
+        &scenario.home.path().join(".config/netsuke/config.toml"),
         "emoji = \"never\"\njobs = 4\n",
     )?;
     write_user_config(
-        &home.path().join(".netsuke.toml"),
+        &scenario.home.path().join(".netsuke.toml"),
         "emoji = \"always\"\njobs = 9\n",
     )?;
 
-    let environment = environment_with_system_scope(home.path(), system.path(), &[]);
-    let merged = merge_in_child(&["netsuke"], project.path(), &environment)?;
+    let environment = scenario.system_scope_environment();
+    let merged = scenario.merge(&environment)?;
 
     ensure!(
         merged.emoji == EmojiPolicy::Never,
@@ -136,46 +172,32 @@ fn xdg_config_home_user_file_outranks_home_dotfile() -> Result<()> {
     Ok(())
 }
 
-/// A malformed user file stops discovery instead of falling back to a valid
-/// system file.
+/// A user file that cannot be loaded stops discovery instead of falling back to
+/// a valid system file.
+///
+/// The first case is syntactically invalid TOML; the second names an `extends`
+/// parent that does not exist. Both must surface the user file's own failure,
+/// because accepting the system file would silently reinstate the fetch and
+/// environment policy the user tried to override.
 #[rstest]
-fn malformed_user_config_stops_discovery_without_system_fallback() -> Result<()> {
-    let project = tempdir().context("create temporary project directory")?;
-    let home = tempdir().context("create temporary home directory")?;
-    let system = tempdir().context("create temporary system directory")?;
-    write_system_config(system.path())?;
-    let user_config = home.path().join(".config/netsuke/config.toml");
-    write_user_config(&user_config, "emoji = \"always\n")?;
+#[case::malformed("emoji = \"always\n", "config.toml")]
+#[case::missing_extends("extends = \"missing-parent.toml\"\n", "missing-parent.toml")]
+fn unloadable_user_config_stops_discovery_without_system_fallback(
+    #[case] contents: &str,
+    #[case] expected_fragment: &str,
+) -> Result<()> {
+    let scenario = Scenario::new()?;
+    let user_config = scenario.home.path().join(".config/netsuke/config.toml");
+    write_user_config(&user_config, contents)?;
 
-    let environment = environment_with_system_scope(home.path(), system.path(), &[]);
-    let error = merge_in_child(&["netsuke"], project.path(), &environment)
-        .expect_err("a malformed user file must not fall back to system configuration");
+    let environment = scenario.system_scope_environment();
+    let error = scenario
+        .merge(&environment)
+        .expect_err("an unloadable user file must not fall back to system configuration");
     let error_chain = format!("{error:#}");
     ensure!(
-        error_chain.contains("config.toml"),
-        "the error should name the broken user file: {error_chain}"
-    );
-    Ok(())
-}
-
-/// A user file whose `extends` parent is missing stops discovery instead of
-/// falling back to a valid system file.
-#[rstest]
-fn missing_extends_parent_in_user_config_stops_discovery() -> Result<()> {
-    let project = tempdir().context("create temporary project directory")?;
-    let home = tempdir().context("create temporary home directory")?;
-    let system = tempdir().context("create temporary system directory")?;
-    write_system_config(system.path())?;
-    let user_config = home.path().join(".config/netsuke/config.toml");
-    write_user_config(&user_config, "extends = \"missing-parent.toml\"\n")?;
-
-    let environment = environment_with_system_scope(home.path(), system.path(), &[]);
-    let error = merge_in_child(&["netsuke"], project.path(), &environment)
-        .expect_err("a missing extends parent must not fall back to system configuration");
-    let error_chain = format!("{error:#}");
-    ensure!(
-        error_chain.contains("missing-parent.toml"),
-        "the error should name the missing parent: {error_chain}"
+        error_chain.contains(expected_fragment),
+        "the error should name {expected_fragment}: {error_chain}"
     );
     Ok(())
 }
@@ -189,19 +211,21 @@ fn missing_extends_parent_in_user_config_stops_discovery() -> Result<()> {
 /// configuration's grants are untrusted wherever they are found.
 #[rstest]
 fn home_dotfile_acting_as_project_config_keeps_project_quarantine() -> Result<()> {
-    let home = tempdir().context("create temporary home directory")?;
-    let system = tempdir().context("create temporary system directory")?;
-    write_system_config(system.path())?;
+    let scenario = Scenario::new()?;
     write_user_config(
-        &home.path().join(".netsuke.toml"),
+        &scenario.home.path().join(".netsuke.toml"),
         "env_allow_var = [\"SAFE\"]\nemoji = \"never\"\n",
     )?;
 
-    let environment =
-        environment_with_xdg_mode(home.path(), system.path(), XdgConfigHomeMode::Unset, &[]);
+    let environment = environment_with_xdg_mode(
+        scenario.home.path(),
+        scenario.system.path(),
+        XdgConfigHomeMode::Unset,
+        &[],
+    );
     // The working directory equals the home directory, so automatic project
     // discovery resolves the same physical file as the user base.
-    let merged = merge_in_child(&["netsuke"], home.path(), &environment)?;
+    let merged = merge_in_child(&["netsuke"], scenario.home.path(), &environment)?;
 
     // An empty allowlist is default-allow, so only the quarantined field itself
     // shows whether the grant survived.
