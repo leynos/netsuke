@@ -66,13 +66,10 @@ COMMAND_WRAPPERS = frozenset({
     "time",
     "xargs",
 })
-#: Commands that run text the scan cannot read: a shell or an interpreter
-#: handed a run-time string, and the builtins that evaluate one. No word
-#: position model can bound what such a command runs -- ``bash -c "$cmd"``
-#: names no command the scan sees, however carefully the wrapper itself is
-#: placed -- so the contract refuses the class rather than trying to read the
-#: string. The action needs none of them, and its own script file is run by
-#: ``uv`` from a pinned path rather than handed to an interpreter by name.
+#: Commands that run text the scan cannot read: a shell or interpreter handed a
+#: run-time string, and the builtins that evaluate one. No word-position model
+#: can bound what such a command runs, so the contract refuses the class rather
+#: than trying to read the string. The action needs none of them.
 FORBIDDEN_EXECUTORS = frozenset({
     ".",
     "bash",
@@ -157,8 +154,7 @@ class _Position(enum.Enum):
 
 #: The positions where a word can name the command bash ultimately runs: the
 #: start of a command, the operand of a wrapper, and the word after a wrapper's
-#: option, which is either that option's value or the command. Both checks
-#: below read the same positions, so a word hidden at any of them is refused.
+#: option, which is either that option's value or the command.
 _COMMAND_POSITIONS = frozenset({
     _Position.COMMAND,
     _Position.WRAPPED,
@@ -169,25 +165,13 @@ _COMMAND_POSITIONS = frozenset({
 def _names_expansion(word: str, position: _Position) -> bool:
     """Return whether ``word`` names a command through a variable expansion.
 
-    Only a word bash reads as a command name qualifies: one that begins a
-    command, one that a wrapper will run, or one sitting where a wrapper's
-    option expects its value. The last is a command position because the scan
-    cannot know which options consume a value: ``command -p`` takes none, so
-    ``command -p "$api" api ...`` runs whatever ``api`` holds, while
-    ``xargs -n 1 "$api"`` runs it after a value that was consumed. Refusing
-    both is the safe direction. The same expansion after a literal command is
-    an argument, which a step may legitimately use.
-
-    The expansion may sit anywhere in the word rather than opening it: bash
-    joins adjacent quoted and unquoted parts, so ``g"$suffix"`` names ``gh``
-    when ``suffix`` holds ``h``, and a check for a leading ``$`` accepts it.
-    A quoted ``$`` that bash would not expand is refused too, because the scan
-    cannot tell the two apart and refusing is the safe direction.
-
-    A ``NAME=value`` word is an assignment rather than a command, wherever it
-    sits: bash stores its value in the variable and runs nothing, so the
-    expansion it carries is a value and not a command name. The step's own
-    ``trusted_root=$(canonical "$TRUSTED_DIRECTORY")`` is that shape.
+    Which positions count, and why an expansion need not open the word, is set
+    out in :data:`_COMMAND_POSITIONS` and :func:`indirect_command_words`. Two
+    shapes are not commands there: a ``NAME=value`` word is an assignment
+    wherever it sits, because bash stores its value and runs nothing -- the
+    step's own ``trusted_root=$(canonical "$TRUSTED_DIRECTORY")`` is that
+    shape -- and a quoted ``$`` bash would not expand is refused, because the
+    scan cannot tell the two apart.
 
     Returns
     -------
@@ -304,14 +288,7 @@ def _placed_words(line: str) -> list[tuple[str, _Position]]:
 
 
 def _is_unread_executor(word: str, position: _Position) -> bool:
-    """Return whether ``word`` would run text the scan cannot read.
-
-    Returns
-    -------
-    bool
-        ``True`` when the word names a forbidden executor in a command
-        position.
-    """
+    """Return whether ``word`` would run text the scan cannot read."""
     return position in _COMMAND_POSITIONS and word in FORBIDDEN_EXECUTORS
 
 
