@@ -5270,10 +5270,17 @@ assessment by moving the responsibilities each row named, not by restating them.
   member as the type the format defines. The policy now takes a
   `RecordedMembers` struct, so the seven transposable parameters the row named
   are one value, and both readers -- the tree adapter and the producer's own
-  self-check -- call the one decoder. `SCHEMA_VERSION` and the member names
-  stay in the policy because the writer composes its document from them: the
-  row asked for the *checks* to move, and moving the vocabulary would have
-  split one document's definition across two files.
+  self-check -- call the one decoder. The member names stay in the policy
+  because the writer composes its document from them: the row asked for the
+  *checks* to move, and moving the vocabulary would have split one document's
+  definition across two files. The schema version is not vocabulary of that
+  kind -- it describes the *document*, so the decoder now owns `SCHEMA_VERSION`
+  and refuses an unknown version before any member is read, and the claim that
+  reaches the policy carries no schema field to disagree about. The asset
+  member's container shape moved with it: `_required_object` refuses a
+  non-object before the policy is reached, which is what lets
+  `release_producer_assets.validated_assets` be typed over a mapping instead of
+  testing its argument's type in a policy module.
 - **Unit Architecture.** `TimedRunner` kept a `self._listings` counter to
   decide a boundary's name, so the fourth listing in a run was named
   differently from the first. The name is now
