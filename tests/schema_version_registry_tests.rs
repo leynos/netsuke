@@ -28,6 +28,11 @@ struct RegistryRow {
     minor: Option<u64>,
 }
 
+/// Parse and return the rows inside the design document's schema registry.
+///
+/// # Errors
+///
+/// Returns an error when registry markers are missing or a row is malformed.
 fn registry_rows(document: &str) -> Result<Vec<RegistryRow>> {
     let (_, after_start) = document
         .split_once(REGISTRY_START)
@@ -92,6 +97,12 @@ fn registry_rows(document: &str) -> Result<Vec<RegistryRow>> {
         .collect()
 }
 
+/// Check registry admission against the reader's supported schema minor.
+///
+/// # Errors
+///
+/// Returns an error when no minor is admitted, the highest minor differs from
+/// the reader, or a reservation interrupts the admitted range.
 fn validate_registry(rows: &[RegistryRow], supported_minor: u64) -> Result<()> {
     let admitted: Vec<_> = rows
         .iter()
@@ -121,6 +132,7 @@ fn validate_registry(rows: &[RegistryRow], supported_minor: u64) -> Result<()> {
     Ok(())
 }
 
+/// Render rows between the schema registry's design-document markers.
 fn table_with_rows(rows: &str) -> String {
     format!(
         concat!(
@@ -136,6 +148,7 @@ fn table_with_rows(rows: &str) -> String {
     )
 }
 
+/// Build a manifest declaring the supplied schema minor.
 fn manifest_for_minor(minor: u64) -> String {
     format!("netsuke_version: '1.{minor}.0'\ntargets:\n  - name: hello\n    command: echo hello\n")
 }

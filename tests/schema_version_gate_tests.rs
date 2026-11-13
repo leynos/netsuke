@@ -30,6 +30,7 @@ enum SchemaDeclaration {
     Unsupported(u64),
 }
 
+/// Generate a rejected schema declaration for property tests.
 fn rejected_declaration() -> impl Strategy<Value = SchemaDeclaration> {
     prop_oneof![
         Just(SchemaDeclaration::Missing),
@@ -39,11 +40,13 @@ fn rejected_declaration() -> impl Strategy<Value = SchemaDeclaration> {
     ]
 }
 
+/// Generate a bounded set of unknown manifest fields.
 fn extra_unknown_keys() -> impl Strategy<Value = Vec<String>> {
     prop::collection::btree_set("x_[a-z][a-z0-9_]{0,10}", 0..=3)
         .prop_map(|keys| keys.into_iter().collect())
 }
 
+/// Render the YAML field for one schema declaration.
 fn schema_field(declaration: &SchemaDeclaration) -> &'static str {
     match declaration {
         SchemaDeclaration::Missing | SchemaDeclaration::Unsupported(_) => "",
@@ -52,6 +55,7 @@ fn schema_field(declaration: &SchemaDeclaration) -> &'static str {
     }
 }
 
+/// Build a manifest with a schema declaration and optional unknown fields.
 fn manifest_with_declaration(declaration: &SchemaDeclaration, unknown_keys: &[String]) -> String {
     let schema = match declaration {
         SchemaDeclaration::Unsupported(minor) => {
@@ -78,6 +82,11 @@ fn manifest_with_declaration(declaration: &SchemaDeclaration, unknown_keys: &[St
     )
 }
 
+/// Load YAML in a temporary workspace and record pre-evaluation activity.
+///
+/// # Errors
+///
+/// Returns an error if the workspace cannot be created, opened or populated.
 fn load_path(yaml: &str) -> Result<LoadProbe> {
     let workspace = tempfile::tempdir().context("create schema-version workspace")?;
     let workspace_path = Utf8Path::from_path(workspace.path())
@@ -111,6 +120,12 @@ fn load_path(yaml: &str) -> Result<LoadProbe> {
     })
 }
 
+/// Assert that schema rejection stops before template evaluation.
+///
+/// # Errors
+///
+/// Returns an error if loading succeeds, evaluation proceeds, or the stable
+/// schema diagnostic is absent.
 fn assert_rejected_before_evaluation(probe: LoadProbe) -> Result<()> {
     let error = probe
         .result
