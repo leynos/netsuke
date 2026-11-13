@@ -415,17 +415,35 @@ decision D-15.
     batch began after the last edit and ended before the next, so no gate was
     reading a tree that changed underneath it.
   - (2026-11-13) `6e5ac6d43` pinned `--locale en-GB` on the schema-rejection
-    CLI test, and `e982dc650` recorded the nine-gate batch that validated the
-    human-path repair above. The batch ran against `e982dc650` with the content
-    hash stable before and after (`4abca580…4abca580`): `check-fmt` 4s,
-    `typecheck` 1129s, `lint` 4096s, `doc-coverage` 1610s (98.16%, 6124/6239),
-    `test` 320s (5210 nextest cases, all passed, 7 skipped, plus doctests),
+    CLI test, and `e982dc650` recorded the nine-gate batch on `5f10aa947`
+    above. That batch ran against `e982dc650` with the content hash stable
+    before and after (`4abca580…4abca580`): `check-fmt` 4s, `typecheck`
+    1129s, `lint` 4096s, `doc-coverage` 1610s (98.16%, 6124/6239), `test`
+    320s (5210 nextest cases, all passed, 7 skipped, plus doctests),
     `markdownlint` 29s, `nixie` 3s, `test-documentation-contracts` 67s,
     `test-workflow-contracts` 271s. `lint` and `typecheck` are the cold-cache
     figures: the worktree's `target/` had been cleaned, so both paid a full
     dependency build and queued on `build-limits` compile slots for most of
     their wall time. Admission stayed `healthy` throughout, and the two gates
     still completed in one attempt each.
+  - (2026-11-13) Writing that entry is itself a plan edit, so `b25820d84`
+    owes the same nine gates and has them. All nine passed with the content
+    hash stable before and after (`3fe0b0d2…3fe0b0d2`): `check-fmt` 3s,
+    `typecheck` 273s, `lint` 226s, `doc-coverage` 498s (98.16%, 6124/6239),
+    `test` 281s, `markdownlint` 29s, `nixie` 2s,
+    `test-documentation-contracts` 1s, `test-workflow-contracts` 289s. The
+    warm `target/` makes these cheaper than the cold run above, not weaker:
+    each log still shows the full selection (5210 nextest cases, 15/15
+    documentation contracts, 1790 plus 28 workflow contracts).
+
+    This paragraph is the last word on the subject, and no further batch
+    re-verifies it. A plan that records its own gate runs cannot converge if
+    each record demands a fresh run, because the commit that writes the record
+    is itself the tree change that voids it. The last revision all nine gates
+    verified is `b25820d84`. Every commit after it carries prose in this one
+    file and nothing else, so its Rust, YAML, Python, catalogue, and Markdown
+    content is byte-identical to what those gates passed; `make check-fmt` on
+    the later tips is what confirms the prose is well formed.
 - [x] EP-M4: developers' guide and documentation clean-up. The developers'
   guide gained "Manifest schema versioning and feature admission" (reservation,
   admission, allocation, the registry contract, and the rejection ladder) and
