@@ -331,13 +331,14 @@ proptest! {
     fn hash_boundary_follows_the_posix_comment_rule(boundary in hash_boundary_strategy()) {
         let HashBoundary {
             prefix,
+            tail,
             starts_comment,
         } = boundary;
-        let template = format!("echo {prefix}#\"{INS_TOKEN}\"");
+        let template = format!("{prefix}#\"{INS_TOKEN}\"{tail}");
         let expected = if starts_comment {
             template.clone()
         } else {
-            format!("echo {prefix}#\"DBL\"")
+            format!("{prefix}#\"DBL\"{tail}")
         };
         let bindings = context_sentinel_bindings();
 

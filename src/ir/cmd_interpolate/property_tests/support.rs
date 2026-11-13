@@ -292,80 +292,99 @@ fn sparse_interpolation_template_strategy() -> impl Strategy<Value = String> {
 pub(super) struct HashBoundary {
     /// Source text placed immediately before the `#`.
     pub(super) prefix: String,
+    /// Lines that close a construct the prefix deliberately leaves open.
+    pub(super) tail: &'static str,
     /// Whether the shell starts a comment at that `#`.
     pub(super) starts_comment: bool,
 }
 
-impl HashBoundary {
-    /// Record a boundary whose preceding word the shell has already ended.
-    fn after_separator(prefix: String) -> Self {
-        Self {
-            prefix,
-            starts_comment: true,
-        }
-    }
+/// Generate `#` boundaries by composing a word segment with up to two others.
+///
+/// The first segment supplies the start of input, a separator, ordinary word
+/// data, an escape, or a line continuation. Each later segment is either
+/// another word segment or a balanced closer: `$(...)`, `$((...))`, a nested
+/// substitution, or a group inside a substitution all leave the word open,
+/// while a subshell `)` is an operator. Composing them is what a fixed family
+/// list cannot express: a scanner can satisfy each rule alone and still
+/// mis-handle their interaction, such as a closer followed by a continuation.
+/// Every segment carries its own expectation, and the last one decides, so the
+/// oracle stays independent of the implementation.
+///
+/// One extra family leaves the outer substitution open so that `#` follows an
+/// inner group closer directly; the property supplies the closing `)` on the
+/// following line, after the commented-out marker.
+pub(super) fn hash_boundary_strategy() -> impl Strategy<Value = HashBoundary> {
+    let composed = (
+        word_segment_strategy(),
+        prop::collection::vec(hash_segment_strategy(), 0..=2),
+    )
+        .prop_map(|(word, rest)| compose_boundary(word, rest));
+    let inner_group = word_segment_strategy().prop_map(inner_group_closer_boundary);
+    prop_oneof![4 => composed, 1 => inner_group]
+}
 
-    /// Record a boundary that is still inside the preceding word.
-    fn inside_word(prefix: String) -> Self {
-        Self {
-            prefix,
-            starts_comment: false,
-        }
+/// Compose a leading word segment and up to two further segments.
+fn compose_boundary(word: (String, bool), rest: Vec<(String, bool)>) -> HashBoundary {
+    let (mut prefix, mut starts_comment) = word;
+    for (segment, ends_word) in rest {
+        prefix.push_str(&segment);
+        starts_comment = ends_word;
+    }
+    HashBoundary {
+        prefix,
+        tail: "",
+        starts_comment,
     }
 }
 
-/// Generate `#` boundaries that exercise every POSIX word-ending rule.
+/// Place `#` directly after the closer of a group inside a substitution.
 ///
-/// The generated prefixes name their expectation rather than restating the
-/// scanner, so the property compares the production traversal with an
-/// independent description of the rule. Nested groups and substitutions are
-/// included because their closers sit at a different parenthesis depth from the
-/// substitution's own, which is exactly where a depth-blind closer check reads
-/// the wrong `)`.
-///
-/// The last three families combine two rules in one prefix, because a scanner
-/// can satisfy each rule alone and still mis-handle their interaction: a closer
-/// followed by a line continuation, a closer followed by an escaped character,
-/// and a comment opened inside an inner group. Each still states its own
-/// expectation, so the oracle stays independent of the implementation.
-pub(super) fn hash_boundary_strategy() -> impl Strategy<Value = HashBoundary> {
+/// The group's `)` is an operator, so the rest of the line is a comment and the
+/// marker never interpolates. The outer substitution still needs its own
+/// closer, which the property places after the marker's line.
+fn inner_group_closer_boundary((word, _): (String, bool)) -> HashBoundary {
+    HashBoundary {
+        prefix: format!("{word}$( (printf x)"),
+        tail: "\n)",
+        starts_comment: true,
+    }
+}
+
+/// Generate any single segment and whether it ends the preceding word.
+fn hash_segment_strategy() -> impl Strategy<Value = (String, bool)> {
+    prop_oneof![3 => word_segment_strategy(), 2 => closer_segment_strategy()]
+}
+
+/// Generate a segment that supplies word text and whether it ends the word.
+fn word_segment_strategy() -> impl Strategy<Value = (String, bool)> {
     let separator = prop::sample::select(POSIX_SEPARATORS.to_vec())
-        .prop_map(|separator| HashBoundary::after_separator(format!("echo x{separator}")));
-    let start_of_input = Just(HashBoundary::after_separator("echo ".to_owned()));
+        .prop_map(|separator| (format!("echo x{separator}"), true));
+    let start_of_input = Just(("echo ".to_owned(), true));
     let in_word = non_separator_character_strategy()
-        .prop_map(|character| HashBoundary::inside_word(format!("echo x{character}")));
+        .prop_map(|character| (format!("echo x{character}"), false));
     let escaped = prop::sample::select(vec![' ', 'a', '9', '-'])
-        .prop_map(|character| HashBoundary::inside_word(format!("echo x\\{character}")));
-    let line_continuation = Just(HashBoundary::inside_word("echo x\\\n".to_owned()));
-    let substitution_closer = prop::sample::select(vec!["$(printf x)", "$((1 + 2))"])
-        .prop_map(|closer| HashBoundary::inside_word(format!("echo {closer}")));
-    let nested_group_closer = Just(HashBoundary::inside_word("echo $( (printf x) )".to_owned()));
-    let nested_substitution_closer = Just(HashBoundary::inside_word(
-        "echo $(printf $(printf x))".to_owned(),
-    ));
-    let subshell_closer = Just(HashBoundary::after_separator("echo (echo x)".to_owned()));
-    let closer_then_continuation =
-        prop::sample::select(vec!["$(printf x)", "$((1 + 2))", "$( (printf x) )"])
-            .prop_map(|closer| HashBoundary::inside_word(format!("echo {closer}\\\n")));
-    let closer_then_escape = prop::sample::select(vec![' ', '#', '-'])
-        .prop_map(|character| HashBoundary::inside_word(format!("echo $(printf x)\\{character}")));
-    let comment_inside_a_group = Just(HashBoundary::inside_word(
-        "echo $( (printf x # note\n) )".to_owned(),
-    ));
+        .prop_map(|character| (format!("echo x\\{character}"), false));
+    let line_continuation = Just(("echo x\\\n".to_owned(), false));
     prop_oneof![
         separator,
         start_of_input,
         in_word,
         escaped,
         line_continuation,
-        substitution_closer,
-        nested_group_closer,
-        nested_substitution_closer,
-        subshell_closer,
-        closer_then_continuation,
-        closer_then_escape,
-        comment_inside_a_group,
     ]
+}
+
+/// Generate a balanced closer and whether its `)` ends the preceding word.
+fn closer_segment_strategy() -> impl Strategy<Value = (String, bool)> {
+    let substitution = prop::sample::select(vec![
+        "$(printf x)",
+        "$((1 + 2))",
+        "$( (printf x) )",
+        "$(printf $(printf x))",
+    ])
+    .prop_map(|closer| (closer.to_owned(), false));
+    let subshell = Just(("(printf x)".to_owned(), true));
+    prop_oneof![substitution, subshell]
 }
 
 /// Join generated fragments and placeholders into one template.

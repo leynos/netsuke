@@ -362,6 +362,15 @@ Heredoc bodies follow the same inert-text rule. A marker in a heredoc body in a
 interpolated. A recipe that needs a marker lowered on a body line must close
 the heredoc first, so the marker stands in ordinary script text instead.
 
+The delimiter word now follows the same token rule as the comment boundary
+above. Only an ASCII space, tab, or newline, or one of `;`, `&`, `|`, `(`, `)`,
+`<`, and `>`, ends it. A non-ASCII space, carriage return, vertical tab, or
+form feed stays part of the delimiter, so the closing line must spell the
+complete word. A recipe that wrote a delimiter such as `EOF` followed by a
+no-break space and `X` used to close its body at a line spelling `EOF`; that
+line is body text now, and the recipe must either spell the whole delimiter on
+the closing line or change the delimiter.
+
 Recipes that do not place `#` directly after a substitution closer are
 unaffected. The
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary)

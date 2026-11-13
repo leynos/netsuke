@@ -196,6 +196,11 @@ fn subshell_close_before_hash_starts_inert_comment() {
 /// The `)` that closes the subshell rather than the substitution is an
 /// operator within the substitution, so `#` after it makes the rest of that
 /// line inert. The substitution's own `)` on the next line then closes it.
+/// The comment deliberately carries an unmatched `'`, which is what exposes a
+/// scanner that ended the comment early. That apostrophe is also why the case
+/// runs through the script traversal alone: the command traversal validates
+/// its output with `shlex`, and `shlex` reads the apostrophe as an opening
+/// quote and rejects the template before the scanner's result can be observed.
 #[test]
 fn inner_group_close_inside_substitution_starts_inert_comment() {
     let (template, expected) = inert_comment_case("echo $( (echo x)", Some(")"));
