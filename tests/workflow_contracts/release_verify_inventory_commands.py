@@ -18,6 +18,7 @@ show each check notices a change live in
 Run via ``make test-workflow-contracts``.
 """
 
+import enum
 import re
 import shlex
 import typing as typ
@@ -84,6 +85,24 @@ COMMAND_WRAPPERS = frozenset({
     "time",
     "xargs",
 })
+#: The ``NAME=value`` word ``env`` accepts before the command it runs.
+ENVIRONMENT_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+
+
+class _Position(enum.Enum):
+    """Where bash reads the next word of a command line.
+
+    The scan follows a line one word at a time, and what a word means depends
+    on what bash expects there: a command name, the operand of a wrapper that
+    runs it, the value of a wrapper's option, an argument, or an operand inside
+    a ``[[ ... ]]`` expression.
+    """
+
+    COMMAND = enum.auto()
+    WRAPPED = enum.auto()
+    OPTION_VALUE = enum.auto()
+    ARGUMENT = enum.auto()
+    TEST = enum.auto()
 
 
 def script_lines(run: str) -> list[str]:
@@ -133,20 +152,92 @@ def _words(line: str) -> list[str]:
         raise AssertionError(msg) from error
 
 
-def _runs_a_command(word: str, *, starts_command: bool, wrapped: bool) -> bool:
-    """Return whether ``word`` is a command whose text is an expansion.
+def _names_expansion(word: str, position: _Position) -> bool:
+    """Return whether ``word`` names a command through a variable expansion.
 
-    A word qualifies when it sits where bash reads a command name -- at the
-    start of a command, or as the operand of a wrapper that runs it -- and
-    begins with ``$``, which is the one spelling the literal scan can see but
-    cannot resolve.
+    Only a word bash reads as a command name qualifies: one that begins a
+    command, or one that a wrapper will run. The same ``$``-leading word after
+    a literal command is an argument, which a step may legitimately use.
 
     Returns
     -------
     bool
-        ``True`` when the word names a command through a variable.
+        ``True`` when the word is a command name spelt as an expansion.
     """
-    return (starts_command or wrapped) and word.startswith("$")
+    if position not in {_Position.COMMAND, _Position.WRAPPED}:
+        return False
+    return word.startswith("$")
+
+
+def _next_position(word: str, position: _Position) -> _Position:
+    """Return where bash reads the word after ``word``.
+
+    Returns
+    -------
+    _Position
+        The position of the following word.
+    """
+    if position is _Position.TEST:
+        return _Position.ARGUMENT if word == TEST_CLOSE else _Position.TEST
+    if word == TEST_OPEN:
+        return _Position.TEST
+    if word in COMMAND_SEPARATORS:
+        return _Position.COMMAND
+    return _after_plain_word(word, position)
+
+
+def _after_plain_word(word: str, position: _Position) -> _Position:
+    """Return the position after a word that is neither a test nor an operator.
+
+    Returns
+    -------
+    _Position
+        The position of the following word.
+    """
+    if position is _Position.OPTION_VALUE:
+        return _Position.WRAPPED
+    if position is _Position.WRAPPED:
+        return _wrapped_successor(word)
+    if position is _Position.COMMAND and word in COMMAND_WRAPPERS:
+        return _Position.WRAPPED
+    return _Position.ARGUMENT
+
+
+def _wrapped_successor(word: str) -> _Position:
+    """Return the position of the word after one among a wrapper's operands.
+
+    The scan does not know which of a wrapper's options take a value, so an
+    option leaves its own value to be read as part of the wrapper, and a
+    ``NAME=value`` assignment that ``env`` accepts is part of it too. Anything
+    else is the command the wrapper runs.
+
+    Returns
+    -------
+    _Position
+        The position of the following word.
+    """
+    if word.startswith("-"):
+        return _Position.OPTION_VALUE
+    if ENVIRONMENT_ASSIGNMENT.match(word) is not None:
+        return _Position.WRAPPED
+    return _Position.ARGUMENT
+
+
+def _indirect_words(line: str) -> list[str]:
+    """Return the words in one joined line that name a command by expansion.
+
+    Returns
+    -------
+    list[str]
+        The offending words, in the order they appear.
+    """
+    position = _Position.COMMAND
+    indirect: list[str] = []
+    for word in _words(line):
+        if _names_expansion(word, position):
+            indirect.append(word)
+        position = _next_position(word, position)
+    return indirect
 
 
 def indirect_command_words(run: str) -> list[str]:
@@ -158,9 +249,9 @@ def indirect_command_words(run: str) -> list[str]:
     ``api=gh; "$api" api --method POST ...`` executes a POST the scan, looking
     for ``gh api``, never sees. Wrapping the expansion in a command that runs
     its operand hides it the same way -- ``command "$api" api ...`` -- so a
-    word in :data:`COMMAND_WRAPPERS` puts the rest of its command in command
-    position as well. The scan reads bash's own tokenization, so a variable
-    used as an operand -- ``[[ -n "$value" ]]`` -- is not mistaken for one.
+    word in :data:`COMMAND_WRAPPERS` puts the word it runs in command position
+    as well. The scan reads bash's own tokenization, so a variable used as an
+    operand -- ``[[ -n "$value" ]]`` -- is not mistaken for one.
 
     Parameters
     ----------
@@ -172,26 +263,7 @@ def indirect_command_words(run: str) -> list[str]:
     list[str]
         The offending command words, in the order they appear.
     """
-    indirect: list[str] = []
-    for line in script_lines(run):
-        starts_command = True
-        in_test = False
-        wrapped = False
-        for word in _words(line):
-            if word == TEST_OPEN:
-                in_test = True
-                wrapped = False
-            elif word == TEST_CLOSE:
-                in_test = False
-            elif _runs_a_command(word, starts_command=starts_command, wrapped=wrapped):
-                indirect.append(word)
-                wrapped = False
-            elif starts_command and word in COMMAND_WRAPPERS:
-                wrapped = True
-            starts_command = not in_test and word in COMMAND_SEPARATORS
-            if starts_command:
-                wrapped = False
-    return indirect
+    return [word for line in script_lines(run) for word in _indirect_words(line)]
 
 
 def gh_api_invocations(run: str) -> list[list[str]]:
