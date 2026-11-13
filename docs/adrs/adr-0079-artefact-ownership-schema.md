@@ -76,9 +76,10 @@ workspace-relative object, not a glob. Normalized ownership roots must not be
 equal, nested, overlapping, or case-equivalent on a case-insensitive
 filesystem. Parent creation does not claim ownership of the parent.
 
-A directory artefact may not contain the effective manifest, loaded
-configuration, `.git`, Netsuke runtime directories, local runtime scripts, or a
-target `sources` path not produced by any target in the graph. An artefact may
+An artefact of any kind may not name the effective manifest, loaded
+configuration, `.git`, a Netsuke runtime directory, a local runtime script, or
+a target `sources` path not produced by any target in the graph. A directory
+artefact may not contain any of those protected objects either. An artefact may
 equal a target output only when both name the same producer and compatible
 object kinds. A `produces` reference identifies one producer; duplicate
 producers fail unless an existing target contract already supplies one shared

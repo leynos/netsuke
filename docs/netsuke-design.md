@@ -961,7 +961,7 @@ Figure: External Git bundle verification and cache-backed lock resolution.
 ### 2.9 Progressive-enhancement contracts
 
 This table records the accepted resolutions for the outstanding decisions in
-RFCs 0021 to 0025. ADRs 0061 to 0067 were accepted on 2026-11-09; references to
+RFCs 0021 to 0025. ADRs 0075 to 0081 were accepted on 2026-11-09; references to
 earlier ADRs identify existing contracts. Each deferred decision has an owning
 roadmap task and the D-17 merge gate.
 
