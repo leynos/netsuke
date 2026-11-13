@@ -152,7 +152,7 @@ jobs:
           python-version: ${{ inputs['python-version'] }}
 
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/rust-build-release@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ env.BIN_NAME }}
@@ -372,7 +372,7 @@ jobs:
 
       - name: Stage artefacts
         id: stage
-        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@7d751eded578e48dacf43ab173d5820e6437c474
+        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
@@ -401,7 +401,7 @@ jobs:
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@7d751eded578e48dacf43ab173d5820e6437c474
+        uses: leynos/shared-actions/.github/actions/linux-packages@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -570,7 +570,7 @@ jobs:
 
       - name: Validate Debian package
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/validate-linux-packages@7d751eded578e48dacf43ab173d5820e6437c474
+        uses: leynos/shared-actions/.github/actions/validate-linux-packages@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -591,7 +591,7 @@ jobs:
 
       - name: Validate RPM package
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/validate-linux-packages@7d751eded578e48dacf43ab173d5820e6437c474
+        uses: leynos/shared-actions/.github/actions/validate-linux-packages@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -646,7 +646,7 @@ jobs:
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/windows-package@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           wxs-path: installer/Package.wxs
           product-name: ${{ inputs['bin-name'] }}
@@ -666,7 +666,7 @@ jobs:
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@7d751eded578e48dacf43ab173d5820e6437c474
+        uses: leynos/shared-actions/.github/actions/macos-package@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}
