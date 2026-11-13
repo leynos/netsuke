@@ -414,6 +414,18 @@ decision D-15.
     `test-documentation-contracts` 316s, `test-workflow-contracts` 298s. The
     batch began after the last edit and ended before the next, so no gate was
     reading a tree that changed underneath it.
+  - (2026-11-13) `6e5ac6d43` pinned `--locale en-GB` on the schema-rejection
+    CLI test, and `e982dc650` recorded the nine-gate batch that validated the
+    human-path repair above. The batch ran against `e982dc650` with the content
+    hash stable before and after (`4abca580…4abca580`): `check-fmt` 4s,
+    `typecheck` 1129s, `lint` 4096s, `doc-coverage` 1610s (98.16%, 6124/6239),
+    `test` 320s (5210 nextest cases, all passed, 7 skipped, plus doctests),
+    `markdownlint` 29s, `nixie` 3s, `test-documentation-contracts` 67s,
+    `test-workflow-contracts` 271s. `lint` and `typecheck` are the cold-cache
+    figures: the worktree's `target/` had been cleaned, so both paid a full
+    dependency build and queued on `build-limits` compile slots for most of
+    their wall time. Admission stayed `healthy` throughout, and the two gates
+    still completed in one attempt each.
 - [x] EP-M4: developers' guide and documentation clean-up. The developers'
   guide gained "Manifest schema versioning and feature admission" (reservation,
   admission, allocation, the registry contract, and the rejection ladder) and
