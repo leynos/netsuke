@@ -7,6 +7,7 @@ use camino::Utf8PathBuf;
 use miette::{MietteDiagnostic, ThemeCharacters};
 use netsuke::localization::{self, keys};
 use netsuke::output_prefs;
+use strip_ansi_escapes::strip;
 use tracing_subscriber::filter::LevelFilter;
 
 /// Build the circular-dependency error the runner reports, keeping the target
@@ -43,8 +44,11 @@ fn manifest_failure() -> anyhow::Error {
 
 #[test]
 fn manifest_failures_render_their_inner_diagnostic() -> Result<()> {
-    let rendered = render_failure(&manifest_failure(), &theme_for(theme_prefs()))
-        .context("a manifest failure should render a diagnostic")?;
+    let rendered = render_failure(
+        &manifest_failure(),
+        &theme_for(presentation_style(false, true)),
+    )
+    .context("a manifest failure should render a diagnostic")?;
     ensure!(
         rendered.contains("netsuke::manifest::schema_version"),
         "the rendered diagnostic must carry the rejection's stable code: {rendered}"
@@ -65,8 +69,11 @@ fn manifest_failures_render_their_inner_diagnostic() -> Result<()> {
 /// a refusal unattributable in a project with several manifests.
 #[test]
 fn reports_keep_the_manifest_path_when_the_diagnostic_omits_it() -> Result<()> {
-    let report = failure_report(&manifest_failure(), &theme_for(theme_prefs()))
-        .context("a manifest failure should render a report")?;
+    let report = failure_report(
+        &manifest_failure(),
+        &theme_for(presentation_style(false, true)),
+    )
+    .context("a manifest failure should render a report")?;
     ensure!(
         report.contains("Failed to load manifest at Netsukefile."),
         "the report must name the manifest the context line identified: {report}"
@@ -120,7 +127,7 @@ fn reports_drop_the_context_line_when_the_diagnostic_names_its_source() -> Resul
         message: localization::message(keys::MANIFEST_PARSE),
     };
     let wrapped = anyhow::Error::new(error).context("Failed to load manifest at Netsukefile.");
-    let report = failure_report(&wrapped, &theme_for(theme_prefs()))
+    let report = failure_report(&wrapped, &theme_for(presentation_style(false, true)))
         .context("a named source should report")?;
     ensure!(
         report.contains("Netsukefile"),
@@ -159,7 +166,7 @@ fn reports_keep_the_context_line_when_the_source_carries_no_label() -> Result<()
         message: localization::message(keys::MANIFEST_PARSE),
     };
     let wrapped = anyhow::Error::new(error).context("Failed to load manifest at Netsukefile.");
-    let report = failure_report(&wrapped, &theme_for(theme_prefs()))
+    let report = failure_report(&wrapped, &theme_for(presentation_style(false, true)))
         .context("an unlabelled source reports")?;
     ensure!(
         report.contains("Failed to load manifest at Netsukefile."),
@@ -181,7 +188,7 @@ fn rendered_diagnostics_emit_no_terminal_hyperlinks() -> Result<()> {
         source: Box::new(linked_diagnostic()),
         message: localization::message(keys::MANIFEST_PARSE),
     });
-    let rendered = render_failure(&error, &theme_for(theme_prefs()))
+    let rendered = render_failure(&error, &theme_for(presentation_style(false, true)))
         .context("a diagnostic carrying a URL should still render")?;
     ensure!(
         !rendered.contains('\u{1b}'),
@@ -198,33 +205,72 @@ fn rendered_diagnostics_emit_no_terminal_hyperlinks() -> Result<()> {
 fn failures_without_a_diagnostic_render_nothing_extra() -> Result<()> {
     let error = anyhow::Error::msg("plain failure");
     ensure!(
-        render_failure(&error, &theme_for(theme_prefs())).is_none(),
+        render_failure(&error, &theme_for(presentation_style(false, true))).is_none(),
         "a failure carrying no diagnostic must not gain a second rendering"
     );
     Ok(())
 }
 
 #[test]
-fn emoji_preferences_select_the_unicode_theme() -> Result<()> {
-    // `resolve_with` takes the `--no-emoji` value, so `Some(false)` allows
-    // emoji and `Some(true)` suppresses them.
-    let emoji_allowed = theme_for(theme_prefs());
-    let emoji_suppressed = theme_for(output_prefs::resolve_with(Some(true), |_| None));
+fn style_flags_select_the_unicode_and_ascii_glyph_sets() -> Result<()> {
+    let unicode = theme_for(presentation_style(true, true));
+    let ascii = theme_for(presentation_style(true, false));
     // `GraphicalTheme` derives only `Debug` and `Clone`, so the direction is
     // asserted on the glyph set, which does derive `PartialEq`.
     ensure!(
-        emoji_allowed.characters == ThemeCharacters::unicode(),
-        "allowing emoji must select the Unicode glyph set: {emoji_allowed:?}"
+        unicode.characters == ThemeCharacters::unicode(),
+        "a Unicode style must select the Unicode glyph set: {unicode:?}"
     );
     ensure!(
-        emoji_suppressed.characters == ThemeCharacters::ascii(),
-        "suppressing emoji must select the ASCII glyph set: {emoji_suppressed:?}"
+        ascii.characters == ThemeCharacters::ascii(),
+        "an ASCII style must select the ASCII glyph set: {ascii:?}"
     );
     ensure!(
-        emoji_allowed.characters.error != emoji_suppressed.characters.error,
-        "the two preferences must not resolve to the same glyph set"
+        unicode.characters.error != ascii.characters.error,
+        "the two styles must not resolve to the same glyph set"
     );
     Ok(())
+}
+
+/// Colour is a property of the style, not of the glyph set.
+///
+/// The two decisions are independent: four combinations are reachable, and a
+/// theme chosen from the glyph flag alone would silently drop colour from a
+/// stream the plan had already decided to style. That is why the theme is
+/// selected on the pair rather than on `unicode` alone.
+///
+/// `miette`'s `ThemeStyles` implements neither `PartialEq` nor anything else
+/// that distinguishes two styles, so this asserts on rendered output: a
+/// diagnostic under a colour-on style must carry SGR, and the same diagnostic
+/// under a colour-off style must not, while both keep the same glyphs.
+#[test]
+fn style_colour_is_independent_of_the_glyph_set() -> Result<()> {
+    let diagnostic = MietteDiagnostic::new("the manifest was refused")
+        .with_code("netsuke::manifest::schema_version");
+    let coloured = render_diagnostic(&diagnostic, &theme_for(presentation_style(true, true)));
+    let plain = render_diagnostic(&diagnostic, &theme_for(presentation_style(false, true)));
+    ensure!(
+        coloured.contains('\u{1b}'),
+        "a colour-on style must emit ANSI escapes: {coloured:?}"
+    );
+    ensure!(
+        !plain.contains('\u{1b}'),
+        "a colour-off style must emit no ANSI escapes: {plain:?}"
+    );
+    ensure!(
+        strip(coloured.as_bytes()) == plain.as_bytes(),
+        "colour must be the only difference between the two renderings"
+    );
+    Ok(())
+}
+
+/// Build a diagnostic style carrying the given colour and glyph decisions.
+fn presentation_style(colour: bool, unicode: bool) -> DiagnosticStyle {
+    DiagnosticStyle {
+        colour,
+        unicode,
+        links: false,
+    }
 }
 
 /// Resolve preferences that allow emoji without consulting the environment.
@@ -232,14 +278,22 @@ fn theme_prefs() -> OutputPrefs {
     output_prefs::resolve_with(Some(false), |_| None)
 }
 
+/// Build the presentation a failure is rendered under, without ambient state.
+fn presentation() -> Presentation {
+    Presentation {
+        prefs: theme_prefs(),
+        style: presentation_style(false, true),
+    }
+}
+
 /// A schema rejection is logged under its own category, not as a plain runner
 /// failure, so an operator can count version faults apart from build faults.
 #[test]
 fn schema_rejections_log_their_own_bounded_error_category() -> Result<()> {
-    let prefs = theme_prefs();
+    let presentation = presentation();
     let (exit_code, events) =
         test_tracing_capture::with_test_subscriber(LevelFilter::TRACE, |captured| {
-            let exit_code = handle_failure(&manifest_failure(), &prefs);
+            let exit_code = handle_failure(&manifest_failure(), presentation);
             (exit_code, captured.snapshot())
         });
 
@@ -265,10 +319,10 @@ fn plain_manifest_rejections_keep_the_general_error_category() -> Result<()> {
         source: Box::new(MietteDiagnostic::new("the manifest is structurally wrong")),
         message: localization::message(keys::MANIFEST_PARSE),
     });
-    let prefs = theme_prefs();
+    let presentation = presentation();
     let (exit_code, events) =
         test_tracing_capture::with_test_subscriber(LevelFilter::TRACE, |captured| {
-            let exit_code = handle_failure(&other, &prefs);
+            let exit_code = handle_failure(&other, presentation);
             (exit_code, captured.snapshot())
         });
 
@@ -291,10 +345,10 @@ fn plain_manifest_rejections_keep_the_general_error_category() -> Result<()> {
 #[test]
 fn human_cycle_failures_log_only_the_bounded_error_category() -> Result<()> {
     const PRIVATE_TARGET: &str = "manifest-private-target";
-    let prefs = theme_prefs();
+    let presentation = presentation();
     let (exit_code, events) =
         test_tracing_capture::with_test_subscriber(LevelFilter::TRACE, |captured| {
-            let exit_code = handle_failure(&cycle_error(PRIVATE_TARGET), &prefs);
+            let exit_code = handle_failure(&cycle_error(PRIVATE_TARGET), presentation);
             (exit_code, captured.snapshot())
         });
 
