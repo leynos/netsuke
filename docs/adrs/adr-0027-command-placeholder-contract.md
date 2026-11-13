@@ -48,6 +48,12 @@ Amended on 2026-10-18 after review of PowerShell comment and stop-parsing edges.
 Amended on 2026-10-19 for issue #846. The PowerShell script insertion-site
 contract and scanner review corrections are recorded in the addenda below.
 
+Amended on 2026-11-06 for issue #971. POSIX comment detection now uses the
+token boundaries of POSIX shell word recognition rather than Unicode
+whitespace, and a `)` that closes a substitution immediately before `#` fails
+closed when the substitution source contains the `case` reserved word. The
+POSIX comment and heredoc boundary amendment below states the contract.
+
 ## Date
 
 2026-09-19
@@ -437,3 +443,60 @@ The delimiter renderer reports a private `EscapeBeforeMarker` unit error, which
 both traversals map to `IrGenError::InvalidCommand` carrying the original
 template. PowerShell is unchanged: it has no unpaired backslash escape before a
 marker and already rejects markers after its own escape character, the backtick.
+
+## Amendment — 2026-11-06: POSIX comment and heredoc boundaries (#971)
+
+A `#` begins an inert comment in POSIX and Bash `command:` and `script:`
+recipes only outside quotes, at the beginning of input or after an unescaped
+space, tab, newline, or one of the operator characters `;`, `&`, `|`, `(`, `)`,
+`<`, and `>`. Those are the separators that delimit a POSIX token, so quote
+tracking follows the text the interpreter executes. The set describes an
+operator only where the shell treats it as one: the `)` that closes a command
+substitution or arithmetic expansion stays in the surrounding word, so `#`
+immediately after it is word data, whereas a `)` that closes a subshell is an
+operator and `#` after it starts a comment. Every other character is word data:
+a no-break space, another Unicode space, a carriage return, vertical tab, or
+form feed before `#` does not start a comment, and a quote after that `#` still
+opens or closes a quoted region. Heredoc delimiter words end at the same
+separators, so a delimiter containing such a character remains one word and
+only a line matching it terminates the body. The shared predicate therefore
+prevents a false comment from skipping a real quote transition, which would
+otherwise select an unquoted path encoding for a marker that the shell reads
+inside quotes.
+
+The two kinds of `)` are lexically identical without the `case` grammar: a `)`
+that terminates a `case` pattern is an operator, while a `)` that closes a
+substitution is word data. When a `)` is immediately followed by `#` and the
+substitution's source contains the `case` reserved word, the scanner therefore
+rejects the recipe instead of guessing. The tracker records the parenthesis
+depth at which each `case` opened and treats a `)` as that construct's pattern
+terminator only at the same depth, so a `case` inside a nested group keeps its
+pattern terminator and the substitution still closes at the real one. The
+enclosing quote context does not narrow the check: a substitution is parsed as
+a separate script, so double quotes around it do not extend into its contents
+and cannot make the boundary unambiguous. PowerShell, which has no `case`
+patterns, keeps its previous unquoted-only rule because the ambiguity does not
+arise there. The check deliberately over-approximates by scanning the raw
+source, so a `case` keyword inside quotes or a comment also triggers the
+rejection; re-lexing the substitution to narrow it would repeat the ambiguity
+the check exists to avoid.
+
+The tracker decides two things by the grammar rather than by spelling alone. A
+reserved word counts only in command position, because `printf esac` passes
+`esac` as an argument; command position follows a separator, a newline, or a
+parenthesis and survives blanks, and a word that completes an argument list
+clears it. An `esac` also closes only a construct open at its own depth, so a
+pattern spelled `esac` cannot end an outer case. Comment boundaries are
+reported by the traversal instead of inferred from `#`, because comment text is
+copied verbatim and never reaches the tracker: the traversal announces the
+comment's start and the newline that ends it, so a `case` on the following line
+still opens its construct. Without both rules, losing or gaining a construct
+would move the real closer and let the following `)#` read as a comment.
+
+The boundary predicate is `is_word_terminator` in
+`src/ir/cmd_interpolate/posix_lexical/mod.rs`. Comment detection and heredoc
+delimiter parsing both call it, so the two cannot drift back to Unicode
+whitespace independently. The regressions are in
+`src/ir/cmd_interpolate/posix_lexical/tests/mod.rs`, with shared command and
+script cases driving both POSIX interpolators, and the end-to-end case is in
+`tests/ninja_dollar_escaping_tests/scripts/mod.rs`.

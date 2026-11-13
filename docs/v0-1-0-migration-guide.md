@@ -291,6 +291,93 @@ further quoting is needed. See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
 the full marker contract.
 
+## Separate a substitution closer and a following `#`
+
+Netsuke now rejects a POSIX or Bash `command:` or `script:` recipe when a `)`
+that closes a `$(...)` or `$((...))` substitution is immediately followed by
+`#` and the substitution source contains the `case` reserved word. A `)` that
+closes a substitution stays part of the surrounding word, so `#` after it is
+word data; a `)` that terminates a `case` pattern is an operator, so `#` after
+it starts a comment. The scanner cannot tell the two apart without the `case`
+grammar, so it fails closed rather than encode a later path for the wrong shell
+context.
+
+The remedy depends on what the `#` means in your recipe.
+
+- When `#` starts a comment, separate it from the closer with a space, a tab,
+  or a newline. The shell then sees the comment it always did, and the text of
+  that comment stops reaching the command's arguments.
+- When `#` is literal word data, keep it inside a quoted region or escape it as
+  `\#` in an unquoted word. Both forms leave the word the shell receives
+  unchanged; only whitespace or an escape may separate it from the closer.
+
+This recipe triggers the rejection:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    script: |
+      echo "$(case x in x) :;; esac)# trailing comment"
+      echo {{ ins }} > {{ outs }}
+defaults: [output.txt]
+```
+
+The `#` there is word data: the double quote that opens before `$(` closes after
+`comment`, so the literal text reaches `echo`. This rewrite clears the
+rejection while keeping that output: it closes the double quote after the
+closer and reopens a single-quoted region for the literal hash.
+
+```yaml
+      echo "$(case x in x) :;; esac)"'# trailing comment'
+```
+
+The argument is unchanged, so the recipe prints what it printed before. Placing
+a space before the `#` also clears the rejection, as in
+`... esac)" # trailing comment`, but it turns the text into a real comment:
+that is the correct form when the recipe never meant to echo it, and the wrong
+form when it did.
+
+A separate unquoted recipe takes the other rewrite, escaping the `#`. Escaping
+is not an option inside the quoted recipe above, because a backslash inside
+double quotes does not escape `#`:
+
+```yaml
+      echo $(case x in x) :;; esac)\#literal
+```
+
+Without the escape this line is rejected, because `#literal` sits directly
+after the closer. With it, the `case` still emits nothing and the word stays
+`#literal`, so the line prints `#literal` rather than starting a comment.
+
+The check scans raw recipe source, so it also rejects a `case` that appears
+inside a string or a comment within the substitution. Anything that separates
+the `#` from the closer, including the `\#` escape, lifts the rejection whether
+or not the `case` was a real keyword. A rejection therefore means "the scanner
+cannot prove which `)` this is", not "this recipe is unsafe".
+
+Heredoc bodies follow the same inert-text rule. A marker in a heredoc body in a
+`script:` recipe is copied literally, while a marker in the delimiter word is
+interpolated. A recipe that needs a marker lowered on a body line must close
+the heredoc first, so the marker stands in ordinary script text instead.
+
+The delimiter word now follows the same token rule as the comment boundary
+above. Only an ASCII space, tab, or newline, or one of `;`, `&`, `|`, `(`, `)`,
+`<`, and `>`, ends it. A non-ASCII space, carriage return, vertical tab, or
+form feed stays part of the delimiter, so the closing line must spell the
+complete word. A recipe that wrote a delimiter such as `EOF` followed by a
+no-break space and `X` used to close its body at a line spelling `EOF`; that
+line is body text now, and the recipe must either spell the whole delimiter on
+the closing line or change the delimiter.
+
+Recipes that do not place `#` directly after a substitution closer are
+unaffected by the ambiguity rejection. The heredoc delimiter rule above applies
+independently of `)#`, so a recipe whose delimiter carries a non-ASCII space
+changes behaviour whether or not it places `#` after a substitution closer. The
+[users' guide safety boundary](users-guide.md#review-the-safety-boundary)
+describes the full comment and substitution rules.
+
 ## Resolve build-graph outputs through the accessors
 
 The intermediate build graph now owns each logical build edge once, however

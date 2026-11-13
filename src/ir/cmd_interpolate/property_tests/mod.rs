@@ -13,11 +13,13 @@ use super::{
     interpolate_script_with_bindings,
 };
 
+use boundary::{HashBoundary, hash_boundary_strategy};
 use support::{
-    adversarial_template_strategy, assert_matches_specification,
-    eight_placeholder_template_strategy, has_odd_backticks, interpolation_template_strategy,
-    is_valid_posix_command, posix_bindings, power_shell_path_strategy,
-    power_shell_template_strategy, raw_binding_strategy, safe_text_strategy,
+    POSIX_SEPARATORS, adversarial_template_strategy, assert_matches_specification,
+    context_sentinel_bindings, eight_placeholder_template_strategy, has_odd_backticks,
+    interpolation_template_strategy, is_valid_posix_command, non_separator_character_strategy,
+    posix_bindings, power_shell_path_strategy, power_shell_template_strategy, raw_binding_strategy,
+    safe_text_strategy,
 };
 
 proptest! {
@@ -272,6 +274,97 @@ proptest! {
             ),
         }
     }
+
+    /// Keep `#` inside the surrounding word after every non-separator.
+    ///
+    /// The quote after `#` still opens a double-quoted region, so the marker
+    /// must lower to the double-quoted encoding. A scanner that treated the
+    /// character as whitespace would end the word, read `#` as a comment, and
+    /// leave the marker literal while the shell executed the quote.
+    #[test]
+    fn non_separator_before_hash_keeps_the_marker_quoted(
+        character in non_separator_character_strategy(),
+        filler in "[a-z]{0,8}",
+    ) {
+        let template = format!("echo {filler}{character}#\"{INS_TOKEN}\"");
+        let output = interpolate_script_with_bindings(&template, &context_sentinel_bindings())
+            .expect("a non-separator must keep '#' inside the surrounding word");
+
+        prop_assert_eq!(
+            output,
+            format!("echo {filler}{character}#\"DBL\""),
+            "a non-separator before '#' must keep the marker double-quoted"
+        );
+    }
+
+    /// End the word at every POSIX separator so `#` starts an inert comment.
+    ///
+    /// The marker sits in the quoted text that follows `#`; when the comment
+    /// is recognised the whole remainder stays literal, so the interpolation
+    /// must leave the template byte-for-byte unchanged.
+    #[test]
+    fn separator_before_hash_starts_an_inert_comment(
+        separator in prop::sample::select(POSIX_SEPARATORS.to_vec()),
+        filler in "[a-z]{1,8}",
+    ) {
+        let template = format!("echo {filler}{separator}#\"{INS_TOKEN}\"");
+        let output = interpolate_script_with_bindings(&template, &context_sentinel_bindings())
+            .expect("a separator must let '#' start an inert comment");
+
+        prop_assert_eq!(
+            output,
+            template,
+            "a separator before '#' must leave the rest of the line inert"
+        );
+    }
+
+    /// Keep the shell's comment rule and the following marker context aligned.
+    ///
+    /// `HashBoundary` labels each generated prefix with the rule the shell
+    /// applies, so this compares both POSIX traversals against POSIX token
+    /// recognition rather than against the scanner. The template's `"` sits
+    /// immediately after `#`: when `#` starts a comment the quote and the
+    /// marker are inert, so they must survive byte-for-byte, and when `#` stays
+    /// in the word the quote opens a region around the marker, so the marker
+    /// must take the double-quoted encoding. A second marker follows `tail`, and
+    /// it interpolates as soon as the comment no longer covers it. Every branch
+    /// keeps the quote pairs balanced, so the command-syntax guard accepts any
+    /// reading.
+    #[test]
+    fn hash_boundary_follows_the_posix_comment_rule(boundary in hash_boundary_strategy()) {
+        let HashBoundary {
+            prefix,
+            tail,
+            starts_comment,
+            tail_marker_is_commented,
+        } = boundary;
+        let template = format!("{prefix}#\"{INS_TOKEN}\"{tail}\"{INS_TOKEN}\"");
+        let leading = if starts_comment { INS_TOKEN } else { "DBL" };
+        let trailing = if tail_marker_is_commented { INS_TOKEN } else { "DBL" };
+        let expected = format!("{prefix}#\"{leading}\"{tail}\"{trailing}\"");
+        let bindings = context_sentinel_bindings();
+
+        for interpolate in [
+            interpolate_command_with_bindings
+                as fn(&str, &CommandBindings) -> Result<String, IrGenError>,
+            interpolate_script_with_bindings,
+        ] {
+            match interpolate(&template, &bindings) {
+                Ok(output) => prop_assert_eq!(
+                    output,
+                    expected.as_str(),
+                    "'#' after {:?} must follow the POSIX comment rule",
+                    prefix
+                ),
+                Err(error) => prop_assert!(
+                    false,
+                    "'#' after {:?} was rejected: {error:?}",
+                    prefix
+                ),
+            }
+        }
+    }
 }
 
+mod boundary;
 mod support;

@@ -195,6 +195,7 @@ ir.duplicate_outputs = พบผลลัพธ์ซ้ำกัน: { $outputs
 ir.circular_dependency = พบการพึ่งพาแบบวงกลม: { $cycle }
 ir.action_serialisation = ทำให้การกระทำเป็นลำดับข้อมูลไม่สำเร็จ: { $details }
 ir.invalid_command = การแทรกค่าในคำสั่งไม่ถูกต้อง: { $snippet }
+ir.ambiguous_substitution_boundary = ขอบเขตการแทนที่คำสั่งไม่ชัดเจนที่อักขระ { $position }; แยกวงเล็บปิดของการแทนที่ออกจาก '#' ที่ตามมา
 
 # ข้อผิดพลาดในการสร้างไฟล์ Ninja
 ninja_gen.missing_action = ไม่มีการกระทำ “{ $id }” ที่เส้นเชื่อมของการสร้างอ้างถึง

@@ -157,3 +157,41 @@ fn power_shell_commands_preserve_hashes_inside_argument_tokens(#[case] argument:
 
     assert_eq!(actual, format!("Write-Output {argument} 'out'"));
 }
+
+/// Keep the POSIX `case` boundary check out of the PowerShell traversal.
+///
+/// `case` is not a PowerShell keyword, so a `)` followed by `#` carries no
+/// pattern-terminator ambiguity there. The POSIX fail-closed rule must not
+/// reject a PowerShell recipe that merely contains those characters.
+#[test]
+fn power_shell_keeps_quoted_case_boundary_accepted() {
+    let template = format!("Write-Output \"$(case x in x)#\" {OUTS_TOKEN}");
+    let bindings = CommandBindings::new(&[], &[Utf8PathBuf::from("out")], RecipeShell::PowerShell);
+    let actual = interpolate_command_with_bindings(&template, &bindings)
+        .expect("PowerShell has no case-pattern ambiguity at a ')#' boundary");
+
+    assert_eq!(actual, "Write-Output \"$(case x in x)#\" 'out'");
+}
+
+/// Reject an unquoted `$(...)#` boundary in both PowerShell traversals.
+///
+/// PowerShell keeps the narrower unquoted-only rule, so this is the case that
+/// rule exists for: outside quotes, a `)` followed by `#` still fails closed
+/// because the scanner cannot tell a substitution closer from a grouping
+/// closer. The quoted counterpart above pins the exception.
+#[test]
+fn power_shell_rejects_unquoted_case_boundary() {
+    let template = format!("Write-Output $(Write-Output case)#{OUTS_TOKEN}");
+    let bindings = CommandBindings::new(&[], &[Utf8PathBuf::from("out")], RecipeShell::PowerShell);
+
+    for interpolate in [
+        interpolate_command_with_bindings
+            as fn(&str, &CommandBindings) -> Result<String, IrGenError>,
+        interpolate_script_with_bindings,
+    ] {
+        assert!(
+            interpolate(&template, &bindings).is_err(),
+            "an unquoted ')#' boundary must fail closed in PowerShell"
+        );
+    }
+}

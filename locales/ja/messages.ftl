@@ -195,6 +195,7 @@ ir.duplicate_outputs = 出力の重複を検出しました: { $outputs }。
 ir.circular_dependency = 循環依存を検出しました: { $cycle }。
 ir.action_serialisation = アクションを直列化できませんでした: { $details }。
 ir.invalid_command = コマンドの補間が無効です: { $snippet }。
+ir.ambiguous_substitution_boundary = 文字 { $position } でコマンド置換の境界が曖昧です。置換の閉じ括弧を後続の '#' から分離してください。
 
 # Ninja 生成のエラー。
 ninja_gen.missing_action = ビルド辺が参照するアクション「{ $id }」がありません。

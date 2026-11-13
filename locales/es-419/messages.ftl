@@ -196,6 +196,7 @@ ir.duplicate_outputs = Se detectaron salidas duplicadas: { $outputs }.
 ir.circular_dependency = Se detectó una dependencia circular: { $cycle }.
 ir.action_serialisation = No se pudo serializar la acción: { $details }.
 ir.invalid_command = Interpolación de comando no válida: { $snippet }.
+ir.ambiguous_substitution_boundary = Límite ambiguo de sustitución de comando en el carácter { $position }; separe el paréntesis de cierre de la sustitución del '#' siguiente.
 
 # Errores de generación de Ninja.
 ninja_gen.missing_action = Falta la acción '{ $id }' referenciada por una arista de compilación.

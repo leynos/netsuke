@@ -195,6 +195,7 @@ ir.duplicate_outputs = 중복된 출력이 발견되었습니다: { $outputs }.
 ir.circular_dependency = 순환 의존성이 발견되었습니다: { $cycle }.
 ir.action_serialisation = 동작을 직렬화하지 못했습니다: { $details }.
 ir.invalid_command = 명령의 보간이 잘못되었습니다: { $snippet }.
+ir.ambiguous_substitution_boundary = { $position }번째 문자에서 명령 치환 경계가 모호합니다. 치환의 닫는 괄호를 뒤따르는 '#'과 분리하세요.
 
 # Ninja 생성 오류.
 ninja_gen.missing_action = 빌드 간선이 참조하는 동작 '{ $id }'이(가) 없습니다.

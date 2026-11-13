@@ -959,14 +959,24 @@ The lowering stages have deliberately separate responsibilities:
   binding set for the recipe, then interpolates every scalar or list entry with
   that set. Both recipe kinds recognize the same `{{ ins }}` and `{{ outs }}`
   markers; POSIX lexical scanning can preserve their internal tokens in
-  comments and heredoc bodies rather than resolving them. Literal `$in`, `$out`,
-  `$ins`, and `$outs` remain shell variables and are escaped for Ninja
-  pass-through. POSIX lowering tracks unquoted, single-quoted, and
-  double-quoted text, and rejects markers within command substitutions because
-  it cannot lower them safely. Script recipes therefore retain heredocs and
-  comments without accepting an unsafe marker context. The resulting action
-  contains lowered command text and no Ninja rule variables; an inert region
-  may still retain an internal Netsuke marker token.
+  comments and heredoc bodies rather than resolving them. Comment and heredoc
+  recognition ends a word only at the shell's own separators, so a non-ASCII
+  character before `#` cannot hide a later quote transition. A `)` that closes
+  a substitution stays in the word, but a `)` that terminates a `case` pattern
+  is an operator; because the two are lexically identical without the `case`
+  grammar, a substitution whose source contains `case` is rejected when a `)`
+  is immediately followed by `#`, whatever the enclosing quote context, because
+  a substitution is parsed as its own script; PowerShell keeps the narrower
+  unquoted-only rule. The pattern terminator is matched at the parenthesis
+  depth where its `case` opened, so a `case` inside a nested group is not
+  confused with the group's own closer. Literal `$in`, `$out`, `$ins`, and
+  `$outs` remain shell variables and are escaped for Ninja pass-through. POSIX
+  lowering tracks unquoted, single-quoted, and double-quoted text, and rejects
+  markers within command substitutions because it cannot lower them safely.
+  Script recipes therefore retain heredocs and comments without accepting an
+  unsafe marker context. The resulting action contains lowered command text and
+  no Ninja rule variables; an inert region may still retain an internal Netsuke
+  marker token.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen/recipe_shell/`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each
@@ -1205,6 +1215,23 @@ from the shared encoder's unit table and from
 the Bash transport and runs the inner script under the host's own `sh`. That is
 the closest executable check a Unix host can make: it verifies the payload this
 route would hand to `bash.exe`, not `bash.exe` itself.
+
+`test_support::shell_transport::decode_bash_transport` owns that decoding so
+every suite shares one implementation. It undoes the Windows argument quoting
+and returns the exact `-c` argument `bash.exe` would receive; it does not model
+the PowerShell transport, whose decoder lives with the PowerShell test suite.
+The helper itself is not platform-gated, because it only manipulates strings,
+but the cases that execute its output are Unix-only because they run the result
+under a POSIX shell.
+
+The same module exports `INTERPRETER_PATH`, the absolute path
+`/fixtures/netsuke/interpreter` that every suite binds as the recipe
+interpreter. It is absolute because the renderer refuses a relative
+interpreter, which would otherwise resolve through `PATH`, and it need not
+exist because the tests decode the rendered command instead of executing
+through that binding. Suites import the constant rather than repeating the
+literal, so a change to the fixture location has one owner and
+`decode_bash_transport` is always asserted against the path the suite bound.
 
 ### Inline recipe progress labels
 
@@ -7369,9 +7396,10 @@ deterministic clock. The boundary records one
 attempt, including failures. Its only labels are the bounded `recipe_shell`
 values `posix`, `bash`, and `powershell`, the `outcome` values `success` and
 `error`, and the `error_category` values `none`,
-`invalid_command_interpolation`, and `other`. Keep clock access and metric
-composition here; callers must not measure graph-generation time with `Instant`
-or add manifest-controlled values to telemetry.
+`invalid_command_interpolation`, `ambiguous_substitution_boundary`, and
+`other`. Keep clock access and metric composition here; callers must not
+measure graph-generation time with `Instant` or add manifest-controlled values
+to telemetry.
 
 The runner-internal `GraphGenerationContext` in
 `src/runner/graph/generation/mod.rs` groups the selected `RecipeShell`, an
@@ -7401,6 +7429,17 @@ The sibling `src/ir/cmd_interpolate/substitution/mod.rs` owns
 `SubstitutionTraversal`, which walks one recipe and applies those bindings only
 after analysing its shell context. Keep this split private to `ir`; it is an
 implementation boundary, not a public command-template API.
+`substitution/posix.rs` owns the POSIX half of that traversal: it resolves
+heredoc declarations, comments, escapes, and backtick toggling before marker
+handling runs, so an inert or rejected region never reaches the lowering logic.
+`script_substitution/delimiters.rs` owns the `$()` nesting state that the
+script traversal needs: `ScriptCommandSubstitution` records the quote context,
+parenthesis depth, opening `$`, and `case` nesting of one command substitution.
+A closer's position survives into the next comment check because the `)` that
+ends `$()` stays part of the surrounding word, while a `)` that ends a subshell
+or a `case` pattern is an operator. Both modules are split out of their parents
+to stay inside the module-size cap; they are not separate shell parsers and
+have no callers outside command interpolation.
 
 The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. It copies
@@ -7409,8 +7448,71 @@ them are not expanded and can remain in the generated recipe; markers in
 heredoc delimiters are expanded. It queues declarations FIFO, including quoted
 delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
 surrounding quote context. This is a command-interpolation helper, not a
-general shell parser, and is not intended for reuse outside that boundary. The
-`src/ir/cmd_interpolate/substitution/powershell/` module groups focused
+general shell parser, and is not intended for reuse outside that boundary.
+
+The helper ends an unquoted POSIX word only at a space, tab, newline, or one of
+the operator characters `;`, `&`, `|`, `(`, `)`, `<`, and `>`. The
+`is_word_terminator` predicate is the single boundary definition behind both
+comment detection and heredoc delimiter termination. It deliberately avoids
+Rust's Unicode `char::is_whitespace`, because `sh`, `dash`, and Bash treat
+characters such as U+00A0 as ordinary word data rather than as locale-dependent
+multibyte blanks. Using the Unicode rule would let `#` after such a character
+start a false comment, skip a real quote transition, and select the wrong path
+encoding for a later marker. A CRLF script therefore treats a carriage return
+before `#` as word data, matching those shells. The traversals that track `$()`
+also pass the position of the `)` that closed the innermost substitution, so
+the boundary check does not mistake that delimiter for a separator. A `)`
+closing a subshell remains an operator and still permits a comment.
+`src/lint/rules/shellscan/mod.rs` and the property-test oracle in
+`src/ir/cmd_interpolate/property_tests/boundary.rs` keep separate boundary
+models; neither controls path encoding, so neither is part of this contract.
+
+A `)` that terminates a `case` pattern is an operator, so a `#` immediately
+after it starts a comment, while the `)` that closes `$()` stays in the
+surrounding word and leaves the same `#` as word data. The two are lexically
+identical without the `case` grammar, so `CaseNesting` in
+`src/ir/cmd_interpolate/command_substitution.rs` counts `case` and `esac`
+reserved words inside each substitution and keeps the substitution open across
+pattern terminators; the `)` that finally closes it is the one checked. When
+that closer is immediately followed by `#` and the substitution's source
+contains `case`, both POSIX traversals fail closed with
+`IrGenError::AmbiguousSubstitutionBoundary` rather than guessing a quote
+context. The check over-approximates on purpose: it scans the raw source, so a
+`case` inside quotes or a comment also triggers it, and it does not consult the
+enclosing quote context, because a substitution is parsed as its own script.
+The diagnostic carries the one-based character offset of the closing `)`, which
+is also the zero-based index of the `#` that follows it, and no recipe text, so
+it survives the 160-character snippet truncation and cannot copy executable
+syntax into a log line.
+
+`CaseNesting` counts a reserved word only in command position, because that is
+the only place the shell reads one: `printf esac` passes `esac` as an argument
+and must leave the construct open. Command position holds at the start of the
+substitution, after a command separator, a newline, or a parenthesis, and after
+a reserved word that opens or continues a command list (`if`, `then`, `else`,
+`elif`, `while`, `until`, `do`, `!`, or `time`); a completed argument, a
+redirection operator, or quoted text clears it. An `esac` also closes only the
+construct open at its own depth, so a pattern spelled `esac` does not end an
+outer case. The tracker takes comments from the traversal rather than inferring
+them from `#`, because comment text is copied verbatim and is never offered to
+it: the traversal reports the comment's start and the newline that ends it, so a
+`case` on the line after a comment still opens its construct. PowerShell has no
+`case` patterns and keeps its unquoted-only rule. The regressions live in
+`src/ir/cmd_interpolate/posix_lexical/tests/case/`: `boundary.rs` covers the
+`)#` ambiguity and the operator-versus-word distinction, and `tracker.rs` covers
+`CaseNesting` command position, depth, and comment hand-off. The property
+`hash_boundary_follows_the_posix_comment_rule` in
+`src/ir/cmd_interpolate/property_tests/mod.rs` takes its prefixes from
+`property_tests/boundary.rs`, which builds them from an independent label for
+separators, word data, escapes, line continuations, and substitution or group
+closers, and composes up to two further segments so interaction cases are
+reachable. Two fixed families cover what composition cannot: an inner group
+closer whose outer `)` and second marker arrive on the following line, and a
+line continuation placed directly after a substitution closer. Each case runs
+through both POSIX traversals, and every boundary asserts a second marker after
+its `tail` so a construct that closes later still checks the text that follows.
+
+The `src/ir/cmd_interpolate/substitution/powershell/` module groups focused
 PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 `lexical/comments.rs` tracks fail-closed comment state, `stop_parsing.rs`
 tracks raw native-command arguments, and `tokens/mod.rs` recognizes the token
@@ -7461,7 +7563,7 @@ The heredoc renderer returns a private `EscapeBeforeMarker` unit error, which
 both traversals map to `IrGenError::InvalidCommand` carrying the original
 template; that parity is pinned by
 `delimiter_markers_after_an_active_escape_are_rejected` in
-`src/ir/cmd_interpolate/posix_lexical/tests.rs` and
+`src/ir/cmd_interpolate/posix_lexical/tests/mod.rs` and
 `markers_after_an_active_backslash_are_rejected` in
 `src/ir/cmd_interpolate/backslash_marker_tests.rs`. Backslash pairs still
 decode to one escaped backslash before the marker, single-quoted backslashes

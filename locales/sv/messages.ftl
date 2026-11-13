@@ -195,6 +195,7 @@ ir.duplicate_outputs = Dubblerade utdata upptäcktes: { $outputs }.
 ir.circular_dependency = Ett cirkulärt beroende upptäcktes: { $cycle }.
 ir.action_serialisation = Åtgärden kunde inte serialiseras: { $details }.
 ir.invalid_command = Ogiltig interpolering i kommandot: { $snippet }.
+ir.ambiguous_substitution_boundary = Tvetydig gräns för kommandosubstitution vid tecken { $position }; separera substitutionens avslutande parentes från följande '#'.
 
 # Fel vid generering av Ninja.
 ninja_gen.missing_action = Åtgärden ”{ $id }” som en byggbåge hänvisar till saknas.

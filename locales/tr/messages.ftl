@@ -195,6 +195,7 @@ ir.duplicate_outputs = Yinelenen çıktılar bulundu: { $outputs }.
 ir.circular_dependency = Döngüsel bağımlılık bulundu: { $cycle }.
 ir.action_serialisation = Eylem serileştirilemedi: { $details }.
 ir.invalid_command = Komutta geçersiz yerleştirme: { $snippet }.
+ir.ambiguous_substitution_boundary = { $position }. karakterde belirsiz komut ikamesi sınırı; ikamenin kapanış parantezini sonraki '#' işaretinden ayırın.
 
 # Ninja üretimi hataları.
 ninja_gen.missing_action = Bir derleme kenarının başvurduğu "{ $id }" eylemi eksik.

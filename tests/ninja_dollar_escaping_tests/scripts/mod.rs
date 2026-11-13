@@ -6,7 +6,32 @@
 
 use super::*;
 
+// Only the Unix-gated transport case decodes a Bash command line, so on Windows
+// these items would be unused and `-D warnings` would reject the test build.
+#[cfg(unix)]
+use netsuke::ninja_gen::{InterpreterExecutable, generate_with_interpreter};
+#[cfg(unix)]
+use test_support::shell_transport::{INTERPRETER_PATH, decode_bash_transport};
+
 mod transport;
+
+/// Generate Ninja text for `shell`, binding an interpreter for the Bash route.
+///
+/// The renderer refuses an unbound Bash interpreter, so this case binds the
+/// absolute fixture path the composition suite also uses. The path is never
+/// executed: only the rendered script is decoded and run under the host shell.
+#[cfg(unix)]
+fn generate_for(shell: RecipeShell, graph: &BuildGraph) -> Result<String> {
+    match shell {
+        RecipeShell::Bash => {
+            let executable =
+                InterpreterExecutable::from_absolute_path(Utf8PathBuf::from(INTERPRETER_PATH))?;
+            Ok(generate_with_interpreter(graph, shell, &executable)?)
+        }
+        RecipeShell::Posix => Ok(generate_with_shell(graph, shell)?),
+        RecipeShell::PowerShell => bail!("this suite covers only the POSIX lexis"),
+    }
+}
 
 /// Verify script `$in` and `$out` become literal shell variables in Ninja.
 #[rstest]
@@ -131,6 +156,60 @@ fn quoted_script_marker_cannot_inject_a_command_boundary(#[case] comment: &str) 
     ensure!(
         !workspace.path().join("injected").exists(),
         "double-quoted marker must not execute the injected touch command"
+    );
+    Ok(())
+}
+
+/// Verify a no-break space before `#` cannot turn a quoted marker into syntax.
+///
+/// A POSIX shell ends a word only at blank, newline, or an operator, so the
+/// no-break space is word data: `#` starts a comment only after a separator,
+/// and the quote that follows it opens a double-quoted region. The hostile
+/// output path inside that region must therefore be encoded for a quoted site.
+/// A scanner that treated the no-break space as whitespace would make the quote
+/// inert and insert the path for an unquoted site, so the recipe would no
+/// longer echo exactly the path and the shell could run the injected `touch`.
+#[cfg(unix)]
+#[rstest]
+#[case::posix(RecipeShell::Posix)]
+#[case::bash(RecipeShell::Bash)]
+fn non_ascii_space_before_hash_keeps_the_marker_quoted(#[case] shell: RecipeShell) -> Result<()> {
+    let output_path = "x\"; touch injected; echo \"y";
+    let manifest = manifest::from_str(&format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: '{output_path}'\n    script: |\n      echo x\u{00a0}#\"\n      echo {{{{ outs }}}}\"\n"
+    ))?;
+    let ninja = generate_for(
+        shell,
+        &BuildGraph::from_manifest_for_shell(&manifest, shell)?,
+    )?;
+    let binding = ninja_commands(&ninja, output_path)?;
+    let script = match shell {
+        // `ninja -t commands` terminates its output with a newline, which is
+        // outside the transport's quoted argument.
+        RecipeShell::Bash => decode_bash_transport(INTERPRETER_PATH, binding.trim_end())?,
+        RecipeShell::Posix | RecipeShell::PowerShell => binding,
+    };
+
+    let workspace = tempfile::tempdir()?;
+    let output = Command::new("/bin/sh")
+        .args(["-ec", &script])
+        .current_dir(workspace.path())
+        .output()
+        .context("run the generated script command")?;
+    ensure!(
+        output.status.success(),
+        "generated script command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let expected = "x\u{00a0}#\necho x\"; touch injected; echo \"y\n";
+    ensure!(
+        output.stdout == expected.as_bytes(),
+        "a no-break space must not end the word before '#', got: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    ensure!(
+        !workspace.path().join("injected").exists(),
+        "the quote after a non-separator must keep the marker from executing the injected touch"
     );
     Ok(())
 }

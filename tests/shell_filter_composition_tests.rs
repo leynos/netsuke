@@ -15,13 +15,13 @@
 //! visible to a test that calls the filter and compares strings.
 //!
 //! The three `RecipeShell` variants are not three interpreters. `Posix` runs
-//! the recipe text directly, `Bash` wraps it in `bash.exe -e -c "…"`, and
+//! the recipe text directly, `Bash` wraps it in `"<interpreter>" -e -c "…"`, and
 //! `PowerShell` encodes it as base64 for `-EncodedCommand`. Only the `Posix`
 //! transport is executable on this host, so the other two are asserted on
 //! their *transport shape* — that the payload survives whichever encoding the
 //! renderer chose — and the `Bash` payload is additionally decoded back to its
 //! inner script and run under the host's own POSIX shell, which is a real
-//! execution of the text `Bash` would hand to `bash.exe`.
+//! execution of the text `Bash` would hand to its bound interpreter.
 
 #![cfg(unix)]
 
@@ -42,8 +42,8 @@ mod backslash_transport;
 mod composition_support;
 
 use composition_support::{
-    decode_bash_transport, decode_power_shell_transport, list_manifest, manifest_with,
-    scalar_manifest,
+    INTERPRETER_PATH, decode_bash_transport, decode_power_shell_transport, list_manifest,
+    manifest_with, scalar_manifest,
 };
 
 /// The value the scalar composition cases quote.
@@ -120,9 +120,8 @@ fn generate(source: &str, shell: RecipeShell) -> Result<String> {
             Ok(generate_with_shell(&graph, shell)?)
         }
         RecipeShell::PowerShell | RecipeShell::Bash => {
-            let interpreter = InterpreterExecutable::from_absolute_path(Utf8PathBuf::from(
-                "/fixtures/netsuke/interpreter",
-            ))?;
+            let interpreter =
+                InterpreterExecutable::from_absolute_path(Utf8PathBuf::from(INTERPRETER_PATH))?;
             Ok(generate_with_interpreter(&graph, shell, &interpreter)?)
         }
     }
@@ -155,7 +154,7 @@ fn scalar_recipes_carry_the_quoted_value(#[case] shell: RecipeShell) -> Result<(
 
     let script = match shell {
         RecipeShell::Posix => binding.clone(),
-        RecipeShell::Bash => decode_bash_transport(&binding)?,
+        RecipeShell::Bash => decode_bash_transport(INTERPRETER_PATH, &binding)?,
         RecipeShell::PowerShell => decode_power_shell_transport(&binding)?,
     };
     ensure!(
@@ -172,7 +171,7 @@ fn scalar_recipes_carry_the_quoted_value(#[case] shell: RecipeShell) -> Result<(
 /// The scalar recipe, run by a real interpreter, yields the exact argument.
 ///
 /// `Posix` runs the binding text directly. `Bash` runs the inner script its own
-/// transport would hand to `bash.exe`, decoded above. `PowerShell` has no
+/// transport would hand to its interpreter, decoded above. `PowerShell` has no
 /// interpreter on this host, so it is exercised only through the decode.
 #[rstest]
 #[case::posix(RecipeShell::Posix)]
@@ -192,7 +191,7 @@ fn scalar_recipes_execute_to_the_intended_argument(#[case] shell: RecipeShell) -
     // Ninja resolves `$$` to `$` before the shell sees the text; running the
     // binding directly does not, so `$$` is collapsed here to model that step.
     let script = match shell {
-        RecipeShell::Bash => decode_bash_transport(&binding)?,
+        RecipeShell::Bash => decode_bash_transport(INTERPRETER_PATH, &binding)?,
         RecipeShell::Posix | RecipeShell::PowerShell => binding.clone(),
     }
     .replace("$$", "$");
@@ -263,7 +262,7 @@ fn command_list_recipes_carry_the_quoted_value(#[case] shell: RecipeShell) -> Re
 
     let script = match shell {
         RecipeShell::Posix => binding.clone(),
-        RecipeShell::Bash => decode_bash_transport(&binding)?,
+        RecipeShell::Bash => decode_bash_transport(INTERPRETER_PATH, &binding)?,
         RecipeShell::PowerShell => decode_power_shell_transport(&binding)?,
     };
     if shell == RecipeShell::PowerShell {
@@ -307,7 +306,7 @@ fn command_list_recipes_execute_to_the_intended_argument(#[case] shell: RecipeSh
     let ninja = generate(&source, shell)?;
     let binding = command_binding(&ninja)?;
     let script = match shell {
-        RecipeShell::Bash => decode_bash_transport(&binding)?,
+        RecipeShell::Bash => decode_bash_transport(INTERPRETER_PATH, &binding)?,
         RecipeShell::Posix | RecipeShell::PowerShell => binding.clone(),
     }
     .replace("$$", "$");
