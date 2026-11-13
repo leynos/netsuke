@@ -54,7 +54,6 @@ fn contains_only_documented_path_bytes(path: &str) -> bool {
             b'A'..=b'Z'
                 | b'a'..=b'z'
                 | b'0'..=b'9'
-                | b','
                 | b'.'
                 | b'/'
                 | b':'

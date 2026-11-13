@@ -228,10 +228,17 @@ impl GlobExpansion {
 /// This predicate belongs only to the Jinja `glob()` adapter. Graph paths and
 /// direct [`glob_paths`] callers have separate escaping boundaries and must not
 /// reuse this deliberately restrictive policy.
+///
+/// The accepted set excludes characters significant to POSIX shells or to
+/// PowerShell argument mode, including the comma that PowerShell cmdlets treat
+/// as an array separator. It is a character allowlist, not a containment or
+/// option-safety check: leading hyphens, absolute paths, and parent-relative
+/// segments remain acceptable, so callers that care about those must check them
+/// separately.
 fn is_shell_inert_path(path: &str) -> bool {
     !path.is_empty()
         && path.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b',' | b'.' | b'/' | b'_' | b'-' | b':')
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'/' | b'_' | b'-' | b':')
         })
 }
 /// Expand a glob pattern and collect the matching UTF-8 file paths.

@@ -69,6 +69,11 @@
   directory or first on `PATH` is no longer selected and cannot run with the
   build process's authority (CWE-427)
   ([#980](https://github.com/leynos/netsuke/issues/980))
+- Reject a comma in a filename matched by the Jinja `glob()` helper. PowerShell
+  cmdlet argument parsing treats a bare comma as an array separator, so an
+  accepted filename could introduce another argument into a trusted recipe; the
+  portable unquoted-path allowlist now excludes the comma (CWE-88)
+  ([#1017](https://github.com/leynos/netsuke/issues/1017))
 
 ## [0.1.0-beta4] - 2026-09-26
 

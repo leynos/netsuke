@@ -72,6 +72,7 @@ fn jinja_glob_rejects_a_command_injecting_filename() -> Result<()> {
 #[case::backtick_substitution("sub`command`.txt")]
 #[case::comment("comment#file.txt")]
 #[case::redirection("redirect>file.txt")]
+#[case::powershell_array_separator("a,b.txt")]
 #[case::shell_punctuation("shell;pipe|ampersand&.txt")]
 #[case::backslash_separator(r"nested\leaf.txt")]
 #[case::backslash_parent(r"part\..\other.txt")]
@@ -141,6 +142,50 @@ fn jinja_glob_preserves_a_shell_inert_filename() -> Result<()> {
     ensure!(
         manifest.targets.len() == 1,
         "the ordinary matched filename should still expand once"
+    );
+    Ok(())
+}
+
+/// A comma is an array separator to PowerShell cmdlet argument parsing, so a
+/// matched filename containing one must not reach a cmdlet recipe as a single
+/// bare template value.
+///
+/// The fixture directory is relative for the same reason as
+/// [`jinja_glob_preserves_a_shell_inert_filename`]: an absolute temporary path
+/// can contain characters outside the shell-inert allowlist. This test proves
+/// rejection at manifest load time; it does not execute PowerShell.
+#[rstest]
+fn jinja_glob_rejects_a_comma_filename_in_a_powershell_cmdlet_recipe() -> Result<()> {
+    let temp = Builder::new()
+        .prefix("netsuke-glob-comma-")
+        .tempdir_in(".")
+        .context("create relative comma glob fixture")?;
+    let fixture_directory = temp
+        .path()
+        .file_name()
+        .and_then(|directory| directory.to_str())
+        .context("read the comma fixture directory name as UTF-8")?;
+    test_fs::write(
+        temp.path().join("version,1.txt"),
+        "attacker-controlled filename",
+    )?;
+    let pattern = format!("{fixture_directory}/*.txt");
+    let manifest = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob({pattern:?})\n",
+            "    name: output-{{{{ index }}}}.txt\n",
+            "    command: Copy-Item -LiteralPath {{{{ item }}}} -Destination backup/\n"
+        ),
+        pattern = pattern
+    ));
+
+    let error =
+        from_str(&manifest).expect_err("a comma in a matched filename must stop manifest loading");
+    let diagnostic = format!("{error:#}");
+    ensure!(
+        diagnostic.contains("characters that require shell quoting"),
+        "unexpected diagnostic: {diagnostic}"
     );
     Ok(())
 }

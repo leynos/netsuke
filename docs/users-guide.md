@@ -972,13 +972,18 @@ brace remains unclosed, the diagnostic points to the outermost unmatched
 opening brace; an unmatched closing brace is reported at that closing brace.
 
 The Jinja helper rejects a matched path unless it can be inserted as one
-portable unquoted shell word. ASCII letters, digits, `/`, `:`, comma, full
-stop, underscore, and hyphen are accepted; whitespace, control characters, and
-shell punctuation are rejected. This prevents an untrusted checkout filename
-from becoming shell syntax when `item` is interpolated into a `command` or
-`script`. On Unix, a matched filename that contains a literal backslash makes
-`glob()` fail with this shell-quoting error; the backslash is preserved rather
-than rewritten into a directory separator.
+portable unquoted shell word. ASCII letters, digits, `/`, `:`, full stop,
+underscore, and hyphen are accepted; whitespace, control characters, and shell
+punctuation are rejected. This prevents an untrusted checkout filename from
+becoming shell syntax when `item` is interpolated into a `command` or `script`.
+A comma is rejected because PowerShell cmdlet argument parsing treats a bare
+comma as an array separator, so an accepted filename could introduce another
+argument into a trusted recipe. `glob()` fails the whole expansion when any
+match contains a comma, and the `shell_quote` and `shell_join` helpers cannot
+rescue a path that `glob()` has already rejected; rename such files instead. On
+Unix, a matched filename that contains a literal backslash makes `glob()` fail
+with this shell-quoting error; the backslash is preserved rather than rewritten
+into a directory separator.
 
 ### Define reusable macros
 
