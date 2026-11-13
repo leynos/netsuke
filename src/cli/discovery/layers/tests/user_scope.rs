@@ -30,7 +30,9 @@ fn single_layer_path(discovered: &super::super::super::DiscoveryOutcome) -> Resu
         layers.len() == 1,
         "expected exactly one discovered layer, got {layers:?}"
     );
-    layers[0]
+    layers
+        .first()
+        .context("discovered layer should be present")?
         .path()
         .map(|path| path.as_str().to_owned())
         .context("discovered layer should record its path")
