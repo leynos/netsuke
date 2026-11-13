@@ -97,7 +97,7 @@ Ninja or output consumption.
 - Atomic sidecar materialization:
   [`src/runner/process/dyndep/files/mod.rs`](../../src/runner/process/dyndep/files/mod.rs)
 - Verified generated-state directory:
-  [`src/runner/process/dyndep/directory.rs`](../../src/runner/process/dyndep/directory.rs)
+  [`src/runner/process/dyndep/directory/mod.rs`](../../src/runner/process/dyndep/directory/mod.rs)
 - Retention and lease implementation:
   [retention implementation](../../src/runner/process/dyndep/retention/mod.rs)
 - User contract:
@@ -114,7 +114,7 @@ workspace resolves such an alias, and retention would then treat unrelated
 workspace files as disposable cache entries and delete them.
 
 Netsuke now establishes the generated-state directory through
-`src/runner/process/dyndep/directory.rs`. The module walks `.netsuke` and
+`src/runner/process/dyndep/directory/mod.rs`. The module walks `.netsuke` and
 `.netsuke/dyndep` one component at a time, refuses any entry that is a symbolic
 link, junction, other reparse point, or non-directory, and returns a verified
 handle. Publication, locking, and retention address bare entry names through

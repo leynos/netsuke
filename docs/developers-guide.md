@@ -7116,7 +7116,7 @@ content, then uses a same-directory temporary file plus atomic rename. Keep
 generated sidecars content-addressed and idempotent; corruption is an error,
 not a reason to overwrite an unknown file.
 
-`src/runner/process/dyndep/directory.rs` establishes the generated-state
+`src/runner/process/dyndep/directory/mod.rs` establishes the generated-state
 directory. `.netsuke` and `.netsuke/dyndep` are project-controlled, so a
 manifest can ship either as a symbolic link or a Windows junction. The module
 walks the two components one at a time, refuses any entry that is not a real
