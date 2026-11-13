@@ -228,7 +228,7 @@ fn retain_entry(dyndep: &Dir, name: &str, pass: &mut RetentionPass<'_, '_>) -> R
         return remove_candidate(dyndep, name, metadata.len(), pass.summary);
     }
     if is_sidecar(Utf8Path::new(name)) {
-        retain_or_remove_sidecar(dyndep, name, &mut pass.retained, pass.summary)?;
+        retain_or_remove_sidecar(dyndep, name, metadata.len(), pass)?;
     }
     Ok(())
 }
@@ -280,16 +280,23 @@ impl RetentionSelection {
 }
 
 /// Retain an obsolete sidecar or reclaim paths rejected by lexical selection.
+///
+/// Takes the size the traversal already read rather than re-statting the entry:
+/// each sidecar would otherwise pay a second metadata round trip, and the
+/// second read could disagree with the one the alias check approved.
 fn retain_or_remove_sidecar(
     dyndep: &Dir,
     name: &str,
-    retained: &mut RetentionSelection,
-    summary: &mut RetentionSummary,
+    bytes: u64,
+    pass: &mut RetentionPass<'_, '_>,
 ) -> Result<()> {
-    let display = entry_display_path(name);
-    let bytes = candidate_size(dyndep, name, &display)?;
-    for (reclaimed_name, reclaimed_bytes) in retained.select(Utf8PathBuf::from(name), bytes) {
-        remove_candidate(dyndep, reclaimed_name.as_str(), reclaimed_bytes, summary)?;
+    for (reclaimed_name, reclaimed_bytes) in pass.retained.select(Utf8PathBuf::from(name), bytes) {
+        remove_candidate(
+            dyndep,
+            reclaimed_name.as_str(),
+            reclaimed_bytes,
+            pass.summary,
+        )?;
     }
     Ok(())
 }
@@ -303,18 +310,6 @@ fn is_sidecar(path: &Utf8Path) -> bool {
 fn has_extension(path: &Utf8Path, extension: &str) -> bool {
     path.extension()
         .is_some_and(|actual| actual.eq_ignore_ascii_case(extension))
-}
-
-/// Return a candidate's byte length from its metadata.
-///
-/// # Errors
-///
-/// Returns an error when the candidate's metadata cannot be read.
-fn candidate_size(dyndep: &Dir, name: &str, display: &Utf8Path) -> Result<u64> {
-    dyndep
-        .symlink_metadata(name)
-        .map(|metadata| metadata.len())
-        .with_context(|| retention_error(display))
 }
 
 /// Remove a reclaimed sidecar and accumulate its size into the summary.
