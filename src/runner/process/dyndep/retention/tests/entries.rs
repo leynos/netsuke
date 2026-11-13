@@ -212,7 +212,7 @@ fn retention_skips_symlink_entries_and_preserves_their_targets() -> Result<()> {
 }
 
 #[cfg(windows)]
-#[test]
+#[rstest]
 fn retention_rejects_a_dyndep_directory_junction(
     dyndep_workspace: Result<(tempfile::TempDir, Dir)>,
 ) -> Result<()> {
