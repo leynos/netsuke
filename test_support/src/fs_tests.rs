@@ -6,6 +6,8 @@
 //! stay a child module of `fs`.
 
 use super::{PathState, create_dir_all, inspect_path, try_is_file, write};
+#[cfg(windows)]
+use super::{create_dir, read_to_string};
 use rstest::{fixture, rstest};
 use std::io;
 use std::path::Path;
@@ -134,6 +136,34 @@ fn create_dir_all_creates_missing_parent_directories(temp_dir: TempDir) -> anyho
     anyhow::ensure!(
         nested.is_dir(),
         "recursive creation should produce a directory"
+    );
+    Ok(())
+}
+
+/// A fixture directory may legitimately contain a `%NAME%` sequence. `cmd`
+/// expands `%NAME%` in the command text, so the junction helper must carry the
+/// paths out of band; this guards that it does.
+#[cfg(windows)]
+#[rstest]
+fn junction_preserves_a_literal_percent_expansion(temp_dir: TempDir) -> anyhow::Result<()> {
+    let temp = temp_dir?;
+    let target = temp.path().join("%USERNAME%");
+    create_dir(&target)?;
+    let link = temp.path().join("link");
+
+    if !super::junction(&target, &link)? {
+        eprintln!("skipping junction test: cmd.exe is unavailable");
+        return Ok(());
+    }
+
+    write(target.join("probe.txt"), b"literal")?;
+    anyhow::ensure!(
+        super::is_dir(&link),
+        "the junction must point at the literal %USERNAME% directory"
+    );
+    anyhow::ensure!(
+        read_to_string(link.join("probe.txt"))? == "literal",
+        "the junction must resolve the intended target, not the ambient expansion"
     );
     Ok(())
 }

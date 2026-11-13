@@ -103,9 +103,19 @@ pub fn junction(target: impl AsRef<Path>, link: impl AsRef<Path>) -> io::Result<
     }
     // `mklink` is a `cmd` built-in, so it is reachable only through `cmd /C`.
     // `raw_arg` passes the line verbatim because `cmd` parses it itself.
+    //
+    // The paths travel in child environment variables rather than in the
+    // command text: `cmd` expands `%NAME%` wherever it appears, so a fixture
+    // directory legitimately named `%USERNAME%` would otherwise be rewritten
+    // to the ambient value. Its expansion is a single pass, so a `%` that
+    // arrives through a variable's value stays literal. `/V:OFF` keeps `!`
+    // literal too, because delayed expansion is off for this child.
     let output = match Command::new("cmd")
+        .arg("/V:OFF")
         .arg("/C")
-        .raw_arg(format!(r#"mklink /J "{link_text}" "{target_text}""#))
+        .raw_arg(r#"mklink /J "%NETSUKE_JUNCTION_LINK%" "%NETSUKE_JUNCTION_TARGET%""#)
+        .env("NETSUKE_JUNCTION_LINK", &link_text)
+        .env("NETSUKE_JUNCTION_TARGET", &target_text)
         .output()
     {
         Ok(output) => output,

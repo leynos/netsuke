@@ -112,11 +112,17 @@ fn retention_uses_lexical_selection_when_directory_entries_are_nonlexical(
     dir.write(&later_second, "67890")?;
     let dyndep = dir.open_dir(DYNDEP_DIR)?;
 
-    let mut selection = RetentionSelection::new(RetentionPolicy::new(2, 10));
+    let current_names = HashSet::new();
     let mut summary = RetentionSummary::default();
-    retain_or_remove_sidecar(&dyndep, "b-small.dd", &mut selection, &mut summary)?;
-    retain_or_remove_sidecar(&dyndep, "c-small.dd", &mut selection, &mut summary)?;
-    retain_or_remove_sidecar(&dyndep, "a-large.dd", &mut selection, &mut summary)?;
+    let mut pass = RetentionPass {
+        current_names: &current_names,
+        retained: RetentionSelection::new(RetentionPolicy::new(2, 10)),
+        summary: &mut summary,
+    };
+    // The sizes mirror the file contents written above.
+    retain_or_remove_sidecar(&dyndep, "b-small.dd", 5, &mut pass)?;
+    retain_or_remove_sidecar(&dyndep, "c-small.dd", 5, &mut pass)?;
+    retain_or_remove_sidecar(&dyndep, "a-large.dd", 10, &mut pass)?;
 
     ensure!(dir.open(current.relative_path()).is_ok());
     ensure!(dir.open(&earliest).is_ok());

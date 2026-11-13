@@ -4,8 +4,10 @@ use super::super::super::tests::temporary_dir;
 use super::*;
 use anyhow::{Result, ensure};
 use cap_std::fs_utf8::Dir;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 
+/// Stage an ambient workspace with a capability handle for one directory test.
+#[fixture]
 fn workspace() -> Result<(tempfile::TempDir, Dir)> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
@@ -13,8 +15,10 @@ fn workspace() -> Result<(tempfile::TempDir, Dir)> {
 }
 
 #[rstest]
-fn open_or_create_creates_the_dyndep_namespace() -> Result<()> {
-    let (_temp, dir) = workspace()?;
+fn open_or_create_creates_the_dyndep_namespace(
+    workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (_temp, dir) = workspace?;
 
     let dyndep = DyndepDirectory::open_or_create(&dir)?;
 
@@ -30,8 +34,10 @@ fn open_or_create_creates_the_dyndep_namespace() -> Result<()> {
 }
 
 #[rstest]
-fn open_or_create_reuses_an_existing_namespace() -> Result<()> {
-    let (_temp, dir) = workspace()?;
+fn open_or_create_reuses_an_existing_namespace(
+    workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (_temp, dir) = workspace?;
     dir.create_dir_all(DYNDEP_DIR)?;
     dir.write(".netsuke/dyndep/kept.dd", "kept")?;
 
@@ -45,8 +51,10 @@ fn open_or_create_reuses_an_existing_namespace() -> Result<()> {
 }
 
 #[rstest]
-fn open_existing_reports_an_absent_namespace() -> Result<()> {
-    let (_temp, dir) = workspace()?;
+fn open_existing_reports_an_absent_namespace(
+    workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (_temp, dir) = workspace?;
 
     ensure!(
         DyndepDirectory::open_existing(&dir)?.is_none(),
@@ -56,8 +64,10 @@ fn open_existing_reports_an_absent_namespace() -> Result<()> {
 }
 
 #[rstest]
-fn open_existing_reports_an_absent_dyndep_directory() -> Result<()> {
-    let (_temp, dir) = workspace()?;
+fn open_existing_reports_an_absent_dyndep_directory(
+    workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (_temp, dir) = workspace?;
     dir.create_dir(".netsuke")?;
 
     ensure!(
@@ -68,8 +78,10 @@ fn open_existing_reports_an_absent_dyndep_directory() -> Result<()> {
 }
 
 #[rstest]
-fn open_or_create_refuses_a_netsuke_regular_file() -> Result<()> {
-    let (_temp, dir) = workspace()?;
+fn open_or_create_refuses_a_netsuke_regular_file(
+    workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (_temp, dir) = workspace?;
     dir.write(".netsuke", "not a directory")?;
 
     let Err(error) = DyndepDirectory::open_or_create(&dir) else {
@@ -87,8 +99,10 @@ fn open_or_create_refuses_a_netsuke_regular_file() -> Result<()> {
 
 #[cfg(unix)]
 #[rstest]
-fn open_or_create_refuses_a_netsuke_directory_symlink() -> Result<()> {
-    let (temp, dir) = workspace()?;
+fn open_or_create_refuses_a_netsuke_directory_symlink(
+    workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (temp, dir) = workspace?;
     let victim = temp.path().join("victim");
     test_support::fs::create_dir(&victim)?;
     test_support::fs::symlink("victim", temp.path().join(".netsuke"))?;
@@ -112,8 +126,10 @@ fn open_or_create_refuses_a_netsuke_directory_symlink() -> Result<()> {
 
 #[cfg(unix)]
 #[rstest]
-fn open_existing_refuses_a_dyndep_directory_symlink() -> Result<()> {
-    let (temp, dir) = workspace()?;
+fn open_existing_refuses_a_dyndep_directory_symlink(
+    workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (temp, dir) = workspace?;
     let victim = temp.path().join("victim");
     test_support::fs::create_dir(&victim)?;
     test_support::fs::create_dir(temp.path().join(".netsuke"))?;
@@ -134,8 +150,10 @@ fn open_existing_refuses_a_dyndep_directory_symlink() -> Result<()> {
 
 #[cfg(unix)]
 #[rstest]
-fn open_existing_refuses_a_dangling_dyndep_symlink() -> Result<()> {
-    let (temp, dir) = workspace()?;
+fn open_existing_refuses_a_dangling_dyndep_symlink(
+    workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (temp, dir) = workspace?;
     test_support::fs::create_dir(temp.path().join(".netsuke"))?;
     test_support::fs::symlink("absent", temp.path().join(".netsuke/dyndep"))?;
 
