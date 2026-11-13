@@ -453,7 +453,8 @@ test-prover-tools-integration: ## Exercise the pinned prover-tools Verus CLI wit
 test-release-publication: ## Test release-candidate identity and staged inventory exactness
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
-		--with 'pyyaml>=6' python -m pytest \
+		--with 'pyyaml>=6' --with 'cyclopts>=4.25.3,<5' \
+		--with 'cuprum>=0.1.0,<0.2.0' python -m pytest \
 		scripts/tests/test_crates_io_candidate_action.py \
 		scripts/tests/test_crates_io_candidate_archive_properties.py \
 		scripts/tests/test_crates_io_candidate_cli.py \
@@ -566,6 +567,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_upload_run.py \
 		scripts/upload_declared_assets_cli.py \
 		scripts/upload_declared_assets_refusals.py \
+		scripts/ensure_draft_release.py \
 		-c /dev/null --rootdir=. \
 		-p no:cacheprovider --doctest-modules
 

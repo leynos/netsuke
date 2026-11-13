@@ -133,6 +133,7 @@ SOURCE_MODULES = (
     "scripts/release_upload_run.py",
     "scripts/upload_declared_assets_cli.py",
     "scripts/upload_declared_assets_refusals.py",
+    "scripts/ensure_draft_release.py",
 )
 
 #: Sources that decide from already parsed, in-memory values.
@@ -203,6 +204,7 @@ ADAPTER_MODULES = (
     "scripts/release_upload_trace.py",
     "scripts/release_upload_run.py",
     "scripts/upload_declared_assets_cli.py",
+    "scripts/ensure_draft_release.py",
 )
 
 #: Sources that own the network boundary. The boundary test uses this same
@@ -227,10 +229,15 @@ NETWORK_FREE_MODULES = tuple(
 #: omission. ``package_crate_cli`` runs ``cargo package``, a local build with
 #: no remote of its own. ``release_upload_remote`` runs ``gh release upload``,
 #: ``gh release view``, and ``gh release download`` (asked for by
-#: ``release_upload_digests``), which do reach GitHub: it is the release's
-#: attachment boundary, and every ``gh`` call in the release path goes through
-#: it. A new entry here is a reviewed decision, not a registration.
+#: ``release_upload_digests``): it is the release's attachment boundary.
+#: ``ensure_draft_release`` runs ``gh release view`` and ``gh release create``
+#: through :mod:`cuprum`, creating the draft this uploader later fills; it is
+#: deliberately not folded into ``release_upload_remote``, because creating an
+#: unseen draft and filling a visible release are different operations with
+#: different re-run semantics. A new entry here is a reviewed decision, not a
+#: registration.
 PROCESS_MODULES = {
+    "scripts/ensure_draft_release.py": "runs `gh release create`, the draft boundary",
     "scripts/package_crate_cli.py": "runs `cargo package`, a local build",
     "scripts/release_upload_remote.py": "runs `gh release upload`, the upload boundary",
 }

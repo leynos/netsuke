@@ -58,11 +58,16 @@ class UploadPlan(typ.TypedDict):
         ``conflicts`` because "the release holds different bytes" and "the
         release could not be read" call for different operator responses, and
         a plan that folded them together would report one as the other.
+    unverifiable_reasons
+        Unverifiable name mapped to the bounded reason the run could not read
+        it, so a plan that names the blocked asset also keeps the remedy an
+        operator needs to choose.
     """
 
     actions: list[list[str]]
     conflicts: list[str]
     unverifiable: list[str]
+    unverifiable_reasons: dict[str, str]
 
 
 class DigestRecord(typ.TypedDict):
@@ -112,8 +117,8 @@ def _plan(run: ActionRun) -> UploadPlan:
     Returns
     -------
     UploadPlan
-        The decoded plan, holding ``actions``, ``conflicts``, and
-        ``unverifiable``.
+        The decoded plan, holding ``actions``, ``conflicts``,
+        ``unverifiable``, and ``unverifiable_reasons``.
     """
     path = run.declared_root / "upload-plan.json"
     decoded: UploadPlan = json.loads(path.read_text(encoding="utf-8"))
@@ -248,6 +253,10 @@ def test_an_asset_github_cannot_vouch_for_is_reported_as_unverifiable(
     assert "could not be verified" in message, message
     plan = _plan(run)
     assert plan["unverifiable"] == [offender], plan
+    assert plan["unverifiable_reasons"] == {offender: "download-failed"}, (
+        "the plan must keep the reason the digest could not be established, "
+        f"got {plan['unverifiable_reasons']!r}"
+    )
     assert plan["conflicts"] == [], (
         "an asset nobody could read must not be reported as a conflict"
     )

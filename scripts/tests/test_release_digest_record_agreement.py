@@ -36,16 +36,27 @@ def test_records_that_differ_about_one_asset_are_refused() -> None:
     )
 
 
-def test_a_record_naming_an_asset_the_other_omits_is_refused() -> None:
+@pytest.mark.parametrize(
+    ("selection", "declaration"),
+    [
+        pytest.param({"a": DIGEST, "b": OTHER}, {"a": DIGEST}, id="selection-only"),
+        pytest.param({"a": DIGEST}, {"a": DIGEST, "b": OTHER}, id="declaration-only"),
+    ],
+)
+def test_a_record_naming_an_asset_the_other_omits_is_refused(
+    selection: dict[str, str], declaration: dict[str, str]
+) -> None:
     """Refuse either side naming an asset the other never saw.
 
     Absence is not agreement: a selection that hashed a file the declaration
     never covered, or the reverse, means the two stages looked at different
-    trees and neither record speaks for the payload.
+    trees and neither record speaks for the payload. Both directions are
+    generated, so a comparison that only walks one record cannot pass by
+    treating the other as authoritative.
     """
     with pytest.raises(release_digest_record.RecordedDigestMismatchError) as caught:
         release_digest_record_agreement.require_records_agree(
-            {"a": DIGEST, "b": OTHER}, declaration={"a": DIGEST}
+            selection, declaration=declaration
         )
 
     assert "['b']" in str(caught.value), (
