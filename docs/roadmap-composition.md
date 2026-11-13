@@ -32,7 +32,7 @@ This step asks whether literal source decomposition can provide deterministic
 identity and useful failure chains before rendering begins. Its result fixes
 the traversal and provenance contract used by later bundle instances.
 
-The fragment-specific version relationship follows [ADR-0061][schema-admission]
+The fragment-specific version relationship follows [ADR-0075][schema-admission]
 (D-6); this task owns its exact contract.
 
 - [ ] 16.1.1. Ratify fragment scope and shared provenance contracts.
@@ -173,7 +173,7 @@ This step asks whether the descriptor, version language, and import interface
 are precise enough to give every instance one meaning. Its outcome fixes the
 contracts that catalogue selection, hashing, and locking must share.
 
-Bundle-entry version relationships follow [ADR-0061][schema-admission] (D-6);
+Bundle-entry version relationships follow [ADR-0075][schema-admission] (D-6);
 this task owns their exact relationship to the importer.
 
 - [ ] 17.1.1. Ratify bundle versions, path anchors, locks, and CLI ownership.
@@ -623,4 +623,4 @@ or retains the current boundary explicitly.
   - Success: every accepted source extension has a separate canonicalization,
     provenance, authority, and migration contract before implementation.
 
-[schema-admission]: adrs/adr-0061-manifest-schema-versions-and-admission.md
+[schema-admission]: adrs/adr-0075-manifest-schema-versions-and-admission.md

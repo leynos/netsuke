@@ -26,8 +26,8 @@ new named execution contexts, and a universal strict mode are not prerequisites.
   declarations lowered to Ninja pools.
 - [RFC 0025](rfcs/rfc-0025-progressive-enhancement-and-maturity-policies.md)
   owns shallow-end compatibility and opt-in policy composition.
-- The governing decisions are [ADR-0061][d61], [ADR-0062][d62], [ADR-0063][d63],
-  [ADR-0064][d64], [ADR-0065][d65], [ADR-0066][d66], and [ADR-0067][d67]. They
+- The governing decisions are [ADR-0075][d61], [ADR-0076][d62], [ADR-0077][d63],
+  [ADR-0078][d64], [ADR-0079][d65], [ADR-0080][d66], and [ADR-0081][d67]. They
   record schema admission, cross-cutting contracts, and feature schemas; all
   were accepted on 2026-11-09.
 
@@ -452,10 +452,10 @@ sharing the same configuration burden.
     Reconsider any feature that cannot demonstrate local benefit before broad
     promotion; no universal strict preset is required for release.
 
-[d61]: adrs/adr-0061-manifest-schema-versions-and-admission.md
-[d62]: adrs/adr-0062-progressive-enhancement-contract-boundaries.md
-[d63]: adrs/adr-0063-managed-state-schema.md
-[d64]: adrs/adr-0064-typed-task-input-schema.md
-[d65]: adrs/adr-0065-artefact-ownership-schema.md
-[d66]: adrs/adr-0066-contention-class-schema.md
-[d67]: adrs/adr-0067-maturity-policy-schema.md
+[d61]: adrs/adr-0075-manifest-schema-versions-and-admission.md
+[d62]: adrs/adr-0076-progressive-enhancement-contract-boundaries.md
+[d63]: adrs/adr-0077-managed-state-schema.md
+[d64]: adrs/adr-0078-typed-task-input-schema.md
+[d65]: adrs/adr-0079-artefact-ownership-schema.md
+[d66]: adrs/adr-0080-contention-class-schema.md
+[d67]: adrs/adr-0081-maturity-policy-schema.md

@@ -394,8 +394,8 @@ canonical `MAJOR.MINOR.0` form without prerelease or build identifiers. The
 [schema registry](netsuke-design.md#schema-versions-and-feature-admission) is
 the source of truth for feature identifiers, syntax reservations, owning RFCs
 and roadmap tasks, admission status, and the first release tag containing a
-feature. ADR-0061 defines the
-[admission policy](adrs/adr-0061-manifest-schema-versions-and-admission.md).
+feature. ADR-0075 defines the
+[admission policy](adrs/adr-0075-manifest-schema-versions-and-admission.md).
 
 ### Reserve syntax before implementation
 
