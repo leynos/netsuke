@@ -19,6 +19,13 @@ name: Build and Package
         description: Rust target triple to compile for
         required: true
         type: string
+      commit:
+        description: >-
+          Full commit the producer must check out and build. The lane refuses
+          to run when the checkout's HEAD differs, so an artefact cannot be
+          attributed to a candidate it was not built from.
+        required: true
+        type: string
       bin-name:
         description: Name of the binary to build
         required: true
@@ -141,10 +148,30 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          # The candidate is named by the caller, not inferred from the ref that
+          # happened to trigger the run, so every producer builds the commit the
+          # release declaration will be bound to.
+          ref: ${{ inputs.commit }}
           # The packaging lane hands the workspace to third-party build actions;
           # keeping the token out of .git/config denies them a reusable push
           # credential.
           persist-credentials: false
+
+      - name: Verify the checkout is the release candidate
+        shell: bash
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.commit }}
+        # `actions/checkout` accepts a branch or tag for `ref`, and a moving
+        # name can resolve elsewhere by the time the build starts. Comparing
+        # HEAD pins the claim to the commit that is actually on disk.
+        run: |
+          set -euo pipefail
+          actual_commit="$(git rev-parse HEAD)"
+          if [[ "$actual_commit" != "$CANDIDATE_COMMIT" ]]; then
+            printf 'checkout is %s but the release candidate is %s\n' \
+              "$actual_commit" "$CANDIDATE_COMMIT" >&2
+            exit 1
+          fi
 
       - name: Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
@@ -687,6 +714,75 @@ jobs:
           dest="dist/${BIN_NAME}-${VERSION}-${ARCHIVE_SUFFIX}.pkg"
           mkdir -p "$(dirname "$dest")"
           mv "$PKG_PATH" "$dest"
+
+      - name: Record producer provenance
+        # Every artefact this job hands on is hashed here, beside the job that
+        # built it, and written to `producer-provenance.json` in the directory
+        # the platform already uploads. Publication compares the downloaded
+        # bytes against this record, so a substituted package or an archive
+        # from another commit is visible even when a matching replacement
+        # sidecar was supplied.
+        #
+        # Only the files this job built are named: the packages it just made,
+        # the binstall archive, and that archive's sidecar. A tree walk would
+        # put retained workspace material into the record, which is the
+        # opposite of what the record exists to prove. The record binds bytes
+        # to this producer's claim; it is not, and does not claim to be, proof
+        # of the commit's honesty.
+        #
+        # The Linux package set is globbed at the `dist` root rather than
+        # enumerated from an output, because the packaging action publishes
+        # both formats there and nothing else does. A missing or duplicated
+        # format is refused by the recorder, which names the offending format.
+        shell: bash
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.commit }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          STAGE_TARGET: ${{ inputs['stage-target'] }}
+          PLATFORM: ${{ inputs.platform }}
+          ARTIFACT_DIR: ${{ steps.stage.outputs['artifact-dir'] }}
+          BINSTALL_ARCHIVE: ${{ steps.stage.outputs['binstall-archive-path'] }}
+          WINDOWS_PACKAGE: ${{ steps.package_windows.outputs['msi-path'] }}
+          ARCHIVE_SUFFIX: ${{ inputs['artifact-suffix'] }}
+        run: |
+          set -euo pipefail
+          case "$PLATFORM" in
+            linux)
+              shopt -s nullglob
+              assets=(dist/*.deb dist/*.rpm)
+              record_dir=dist
+              ;;
+            windows)
+              assets=("$WINDOWS_PACKAGE")
+              record_dir=$ARTIFACT_DIR
+              ;;
+            macos)
+              assets=("dist/${BIN_NAME}-${VERSION}-${ARCHIVE_SUFFIX}.pkg")
+              record_dir=$ARTIFACT_DIR
+              ;;
+            *)
+              printf '::error title=Unrecorded platform::%s\n' "$PLATFORM"
+              exit 1
+              ;;
+          esac
+          # The archive's sidecar is written beside it by the staging action, so
+          # its path is derived rather than globbed; the recorder refuses it if
+          # it is not a regular file.
+          assets+=("$BINSTALL_ARCHIVE" "$BINSTALL_ARCHIVE.sha256")
+          asset_args=()
+          for asset in "${assets[@]}"; do
+            asset_args+=(--asset "$asset")
+          done
+          uv run --no-project --python "$UV_PYTHON" \
+            scripts/record_producer_provenance_cli.py \
+            --commit "$CANDIDATE_COMMIT" \
+            --run-id "$RUN_ID" \
+            --run-attempt "$RUN_ATTEMPT" \
+            --target "$STAGE_TARGET" \
+            --platform "$PLATFORM" \
+            "${asset_args[@]}" \
+            --output "$record_dir/producer-provenance.json"
 
       - name: Upload Linux artefacts
         if: inputs.platform == 'linux' && inputs['should-upload-workflow-artifacts']

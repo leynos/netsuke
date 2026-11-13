@@ -9,6 +9,9 @@ The record is written before upload and remains independent of downloaded
 bytes. Comparing downloads to it is what makes replacing an archive or package
 visible even when a replacement sidecar agrees with the replacement bytes.
 
+Publication writes two such records, and making them answer for each other is
+:mod:`release_digest_record_agreement`'s claim rather than this module's.
+
 Run via the release publication adapters; behavioural coverage lives in
 ``scripts/tests/test_release_digest_record.py``.
 """

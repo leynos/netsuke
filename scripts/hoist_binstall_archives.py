@@ -18,8 +18,10 @@ This docstring previously gave a different reason — that
 ``upload-release-assets`` namespaces any file not already at the root. That
 is false. The action computes a namespaced name and passes it as ``gh``'s
 ``#label``, which is a display label; the asset is still named from the
-source basename. The hoist remains correct and necessary, for the reason
-above rather than the one first stated.
+source basename. The publishing lane's own action passes bare source paths
+and computes no label at all, so neither uploader could be relying on a
+prefix. The hoist remains correct and necessary, for the reason above
+rather than the one first stated.
 
 The expected archive set is derived from ``.github/release-staging.toml``
 (the target triples) and ``Cargo.toml`` (the package name), keeping those

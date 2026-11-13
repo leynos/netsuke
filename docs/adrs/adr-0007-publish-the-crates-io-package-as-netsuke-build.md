@@ -191,3 +191,67 @@ upload, and verifies the public bytes. Both the resume sequence and the
 rehearsal boundary are held by tests, the latter as a workflow-contract
 assertion that the offline step's shell text names no credential flag, fetch
 tool, or registry URL.
+
+## Addendum (2026-11-09): the GitHub asset publisher
+
+This addendum records the mechanism the GitHub half of a release uses to attach
+assets, which the original decision left open: it settles how the bytes *reach
+the Release*, where the 2026-10-24 addendum settles how they reach the
+registry. It names the publisher, as the trusted-packaging ExecPlan's
+documentation list requires.
+
+**Decision.** `release.yml`'s `publish-release` job calls
+`./.github/actions/upload-declared-assets`, a composite action in this
+repository, rather than the shared `upload-release-assets` action the rehearsal
+still uses. The action composes three CLIs already in `scripts/`:
+`select_release_payload_cli.py` copies only the payload the release declares,
+`release_declaration_cli.py` writes the declaration and the trusted digest
+record from the staged bytes, and `upload_declared_assets_cli.py` reconciles
+the release against that record and uploads only the gaps.
+
+- Every producer binds its record to the candidate commit and the workflow
+  run. `publish-release` checks out the candidate rather than the triggering
+  ref, `build-and-package` verifies its own checkout against the same commit,
+  and selection refuses a record from another commit or run before any name it
+  claims is trusted.
+- Selection matches staged files to the declaration by published name.
+  Non-release-shaped material -- the binary, licences, completions, manual
+  pages that ship inside the packages -- is excluded; a file carrying a release
+  suffix that is not a declared name is refused.
+- Each package claim is checked against where the download put it. Every
+  producer uploads one workflow artefact and the release downloads each into
+  its own subtree of `dist`, so `scripts/release_package_origins.py` can report
+  the target key whose subtree staged each published package. A record claiming
+  a package a sibling's subtree staged is refused, which is the one-for-one
+  exchange no per-format count can see.
+- The declaration and both digest records are written from the staged tree
+  before the uploader's first release-asset request, and retained as a
+  `declared-assets-<job>-<attempt>` workflow artefact, so a run that is later
+  refused still leaves the account of what it declared. Earlier steps in the
+  job do reach the network -- the draft-release lookup and the artefact
+  download -- but none of them transmits release bytes.
+- An attached asset whose digest matches the record is skipped. An attached
+  asset with different bytes stops the run, as does one whose bytes could not
+  be established at all, and the two are reported as distinct diagnoses. The
+  uploader never replaces an attached asset.
+
+**What this decision does not claim.** A package name cannot be derived: three
+external shared actions own those names, so its format suffix and the
+per-target count are all the name itself says. The subtree position is a
+stronger observation but still an observation -- it reports where the download
+put a file, not who built it. Suffix, count, and position checks narrow what
+can reach the upload; none of them proves origin, and the records -- not those
+checks -- are what bind the bytes to a commit. This is stated in the users' and
+developers' guides rather than implied.
+
+**Status.** Implemented and exercised by an executed-shell harness in
+`tests/workflow_contracts/`; not yet exercised by a live release. The inventory
+verifier, the GitHub release finalizer, and the consumer smoke test remain open
+in the trusted-packaging ExecPlan, so the retained records have no consumer in
+the workflow yet and the release is not published by this decision.
+
+Only a release the workflow *creates* is a draft: `ensure_draft_release.py`
+returns as soon as the tag already has a release, without checking whether it
+is public. A rerun therefore attaches assets to whatever release the tag
+already names, which may well be public by then. Nothing here can widen that
+guarantee, so it is recorded rather than assumed.

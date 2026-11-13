@@ -294,3 +294,64 @@ The helper remains diagnostic: it does not change the release mode or convert a
 failed package or artefact-upload step into success. The package job is not a
 dependency of either publication job until the registry publisher consumes its
 artefact.
+
+## Addendum (2026-11-08): Attempt-specific telemetry artefact names
+
+This addendum amends, and does not replace, the 2026-10-03 and 2026-10-26
+addenda above. Their text is preserved as written; the artefact names they
+specify are superseded here.
+
+Every retained observability artefact name now carries
+`-${{ github.run_attempt }}` after the job scope, so
+`release-operation-observability-${{ github.job }}` becomes
+`release-operation-observability-${{ github.job }}-${{ github.run_attempt }}`,
+and the package job's `release-operation-observability-package-crate` becomes
+`release-operation-observability-package-crate-${{ github.run_attempt }}`.
+
+The suffix is load-bearing. A job re-run keeps the run id and increments only
+the attempt, so an artefact named for the job alone collides with the first
+attempt's artefact, and `actions/upload-artifact` v7 refuses to overwrite an
+existing one rather than replacing it. Resolving that with `overwrite: true`
+would be worse than the collision: the retained record exists so an operator
+can compare a re-run against the attempt that failed, and overwriting deletes
+the comparison. The name distinguishes attempts instead, which costs one extra
+artefact per re-run and loses nothing.
+
+Nothing else in either addendum changes. The retention policy, the dry-run
+carve-out for the staging job, the fixed operation and phase labels, and the
+bounded error-category set all stand.
+
+## Addendum (2026-11-12): Per-call upload trace
+
+This addendum extends the accepted decision to the declared-asset uploader. It
+does not change the release-admission gate, the bounds on what an artefact may
+contain, or any earlier addendum.
+
+The aggregate boundary timings cannot answer which call failed. `TimedRunner`
+sums a boundary across every call that crossed it, and a run downloads once per
+undigested name, so four durations stand for as many as eleven `gh` invocations.
+`upload-trace.jsonl` is the per-call record: one `trace_event` per invocation,
+with the operation (`release_listing`, `asset_download`, `asset_upload`,
+`release_verification`), the outcome (`completed` or `failed`), an
+`error_category` of `call_failed` on a failed call, the duration in seconds,
+and the run identity (`run_id`, `job`, `run_attempt`).
+
+The record follows this ADR's existing bounds. No asset name, URL, payload
+path, or command output is written; the duration and the bounded vocabulary are
+the whole of it. `TraceRecord` refuses an operation or outcome outside that
+vocabulary at construction, so a value a consumer cannot filter on cannot be
+written. The run identity is read once by the command line and passed in,
+rather than read by the seam: the seam stays free of process state, as the
+injected-environment rule requires.
+
+A call that returned a non-zero status is traced as `failed`, not only one that
+raised. A `gh` refusal is normally reported through its exit status, and a
+trace that marked every one of those `completed` would miss exactly the calls
+an operator investigates.
+
+The two vocabularies stay separate. A boundary names a duration to sum and an
+operation names a call to trace, and the mapping between them is one table in
+`release_upload_trace` rather than a caller's assumption. The file is written
+beside `upload-plan.json` and `upload-timings.json` and retained by the same
+`always()` artefact step, and it never fails the run: the plan is the contract
+and the uploader has already reported a refusal on standard error.

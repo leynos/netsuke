@@ -1,10 +1,17 @@
 """Write the release's declared asset list for the publication jobs to read.
 
-The upload step, the inventory verifier and the finalizer all need the same
-answer to "which assets does this release publish?". This CLI is where that
-answer is produced: it calls :func:`release_declaration.declared_asset_names`
-and writes the result as one name per line, which is the format
-``verify_release_inventory_cli --expected`` already reads.
+The upload step needs one answer to "which assets does this release publish?",
+both to reconcile against what GitHub already holds and to name the transfer.
+This CLI is where that answer is produced: it calls
+:func:`release_declaration.declared_asset_names` and writes the result as one
+name per line, which is the format ``verify_release_inventory_cli --expected``
+reads.
+
+The verifier and the finalizer are written and their suites pass, but neither
+runs in the release workflow yet, so nothing consumes the declaration outside
+this action today. The file is retained as an artefact because that is what
+will hand it on once those jobs are wired: a step that recomputed the set there
+would be reading the tree it is supposed to check.
 
 Producing the declaration and comparing against it stay separate steps, and
 that separation is the point. A producer that read the staged tree and declared
@@ -14,13 +21,15 @@ and the operating-system half is held to a per-platform count, so both halves
 can disagree with the tree.
 
 The same run also writes the trusted digest record, because this is the only
-stage holding both the declared names and the staged bytes, and it is the last
-point before upload at which the bytes are still the build's own. The verifier
-compares the download against that record, so a substituted package or a
-replaced archive/sidecar pair is caught. Both files are staged before either
-destination changes. If the second replacement fails, the first is restored;
-if restoration also fails, the backup is retained for recovery. Two separate
-paths cannot be replaced atomically across a process or machine failure.
+stage holding both the declared names and the staged bytes and it is the last
+point before upload at which the bytes are still the build's own. The upload
+step compares the payload it selected against that record before the first
+network call, and again against the release listing afterwards, so a
+substituted package or a replaced archive/sidecar pair is caught. Both files
+are staged before either destination changes. If the second replacement fails,
+the first is restored; if restoration also fails, the backup is retained for
+recovery. Two separate paths cannot be replaced atomically across a process or
+machine failure.
 
 Nothing here reaches the network. Every job that runs this has already
 downloaded the artefacts; this module lists what should be there.

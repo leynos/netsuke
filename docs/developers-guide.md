@@ -2592,22 +2592,281 @@ and macOS builds, and Ubicloud has no Windows runners to move either to.
 The dry run still enters the `release` job to rehearse staging. The package
 jobs upload their packages as workflow artefacts under
 `should_upload_package_artifacts`; the release job downloads them, hoists and
-validates the cargo-binstall archive pairs, then asks `upload-release-assets`
-to validate the upload plan. Its `dry-run` input prevents any release upload,
-and the draft-creation step is publish-only. Build diagnostic artefacts remain
-behind `should_upload_workflow_artifacts`, which stays false during dry runs.
+validates the cargo-binstall archive pairs, then asks the shared
+`upload-release-assets` action to validate the upload plan. Its `dry-run` input
+prevents any release upload, and the draft-creation step is publish-only. Build
+diagnostic artefacts remain behind `should_upload_workflow_artifacts`, which
+stays false during dry runs.
+
+The publishing lane takes the same download and hoist path but hands the result
+to `./.github/actions/upload-declared-assets` instead. Its interface is three
+required inputs and four optional ones, and `action.yml` is the authority for
+that count:
+
+| Input            | Required | Default                        | Purpose                                                 |
+| ---------------- | -------- | ------------------------------ | ------------------------------------------------------- |
+| `release-tag`    | yes      | --                             | The validated release tag to reconcile against.         |
+| `commit`         | yes      | --                             | The candidate commit the producer records are bound to. |
+| `version`        | yes      | --                             | The release version the archive names interpolate.      |
+| `dry-run`        | no       | `false`                        | Reconcile and plan without uploading.                   |
+| `dist-dir`       | no       | `dist`                         | The tree the download and hoist steps left behind.      |
+| `staging-config` | no       | `.github/release-staging.toml` | The file naming targets and platforms.                  |
+| `manifest`       | no       | `Cargo.toml`                   | The package the archives belong to.                     |
+
+`commit` must be the full, lowercase 40-character hexadecimal commit the
+release publishes. It is forwarded from the metadata job rather than derived
+from the triggering ref, because only that job validates the spelling and the
+producer records are keyed by the value it produces.
+
+`./.github/workflows/build-and-package.yml` takes the same `commit` input, and
+there it is **required**: a reusable-workflow caller that omits it is refused
+before the job starts, and one that passes an abbreviated SHA, an uppercase
+spelling, a tag, or a branch name is refused once the producer compares it with
+the checkout's `HEAD`. Because the metadata job is the only place that
+validates the spelling, a direct caller forwards that job's exported
+`candidate_commit`; `release.yml` publishes it from `workflow_call.outputs` for
+exactly that reason.
+
+The upload CLI's exit status is a contract rather than a diagnostic detail: the
+workflow branches on it, and an operator retries one status and escalates
+another. `scripts/upload_declared_assets_refusals.py` owns the table that maps
+each exception the step can raise to the status a shell sees and the sentence
+its log line leads with, which is what keeps the promise the CLI's docstring
+makes checkable against the code that keeps it.
+
+| Status | Constant                 | Meaning                                                     |
+| ------ | ------------------------ | ----------------------------------------------------------- |
+| `0`    | `EXIT_OK`                | Every declared asset reconciled; nothing left to upload.    |
+| `1`    | `EXIT_CONFLICT`          | A staged artefact disagrees with the release or the record. |
+| `2`    | `EXIT_INPUT_UNREADABLE`  | An input the run cannot read at all.                        |
+| `3`    | `EXIT_UPLOAD_FAILED`     | The transfer itself failed.                                 |
+| `4`    | `EXIT_OUTPUT_UNWRITABLE` | A record the run had to write could not be written.         |
+
+A subclass must precede its base in that table, or the base's label would
+describe the wrong failure; and every status the CLI documents must be
+reachable, since a status with no entry is a promise the workflow can never
+observe. Both properties are tested rather than assumed.
+
+The pieces that action is built from are named after what they own.
+`scripts/record_producer_provenance_cli.py` and its sibling modules write the
+producer record each build job leaves in its staging directory, and
+`scripts/release_producer_provenance.py` is the policy that validates one;
+`scripts/release_package_origins.py` decides whether a package's recorded
+origins support publishing it; `scripts/release_payload_selection.py` chooses
+the declared names and `scripts/release_payload_tree.py` copies exactly those
+files; `scripts/release_upload_observation.py` splits the effectful release
+listing from the read-only reconciliation decision;
+`scripts/release_upload_run.py` sequences one run — verify the payload,
+transfer, re-observe — through the injected runner; and
+`scripts/upload_declared_assets_cli.py` is the entry point the action's steps
+call, owning the argument surface and the exit-status contract over that run.
+
+The modules underneath are partitioned by what they are allowed to touch, and
+the partition is checked rather than merely described. `POLICY_MODULES` in
+`tests/workflow_contracts/release_publication_modules.py` are the modules that
+decide from values already in memory; `ADAPTER_MODULES` are the ones that parse
+a format, read or write a file, or compose policy at a CLI edge. The lists are
+a partition of `SOURCE_MODULES`, so a new release source cannot be added
+without an explicit decision about which side owns its effects, and
+`test_every_release_source_is_classified_as_policy_or_adapter` refuses a file
+that appears in neither or in both.
+
+The boundary is drawn so each side answers a question the other cannot. An
+adapter owns the wire: member names, presence, and text-vs-number, plus
+everything that can fail for a reason a filesystem or a remote service caused.
+A policy module owns the claim the decoded values make. The split matters most
+where both refusals exist for the same file, which is why
+`scripts/release_producer_provenance_decode.py` is separate from
+`scripts/release_producer_provenance.py`: "this document is malformed" and
+"this document claims a commit nobody built" have different remedies, and
+collapsing them into one message would leave an operator unable to tell a
+corrupt file from a producer that ran against the wrong revision. Both call
+paths use the one decoder — `release_payload_tree` for reading, and
+`record_producer_provenance_record` for the producer's own self-check — so the
+reader and the writer cannot disagree about what a readable record is.
+
+The same reasoning names the smaller pieces.
+`scripts/release_producer_claims.py` binds each record's claims to the target
+the record names, because a union of every record's claims would let two
+same-platform producers exchange their bytes while the union stayed identical.
+`scripts/release_producer_assets.py` judges only one record's asset map: the
+name may describe something other than a bare file, and the digest may not be a
+SHA-256 at all, and neither is inferred from the other.
+`scripts/release_payload_identity.py` asks the three questions selection needs
+answered before it trusts a name — is this tree the candidate's, did every
+configured target report, and does each record describe the platform its target
+implies — and asks them in that order, because a tree that is not this
+candidate's must be refused before anything it claims is read.
+`scripts/release_payload_names.py` decides whether each declared name has
+exactly one file and whether each release-shaped file the declaration does not
+account for is refuseable; the binaries, licences, completions and manual pages
+that ship *inside* the packages are excluded silently, since refusing them
+would reject a good build.
+
+On the upload side the decision and the effect are separated the same way.
+`scripts/release_upload_failures.py` holds a small fixed vocabulary for why an
+attached asset's bytes could not be established — a transient transfer fault, a
+name that resolved to a symlink, and a file that could not be read at all call
+for different responses — and deliberately does not quote the underlying error,
+which could carry a URL or a token into a log.
+`scripts/release_upload_messages.py` renders the refusal prose that a person
+reads, kept apart from `scripts/release_upload_plan.py` because the plan's
+fields are a contract with a job and these words are read by an operator.
+`scripts/release_upload_digests.py` establishes digests for the attached assets
+GitHub would not report, treating a failed download as "could not tell" rather
+than as an error, so reconciliation can report unverifiable rather than wrong
+bytes. `scripts/release_upload_boundaries.py` does nothing but name which of
+the four boundaries a `gh` invocation crosses, given the command and the phase
+the run has reached, so that naming is a total function a test can state
+without a subprocess or a clock.
+
+The direction of dependency is one-way and visible in the import lists. No
+policy module imports an adapter, and every release source outside the declared
+HTTP transport boundary stays network-free; the contract test above applies
+both rules to the actual module set rather than to a hand-maintained subset.
+
+That action selects only the artefacts this run's producer records vouch for,
+writes the declaration and the trusted digest record from the staged bytes,
+retains all three files as the
+`declared-assets-${{ github.job }}-${{ github.run_attempt }}` workflow
+artefact, and only then uploads the declared names. The upload plan it wrote,
+which names the assets of a refusing run, is retained afterwards as a separate
+`declared-assets-plan-${{ github.job }}-${{ github.run_attempt }}` artefact.
+The uploader writes that plan twice: once before the first byte moves, so a
+transfer that raises still leaves an operator what the run set out to do, and
+again after it, so the retained file describes what the release holds. The
+retention therefore cannot join the record above -- the plan's final content
+does not exist until the run has finished, and a second retention under the
+record's name would collide. The attempt suffix keeps a job re-run from
+colliding with the first attempt's record, which v7 refuses to overwrite. The
+shared action remains in use by the rehearsal, so the same `dry-run` expression
+decides both lanes' mode. `publish-release` checks out the candidate commit
+rather than the triggering ref because the selection, the declaration, and the
+uploader all read repository files and those files must be the ones the
+producers built.
+
+Only *the upload step itself* defers its failure; the action as a whole can
+still fail. That step captures the uploader's status, writes `upload-error` and
+`error-message` outputs, and exits 0, and the job's own
+`Check asset upload errors` step turns a `true` into a diagnostic and an exit
+status of 1. That hand-off is what the shared action already did, and keeping
+it means the surrounding steps did not move: the outcome record still reads
+`UPLOAD_ERROR_PRESENT` from the output, and `release_operation_records` still
+classifies a planned-but-refused upload as `upload_plan_validation` from the
+flag rather than from a phase outcome.
+
+Deferring the failure is what makes the upload step's own log line
+load-bearing, so the step prints its diagnostic to standard error as well as
+writing it to the output. The caller's failure step is not guaranteed to run: a
+runner that cannot retain the plan artefact, or a cancellation between the two
+steps, skips it, and the job log would then hold no explanation at all.
+
+The uploader also retains `upload-timings.json` beside its plan, and the
+plan-retention step carries both. It records how long the reconciliation
+listing, the asset download, the transfer, and the post-upload verification
+each took, with `null` for a boundary the run did not cross. Those are the four
+places the step reaches GitHub, and one duration for the whole step could not
+tell a slow transfer from a listing that retried. `TimedRunner` in
+`release_upload_timing` is the seam: it wraps the injected `subprocess` runner,
+so every `gh` invocation is measured at one point and no call site knows the
+timing exists. It is generic over the runner it wraps rather than importing
+`subprocess` itself, so the module that names the boundaries stays free of the
+process boundary. Writing and reading the record live in
+`release_upload_timing_files`, following the `release_digest` and
+`release_digest_files` split. Each member is a measured integer or a JSON
+`null` for a boundary the run did not cross, and nothing else: a reader that
+assumed every member were a number would misparse a valid record, and the same
+reason that keeps the plan to a bounded failure vocabulary rather than command
+output keeps this file to durations.
+
+`TimedRunner` only *measures*. Which boundary a call belongs to is
+`release_upload_boundaries.boundary_of`'s, the running total is
+`BoundaryTimings.with_measurement`'s, and the per-call record is
+`release_upload_trace.record_for_call`'s; the runner is the composition of the
+three around one call, and each is a unit a test drives without a subprocess.
+Naming a listing needs to know *when* it happens rather than merely what ran,
+so the phase is an argument, not a count of listings already seen: the phase
+becomes confirmation when the runner actually sends a transfer, which derives
+the fact from the call instead of asking a caller to announce it and risk
+forgetting. A counter would also make a call's meaning depend on history, so a
+listing added later for a new reason would silently renumber the figures an
+operator reads.
+
+Neither diagnostic can fail the run. `record_timings` and `record_trace` let
+their `OSError` reach the caller, and `upload_declared_assets_cli` is where the
+judgement is made: the plan is the contract, so a refused or completed run
+keeps its exit status even when a timing or a trace could not be written. The
+two writes are guarded separately, so one unwritable file cannot suppress the
+attempt to record the other — they are unrelated diagnostics, and tying them
+together would make the trace's fate depend on the timings file's. A writer
+that swallowed the error could not tell its caller whether the record exists,
+and it would be deciding the run's outcome from inside a file write.
+
+The aggregate says how long a boundary took, not which of its calls failed: a
+run downloads once per undigested name, and eleven calls summed into four
+numbers cannot say which one refused. `upload-trace.jsonl` is the per-call
+record, written by `release_upload_trace` to the same directory and retained by
+the same `always()` step. It follows the JSONL style
+`release_operation_records` already uses: one `trace_event` per `gh`
+invocation, carrying the operation (`release_listing`, `asset_download`,
+`asset_upload`, or `release_verification`), the outcome (`completed` or
+`failed`), an error category on a failed call, its duration in seconds, and the
+run identity (`run_id`, `job`, `run_attempt`, each `unknown` when the
+environment carries none). The two vocabularies are deliberately separate: a
+boundary names a duration to sum, and an operation names a call to trace, so
+the mapping between them lives in one table rather than in either caller. The
+seam is the same `TimedRunner`, and it traces a call that returned non-zero as
+`failed` rather than only one that raised: a `gh` refusal reported through its
+exit status is exactly the call an operator reads the trace to find. The record
+is bounded by construction. No asset name, URL, or command output reaches it,
+because the file outlives the run and an asset name is both unbounded and
+attacker-visible in a way a duration is not. `TraceRecord` refuses an operation
+or outcome outside that vocabulary when it is constructed, so an unfilterable
+value cannot be written at all, and the run identity is read from the
+environment once by the command line rather than by the seam that writes the
+file.
+
+Three earlier steps have no such treatment, and a reader who takes "the action
+never fails" literally will misdiagnose their failures. Selection can refuse a
+stale candidate, a missing target, an ambiguous staged file, or an artefact
+claimed by another target. Declaration can refuse a record that does not cover
+the release. Retention uploads the record with `if-no-files-found: error`, so a
+selector that wrote nothing fails there rather than at the uploader. Each of
+those fails the action's own step, which is what stops a bad tree from reaching
+the network at all.
+
+The upload path ends here for now. The uploader reads the local `trusted.json`
+when it checks the payload. No later job consumes the retained artefact:
+`verify-release-inventory`, `finalize-github-release`, and `consumer-smoke` are
+planned job-matched actions that do not exist yet, and no job in this workflow
+publishes a release. Only a release the workflow creates is a draft:
+`ensure_draft_release.py` returns as soon as the tag already has one, without
+checking whether it is public, so a rerun attaches assets to whatever release
+the tag already names. The record is retained *for* those jobs, which is what
+the issue asks for; wiring a consumer is their work. Read the section above as
+describing the implemented upload path, not a completed verification and
+finalization hand-off.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
-its JSONL telemetry file remains on the runner. Publication uploads a per-job
-artefact named `release-operation-observability-${{ github.job }}`. It contains
-`release-operation-observability.jsonl` with bounded operation and phase
-counters, duration samples, and phase start/completion events. If cancellation
-interrupts a phase before its end marker, it records a phase interruption event
-named `release_phase_interrupted`. The summary records job and phase outcomes
-with a fixed error category. The publication artefact uses the repository's
-default GitHub Actions retention policy. These records omit release tags,
-filenames, raw error text, and secrets.
+its JSONL telemetry file remains on the runner. Publication uploads a
+per-job-and-per-attempt artefact named
+`release-operation-observability-${{ github.job }}-${{ github.run_attempt }}`.
+It contains `release-operation-observability.jsonl` with bounded operation and
+phase counters, duration samples, and phase start/completion events. If
+cancellation interrupts a phase before its end marker, it records a phase
+interruption event named `release_phase_interrupted`. The summary records job
+and phase outcomes with a fixed error category. The publication artefact uses
+the repository's default GitHub Actions retention policy. These records omit
+release tags, filenames, raw error text, and secrets.
+
+The attempt suffix is what makes a job re-run safe. A re-run keeps the run id
+and increments only the attempt, so a job-only name collides with the first
+attempt's artefact, and `actions/upload-artifact` v7 refuses to overwrite one
+rather than replacing it. `overwrite: true` would resolve the collision by
+deleting the earlier attempt's evidence, which is the opposite of what the
+retained record is for: an operator diagnosing a re-run needs both attempts to
+compare.
 
 The skip applies only to events that `ci.yml` also answers. The dry run answers
 `ready_for_review` and `ci.yml` does not, so a draft marked ready after its
@@ -2974,10 +3233,11 @@ An always-run step writes the job and phase outcomes, durations, dry-run mode,
 and fixed error category to `GITHUB_STEP_SUMMARY`. It also writes
 `release-operation-observability.jsonl` under `runner.temp`; a following
 always-run step uploads that file as
-`release-operation-observability-package-crate`. The JSONL contains bounded
-metrics and phase events. Both workflow artefacts use the repository's
-configured GitHub Actions retention policy because neither upload overrides
-retention.
+`release-operation-observability-package-crate-<attempt>`, where the attempt is
+`github.run_attempt`, so a re-run of the job keeps its own record instead of
+colliding with the first attempt's. The JSONL contains bounded metrics and
+phase events. Both workflow artefacts use the repository's configured GitHub
+Actions retention policy because neither upload overrides retention.
 
 The CLI captures the observation end time and passes it into the environment
 parser. Tests supply a fixed timestamp to keep duration calculations
@@ -3229,6 +3489,70 @@ has exercised this publisher. The later `verify-release-inventory` job is also
 still open, so `publish-release` does not yet wait for crates.io success and a
 tagged run can temporarily leave the GitHub Release and crate out of sync.
 
+### Selecting the declared payload
+
+Selection answers one question: which of the files the download left in `dist`
+is this release's payload? `release_payload_selection.select_payload` is the
+policy half. It receives three already-parsed accounts -- the producer records,
+the release identity, and an observation of the staged tree -- and returns the
+declared names with each one's recorded digest and the adapter's own source
+value. It never opens a file, so its cases supply tokens rather than paths.
+
+The three accounts arrive in named shapes rather than as loose arguments.
+`ReleaseIdentity` carries the candidate commit, the workflow run, and the
+staging configuration's target table. `StagedTree` carries the archive each
+target's record names, every regular file indexed by the name it would publish
+under, and an *optional* mapping of package name to the target subtree that
+staged it. Those are the inputs a mapping-based boundary needs: a caller
+assembles the observations, and the policy says what they mean.
+
+`StagedTree.package_origins` has three shapes and they are not interchangeable.
+A populated mapping is the walked tree, and a package a record claims must
+appear there under that record's own target. `None` is a caller that did not
+walk the tree, and the per-format counts stand as the whole package guarantee.
+`{}` is a walk that found no producer record beside any package at all, and
+every claimed package is refused. A falsy default would collapse the last two
+into the first, which is exactly the case -- a package nobody staged -- that a
+count cannot see.
+
+`select_release_payload_cli` is the adapter that composes those observations
+and installs the result. `select_payload` reads the staging configuration, the
+producer records (once, so the claim check and the origin walk judge the same
+bytes), the archive names, the staged index, and the package-origin walk, and
+returns the selection without touching the destination. `main` runs it in its
+own `try` block and calls `install_payload` in a second, so a wrong tree is
+reported as a refusal while a destination that cannot be written is reported as
+`EXIT_OUTPUT_UNWRITABLE`; sharing one classifier would send an operator to the
+producer records for a fault in their workspace.
+
+`install_payload` hands `release_payload_regular_files` the staged root, and
+the regularity proof stops there. Everything from the root down is the
+downloaded tree, so a link inside it is refused; the root's own ancestors are
+the runner's path, chosen by the job rather than by the producers, and a link
+there redirects nothing this run publishes. Probing them anyway would reject a
+good tree on a host whose `$RUNNER_TEMP` sits under a symlinked mount, which is
+a false refusal with no corrective action available. A source outside the root
+is refused separately, because selection's names came from that tree and a path
+beyond it is a different claim.
+
+`release_payload_handoff.require_payload_matches` is the later claim, made by
+the uploader against the directory it is about to publish. Selection verified
+the staged bytes; this verifies the *hand-off*, over the copy the action
+installed under `runner.temp` and passes to the uploader step in the same job.
+Nothing transfers the payload through a workflow artefact: only the
+declaration, the two digest records, and the plan are retained, and a later job
+restoring them would receive evidence *about* the payload rather than the
+payload itself. What the check covers is therefore the local stretch between
+`select` and `upload` -- a step that rewrote, appended, or replaced an entry in
+`declared-assets/selected/payload` after selection approved it.
+
+It requires the directory to hold exactly the declared names, and it hashes the
+path `release_upload_remote.upload` will actually pass to `gh` --
+`payload_dir / name` -- after proving that path a regular file with `lstat`.
+Indexing the directory by published name would answer a question about names
+instead: a regular `sub/a.deb` would satisfy the digest check for a declared
+`a.deb` while a symlink at the root carried the transfer somewhere else.
+
 ### Trusted digest records
 
 A release has to state, before anything is uploaded, which bytes it intends to
@@ -3236,16 +3560,55 @@ publish. That statement is the digest record: `{"assets": {name: digest}}`,
 written by `release_declaration_cli --digest-record` from the staged tree in
 the same run that declares the names, and read by both later consumers.
 
-The provenance chain has four links and each one refuses rather than
-interpolates.
+Selection writes a record of its own, and the difference between the two is the
+point. `select_release_payload_cli` hashes the staged *sources* once and
+requires them to equal the digests the producer records claim, and
+`selection.json` is written from that same account rather than from a second
+hash of the copy. Re-hashing at install time would make the record describe
+whatever bytes the copy happened to read: a source swapped between the check
+and the copy would leave `selection.json`, the declaration record, and the
+payload agreeing with each other and none of them with the producer. Writing
+the verified digests instead makes the payload disagree with the record, which
+is the disagreement the uploader refuses.
+
+The declaration record is produced from the staged tree by a later step,
+independently of selection. The file itself is installed after the copy, and
+that ordering is deliberate: a record that exists beside no payload would be a
+claim a reader could mistake for a completed selection, so a copy that fails
+leaves neither the payload nor a record behind.
+
+A record compared only with a later hash of the copied tree would accept bytes
+swapped between the two hashes, so
+`release_digest_record_agreement.require_records_agree` makes the two records
+answer for one another before either is used against the payload. A run that
+presents a payload matching its declaration record but not its selection record
+is refused as a conflict.
+
+The provenance chain has six links and each one refuses rather than
+interpolates. Links 1 to 4 run in every tagged workflow; links 5 and 6 are
+written and tested but are not yet wired into `release.yml`, so today the
+record is retained past the upload rather than consumed by them.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
-2. `release_declaration_cli --digest-record` writes those digests to the record.
-3. `verify_release_inventory_cli --trusted` compares every downloaded asset
-   against the record, and refuses a record that does not cover exactly the
-   declared set.
-4. `finalize_github_release_cli --identity` reads the same record to decide what
-   a re-run should do.
+2. `select_release_payload_cli` hashes the sources it approves, requires them
+   to equal the producer records, copies them, and writes `selection.json` from
+   those verified digests once the copy has succeeded.
+3. `release_declaration_cli --digest-record` writes its own record from the
+   staged tree, and `upload_declared_assets_cli` requires the two records to
+   name the same bytes.
+4. `upload_declared_assets_cli --digest-record --selection-record` refuses a
+   payload whose bytes disagree with the records, and uploads only names they
+   cover.
+5. *Planned.* `verify_release_inventory_cli --trusted` compares every
+   downloaded asset against the record, and refuses a record that does not
+   cover exactly the declared set.
+6. *Planned.* `finalize_github_release_cli --identity` reads the same record to
+   decide what a re-run should do.
+
+The action retains `declaration.txt`, `selection.json`, and `trusted.json` as a
+workflow artefact for exactly that reason: a job added to the chain later needs
+this run's account of the release, and a record reconstructed after the fact
+would be derived from the bytes it is meant to judge.
 
 The record is never derived from downloaded bytes, and that is the whole point.
 A record derived from the download proves only that GitHub agrees with itself:
@@ -3278,8 +3641,31 @@ be undone, so the decision to proceed is taken from recorded state before
 anything is un-drafted.
 
 `release_reconcile_github.plan_asset_actions` assigns each declared name one of
-three actions — upload, skip-verified, or conflict — and
-`finalize_github_release_cli` turns the plan into an exit status.
+four actions, and the name's own evidence decides which:
+
+| Action          | Evidence                                                       |
+| --------------- | -------------------------------------------------------------- |
+| `UPLOAD`        | the release does not attach the name at all                    |
+| `SKIP_VERIFIED` | the attached digest equals the trusted record's                |
+| `CONFLICT`      | the attached digest was read and differs from the record's     |
+| `UNVERIFIABLE`  | the name is attached and no digest could be established for it |
+
+*Table 6: The four actions `plan_asset_actions` assigns.*
+
+`CONFLICT` and `UNVERIFIABLE` both stop the upload, and they are kept apart
+because their remedies differ. A conflict says the release holds demonstrably
+wrong bytes and a person has to decide what to do with them; an unverifiable
+name says the listing or the download failed, so the release may be perfectly
+correct. A run that reported the second as the first would send an operator
+hunting for wrong bytes that do not exist, which is why `write_plan` records
+them under separate keys and `blocked_message` names each clause that applies.
+
+`finalize_github_release_cli` turns a plan of all four actions into an exit
+status, with `UNVERIFIABLE` sharing `EXIT_CONFLICT` because both must stop the
+run just as firmly; only the plan keeps them apart. Only names the record
+declares are decided: an attached asset the record never claimed is left alone
+here because refusing over it would block a release over a file the plan never
+named.
 
 | Exit constant            | Code | Meaning                                                  |
 | ------------------------ | ---- | -------------------------------------------------------- |
@@ -3289,7 +3675,7 @@ three actions — upload, skip-verified, or conflict — and
 | `EXIT_INPUT_UNREADABLE`  | 3    | the record cannot support a decision at all              |
 | `EXIT_OUTPUT_UNWRITABLE` | 4    | the reconciliation plan could not be written             |
 
-*Table 6: `finalize_github_release_cli` exit statuses.*
+*Table 7: `finalize_github_release_cli` exit statuses.*
 
 Conflict outranks upload when a draft holds both kinds of finding. The
 precedence is stated in `_verdict` rather than taken from the numeric maximum,
@@ -3390,6 +3776,26 @@ those operations at the file or transport boundary:
   observations for `release_reconcile_crates`. `release_crates_io_adapter` maps
   download status and file bytes into a `DownloadObservation` for
   `verify_crates_io_bytes`.
+- `release_payload_selection` chooses from names and already-parsed records.
+  `release_payload_tree` walks, copies, and writes the selection's record, and
+  `release_payload_handoff` judges the installed directory against that record
+  at the paths the uploader will send. `release_payload_regular_files` owns the
+  regularity proof both of the latter two reach for.
+- `release_upload_observation` splits the release listing into an effectful
+  `observe_release` and a read-only `settle_observation`. The first lists the
+  release through `release_upload_remote` and, only for names the listing left
+  undigested, downloads and hashes the asset. The second turns an `Observation`
+  into a `Settlement` without touching the network or the filesystem, which is
+  why a case can hand it a handwritten mapping and no stub at all.
+  `settle_observation` takes the expected mapping as well as the observation:
+  an observation says what the release holds, while what the payload should
+  hold is the caller's, and a plan derived from the listing alone would decide
+  about names nobody declared. Nothing in the module composes the two:
+  `release_upload_run.settle` calls them separately around its transfer,
+  because the re-read after an upload is a second observation of the same
+  release and not a second decision procedure. A convenience wrapper taking
+  both in one call would hide the one effectful half at exactly the call site
+  the split exists to keep honest.
 - `finalize_github_release_cli` normalizes GitHub's `sha256:` digest prefix;
   `release_reconcile_github` receives bare digests and only plans actions.
 
@@ -3461,7 +3867,7 @@ CLI also refuses, so the mistake surfaces as the input that caused it.
 | `version`      | yes      | the crate version from the manifest                   |
 | `bin-name`     | yes      | `netsuke`, the installed binary name                  |
 
-*Table 7: `package-crate` action inputs.*
+*Table 8: `package-crate` action inputs.*
 
 The action publishes three outputs — `identity-path`, `crate-name`, and
 `crate-path` — and resolves the archive name from the record it just wrote
@@ -3487,11 +3893,11 @@ not move it out of harm's way.
 
 Two targets cover this surface, and neither runs the other.
 
-`make test-release-publication` runs the thirty-six `scripts/tests/test_*.py`
-modules for the release-policy CLIs and their library modules, then runs the
-same source modules under `--doctest-modules`, so the examples in their
-docstrings execute. The recipe pins the interpreter, pytest, and hypothesis,
-and passes `-c /dev/null --rootdir=. -p no:cacheprovider`: without the isolated
+`make test-release-publication` runs the `scripts/tests/test_*.py` modules for
+the release-policy CLIs and their library modules, then runs the same source
+modules under `--doctest-modules`, so the examples in their docstrings execute.
+The recipe pins the interpreter, pytest, and hypothesis, and passes
+`-c /dev/null --rootdir=. -p no:cacheprovider`: without the isolated
 configuration a root `pyproject.toml` supplies plugins and options and the
 command stops describing what it runs. It requires `PYTHONPATH=scripts` because
 the suites import their modules by bare name.

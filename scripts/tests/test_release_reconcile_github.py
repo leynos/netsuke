@@ -17,8 +17,12 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from release_reconcile_github import (
     AssetAction,
+    blocked,
     conflicts,
     plan_asset_actions,
+    present_assets,
+    undigested,
+    unverifiable,
 )
 
 #: Digests stand in for bare values after the GitHub adapter normalises the
@@ -93,15 +97,94 @@ def test_a_present_asset_with_the_wrong_digest_conflicts() -> None:
     ) == ("netsuke.tar.gz",), "the conflicting name must be reported"
 
 
-def test_a_present_asset_with_no_reported_digest_conflicts() -> None:
-    """Require an asset GitHub reports no digest for to conflict.
+def test_a_present_asset_with_no_reported_digest_is_unverifiable() -> None:
+    """Report an asset GitHub gave no digest for as unverifiable.
 
     ``None`` means the evidence is absent, not that it agrees. Treating an
     unverifiable asset as verified is the same failure as name-matching.
+
+    It is *not* a conflict. Nothing compared the bytes, so saying they disagree
+    would promise evidence the run does not have and send an operator looking
+    for wrong bytes that may well be right.
     """
     plan = _plan({"netsuke.tar.gz": DIGEST_A}, {"netsuke.tar.gz": None})
-    assert plan["netsuke.tar.gz"] is AssetAction.CONFLICT, (
-        "an asset with no reported digest has no evidence and must conflict"
+    assert plan["netsuke.tar.gz"] is AssetAction.UNVERIFIABLE, (
+        "an asset with no reported digest has no evidence and is unverifiable"
+    )
+
+
+def test_unverifiable_names_are_reported_apart_from_conflicts() -> None:
+    """Keep the two refusals distinguishable after planning.
+
+    Both stop an upload, so a caller that only asks "may I proceed" treats
+    them alike. A caller that reports to an operator must not: the remedies
+    differ.
+    """
+    actions = plan_asset_actions(
+        expected={"a.deb": DIGEST_A, "b.rpm": DIGEST_A, "c.pkg": DIGEST_A},
+        present={"a.deb": DIGEST_A, "b.rpm": DIGEST_B, "c.pkg": None},
+    )
+    assert conflicts(actions) == ("b.rpm",), (
+        "only the read-and-disagreeing name is a conflict"
+    )
+    assert unverifiable(actions) == ("c.pkg",), "only the unread name is unverifiable"
+    assert blocked(actions) == ("b.rpm", "c.pkg"), (
+        "both stop the run, and both must be named"
+    )
+
+
+def test_blocked_sees_every_name_of_a_single_pass_iterable() -> None:
+    """Name the unverifiable entries even when ``actions`` is a generator.
+
+    ``blocked`` is annotated ``Iterable``, so it owes a caller the same answer
+    for any iterable it accepts. A second pass over an exhausted generator
+    yields nothing, which would drop the unverifiable names and let a run
+    upload over bytes nobody could read.
+    """
+    planned = [
+        ("b.rpm", AssetAction.CONFLICT),
+        ("c.pkg", AssetAction.UNVERIFIABLE),
+        ("a.deb", AssetAction.UPLOAD),
+    ]
+    assert blocked(name_action for name_action in planned) == ("b.rpm", "c.pkg"), (
+        "a generator must yield the same answer as a list"
+    )
+
+
+def test_a_listing_digest_outranks_a_downloaded_one() -> None:
+    """Keep the listing authoritative where it reported a digest.
+
+    A download exists to supply evidence the listing withheld, not to overrule
+    it. Taking the downloaded value whenever the two differ would let a
+    truncated transfer contradict a digest GitHub itself reported.
+    """
+    assert present_assets({"a.deb": DIGEST_A}, {"a.deb": DIGEST_B}) == {
+        "a.deb": DIGEST_A
+    }, "a reported digest must not be replaced by a downloaded one"
+
+
+def test_a_downloaded_digest_fills_only_the_listing_gap() -> None:
+    """Fill a ``None`` from the download and leave every other name alone."""
+    assert present_assets(
+        {"a.deb": None, "b.rpm": DIGEST_B}, {"a.deb": DIGEST_A, "b.rpm": DIGEST_A}
+    ) == {"a.deb": DIGEST_A, "b.rpm": DIGEST_B}, "only the gap may be filled"
+
+
+def test_only_declared_names_are_sought_by_download() -> None:
+    """Exclude an undigested asset the trusted record never named.
+
+    Downloading it would spend a transfer on a file nothing consults, and the
+    answer could not change the plan.
+    """
+    assert undigested({"a.deb": DIGEST_A}, {"a.deb": None, "stowaway.txt": None}) == (
+        "a.deb",
+    ), "an undeclared undigested asset must not be downloaded"
+
+
+def test_a_listed_digest_is_not_sought_by_download() -> None:
+    """Ask for nothing when the listing already carried every digest."""
+    assert not undigested({"a.deb": DIGEST_A}, {"a.deb": DIGEST_A}), (
+        "a name the listing described needs no transfer"
     )
 
 

@@ -18,15 +18,12 @@ import json
 import typing as typ
 
 import pytest
-import release_reconcile_github
 from finalize_github_release_cli import (
-    ACTION_EXITS,
     EXIT_CONFLICT,
     EXIT_INPUT_UNREADABLE,
     EXIT_OK,
     EXIT_OUTPUT_UNWRITABLE,
     EXIT_UPLOAD_REQUIRED,
-    build_parser,
     main,
 )
 
@@ -68,14 +65,16 @@ def _argv(
 class _PlanRecord(typ.TypedDict):
     """Describe the reconciliation plan the CLI records as JSON.
 
-    The plan is a two-field document, and naming the field types is what lets
-    the assertions below read ``actions`` and ``conflicts`` as the collections
-    they are. Declaring the whole record as ``dict[str, object]`` would make
-    each lookup opaque and force a cast at every use.
+    The plan is a three-field document, and naming the field types is what lets
+    the assertions below read ``actions``, ``conflicts``, and ``unverifiable``
+    as the collections they are. Declaring the whole record as
+    ``dict[str, object]`` would make each lookup opaque and force a cast at
+    every use.
     """
 
     actions: list[list[str]]
     conflicts: list[str]
+    unverifiable: list[str]
 
 
 def _plan(output: pathlib.Path) -> _PlanRecord:
@@ -158,8 +157,9 @@ def test_the_cli_refuses_an_asset_that_disagrees(
     err = capsys.readouterr().err
     assert ARCHIVE in err, "the diagnosis must name the archive conflict"
     assert SIDECAR in err, "the diagnosis must name the sidecar conflict too"
-    assert "trusted digest record" in err, (
-        "the diagnosis must distinguish the build's trusted input from an inventory"
+    assert "disagree with the trusted record" in err, (
+        "the diagnosis must distinguish the build's trusted input from an "
+        "inventory, and must word it as the uploader does"
     )
 
 
@@ -263,6 +263,39 @@ def test_the_cli_reports_a_conflict_ahead_of_a_missing_asset(
     )
 
 
+def test_the_cli_reports_an_unverifiable_asset_by_name(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Name an attached asset whose digest the listing could not establish.
+
+    An unverifiable asset shares ``EXIT_CONFLICT`` with a real disagreement, so
+    a diagnostic built from the conflicts alone would print nothing: the step
+    would exit 1 naming no asset, and the operator would be left reading the
+    plan file to learn what stopped them.
+    """
+    identity = _identity(tmp_path / "identity.json", {ARCHIVE: ARCHIVE_DIGEST})
+    # `null` is what `gh release view` reports for an asset GitHub holds no
+    # digest for, and the reconciler plans it as unverifiable rather than as a
+    # conflict.
+    assets = _reported(tmp_path / "assets.json", {ARCHIVE: None})
+    output = tmp_path / "plan.json"
+
+    code = main(_argv(identity, assets, output))
+
+    assert code == EXIT_CONFLICT, f"an unreadable digest must stop the run, got {code}"
+    assert _plan(output)["unverifiable"] == [ARCHIVE], (
+        "the plan must record the asset under its own kind"
+    )
+    assert _plan(output)["conflicts"] == [], (
+        "nothing compared this asset's bytes, so it is not a conflict"
+    )
+    err = capsys.readouterr().err
+    assert ARCHIVE in err, "the diagnosis must name the unverifiable asset"
+    assert "could not be verified" in err, (
+        "the diagnosis must not claim the bytes disagreed"
+    )
+
+
 @pytest.mark.parametrize(
     ("reported_digest", "has_conflict"),
     [
@@ -347,48 +380,3 @@ def test_the_cli_refuses_a_record_that_cannot_support_a_decision(
         "step could read a stale one"
     )
     assert capsys.readouterr().err, "the refusal must be diagnosed"
-
-
-def test_the_exit_table_covers_every_action_the_planner_declares() -> None:
-    """Require the table to name every action, so none falls to a default."""
-    declared = {action.value for action in release_reconcile_github.AssetAction}
-    assert set(ACTION_EXITS) == declared, (
-        f"the exit table must cover exactly the planner's actions; "
-        f"missing {sorted(declared - set(ACTION_EXITS))!r}, "
-        f"extra {sorted(set(ACTION_EXITS) - declared)!r}"
-    )
-
-
-def test_the_exit_table_treats_only_a_verified_asset_as_success() -> None:
-    """Require both other actions to stop the release before it is un-drafted."""
-    successes = sorted(action for action, code in ACTION_EXITS.items() if code == 0)
-    assert successes == ["skip-verified"], (
-        f"only a verified asset may proceed to un-drafting, found {successes!r}"
-    )
-
-
-def test_the_conflict_code_is_distinct_from_the_upload_code() -> None:
-    """Keep the two refusals apart, since they send an operator elsewhere."""
-    assert EXIT_CONFLICT != EXIT_UPLOAD_REQUIRED, (
-        "a conflict and a missing asset are different failures and must not "
-        "share an exit code"
-    )
-
-
-@pytest.mark.parametrize("missing", ["--identity", "--assets", "--output"])
-def test_the_cli_requires_all_three_files(missing: str) -> None:
-    """Refuse to guess any of them, since each names a different input."""
-    complete = {
-        "--identity": "identity.json",
-        "--assets": "assets.json",
-        "--output": "plan.json",
-    }
-    argv = [
-        part
-        for flag, value in complete.items()
-        if flag != missing
-        for part in (flag, value)
-    ]
-
-    with pytest.raises(SystemExit):
-        _ = build_parser().parse_args(argv)

@@ -77,7 +77,7 @@ EXPECTED_OUTPUTS = {
 EXPECTED_JOB_INPUTS = {
     "tag": "${{ needs.metadata.outputs.release_tag }}",
     "dry-run": "${{ needs.metadata.outputs.should_publish != 'true' }}",
-    "commit": "${{ github.sha }}",
+    "commit": "${{ needs.metadata.outputs.candidate_commit }}",
     "package-name": "${{ needs.metadata.outputs.package_name }}",
     "version": "${{ needs.metadata.outputs.version }}",
     "bin-name": "${{ needs.metadata.outputs.bin_name }}",

@@ -125,6 +125,27 @@ def test_every_step_reports_a_parseable_shape() -> None:
                 )
 
 
+def test_every_step_id_is_unique_within_its_action() -> None:
+    """Require the step ids an action's outputs are read through to be unique.
+
+    GitHub keys a step's outputs by its ``id``, so two steps sharing one id
+    would leave an ``outputs:`` expression reading whichever wrote last --
+    and a case that captured outputs per step id could not tell them apart.
+    Only the presence of an id is checked here; which outputs a manifest
+    exports is the owning suite's claim.
+    """
+    for action_name, document in action_sources().items():
+        ids = [
+            str(step["id"])
+            for step in action_steps(action_name, document)
+            if step.get("id")
+        ]
+        assert len(ids) == len(set(ids)), (
+            f"{action_name} reuses a step id, so its outputs are ambiguous: "
+            f"{sorted(ids)}"
+        )
+
+
 def test_a_manifest_without_a_runs_mapping_is_refused() -> None:
     """Fail on a manifest whose ``runs`` section is absent or not a mapping.
 
