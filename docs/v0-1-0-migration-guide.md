@@ -19,6 +19,7 @@ sections that match the features they use.
 | Review if enabled | Rust `Action.pool` choices | Move console scheduling onto the edge; keep custom pools off it.    |
 | Required          | `NinjaGenError` matches    | Add arms for the two new console variants.                          |
 | Optional          | Existing manifests         | Omit `console` to retain ordinary scheduling; it defaults to false. |
+| Optional          | Scripts parsing stdout     | Tolerate the forwarding-failure warning on stdout.                  |
 
 _Table 1: migration obligations for the beta series and console-pool option._
 
@@ -871,6 +872,28 @@ the release workflow runs this check, and it needs no new input. The
 [users' guide](users-guide.md) states the candidate contract and the recovery
 path for an interrupted publication.
 
+## Tolerate the forwarding-failure warning on stdout
+
+Netsuke counts every child-output forwarding failure in
+`netsuke_ninja_forward_failures_total`, labelled by `stream` and
+`failure_kind`, and emits a warning beside the output it describes. Forwarding
+loss does not change the build result: the child's exit status remains
+authoritative, so a build whose output a closed pipe truncated is reported as
+the build it was.
+
+One case moves a line onto stdout. When stderr is the destination that rejected
+a write or a flush — for example under `netsuke build 2>&-` — the closed pipe
+cannot carry its own warning, so Netsuke writes
+`netsuke: warning: failed to forward child stderr` to stdout instead. A script
+that parses stdout must tolerate that line where it previously saw only build
+output. JSON mode never reaches the fallback, because it drains both child
+streams to a sink, so stdout stays one result document.
+
+See
+[Bounded output-forwarding metrics](users-guide.md#bounded-output-forwarding-metrics)
+for the labels, the fallback condition, and what forwarding loss does and does
+not change.
+
 ## What does not need to change
 
 The convenience wrappers keep their child-process behaviour: the child inherits
@@ -900,6 +923,8 @@ owned sink and completion-ordering contract.
 - [ ] Add `NinjaGenError::ConsoleDependencyOnly` and
   `NinjaGenError::ConsolePoolConflict` arms to exhaustive matches on generation
   errors.
+- [ ] If a script parses `netsuke` stdout, tolerate the
+  `netsuke: warning: failed to forward child stderr` line.
 
 ## Common errors and fixes
 
