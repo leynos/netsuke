@@ -96,6 +96,9 @@ def test_a_continued_command_is_scanned_after_joining() -> None:
         'api=gh; command "$api" api --method POST "repos/o/r/releases"',
         'api=gh; env EXTRA=1 "$api" api --method POST "repos/o/r/releases"',
         'api=gh; xargs -n 1 "$api" api --method POST < releases.txt',
+        'suffix=h; g"$suffix" api --method POST "repos/o/r/releases"',
+        'suffix=h; command g"$suffix" api --method POST "repos/o/r/releases"',
+        'api=gh; EXTRA=1 command "$api" api --method POST "repos/o/r/releases"',
     ],
 )
 def test_a_command_word_built_from_a_variable_is_rejected(line: str) -> None:
@@ -104,10 +107,13 @@ def test_a_command_word_built_from_a_variable_is_rejected(line: str) -> None:
     Each line executes a POST while naming no ``gh api`` call the scan can
     read, so the count and flag checks both pass. The fourth spelling places
     the call inside a command substitution, the fifth behind a braced
-    expansion, and the last three behind a wrapper -- ``command``, ``env`` and
+    expansion, and the next three behind a wrapper -- ``command``, ``env`` and
     ``xargs`` -- whose options and assignments come before the word that is
-    actually run. A scan of command words has to reach each of those rather
-    than assume away the ones it does not model.
+    actually run. The last three reach the word by other routes: a command
+    word that carries the expansion after a literal prefix, the same word
+    behind a wrapper, and a wrapper behind an environment assignment. A scan
+    of command words has to reach each of those rather than assume away the
+    ones it does not model.
     """
     indirect = indirect_command_words(line)
     assert indirect, f"{line!r} builds a command from a variable"

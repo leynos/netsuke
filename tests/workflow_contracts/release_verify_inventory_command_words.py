@@ -134,8 +134,19 @@ def _names_expansion(word: str, position: _Position) -> bool:
     """Return whether ``word`` names a command through a variable expansion.
 
     Only a word bash reads as a command name qualifies: one that begins a
-    command, or one that a wrapper will run. The same ``$``-leading word after
-    a literal command is an argument, which a step may legitimately use.
+    command, or one that a wrapper will run. The same expansion after a literal
+    command is an argument, which a step may legitimately use.
+
+    The expansion may sit anywhere in the word rather than opening it: bash
+    joins adjacent quoted and unquoted parts, so ``g"$suffix"`` names ``gh``
+    when ``suffix`` holds ``h``, and a check for a leading ``$`` accepts it.
+    A quoted ``$`` that bash would not expand is refused too, because the scan
+    cannot tell the two apart and refusing is the safe direction.
+
+    A ``NAME=value`` word is an assignment rather than a command, in either
+    position: bash stores its value in the variable and runs nothing, so the
+    expansion it carries is a value and not a command name. The step's own
+    ``trusted_root=$(canonical "$TRUSTED_DIRECTORY")`` is that shape.
 
     Returns
     -------
@@ -144,7 +155,9 @@ def _names_expansion(word: str, position: _Position) -> bool:
     """
     if position not in {_Position.COMMAND, _Position.WRAPPED}:
         return False
-    return word.startswith("$")
+    if ENVIRONMENT_ASSIGNMENT.match(word) is not None:
+        return False
+    return "$" in word
 
 
 def _next_position(word: str, position: _Position) -> _Position:
@@ -167,6 +180,11 @@ def _next_position(word: str, position: _Position) -> _Position:
 def _after_plain_word(word: str, position: _Position) -> _Position:
     """Return the position after a word that is neither a test nor an operator.
 
+    An assignment ahead of a command sets the environment for that command
+    rather than becoming the command, so ``EXTRA=1 command "$api" ...`` still
+    reaches the wrapper. Keeping the position open is what lets the scan see
+    the word the wrapper runs.
+
     Returns
     -------
     _Position
@@ -176,7 +194,26 @@ def _after_plain_word(word: str, position: _Position) -> _Position:
         return _Position.WRAPPED
     if position is _Position.WRAPPED:
         return _wrapped_successor(word)
-    if position is _Position.COMMAND and word in COMMAND_WRAPPERS:
+    if position is _Position.COMMAND:
+        return _command_successor(word)
+    return _Position.ARGUMENT
+
+
+def _command_successor(word: str) -> _Position:
+    """Return the position after a word at the start of a command.
+
+    The word still to come is the command only while the assignments ahead of
+    it hold their place; once anything else is written, the command has been
+    named and what follows it is an argument.
+
+    Returns
+    -------
+    _Position
+        The position of the following word.
+    """
+    if ENVIRONMENT_ASSIGNMENT.match(word) is not None:
+        return _Position.COMMAND
+    if word in COMMAND_WRAPPERS:
         return _Position.WRAPPED
     return _Position.ARGUMENT
 
@@ -225,11 +262,13 @@ def indirect_command_words(run: str) -> list[str]:
     step does for the release number, but its *commands* must be literal. A
     command word that is an expansion can hide a write behind the literal scan:
     ``api=gh; "$api" api --method POST ...`` executes a POST the scan, looking
-    for ``gh api``, never sees. Wrapping the expansion in a command that runs
-    its operand hides it the same way -- ``command "$api" api ...`` -- so a
-    word in :data:`COMMAND_WRAPPERS` puts the word it runs in command position
-    as well. The scan reads bash's own tokenization, so a variable used as an
-    operand -- ``[[ -n "$value" ]]`` -- is not mistaken for one.
+    for ``gh api``, never sees. The expansion need not open the word --
+    ``suffix=h; g"$suffix" api ...`` builds ``gh`` from a prefix and a variable
+    -- and wrapping it in a command that runs its operand hides it the same way,
+    ``command "$api" api ...``, so a word in :data:`COMMAND_WRAPPERS` puts the
+    word it runs in command position as well. The scan reads bash's own
+    tokenization, so a variable used as an operand -- ``[[ -n "$value" ]]`` --
+    is not mistaken for one.
 
     Parameters
     ----------
