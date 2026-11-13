@@ -8,10 +8,12 @@ be kept up to date as work proceeds.
 Status: IN PROGRESS
 
 EP-M0 through EP-M5 are complete and roadmap item 20.1.1 is marked done. The
-rebased candidate is awaiting a scope decision because the corrected full-patch
-line count exceeds D-20; the milestones and their acceptance evidence remain
-complete. The user approved this plan on 2026-10-24 and selected D-19 Option A;
-approval authorized drafting the decision records, and it did not accept them.
+published candidate is awaiting a D-20 scope decision because the EP-M3 delta
+exceeds the approved line and file ceilings. The full local gate sequence
+passed on `f32a657f`; this plan-only correction is receiving its documentation
+gates. The milestones and their acceptance evidence remain complete. The user
+approved this plan on 2026-10-24 and selected D-19 Option A; approval
+authorized drafting the decision records, and it did not accept them.
 
 Acceptance was given by the user on 2026-11-09 as a direct instruction to
 accept the seven records and mark the roadmap item complete, and no amendment
@@ -348,15 +350,16 @@ decision D-15.
   schema-version localization keys, and retained both migration-guide sections.
   The updated main had already allocated ADR-0061 and ADR-0068 through
   ADR-0074, so the live branch/PR sweep moved this plan's accepted records to
-  ADR-0075 through ADR-0081. Fresh candidate gates are pending after the
-  documentation migration.
-- [ ] (2026-11-13) Corrected the full-patch scope count against the original
-  boundary `e4ef7c511` and current candidate: 2,710 net lines across Rust files
-  (+2,805/-95), including 881 net lines in non-test `src/` (+928/-47). This
-  exceeds D-20's 2,000/800 ceilings. The earlier 975/339 estimate measured only
-  working-tree changes relative to `HEAD`, not the full candidate patch; the
-  corrected count blocks the final gate run and publication pending a scope
-  decision.
+  ADR-0075 through ADR-0081. The full local gate sequence passed on the
+  resulting candidate at `f32a657f`.
+- [ ] (2026-11-13) Recomputed the EP-M3 delta from the last EP-M2 commit
+  `afd421297` through the published candidate `f32a657f`: 2,710 net Rust lines
+  (+2,808/-98), 878 net non-test `src/` lines (+928/-50), and 56 counted paths
+  after excluding the 35 locale catalogues and one new snapshot. This exceeds
+  each D-20 ceiling: 2,000 Rust lines, 800 non-test `src/` lines, and 32 files.
+  The seven local gates passed on `f32a657f` and it is published; this
+  plan-only correction is under documentation validation. A scope decision
+  remains necessary before marking the plan complete.
 - [x] EP-M3: reader-side schema version gate, users' guide, CHANGELOG. OBL-1 to
   OBL-5 are discharged by the artefacts listed in the verification plan; the
   gate sequence this milestone names passed at `bd7e6f123`, and the later
@@ -1020,8 +1023,8 @@ makes at approval.
 - Decision D-20 (scope ceiling, user-approved): EP-M3 may add up to 2,000 net
   lines across Rust files, or up to 800 net lines in non-test `src/` files.
   Either limit is an independent stop condition, as is the existing 32-file
-  limit. The current implementation is within both Rust limits. Date/Author:
-  2026-11-03, user.
+  limit. The current EP-M3 delta exceeds all three ceilings; see Progress for
+  the measured scope and pending decision. Date/Author: 2026-11-03, user.
 
 - Decision D-21 (test budget, superseded): give
   `cli_configuration_fixture_compiles` a test-specific 900 s allowance after
