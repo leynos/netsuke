@@ -38,6 +38,7 @@ import release_digest_files
 import release_github_assets_adapter
 import release_package_formats
 import release_producer_provenance
+import release_producer_provenance_decode
 from record_producer_provenance_errors import (
     DoublyPublishedNameError,
     DuplicatePackageFormatError,
@@ -137,11 +138,11 @@ def record(
         release_producer_provenance.PLATFORM_MEMBER: identity.platform,
         release_producer_provenance.ASSETS_MEMBER: dict(assets),
     }
-    # The producer validates its own output the same way publication will, so
-    # a malformed commit or an unsupported platform fails here rather than
-    # after the artefacts have been uploaded.
+    # The producer validates its own output through the same decoder
+    # publication uses, so a malformed claim fails here rather than after the
+    # artefacts are uploaded.
     try:
-        _ = release_producer_provenance.validate_provenance(mapping)
+        _ = release_producer_provenance_decode.decode_provenance(mapping)
     except ProvenanceError as error:
         raise ProvenanceRefusedError(str(error)) from error
     return mapping

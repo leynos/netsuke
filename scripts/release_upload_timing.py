@@ -37,7 +37,13 @@ import dataclasses
 import time
 import typing as typ
 
+import release_upload_boundaries
 import release_upload_trace
+from release_upload_boundaries import (
+    PHASE_CONFIRMATION,
+    PHASE_RECONCILIATION,
+    UPLOAD_BOUNDARY,
+)
 from release_upload_trace import CallTrace
 
 if typ.TYPE_CHECKING:
@@ -52,18 +58,6 @@ __all__ = [
 
 #: Name of the file the uploader writes beside its plan.
 TIMINGS_NAME = "upload-timings.json"
-
-#: Where the ``gh`` subcommand sits in an argument list: ``gh``, ``release``,
-#: then the subcommand that names what is being done with the release.
-_SUBCOMMAND_INDEX = 2
-
-#: The subcommand that reads the release, as opposed to transferring to it.
-_LIST_SUBCOMMAND = "view"
-
-#: The subcommands that cross a boundary of their own, and which one each is.
-#: ``view`` is absent because it is decided by how many listings have happened:
-#: the first reconciles, the second describes what the transfer left behind.
-_SUBCOMMAND_BOUNDARIES = {"download": "download", "upload": "upload"}
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -90,6 +84,47 @@ class BoundaryTimings:
     download_ms: int | None = None
     upload_ms: int | None = None
     verification_ms: int | None = None
+
+    def with_measurement(self, boundary: str, milliseconds: int) -> BoundaryTimings:
+        """Return these timings with one more crossing of ``boundary`` added.
+
+        Parameters
+        ----------
+        boundary
+            The boundary the call crossed.
+        milliseconds
+            How long that call took, in whole milliseconds.
+
+        Returns
+        -------
+        BoundaryTimings
+            The new total for that boundary. The receiver is unchanged, so a
+            caller holding an earlier reading keeps the numbers it had.
+
+        Notes
+        -----
+        A boundary is crossed more than once: a run downloads once per
+        undigested name, and a retried transfer crosses ``upload`` again.
+        Reporting only the last crossing would give one asset's cost as the
+        boundary's. An uncrossed boundary stays ``None`` rather than becoming
+        ``0``, so "nothing needed downloading" is not published as "the
+        download was instantaneous".
+
+        Examples
+        --------
+        >>> BoundaryTimings().with_measurement("upload", 3).with_measurement(
+        ...     "upload", 4
+        ... ).upload_ms
+        7
+        >>> BoundaryTimings().download_ms is None
+        True
+        """
+        member = f"{boundary}_ms"
+        previous = getattr(self, member)
+        return dataclasses.replace(
+            self,
+            **{member: milliseconds if previous is None else previous + milliseconds},
+        )
 
 
 def elapsed_ms(started_ns: int, ended_ns: int) -> int:
@@ -130,6 +165,9 @@ class TimedRunner[Result]:
     clock_ns
         The monotonic reading, injected so a test can make a boundary take a
         known time without sleeping. Defaults to ``time.monotonic_ns``.
+    wall_clock_ns
+        The wall-clock reading a trace record is timestamped with, injected
+        for the same reason. Defaults to ``time.time_ns``.
     context
         The run identity each trace record carries, or ``None`` to trace with
         none. Supplied by the caller because this seam does not own process
@@ -141,13 +179,21 @@ class TimedRunner[Result]:
     boundary is exactly one ``gh`` invocation: measuring at the runner means a
     call site added later is measured without knowing anything about telemetry.
 
-    Boundary durations accumulate. A run downloads once per undigested name,
-    so ``download_ms`` is the time all of those took; recording only the last
-    one would report the cost of one asset as the cost of the boundary.
+    It only *measures*. Which boundary a call belongs to is
+    :func:`release_upload_boundaries.boundary_of`'s, the running totals are
+    :meth:`BoundaryTimings.with_measurement`'s, and the per-call record is
+    :func:`release_upload_trace.record_for_call`'s; each is a separate unit a
+    test drives without a subprocess, and this class is the composition of
+    them around one call.
 
-    A command this class does not recognise as a boundary is passed through
-    unmeasured. Attributing an unknown subcommand's duration to one of the four
-    boundaries would be inventing a fact.
+    The phase moves from reconciliation to confirmation when this runner *sends
+    a transfer*, because that is the event the two listings sit either side of.
+    Nothing else has to be announced, and a run that never uploads never
+    confirms -- there is no second listing to name.
+
+    A command the classifier does not recognise as a boundary is passed
+    through unmeasured. Attributing an unknown subcommand's duration to one of
+    the four boundaries would be inventing a fact.
 
     Examples
     --------
@@ -180,12 +226,12 @@ class TimedRunner[Result]:
         # attribute another run's calls to this one.
         self._trace = CallTrace()
         self._context = dict(context or {})
-        self._listings = 0
+        self._phase = PHASE_RECONCILIATION
         self._timings = BoundaryTimings()
 
     def __call__(self, arguments: cabc.Sequence[str], **keywords: object) -> Result:
         """Run one command, recording its duration under the boundary it is."""
-        boundary = self._boundary(arguments)
+        boundary = release_upload_boundaries.boundary_of(arguments, phase=self._phase)
         if boundary is None:
             return self._inner(arguments, **keywords)
         started_ns = self._clock_ns()
@@ -209,8 +255,26 @@ class TimedRunner[Result]:
             # slow failure is the one an operator most needs. One clock reading
             # serves both records, so the two cannot disagree about it.
             ended_ns = self._clock_ns()
-            self._record(boundary, elapsed_ms(started_ns, ended_ns))
-            self._trace_call(boundary, started_ns, ended_ns, outcome)
+            self._timings = self._timings.with_measurement(
+                boundary, elapsed_ms(started_ns, ended_ns)
+            )
+            if boundary == UPLOAD_BOUNDARY:
+                # A transfer turns the question this run asks of the release;
+                # the phase is derived from the call, not announced by a
+                # caller who might forget.
+                self._phase = PHASE_CONFIRMATION
+            self._trace = self._trace.appended(
+                release_upload_trace.record_for_call(
+                    boundary=boundary,
+                    outcome=outcome,
+                    readings=release_upload_trace.CallReadings(
+                        started_ns=started_ns,
+                        ended_ns=ended_ns,
+                        timestamp_ns=self._wall_clock_ns(),
+                    ),
+                    context=self._context,
+                )
+            )
 
     @property
     def timings(self) -> BoundaryTimings:
@@ -233,56 +297,6 @@ class TimedRunner[Result]:
             One record for each traced call, in the order they finished.
         """
         return self._trace
-
-    def _boundary(self, arguments: cabc.Sequence[str]) -> str | None:
-        """Name the boundary a command is, or ``None`` when it is not one."""
-        if not _is_release_command(arguments):
-            return None
-        subcommand = arguments[_SUBCOMMAND_INDEX]
-        if subcommand == _LIST_SUBCOMMAND:
-            # The first listing reconciles before any transfer; the second
-            # describes what the release holds afterwards.
-            self._listings += 1
-            return "listing" if self._listings == 1 else "verification"
-        return _SUBCOMMAND_BOUNDARIES.get(subcommand)
-
-    def _record(self, boundary: str, milliseconds: int) -> None:
-        """Accumulate one boundary's duration across the calls that crossed it."""
-        member = f"{boundary}_ms"
-        previous = getattr(self._timings, member)
-        self._timings = dataclasses.replace(
-            self._timings,
-            **{member: milliseconds if previous is None else previous + milliseconds},
-        )
-
-    def _trace_call(
-        self, boundary: str, started_ns: int, ended_ns: int, outcome: str
-    ) -> None:
-        """Append one bounded record for the call that just finished.
-
-        One record per call, where :meth:`_record` sums a boundary: the
-        aggregate answers how long listing took, and only a per-call record
-        answers which of several calls failed.
-        """
-        # Read in seconds from the raw nanoseconds rather than from the
-        # millisecond aggregate: a call faster than a millisecond rounds to
-        # zero there, and a trace that reported every stub call as taking no
-        # time would hide exactly the calls a test is watching for.
-        duration_seconds = max(0, ended_ns - started_ns) / 1_000_000_000
-        self._trace = self._trace.appended(
-            release_upload_trace.TraceRecord(
-                operation=release_upload_trace.operation_for_boundary(boundary),
-                outcome=outcome,
-                error_category=(
-                    None
-                    if outcome == release_upload_trace.OUTCOME_COMPLETED
-                    else release_upload_trace.ERROR_CATEGORY_FAILED
-                ),
-                duration_seconds=round(duration_seconds, 9),
-                timestamp_ns=self._wall_clock_ns(),
-                context=self._context,
-            )
-        )
 
 
 #: The attribute a completed command reports its exit status through. Read
@@ -313,26 +327,3 @@ def _failed(result: object) -> bool:
     """
     status = getattr(result, _STATUS_ATTRIBUTE, 0)
     return isinstance(status, int) and status != 0
-
-
-def _is_release_command(arguments: cabc.Sequence[str]) -> bool:
-    """Report whether these arguments are a complete ``gh release`` command.
-
-    Returns
-    -------
-    bool
-        ``True`` when the executable is ``gh``, the command is ``release``,
-        and a subcommand follows.
-
-    Examples
-    --------
-    >>> _is_release_command(["gh", "release", "view", "v1"])
-    True
-    >>> _is_release_command(["gh", "release"])
-    False
-    >>> _is_release_command(["python3", "release", "view"])
-    False
-    """
-    return list(arguments[:2]) == ["gh", "release"] and (
-        len(arguments) > _SUBCOMMAND_INDEX
-    )

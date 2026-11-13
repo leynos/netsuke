@@ -25,7 +25,6 @@ in ``scripts/tests/test_release_upload_trace.py``.
 
 import dataclasses
 import json
-import sys
 import typing as typ
 
 if typ.TYPE_CHECKING:
@@ -38,9 +37,11 @@ __all__ = [
     "OUTCOME_FAILED",
     "TRACE_NAME",
     "UNKNOWN",
+    "CallReadings",
     "CallTrace",
     "TraceRecord",
     "operation_for_boundary",
+    "record_for_call",
     "record_trace",
     "trace_context",
     "trace_path",
@@ -213,7 +214,7 @@ def trace_path(plan_path: pathlib.Path) -> pathlib.Path:
 
 
 def record_trace(plan_path: pathlib.Path, trace: CallTrace) -> None:
-    """Write ``trace`` beside ``plan_path``, reporting a failure and going on.
+    """Write ``trace`` beside ``plan_path``.
 
     Parameters
     ----------
@@ -224,10 +225,13 @@ def record_trace(plan_path: pathlib.Path, trace: CallTrace) -> None:
 
     Notes
     -----
-    A run does not fail over this file, for the same reason it does not fail
-    over its timings: the plan is the contract, and a release that refused for
-    a real reason has already said so on standard error. A full disk here must
-    not replace that diagnostic with a worse one.
+    An ``OSError`` propagates rather than being swallowed, for the same reason
+    :func:`release_upload_timing_files.record_timings` propagates one: whether
+    a run survives a missing diagnostic is the caller's decision, and this
+    module cannot print a diagnostic about a diagnostic without deciding it
+    here. It reaches the caller from the write below rather than being raised
+    by name in a ``Raises`` section, which Ruff's DOC501 reserves for
+    exceptions a function raises itself.
 
     Examples
     --------
@@ -239,13 +243,101 @@ def record_trace(plan_path: pathlib.Path, trace: CallTrace) -> None:
     ''
     """
     destination = trace_path(plan_path)
-    try:
-        destination.write_text(
-            "".join(json.dumps(record.as_record()) + "\n" for record in trace.records),
-            encoding="utf-8",
-        )
-    except OSError as error:
-        print(f"upload trace not recorded: {destination}: {error}", file=sys.stderr)
+    destination.write_text(
+        "".join(json.dumps(record.as_record()) + "\n" for record in trace.records),
+        encoding="utf-8",
+    )
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class CallReadings:
+    """Hold the three clock readings one traced call is measured between.
+
+    Attributes
+    ----------
+    started_ns
+        The monotonic reading taken before the call.
+    ended_ns
+        The monotonic reading taken after it.
+    timestamp_ns
+        The wall-clock reading the record is stamped with.
+
+    Notes
+    -----
+    They travel together because they are one measurement: a caller that
+    paired the wrong start with an end would publish a plausible duration for
+    a call that never took that long, and three positional integers invite
+    exactly that.
+    """
+
+    started_ns: int
+    ended_ns: int
+    timestamp_ns: int
+
+
+def record_for_call(
+    *,
+    boundary: str,
+    outcome: str,
+    readings: CallReadings,
+    context: dict[str, str],
+) -> TraceRecord:
+    """Build the trace record one finished call is published as.
+
+    Parameters
+    ----------
+    boundary
+        The timing boundary the call crossed, which names the operation.
+    outcome
+        ``completed`` or ``failed``.
+    readings
+        The clock readings the call was measured between.
+    context
+        The run identity to link the record through.
+
+    Returns
+    -------
+    TraceRecord
+        The bounded record for that one call.
+
+    Notes
+    -----
+    The duration is read from the raw nanoseconds rather than from a
+    millisecond total: a call faster than a millisecond rounds to zero there,
+    and a trace that reported every quick call as taking no time would hide
+    exactly the calls a test watches for.
+
+    Building the record here rather than inside the runner keeps the record
+    vocabulary in the one module that defines it, so a field added to a trace
+    record does not have to be threaded through a second file.
+
+    Examples
+    --------
+    >>> record = record_for_call(
+    ...     boundary="upload", outcome=OUTCOME_COMPLETED,
+    ...     readings=CallReadings(
+    ...         started_ns=0, ended_ns=2_500_000, timestamp_ns=1
+    ...     ),
+    ...     context={},
+    ... )
+    >>> record.operation, record.duration_seconds
+    ('asset_upload', 0.0025)
+    >>> record.error_category is None
+    True
+    """
+    # Read in seconds from the raw nanoseconds rather than from a millisecond
+    # aggregate: see the note above.
+    elapsed_ns = readings.ended_ns - readings.started_ns
+    return TraceRecord(
+        operation=operation_for_boundary(boundary),
+        outcome=outcome,
+        error_category=(
+            None if outcome == OUTCOME_COMPLETED else ERROR_CATEGORY_FAILED
+        ),
+        duration_seconds=round(max(0, elapsed_ns) / 1_000_000_000, 9),
+        timestamp_ns=readings.timestamp_ns,
+        context=context,
+    )
 
 
 def operation_for_boundary(boundary: str) -> str:

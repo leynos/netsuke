@@ -161,19 +161,19 @@ def test_an_unknown_operation_is_refused() -> None:
         )
 
 
-def test_an_unwritable_trace_does_not_fail_the_run(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+def test_an_unwritable_destination_is_reported_to_the_caller(
+    tmp_path: pathlib.Path,
 ) -> None:
-    """Report an unwritable destination and leave the exit status alone.
+    """Surface the ``OSError`` rather than swallowing it and printing.
 
-    The plan is the contract; the trace is a diagnostic. Turning a full disk
-    into an upload failure would replace the uploader's real refusal with a
-    message about the wrong thing.
+    The plan is the contract and the trace is a diagnostic, but that judgement
+    belongs to the CLI boundary that can report it. A writer that swallowed the
+    error could not tell its caller whether the record exists, and it would be
+    deciding the run's outcome from inside a file write.
     """
     plan = tmp_path / "absent" / "upload-plan.json"
-    release_upload_trace.record_trace(plan, release_upload_trace.CallTrace())
-    captured = capsys.readouterr()
-    assert "upload trace not recorded" in captured.err, captured.err
+    with pytest.raises(OSError, match=r"upload-trace.jsonl"):
+        release_upload_trace.record_trace(plan, release_upload_trace.CallTrace())
 
 
 def test_the_trace_sits_beside_the_plan(tmp_path: pathlib.Path) -> None:

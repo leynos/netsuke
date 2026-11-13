@@ -148,19 +148,20 @@ def test_an_unreadable_record_is_refused(
         read_timings(destination)
 
 
-def test_a_recorded_failure_does_not_fail_the_run(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+def test_an_unwritable_destination_is_reported_to_the_caller(
+    tmp_path: pathlib.Path,
 ) -> None:
-    """Report an unwritable timings destination and leave the exit status alone.
+    """Surface the ``OSError`` rather than swallowing it and printing.
 
-    The timings are a diagnostic; the plan is the contract. Failing the run
-    over the diagnostic would replace the uploader's real refusal with a
-    message about a full disk.
+    Whether a run survives an unwritable timings file is a decision about the
+    run, and only the CLI boundary -- which can print -- knows the plan is the
+    contract. A writer that swallowed the error would leave that caller unable
+    to tell a recorded run from an unrecorded one, and would put the diagnostic
+    text in the persistence unit instead of at the edge that owns it.
     """
     plan = tmp_path / "absent" / "upload-plan.json"
-    record_timings(plan, BoundaryTimings(listing_ms=2))
-    captured = capsys.readouterr()
-    assert "upload timings not recorded" in captured.err, captured.err
+    with pytest.raises(OSError, match=r"upload-timings.json"):
+        record_timings(plan, BoundaryTimings(listing_ms=2))
 
 
 def test_the_timed_runner_measures_each_boundary(tmp_path: pathlib.Path) -> None:

@@ -1,17 +1,32 @@
 """Hold producer provenance to the claims publication is allowed to trust.
 
 A producer record is the only evidence that the bytes a job uploaded were the
-bytes that job built. These tests pin the shape it must have, the values it
-must carry, and the comparisons publication makes before trusting it. They are
-deliberately separate from the CLI that writes the record: the policy is
-proved without touching a filesystem, and the adapter is proved against real
+bytes that job built. These tests pin the *claim* a record may make and the
+comparisons publication performs before trusting it: which schema versions are
+read, what a commit and a run identity look like, which platforms can be
+packaged, and which asset names and digests a producer may declare.
+
+Reading the document itself -- that it is an object, that it carries its
+members, that each member is text -- is a different boundary with different
+diagnoses, and is covered by
+``scripts/tests/test_release_producer_provenance_decode.py``. Keeping the two
+apart is what lets a failure here name a bad *claim* rather than a bad file.
+
+They are deliberately separate from the CLI that writes the record: the policy
+is proved without touching a filesystem, and the adapter is proved against real
 bytes.
 
 Run via ``make test-release-publication``.
 """
 
+import typing as typ
+
 import pytest
-from release_producer_provenance import ProducerProvenance, validate_provenance
+from release_producer_provenance import (
+    ProducerProvenance,
+    RecordedMembers,
+    validated_provenance,
+)
 from release_producer_provenance_checks import (
     declared_names,
     require_candidate,
@@ -24,11 +39,14 @@ from release_producer_provenance_errors import (
     EmptyAssetsError,
     ForeignRunError,
     InvalidDigestError,
+    MalformedCommitError,
     MalformedRecordError,
-    MissingMemberError,
+    MalformedRunIdentityError,
     MissingTargetError,
+    SchemaNotIntegerError,
     StaleCandidateError,
     UnknownPlatformError,
+    UnknownSchemaError,
     UnsafeAssetNameError,
 )
 
@@ -37,13 +55,20 @@ OTHER_COMMIT = "fedcba9876543210fedcba9876543210fedcba98"
 DIGEST = "b" * 64
 OTHER_DIGEST = "c" * 64
 
-#: Distinguish "leave this member out" from "set this member to None".
-_ABSENT = object()
 
+def _members(**overrides: object) -> RecordedMembers:
+    """Return well-typed decoded members, with the requested ones overridden.
 
-def _record(**overrides: object) -> dict[str, object]:
-    """Return a well-formed record with the requested members overridden."""
-    record: dict[str, object] = {
+    The values are what :func:`release_producer_provenance_decode.decode_provenance`
+    hands the policy once it has checked the document's types, so a case below
+    is about what the policy decides and never about what the wire carried.
+
+    Returns
+    -------
+    RecordedMembers
+        The decoded members, with the requested ones replaced.
+    """
+    members: dict[str, object] = {
         "schema": 1,
         "commit": COMMIT,
         "run_id": "1234",
@@ -52,12 +77,11 @@ def _record(**overrides: object) -> dict[str, object]:
         "platform": "linux",
         "assets": {"netsuke_1_amd64.deb": DIGEST},
     }
-    for member, value in overrides.items():
-        if value is _ABSENT:
-            del record[member]
-        else:
-            record[member] = value
-    return record
+    members.update(overrides)
+    # The overrides are deliberately unvalidated: a case supplies the wrong
+    # type on purpose so the policy can be seen refusing it. The cast states
+    # that intent rather than suppressing a checker complaint about it.
+    return typ.cast("RecordedMembers", RecordedMembers(**members))
 
 
 def _provenance(
@@ -89,32 +113,24 @@ def test_a_complete_record_is_projected_onto_the_claim() -> None:
     )
 
 
-@pytest.mark.parametrize("record", [None, [], "record", 7], ids=repr)
-def test_a_record_that_is_not_a_mapping_is_refused(record: object) -> None:
-    """Refuse to read members out of something that is not a record."""
-    with pytest.raises(MalformedRecordError):
-        validate_provenance(record)
+@pytest.mark.parametrize("schema", [True, 1.0], ids=repr)
+def test_a_schema_of_the_wrong_type_is_refused_as_a_shape_fault(
+    schema: object,
+) -> None:
+    """Refuse a schema whose type is not the integer the format defines.
 
-
-def test_a_record_missing_a_member_names_the_absent_member() -> None:
-    """Report exactly which member a truncated record lacks."""
-    with pytest.raises(MissingMemberError) as refusal:
-        validate_provenance(_record(assets=_ABSENT))
-
-    assert "assets" in str(refusal.value), "the diagnosis must name the member"
-
-
-@pytest.mark.parametrize("schema", ["1", True, 1.0, None], ids=repr)
-def test_a_non_integer_schema_is_refused(schema: object) -> None:
-    """Refuse a schema that is not the integer the format defines."""
-    with pytest.raises(MalformedRecordError):
-        validate_provenance(_record(schema=schema))
+    ``True`` is the case worth naming: it is an ``int`` to Python, so a check
+    that only asked ``isinstance(value, int)`` would read a template's
+    ``true`` as schema version one.
+    """
+    with pytest.raises(SchemaNotIntegerError):
+        validated_provenance(_members(schema=schema))
 
 
 def test_an_unknown_schema_version_is_refused() -> None:
     """Refuse a record written to a format this reader does not know."""
-    with pytest.raises(MalformedRecordError):
-        validate_provenance(_record(schema=2))
+    with pytest.raises(UnknownSchemaError):
+        validated_provenance(_members(schema=2))
 
 
 @pytest.mark.parametrize(
@@ -124,16 +140,15 @@ def test_an_unknown_schema_version_is_refused() -> None:
         COMMIT.upper(),
         f"{COMMIT[:39]}g",
         "",
-        None,
     ],
-    ids=["short", "uppercase", "not-hex", "empty", "none"],
+    ids=["short", "uppercase", "not-hex", "empty"],
 )
 def test_a_commit_that_is_not_a_full_lowercase_commit_is_refused(
     commit: object,
 ) -> None:
     """Refuse a commit whose shape cannot name one commit unambiguously."""
-    with pytest.raises(MalformedRecordError):
-        validate_provenance(_record(commit=commit))
+    with pytest.raises(MalformedCommitError):
+        validated_provenance(_members(commit=commit))
 
 
 @pytest.mark.parametrize("member", ["run_id", "run_attempt"])
@@ -142,14 +157,16 @@ def test_a_run_identity_that_is_not_positive_integer_text_is_refused(
     member: str, value: str
 ) -> None:
     """Refuse a run identity publication cannot compare as a number."""
-    with pytest.raises(MalformedRecordError):
-        validate_provenance(_record(**{member: value}))
+    with pytest.raises(MalformedRunIdentityError) as refusal:
+        validated_provenance(_members(**{member: value}))
+
+    assert member in str(refusal.value), "the diagnosis must name the member"
 
 
 def test_a_platform_with_no_package_format_is_refused() -> None:
     """Refuse a platform whose packages this release cannot name."""
     with pytest.raises(UnknownPlatformError) as refusal:
-        validate_provenance(_record(platform="solaris"))
+        validated_provenance(_members(platform="solaris"))
 
     assert "solaris" in str(refusal.value), "the diagnosis must name the platform"
 
@@ -158,13 +175,13 @@ def test_a_platform_with_no_package_format_is_refused() -> None:
 def test_assets_that_are_not_a_mapping_are_refused(assets: object) -> None:
     """Refuse a digest table that cannot be keyed by published name."""
     with pytest.raises(MalformedRecordError):
-        validate_provenance(_record(assets=assets))
+        validated_provenance(_members(assets=assets))
 
 
 def test_a_producer_that_claims_no_assets_is_refused() -> None:
     """Refuse a producer that says nothing about the bytes it uploaded."""
     with pytest.raises(EmptyAssetsError) as refusal:
-        validate_provenance(_record(assets={}))
+        validated_provenance(_members(assets={}))
 
     assert "linux-x86_64" in str(refusal.value), "the diagnosis must name the target"
 
@@ -175,7 +192,7 @@ def test_a_producer_that_claims_no_assets_is_refused() -> None:
 def test_an_unsafe_claimed_name_is_refused(name: str) -> None:
     """Refuse a name that could escape the directory it is written into."""
     with pytest.raises(UnsafeAssetNameError):
-        validate_provenance(_record(assets={name: DIGEST}))
+        validated_provenance(_members(assets={name: DIGEST}))
 
 
 @pytest.mark.parametrize(
@@ -186,7 +203,7 @@ def test_an_unsafe_claimed_name_is_refused(name: str) -> None:
 def test_a_malformed_digest_is_refused(digest: object) -> None:
     """Refuse a digest that cannot be compared against real bytes."""
     with pytest.raises(InvalidDigestError):
-        validate_provenance(_record(assets={"netsuke.deb": digest}))
+        validated_provenance(_members(assets={"netsuke.deb": digest}))
 
 
 def test_a_record_from_another_commit_is_refused_as_stale() -> None:

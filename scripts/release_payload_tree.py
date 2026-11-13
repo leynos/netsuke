@@ -42,7 +42,7 @@ import typing as typ
 import hoist_binstall_discovery
 import release_digest_record_files
 import release_github_assets_adapter
-import release_producer_provenance
+import release_producer_provenance_decode
 from record_producer_provenance_record import RECORD_NAME
 from release_payload_errors import PayloadError
 
@@ -60,6 +60,7 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
     import release_payload_selection
+    import release_producer_provenance
 
 __all__ = [
     "PAYLOAD_DIRECTORY",
@@ -231,10 +232,12 @@ def _read_provenance(
     -----
     A record that cannot be read surfaces ``OSError``; unusable JSON surfaces
     ``ValueError``; and a record of the wrong shape surfaces the reader's own
-    ``ProvenanceError``.
+    ``ProvenanceError``. The document is decoded by
+    :func:`release_producer_provenance_decode.decode_provenance`, which owns
+    the wire shape, and validated by the policy module, which owns the claim.
     """
     decoded = json.loads(path.read_text(encoding="utf-8"))
-    return release_producer_provenance.validate_provenance(decoded)
+    return release_producer_provenance_decode.decode_provenance(decoded)
 
 
 def install_payload[Source: pathlib.Path](

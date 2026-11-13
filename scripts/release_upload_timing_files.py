@@ -20,7 +20,6 @@ beside the plan, and behavioural coverage lives in
 
 import dataclasses
 import json
-import sys
 import typing as typ
 
 import release_upload_timing
@@ -193,7 +192,7 @@ def _milliseconds(value: object, *, member: str) -> int | None:
 def record_timings(
     plan_path: pathlib.Path, timings: release_upload_timing.BoundaryTimings
 ) -> None:
-    """Write ``timings`` beside ``plan_path``, reporting a failure and going on.
+    """Write ``timings`` beside ``plan_path``.
 
     Parameters
     ----------
@@ -205,10 +204,17 @@ def record_timings(
 
     Notes
     -----
-    A run does not fail over this file. The plan is the contract a downstream
-    job reads; the timings are a diagnostic, and a release that refused for a
-    real reason has already said so on standard error. Turning a full disk
-    into an upload failure would replace that diagnostic with a worse one.
+    An ``OSError`` propagates rather than being swallowed: only the caller
+    knows whether a missing diagnostic may fail its run, and this module has
+    no diagnostic destination of its own to report to. It reaches the caller
+    from :func:`write_timings` rather than being raised here, which is why it
+    is described in prose rather than in a ``Raises`` section -- Ruff's DOC501
+    reserves that section for exceptions a function raises itself.
+
+    Whether a run survives an unwritable timings file is a decision about the
+    *run*, not about the file, so it is made by the CLI boundary that calls
+    this and can print. Swallowing the error here would leave that caller
+    unable to tell a recorded run from an unrecorded one.
 
     Examples
     --------
@@ -219,11 +225,4 @@ def record_timings(
     ...     read_timings(timings_path(plan)).download_ms
     3
     """
-    try:
-        write_timings(timings_path(plan_path), timings)
-    except OSError as error:
-        destination = timings_path(plan_path)
-        print(
-            f"upload timings not recorded: {destination}: {error}",
-            file=sys.stderr,
-        )
+    write_timings(timings_path(plan_path), timings)

@@ -90,6 +90,8 @@ from upload_declared_assets_refusals import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     import release_upload_observation
 
 __all__ = [
@@ -222,12 +224,54 @@ def _record_measurements(request: UploadRequest, timed: TimedRunner[object]) -> 
 
     Notes
     -----
-    The trace goes second so a run that dies writing it has still published the
-    aggregate, and neither file can fail the run: the plan is the contract, and
-    the uploader has already said on standard error why it refused.
+    Neither record can fail the run: the plan is the contract, and the uploader
+    has already said on standard error why it refused. A full disk here must
+    not replace that diagnostic with a message about the wrong thing, which is
+    why the exit status is the caller's and not this function's.
+
+    Each write is guarded separately, so one unwritable file cannot suppress
+    the attempt to record the other. A shared ``try`` would make the trace's
+    fate depend on the timings file's, and the two are unrelated diagnostics.
     """
-    release_upload_timing_files.record_timings(request.plan_path, timed.timings)
-    release_upload_trace.record_trace(request.plan_path, timed.trace)
+    _record_one(
+        "upload timings",
+        release_upload_timing_files.timings_path(request.plan_path),
+        lambda: release_upload_timing_files.record_timings(
+            request.plan_path, timed.timings
+        ),
+    )
+    _record_one(
+        "upload trace",
+        release_upload_trace.trace_path(request.plan_path),
+        lambda: release_upload_trace.record_trace(request.plan_path, timed.trace),
+    )
+
+
+def _record_one(
+    description: str, destination: pathlib.Path, write: cabc.Callable[[], None]
+) -> None:
+    """Attempt one diagnostic write, reporting an unwritable destination.
+
+    Parameters
+    ----------
+    description
+        What the record is called, so the log line names the file that failed
+        rather than saying a record failed.
+    destination
+        Where the record was to be written, quoted in the diagnostic.
+    write
+        The write to attempt.
+
+    Notes
+    -----
+    The upload result is untouched: a diagnostic that could not be written is
+    reported and the run carries on, which is the whole reason the failure is
+    handled at this boundary rather than inside the writer.
+    """
+    try:
+        write()
+    except OSError as error:
+        print(f"{description} not recorded: {destination}: {error}", file=sys.stderr)
 
 
 def _report(

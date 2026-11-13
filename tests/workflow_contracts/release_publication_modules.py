@@ -48,6 +48,7 @@ SECTION_MODULES = (
     "scripts/tests/test_release_digest_record_files.py",
     "scripts/tests/test_release_staged_digests.py",
     "scripts/tests/test_release_producer_provenance.py",
+    "scripts/tests/test_release_producer_provenance_decode.py",
     "scripts/tests/test_record_producer_provenance_cli.py",
     "scripts/tests/test_release_payload_names.py",
     "scripts/tests/test_release_payload_selection.py",
@@ -63,8 +64,10 @@ SECTION_MODULES = (
     "scripts/tests/test_release_upload_remote.py",
     "scripts/tests/test_release_upload_observation.py",
     "scripts/tests/test_upload_declared_assets_cli.py",
+    "scripts/tests/test_upload_declared_assets_diagnostics.py",
     "scripts/tests/test_upload_declared_assets_properties.py",
     "scripts/tests/test_upload_declared_assets_status.py",
+    "scripts/tests/test_release_upload_boundaries.py",
     "scripts/tests/test_release_upload_timing.py",
     "scripts/tests/test_release_upload_trace.py",
 )
@@ -108,6 +111,7 @@ SOURCE_MODULES = (
     "scripts/release_producer_assets.py",
     "scripts/release_producer_provenance.py",
     "scripts/release_producer_provenance_checks.py",
+    "scripts/release_producer_provenance_decode.py",
     "scripts/release_producer_provenance_errors.py",
     "scripts/record_producer_provenance_cli.py",
     "scripts/record_producer_provenance_errors.py",
@@ -121,6 +125,7 @@ SOURCE_MODULES = (
     "scripts/release_payload_regular_files.py",
     "scripts/release_package_origins.py",
     "scripts/select_release_payload_cli.py",
+    "scripts/release_upload_boundaries.py",
     "scripts/release_upload_digests.py",
     "scripts/release_upload_failures.py",
     "scripts/release_upload_messages.py",
@@ -161,7 +166,7 @@ POLICY_MODULES = (
     "scripts/release_payload_identity.py",
     "scripts/release_payload_names.py",
     "scripts/release_payload_selection.py",
-    "scripts/upload_declared_assets_refusals.py",
+    "scripts/release_upload_boundaries.py",
     "scripts/release_upload_failures.py",
 )
 
@@ -189,6 +194,7 @@ ADAPTER_MODULES = (
     "scripts/record_producer_provenance_cli.py",
     "scripts/record_producer_provenance_errors.py",
     "scripts/record_producer_provenance_record.py",
+    "scripts/release_producer_provenance_decode.py",
     "scripts/release_payload_handoff.py",
     "scripts/release_payload_tree.py",
     "scripts/release_payload_regular_files.py",
@@ -204,6 +210,7 @@ ADAPTER_MODULES = (
     "scripts/release_upload_trace.py",
     "scripts/release_upload_run.py",
     "scripts/upload_declared_assets_cli.py",
+    "scripts/upload_declared_assets_refusals.py",
     "scripts/ensure_draft_release.py",
 )
 
