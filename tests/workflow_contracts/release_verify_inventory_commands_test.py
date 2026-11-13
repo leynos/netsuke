@@ -5,22 +5,25 @@ checked-in action. Each such assertion is only as good as its reach: a scan
 anchored at the start of a line misses a call inside a substitution, a scan of
 raw lines misses a command continued across a backslash-newline, and a scan of
 command names misses one built from a variable. These cases are the controls
-for ``release_verify_inventory_commands`` -- they show the scans do reach those
-shapes, and refuse the ones they cannot read rather than passing them
+for the ``release_verify_inventory_command_words`` and
+``release_verify_inventory_commands`` modules -- they show the scans do reach
+those shapes, and refuse the ones they cannot read rather than passing them
 unexamined.
 
 Run via ``make test-workflow-contracts``.
 """
 
 import pytest
+from release_verify_inventory_command_words import (
+    indirect_command_words,
+    script_lines,
+)
 from release_verify_inventory_commands import (
     GH_RELEASE_CALL,
     forbidden_gh_flags,
     gh_api_invocations,
-    indirect_command_words,
     reject_secrets,
     run_tokens,
-    script_lines,
 )
 
 

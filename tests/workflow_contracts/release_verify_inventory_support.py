@@ -5,7 +5,8 @@ re-asserts it once per deliberate mutation to show that the assertion notices
 the change. This module holds the documents the contract reads and the values
 it pins; how a step's ``run`` text becomes the commands bash would execute, and
 how a ``gh api`` call or an expression is recognised inside it, live in
-``release_verify_inventory_commands.py``.
+``release_verify_inventory_commands.py`` and
+``release_verify_inventory_command_words.py``.
 
 The mutations themselves live in ``release_verify_inventory_mutations.py``,
 beside the shape each one changes, so this module stays the reading side of the

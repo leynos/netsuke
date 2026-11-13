@@ -16,14 +16,16 @@ import typing as typ
 import pytest
 from release_publish_path_scenarios import SCENARIOS
 from release_publish_path_verification import check_verify_inventory
+from release_verify_inventory_command_words import (
+    indirect_command_words,
+    script_lines,
+)
 from release_verify_inventory_commands import (
     GH_RELEASE_CALL,
     forbidden_gh_flags,
     gh_api_invocations,
-    indirect_command_words,
     reject_secrets,
     run_tokens,
-    script_lines,
 )
 from release_verify_inventory_mutations import (
     ACTION_MUTATIONS,
