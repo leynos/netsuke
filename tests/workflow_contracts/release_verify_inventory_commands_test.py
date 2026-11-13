@@ -114,7 +114,9 @@ def test_a_test_expression_operand_is_not_a_command() -> None:
     script = (
         'while read -r name || [[ -n "$name" ]]; do\n  printf \'%s\\n\' "$name"\ndone\n'
     )
-    assert not indirect_command_words(script)
+    assert not indirect_command_words(script), (
+        "a variable used as a test operand must not read as a command"
+    )
 
 
 def test_a_line_the_tokenizer_cannot_read_is_refused() -> None:
