@@ -534,6 +534,24 @@ decision D-15.
     rather than proposed, `docs/roadmap-progressive-enhancement.md` records the
     acceptance date in its preamble and marks 20.1.1 with its three
     sub-bullets `[x]`, and this plan's status line is `COMPLETE`.
+- [x] (2026-11-13) CodeRabbit's current-head pre-merge review requested
+  load-bearing coverage for runner-error selection, contained `miette::Report`
+  selection, their precedence, and missing-manifest stderr through the real
+  CLI. Added three unit tests and one process-level test; the source files stay
+  below the 400-line ceiling. Each of the three selection tests failed under
+  its corresponding temporary mutation and passed again after restoration.
+  Focused tests and `make fmt` pass. The first gate pass cleared formatting and
+  typechecking; lint then required the `tests.rs` module to move to
+  `tests/mod.rs`. The source, child module, and developers' guide now follow
+  that layout. The fresh ten-gate batch passed: `check-fmt`, `typecheck`,
+  `lint`, package verification, documentation contracts (15/15), workflow
+  contracts (1,802 passed, 3 skipped, plus 28 script tests), the full test
+  suite (5,542 passed, 7 skipped, plus doctests), Markdown lint (231 files,
+  zero issues), and Mermaid validation. Doc coverage was 98.23%. The staged
+  candidate hash
+  `1573e56c32cabc47aeac779c55d64829039e500ac6e307dd3da6f1742e1d6482` was stable
+  before and after the run. Logs use the
+  `/tmp/*5fe5acf9*20-1-1-ratify-progressive-enhancement-contracts-2.out` prefix.
 
 ## Surprises & discoveries
 

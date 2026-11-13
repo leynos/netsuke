@@ -10,6 +10,8 @@ use netsuke::output_prefs;
 use strip_ansi_escapes::strip;
 use tracing_subscriber::filter::LevelFilter;
 
+mod runner_diagnostics;
+
 /// Build the circular-dependency error the runner reports, keeping the target
 /// name private so its absence from tracing output is meaningful.
 fn cycle_error(private_target: &str) -> anyhow::Error {

@@ -124,6 +124,10 @@ fn generate_writes_file() -> Result<()> {
 #[path = "assert_cmd_tests/schema_version.rs"]
 mod schema_version;
 
+/// Cover human diagnostics at the missing-manifest process boundary.
+#[path = "assert_cmd_tests/runner_diagnostics.rs"]
+mod runner_diagnostics;
+
 #[rstest]
 fn generate_streams_to_stdout_by_default() -> Result<()> {
     let temp = setup_simple_workspace("generate stdout test")?;
