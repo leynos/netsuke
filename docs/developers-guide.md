@@ -9055,6 +9055,20 @@ both operator and project roots, each occurrence keeps its own authority: the
 operator occurrence retains its grants and the project occurrence loses them.
 An explicitly selected ancestor remains operator-scoped.
 
+Blocklists stay in the generic merge because they only restrict, but their
+shape is validated first. `retain_layers_and_resolve_json` validates
+`env_block_var` as `Vec<String>` for occurrences that are project-scoped or
+project-chain, and `fetch_block_host` as `Vec<HostPattern>` for project-scoped
+occurrences. Validation is non-mutating: it neither removes, rewrites, nor
+quarantines either field, because the accumulated value must remain cumulative.
+A malformed value, including `null` left by a non-finite TOML float, a scalar,
+an object, or an invalid array element, records an `OrthoError::Validation` in
+the discovery error list. `push_discovered_file_layers` then inserts none of
+the discovered layers, so a lower-trust resettable value cannot reach the
+generic append merge. New restriction fields added at the project boundary must
+follow the same non-mutating shape validation; do not route them through
+quarantine.
+
 `retain_layers_and_resolve_json` returns the retained layers, the JSON
 preference, and the ordered project-chain request together. `DiscoveredLayers`
 owns the request until `into_parts` transfers it with the layers and discovery

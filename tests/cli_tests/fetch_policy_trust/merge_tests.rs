@@ -226,6 +226,55 @@ trust_project_fetch_policy = true
     Ok(())
 }
 
+/// Reject a non-finite project fetch blocklist instead of letting the JSON
+/// conversion turn it into a `null` that clears the operator's deny entries.
+///
+/// The repository's `ortho_config` 0.10.0 pipeline converts a non-finite TOML
+/// float to `null` and its append merge treats `null` as a reset, so this
+/// regression must fail loading rather than simply assert the loaded policy.
+#[rstest]
+#[case::nan("nan")]
+#[case::infinity("inf")]
+#[case::negative_infinity("-inf")]
+#[case::array_containing_nan("[nan]")]
+fn non_finite_project_fetch_block_host_is_rejected(#[case] literal: &str) -> Result<()> {
+    let project_config = format!("fetch_block_host = {literal}\n");
+    let merged = merge_fetch_policy(
+        &FetchPolicyFileLayers {
+            project: Some(&project_config),
+            ..FetchPolicyFileLayers::default()
+        },
+        &[],
+        &["netsuke", "--fetch-block-host", "operator-blocked.example"],
+    );
+
+    ensure!(
+        merged.is_err(),
+        "a non-finite {literal} project blocklist must stop loading"
+    );
+    Ok(())
+}
+
+/// Keep the operator block effective when the project adds an empty blocklist
+/// or omits the field: neither form may clear accumulated deny entries.
+#[rstest]
+#[case::empty(Some("fetch_block_host = []\n"))]
+#[case::absent(None)]
+fn empty_or_absent_project_blocklist_keeps_operator_block(
+    #[case] project_config: Option<&str>,
+) -> Result<()> {
+    let merged = merge_fetch_policy(
+        &FetchPolicyFileLayers {
+            project: project_config,
+            ..FetchPolicyFileLayers::default()
+        },
+        &[],
+        &["netsuke", "--fetch-block-host", "operator-blocked.example"],
+    )?;
+
+    assert_host_blocked(&merged, &url("https://operator-blocked.example")?)
+}
+
 #[rstest]
 fn project_cannot_self_authorize_fetch_policy_widening() -> Result<()> {
     let project_config = format!("trust_project_fetch_policy = true\n{PROJECT_GRANTS}");

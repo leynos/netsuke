@@ -17,6 +17,7 @@ use super::json::json_from_value;
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
 use super::trace::EnvGrantQuarantineTrace;
 use super::{ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
+use crate::host_pattern::HostPattern;
 
 /// Identify whether this occurrence belongs to a selected project chain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -146,12 +147,18 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
         }
         if scope == FileScope::Project || project_chain {
             quarantine_env_grants(&mut value, project_chain, &mut resolved);
+            validate_project_blocklist::<Vec<String>>(&value, "env_block_var", &mut resolved);
         }
         if project_chain {
             quarantine_manifest_budget(&mut value, &mut resolved);
         }
         if scope == FileScope::Project {
             quarantine_fetch_policy(&mut value, &mut resolved);
+            validate_project_blocklist::<Vec<HostPattern>>(
+                &value,
+                "fetch_block_host",
+                &mut resolved,
+            );
         }
         resolved
             .layers
@@ -189,6 +196,27 @@ fn quarantine_env_grants(
         }
         Ok(None) => {}
         Err(error) => resolved.errors.push(error),
+    }
+}
+
+/// Validate one project blocklist without removing or rewriting it.
+///
+/// Blocklists stay in the generic append merge so their union remains
+/// cumulative, but a shape that merge would read as a reset is rejected first.
+/// In particular `null` arrives from a non-finite TOML float, and the append
+/// strategy resets the accumulated collection on `null`.
+fn validate_project_blocklist<T>(
+    value: &serde_json::Value,
+    field: &str,
+    resolved: &mut ResolvedFileLayers,
+) where
+    T: DeserializeOwned,
+{
+    let Some(fields) = value.as_object() else {
+        return;
+    };
+    if let Err(error) = parse_project_policy_field::<T>(fields, field) {
+        resolved.errors.push(error);
     }
 }
 

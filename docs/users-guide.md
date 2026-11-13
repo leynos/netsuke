@@ -2132,6 +2132,12 @@ layers, and a block always wins over an allow. Project-chain
 project-chain file can enable them by setting `trust_project_fetch_policy`
 itself.
 
+A project-chain `fetch_block_host` value must be an array of valid host
+patterns. A `null`, a scalar, an object, a non-finite TOML float such as `nan`
+or `inf`, or an array containing an invalid element stops loading with a
+validation error that names `fetch_block_host`; no discovered file layer is
+then merged. An empty array adds no restriction and removes none.
+
 For example, if `.netsuke.toml` extends `policy.toml`, grants in either file
 are project-chain requests and need operator opt-in before they can widen the
 fetch policy. A `trust_project_fetch_policy = true` in `policy.toml` is also
@@ -2194,10 +2200,14 @@ policy has no glob or pattern matching. `env_allow_var` entries from project
 occurrences selected through `.netsuke.toml` and its `extends` chain are
 removed before policy composition. This prevents a checkout-controlled ancestor
 from widening the operator allowlist or activating default-deny.
-`env_block_var` entries remain cumulative because they only restrict access.
-Operator chains and unrelated explicit configuration chains retain their
-grants; a file reached from both project and operator roots keeps its separate
-authority for each occurrence.
+`env_block_var` entries remain cumulative because they only restrict access. A
+project-chain `env_block_var` value must be an array of strings. A `null`, a
+scalar, an object, a non-finite TOML float such as `nan` or `inf`, or an array
+containing a non-string element stops loading with a validation error that names
+`env_block_var`; no discovered file layer is then merged. An empty array adds
+no restriction and removes none. Operator chains and unrelated explicit
+configuration chains retain their grants; a file reached from both project and
+operator roots keeps its separate authority for each occurrence.
 
 This policy reduces secret ingress into rendered manifest fields. It does not
 make rendered manifest contents safe to log: allowed values still require the
