@@ -444,6 +444,28 @@ decision D-15.
     file and nothing else, so its Rust, YAML, Python, catalogue, and Markdown
     content is byte-identical to what those gates passed; `make check-fmt` on
     the later tips is what confirms the prose is well formed.
+  - (2026-11-13) That reasoning held only while the later commits really were
+    prose. Rebase conflicts are not prose, and `main`'s own `e4ef7c511` landed
+    terminal-rendering tests that this branch then failed. The rebase onto
+    `e4ef7c511` had to rebuild `src/main.rs` by hand, and the rebuild carried a
+    real regression: the human failure path had come to log every runner
+    failure, ignore the resolved colour, and repeat the diagnostic's message
+    above its code.
+
+    `81f73eb7a` repairs all three. It logs only a failure the runner did not
+    anticipate, selects the theme on the style's colour *and* glyph flags
+    rather than the glyph flag alone, and keeps a context line only where it
+    says something the rendering does not. Rendered stderr for a missing
+    manifest is now byte-identical to `e4ef7c511`'s.
+
+    The nine gates have run on `81f73eb7a` with the content hash stable before
+    and after (`ed245908…ed245908`): `check-fmt` 3s, `typecheck` 21s, `lint`
+    684s, `doc-coverage` 336s (98.16%), `test` 257s (**5538 nextest cases, all
+    passed**, 7 skipped, plus doctests), `markdownlint` 34s, `nixie` 3s,
+    `test-documentation-contracts` 1s, `test-workflow-contracts` 294s.
+    `81f73eb7a` is therefore the last revision all nine gates verified, and it
+    supersedes `b25820d84`: the suite grew from 5210 to 5538 cases when `main`
+    landed its new tests, so the older batch cannot speak for this tree.
 - [x] EP-M4: developers' guide and documentation clean-up. The developers'
   guide gained "Manifest schema versioning and feature admission" (reservation,
   admission, allocation, the registry contract, and the rejection ladder) and
