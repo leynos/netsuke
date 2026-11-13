@@ -136,6 +136,30 @@ def _read_inventory(directory: pathlib.Path) -> list[release_inventory.Published
     return sorted(assets, key=lambda asset: asset.name)
 
 
+def _declared_names(declared_text: str) -> list[str]:
+    r"""Return the names a declaration file lists, one per line.
+
+    The declaration's layout is a property of the file the producer writes, so
+    this adapter owns it: the domain module is handed names, not text. Blank
+    lines separate the names the producer writes and carry no meaning, which is
+    what lets a trailing newline go unnoticed. A repeated name is refused by
+    :func:`release_inventory.require_unique_declaration`, because repetition is
+    a fault in the declaration rather than in its layout.
+
+    Returns
+    -------
+    list[str]
+        The non-blank names, in declaration order.
+
+    Examples
+    --------
+    >>> _declared_names("a.tar.gz\n\na.tar.gz.sha256\n")
+    ['a.tar.gz', 'a.tar.gz.sha256']
+    """
+    names = [line.strip() for line in declared_text.splitlines() if line.strip()]
+    return release_inventory.require_unique_declaration(names)
+
+
 def _digests_of_downloads(
     directory: pathlib.Path,
     present: cabc.Iterable[release_inventory.PublishedAsset],
@@ -362,7 +386,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"trusted digest record rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED
     try:
-        expected = release_inventory.declared_names_from_text(declared_text)
+        expected = _declared_names(declared_text)
     except release_inventory.DuplicateDeclarationError as error:
         print(f"declaration rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED

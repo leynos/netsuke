@@ -14,9 +14,10 @@ its six archives' ``.sha256`` sidecars and none of the archives they describe:
 every file present passed inspection, and the release was unusable through
 ``cargo binstall``. Comparing against the declared set catches it.
 
-Directory scanning and archive-name discovery belong to the release adapters.
-This module accepts observed names and sizes, and every rejection carries a
-diagnosis rather than an exit code.
+Directory scanning, archive-name discovery, and the declaration file's own
+line layout belong to the release adapters. This module accepts observed names,
+sizes, and declared names, and every rejection carries a diagnosis rather than
+an exit code.
 
 Run via the release workflow's inventory verification; behavioural coverage
 lives in ``scripts/tests/test_release_inventory.py``.
@@ -316,35 +317,6 @@ def require_unique_declaration(names: cabc.Iterable[str]) -> list[str]:
         )
         raise DuplicateDeclarationError(msg)
     return ordered
-
-
-def declared_names_from_text(declared_text: str) -> list[str]:
-    r"""Return the names a declaration file lists, one per line.
-
-    Parameters
-    ----------
-    declared_text
-        The declaration file's text.
-
-    Returns
-    -------
-    list[str]
-        The non-blank names, in declaration order.
-
-    Notes
-    -----
-    Blank lines separate the names the producer writes and carry no meaning,
-    so dropping them here is what lets a trailing newline go unnoticed. A
-    repeated name is refused by :func:`require_unique_declaration`, because
-    repetition is a fault in the declaration rather than in its layout.
-
-    Examples
-    --------
-    >>> declared_names_from_text("a.tar.gz\n\na.tar.gz.sha256\n")
-    ['a.tar.gz', 'a.tar.gz.sha256']
-    """
-    names = [line.strip() for line in declared_text.splitlines() if line.strip()]
-    return require_unique_declaration(names)
 
 
 def validate_inventory(
