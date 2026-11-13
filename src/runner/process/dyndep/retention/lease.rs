@@ -93,9 +93,9 @@ impl DyndepPublicationLease {
         current: &[GeneratedDyndep],
         policy: RetentionPolicy,
     ) -> Result<RetentionSummary> {
-        match &self.dyndep_dir {
-            Some(dir) => prune_verified_sidecars(dir, self, current, policy),
-            None => Ok(RetentionSummary::default()),
-        }
+        self.dyndep_dir.as_ref().map_or_else(
+            || Ok(RetentionSummary::default()),
+            |dir| prune_verified_sidecars(dir, self, current, policy),
+        )
     }
 }

@@ -225,7 +225,7 @@ fn retain_entry(dyndep: &Dir, name: &str, pass: &mut RetentionPass<'_, '_>) -> R
         // Every current atomic writer owns the same exclusive lease, so a
         // temporary file observed here cannot belong to an active Netsuke
         // publication protocol.
-        return remove_candidate(dyndep, name, &display, metadata.len(), pass.summary);
+        return remove_candidate(dyndep, name, metadata.len(), pass.summary);
     }
     if is_sidecar(Utf8Path::new(name)) {
         retain_or_remove_sidecar(dyndep, name, &mut pass.retained, pass.summary)?;
@@ -289,14 +289,7 @@ fn retain_or_remove_sidecar(
     let display = entry_display_path(name);
     let bytes = candidate_size(dyndep, name, &display)?;
     for (reclaimed_name, reclaimed_bytes) in retained.select(Utf8PathBuf::from(name), bytes) {
-        let reclaimed_display = entry_display_path(reclaimed_name.as_str());
-        remove_candidate(
-            dyndep,
-            reclaimed_name.as_str(),
-            &reclaimed_display,
-            reclaimed_bytes,
-            summary,
-        )?;
+        remove_candidate(dyndep, reclaimed_name.as_str(), reclaimed_bytes, summary)?;
     }
     Ok(())
 }
@@ -332,13 +325,13 @@ fn candidate_size(dyndep: &Dir, name: &str, display: &Utf8Path) -> Result<u64> {
 fn remove_candidate(
     dyndep: &Dir,
     name: &str,
-    display: &Utf8Path,
     bytes: u64,
     summary: &mut RetentionSummary,
 ) -> Result<()> {
+    let display = entry_display_path(name);
     dyndep
         .remove_file(name)
-        .with_context(|| retention_error(display))?;
+        .with_context(|| retention_error(&display))?;
     summary.reclaimed_files += 1;
     summary.reclaimed_bytes = summary.reclaimed_bytes.saturating_add(bytes);
     Ok(())
