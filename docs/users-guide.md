@@ -2607,6 +2607,29 @@ Netsuke reports failures at the earliest stage that can identify them:
 Human diagnostics include remediation hints where one is available. JSON mode
 exposes the same information as fields.
 
+### Read a manifest failure in human mode
+
+When a run fails while loading the manifest, human mode reports one diagnostic,
+chosen in the same order JSON mode uses: the first runtime error, then the
+first manifest error, then the diagnostic report beneath it. Both modes
+therefore name the same fault, at the same depth.
+
+Whether that diagnostic replaces the "Failed to load manifest at …" context
+line depends on whether it can point at a place in the manifest:
+
+- A YAML parse failure shows a rendered snippet that quotes the offending line
+  and marks it. The snippet already names the manifest, so the context line is
+  omitted rather than repeated.
+- A schema rejection, such as an unsupported `netsuke_version`, keeps the
+  "Failed to load manifest at …" context line, because a schema rejection has
+  no source snippet to draw.
+- A failure whose cause carries no diagnostic at all, such as a missing
+  manifest, prints only its context line.
+
+The rule is that a diagnostic is self-contained when it names both its source
+and a labelled span within it. Only then does it stand alone as the whole
+report.
+
 Terminal human-mode configuration-load events emitted by `config_err_to_exit`
 include structured `operation` and `error_category` fields. `operation` is
 `diag_mode_resolution` for the early diagnostic preference phase or

@@ -268,6 +268,12 @@ inside an entry of the `causes` array. See
 [Declare the schema version](users-guide.md#declare-the-schema-version) for the
 full behaviour and the diagnostic shape.
 
+Human mode now also renders the manifest diagnostic itself. A schema rejection
+keeps its "Failed to load manifest at …" context line, while a YAML parse
+failure shows a quoted snippet of the offending line instead. See
+[Read a manifest failure in human mode](users-guide.md#read-a-manifest-failure-in-human-mode)
+for which failures show which.
+
 Before changing `netsuke_version`, verify that the reader supports the schema
 features used by the manifest. Changing the declaration alone does not migrate
 unsupported syntax.
