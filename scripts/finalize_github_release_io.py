@@ -83,6 +83,7 @@ class FinalizeError(Exception):
     """
 
     def __init__(self, code: int, message: str) -> None:
+        """Store the exit status alongside the diagnosis it explains."""
         super().__init__(message)
         self.code = code
 
