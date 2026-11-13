@@ -1224,6 +1224,15 @@ The helper itself is not platform-gated, because it only manipulates strings,
 but the cases that execute its output are Unix-only because they run the result
 under a POSIX shell.
 
+The same module exports `INTERPRETER_PATH`, the absolute path
+`/fixtures/netsuke/interpreter` that every suite binds as the recipe
+interpreter. It is absolute because the renderer refuses a relative
+interpreter, which would otherwise resolve through `PATH`, and it need not
+exist because the tests decode the rendered command instead of executing
+through that binding. Suites import the constant rather than repeating the
+literal, so a change to the fixture location has one owner and
+`decode_bash_transport` is always asserted against the path the suite bound.
+
 ### Inline recipe progress labels
 
 `BuildEdge.progress_label` in `src/ir/graph/mod.rs` retains the raw first
@@ -7203,6 +7212,17 @@ The sibling `src/ir/cmd_interpolate/substitution/mod.rs` owns
 `SubstitutionTraversal`, which walks one recipe and applies those bindings only
 after analysing its shell context. Keep this split private to `ir`; it is an
 implementation boundary, not a public command-template API.
+`substitution/posix.rs` owns the POSIX half of that traversal: it resolves
+heredoc declarations, comments, escapes, and backtick toggling before marker
+handling runs, so an inert or rejected region never reaches the lowering logic.
+`script_substitution/delimiters.rs` owns the `$()` nesting state that the
+script traversal needs: `ScriptCommandSubstitution` records the quote context,
+parenthesis depth, opening `$`, and `case` nesting of one command substitution.
+A closer's position survives into the next comment check because the `)` that
+ends `$()` stays part of the surrounding word, while a `)` that ends a subshell
+or a `case` pattern is an operator. Both modules are split out of their parents
+to stay inside the module-size cap; they are not separate shell parsers and
+have no callers outside command interpolation.
 
 The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. It copies
@@ -7227,7 +7247,7 @@ also pass the position of the `)` that closed the innermost substitution, so
 the boundary check does not mistake that delimiter for a separator. A `)`
 closing a subshell remains an operator and still permits a comment.
 `src/lint/rules/shellscan/mod.rs` and the property-test oracle in
-`src/ir/cmd_interpolate/property_tests/support.rs` keep separate boundary
+`src/ir/cmd_interpolate/property_tests/boundary.rs` keep separate boundary
 models; neither controls path encoding, so neither is part of this contract.
 
 A `)` that terminates a `case` pattern is an operator, so a `#` immediately
@@ -7261,11 +7281,19 @@ them from `#`, because comment text is copied verbatim and is never offered to
 it: the traversal reports the comment's start and the newline that ends it, so a
 `case` on the line after a comment still opens its construct. PowerShell has no
 `case` patterns and keeps its unquoted-only rule. The regressions live in
-`src/ir/cmd_interpolate/posix_lexical/tests/case_boundary.rs`; the property
+`src/ir/cmd_interpolate/posix_lexical/tests/case/`: `boundary.rs` covers the
+`)#` ambiguity and the operator-versus-word distinction, and `tracker.rs` covers
+`CaseNesting` command position, depth, and comment hand-off. The property
 `hash_boundary_follows_the_posix_comment_rule` in
-`src/ir/cmd_interpolate/property_tests/mod.rs` checks the comment rule against
-an independent generator label for separators, word data, escapes, line
-continuations, and substitution or group closers in both traversals.
+`src/ir/cmd_interpolate/property_tests/mod.rs` takes its prefixes from
+`property_tests/boundary.rs`, which builds them from an independent label for
+separators, word data, escapes, line continuations, and substitution or group
+closers, and composes up to two further segments so interaction cases are
+reachable. Two fixed families cover what composition cannot: an inner group
+closer whose outer `)` and second marker arrive on the following line, and a
+line continuation placed directly after a substitution closer. Each case runs
+through both POSIX traversals, and every boundary asserts a second marker after
+its `tail` so a construct that closes later still checks the text that follows.
 
 The `src/ir/cmd_interpolate/substitution/powershell/` module groups focused
 PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
