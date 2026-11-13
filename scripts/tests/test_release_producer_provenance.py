@@ -64,13 +64,14 @@ def _members(**overrides: object) -> RecordedMembers:
     RecordedMembers
         The decoded members, with the requested ones replaced.
     """
+    assets: dict[object, object] = {"netsuke_1_amd64.deb": DIGEST}
     members: dict[str, object] = {
         "commit": COMMIT,
         "run_id": "1234",
         "run_attempt": "1",
         "target": "linux-x86_64",
         "platform": "linux",
-        "assets": {"netsuke_1_amd64.deb": DIGEST},
+        "assets": assets,
     }
     members.update(overrides)
     # The overrides are deliberately unvalidated: a case supplies the wrong

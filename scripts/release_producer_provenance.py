@@ -33,6 +33,7 @@ Coverage: ``scripts/tests/test_release_producer_provenance.py``.
 
 import dataclasses
 import re
+import typing as typ
 
 import release_package_formats
 import release_producer_assets
@@ -41,6 +42,9 @@ from release_producer_provenance_errors import (
     MalformedRunIdentityError,
     UnknownPlatformError,
 )
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 __all__ = [
     "ASSETS_MEMBER",
@@ -130,7 +134,13 @@ class RecordedMembers:
     platform
         The platform whose package formats the target stages.
     assets
-        The decoded asset map, whose shape the policy decides.
+        The decoded asset map, whose entries the policy judges. Its *container*
+        is a mapping because
+        :func:`release_producer_provenance_decode.decode_provenance` refused
+        any other shape before building this value, so the policy reads it
+        rather than testing it. Its keys are typed as any object for the same
+        reason: a key is data, and refusing one that is not a bare file name is
+        :func:`release_producer_assets.validated_assets`'s, not the decoder's.
     """
 
     commit: str
@@ -138,7 +148,7 @@ class RecordedMembers:
     run_attempt: str
     target: str
     platform: str
-    assets: object
+    assets: cabc.Mapping[object, object]
 
 
 def validated_provenance(members: RecordedMembers) -> ProducerProvenance:

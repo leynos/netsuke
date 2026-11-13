@@ -50,7 +50,7 @@ _DIGEST = re.compile(rf"\A[0-9a-f]{{{release_digest.DIGEST_HEX_LENGTH}}}\Z")
 
 
 def validated_assets(
-    declared: cabc.Mapping[str, object], *, target: str
+    declared: cabc.Mapping[object, object], *, target: str
 ) -> dict[str, str]:
     """Return a validated name-to-digest mapping for one producer.
 
@@ -66,14 +66,18 @@ def validated_assets(
 
     Notes
     -----
-    The mapping's *shape* -- that the record's ``assets`` member is an object
-    rather than a list or a string -- is :func:`decode_provenance`'s, so this
-    function is never handed a value of another type and does not test for
-    one. Every refusal here is about a claim: a name that is not a bare file
-    name, a digest that is not hexadecimal, or an empty set.
+    The mapping's *container* -- that the record's ``assets`` member is an
+    object rather than a list or a string -- is :func:`decode_provenance`'s, so
+    this function is never handed a value of another type and does not test for
+    one. Its *keys* are typed as any object for the same reason a key is data
+    rather than a member: a key that is not a bare file name is refused by
+    :func:`_validated_name` below, which is the only place that decides it.
+    Every refusal here is about a claim: a name that is not a bare file name, a
+    digest that is not hexadecimal, or an empty set.
 
-    ``UnsafeAssetNameError`` and ``InvalidDigestError`` surface from the two
-    helpers below.
+    ``UnsafeAssetNameError`` and ``InvalidDigestError`` surface from
+    :func:`_validated_entry` below, which calls both helpers in the one order
+    that makes each refusal quotable.
 
     Examples
     --------
@@ -82,12 +86,28 @@ def validated_assets(
     """
     if not declared:
         raise EmptyAssetsError(target)
-    return {
-        _validated_name(name, target=target): _validated_digest(
-            name, digest, target=target
-        )
+    return dict(
+        _validated_entry(name, digest, target=target)
         for name, digest in declared.items()
-    }
+    )
+
+
+def _validated_entry(name: object, digest: object, *, target: str) -> tuple[str, str]:
+    """Return one entry's name and digest, judging the name first.
+
+    Returns
+    -------
+    tuple[str, str]
+        The published name and the digest claimed for it.
+
+    Notes
+    -----
+    The two judgments share one function so their order is stated once rather
+    than implied by a comprehension's evaluation order: a name that is not a
+    string cannot be quoted by the digest refusal, so it must be refused first.
+    """
+    validated = _validated_name(name, target=target)
+    return validated, _validated_digest(validated, digest, target=target)
 
 
 def _validated_name(name: object, *, target: str) -> str:

@@ -253,13 +253,17 @@ def _required_text(record: cabc.Mapping[str, object], member: str) -> str:
     return value
 
 
-def _required_object(record: cabc.Mapping[str, object], member: str) -> object:
+def _required_object(
+    record: cabc.Mapping[str, object], member: str
+) -> cabc.Mapping[object, object]:
     """Return a member the format defines as an object, or refuse the document.
 
     Returns
     -------
-    object
-        The member's value, known to be a mapping but not yet judged.
+    collections.abc.Mapping[object, object]
+        The member's value, known to be a mapping but not yet judged. Its keys
+        are typed as any object because a key is data: whether one names a
+        publishable file is the policy's to decide.
 
     Raises
     ------
