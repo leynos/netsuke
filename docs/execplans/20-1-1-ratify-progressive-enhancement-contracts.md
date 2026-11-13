@@ -406,6 +406,14 @@ decision D-15.
     it: one per branch of the decision, plus a CLI case that runs both against
     the real binary. Both unit tests were shown to fail under a mutation that
     reverts each half of the rule.
+  - (2026-11-12) `5f10aa947` is that repair, and it has its own nine-gate
+    batch. All nine passed on the exact tree with the content hash stable
+    before and after (`89f35632…89f35632`): `check-fmt` 3s, `typecheck` 48s,
+    `lint` 415s, `doc-coverage` 1606s (98.16%, 6124/6239), `test` 519s (5210
+    nextest cases plus doctests), `markdownlint` 29s, `nixie` 1s,
+    `test-documentation-contracts` 316s, `test-workflow-contracts` 298s. The
+    batch began after the last edit and ended before the next, so no gate was
+    reading a tree that changed underneath it.
 - [x] EP-M4: developers' guide and documentation clean-up. The developers'
   guide gained "Manifest schema versioning and feature admission" (reservation,
   admission, allocation, the registry contract, and the rejection ladder) and
