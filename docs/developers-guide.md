@@ -933,7 +933,7 @@ The glyph theme comes from `human_diagnostics::theme_for`, which derives it
 from the resolved `OutputPrefs` rather than reading `NO_COLOR` itself, so the
 renderer stays callable in-process. `human_diagnostics::render_failure` returns
 the text without writing it, which is what the unit tests in
-`src/human_diagnostics/tests.rs` assert on.
+`src/human_diagnostics/tests/mod.rs` assert on.
 
 ### Adding or changing messages
 
