@@ -19,12 +19,17 @@ mod environment;
 pub use environment::{EnvProvider, StdEnvProvider};
 
 mod diagnostics;
+
 mod json;
+
 mod layers;
+
 mod paths;
+
 mod project_policy;
 
 mod selector;
+
 mod shell_definitions;
 pub(crate) use shell_definitions::is_shells_key;
 mod trace;
@@ -50,6 +55,7 @@ pub(crate) use merge_layers::push_discovered_file_layers;
 /// Read as the primary selector after the `--config` CLI flag when a path is
 /// not given explicitly.
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
+
 /// Environment variables consulted while discovering configuration layers.
 const DISCOVERY_ENV_KEYS: [&str; 7] = [
     CONFIG_ENV_VAR,
@@ -283,6 +289,7 @@ pub(crate) fn discovery_env_source(env: &impl EnvProvider) -> SharedEnvSource {
     }
     Arc::new(source)
 }
+
 /// Load the configuration chain rooted at an explicit file path.
 ///
 /// Unlike discovery, a missing explicit file is an error because the caller
@@ -359,5 +366,6 @@ mod helper_proptests;
 /// test asserts the invariant for generated path values.
 #[cfg(test)]
 mod path_precedence_tests;
+
 #[cfg(test)]
 mod unit_tests;

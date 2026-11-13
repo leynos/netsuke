@@ -410,3 +410,4 @@ mod selector_tests;
 #[cfg(test)]
 mod tests;
 // weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
+// weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
