@@ -19,8 +19,6 @@ bytes.
 Run via ``make test-release-publication``.
 """
 
-import typing as typ
-
 import pytest
 from release_producer_provenance import (
     ProducerProvenance,
@@ -79,9 +77,8 @@ def _members(**overrides: object) -> RecordedMembers:
     }
     members.update(overrides)
     # The overrides are deliberately unvalidated: a case supplies the wrong
-    # type on purpose so the policy can be seen refusing it. The cast states
-    # that intent rather than suppressing a checker complaint about it.
-    return typ.cast("RecordedMembers", RecordedMembers(**members))
+    # type on purpose so the policy can be seen refusing it.
+    return RecordedMembers(**members)
 
 
 def _provenance(
