@@ -53,22 +53,46 @@ def assert_disjoint_inputs(inputs: dict[str, object]) -> None:
         into the download directory.
     """
     trusted = _normalised(inputs["trusted-directory"])
-    for key in ("declaration-file", "trusted-record-file"):
-        value = _normalised(inputs[key])
-        if not _inside(trusted, value):
-            msg = f"{key} ({value}) must be inside trusted-directory ({trusted})"
-            raise AssertionError(msg)
     download = _normalised(inputs["download-directory"])
     output = _normalised(inputs["output-path"])
-    for label, value in (
-        ("download-directory", download),
-        ("output-path", output),
-    ):
-        if _overlap(trusted, value):
-            msg = (
-                f"{label} ({value}) must be disjoint from trusted-directory ({trusted})"
-            )
-            raise AssertionError(msg)
-    if _overlap(download, output):
-        msg = f"output-path ({output}) must not overlap download-directory ({download})"
-        raise AssertionError(msg)
+    declaration = _normalised(inputs["declaration-file"])
+    record = _normalised(inputs["trusted-record-file"])
+    problem = (
+        _inside_message("declaration-file", declaration, trusted)
+        or _inside_message("trusted-record-file", record, trusted)
+        or _disjoint_message("download-directory", download, trusted)
+        or _disjoint_message("output-path", output, trusted)
+        or _overlap_message("output-path", output, "download-directory", download)
+    )
+    if problem is not None:
+        raise AssertionError(problem)
+
+
+def _inside_message(
+    key: str, value: pathlib.PurePath, trusted: pathlib.PurePath
+) -> str | None:
+    """Return the refusal for a trusted file that names something outside."""
+    if _inside(trusted, value):
+        return None
+    return f"{key} ({value}) must be inside trusted-directory ({trusted})"
+
+
+def _disjoint_message(
+    label: str, value: pathlib.PurePath, trusted: pathlib.PurePath
+) -> str | None:
+    """Return the refusal for a path that meets the trusted directory."""
+    if not _overlap(trusted, value):
+        return None
+    return f"{label} ({value}) must be disjoint from trusted-directory ({trusted})"
+
+
+def _overlap_message(
+    label: str,
+    value: pathlib.PurePath,
+    other_label: str,
+    other: pathlib.PurePath,
+) -> str | None:
+    """Return the refusal for two labelled paths that name related directories."""
+    if not _overlap(value, other):
+        return None
+    return f"{label} ({value}) must not overlap {other_label} ({other})"
