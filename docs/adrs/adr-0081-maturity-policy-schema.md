@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0067: Maturity policy schema
+# Architectural decision record (ADR) 0081: Maturity policy schema
 
 ## Status
 

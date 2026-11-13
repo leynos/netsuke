@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0064: Typed task input schema
+# Architectural decision record (ADR) 0078: Typed task input schema
 
 ## Status
 

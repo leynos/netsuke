@@ -5,15 +5,19 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: COMPLETE
+Status: IN PROGRESS
 
-Every milestone including EP-M5 is complete and roadmap item 20.1.1 is marked
-done. The user approved this plan on 2026-10-24 and selected D-19 Option A;
+EP-M0 through EP-M5 are complete and roadmap item 20.1.1 is marked done. The
+rebased candidate is awaiting a scope decision because the corrected full-patch
+line count exceeds D-20; the milestones and their acceptance evidence remain
+complete. The user approved this plan on 2026-10-24 and selected D-19 Option A;
 approval authorized drafting the decision records, and it did not accept them.
 
 Acceptance was given by the user on 2026-11-09 as a direct instruction to
-accept the records and mark the roadmap item complete, and no amendment was
-requested. It is not evidenced by a GitHub review submission: the pull request
+accept the seven records and mark the roadmap item complete, and no amendment
+was requested. At acceptance the records were numbered ADR-0061 to ADR-0067;
+the 2026-11-13 rebase renumbered those same accepted texts as ADR-0075 to
+ADR-0081. It is not evidenced by a GitHub review submission: the pull request
 carries no approving review from the repository owner, so the acceptance is
 recorded here as the acceptance action and not as a link to a review. The seven
 decision records were supplied as `Proposed` specifically so that acceptance
@@ -34,12 +38,12 @@ support.
 
 After this work, four things are observable:
 
-1. Seven new ADRs exist and are accepted. ADR-0061 fixes what
+1. Seven new ADRs exist and are accepted. ADR-0075 fixes what
    `netsuke_version` means, how schema versions are allocated over a release
-   lifecycle, and how unsupported syntax is rejected. ADR-0062 records the
+   lifecycle, and how unsupported syntax is rejected. ADR-0076 records the
    cross-cutting contracts: the shallow end, feature and rule identifiers, the
    registered discriminators of the command operation union, persisted format
-   coordination, and one merge rule for operator ceilings. ADR-0063 to ADR-0067
+   coordination, and one merge rule for operator ceilings. ADR-0077 to ADR-0081
    record the schema decisions for RFCs 0021 to 0025, one ADR per RFC,
    following the RFC 0011 and ADR-0019 precedent.
 2. `docs/netsuke-design.md` contains the authoritative schema-version
@@ -79,8 +83,8 @@ decision D-15.
 - Do not implement until the user explicitly approves this plan.
 - Do not mark any ADR `Accepted`, or roadmap item 20.1.1 done, until the user
   has explicitly accepted the drafted ADRs in pull-request review. Satisfied on
-  2026-11-09: the user accepted ADR-0061 to ADR-0067 in review, and EP-M5
-  recorded that acceptance.
+  2026-11-09: the user accepted the seven ADR texts, then numbered 0061 to
+  0067; the rebase renumbered them 0075 to 0081, and EP-M5 records acceptance.
 - Preserve the shallow end. The quickstart manifest in RFC 0025 section 2 and
   `docs/quickstart.md` must parse, generate, and build with identical output.
   No manifest declaring `netsuke_version: "1.0.0"` may change parse result,
@@ -123,7 +127,8 @@ decision D-15.
   `docs/adrs/adr-nnnn-title-slug.md` with four-digit numbers. On 2026-10-24 the
   highest number minted on any branch was ADR-0059, no branch mentioned an
   ADR-006x number, and ADR-0060 was provisionally claimed by the 3.12.3 plan,
-  so this plan takes ADR-0061 to ADR-0067. Never renumber with a blind `sed`.
+  so the initial draft took ADR-0061 to ADR-0067. The current allocation is
+  recorded in Decision D-22. Never renumber with a blind `sed`.
 
 ## Tolerances (exception triggers)
 
@@ -153,9 +158,10 @@ decision D-15.
   that ADR to `Accepted` until the amendment is accepted.
 - Iterations: if focused tests still fail after three fix attempts within one
   milestone, stop and escalate.
-- ADR numbering: if any of ADR-0061 to ADR-0067 is taken when EP-M1 starts,
-  take the next free numbers, update every reference in this plan, and record
-  the change in `Decision log`; this needs no escalation.
+- ADR numbering: re-sweep all remote branches and open pull requests before
+  publishing. If ADR-0075 to ADR-0081 becomes reserved, take the next free
+  consecutive range, update the full documentation index and every reference,
+  and record the change in `Decision log`; this needs no escalation.
 
 ## Risks
 
@@ -169,7 +175,7 @@ decision D-15.
 
 - Risk: mixed fleets at the first schema-minor release. Binaries released
   before this gate still accept `1.1.0` and evaluate it. Severity: medium.
-  Likelihood: medium. Mitigation: ADR-0061 states that the reader guarantee
+  Likelihood: medium. Mitigation: ADR-0075 states that the reader guarantee
   starts with the first release containing the gate, and forbids publishing the
   first schema minor in that same release.
 
@@ -181,7 +187,7 @@ decision D-15.
 
 - Risk: 16.1.1 or 17.1.1 is planned concurrently and claims the next schema
   minor independently of ADR-0043's `1.1.0` reservation. Severity: medium.
-  Likelihood: medium. Mitigation: ADR-0061 allocates every later minor at
+  Likelihood: medium. Mitigation: ADR-0075 allocates every later minor at
   admission, not at ratification, the registry and its contract test turn
   ADR-0043's coordination convention into a checked mechanism, and EP-M2 adds
   pointers to 12.1.2, 16.1.1, and 17.1.1.
@@ -195,10 +201,10 @@ decision D-15.
 
 - Risk: new template vocabulary slips past the version. A new Jinja global or
   filter is not a manifest key, so a `1.0.0` manifest could depend on a newer
-  reader. Severity: medium. Likelihood: medium. Mitigation: ADR-0061 classifies
+  reader. Severity: medium. Likelihood: medium. Mitigation: ADR-0075 classifies
   template vocabulary introduced by a registered feature (such as the `inputs`
   namespace or host facts) as part of that feature's admission; general stdlib
-  growth remains under RFC 0006's policy, and ADR-0061 records this as a known
+  growth remains under RFC 0006's policy, and ADR-0075 records this as a known
   limitation.
 
 - Risk: moving the check earlier changes existing diagnostics. Severity: low.
@@ -251,12 +257,14 @@ decision D-15.
   PR heads; recorded the ADR-number and baseline-gate evidence below.
 - [x] (2026-10-24) Published the rebased baseline with an explicit lease;
   local, tracking, and remote heads matched at `8de685cd5`.
-- [x] (2026-10-24) EP-M1: drafted ADR-0061 as Proposed and added the
+- [x] (2026-10-24) EP-M1: drafted ADR-0061 as Proposed; it was renumbered
+  to ADR-0075 after the 2026-11-13 rebase. Added the schema-version registry,
   schema-version registry. The registry reserves the planned top-level keys,
   node fields, command discriminators, and the closed vocabularies settled by
   D-11 to D-14. `make check-fmt`, `make markdownlint` (including spelling), and
   `make nixie` passed after formatting.
-- [x] (2026-10-24) EP-M2: drafted ADR-0062 to ADR-0067 as Proposed; added the
+- [x] (2026-10-24) EP-M2: drafted ADR-0062 to ADR-0067 as Proposed; they
+  were renumbered to ADR-0076 to ADR-0081 after the 2026-11-13 rebase. Added
   OD-21 to OD-25 resolution table and amended the RFC and roadmap references.
   `make check-fmt`, `make markdownlint` (including spelling), `make nixie`, and
   both resolution-table review checks passed.
@@ -332,6 +340,23 @@ decision D-15.
   exits 1 reporting the code twice and the supported `1.0`; the `1.0.0` control
   generates; a missing manifest keeps its single context line. `make fmt` and a
   focused Clippy pass are green.
+- [x] (2026-11-13) Rebased all 41 topic commits from old base
+  `e4ef7c511` onto current `main` at `8b38ac377` with the built-in Git merge
+  driver; global Weave attributes were bypassed. The range-diff accounts for
+  all 41 commits. Semantic resolutions preserved the Ninja ADR-0061 entry
+  alongside this branch's schema decisions, merged the console-pool and
+  schema-version localization keys, and retained both migration-guide sections.
+  The updated main had already allocated ADR-0061 and ADR-0068 through
+  ADR-0074, so the live branch/PR sweep moved this plan's accepted records to
+  ADR-0075 through ADR-0081. Fresh candidate gates are pending after the
+  documentation migration.
+- [ ] (2026-11-13) Corrected the full-patch scope count against the original
+  boundary `e4ef7c511` and current candidate: 2,710 net lines across Rust files
+  (+2,805/-95), including 881 net lines in non-test `src/` (+928/-47). This
+  exceeds D-20's 2,000/800 ceilings. The earlier 975/339 estimate measured only
+  working-tree changes relative to `HEAD`, not the full candidate patch; the
+  corrected count blocks the final gate run and publication pending a scope
+  decision.
 - [x] EP-M3: reader-side schema version gate, users' guide, CHANGELOG. OBL-1 to
   OBL-5 are discharged by the artefacts listed in the verification plan; the
   gate sequence this milestone names passed at `bd7e6f123`, and the later
@@ -368,7 +393,7 @@ decision D-15.
     schema-telemetry module headers now state that only `AmbientFull` and
     `Full` record, the remedy assertion uses a phrase unique to
     `manifest.schema_version.help` rather than `MAJOR.MINOR.0` (which also
-    appears in the `invalid` summary), ADR-0066 is restored to its accepted
+    appears in the `invalid` summary), ADR-0080 is restored to its accepted
     text with a dated addendum for the zero-ceiling rule, and this ExecPlan is
     brought up to date. All nine gates passed with the content hash stable
     (`410d7c0e…410d7c0e`): `check-fmt` 3s, `typecheck` 756s, `lint` 2661s,
@@ -527,7 +552,8 @@ decision D-15.
   `unreachable!` became a closed `FIXTURES` table, which removed the panic
   rather than suppressing the lint.
 - [x] EP-M5: ADR acceptance, roadmap completion, plan completion.
-  - 2026-11-09: the user explicitly accepted ADR-0061 to ADR-0067 in review.
+  - 2026-11-09: the user explicitly accepted the seven records, then numbered
+    ADR-0061 to ADR-0067; they are now ADR-0075 to ADR-0081.
     Each ADR's status became `Accepted on 2026-11-09` followed by a one-line
     summary of its decision; no amendment was requested, so the drafted text
     stands. `docs/netsuke-design.md` now calls the resolution table accepted
@@ -572,7 +598,7 @@ decision D-15.
   `query.rs`, the runner, graph, and help paths) funnels through
   `budget::adapter::from_str_named` into it. Impact: the gate belongs directly
   after YAML parsing. The only bypass is library use of the public
-  `Deserialize` implementation on `NetsukeManifest`, which ADR-0061 records as
+  `Deserialize` implementation on `NetsukeManifest`, which ADR-0075 records as
   a limitation.
 
 - Observation: YAML shapes reaching the gate. Unquoted `netsuke_version: 1.0.0`
@@ -700,7 +726,7 @@ when the user accepts the corresponding ADR in EP-M5. D-15 to D-18 are planning
 decisions that take effect on plan approval. D-19 is a choice the approver
 makes at approval.
 
-- Decision D-1 (ADR-0061), schema version semantics. `netsuke_version` is the
+- Decision D-1 (ADR-0075), schema version semantics. `netsuke_version` is the
   manifest schema version, not the Netsuke release version. It keeps SemVer
   spelling because the whole corpus and RFC 0003's `requires.manifest` ranges
   use it, but its canonical form is exactly `MAJOR.MINOR.0` with no prerelease
@@ -715,7 +741,7 @@ makes at approval.
   removes ambiguity. Date/Author: 2026-09-27, planning agent, revised after
   panel review.
 
-- Decision D-2 (ADR-0061), admission point. When the parsed YAML root is a
+- Decision D-2 (ADR-0075), admission point. When the parsed YAML root is a
   mapping, its literal `netsuke_version` entry is checked immediately after
   YAML parsing and before variable registration, macro registration, `foreach`/
   `when` expansion, or any other template evaluation. A missing entry, a
@@ -728,7 +754,7 @@ makes at approval.
   filesystem, run commands, and fetch URLs. Date/Author: 2026-09-27, planning
   agent, revised after panel review.
 
-- Decision D-3 (ADR-0061), allocation lifecycle. Ratification reserves names in
+- Decision D-3 (ADR-0075), allocation lifecycle. Ratification reserves names in
   the design-document registry. It allocates a number only where an accepted
   ADR already has: ADR-0043 reserves `1.1.0` for the consolidated
   structured-command surface (feature identifiers `structured-commands` and
@@ -770,7 +796,7 @@ makes at approval.
   users install. Date/Author: 2026-09-27, planning agent; revised 2026-10-24
   after rebasing onto ADR-0043.
 
-- Decision D-4 (ADR-0061), rejection ladder. Schema admission events are: a
+- Decision D-4 (ADR-0075), rejection ladder. Schema admission events are: a
   new key, a new command discriminator, a new value in a closed vocabulary
   (such as a state `kind`, probe `protocol`, or maturity rule identifier), and
   new template vocabulary introduced by a registered feature. This applies from
@@ -795,10 +821,10 @@ makes at approval.
   12.1.2, or whichever feature is admitted first, implements rungs 2 and 2b.
   Date/Author: 2026-09-27, planning agent, revised after panel review.
 
-- Decision D-5 (ADR-0061), opt-in mechanism. Raising `netsuke_version` is the
+- Decision D-5 (ADR-0075), opt-in mechanism. Raising `netsuke_version` is the
   only opt-in. There is no per-feature list in the style of Cargo's
   `cargo-features`, because Netsuke's minors are additive and a list would
-  duplicate the version signal. Options considered and rejected in ADR-0061: a
+  duplicate the version signal. Options considered and rejected in ADR-0075: a
   version floor plus reserved-key rejection with no version bump (cannot catch
   shape changes such as RFC 0001's string-to-mapping `command`, cannot catch
   unreserved keys, and leaves the declaration's relationship to used syntax
@@ -808,7 +834,7 @@ makes at approval.
   tool that runs commands and deletes files). Date/Author: 2026-09-27, planning
   agent, revised after panel review.
 
-- Decision D-6 (ADR-0061), nested and composed documents. Each document a
+- Decision D-6 (ADR-0075), nested and composed documents. Each document a
   reader loads is admitted against its own declared version. Whether an
   included fragment or bundle entry manifest must declare a version, and how it
   relates to its importer's, is assigned to 16.1.1 and 17.1.1, with the
@@ -818,12 +844,12 @@ makes at approval.
   to, never a substitute for, the manifest minor. Date/Author: 2026-09-27,
   planning agent, added after panel review.
 
-- Decision D-7 (ADR-0062), identifiers and capability reporting. Feature
+- Decision D-7 (ADR-0076), identifiers and capability reporting. Feature
   identifiers and maturity rule identifiers are separate namespaces. The
   design-document registry is the open list of feature identifiers; its initial
   rows are `structured-commands`, `named-shells`, `includes`, `bundles`,
   `host-facts`, `inputs`, `contention`, `states`, `artefacts`, and `maturity`.
-  ADR-0067 holds the rule-to-feature table (for example, `owned-cleanup`
+  ADR-0081 holds the rule-to-feature table (for example, `owned-cleanup`
   requires `artefacts`). Capability reporting is keyed by feature identifier;
   the JSON shape belongs to 20.2.1, its configuration-context surface to phase
   5's `context`, and maturity findings to the existing `netsuke check` report
@@ -831,7 +857,7 @@ makes at approval.
   with a version or capability remedy. Date/Author: 2026-09-27, planning agent,
   revised after panel review.
 
-- Decision D-8 (ADR-0062), the command operation union. Phase 12 (RFC 0001)
+- Decision D-8 (ADR-0076), the command operation union. Phase 12 (RFC 0001)
   owns the one closed union: its abstract syntax tree (AST), parser,
   action-plan codec, and runner dispatch. The union's discriminator set is
   registered: `invoke`, `rule`, and `script` from RFC 0001, plus
@@ -846,7 +872,7 @@ makes at approval.
   and phases 23 and 24 depend on 12.1.2 and 12.3.1. Date/Author: 2026-09-27,
   planning agent, revised after panel review.
 
-- Decision D-9 (ADR-0062), shallow end and persisted formats. RFC 0025 section
+- Decision D-9 (ADR-0076), shallow end and persisted formats. RFC 0025 section
   2 is a release acceptance requirement for every schema-1 release: optional
   top-level keys default to empty, their absence produces no message at any
   verbosity, and one node's feature never requires declarations elsewhere
@@ -867,7 +893,7 @@ makes at approval.
   sidecars keep ADR-0012. Date/Author: 2026-09-27, planning agent, revised
   after panel review.
 
-- Decision D-10 (ADR-0062), operator ceilings. Operator limits introduced by
+- Decision D-10 (ADR-0076), operator ceilings. Operator limits introduced by
   these RFCs follow one rule: a numeric ceiling set by a trusted layer is a
   maximum; the primary project `.netsuke.toml` (ADR-0021's untrusted project
   layer) may lower it but never raise it; the effective value is the minimum,
@@ -880,7 +906,7 @@ makes at approval.
   governs field declaration. Date/Author: 2026-09-27, planning agent, added
   after panel review.
 
-- Decision D-11 (ADR-0066, RFC 0024). `capacity` is an integer from 1 to a
+- Decision D-11 (ADR-0080, RFC 0024). `capacity` is an integer from 1 to a
   schema-owned maximum of 1024, independent of the CLI `jobs` limit so that
   raising `jobs` never changes the schema; zero is rejected because Ninja treats
   `depth = 0` as unlimited. The effective capacity is the minimum of the
@@ -895,7 +921,7 @@ makes at approval.
   field on a rule is rejected in the first version. Date/Author: 2026-09-27,
   planning agent, revised after panel review.
 
-- Decision D-12 (ADR-0065, RFC 0023). The canonical spellings are `artefacts`
+- Decision D-12 (ADR-0079, RFC 0023). The canonical spellings are `artefacts`
   and `--artefact`; there is no `artifacts` alias, and 24.1.1 adds a suggestion
   for it. `kind` defaults to `file`, `role` to `generated`, and `create_parent`
   to `false`. An artefact root may not equal, contain, or lie inside another
@@ -912,7 +938,7 @@ makes at approval.
   remote delivery: no owner until a separate RFC). Date/Author: 2026-09-27,
   planning agent, revised after panel review.
 
-- Decision D-13 (ADR-0064, RFC 0022). Integer inputs use the signed 64-bit
+- Decision D-13 (ADR-0078, RFC 0022). Integer inputs use the signed 64-bit
   range and reject overflow rather than widening or wrapping.
   `--input NAME=VALUE` is a repeatable option registered once in ADR-0016's
   canonical command metadata and attached to every subcommand that loads a
@@ -924,7 +950,7 @@ makes at approval.
   (not before 21.3.1's canary shows demand). Date/Author: 2026-09-27, planning
   agent, narrowed after panel review.
 
-- Decision D-14 (ADR-0063 and ADR-0067, RFCs 0021 and 0025). For states: `kind`
+- Decision D-14 (ADR-0077 and ADR-0081, RFCs 0021 and 0025). For states: `kind`
   is the closed set `directory`, `file`, `python-venv`, and `custom`; when
   `probe.external` is present, `probe.protocol` is required and is the closed
   set `nagios`; `probe.timeout_seconds` and `probe.max_output_bytes` are
@@ -947,7 +973,7 @@ makes at approval.
 - Decision D-15 (scope): EP-M3 is in scope. It implements rung 1 of D-4 only.
   Roadmap item 12.1.2 keeps its title ("Add the closed structured-command AST
   and schema version gate"); EP-M2 adds one sub-bullet saying that 12.1.2
-  extends ADR-0061's reader gate by admitting ADR-0043's `1.1` and implementing
+  extends ADR-0075's reader gate by admitting ADR-0043's `1.1` and implementing
   rungs 2 and 2b, so each part of the gate has exactly one owner. If the
   reviewer strikes EP-M3, the sub-bullet instead makes 12.1.2 the owner of rung
   1 as well. EP-M3 may ship as a separate pull request from the documentation
@@ -982,8 +1008,8 @@ makes at approval.
   it, keep the supported range contiguous (D-3 rule 8), and let later features
   take the minors after `1.1` at admission. It conforms to accepted
   architecture and costs at most a wait for 12.1.2 by features that do not need
-  structured commands. Option B: draft ADR-0061 so that it amends ADR-0043,
-  through an `Amended by ADR-0061 (date)` banner and an `## Amendments`
+  structured commands. Option B: draft ADR-0075 so that it amends ADR-0043,
+  through an `Amended by ADR-0075 (date)` banner and an `## Amendments`
   section, replacing the fixed `1.1.0` with "the structured-command surface
   takes the next minor at its admission, as one increment". It removes the wait
   but changes accepted architecture and leaves RFC 0001 section 19.2 and RFC
@@ -1017,6 +1043,16 @@ makes at approval.
   response this plan prefers to widening a budget. Date/Author: 2026-11-05,
   rebase evidence.
 
+- Decision D-22 (ADR numbering after rebase): current `main` at
+  `8b38ac377` reserves ADR-0061 and has recorded ADR-0068 through ADR-0074. The
+  original ADR-0061 to ADR-0067 allocation therefore collides with the updated
+  main history. A live sweep on 2026-11-13 checked all 80 remote branch trees
+  and all 26 open pull-request file diffs; ADR-0075 through ADR-0081 were free.
+  The seven accepted records are renumbered to ADR-0075 through ADR-0081, with
+  all paths, links, design references, and index entries updated. The
+  2026-10-24 sweep remains accurate for the initial allocation. Date/Author:
+  2026-11-13, rebase evidence.
+
 - Approval: the user approved this plan on 2026-10-24 and selected the
   recommended D-19 Option A. The plan honours ADR-0043's `1.1.0` reservation.
   The user approved D-20's updated scope ceilings on 2026-11-03.
@@ -1035,9 +1071,10 @@ rebased a second time onto `fb8486ff3`, where the only textual conflicts were
 the `CHANGELOG.md` entry list and the at-a-glance table's column padding; both
 were resolved by keeping every entry from each side.
 
-EP-M5 completed on 2026-11-09: ADR-0061 to ADR-0067 read `Accepted` with that
-date and a one-line summary of what each decides, the design document's
-resolution table and the roadmap preamble describe them as accepted, and
+EP-M5 completed on 2026-11-09: the seven records (then ADR-0061 to ADR-0067,
+now ADR-0075 to ADR-0081) read `Accepted` with that date and a one-line summary
+of what each decides, the design document's resolution table and the roadmap
+preamble describe them as accepted, and
 `docs/roadmap-progressive-enhancement.md` marks 20.1.1 and its three sub-bullets
 `[x]`. No amendment was requested in review, so the ADR text is the drafted
 text.
@@ -1155,10 +1192,10 @@ Upstream artefacts, at `main` commit `f8df5d808f1bee4eb8554df0160119864ade6f39`
 Trace links:
 
 ```plaintext
-RM-a -> OD-21..OD-25 -> D-11..D-14, D-17 -> ADR-0063..ADR-0067 + design resolution table -> EP-M2 -> EP-M5 acceptance
-RM-b -> ADR-0043 (1.1.0), RFC0003, RFC0029 -> D-1, D-3, D-6, D-9, D-19 -> ADR-0061/0062 -> EP-M1/M2 -> OBL-5
-TOR-COMPAT -> D-1 -> ADR-0061 -> EP-M3
-RM-c -> RFC0025-2/3, RFC0001-15.1 -> D-4, D-7, D-8 -> ADR-0061/ADR-0062 -> EP-M1/EP-M2
+RM-a -> OD-21..OD-25 -> D-11..D-14, D-17 -> ADR-0077..ADR-0081 + design resolution table -> EP-M2 -> EP-M5 acceptance
+RM-b -> ADR-0043 (1.1.0), RFC0003, RFC0029 -> D-1, D-3, D-6, D-9, D-19 -> ADR-0075/ADR-0076 -> EP-M1/M2 -> OBL-5
+TOR-COMPAT -> D-1 -> ADR-0075 -> EP-M3
+RM-c -> RFC0025-2/3, RFC0001-15.1 -> D-4, D-7, D-8 -> ADR-0075/ADR-0076 -> EP-M1/EP-M2
 OLD-READER -> D-1, D-2, D-4 rung 1, D-15, D-18 -> EP-M3 -> OBL-1..OBL-5
 SE -> D-9 -> OBL-3 regression evidence -> 20.1.2 fixtures (later)
 ```
@@ -1276,14 +1313,14 @@ Obligations:
 
 Residual gaps: rungs 2, 2b, and 4 are not implemented here. General stdlib
 vocabulary is not version-gated (Risks). Library callers that deserialize
-`NetsukeManifest` directly bypass the gate (ADR-0061 limitation).
+`NetsukeManifest` directly bypass the gate (ADR-0075 limitation).
 
 ## Plan of work
 
 Stage A (EP-M0) re-sweeps ADR numbers and records baseline gates.
 
-Stage B (EP-M1, EP-M2) drafts ADR-0061 and the registry, then ADR-0062 to
-ADR-0067, the resolution table, and the RFC and roadmap amendments. All ADRs are
+Stage B (EP-M1, EP-M2) drafts ADR-0075 and the registry, then ADR-0076 to
+ADR-0081, the resolution table, and the RFC and roadmap amendments. All ADRs are
 `Proposed`. Each milestone ends with the full gate set and a commit.
 
 Stage C (EP-M3) adds red tests, observes them fail, implements the pure
@@ -1309,9 +1346,9 @@ roadmap item done, and completes this plan.
 - Remaining gaps: all later milestones.
 - Compatibility decision: none.
 
-### EP-M1: ADR-0061 and the schema-version registry
+### EP-M1: ADR-0075 and the schema-version registry
 
-- Outcome: `docs/adrs/adr-0061-manifest-schema-versions-and-admission.md`
+- Outcome: `docs/adrs/adr-0075-manifest-schema-versions-and-admission.md`
   (`Proposed`) records D-1 to D-6, the options considered under D-5, the prior
   art listed under `Artefacts and notes`, and the limitations (library bypass,
   stdlib vocabulary, pre-gate binaries). `docs/netsuke-design.md` section 2.2
@@ -1335,18 +1372,18 @@ roadmap item done, and completes this plan.
 - Conformance check: no code or RFC changed; the `1.1` reservation matches
   ADR-0043 (or its accepted amendment).
 - Recovery: revert the milestone commit.
-- Remaining gaps: ADR-0062 to ADR-0067; the gate.
+- Remaining gaps: ADR-0076 to ADR-0081; the gate.
 - Compatibility decision: none.
 
 ### EP-M2: contract ADRs, resolution table, RFC and roadmap amendments
 
 - Outcome: all `Proposed`:
-  `docs/adrs/adr-0062-progressive-enhancement-contract-boundaries.md` (D-7 to
-  D-10), `docs/adrs/adr-0063-managed-state-schema.md` (D-14, states),
-  `docs/adrs/adr-0064-typed-task-input-schema.md` (D-13),
-  `docs/adrs/adr-0065-artefact-ownership-schema.md` (D-12),
-  `docs/adrs/adr-0066-contention-class-schema.md` (D-11), and
-  `docs/adrs/adr-0067-maturity-policy-schema.md` (D-14, maturity, and the
+  `docs/adrs/adr-0076-progressive-enhancement-contract-boundaries.md` (D-7 to
+  D-10), `docs/adrs/adr-0077-managed-state-schema.md` (D-14, states),
+  `docs/adrs/adr-0078-typed-task-input-schema.md` (D-13),
+  `docs/adrs/adr-0079-artefact-ownership-schema.md` (D-12),
+  `docs/adrs/adr-0080-contention-class-schema.md` (D-11), and
+  `docs/adrs/adr-0081-maturity-policy-schema.md` (D-14, maturity, and the
   rule-to-feature table). `docs/netsuke-design.md` gains
   `### 2.9 Progressive-enhancement contracts`, holding the resolution table:
   one row per outstanding item from OD-21 to OD-25, with the RFC section, the
@@ -1355,12 +1392,12 @@ roadmap item done, and completes this plan.
   section 10's sentence "Allocate the manifest and persisted-plan versions
   during acceptance alongside RFC 0001" and RFC 0022 section 8's "Allocate the
   manifest version with the shared schema acceptance work" are each replaced by
-  a sentence stating that ADR-0043 and ADR-0061 govern schema-version
+  a sentence stating that ADR-0043 and ADR-0075 govern schema-version
   allocation. In `docs/roadmap.md`, completed item 12.1.1 is not edited; 12.1.2
-  keeps its title and gains one sub-bullet saying that it extends ADR-0061's
+  keeps its title and gains one sub-bullet saying that it extends ADR-0075's
   reader gate by admitting ADR-0043's `1.1`, implements rungs 2 and 2b, and
   reserves D-8's discriminators. In `docs/roadmap-composition.md`, 16.1.1 and
-  17.1.1 each gain one sentence citing ADR-0061 and D-6.
+  17.1.1 each gain one sentence citing ADR-0075 and D-6.
   `docs/roadmap-progressive-enhancement.md`'s ownership section links the seven
   ADRs. `docs/contents.md` gains the seven entries beside the existing ADR
   index entries; that index is not strictly ascending (ADR-0056 sits between
@@ -1407,7 +1444,7 @@ roadmap item done, and completes this plan.
 ### EP-M4: developers' guide and documentation clean-up
 
 - Outcome: `docs/developers-guide.md` gains a section on reserving, admitting,
-  and allocating a schema feature under ADR-0061 (the D-3 lifecycle, the
+  and allocating a schema feature under ADR-0075 (the D-3 lifecycle, the
   registry, the contract test, and the ladder rungs a new feature must
   implement). `docs/snapshot-testing-in-netsuke-using-insta.md` uses `"1.0.0"`.
 - Requirements: `AGENTS.md` documentation obligations.
@@ -1419,7 +1456,7 @@ roadmap item done, and completes this plan.
 
 ### EP-M5: acceptance and completion
 
-- Precondition: the user has explicitly accepted ADR-0061 to ADR-0067 in
+- Precondition: the user has explicitly accepted ADR-0075 to ADR-0081 in
   review, possibly with amendments. Until then this plan stays `IN PROGRESS`
   with a sentence beneath the status naming the pending acceptance.
 - Outcome: each accepted ADR reads `Accepted` with its date and a one-line
@@ -1534,7 +1571,7 @@ EP-M3, green:
        pub(crate) max_minor: u64,
    }
 
-   /// Schema versions admitted by this release (ADR-0061).
+   /// Schema versions admitted by this release (ADR-0075).
    pub(crate) const SUPPORTED: SupportedSchema = SupportedSchema { major: 1, max_minor: 0 };
 
    /// Reasons a declared schema version cannot be admitted.
@@ -1686,7 +1723,7 @@ supported schema `1.0`, a non-zero exit, and `absent`. Replacing `1.1.0` with
 Every step is repeatable; re-running `make fmt` reapplies Markdown formatting.
 Each milestone is one commit, so any milestone can be reverted with
 `git revert` without disturbing earlier ones. If EP-M3 is reverted, amend
-ADR-0061's D-15 paragraph in the same revert series. The `/tmp` probe
+ADR-0075's D-15 paragraph in the same revert series. The `/tmp` probe
 directories may be deleted at any time.
 
 ## Artefacts and notes
@@ -1698,7 +1735,7 @@ provisionally claimed by the open 3.12.3 plan in PR #809, whose ADR file is not
 yet present. The only ADR-006x prose reference outside this plan is that claim.
 The previously missing local tracking ref `dev-build-footprint` was fetched to
 a scratch ref and scanned; it contains ADR-0056 and no later reservation.
-ADR-0061 to ADR-0067 remain available for EP-M1, subject to the required fresh
+ADR-0075 to ADR-0081 remain available for EP-M1, subject to the required fresh
 sweep immediately before file creation.
 
 Baseline gate results:
@@ -1740,7 +1777,7 @@ ninja: error: build.ninja:2: invalid pool depth
 ninja: fatal: ninja version (1.11.1) incompatible with build file ninja_required_version version (99.0).
 ```
 
-Prior art consulted through Firecrawl, for ADR-0061's options section:
+Prior art consulted through Firecrawl, for ADR-0075's options section:
 
 - Ninja manual: pools arrived in 1.1; the `console` pool in 1.5 has depth 1;
   `ninja_required_version` makes an older Ninja refuse a newer build file.
@@ -1816,8 +1853,8 @@ changed:
   `Proposed` and accepted only by explicit user acceptance (new EP-M5). RFCs
   stay `Proposed` with governing-decision bullets, as RFC 0011 does.
   Contradicting RFC and roadmap sentences are amended.
-- The single large ADR-0062 is split: ADR-0062 keeps cross-cutting contracts,
-  and ADR-0063 to ADR-0067 hold one RFC each. The resolution table moves to the
+- The single large ADR-0076 is split: ADR-0076 keeps cross-cutting contracts,
+  and ADR-0077 to ADR-0081 hold one RFC each. The resolution table moves to the
   design document.
 - D-1 now requires canonical `MAJOR.MINOR.0` and holds the supported range as
   data. D-3 gains a full release lifecycle. D-4 defines what counts as syntax
@@ -1849,9 +1886,9 @@ invalidated several premises. What changed:
   new D-19 offers amending ADR-0043 instead; EP-M2 no longer edits 12.1.1 and
   adds a sub-bullet to 12.1.2 rather than retitling it.
 - ADRs moved to `docs/adrs/adr-nnnn-*.md` with four-digit numbers, and
-  ADR-0041 to ADR-0056 are taken; this plan's ADRs become ADR-0061 to ADR-0067,
-  with the sweep command rewritten for both layouts. RFC files gained an `rfc-`
-  prefix and some new slugs.
+  ADR-0041 to ADR-0056 are taken; the initial allocation for this plan was
+  ADR-0061 to ADR-0067, later renumbered to ADR-0075 to ADR-0081 after the
+  2026-11-13 rebase. RFC files gained an `rfc-` prefix and some new slugs.
 - `netsuke check` merged (ADR-0056): constraints, D-7, D-14, and OBL-4 now
   cover it; ADR-0045's version-free `command_isolation` key is recorded as part
   of the `1.0` core.
@@ -1873,19 +1910,20 @@ of the drafted ADRs remains scheduled for EP-M5.
 PR #808 was rebased onto `main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`.
 The original five commits replayed patch-identically with no conflicts. The
 remote-branch sweep found ADR-0060 provisionally claimed by open PR #809 and
-left ADR-0061 to ADR-0067 available; this sweep includes the live branch that
-had no local tracking ref. The formatter, lint, typecheck, doc-coverage,
-Markdown, and Mermaid gates passed. `make test` recorded one timeout while its
-nested Cargo check waited for compiler admission; this plan records the result
-without retrying or hiding it. Cargo's `rust-version` wording was corrected to
-describe its enforced compiler floor rather than manifest-syntax admission.
+left ADR-0061 to ADR-0067 available for the initial allocation; this sweep
+included the live branch that had no local tracking ref. The formatter, lint,
+typecheck, doc-coverage, Markdown, and Mermaid gates passed. `make test`
+recorded one timeout while its nested Cargo check waited for compiler
+admission; this plan records the result without retrying or hiding it. Cargo's
+`rust-version` wording was corrected to describe its enforced compiler floor
+rather than manifest-syntax admission.
 
-2026-10-24, EP-M1: drafted ADR-0061 as Proposed and documented the feature
-registry in `docs/netsuke-design.md`. The registry records the reserved
-structured-command `1.1` minor, leaves other planned features unallocated, and
-lists the source-backed fields, discriminators, and closed vocabularies. Tag
-history confirms `vTEST` as the first tagged tree with a schema `1.0.0`
-manifest and `v0.1.0-beta1` as the first versioned release; the
+2026-10-24, EP-M1: drafted ADR-0061 (now ADR-0075) as Proposed and documented
+the feature registry in `docs/netsuke-design.md`. The registry records the
+reserved structured-command `1.1` minor, leaves other planned features
+unallocated, and lists the source-backed fields, discriminators, and closed
+vocabularies. Tag history confirms `vTEST` as the first tagged tree with a
+schema `1.0.0` manifest and `v0.1.0-beta1` as the first versioned release; the
 `command_isolation` field was accepted later under the pre-gate `1.0` schema
 and remains absent from release tags. `make fmt`, `make check-fmt`,
 `make markdownlint`, and `make nixie` passed. No code changed. At that point

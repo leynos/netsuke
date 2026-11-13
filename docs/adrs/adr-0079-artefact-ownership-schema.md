@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0065: Artefact ownership schema
+# Architectural decision record (ADR) 0079: Artefact ownership schema
 
 ## Status
 
@@ -92,7 +92,7 @@ validates the scope again. Exceeding a bound fails the plan rather than
 truncating it. `--force` skips confirmation but not validation or bounds.
 
 Use operator ceilings `clean_entries_ceiling`, `clean_depth_ceiling`,
-`clean_bytes_ceiling`, and `clean_elapsed_ceiling_seconds` under ADR-0062.
+`clean_bytes_ceiling`, and `clean_elapsed_ceiling_seconds` under ADR-0076.
 
 ## Goals and non-goals
 

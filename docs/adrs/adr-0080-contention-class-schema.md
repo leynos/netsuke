@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0066: Contention class schema
+# Architectural decision record (ADR) 0080: Contention class schema
 
 ## Status
 
@@ -39,7 +39,7 @@ also cannot be emitted directly as Ninja identifiers.
 ### Technical requirements
 
 - Cap schema capacity independently of CLI `jobs`.
-- Combine declared capacity with a trusted operator ceiling using ADR-0062.
+- Combine declared capacity with a trusted operator ceiling using ADR-0076.
 - Lower public names through a typed identity and safe internal encoding.
 - Reject incompatible use of Ninja's `console` pool rather than weaken either
   guarantee.

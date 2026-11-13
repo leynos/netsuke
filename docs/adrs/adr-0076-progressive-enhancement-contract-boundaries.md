@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0062: Progressive-enhancement contract boundaries
+# Architectural decision record (ADR) 0076: Progressive-enhancement contract boundaries
 
 ## Status
 
@@ -153,7 +153,7 @@ ADR-0026, and ADR-0050.
   - Keep optional features independently adoptable and identifiable.
   - Make operator restrictions monotone across configuration layers.
 - Non-goals:
-  - Define the feature-specific schema fields settled by ADR-0063 to ADR-0067.
+  - Define the feature-specific schema fields settled by ADR-0077 to ADR-0081.
   - Add a new capability command, report envelope, parser, or runner.
   - Version persisted formats with `netsuke_version`.
 
@@ -185,4 +185,4 @@ ADR-0026, and ADR-0050.
 - Phase 5 owns the `context --json` surface; the existing `netsuke check`
   owner retains maturity findings.
 - Roadmap item 12.1.2 or a later admission change must implement raw-document
-  checks for feature minima and reserved syntax as specified by ADR-0061.
+  checks for feature minima and reserved syntax as specified by ADR-0075.

@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0061: Manifest schema versions and admission
+# Architectural decision record (ADR) 0075: Manifest schema versions and admission
 
 ## Status
 

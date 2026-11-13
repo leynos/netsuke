@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0063: Managed state schema
+# Architectural decision record (ADR) 0077: Managed state schema
 
 ## Status
 
@@ -39,12 +39,12 @@ is sandboxed.
 
 ### Technical requirements
 
-- Use the structured command block from ADR-0062; do not add a state-private
+- Use the structured command block from ADR-0076; do not add a state-private
   command parser.
 - Bound probe execution by positive time and output limits.
 - Permit state operations only in always-run actions or targets with
   `always: true`.
-- Merge operator limits under ADR-0062's trusted-ceiling rule.
+- Merge operator limits under ADR-0076's trusted-ceiling rule.
 
 ## Options considered
 
@@ -110,7 +110,7 @@ The default timeout is 10 seconds and the combined stdout/stderr limit is
 positive integers capped by trusted ceilings `probe_timeout_ceiling_seconds` and
 `probe_output_ceiling_bytes`. `probe_external_deny` can prohibit external
 probes. The shared configuration layer owns these fields and their provenance
-under ADR-0062.
+under ADR-0076.
 
 External probes reuse the structured invocation fields allowed by RFC 0021:
 `invoke`, `env`, `cwd`, and an allowed `shell`. The runner makes no read-only
