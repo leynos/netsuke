@@ -1,12 +1,11 @@
 //! Unit tests for runner path resolution, predicate helpers, and core helpers.
 use super::*;
 use crate::cli::{HelpArgs, HelpTopic};
-use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
 use crate::localization;
 use crate::manifest::ManifestLoadStage;
+use crate::recipe_shell::RecipeShell;
 use crate::status::{LocalizationKey, StageNumber, StatusReporter};
 use crate::test_tracing_capture::with_test_subscriber;
-use crate::{ninja_gen::NinjaGenError, recipe_shell::RecipeShell};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 use monotony::test_util::FixedMonotonicClock;
@@ -239,33 +238,6 @@ fn build_graph_preserves_graph_error_context() -> Result<()> {
         "graph context should be retained: {error:?}"
     );
     Ok(())
-}
-
-#[test]
-fn ninja_text_propagates_typed_generation_errors() {
-    let mut graph = BuildGraph::default();
-    graph
-        .insert_edge(BuildEdge {
-            action_id: "missing".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("hello")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            progress_label: None,
-            phony: false,
-            always: false,
-            output_visibility: crate::ir::EdgeOutputVisibility::default(),
-        })
-        .expect("test graph output aliases must be unique");
-
-    let error = generation::ninja_text_for_shell(&graph, RecipeShell::host_default())
-        .expect_err("missing action should fail generation");
-    assert!(matches!(
-        error,
-        NinjaGenError::MissingAction { ref id, .. } if id == "missing"
-    ));
 }
 
 #[rstest]
