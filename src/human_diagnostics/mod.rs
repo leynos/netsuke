@@ -12,12 +12,20 @@
 //! whole report for errors such as a missing manifest. Either way a person sees
 //! the same fault the JSON mode reports, at the same depth.
 //!
-//! Nothing here reads the process environment. The glyph theme is derived from
-//! the already-resolved [`OutputPrefs`], which keeps this module callable from
-//! an in-process test without ambient state.
+//! Nothing here reads the process environment. The glyph and colour theme is
+//! derived from the already-resolved [`DiagnosticStyle`] and the localized
+//! prefixes from [`OutputPrefs`], which keeps this module callable from an
+//! in-process test without ambient state.
+//!
+//! A failure the runner classified itself — a [`runner::RunnerError`] — is
+//! rendered but not logged: its diagnostic is the whole report, and a tracing
+//! event would prepend a timestamped line to text that already reads as a
+//! complete answer. That is why a missing manifest prints one line and not
+//! two.
 
 use anyhow::Error;
 use miette::{Diagnostic, GraphicalReportHandler, GraphicalTheme, Report};
+use netsuke::display_plan::DiagnosticStyle;
 use netsuke::ir::IrGenError;
 use netsuke::manifest;
 use netsuke::output_prefs::OutputPrefs;
@@ -25,17 +33,24 @@ use netsuke::runner;
 use std::io::{self, Write};
 use std::process::ExitCode;
 
-/// Choose the glyph theme that matches the resolved output preferences.
+/// Choose the glyph and colour theme that matches the resolved style.
 ///
-/// The theme is monochrome in both arms. Colour is deliberately left to the
-/// caller's terminal conventions rather than to ANSI escapes embedded in a
-/// diagnostic, which keeps piped and redirected stderr greppable.
+/// `miette`'s four predefined themes are the cross product of its two
+/// independent decisions, so the style's `colour` and `unicode` flags select
+/// one directly. Colour is not left to the terminal: the caller has already
+/// decided it from the colour policy and the stream's terminal facts, and a
+/// theme that ignored that would paint ANSI into a redirected stream.
+///
+/// Links are not a theme property. They are disabled on the handler instead,
+/// because the style's `links` flag has to reach [`GraphicalReportHandler`]
+/// rather than the glyph set.
 #[must_use]
-pub fn theme_for(prefs: OutputPrefs) -> GraphicalTheme {
-    if prefs.emoji_allowed() {
-        GraphicalTheme::unicode_nocolor()
-    } else {
-        GraphicalTheme::none()
+pub fn theme_for(style: DiagnosticStyle) -> GraphicalTheme {
+    match (style.colour, style.unicode) {
+        (true, true) => GraphicalTheme::unicode(),
+        (true, false) => GraphicalTheme::ascii(),
+        (false, true) => GraphicalTheme::unicode_nocolor(),
+        (false, false) => GraphicalTheme::none(),
     }
 }
 
@@ -97,21 +112,54 @@ pub fn circular_dependency_cause(error: &Error) -> Option<&IrGenError> {
 /// its bounded rendering is what keeps manifest target names out of the tracing
 /// event and the diagnostic adds nothing a reader needs.
 ///
-/// The glyph theme is derived here from `prefs` rather than passed in, because
-/// every caller has the preferences already and the two must not disagree.
-pub fn handle_failure(err: &Error, prefs: &OutputPrefs) -> ExitCode {
-    let prefix = prefs.error_prefix();
+/// The theme is derived here from `presentation` rather than passed in, because
+/// every caller has the resolved preferences already and the rendered result
+/// must not disagree with the rest of the run's output.
+///
+/// A failure the runner classified itself is not logged. Its diagnostic is the
+/// whole report, and a tracing event would prepend a timestamped line to text
+/// that is already a complete, readable answer — the near-ubiquitous missing
+/// manifest included. Only a failure the runner did not anticipate is logged,
+/// because that one may reach an operator through logs alone.
+pub fn handle_failure(err: &Error, presentation: Presentation) -> ExitCode {
+    let prefix = presentation.prefs.error_prefix();
     if let Some(cycle_error) = circular_dependency_cause(err) {
         tracing::error!(error_kind = "circular_dependency", "runner failed");
         drop(writeln!(io::stderr(), "{prefix} {cycle_error}"));
         return ExitCode::FAILURE;
     }
-    tracing::error!(error_kind = failure_kind(err), "runner failed");
-    match failure_report(err, &theme_for(*prefs)) {
+    if !is_expected_failure(err) {
+        tracing::error!(error_kind = failure_kind(err), "runner failed");
+    }
+    let theme = theme_for(presentation.style);
+    match failure_report(err, &theme) {
         Some(report) => drop(writeln!(io::stderr(), "{prefix} {report}")),
         None => drop(writeln!(io::stderr(), "{prefix} {err}")),
     }
     ExitCode::FAILURE
+}
+
+/// The resolved presentation a failure is rendered under.
+///
+/// The two fields come from one [`DisplayPlan`](netsuke::display_plan::DisplayPlan)
+/// and are consumed together on every path, so they travel as one value rather
+/// than as two arguments a call site could transpose or mismatch.
+#[derive(Debug, Clone, Copy)]
+pub struct Presentation {
+    /// Localized prefixes and glyph preferences.
+    pub prefs: OutputPrefs,
+    /// Colour, glyph, and link capabilities for the diagnostic itself.
+    pub style: DiagnosticStyle,
+}
+
+/// Report whether the runner already classified this failure.
+///
+/// A [`runner::RunnerError`] is one the runner raises deliberately: it carries
+/// its own diagnostic code, help text, and localized message, so it needs no
+/// log event to be understood. Every other failure is unexpected, and logging
+/// it is how it reaches an operator who only has the logs.
+fn is_expected_failure(err: &Error) -> bool {
+    err.downcast_ref::<runner::RunnerError>().is_some()
 }
 
 /// Compose the human report for a failure, or `None` when it has no diagnostic.
@@ -129,10 +177,23 @@ pub fn handle_failure(err: &Error, prefs: &OutputPrefs) -> ExitCode {
 /// no file at all.
 fn failure_report(err: &Error, theme: &GraphicalTheme) -> Option<String> {
     let rendered = render_failure(err, theme)?;
-    if select_diagnostic(err).is_some_and(names_its_own_source) {
+    let diagnostic = select_diagnostic(err)?;
+    if names_its_own_source(diagnostic) || repeats_the_message(err, diagnostic) {
         return Some(rendered);
     }
     Some(format!("{err}\n{rendered}"))
+}
+
+/// Report whether the context line merely restates the diagnostic's own text.
+///
+/// A top-level [`runner::RunnerError`] *is* the selected diagnostic, so its
+/// context line and its first rendered cause line are the same sentence. Keeping
+/// both would print it twice and push the diagnostic code — the line a reader
+/// greps for — below the duplicate. A context line earns its place only when it
+/// says something the rendering does not, which is exactly when the prose
+/// differs.
+fn repeats_the_message(err: &Error, diagnostic: &dyn Diagnostic) -> bool {
+    err.to_string() == diagnostic.to_string()
 }
 
 /// Report whether a diagnostic renders a snippet naming its own file.
@@ -224,12 +285,14 @@ impl ManifestFailure {
 
 /// Render one diagnostic with `miette`'s graphical layout.
 ///
-/// Links are disabled because `miette` emits OSC 8 hyperlinks whenever a
-/// diagnostic supplies a [`Diagnostic::url`], and that happens even under a
-/// monochrome theme. A `netsuke check` finding always supplies one, so leaving
-/// links on would put terminal control sequences into redirected stderr. The
-/// URL is still printed as plain text after the code, so nothing is lost from
-/// a transcript.
+/// Links are disabled unconditionally, because `miette` emits OSC 8 hyperlinks
+/// whenever a diagnostic supplies a [`Diagnostic::url`], and that happens even
+/// under a monochrome theme. A `netsuke check` finding always supplies one, so
+/// leaving links on would put terminal control sequences into redirected
+/// stderr. The URL is still printed as plain text after the code, so nothing is
+/// lost from a transcript. This is stricter than the style's `links` flag on
+/// purpose: the flag decides whether links are *permitted*, and this boundary
+/// is the one place that decides they are not wanted.
 fn render_diagnostic(diagnostic: &dyn Diagnostic, theme: &GraphicalTheme) -> String {
     let mut rendered = String::new();
     let handler = GraphicalReportHandler::new_themed(theme.clone()).with_links(false);

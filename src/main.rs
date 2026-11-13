@@ -34,7 +34,7 @@
 use netsuke::{
     cli, cli_localization, diagnostic_json,
     display_plan::{DisplayPlan, TerminalFacts, resolve_display_plan},
-    locale_resolution, localization, output_prefs, runner,
+    locale_resolution, localization, runner,
 };
 use std::ffi::OsString;
 use std::io::{self, IsTerminal};
@@ -325,7 +325,7 @@ fn run_cli(
     configure_runtime(cli, system_locale, runtime_mode, plan);
     match runner::run(cli, plan) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) => handle_runner_error(&err, plan.prefs(), runtime_mode),
+        Err(err) => handle_runner_error(&err, plan, runtime_mode),
     }
 }
 
@@ -358,16 +358,19 @@ fn configure_runtime(
 /// JSON output uses the stable diagnostic serializer and fallback payload to
 /// remain valid JSON; human output writes a localized prefix followed by the
 /// failure's rendered diagnostic, or by its context line when it carries none.
-/// Both paths return failure.
-fn handle_runner_error(
-    err: &anyhow::Error,
-    prefs: output_prefs::OutputPrefs,
-    mode: DiagMode,
-) -> ExitCode {
+/// Both paths return failure. The plan is taken whole rather than as loose
+/// preferences because the human path needs its diagnostic style as well as its
+/// glyphs, and deriving one from the other at this boundary is how the two
+/// silently disagree.
+fn handle_runner_error(err: &anyhow::Error, plan: DisplayPlan, mode: DiagMode) -> ExitCode {
     if mode.is_json() {
         return diagnostic_json::emit_or_fallback(main_diagnostics::render_runtime_error_json(err));
     }
-    human_diagnostics::handle_failure(err, &prefs)
+    let presentation = human_diagnostics::Presentation {
+        prefs: plan.prefs(),
+        style: plan.diagnostic_style(),
+    };
+    human_diagnostics::handle_failure(err, presentation)
 }
 
 #[cfg(test)]
