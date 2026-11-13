@@ -2661,6 +2661,70 @@ transfer, re-observe — through the injected runner; and
 `scripts/upload_declared_assets_cli.py` is the entry point the action's steps
 call, owning the argument surface and the exit-status contract over that run.
 
+The modules underneath are partitioned by what they are allowed to touch, and
+the partition is checked rather than merely described. `POLICY_MODULES` in
+`tests/workflow_contracts/release_publication_modules.py` are the modules that
+decide from values already in memory; `ADAPTER_MODULES` are the ones that parse
+a format, read or write a file, or compose policy at a CLI edge. The lists are
+a partition of `SOURCE_MODULES`, so a new release source cannot be added
+without an explicit decision about which side owns its effects, and
+`test_every_release_source_is_classified_as_policy_or_adapter` refuses a file
+that appears in neither or in both.
+
+The boundary is drawn so each side answers a question the other cannot. An
+adapter owns the wire: member names, presence, and text-vs-number, plus
+everything that can fail for a reason a filesystem or a remote service caused.
+A policy module owns the claim the decoded values make. The split matters most
+where both refusals exist for the same file, which is why
+`scripts/release_producer_provenance_decode.py` is separate from
+`scripts/release_producer_provenance.py`: "this document is malformed" and
+"this document claims a commit nobody built" have different remedies, and
+collapsing them into one message would leave an operator unable to tell a
+corrupt file from a producer that ran against the wrong revision. Both call
+paths use the one decoder — `release_payload_tree` for reading, and
+`record_producer_provenance_record` for the producer's own self-check — so the
+reader and the writer cannot disagree about what a readable record is.
+
+The same reasoning names the smaller pieces.
+`scripts/release_producer_claims.py` binds each record's claims to the target
+the record names, because a union of every record's claims would let two
+same-platform producers exchange their bytes while the union stayed identical.
+`scripts/release_producer_assets.py` judges only one record's asset map: the
+name may describe something other than a bare file, and the digest may not be a
+SHA-256 at all, and neither is inferred from the other.
+`scripts/release_payload_identity.py` asks the three questions selection needs
+answered before it trusts a name — is this tree the candidate's, did every
+configured target report, and does each record describe the platform its target
+implies — and asks them in that order, because a tree that is not this
+candidate's must be refused before anything it claims is read.
+`scripts/release_payload_names.py` decides whether each declared name has
+exactly one file and whether each release-shaped file the declaration does not
+account for is refuseable; the binaries, licences, completions and manual pages
+that ship *inside* the packages are excluded silently, since refusing them
+would reject a good build.
+
+On the upload side the decision and the effect are separated the same way.
+`scripts/release_upload_failures.py` holds a small fixed vocabulary for why an
+attached asset's bytes could not be established — a transient transfer fault, a
+name that resolved to a symlink, and a file that could not be read at all call
+for different responses — and deliberately does not quote the underlying error,
+which could carry a URL or a token into a log.
+`scripts/release_upload_messages.py` renders the refusal prose that a person
+reads, kept apart from `scripts/release_upload_plan.py` because the plan's
+fields are a contract with a job and these words are read by an operator.
+`scripts/release_upload_digests.py` establishes digests for the attached assets
+GitHub would not report, treating a failed download as "could not tell" rather
+than as an error, so reconciliation can report unverifiable rather than wrong
+bytes. `scripts/release_upload_boundaries.py` does nothing but name which of
+the four boundaries a `gh` invocation crosses, given the command and the phase
+the run has reached, so that naming is a total function a test can state
+without a subprocess or a clock.
+
+The direction of dependency is one-way and visible in the import lists. No
+policy module imports an adapter, and every release source outside the declared
+HTTP transport boundary stays network-free; the contract test above applies
+both rules to the actual module set rather than to a hand-maintained subset.
+
 That action selects only the artefacts this run's producer records vouch for,
 writes the declaration and the trusted digest record from the staged bytes,
 retains all three files as the
@@ -2710,6 +2774,29 @@ process boundary. Writing and reading the record live in
 assumed every member were a number would misparse a valid record, and the same
 reason that keeps the plan to a bounded failure vocabulary rather than command
 output keeps this file to durations.
+
+`TimedRunner` only *measures*. Which boundary a call belongs to is
+`release_upload_boundaries.boundary_of`'s, the running total is
+`BoundaryTimings.with_measurement`'s, and the per-call record is
+`release_upload_trace.record_for_call`'s; the runner is the composition of the
+three around one call, and each is a unit a test drives without a subprocess.
+Naming a listing needs to know *when* it happens rather than merely what ran,
+so the phase is an argument, not a count of listings already seen: the phase
+becomes confirmation when the runner actually sends a transfer, which derives
+the fact from the call instead of asking a caller to announce it and risk
+forgetting. A counter would also make a call's meaning depend on history, so a
+listing added later for a new reason would silently renumber the figures an
+operator reads.
+
+Neither diagnostic can fail the run. `record_timings` and `record_trace` let
+their `OSError` reach the caller, and `upload_declared_assets_cli` is where the
+judgement is made: the plan is the contract, so a refused or completed run
+keeps its exit status even when a timing or a trace could not be written. The
+two writes are guarded separately, so one unwritable file cannot suppress the
+attempt to record the other — they are unrelated diagnostics, and tying them
+together would make the trace's fate depend on the timings file's. A writer
+that swallowed the error could not tell its caller whether the record exists,
+and it would be deciding the run's outcome from inside a file write.
 
 The aggregate says how long a boundary took, not which of its calls failed: a
 run downloads once per undigested name, and eleven calls summed into four
