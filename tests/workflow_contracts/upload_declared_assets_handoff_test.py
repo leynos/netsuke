@@ -65,9 +65,6 @@ FAILURE_STEP = "Check asset upload errors"
 ERROR_OUTPUT = "upload-error"
 MESSAGE_OUTPUT = "error-message"
 
-#: The workflow's id for the step that calls the action.
-UPLOAD_STEP_ID = "upload_assets"
-
 #: The only composite ``value:`` form the mapping may use, capturing the step
 #: id and output name so both halves of the claim are checked.
 _STEP_OUTPUT = r"steps\.([\w-]+)\.outputs\.([\w-]+)"
@@ -212,6 +209,34 @@ def _failure_message_expression() -> str:
     return expression
 
 
+def _calling_step_id() -> str:
+    """Return the workflow's own ``id:`` for the step calling the action.
+
+    The failure step addresses that step by id in two places -- its guard and
+    its ``env:`` -- so the id is a fact about the workflow, not about this
+    suite. Restating it here would let a rename update the workflow and leave
+    the cases green against a constant nothing reads; resolving it from the
+    workflow is what makes the drift observable.
+
+    Returns
+    -------
+    str
+        The ``id:`` the calling step declares.
+
+    Notes
+    -----
+    An unnamed step would make every later resolution read a step id no
+    workflow has, so its absence is a failure rather than an empty string.
+    """
+    upload = named_step(_publication_steps(), WORKFLOW_UPLOAD_STEP)
+    identifier = upload.get("id")
+    assert isinstance(identifier, str), (
+        "the step calling the action must carry an id for the failure step to "
+        "read; without one the guard looks up a step that does not exist"
+    )
+    return identifier
+
+
 def _run_failure_step(mapped: dict[str, str]) -> subprocess.CompletedProcess[str]:
     """Execute the failure step's own script with the mapped outputs.
 
@@ -227,12 +252,13 @@ def _run_failure_step(mapped: dict[str, str]) -> subprocess.CompletedProcess[str
     step = named_step(_publication_steps(), FAILURE_STEP)
     script = step.get("run")
     assert isinstance(script, str), "the failure step must carry its own script"
+    calling_step = _calling_step_id()
     environment = {
         "PATH": "/usr/bin:/bin",
         "ERROR_MESSAGE": _resolve(
             _failure_message_expression(),
-            {UPLOAD_STEP_ID: mapped},
-            UPLOAD_STEP_ID,
+            {calling_step: mapped},
+            calling_step,
         ),
     }
     # The argv is fixed and the script comes from this repository's own
@@ -248,7 +274,8 @@ def _run_failure_step(mapped: dict[str, str]) -> subprocess.CompletedProcess[str
 
 def _guard_holds(mapped: dict[str, str], *, job_failed: bool = False) -> bool:
     """Report whether the failure step's own guard fires for these outputs."""
-    outputs = {(UPLOAD_STEP_ID, name): value for name, value in mapped.items()}
+    calling_step = _calling_step_id()
+    outputs = {(calling_step, name): value for name, value in mapped.items()}
     return evaluate(_failure_step_condition(), outputs, job_failed=job_failed)
 
 
@@ -349,3 +376,22 @@ def test_the_failure_step_prints_the_diagnostic_verbatim(
         "the job log must carry the mapped diagnostic verbatim, got "
         f"{finished.stdout!r} for {mapped[MESSAGE_OUTPUT]!r}"
     )
+
+
+def test_the_failure_step_addresses_the_step_that_calls_the_action() -> None:
+    """Read the same step id in both places the failure step names one.
+
+    The guard and the ``env:`` expression each address the calling step by id,
+    and nothing else compares those ids with the workflow's own ``id:``.
+    Renaming the step without updating the references leaves both reading a
+    step that does not exist: GitHub substitutes an empty string, an empty
+    ``upload-error`` reads as "no error", and a refused upload would publish
+    silently while every case here stayed green.
+    """
+    calling_step = _calling_step_id()
+    assert re.search(
+        rf"steps\.{re.escape(calling_step)}\.outputs\.", _failure_step_condition()
+    ), f"the guard must read {calling_step}'s outputs"
+    assert re.search(
+        rf"steps\.{re.escape(calling_step)}\.outputs\.", _failure_message_expression()
+    ), f"the diagnostic must read {calling_step}'s outputs"
