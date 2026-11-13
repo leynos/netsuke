@@ -251,5 +251,5 @@ with the 2,400 s allowance the 2026-11-05 reassessment records. The reason is
 measured rather than theoretical: the single-invocation gate passed at 257.7 s
 and 261.5 s, failed at 300.008 s, passed at 480.264 s on one base, and reached
 its 600 s cap on the rebased base (CI runs 41782146443 and 41826968891). The
-placement decision this ADR records is unchanged; only the gate's internal shape
-and its allowance moved.
+placement decision this ADR records is unchanged; only the gate's internal
+shape and its allowance moved.

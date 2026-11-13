@@ -6401,13 +6401,13 @@ failures; `make kani-full` performs the model codegen and verification.
 
 The mutation gate's allowances live in the dedicated `kani` profile. The patch
 sweep gets forty 60-second periods, the largest allowance the profile's
-42-minute whole-run cap contains, and the prewarm and its negative-compile check
-get fifteen each. All three compile
-into `target/kani-mutation-compile`, which no cache restores — `kani-cache`
-holds the Kani payloads, not a build tree — so a run without the prewarm pays a
-cold build of the whole dependency graph plus a recompile per patch. Splitting
-the work gives that cold cost its own invocation and its own allowance, so the
-sweep compiles against a warm target while incremental reuse is preserved.
+42-minute whole-run cap contains, and the prewarm and its negative-compile
+check get fifteen each. All three compile into `target/kani-mutation-compile`,
+which no cache restores — `kani-cache` holds the Kani payloads, not a build
+tree — so a run without the prewarm pays a cold build of the whole dependency
+graph plus a recompile per patch. Splitting the work gives that cold cost its
+own invocation and its own allowance, so the sweep compiles against a warm
+target while incremental reuse is preserved.
 
 The measurements that sized these allowances all predate the split. With the
 original 18 patches, two CI runs passed at 257.7 s and 261.5 s and a third
@@ -6429,18 +6429,19 @@ The ordinary and coverage profiles retain their 300 s per-test allowance and
 the coverage CI run remains 960 s.
 
 The hosted run spent 824 s before nextest started the mutation test and 7 s
-finalizing. The gate runs two nextest invocations, so the ceiling has to contain
-two whole-run caps rather than one: 824 s of setup, two 2,520 s caps, and 7 s of
-finalization total 5,871 s. The 100-minute `kani-smoke` job leaves 129 s for
-runner variance and post-step reporting. Sizing the ceiling from a single cap
-would cancel the job while the second invocation was still reporting, and a
-cancellation discards the log that explains the overrun.
+finalizing. The gate runs two nextest invocations, so the ceiling has to
+contain two whole-run caps rather than one: 824 s of setup, two 2,520 s caps,
+and 7 s of finalization total 5,871 s. The 100-minute `kani-smoke` job leaves
+129 s for runner variance and post-step reporting. Sizing the ceiling from a
+single cap would cancel the job while the second invocation was still
+reporting, and a cancellation discards the log that explains the overrun.
 
 The mutation filters use the anchored `compile_guard::`, `prewarm::`, and
 `negative::` submodule test names, so the Kani-specific timeouts are applied to
-the intended tests rather than falling through to the 300 s default. A filter selecting
-nothing leaves its override out of the test-groups listing, which makes
-`cargo nextest show-config test-groups --profile kani` a cheap binding check.
+the intended tests rather than falling through to the 300 s default. A filter
+selecting nothing leaves its override out of the test-groups listing, which
+makes `cargo nextest show-config test-groups --profile kani` a cheap binding
+check.
 
 That widening was inert when it first landed, which is why the override is
 worth reading as a worked example of the trap above. Its filter named the bare
@@ -6452,13 +6453,13 @@ carries the `compile_guard::` prefix. The general rule is that a filter for a
 test in a submodule must name the module path Nextest prefixes onto the
 qualified name it matches against; `cargo nextest show-config test-groups` is
 the cheap way to see whether an override binds, since a filter selecting
-nothing leaves its override out of that listing entirely.
-Regenerate a rotted patch *in place*: swap an operator, comparator, index, or
-literal rather than deleting a statement or redirecting a call. Deleting the
-only use of a helper, or the only reassignment of a `mut` binding, is what
-turns the mutation into a compile error under denied warnings. Then re-validate
-the regenerated file by applying the patch, confirming the patched tree
-compiles, and watching the harness fail under the mutation before committing.
+nothing leaves its override out of that listing entirely. Regenerate a rotted
+patch *in place*: swap an operator, comparator, index, or literal rather than
+deleting a statement or redirecting a call. Deleting the only use of a helper,
+or the only reassignment of a `mut` binding, is what turns the mutation into a
+compile error under denied warnings. Then re-validate the regenerated file by
+applying the patch, confirming the patched tree compiles, and watching the
+harness fail under the mutation before committing.
 
 ### Kani cfg compile-time checks
 
@@ -12044,12 +12045,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                   |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------- |
 | Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default and CI; 900 s Kani prewarm and negative check; 2,400 s Kani sweep |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                        | 960 s CI; 2,520 s Kani; unset locally         |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m Kani and coverage                       |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                        | 960 s CI; 2,520 s Kani; unset locally                                           |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                   |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m Kani and coverage                                                         |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -12101,15 +12102,15 @@ cap on the rebased base (CI runs 41782146443 and 41826968891). That cap covered
 a cold dependency build as well as the patch sweep, so the target now runs a
 prewarm and a patch sweep in separate Nextest invocations against the same
 sandbox path and target, under the `kani` profile: 900 s each for the prewarm
-and its negative-compile check, and 2,400 s for the sweep. The profile's
-2,520 s whole-run cap contains any of those allowances together with the window
+and its negative-compile check, and 2,400 s for the sweep. The profile's 2,520
+s whole-run cap contains any of those allowances together with the window
 nextest needs to stop the run, and the two invocations are capped separately.
 The job's ceiling is a backstop sized from those two caps rather than a sum of
-the per-test allowances, which bound one test each and add up to no budget.
-The packaging smoke test once carried a 900 s override of the same kind: under
-a private-target harness it passed at 145 s and timed out at 300.047 s on heads
-that differed by a word in a plan, and later full-suite runs passed at 208.921 s
-and reached the 300.017 s cap during concurrent Cargo work. Its verification
+the per-test allowances, which bound one test each and add up to no budget. The
+packaging smoke test once carried a 900 s override of the same kind: under a
+private-target harness it passed at 145 s and timed out at 300.047 s on heads
+that differed by a word in a plan, and later full-suite runs passed at 208.921
+s and reached the 300.017 s cap during concurrent Cargo work. Its verification
 build has since left the suite, so it no longer needs one. Each override binds
 only because its filter carries the test's module path; earlier passing runs
 did not prove the wider allowance was in force because the test completed

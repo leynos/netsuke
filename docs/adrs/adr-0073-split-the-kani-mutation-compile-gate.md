@@ -91,13 +91,13 @@ seeded marker, so a rejection for an unrelated reason fails the test. The
 unmodified tree is compiled first, so a rejection cannot be explained by a
 sandbox that never built.
 
-`make test-kani-mutations` selects the profile explicitly with `--profile kani`,
-so these invocations receive its 2,520 s whole-run cap, which sits above every
-allowance they carry, and each of the two invocations is bounded by that cap
-separately. The job's `timeout-minutes` therefore has to contain two caps, and
-the 2026-11-05 reassessment in ADR-0059 records the arithmetic. The coverage
-lanes keep their 960 s cap and their 300 s per-test allowance, so no Kani
-allowance reaches a lane that does not select the profile.
+`make test-kani-mutations` selects the profile explicitly with
+`--profile kani`, so these invocations receive its 2,520 s whole-run cap, which
+sits above every allowance they carry, and each of the two invocations is
+bounded by that cap separately. The job's `timeout-minutes` therefore has to
+contain two caps, and the 2026-11-05 reassessment in ADR-0059 records the
+arithmetic. The coverage lanes keep their 960 s cap and their 300 s per-test
+allowance, so no Kani allowance reaches a lane that does not select the profile.
 
 ## Known Risks and Limitations
 
@@ -114,15 +114,15 @@ allowance reaches a lane that does not select the profile.
 
 ## Addendum, 2026-11-13: the job ceiling is 100 minutes
 
-The decision above is unchanged. This records the arithmetic that sets the job's
-outer bound now that the gate runs under its own Nextest profile.
+The decision above is unchanged. This records the arithmetic that sets the
+job's outer bound now that the gate runs under its own Nextest profile.
 
 _Decision Drivers_ and _Decision Outcome_ describe a job ceiling that contains
 the gate. Two things have moved since they were written. The gate now selects
 `--profile kani`, so each of its two invocations receives a 2,520 s whole-run
-cap rather than no cap at all, and the ceiling therefore has to contain two caps
-rather than one. The gate's third test, the negative check, shares the first
-invocation instead of adding one.
+cap rather than no cap at all, and the ceiling therefore has to contain two
+caps rather than one. The gate's third test, the negative check, shares the
+first invocation instead of adding one.
 
 Run 41840367244 spent 824 s before nextest started the mutation test, and the
 job's finalisation costs 7 s. Two capped runs plus that setup and finalisation
