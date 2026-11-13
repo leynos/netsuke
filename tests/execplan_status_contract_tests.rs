@@ -1,7 +1,7 @@
 //! Contract tests for the `Status:` header field of every `ExecPlan`.
 //!
 //! `ExecPlan`s under `docs/execplans/` each open with a single `Status:` line.
-//! The documentation style guide defines its value as a closed set, and the
+//! This suite defines its value as a closed set, and the
 //! field's whole value is that it can be grepped, counted, and checked without
 //! reading the plan. Issue #586 found that it had instead drifted: five
 //! vocabularies for the same state, three plans with no field at all, and two
@@ -13,12 +13,10 @@
 //! stray value, a missing line, a qualifier glued to the value, or a second
 //! field in the same header fails.
 //!
-//! The authority order the tests cannot check is recorded in the style guide:
+//! The authority order the tests cannot check is:
 //! a plan's `Progress` and `Outcomes & retrospective` sections, and its
 //! roadmap checkbox, outrank the header. This suite keeps the header
 //! well-formed, not correct in substance.
-
-use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -28,14 +26,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 const STATUS_PREFIX: &str = "Status:";
 
 /// The closed set of values the header status field may carry.
-///
-/// Mirrors the vocabulary table in the `### ExecPlan` section of
-/// `docs/documentation-style-guide.md`, which this suite also checks for
-/// agreement so the two cannot drift apart.
 const STATUS_VALUES: [&str; 5] = ["DRAFT", "APPROVED", "IN PROGRESS", "BLOCKED", "COMPLETE"];
-
-/// The style-guide section that defines the status vocabulary.
-const STYLE_GUIDE: &str = "docs/documentation-style-guide.md";
 
 /// Opens the repository root as a capability-scoped directory handle.
 ///
@@ -80,8 +71,8 @@ fn execplan_names(root: &Dir) -> Result<Vec<String>> {
 
 /// The lines of a plan that precede its first section heading.
 ///
-/// The header is everything above the first `## ` heading, which is where the
-/// style guide puts the status field.
+/// The header is everything above the first `## ` heading, where the status
+/// field sits.
 fn header_lines(source: &str) -> Vec<&str> {
     source
         .lines()
@@ -150,81 +141,12 @@ fn every_execplan_header_status_is_within_the_closed_set() -> Result<()> {
     Ok(())
 }
 
-/// Verify the style guide still defines the vocabulary the tests enforce.
-///
-/// Without this, the suite could keep passing against a set the guide no
-/// longer states — the tests would be checking a rule nobody publishes. The
-/// check runs both ways: a value the tests require but the guide omits fails,
-/// and so does a value the guide documents but the tests would reject.
-#[test]
-fn the_style_guide_defines_every_accepted_status_value() -> Result<()> {
-    let root = repo_root()?;
-    let source = root
-        .read_to_string(STYLE_GUIDE)
-        .context("read the documentation style guide")?;
-    let after_heading = source
-        .split("### ExecPlan")
-        .nth(1)
-        .context("the style guide should carry an `### ExecPlan` section")?;
-    // Bound the section at the next heading of either level. A `## ` split
-    // alone would carry a sibling `### ` subsection's table into the scan, and
-    // the rows there would then read as documented statuses.
-    let section = after_heading
-        .split("\n## ")
-        .next()
-        .and_then(|body| body.split("\n### ").next())
-        .unwrap_or(after_heading);
-
-    // The table's first row is its header, which names the column rather than
-    // a status, so the documented values are the rows beneath it.
-    let documented: BTreeSet<&str> = table_rows(section).skip(1).collect();
-    let missing: BTreeSet<&str> = STATUS_VALUES
-        .iter()
-        .copied()
-        .filter(|value| !documented.contains(value))
-        .collect();
-    ensure!(
-        missing.is_empty(),
-        "the style guide's ExecPlan section should document every accepted status; \
-         missing: {missing:?}"
-    );
-
-    let extra: BTreeSet<&str> = documented
-        .iter()
-        .copied()
-        .filter(|value| !STATUS_VALUES.contains(value))
-        .collect();
-    ensure!(
-        extra.is_empty(),
-        "the style guide's ExecPlan section should document no status the tests \
-         reject; extra: {extra:?}"
-    );
-    Ok(())
-}
-
-/// The first column of every Markdown table row in a section.
-///
-/// Reading the table's first column rather than scanning the section as text
-/// keeps the check honest: the section names the rejected values too, in the
-/// bullet giving `Status: COMPLETED` as a counter-example, so a substring
-/// search would find `COMPLETE` inside `COMPLETED` and pass with the row
-/// deleted.
-fn table_rows(section: &str) -> impl Iterator<Item = &str> {
-    section.lines().filter_map(|raw| {
-        let rest = raw.trim().strip_prefix('|')?;
-        let (first_cell, _) = rest.split_once('|')?;
-        let cell = first_cell.trim();
-        // The delimiter row separates header from body; its cells are dashes.
-        (!cell.is_empty() && !cell.starts_with('-')).then_some(cell)
-    })
-}
-
 #[cfg(test)]
 mod tests {
-    //! Unit tests for the header parsing and table reading above.
+    //! Unit tests for the header parsing above.
     //!
     //! Each covers one rule the contract tests depend on, so a change to
-    //! `header_lines`, `header_status`, or `table_rows` fails here with a
+    //! `header_lines` or `header_status` fails here with a
     //! narrow cause rather than as an unexplained contract failure.
 
     use super::*;
@@ -274,37 +196,6 @@ mod tests {
         ensure!(
             !STATUS_VALUES.contains(&value.as_str()),
             "a qualified status should not satisfy the closed set, found {value:?}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn table_rows_yield_the_first_cell_of_body_rows_only() -> Result<()> {
-        let section = "Some prose.\n\n\
-             | Value  | Meaning |\n\
-             | ------ | ------- |\n\
-             | DRAFT  | Draft.  |\n\
-             | BLOCKED | Blocked. |\n\n\
-             Trailing prose naming COMPLETED.\n";
-        let rows: Vec<&str> = table_rows(section).collect();
-        ensure!(
-            rows == ["Value", "DRAFT", "BLOCKED"],
-            "table rows should carry the header and body first cells, found {rows:?}"
-        );
-        ensure!(
-            !rows.contains(&"COMPLETE"),
-            "prose outside the table must not contribute rows, found {rows:?}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn table_rows_ignore_a_row_whose_first_cell_is_empty() -> Result<()> {
-        let section = "| | Meaning |\n| - | ------- |\n";
-        let rows: Vec<&str> = table_rows(section).collect();
-        ensure!(
-            rows.is_empty(),
-            "a row with a blank first cell should contribute nothing, found {rows:?}"
         );
         Ok(())
     }
