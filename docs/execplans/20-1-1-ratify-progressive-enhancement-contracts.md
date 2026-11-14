@@ -1084,6 +1084,19 @@ makes at approval.
   recommended D-19 Option A. The plan honours ADR-0043's `1.1.0` reservation.
   The user approved D-20's updated scope ceilings on 2026-11-03.
 
+- (2026-11-14) The branch was replayed onto current `main` at `750f56a22`
+  from base `8b38ac377`. The replay boundary is the 48-commit series above that
+  base; recovery refs `refs/recovery/20-1-1/pre-rebase-head` and
+  `pre-rebase-base` preserve the pre-replay state. Two commits conflicted, both
+  in one file, `docs/v0-1-0-migration-guide.md`, and both conflicts were in the
+  at-a-glance table. Main's advanced text and this branch's `Obligation` column
+  were unified rather than one side being chosen: the resolved table keeps all
+  22 rows, including the `Release upload` and `POSIX heredoc delimiters` rows
+  main added while this branch was open. The replay reached `1ff680625`.
+  Repairing the escaped pipe the treatment dropped, and repadding with
+  `mdtablefix --in-place`, produced `143a8f330`. Date/Author: 2026-11-14,
+  delivery evidence.
+
 ## Outcomes & retrospective
 
 The first complete local gate sequence passed six gates and exposed one timeout
