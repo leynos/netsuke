@@ -378,6 +378,17 @@ explicit and exercise the actual adapters in tests.
     so `configured_shells_layered_names_must_be_unique` failed with the
     correct diagnostic in hand. The step now asserts `already declares`; all
     four `configured_shells` scenarios pass.
+  - [x] 2026-11-14: Pass the whole eleven-gate set against the repaired tree.
+    The run tagged `final16` executed every gate sequentially and finished
+    `failed=0`: `check-fmt` 4s, `lint` 83s, `typecheck` 9s, `doc-coverage`
+    36s, `test` 92s, `test-workflow-contracts` 636s,
+    `test-package-verify` 155s, `test-documentation-contracts` 21s, `verus`
+    2s, `markdownlint` 39s, `nixie` 1s. `make verus` reports "9 verified, 0
+    errors"; doc-comment coverage is 98.26% against the 80% threshold. The
+    gates read the tree that commit `2cdbb176a` records. Every commit after
+    that one carries prose in this file and comments in a committed proptest
+    seed file, which proptest ignores, so the Rust, YAML, Python, proof, and
+    Markdown content the gates passed is byte-identical to the tip.
 
 ## Surprises & discoveries
 
