@@ -8,15 +8,20 @@
 //!
 //! The Verus proof in `verus/configured_shells/main.rs` establishes that the
 //! model walk and this pairwise statement agree at every sequence length. The
-//! properties here supply the bounded, tested correspondence between that model
-//! and the production function: they sample generated sequences of validated
-//! names and must agree with the oracle on every sample. They do not prove
-//! agreement for all production inputs, and they say nothing about discovery,
-//! merging, or the configuration-loading path around the validator.
+//! properties here supply the bounded, tested correspondence from that model to
+//! the shipped code: they sample generated sequences and layers of validated
+//! names and must agree with the oracle on every sample, and one property drives
+//! the production configuration merge so that a merge which changed behaviour at
+//! a layer boundary would be caught. They do not prove agreement for all
+//! production inputs, and they say nothing about discovery, file loading, or the
+//! rest of the configuration-loading path.
 
-use super::super::validate_composition;
+use super::super::{ShellDefinition, validate_composition};
 use super::definitions;
+use crate::cli::CliConfig;
+use ortho_config::{MergeComposer, sanitize_value};
 use proptest::prelude::*;
+use serde_json::{Value, json};
 
 /// Restate the reserved built-in spellings without reusing the lookup path.
 const BUILT_IN_NAMES: [&str; 4] = ["sh", "bash", "pwsh", "powershell"];
@@ -87,6 +92,48 @@ proptest! {
             &cuts
         );
     }
+
+    /// Check the production configuration merge against the oracle.
+    ///
+    /// The properties above flatten the layers themselves, so a production
+    /// merge that behaved differently at a layer boundary would pass them. This
+    /// property drives `CliConfig::merge_from_layers`, the entry point
+    /// configuration loading uses, and requires three things: the verdict
+    /// matches the oracle, an accepted registry survives with every definition
+    /// in merge order and its payload intact, and regrouping the same names at
+    /// different boundaries cannot change the verdict.
+    #[test]
+    fn production_merge_agrees_with_the_oracle(
+        layers in generated_layers(),
+        cuts in proptest::collection::vec(0usize..=40, 0..=8),
+    ) {
+        let names = merged(&layers);
+        let accepted = oracle_accepts(&names);
+        match merge_generated_layers(&layers) {
+            Ok(declarations) => {
+                prop_assert!(accepted, "merge accepted a rejected registry: {:?}", &layers);
+                prop_assert_eq!(
+                    declared_definitions(&declarations),
+                    expected_definitions(&names),
+                    "layers: {:?}",
+                    &layers
+                );
+            }
+            Err(message) => prop_assert!(
+                !accepted,
+                "merge rejected an accepted registry: {:?}: {message}",
+                &layers
+            ),
+        }
+        let regrouped = regroup(&names, &cuts);
+        prop_assert_eq!(
+            merge_generated_layers(&regrouped).is_ok(),
+            accepted,
+            "regrouped from {:?} with cuts {:?}",
+            &layers,
+            &cuts
+        );
+    }
 }
 
 /// Generate sequences of zero to five names drawn from the pool.
@@ -139,6 +186,69 @@ fn regroup<'a>(names: &[&'a str], cuts: &[usize]) -> Vec<Vec<&'a str>> {
     }
     layers.push(remaining.to_vec());
     layers
+}
+
+/// Build the configuration layer that declares exactly `names`.
+///
+/// Each definition derives its program and arguments from its own name, so the
+/// expectation in the assertion is computed from the same input rather than
+/// restated in a second table that could drift.
+fn layer_value(names: &[&str]) -> Value {
+    let definitions: Vec<Value> = names
+        .iter()
+        .map(|name| {
+            json!({
+                "name": name,
+                "executable": format!("{name}-bin"),
+                "args": ["--tag", name],
+            })
+        })
+        .collect();
+    json!({ "shells": definitions })
+}
+
+/// Merge generated layers through the production configuration schema.
+///
+/// The defaults layer supplies every unrelated key, so the only thing under
+/// test is how the schema merges and validates `shells`. The error is reduced
+/// to its message because the property needs the verdict and a readable
+/// diagnostic, not the typed error.
+fn merge_generated_layers(layers: &[Vec<&'static str>]) -> Result<Vec<ShellDefinition>, String> {
+    let defaults = sanitize_value(&CliConfig::default()).map_err(|error| error.to_string())?;
+    let mut composer = MergeComposer::with_capacity(layers.len() + 1);
+    composer.push_defaults(defaults);
+    for layer in layers {
+        composer.push_file(layer_value(layer), None);
+    }
+    CliConfig::merge_from_layers(composer.layers())
+        .map(|config| config.shells)
+        .map_err(|error| error.to_string())
+}
+
+/// State the definitions a layer set declaring `names` must produce.
+fn expected_definitions(names: &[&str]) -> Vec<(String, String, Vec<String>)> {
+    names
+        .iter()
+        .map(|name| {
+            let owned = (*name).to_owned();
+            let arguments = vec!["--tag".to_owned(), owned.clone()];
+            (owned.clone(), format!("{owned}-bin"), arguments)
+        })
+        .collect()
+}
+
+/// Describe merged definitions as comparable name, program, and arguments.
+fn declared_definitions(definitions: &[ShellDefinition]) -> Vec<(String, String, Vec<String>)> {
+    definitions
+        .iter()
+        .map(|definition| {
+            (
+                definition.name.as_str().to_owned(),
+                definition.executable.as_str().to_owned(),
+                definition.args.as_slice().to_vec(),
+            )
+        })
+        .collect()
 }
 
 /// Show the oracle reaches both outcomes, so agreement is not vacuous.

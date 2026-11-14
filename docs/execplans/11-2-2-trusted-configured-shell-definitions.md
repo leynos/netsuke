@@ -385,10 +385,31 @@ explicit and exercise the actual adapters in tests.
     `test-package-verify` 155s, `test-documentation-contracts` 21s, `verus`
     2s, `markdownlint` 39s, `nixie` 1s. `make verus` reports "9 verified, 0
     errors"; doc-comment coverage is 98.26% against the 80% threshold. The
-    gates read the tree that commit `2cdbb176a` records. Every commit after
-    that one carries prose in this file and comments in a committed proptest
-    seed file, which proptest ignores, so the Rust, YAML, Python, proof, and
-    Markdown content the gates passed is byte-identical to the tip.
+    gates read the tree that commit `2cdbb176a` records. The Rust, YAML,
+    Python, and proof content those gates passed is byte-identical to that
+    commit. The later commits in this file add Progress prose, which is
+    Markdown the run did not read, and comments in a committed proptest seed
+    file, which proptest ignores; the Markdown gates were re-run over that
+    prose rather than assumed to cover it.
+  - [x] 2026-11-14: Drive the production merge from the generated layers,
+    because both hosted assessments asked for it. The properties above flatten
+    the layers themselves, so a merge that behaved differently at a layer
+    boundary would have passed them. `production_merge_agrees_with_the_oracle`
+    in `src/cli/config/shells/tests/oracle.rs` now builds one configuration
+    layer per generated layer and calls `CliConfig::merge_from_layers`, the
+    entry point configuration loading uses. It requires the verdict to match
+    the oracle, an accepted registry to survive with every definition in merge
+    order and its program and arguments intact, and a regrouping of the same
+    names at drawn boundaries not to change the verdict. The negative control
+    is a duplicate-rejection mutation: making `check_definition` accept an
+    occupied name fails this property with "merge accepted a rejected
+    registry: [["fish", "fish"]]", which is the one-layer duplicate class;
+    the byte-identical restored file returns it to green.
+  - [x] 2026-11-14: Clear one more Clippy finding the `lint` gate caught in the
+    new property's helper. `expected_definitions` rebound `name` inside
+    `.map(|name| ...)`, and the repository denies `clippy::shadow_reuse`, so the
+    owned binding is now `owned`. The gate aborted at `lint` (42 s) with exit 2;
+    `make lint-clippy` and the focused oracle run (7 of 7) pass afterwards.
 
 ## Surprises & discoveries
 
@@ -692,6 +713,20 @@ fail".
   `[["fish", "fish"]]`, `["sh"]`, `[["sh"]]`) and replaying them first makes
   both rules' smallest counterexamples deterministic on every run. The
   repository already tracks nine such files.
+- 2026-11-14: Check the correspondence against the production merge, not only
+  against `validate_composition`. Every earlier property flattened the layers
+  in the test before calling the validator, so the layer boundary was the
+  test's own assumption rather than something the samples exercised: a merge
+  that dropped, reordered, replaced, or deduplicated definitions across files
+  would have agreed with the oracle on every sample. The property now builds
+  real configuration layers, merges them with `CliConfig::merge_from_layers`,
+  and compares both the verdict and, on acceptance, the ordered definitions and
+  their payloads against the oracle. The defaults layer is composed in because
+  `merge_from_layers` needs the unrelated keys, which also proves the merge
+  still completes with an empty `shells` registry. This trades the module's
+  original "validator only" scope for adapter evidence; it does not weaken the
+  independence of the oracle, which still states the rule pairwise and shares
+  no code with either the validator or the merge.
 
 ## Outcomes & retrospective
 
@@ -728,6 +763,16 @@ property, once written, agreed with its oracle so consistently that it passed a
 deliberately broken build, because a uniform name pool put a reserved spelling
 into almost every large registry. Only the mutation control exposed that, and
 the property was rewritten before it was trusted.
+
+Follow-up review found one more of the same kind. The layered properties
+flattened the layers themselves before calling the validator, so every sample
+agreed with the oracle about a sequence the test had already assembled, and the
+production merge was never exercised. `production_merge_agrees_with_the_oracle`
+now drives `CliConfig::merge_from_layers` with one configuration layer per
+generated layer, which is what makes the evidence adapter evidence rather than
+model evidence. The general lesson is that a property is only as strong as the
+production entry point it reaches: a test that pre-processes its input and then
+calls an inner function proves a statement about the inner function alone.
 
 Executable resolution is 11.2.3 and structured-command integration is 12.3.1;
 neither is claimed here. The wider issue #593 stays open.
@@ -949,6 +994,16 @@ strategy weights unreserved names three to one. The test
 are drawn from names the pool really contains, so the weights cannot drift away
 from the pool.
 
+The correspondence is checked against the production merge, not only against
+the validator. `production_merge_agrees_with_the_oracle` turns every generated
+layer into a configuration layer and calls `CliConfig::merge_from_layers`, so
+the sampled layers travel through the schema's append merge and post-merge
+hook. A merge that reordered, replaced, deduplicated, or dropped definitions at
+a layer boundary would fail the payload comparison, and a regrouping of the
+same names at drawn boundaries must not change the verdict. The class witnesses
+above stay in force, because they state the outcomes the generated samples must
+be able to reach.
+
 Non-vacuity evidence includes an empty successful registry, two distinct
 configured names succeeding, a built-in rejection, and a duplicate introduced
 only in the last layer. Temporarily remove duplicate rejection and separately
@@ -958,8 +1013,10 @@ incorrect program or intentionally false theorem remains in the tree. The
 recorded controls are: removing duplicate rejection from `check_definition`
 fails `a_duplicate_message_names_both_positions`, both
 `repeated_names_are_rejected` cases, `every_layer_class_reaches_a_verdict`,
-`production_composition_agrees_with_the_oracle`, and
-`layered_registries_agree_with_the_oracle`; removing `!appears_before` from
+`production_composition_agrees_with_the_oracle`,
+`layered_registries_agree_with_the_oracle`, and
+`production_merge_agrees_with_the_oracle`, the last with "merge accepted a
+rejected registry: [["fish", "fish"]]"; removing `!appears_before` from
 `walk_prefix` fails verification with 8 verified and 1 error; removing the
 built-in lookup fails `built_in_names_are_rejected`,
 `a_reserved_repeat_reports_the_reserved_rule`, and the same three oracle tests;
