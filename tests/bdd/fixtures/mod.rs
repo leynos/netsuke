@@ -28,34 +28,6 @@ use std::path::PathBuf;
 use std::sync::MutexGuard;
 use test_support::http::HttpServer;
 
-
-//! Fixture modules for BDD scenarios.
-//!
-//! The `TestWorld` struct holds all state for BDD scenarios. Non-Clone types
-//! use `RefCell<Option<T>>` directly, while Clone types use `Slot<T>`.
-//!
-//! With rstest-bdd 0.3.1+, fixtures are injected directly into step functions
-//! as parameters, eliminating the need for thread-local storage.
-};
-
-
-//! Fixture modules for BDD scenarios.
-//!
-//! The `TestWorld` struct holds all state for BDD scenarios. Non-Clone types
-//! use `RefCell<Option<T>>` directly, while Clone types use `Slot<T>`.
-//!
-//! With rstest-bdd 0.3.1+, fixtures are injected directly into step functions
-//! as parameters, eliminating the need for thread-local storage.
-};
-//! Fixture modules for BDD scenarios.
-//!
-//! The `TestWorld` struct holds all state for BDD scenarios. Non-Clone types
-//! use `RefCell<Option<T>>` directly, while Clone types use `Slot<T>`.
-//!
-//! With rstest-bdd 0.3.1+, fixtures are injected directly into step functions
-//! as parameters, eliminating the need for thread-local storage.
-};
-
 /// Combined test world for all BDD scenarios.
 ///
 /// Non-Clone types are stored in `RefCell<Option<T>>` to allow interior

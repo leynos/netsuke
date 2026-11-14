@@ -86,4 +86,3 @@ impl StdlibState {
         Arc::clone(&self.impure)
     }
 }
-// weave: run 'weave explain src/stdlib/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
