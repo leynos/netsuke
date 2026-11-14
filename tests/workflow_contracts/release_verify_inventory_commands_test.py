@@ -4,8 +4,9 @@ The contract test asserts that the verification step's scans pass over the
 checked-in action. Each such assertion is only as good as its reach: a scan
 anchored at the start of a line misses a call inside a substitution, a scan of
 raw lines misses a command continued across a backslash-newline, a scan of
-command names misses one built from a variable, and no scan of positions can
-tell what an interpreter is handed. These cases are the controls
+command names misses one built from a variable, a scan of literal calls misses
+a subcommand built from one, and no scan of positions can tell what an
+interpreter is handed. These cases are the controls
 for the ``release_verify_inventory_command_words`` and
 ``release_verify_inventory_commands`` modules -- they show the scans do reach
 those shapes, and refuse the ones they cannot read rather than passing them
@@ -26,6 +27,7 @@ from release_verify_inventory_commands import (
     gh_api_invocations,
     reject_secrets,
     run_tokens,
+    unread_subcommand_lines,
 )
 
 
@@ -148,6 +150,45 @@ def test_a_wrapper_around_a_literal_command_is_not_indirect() -> None:
     assert not indirect_command_words(
         'command env gh api --method GET "repos/o/r/releases"\n'
     ), "a nested wrapper around a literal command must not read as indirect"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'subcommand=api; gh "$subcommand" --method POST "repos/o/r/releases"',
+        'subcommand=api; gh ${subcommand} --method POST "repos/o/r/releases"',
+        'subcommand=api; gh "$subcommand" -f tag_name=v1',
+        'prefix=a; gh "${prefix}pi" --method POST "repos/o/r/releases"',
+        'subcommand=api; command gh "$subcommand" --method POST "repos/o/r"',
+        'subcommand=api; gh "$subcommand" \\\n  --method POST "repos/o/r"',
+    ],
+)
+def test_a_gh_subcommand_built_from_a_variable_is_rejected(line: str) -> None:
+    """Refuse a ``gh`` call whose subcommand the literal scan cannot read.
+
+    The command word here is the literal ``gh``, which every position check
+    accepts; the write hides in the word after it. Bash expands that word before
+    ``gh`` runs, so ``gh "$subcommand" --method POST`` issues the POST that the
+    literal ``gh api`` scan has no call to inspect. The spellings cover a bare
+    expansion, a braced one, a bare word with the write flags attached, a
+    literal prefix joined to the expansion, a wrapper before the command, and a
+    call continued across a backslash-newline.
+    """
+    unread = unread_subcommand_lines(line)
+    assert unread, f"{line!r} builds a gh subcommand from a variable"
+
+
+def test_a_literal_gh_subcommand_is_not_rejected() -> None:
+    """Accept the action's own listing call, whose arguments expand.
+
+    The control for the cases above: they must be refused because the
+    *subcommand* is built from a variable, not because a variable appears in the
+    call. The listing step names its release path with one, and a rule that
+    refused any expanded argument would reject the action it is meant to hold.
+    """
+    assert not unread_subcommand_lines(
+        'gh api --method GET --paginate --slurp "repos/$GITHUB_REPOSITORY/x"\n'
+    ), "a variable used as an argument must not make the subcommand indirect"
 
 
 @pytest.mark.parametrize(

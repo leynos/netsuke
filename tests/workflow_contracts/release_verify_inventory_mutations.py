@@ -109,6 +109,18 @@ EXECUTOR_MUTATIONS = {
     "gh-api-eval": 'api="gh api --method POST repos/o/r/releases"; eval "$api"',
     "gh-api-shell": 'api="gh api --method POST repos/o/r/releases"; bash -c "$api"',
 }
+#: Commands a mutation appends whose command word is the literal ``gh`` but
+#: whose subcommand is not. Placing the command word answers only where bash
+#: looks, so the POST is hidden from the literal ``gh api`` scan by the word
+#: that follows, which the braced spelling writes the same way.
+SUBCOMMAND_MUTATIONS = {
+    "gh-api-indirect-subcommand": (
+        'subcommand=api; gh "$subcommand" --method POST "repos/o/r/releases"'
+    ),
+    "gh-api-braced-subcommand": (
+        'subcommand=api; gh "${subcommand}" --method POST "repos/o/r/releases"'
+    ),
+}
 #: Each write-implying argument a mutation adds to the listing call, in the
 #: spellings that whole-token matching would accept.
 LISTING_ARGUMENT_MUTATIONS = {
@@ -181,6 +193,7 @@ APPENDING_MUTATIONS = {
     **SUBSTITUTION_QUOTE_MUTATIONS,
     **INDIRECT_COMMAND_MUTATIONS,
     **EXECUTOR_MUTATIONS,
+    **SUBCOMMAND_MUTATIONS,
 }
 
 #: Each action mutation, paired with the change it makes to the steps.

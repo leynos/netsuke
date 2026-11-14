@@ -3,7 +3,7 @@
 The verification action's safety rests on the commands it runs being the ones
 the contract can read. A ``gh api`` call is inspected for write-implying flags,
 the verifier invocation has its tokens pinned, and a token-bearing step must
-name its commands literally.
+name its commands and its ``gh`` subcommands literally.
 
 This module owns those checks -- the auditing half of the contract. Reading the
 step, by joining its lines and deciding which word bash treats as a command,
@@ -38,6 +38,10 @@ GH_API_CALL = re.compile(r"\bgh\s+api\b")
 #: The `gh release` subcommand, which can write; `gh api` is what a read-only
 #: step must use instead.
 GH_RELEASE_CALL = re.compile(r"\bgh\s+release\b")
+#: A `gh` word and the word bash reads as its subcommand, quoted or bare. Bash
+#: expands that word before `gh` sees it, so `gh "$sub"` runs whatever the
+#: variable holds and the literal `gh api` scan finds no call to inspect.
+GH_SUBCOMMAND = re.compile(r"\bgh\s+(\"[^\"]*\"|'[^']*'|\S+)")
 #: The word naming the secrets context inside an expression, whether dotted,
 #: indexed, or passed whole to `toJSON`.
 SECRET_WORD = re.compile(r"\bsecrets\b")
@@ -81,6 +85,42 @@ def gh_api_invocations(run: str) -> list[list[str]]:
         )
         raise AssertionError(msg)
     return invocations
+
+
+def unread_subcommand_lines(run: str) -> list[str]:
+    """Return each line whose ``gh`` subcommand the scan cannot read.
+
+    Placing a command word says bash runs ``gh``; it does not say which
+    subcommand the word after it names. ``subcommand=api; gh "$subcommand"
+    --method POST ...`` runs an ``api`` call with the write-implying flags the
+    contract refuses, yet the literal ``gh api`` scan finds nothing: the word it
+    looks for is the one bash builds from the variable. A word written out
+    before the expansion -- ``gh "a$(printf pi)"`` -- escapes the literal scan
+    the same way, and a quoted ``$`` is refused because the scan cannot tell it
+    from one bash expands.
+
+    Parameters
+    ----------
+    run
+        The step's ``run`` text, as the action manifest carries it.
+
+    Returns
+    -------
+    list[str]
+        The offending joined lines, in the order the step runs them.
+
+    Examples
+    --------
+    >>> unread_subcommand_lines('sub=api; gh "$sub" --method POST repos/o/r')
+    ['sub=api; gh "$sub" --method POST repos/o/r']
+    >>> unread_subcommand_lines('gh api --method GET "repos/$GITHUB_REPOSITORY/x"')
+    []
+    """
+    return [
+        line
+        for line in script_lines(run)
+        if any("$" in word for word in GH_SUBCOMMAND.findall(line))
+    ]
 
 
 def forbidden_gh_flags(tokens: list[str]) -> list[str]:

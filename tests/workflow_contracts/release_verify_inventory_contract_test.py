@@ -27,6 +27,7 @@ from release_verify_inventory_commands import (
     gh_api_invocations,
     reject_secrets,
     run_tokens,
+    unread_subcommand_lines,
 )
 from release_verify_inventory_mutations import (
     ACTION_MUTATIONS,
@@ -113,6 +114,14 @@ def _assert_gh_api_calls(steps: list[dict[str, object]]) -> None:
         assert not executors, (
             f"{name} must not hand a run-time string to an interpreter; "
             f"{executors!r} would run text the scan cannot read"
+        )
+        # Naming the command word literally still leaves the subcommand open: a
+        # `gh "$subcommand" --method POST` runs the write the literal scan has
+        # no word to inspect.
+        unread = unread_subcommand_lines(run)
+        assert not unread, (
+            f"{name} must name its gh subcommands literally; {unread!r} builds "
+            "one from a variable, which hides the call it makes"
         )
         invocations = gh_api_invocations(run)
         expected = 1 if name in NETWORK_STEPS else 0

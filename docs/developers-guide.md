@@ -3329,14 +3329,15 @@ check for exactly the dependencies this job must observe.
 `tests/workflow_contracts/release_verify_inventory_contract_test.py` pins the
 action's shape, the job's wiring, and the credential routing, and proves each
 assertion against a deliberate mutation of the checked documents. It also reads
-each step's shell text as bash does, and refuses two shapes the literal scan
+each step's shell text as bash does, and refuses three shapes the literal scan
 could not check: a command word built from a variable, including one reached
-through nested wrappers, and any command that would hand a run-time string to
-an interpreter. The job's reachability is computed independently in
-`release_publish_path_verification.py`, from the scenario table in
-`release_publish_path_scenarios.py`; that table includes a publisher failure
-and a publisher skip for each publisher, plus the realistic dry run in which
-both are skipped while the rehearsal job runs.
+through nested wrappers; a `gh` subcommand built from a variable, which hides
+the call the literal `gh api` scan looks for; and any command that would hand a
+run-time string to an interpreter. The job's reachability is computed
+independently in `release_publish_path_verification.py`, from the scenario
+table in `release_publish_path_scenarios.py`; that table includes a publisher
+failure and a publisher skip for each publisher, plus the realistic dry run in
+which both are skipped while the rehearsal job runs.
 
 ### Release-inventory verifier telemetry
 
