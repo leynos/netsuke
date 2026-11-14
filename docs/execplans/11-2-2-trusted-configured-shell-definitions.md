@@ -456,6 +456,16 @@ explicit and exercise the actual adapters in tests.
     `preview` unit tests beside the renderer, which run on every platform, and
     the integration case keeps only the overlong directory that every supported
     filesystem can hold.
+  - [x] 2026-11-15: Pass the whole eleven-gate set against this tree. The run
+    tagged `final21` executed every gate sequentially and finished `failed=0`
+    in 853 s: `check-fmt` 4s, `lint` 47s, `typecheck` 9s, `doc-coverage` 18s,
+    `test` 67s, `test-workflow-contracts` 618s, `test-package-verify` 36s,
+    `test-documentation-contracts` 1s, `verus` 2s, `markdownlint` 51s,
+    `nixie` 0s. `make verus` reports "9 verified, 0 errors" and doc-comment
+    coverage is 98.26%. An earlier run tagged `final20` aborted at `lint`
+    (15 s) because the new preview reader sliced a `&str` by index, which this
+    repository denies as `clippy::string_slice`; `split_once` now supplies both
+    halves, and the `preview` fixture's fixed slice became `strip_suffix`.
 
 ## Surprises & discoveries
 
