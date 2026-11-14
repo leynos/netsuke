@@ -168,6 +168,188 @@ fn malformed_project_chain_grant_remains_a_validation_error() {
     );
 }
 
+/// Reject every reset representation for the project blocklists while leaving
+/// the supplied value untouched, so no later merge can read it as a clear.
+#[test]
+fn malformed_project_blocklists_remain_validation_errors() {
+    let malformed_values = [
+        ("null", json!(null)),
+        ("a scalar number", json!(1)),
+        ("a scalar string", json!("BLOCKED")),
+        ("an object", json!({"blocked": "TOKEN"})),
+        ("an array containing null", json!([null])),
+        ("an array containing a number", json!([1])),
+    ];
+
+    for (description, supplied) in malformed_values {
+        for field in ["env_block_var", "fetch_block_host"] {
+            let resolved = retain_layers_and_resolve_json(scope_project_chain(
+                vec![file_layer(json!({ (field): supplied.clone() }), None)],
+                0,
+            ));
+
+            assert!(
+                matches!(
+                    resolved.errors.first().map(AsRef::as_ref),
+                    Some(OrthoError::Validation { key, .. }) if key == field
+                ),
+                "{description} in {field} must produce its own validation error"
+            );
+            let retained = resolved
+                .layers
+                .into_iter()
+                .next()
+                .expect("malformed layer is retained")
+                .into_value();
+            assert_eq!(
+                retained.get(field),
+                Some(&supplied),
+                "{description} in {field} must not be stripped or rewritten"
+            );
+        }
+    }
+}
+
+/// Reject an invalid host pattern inside a project fetch blocklist.
+#[test]
+fn invalid_project_fetch_block_host_pattern_is_a_validation_error() {
+    let supplied = json!([""]);
+    let resolved = retain_layers_and_resolve_json(scope_project_chain(
+        vec![file_layer(
+            json!({ "fetch_block_host": supplied.clone() }),
+            None,
+        )],
+        0,
+    ));
+
+    assert!(matches!(
+        resolved.errors.first().map(AsRef::as_ref),
+        Some(OrthoError::Validation { key, .. }) if key == "fetch_block_host"
+    ));
+    let retained = resolved
+        .layers
+        .into_iter()
+        .next()
+        .expect("malformed layer is retained")
+        .into_value();
+    assert_eq!(retained.get("fetch_block_host"), Some(&supplied));
+}
+
+/// Preserve valid and empty project blocklists as cumulative restrictions.
+#[test]
+fn valid_project_blocklists_are_preserved_without_errors() {
+    let resolved = retain_layers_and_resolve_json(scope_project_chain(
+        vec![file_layer(
+            json!({
+                "env_block_var": ["BLOCKED_TOKEN"],
+                "fetch_block_host": ["blocked.example", "*.wild.example"],
+            }),
+            None,
+        )],
+        0,
+    ));
+
+    assert!(resolved.errors.is_empty());
+    let value = resolved
+        .layers
+        .into_iter()
+        .next()
+        .expect("valid layer is retained")
+        .into_value();
+    assert_eq!(value.get("env_block_var"), Some(&json!(["BLOCKED_TOKEN"])));
+    assert_eq!(
+        value.get("fetch_block_host"),
+        Some(&json!(["blocked.example", "*.wild.example"]))
+    );
+
+    let empty = retain_layers_and_resolve_json(scope_project_chain(
+        vec![file_layer(
+            json!({ "env_block_var": [], "fetch_block_host": [] }),
+            None,
+        )],
+        0,
+    ));
+    assert!(empty.errors.is_empty());
+    let empty_value = empty
+        .layers
+        .into_iter()
+        .next()
+        .expect("empty layer is retained")
+        .into_value();
+    assert_eq!(empty_value.get("env_block_var"), Some(&json!([])));
+    assert_eq!(empty_value.get("fetch_block_host"), Some(&json!([])));
+}
+
+/// Validate both blocklists for an explicitly selected project occurrence,
+/// which carries project scope without automatic-chain provenance.
+#[test]
+fn explicit_project_occurrence_validates_both_blocklists() {
+    let resolved = retain_layers_and_resolve_json(scope_project_fetch_layers(
+        vec![file_layer(
+            json!({"env_block_var": null, "fetch_block_host": null}),
+            None,
+        )],
+        0,
+    ));
+
+    assert_eq!(resolved.errors.len(), 2);
+    assert!(matches!(
+        resolved.errors.first().map(AsRef::as_ref),
+        Some(OrthoError::Validation { key, .. }) if key == "env_block_var"
+    ));
+    assert!(matches!(
+        resolved.errors.get(1).map(AsRef::as_ref),
+        Some(OrthoError::Validation { key, .. }) if key == "fetch_block_host"
+    ));
+}
+
+/// Validate the environment blocklist for a chain occurrence that the fetch
+/// quarantine treats as operator-authority, because the chain governs
+/// environment policy while fetch policy follows the selected primary index.
+#[test]
+fn chain_environment_blocklist_is_validated_for_operator_scoped_occurrence() {
+    let resolved = retain_layers_and_resolve_json(scope_project_chain(
+        vec![
+            file_layer(json!({"fetch_block_host": ["blocked.example"]}), None),
+            file_layer(
+                json!({"env_block_var": null, "fetch_block_host": null}),
+                None,
+            ),
+        ],
+        0,
+    ));
+
+    assert_eq!(
+        resolved.errors.len(),
+        1,
+        "only the chain-governed environment blocklist is validated here"
+    );
+    assert!(matches!(
+        resolved.errors.first().map(AsRef::as_ref),
+        Some(OrthoError::Validation { key, .. }) if key == "env_block_var"
+    ));
+}
+
+/// Leave operator-authority occurrences with their existing semantics: a
+/// malformed blocklist is not reclassified as a project-boundary failure.
+#[test]
+fn operator_occurrence_retains_malformed_blocklists_without_new_errors() {
+    let supplied = json!({"env_block_var": null, "fetch_block_host": null});
+    let resolved = retain_layers_and_resolve_json(vec![ScopedFileLayer::operator(file_layer(
+        supplied.clone(),
+        None,
+    ))]);
+
+    assert!(resolved.errors.is_empty());
+    let retained = resolved
+        .layers
+        .into_iter()
+        .next()
+        .expect("operator layer is retained")
+        .into_value();
+    assert_eq!(retained, supplied);
+}
+
 /// Keep malformed fetch fields within the fetch quarantine validator.
 #[test]
 fn malformed_primary_fetch_fields_remain_configuration_errors() {

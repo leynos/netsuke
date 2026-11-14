@@ -113,6 +113,34 @@ obtain a process value at all. A denial returns one fixed, localized diagnostic
 and emits only a bounded `failure_kind="blocked"` trace field; neither the
 requested name nor its value appears in the diagnostic or the trace.
 
+### Addendum: reject blocklist reset values before merging (2026-11-12)
+
+Issue #995 found the same reset hazard in the environment boundary that
+[ADR-0021](adr-0021-keep-project-fetch-policy-below-the-operator-ceiling.md)'s
+2026-11-12 addendum records for fetch policy. A project-chain `env_block_var`
+value that was not an array could reach the generic configuration merger. The
+`ortho_config` 0.10.0 pipeline converts a non-finite TOML float to JSON `null`,
+and its append merge treats a `null` collection value as a reset, so a project
+layer supplying `nan`, `inf`, or `-inf` could clear an operator block entry and
+let `env()` read a denied variable.
+
+Discovery now validates `env_block_var` as an array of strings for every
+occurrence that is project-scoped or belongs to an automatically discovered
+project chain, before generic merging. A malformed value records an
+`OrthoError::Validation` naming the field. Any discovery error keeps every
+discovered file layer out of the merge, so the boundary fails closed, and the
+value is neither rewritten nor removed. Valid arrays, including `[]`, remain
+cumulative restrictions. Operator-authority occurrences keep their existing
+semantics.
+
+The chain marker rather than the physical path decides where validation
+applies, matching the environment-grant rule above: a file reached through both
+an operator root and a project root is validated only for its project
+occurrence. The reset behaviour was confirmed against the published
+`ortho_config` 0.10.0, `figment` 0.10.19, and `serde_json` 1.0.154 sources, but
+the validation depends on none of those internals. End-to-end coverage runs
+only on Unix, because the discovery harness injects XDG environment variables.
+
 The violation is a domain-shaped error. `EnvPolicyViolation::Blocked` carries
 no localization payload, so `EnvAccessPolicy` stays evaluable without the
 localization framework; the manifest adapter renders the operator-facing text

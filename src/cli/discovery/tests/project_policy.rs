@@ -253,6 +253,39 @@ fn malformed_project_chain_requests_accumulate_validation_errors() {
     assert!(primary.get("trust_project_fetch_policy").is_some());
 }
 
+/// Accumulate one error per malformed blocklist, in occurrence order, while
+/// retaining every supplied value for fail-closed diagnostics.
+#[test]
+fn malformed_project_blocklists_accumulate_across_occurrences() {
+    let inherited = json!({"env_block_var": null, "fetch_block_host": [null]});
+    let primary = json!({"env_block_var": 3});
+    let scoped = scope_project_chain(
+        vec![
+            MergeLayer::file(Cow::Owned(inherited.clone()), Some("ancestor.toml".into())),
+            MergeLayer::file(Cow::Owned(primary.clone()), Some(".netsuke.toml".into())),
+        ],
+        1,
+    );
+    let resolved = retain_layers_and_resolve_json(scoped);
+
+    assert_eq!(resolved.errors.len(), 3);
+    assert!(has_validation_error(&resolved, 0, "env_block_var"));
+    assert!(has_validation_error(&resolved, 1, "fetch_block_host"));
+    assert!(has_validation_error(&resolved, 2, "env_block_var"));
+
+    let mut layers = resolved.layers.into_iter();
+    let inherited_layer = layers
+        .next()
+        .expect("inherited layer should remain")
+        .into_value();
+    let primary_layer = layers
+        .next()
+        .expect("primary layer should remain")
+        .into_value();
+    assert_eq!(inherited_layer, inherited);
+    assert_eq!(primary_layer, primary);
+}
+
 /// Check whether one accumulated error preserves the expected validation key.
 fn has_validation_error(resolved: &ResolvedFileLayers, index: usize, key: &str) -> bool {
     resolved.errors.get(index).is_some_and(|error| {

@@ -1,6 +1,7 @@
 //! Tests for operator, project, and explicit config-chain provenance.
 
 use super::*;
+use rstest::rstest;
 use tempfile::tempdir;
 
 /// Retain environment grants from a trusted XDG chain.
@@ -84,6 +85,76 @@ fn inherited_project_block_overrides_operator_allow() -> Result<()> {
         "an inherited block must override an operator allow"
     );
     assert_blocked_without_read(&policy, "CI_TOKEN")
+}
+
+/// Reject a non-finite project environment blocklist instead of letting the
+/// JSON conversion turn it into a `null` that clears the operator's block.
+///
+/// The rejection path matters most here: a cleared block would let the
+/// renderer read a variable the operator explicitly denied.
+#[rstest]
+#[case::nan("nan")]
+#[case::infinity("inf")]
+#[case::negative_infinity("-inf")]
+#[case::array_containing_nan("[nan]")]
+fn non_finite_project_env_block_var_is_rejected(#[case] literal: &str) -> Result<()> {
+    let sandbox = ConfigSandbox::new()?;
+    write_config(
+        sandbox.project_path().join(".netsuke.toml"),
+        &format!("env_block_var = {literal}\n"),
+    )?;
+    let merged = sandbox.merge_auto(&["--env-block-var", "SAFE"]);
+
+    ensure!(
+        merged.is_err(),
+        "a non-finite {literal} project blocklist must stop loading"
+    );
+    Ok(())
+}
+
+/// Reject a non-finite blocklist inherited through the project `extends`
+/// chain, which reaches the policy boundary as an ancestor occurrence.
+#[rstest]
+#[case::nan("nan")]
+#[case::array_containing_nan("[nan]")]
+fn non_finite_inherited_project_env_block_var_is_rejected(#[case] literal: &str) -> Result<()> {
+    let sandbox = ConfigSandbox::new()?;
+    write_config(
+        sandbox.project_path().join(".netsuke.toml"),
+        "extends = \"base.toml\"\n",
+    )?;
+    write_config(
+        sandbox.project_path().join("base.toml"),
+        &format!("env_block_var = {literal}\n"),
+    )?;
+    let merged = sandbox.merge_auto(&["--env-block-var", "SAFE"]);
+
+    ensure!(
+        merged.is_err(),
+        "an inherited non-finite {literal} blocklist must stop loading"
+    );
+    Ok(())
+}
+
+/// Keep the operator block effective when the project adds an empty
+/// environment blocklist or omits the field.
+#[rstest]
+#[case::empty(Some("env_block_var = []\n"))]
+#[case::absent(None)]
+fn empty_or_absent_project_env_blocklist_keeps_operator_block(
+    #[case] project_config: Option<&str>,
+) -> Result<()> {
+    let sandbox = ConfigSandbox::new()?;
+    if let Some(config) = project_config {
+        write_config(sandbox.project_path().join(".netsuke.toml"), config)?;
+    }
+    let cli = sandbox.merge_auto(&["--env-block-var", "SAFE"])?;
+
+    ensure!(
+        cli.env_block_var == ["SAFE"],
+        "the operator block must remain the effective blocklist"
+    );
+    assert_blocked_without_read(&cli.env_access_policy(), "SAFE")
 }
 
 /// Give an operator block precedence over an operator-chain grant.
