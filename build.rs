@@ -53,8 +53,14 @@ const FALLBACK_DATE: &str = "1970-01-01";
 // `src/cli/parser/mod.rs`; matching logic is split out of `src/host/pattern.rs`
 // into `src/host/matching.rs`. Adding a dependency on anything outside this
 // slice will surface here as a compile error, which is the intended signal.
+//
+// The slice keeps the library's public module tree. A re-export inside a
+// private module is unreachable, so rustc reports it as an unused import even
+// though the library crate consumes it; declaring these modules `pub` the way
+// `src/lib.rs` does keeps that analysis about this compilation unit's real
+// reachability rather than about a visibility the source never had.
 #[path = "src/cli"]
-mod cli {
+pub mod cli {
     //! The Clap schema slice of `src/cli`, mirroring `src/cli/mod.rs`.
 
     pub mod config;
@@ -73,6 +79,15 @@ mod cli_localization;
 // The build-script slice compiles pattern syntax without runtime matching.
 #[path = "src/host/pattern.rs"]
 mod host_pattern;
+
+/// The trusted shell vocabulary the CLI schema names in `shells` definitions.
+///
+/// `ShellDefinition` stores a validated [`ShellName`] and classifies its
+/// executable by [`HostFamily`], so the slice cannot describe the schema
+/// without these types. Only the vocabulary is compiled: resolution and
+/// execution stay outside the build script.
+#[path = "src/shell_selection/mod.rs"]
+pub mod shell_selection;
 
 /// The locale registry, shared with the library crate.
 ///
@@ -198,13 +213,25 @@ fn emit_rerun_directives() {
     // Only the modules this script actually compiles need to trigger a rerun.
     println!("cargo:rerun-if-changed=src/cli/command.rs");
     println!("cargo:rerun-if-changed=src/cli/config/mod.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/defaults.rs");
     println!("cargo:rerun-if-changed=src/cli/config/validation.rs");
     println!("cargo:rerun-if-changed=src/cli/config/budget.rs");
     println!("cargo:rerun-if-changed=src/cli/config/no_input.rs");
     println!("cargo:rerun-if-changed=src/cli/config/policy_definitions.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/shells/mod.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/shells/arguments.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/shells/compose.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/shells/definition.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/shells/executable.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/shells/preview.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/shells/spelling.rs");
     println!("cargo:rerun-if-changed=src/cli/help.rs");
     println!("cargo:rerun-if-changed=src/cli/validation.rs");
     println!("cargo:rerun-if-changed=src/host/pattern.rs");
+    println!("cargo:rerun-if-changed=src/shell_selection/mod.rs");
+    println!("cargo:rerun-if-changed=src/shell_selection/built_in/mod.rs");
+    println!("cargo:rerun-if-changed=src/shell_selection/name/mod.rs");
+    println!("cargo:rerun-if-changed=src/shell_selection/selection/mod.rs");
     // Cargo supplies package metadata, TARGET, and PROFILE itself. Watching
     // their ambient values would invalidate artefacts when tests invoke Cargo
     // with inherited metadata; Cargo.toml and Cargo's build units track them.

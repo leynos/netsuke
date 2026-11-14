@@ -87,3 +87,33 @@
 
 # CLI-only controls such as `--config`, `--directory`, and subcommands are not
 # read from config files.
+
+# Trusted shell definitions. A definition names a shell, the program a future
+# adapter would run for it, and the fixed arguments that program receives.
+#
+# Only a system or user operator configuration file may declare `shells`. A
+# project `.netsuke.toml`, a file selected with `--config` or `NETSUKE_CONFIG`,
+# and the environment are untrusted for this key and are rejected, so do not
+# copy this block into a project root.
+#
+# Definitions merge by concatenation in merge order. An empty higher layer
+# neither clears nor narrows a lower one. A built-in name (`sh`, `bash`,
+# `pwsh`, `powershell`) may not be redefined, and no name may appear twice
+# across the merged configuration.
+#
+# `args` is the fixed prefix of a future invocation: the executable, then these
+# arguments, then exactly one rendered source argument. Choose a prefix for
+# which that invocation reaches the executable's own source evaluator; Netsuke
+# checks structure only and cannot verify that for an arbitrary program. `args`
+# needs 1 to 16 elements and at most 4096 UTF-8 bytes in total.
+#
+# `executable` must be a bare name or an absolute path on the loading host. A
+# POSIX-style rooted path is not absolute to Windows, which requires a drive or
+# a UNC share, so a bare name is the portable spelling. Nothing probes the
+# filesystem, so a definition naming a program that is not installed is
+# accepted at configuration time. Loading a definition never runs it; named
+# commands are a later task.
+# [[shells]]
+# name = "dash"
+# executable = "dash"
+# args = ["-c"]

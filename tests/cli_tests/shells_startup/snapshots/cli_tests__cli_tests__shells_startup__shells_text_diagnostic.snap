@@ -1,0 +1,6 @@
+---
+source: tests/cli_tests/shells_startup/mod.rs
+expression: rendered
+---
+[TIMESTAMP] ERROR netsuke::config_load: configuration load failed operation="config_merge" error_category="validation"
+Validation failed for 'shells[0].executable': a shell executable must be a bare name or an absolute path, not a relative path; value is "bin/dash"; declared in "[WORKSPACE]/user/netsuke/config.toml"

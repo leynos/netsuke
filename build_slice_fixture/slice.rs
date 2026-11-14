@@ -17,6 +17,12 @@ pub mod cli {
 mod cli_localization;
 #[path = "../src/host/pattern.rs"]
 mod host_pattern;
+/// Compile the trusted shell vocabulary the CLI schema's definitions name.
+///
+/// Listed here so the fixture stands in for exactly the sources `build.rs`
+/// compiles.
+#[path = "../src/shell_selection/mod.rs"]
+pub mod shell_selection;
 #[path = "../src/locale/catalogues.rs"]
 pub mod locale_catalogues;
 #[path = "../src/localization/mod.rs"]

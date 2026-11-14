@@ -54,9 +54,12 @@ output and some leaf files so the long-lived structure remains visible.
 │   ├── snapshots/
 │   ├── terminal_rendering/
 │   └── terminal_rendering_tests.rs
-└── tools/
-    ├── kani/
-    └── mold/
+├── tools/
+│   ├── kani/
+│   └── mold/
+└── verus/
+    ├── canonical_value/
+    └── configured_shells/
 ```
 
 ## Path responsibilities
@@ -133,6 +136,11 @@ output and some leaf files so the long-lived structure remains visible.
   generation, packaging, and formal checks.
 - `src/`: Main `netsuke-build` Rust package source code.
 - `src/cli/`: Command-line configuration, parsing, validation, and merge logic.
+- `src/cli/config/shells/`: The trusted `shells` schema. `ShellDefinition`
+  groups a validated `ShellName`, `ShellExecutable`, and `ShellArguments`;
+  `validate_composition` applies the registry rules after merging. See the
+  [developers' guide](developers-guide.md) for the discovery and proof
+  boundaries.
 - `src/host/`: Shared host-pattern syntax and runtime hostname matching;
   the build script compiles only the pattern module.
 - `src/ir/`: Intermediate representation generation, interpolation, graph, and
@@ -198,6 +206,11 @@ output and some leaf files so the long-lived structure remains visible.
   [ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).
 - `tools/mold/`: Pinned `mold` linker release version and the SHA-256 checksums
   used to verify the downloaded release artefacts.
+- `verus/`: Verus refinement proofs, one self-contained program per proof. A
+  proof states a specification over the same sequence the production code walks
+  and proves the walk agrees with it; a repository Rust oracle closes the
+  remaining gap to the real function. `configured_shells/` proves the trusted
+  shell-composition rule and `canonical_value/` the action-hash canonicalizer.
 
 ## Internal support module ownership
 

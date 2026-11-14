@@ -5,11 +5,28 @@
 //! [`CliConfig`] still rejects unsupported values at configuration
 //! composition rather than later during runner setup.
 
+use super::budget::validate_manifest_budget;
+use super::shells::{SHELLS_KEY, validate_composition};
 use super::{CliConfig, NO_INPUT_VALIDATION_REASON, validation_error};
-use ortho_config::OrthoResult;
+use ortho_config::{OrthoResult, PostMergeContext, PostMergeHook};
 
 /// Maximum number of parallel build jobs accepted by the CLI.
 pub(super) const MAX_JOBS: usize = super::super::validation::MAX_JOBS;
+
+impl PostMergeHook for CliConfig {
+    /// Reject a merged configuration that the runner cannot honour.
+    ///
+    /// Every check runs after all layers have merged and before any manifest is
+    /// read, so a rejected value stops startup at configuration loading.
+    fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
+        validate_manifest_path(self)?;
+        validate_non_interactive(self)?;
+        validate_jobs(self)?;
+        validate_configured_shells(self)?;
+        validate_manifest_budget(self)?;
+        Ok(())
+    }
+}
 
 /// Return whether `jobs` falls outside the accepted range.
 const fn jobs_out_of_bounds(jobs: usize) -> bool {
@@ -66,4 +83,20 @@ pub(super) fn validate_jobs(config: &CliConfig) -> OrthoResult<()> {
         ));
     }
     Ok(())
+}
+
+/// Verify the merged registry of configured shells.
+///
+/// Each file layer already rejected a malformed definition, so this pass owns
+/// only the rules that need the whole registry: no definition may reuse a
+/// built-in name, and no two positions may share a name. The merged vector is
+/// validated once, so a rejection leaves no partially accepted registry.
+///
+/// # Errors
+///
+/// Returns a validation error naming the registry when it shadows a built-in
+/// shell name or declares one name more than once.
+pub(super) fn validate_configured_shells(config: &CliConfig) -> OrthoResult<()> {
+    validate_composition(&config.shells)
+        .map_err(|error| validation_error(SHELLS_KEY, &error.to_string()))
 }

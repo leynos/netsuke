@@ -48,6 +48,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-complete-manifest",
     "guide-console-target",
     "guide-configuration-observability",
+    "guide-configured-shell-definition",
     "guide-crates-io-install",
     "guide-direct-command-list",
     "guide-file-follow-symlinks-expression",

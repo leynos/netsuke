@@ -2458,7 +2458,7 @@ outside the execution domain.
   - Success: unit and serialization tests prove the finite built-in names,
     configured-name retention, host rules, fixed invocations, and exact
     `false`, `true`, and string mappings without changing command execution.
-- [ ] 11.2.2. Add trusted configured shell definitions.
+- [x] 11.2.2. Add trusted configured shell definitions.
   - Requires 11.2.1.
   - Add append-merged `CliConfig` shell definitions with validated `name`,
     `executable`, and fixed `args`, reserving built-in names and rejecting

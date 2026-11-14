@@ -25,6 +25,7 @@ mod paths;
 mod project_policy;
 
 mod selector;
+mod shell_definitions;
 mod trace;
 
 mod telemetry;
