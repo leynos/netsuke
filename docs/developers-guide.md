@@ -387,6 +387,62 @@ capture helper. They assert the counter, duration sample, and completion event
 for a successful fixture query, a missing-manifest failure, and an invalid
 manifest failure classified as the non-`RunnerError` `other` category.
 
+## Manifest schema versioning and feature admission
+
+`netsuke_version` names the manifest schema, not the Netsuke release. Use its
+canonical `MAJOR.MINOR.0` form without prerelease or build identifiers. The
+[schema registry](netsuke-design.md#schema-versions-and-feature-admission) is
+the source of truth for feature identifiers, syntax reservations, owning RFCs
+and roadmap tasks, admission status, and the first release tag containing a
+feature. ADR-0075 defines the
+[admission policy](adrs/adr-0075-manifest-schema-versions-and-admission.md).
+
+### Reserve syntax before implementation
+
+Before implementing an optional key, field, command discriminator, template
+vocabulary, or closed-set value, add a registry row for its owning feature.
+Record the exact syntax names and its roadmap owner. A `reserved` row prevents
+another feature from claiming those names; it does not make them acceptable to
+the reader. Keep the row `reserved` until an admission change makes the feature
+available.
+
+The registry contract in
+[`tests/schema_version_registry_tests.rs`](../tests/schema_version_registry_tests.rs)
+independently pins each row and checks the reader's supported range. Update it
+with deliberate registry changes; deriving the expected rows from the registry
+would make the test confirm itself.
+
+### Allocate schema minors on `main`
+
+Only `main` allocates a new schema minor. The first admission after the latest
+published tag, including a beta tag, raises the reader's maximum minor in the
+same change that admits the feature. Later admissions before the next tag use
+that minor. A tag freezes the feature set for every minor it contains. Keep the
+supported range contiguous, do not skip an unadmitted reservation, and do not
+backport admissions to release or hotfix branches. Reverting the only admission
+of an unpublished minor also reverts its maximum-minor increase.
+
+ADR-0043 reserves `1.1.0` for the structured-command and named-shells surface.
+Keep the current supported range at `1.0.0` until the owning admission change
+is ready; a reservation is not a feature opt-in.
+
+### Implement the admission ladder with the feature
+
+The reader checks a mapping's literal `netsuke_version` immediately after YAML
+parsing and before variables or macros are registered, expansion runs, or
+templates are evaluated. The current gate implements the first rejection rung:
+it rejects a missing, malformed, or unsupported schema version. It does not yet
+inspect raw documents for syntax ownership.
+
+Before a feature's syntax is admitted, implement the applicable raw-document
+checks for syntax that requires a later minor and syntax that is reserved but
+not admitted. Those checks run before template evaluation and report the
+feature identifier and minimum schema version or reservation, respectively.
+Unknown syntax must retain the existing unknown-field diagnostic, and known
+syntax used in an unsupported context must receive a feature-specific error.
+Roadmap item 12.1.2 or the first feature it admits owns the later-minor and
+reserved-syntax rungs; RFCs 0021 to 0025 remain reservations until then.
+
 ## Unstable Rust API for embedders
 
 The [users' guide](users-guide.md) documents Netsuke's user interface: the
@@ -838,6 +894,46 @@ before returning to `run_with_args`.
 
 **Cross-references:** `docs/netsuke-design.md` §8.4, for the rationale behind
 buffering rather than gating output on the resolved mode.
+
+### Rendering failures in human mode
+
+`handle_runner_error` in `src/main.rs` sends JSON mode to
+`render_runtime_error_json`, which picks the most specific diagnostic out of
+the failure chain: a `RunnerError`, else a `ManifestError`, else a
+`miette::Report`. Human mode goes to `human_diagnostics::handle_failure`, which
+makes the same selection and renders the diagnostic with `miette`'s graphical
+handler. Both modes therefore report the same fault at the same depth, and a
+new diagnostic type has to be added to both or the modes disagree.
+
+A failure carrying none of those diagnostics keeps its context line, which is
+the whole report for errors such as a missing manifest. A failure that does
+carry one prints the rendered diagnostic instead of the context line when that
+diagnostic renders a snippet naming the file, because the snippet repeats the
+path the context line carries.
+
+Naming the file takes more than a source. `miette` returns from
+`render_snippets` before drawing anything when a diagnostic supplies no label,
+so a `#[source_code]` with no `#[label]` never prints its file name. The
+predicate is therefore "has a source *and* at least one label", looked for on
+the selected diagnostic and then down its `diagnostic_source` chain, because
+`ManifestError::Parse` is the wrapper that gets selected while the labelled
+`YamlDiagnostic` sits beneath it. Judging on the source alone would drop the
+context line for a diagnostic that never showed the path, leaving the failure
+naming no file at all.
+
+A schema-version rejection satisfies neither half: it carries no source and no
+label, and its message names the declaration and the supported schema without
+naming the file. It therefore keeps the context line above its diagnostic, so a
+refusal stays attributable in a project with more than one manifest. Both
+branches are pinned by a test, and the CLI exercises them against the real
+binary. Circular dependencies keep a separate branch: its bounded rendering is
+what keeps manifest target names out of the tracing event.
+
+The glyph theme comes from `human_diagnostics::theme_for`, which derives it
+from the resolved `OutputPrefs` rather than reading `NO_COLOR` itself, so the
+renderer stays callable in-process. `human_diagnostics::render_failure` returns
+the text without writing it, which is what the unit tests in
+`src/human_diagnostics/tests/mod.rs` assert on.
 
 ### Adding or changing messages
 
@@ -11845,6 +11941,80 @@ The recorder keeps exact label-shape matching in
 `src/observability/recorder/labels.rs`. These queries serve only the recorder;
 metric-specific admission rules supply the reviewed names and value sets, so
 composing label shapes never widens the accepted vocabulary.
+
+### Manifest schema-admission telemetry
+
+`src/manifest/schema_version/telemetry.rs` owns telemetry for the
+schema-version gate. `parse_admitted_document` in `src/manifest/mod.rs` is the
+only caller: it records the decision returned by
+`schema_version::admit_document` and then maps a rejection into a
+`ManifestError::Parse`. `record_admission` returns the decision unchanged, so
+the gate's control flow is identical with and without telemetry and the
+recording is a boundary observer rather than part of the predicate.
+
+Recording before the diagnostic is what keeps the count exact. A rejection
+aborts the load, so a counter placed after the error mapping would never run
+for the cases the series exists to measure. Every *recording* load that reaches
+the admission gate therefore increments exactly one series, admitted or not.
+Which loads record is decided by the registration, below.
+
+Two earlier failures return before `record_admission` and increment nothing: a
+YAML document that does not parse, and a manifest refused by the source-size
+budget charge. The counter is therefore a count of admission decisions, not a
+denominator for total load attempts; do not divide anything by it.
+
+The series is gated on the load's registration via
+`StdlibRegistration::records_schema_admission`, which is true for `AmbientFull`
+and `Full` only. Discovery queries and `netsuke test` runs share this loader
+and reach the same gate, but they are not admissions of a user's manifest, so
+counting them would inflate both terms of a refusal rate with traffic the
+series is not about. This mirrors the expansion and budget telemetry gate
+(ADR-0050 Addendum E). The gate withholds only the recording: a query that
+declares an unsupported schema still fails with the same diagnostic.
+
+The counter is `netsuke_manifest_schema_admissions_total`, with one `outcome`
+label drawn from the closed set `admitted`, `missing`, `not_string`, `invalid`,
+`unsupported`, and `not_canonical`, exposed as the module constant
+`SCHEMA_ADMISSION_OUTCOME_VALUES` and re-exported through `netsuke::manifest`.
+The four rejection categories mirror the diagnostic variants one for one, which
+is why `admitted` and `not_canonical` are in the same vocabulary: the latter is
+a rejection this gate distinguishes from `unsupported`, and collapsing the two
+would hide manifests that declare a supported schema in the wrong form.
+
+Nothing else is recorded. The declared version text, the manifest path, and the
+manifest body are absent by construction: `outcome_label` takes a
+`SchemaVersionRejection` by value and returns a `&'static str`, so no derived
+string can reach a label. The accompanying decision event records the operation
+and the category only. A `debug_assert!` inside `record_admission` fails if an
+outcome outside the exported array is ever produced, keeping the constant and
+the mapping from drifting apart.
+
+The counter description is registered once per process behind a `Once`. The
+application recorder in `src/observability/recorder/mod.rs` admits the series:
+`SCHEMA_ADMISSION_TOTAL` is listed in `accepts_name` and matched in
+`accepts_counter_registration` against exactly that one label set, so the
+counter survives into the process snapshot rather than being discarded as a
+noop handle, while any other label name, label count, or out-of-vocabulary
+value is rejected.
+
+Tests sit on both sides of the boundary.
+`src/manifest/schema_version/telemetry.rs`'s inline `tests` module drives the
+real loader under a local debugging recorder, asserting that each of the six
+outcomes reaches exactly one bounded series and that a sentinel carried in a
+declaration's build metadata never reaches a label, an event, or a span field.
+`recorder_retains_bounded_schema_admission_series` in
+`src/observability/recorder/tests/schema_admission_tests.rs` proves the
+production recorder retains the six bounded series and rejects an
+out-of-vocabulary outcome, an extra label, and a series missing its label.
+
+The failure boundary classifies these rejections separately. `failure_kind` in
+`src/human_diagnostics/mod.rs` walks the error chain, and `ManifestFailure::of`
+inspects the diagnostic's stable code rather than its message — the message is
+localized, and the `unsupported` text embeds the declared version. A schema
+rejection is therefore logged under `error_kind = "manifest_schema_version"`
+while every other failure keeps `error_kind = "runner"`, so an operator can
+count version faults apart from build faults without the log line carrying
+manifest-controlled text.
 
 ### Recipe-text dialect telemetry
 

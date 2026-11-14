@@ -95,6 +95,17 @@ impl StdlibRegistration {
         matches!(self, Self::AmbientFull | Self::Full(_))
     }
 
+    /// Report whether the schema-admission decision is recorded for this load.
+    ///
+    /// The admission counter measures how often a real load is admitted or
+    /// refused, so a refusal rate stays interpretable. Discovery queries and
+    /// test runs reach the same gate but are not admissions of a user's
+    /// manifest; counting them would inflate both numerator and denominator
+    /// with traffic the series is not about.
+    pub(crate) const fn records_schema_admission(&self) -> bool {
+        matches!(self, Self::AmbientFull | Self::Full(_))
+    }
+
     /// Report whether a refused helper marks the surrounding `when` as
     /// conditional instead of failing the load.
     pub(crate) const fn classifies_query_refusals(&self) -> bool {

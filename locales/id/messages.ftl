@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Berkas dyndep yang dihasilkan di { $path } melebihi
 
 # Diagnostik manifes.
 manifest.parse = Penguraian manifes gagal.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Manifes harus menyatakan 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' harus berupa rilis versi semantik dengan format MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } menyatakan skema manifes { $declared }, tetapi Netsuke mendukung skema { $supported }.
+manifest.schema_version.help = Nyatakan rilis skema yang didukung secara persis dalam format MAJOR.MINOR.0, tanpa metadata prarilis atau build.
 manifest.structure_error = Galat struktur manifes pada { $name }: { $details }
 manifest.yaml.parse = Galat penguraian YAML pada baris { $line }, kolom { $column }: { $details }
 manifest.yaml.label = YAML tidak sah

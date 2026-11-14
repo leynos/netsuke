@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Mae'r ffeil dyndep a gynhyrchwyd yn { $path } yn fw
 
 # Diagnosteg y maniffest.
 manifest.parse = Methodd dadansoddiad y maniffest.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Rhaid i'r maniffest ddatgan 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] Rhaid i 'netsuke_version' fod yn fersiwn ryddhau semantig ar ffurf MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] Mae { $name } yn datgan sgema maniffest { $declared }, ond mae Netsuke yn cynnal sgema { $supported }.
+manifest.schema_version.help = Datganwch yr union fersiwn ryddhau sgema a gynhelir ar ffurf MAJOR.MINOR.0, heb fetadata rhag-ryddhau na metadata adeiladu.
 manifest.structure_error = Gwall strwythur yn y maniffest yn { $name }: { $details }
 manifest.yaml.parse = Gwall dadansoddi YAML ar linell { $line }, colofn { $column }: { $details }
 manifest.yaml.label = YAML annilys

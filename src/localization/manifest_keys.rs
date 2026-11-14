@@ -60,4 +60,8 @@ define_keys! {
     MANIFEST_COMMAND_ISOLATION_RECIPE => "manifest.command_isolation_recipe",
     MANIFEST_COMMAND_ISOLATION_SCALAR => "manifest.command_isolation_scalar",
     MANIFEST_CONSOLE_DEPENDENCY_ONLY => "manifest.console_dependency_only",
+    MANIFEST_SCHEMA_VERSION_MISSING => "manifest.schema_version.missing",
+    MANIFEST_SCHEMA_VERSION_INVALID => "manifest.schema_version.invalid",
+    MANIFEST_SCHEMA_VERSION_UNSUPPORTED => "manifest.schema_version.unsupported",
+    MANIFEST_SCHEMA_VERSION_HELP => "manifest.schema_version.help",
 }

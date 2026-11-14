@@ -7,6 +7,7 @@
 - **Created:** 2026-09-19
 - **Scope:** Optional preparation contracts, not a new build scheduler
 - **Implementation:** [Progressive-enhancement roadmap, phase 23][roadmap]
+- **Governing decisions:** [ADR-0076][d62] and [ADR-0077][d63]
 
 ## 1. Summary
 
@@ -302,8 +303,9 @@ would force plugin development for ordinary functional conditions.
 
 Adoption is per action. Existing commands and environment management remain
 supported, and no package installer becomes a prerequisite for unrelated work.
-Allocate the manifest and persisted-plan versions during acceptance alongside
-RFC 0001; examples here are proposed fragments, not current-release promises.
+[ADR-0075][d61] governs manifest schema-version allocation, while
+[ADR-0043][d43] governs persisted action-plan versions. Examples here remain
+proposed fragments, not current-release promises.
 
 Before implementation, ratify the precise `python-venv` inspection contract,
 portable lease implementation, runtime-record retention limits, and operator
@@ -318,6 +320,10 @@ functional checks with the same result algebra and process boundary. Keep
 readiness, preparation evidence, and artefact ownership distinct.
 
 [roadmap]: ../roadmap-progressive-enhancement.md#23-verified-preparation-without-mandatory-environments
+[d61]: ../adrs/adr-0075-manifest-schema-versions-and-admission.md
+[d43]: ../adrs/adr-0043-consolidated-structured-command-execution-contract.md
+[d62]: ../adrs/adr-0076-progressive-enhancement-contract-boundaries.md
+[d63]: ../adrs/adr-0077-managed-state-schema.md
 [maturity]: rfc-0025-progressive-enhancement-and-maturity-policies.md
 [commands]: rfc-0001-structured-command-blocks-and-argv-templates.md
 [contention]: rfc-0024-named-contention-classes.md

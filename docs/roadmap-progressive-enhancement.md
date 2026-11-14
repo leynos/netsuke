@@ -26,6 +26,10 @@ new named execution contexts, and a universal strict mode are not prerequisites.
   declarations lowered to Ninja pools.
 - [RFC 0025](rfcs/rfc-0025-progressive-enhancement-and-maturity-policies.md)
   owns shallow-end compatibility and opt-in policy composition.
+- The governing decisions are [ADR-0075][d61], [ADR-0076][d62], [ADR-0077][d63],
+  [ADR-0078][d64], [ADR-0079][d65], [ADR-0080][d66], and [ADR-0081][d67]. They
+  record schema admission, cross-cutting contracts, and feature schemas; all
+  were accepted on 2026-11-09.
 
 RFC 0001 and phases 12 to 14 retain ownership of command parsing, argv,
 execution, process cleanup, capability-scoped paths, and persisted action
@@ -60,12 +64,12 @@ the prerequisites or required vocabulary of a first Netsuke build.
 Outcome: a release can demonstrate unchanged basic behaviour rather than merely
 assert it. The fixtures expose whether later syntax has become contagious.
 
-- [ ] 20.1.1. Ratify the progressive-enhancement contracts and version gates.
-  - [ ] Review RFCs 0021 to 0025, resolve their outstanding schema decisions,
+- [x] 20.1.1. Ratify the progressive-enhancement contracts and version gates.
+  - [x] Review RFCs 0021 to 0025, resolve their outstanding schema decisions,
     and record accepted decisions through the normal ADR process.
-  - [ ] Coordinate manifest and persisted-plan version allocation with 12.1.1,
+  - [x] Coordinate manifest and persisted-plan version allocation with 12.1.1,
     16.1.1, and 17.1.1 without requiring bundle implementation first.
-  - [ ] Record operation-union ownership, feature-specific capability reporting,
+  - [x] Record operation-union ownership, feature-specific capability reporting,
     and rejection of unsupported syntax. See RFC 0025 sections 2 and 3.
 - [ ] 20.1.2. Add unchanged-basic-workflow acceptance fixtures. Requires 20.1.1.
   - [ ] Preserve the exact quickstart manifest, scalar shell recipes, ordinary
@@ -447,3 +451,11 @@ sharing the same configuration burden.
   - [ ] Keep all first-page prerequisites and required declarations unchanged.
     Reconsider any feature that cannot demonstrate local benefit before broad
     promotion; no universal strict preset is required for release.
+
+[d61]: adrs/adr-0075-manifest-schema-versions-and-admission.md
+[d62]: adrs/adr-0076-progressive-enhancement-contract-boundaries.md
+[d63]: adrs/adr-0077-managed-state-schema.md
+[d64]: adrs/adr-0078-typed-task-input-schema.md
+[d65]: adrs/adr-0079-artefact-ownership-schema.md
+[d66]: adrs/adr-0080-contention-class-schema.md
+[d67]: adrs/adr-0081-maturity-policy-schema.md

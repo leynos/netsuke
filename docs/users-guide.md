@@ -462,6 +462,22 @@ built-in template helpers (see
 shadowing the helper, the manifest fails to parse and the error names the
 offending key.
 
+### Declare the schema version
+
+Set `netsuke_version` to the schema version the manifest uses. The current
+reader accepts exactly `1.0.0`; it rejects missing, malformed, and unsupported
+versions before evaluating Jinja. When a manifest declares an unsupported
+version, update it to a version supported by the installed Netsuke release
+after checking that the manifest uses only that schema's features.
+
+The rejection names the schema the manifest declares and the schema the
+installed Netsuke supports, and reports the `netsuke::manifest::schema_version`
+diagnostic code. In human output the diagnostic header shows that code, so a
+failure can be recognized without reading the message text. In `--json` output
+the top-level `code` is `netsuke::manifest::parse`; the schema-specific code
+appears as text within an entry in the `causes` array, so match that text to
+identify a schema failure.
+
 ### Rules and recipes
 
 Rules must provide exactly one executable recipe. Actions and targets that
@@ -2034,6 +2050,37 @@ rate at which the policy is refusing manifest access. Variable names and their
 values never appear in the label, and neither do the contents of a fallback,
 because environment variable names routinely identify credentials.
 
+#### Manifest schema-admission metrics
+
+Every full load that reaches schema admission counts one decision against its
+declared `netsuke_version` in a single bounded series. A full load is one
+requested as `Full` or `AmbientFull`, which covers both a Netsuke command and a
+direct library call such as `netsuke::manifest::from_str`, so an operator with
+a metrics recorder will see library admissions in the same series as command
+admissions. Three things are therefore not counted. YAML that does not parse,
+and a manifest refused by the source-size budget, both return before the gate.
+Discovery queries and `netsuke test` runs reach the gate but do not count: they
+are not admissions of a user's manifest, so counting them would inflate both
+terms of a refusal rate. The gate still validates those loads, so a query
+naming an unsupported schema still fails — only the counting is withheld. A
+non-mapping root does reach the gate and is counted as admitted:
+
+- `netsuke_manifest_schema_admissions_total` — a counter with a single `outcome`
+  label. `outcome` is `admitted` when the declaration names a supported schema
+  in canonical form, `missing` when the manifest does not declare one,
+  `not_string` when the declaration is not a string, `invalid` when it is not
+  SemVer, `unsupported` when it names a major or minor this Netsuke does not
+  implement, and `not_canonical` when it is a supported version written with a
+  non-zero patch, pre-release, or build metadata.
+
+The six outcomes are the complete vocabulary. The declared version text, the
+manifest path, and the manifest body never appear in the label, so an operator
+can count version faults without collecting the versions themselves. The
+decision is recorded before it becomes a diagnostic, so each counted load
+increments exactly one series even though the manifest stops loading on a
+rejection. Read the counter as a count of full-load admission decisions — never
+as a denominator for total load attempts.
+
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
 
@@ -2559,6 +2606,29 @@ Netsuke reports failures at the earliest stage that can identify them:
 
 Human diagnostics include remediation hints where one is available. JSON mode
 exposes the same information as fields.
+
+### Read a manifest failure in human mode
+
+When a run fails while loading the manifest, human mode reports one diagnostic,
+chosen in the same order JSON mode uses: the first runtime error, then the
+first manifest error, then the diagnostic report beneath it. Both modes
+therefore name the same fault, at the same depth.
+
+Whether that diagnostic replaces the "Failed to load manifest at …" context
+line depends on whether it can point at a place in the manifest:
+
+- A YAML parse failure shows a rendered snippet that quotes the offending line
+  and marks it. The snippet already names the manifest, so the context line is
+  omitted rather than repeated.
+- A schema rejection, such as an unsupported `netsuke_version`, keeps the
+  "Failed to load manifest at …" context line, because a schema rejection has
+  no source snippet to draw.
+- A failure whose cause carries no diagnostic at all, such as a missing
+  manifest, prints only its context line.
+
+The rule is that a diagnostic is self-contained when it names both its source
+and a labelled span within it. Only then does it stand alone as the whole
+report.
 
 Terminal human-mode configuration-load events emitted by `config_err_to_exit`
 include structured `operation` and `error_category` fields. `operation` is

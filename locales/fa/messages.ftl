@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = ‏ فایل dyndep تولیدشده در ‏{ $pat
 
 # تشخیص‌های مانیفست.
 manifest.parse = تجزیهٔ مانیفست ناکام ماند.
+manifest.schema_version.missing = ‏ [netsuke::manifest::schema_version] مانیفست باید 'netsuke_version' را اعلام کند.
+manifest.schema_version.invalid = ‏ [netsuke::manifest::schema_version] 'netsuke_version' باید یک نسخهٔ انتشار معنایی به‌شکل MAJOR.MINOR.0 باشد.
+manifest.schema_version.unsupported = ‏ [netsuke::manifest::schema_version] { $name } طرح‌وارهٔ مانیفست { $declared } را اعلام می‌کند، اما Netsuke از طرح‌وارهٔ { $supported } پشتیبانی می‌کند.
+manifest.schema_version.help = نسخهٔ انتشار دقیق طرح‌وارهٔ پشتیبانی‌شده را به‌شکل MAJOR.MINOR.0 و بدون فرادادهٔ پیش‌انتشار یا ساخت اعلام کنید.
 manifest.structure_error = خطای ساختاری مانیفست در { $name }: { $details }
 manifest.yaml.parse = خطای تجزیهٔ YAML در سطر { $line }، ستون { $column }: { $details }
 manifest.yaml.label = ‏YAML نامعتبر

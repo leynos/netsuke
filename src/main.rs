@@ -31,15 +31,13 @@
 //! from that: the adapters are wired as each plan becomes available, not the
 //! reverse. Execution itself is delegated to [`runner::run`].
 
-use miette::Report;
 use netsuke::{
     cli, cli_localization, diagnostic_json,
     display_plan::{DisplayPlan, TerminalFacts, resolve_display_plan},
-    ir::IrGenError,
-    locale_resolution, localization, output_prefs, runner,
+    locale_resolution, localization, runner,
 };
 use std::ffi::OsString;
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 use tracing_subscriber::filter::LevelFilter;
 // Keep the subscriber extension visible to src/tests.rs through `use super::*`.
@@ -62,6 +60,8 @@ mod startup_tracing;
 pub mod test_tracing_capture;
 
 mod config_load;
+
+mod human_diagnostics;
 
 mod main_startup;
 use main_startup::{
@@ -325,7 +325,7 @@ fn run_cli(
     configure_runtime(cli, system_locale, runtime_mode, plan);
     match runner::run(cli, plan) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) => handle_runner_error(err, plan.prefs(), runtime_mode),
+        Err(err) => handle_runner_error(&err, plan, runtime_mode),
     }
 }
 
@@ -356,44 +356,21 @@ fn configure_runtime(
 /// Render a runner failure according to the selected human or JSON mode.
 ///
 /// JSON output uses the stable diagnostic serializer and fallback payload to
-/// remain valid JSON; human output writes a formatted error to stderr. Both
-/// paths return failure.
-fn handle_runner_error(
-    err: anyhow::Error,
-    prefs: output_prefs::OutputPrefs,
-    mode: DiagMode,
-) -> ExitCode {
+/// remain valid JSON; human output writes a localized prefix followed by the
+/// failure's rendered diagnostic, or by its context line when it carries none.
+/// Both paths return failure. The plan is taken whole rather than as loose
+/// preferences because the human path needs its diagnostic style as well as its
+/// glyphs, and deriving one from the other at this boundary is how the two
+/// silently disagree.
+fn handle_runner_error(err: &anyhow::Error, plan: DisplayPlan, mode: DiagMode) -> ExitCode {
     if mode.is_json() {
-        return diagnostic_json::emit_or_fallback(main_diagnostics::render_runtime_error_json(
-            &err,
-        ));
+        return diagnostic_json::emit_or_fallback(main_diagnostics::render_runtime_error_json(err));
     }
-    let prefix = prefs.error_prefix();
-    if let Some(cycle_error) = circular_dependency_cause(&err) {
-        tracing::error!(error_kind = "circular_dependency", "runner failed");
-        drop(writeln!(io::stderr(), "{prefix} {cycle_error}"));
-        return ExitCode::FAILURE;
-    }
-    match err.downcast::<runner::RunnerError>() {
-        Ok(runner_err) => {
-            let report = Report::new(runner_err);
-            drop(writeln!(io::stderr(), "{prefix} {report:?}"));
-        }
-        Err(other_err) => {
-            tracing::error!(error = %other_err, "runner failed");
-            drop(writeln!(io::stderr(), "{prefix} {other_err}"));
-        }
-    }
-    ExitCode::FAILURE
-}
-
-/// Find a circular-dependency error inside a contextual runner failure.
-fn circular_dependency_cause(error: &anyhow::Error) -> Option<&IrGenError> {
-    error.chain().find_map(|cause| {
-        cause
-            .downcast_ref::<IrGenError>()
-            .filter(|ir_error| matches!(ir_error, IrGenError::CircularDependency { .. }))
-    })
+    let presentation = human_diagnostics::Presentation {
+        prefs: plan.prefs(),
+        style: plan.diagnostic_style(),
+    };
+    human_diagnostics::handle_failure(err, presentation)
 }
 
 #[cfg(test)]

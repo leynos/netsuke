@@ -346,6 +346,21 @@ operator, user, and contributor references are easier to find.
 - [ADR-0074](adrs/adr-0074-typed-records-for-release-policy-boundaries.md):
   Frozen slotted records at release policy boundaries, with adapters owning
   external record shapes and domain-shaped mappings retained.
+- [ADR-0075: Manifest schema versions and admission](adrs/adr-0075-manifest-schema-versions-and-admission.md):
+  Schema-version meaning, feature admission, and allocation lifecycle.
+- [ADR-0076: Progressive enhancement contract boundaries](adrs/adr-0076-progressive-enhancement-contract-boundaries.md):
+  Shared feature identifiers, operation ownership, shallow-end, and operator
+  ceilings.
+- [ADR-0077: Managed state schema](adrs/adr-0077-managed-state-schema.md):
+  Optional state declarations and readiness-operation contracts.
+- [ADR-0078: Typed task input schema](adrs/adr-0078-typed-task-input-schema.md):
+  Optional typed root inputs and their shared value contract.
+- [ADR-0079: Artefact ownership schema](adrs/adr-0079-artefact-ownership-schema.md):
+  Explicit output ownership and bounded cleanup declarations.
+- [ADR-0080: Contention class schema](adrs/adr-0080-contention-class-schema.md):
+  Optional named contention classes lowered through the existing scheduler.
+- [ADR-0081: Maturity policy schema](adrs/adr-0081-maturity-policy-schema.md):
+  Shallow-end policy composition and rule-to-feature requirements.
 
 ## Proposals
 
