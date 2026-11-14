@@ -4119,6 +4119,22 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `readback`'s doctest pins the read-back's comparison: it reports `finalized`
   only for the trusted inventory.
 
+- [x] (2026-11-14) Rebased onto the parent's `ed436b133` and resolved its one
+  conflict.
+
+  **The conflict.** The parent branch now explains that link 5 runs only in a
+  publishing-mode run whose publisher jobs both succeeded, replacing the older
+  "links 1 to 5 run in every tagged workflow". This branch's own commit had
+  rewritten the same paragraph to report link 6 as wired, which dropped that
+  condition.
+
+  **The resolution.** The paragraph keeps the parent's condition, extended to
+  link 6 as well, and names the two jobs that host the last links. The
+  extension is what the workflow says: `finalize-github-release` runs only when
+  the registry publication, the draft upload, and the inventory verification
+  have each succeeded, so link 6's silence about an unverified payload carries
+  as little weight as link 5's.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
