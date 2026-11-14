@@ -412,6 +412,8 @@ operator, user, and contributor references are easier to find.
   Falsification plan for a nested Cargo fixture timeout under shared compiler
   admission pressure.
 - [execplans/](execplans/): Execution plans and implementation handoff notes.
+  - [MiniJinja macro overlay spike](execplans/7-1-3-spike-mini-jinja-overlay-shadowing.md):
+    Approval-gated plan for roadmap 7.1.3 replacement and spy-capture evidence.
 
 ## Testing and quality references
 
