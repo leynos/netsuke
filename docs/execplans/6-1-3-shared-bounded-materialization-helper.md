@@ -10,8 +10,8 @@ Status: COMPLETE
 
 Approved by the user on 2026-11-01, with the D-03 and D-12 recommendations
 accepted. EP-M1 started on 2026-11-01 and EP-M5 reconciled the plan on
-2026-11-14, so the status is `COMPLETE`. These are the only values
-`tests/execplan_status_contract_tests.rs` accepts.
+2026-11-15 after the rebase onto `main`, so the status is `COMPLETE`. These are
+the only values `tests/execplan_status_contract_tests.rs` accepts.
 
 ## Purpose / big picture
 
@@ -498,25 +498,33 @@ conflict in `Decision log`, and escalate.
     observe through an existing helper, and the consumer work that surfaces
     these refusals is 6.1.4, 6.2.1, 6.4.2, and 6.5.3. The conclusion is
     recorded in `Outcomes & retrospective`.
-  - Final gates (2026-11-14). The scrutineer ran the whole set sequentially
-    against the candidate at `67e081c93`, one gate at a time, with the working
-    tree unchanged throughout: `check-fmt` 3 s; `lint` 1203 s; `typecheck`
-    136 s; `test` 314 s (5008 nextest tests passed, 7 skipped; 129 doctests
-    passed); `doc-coverage` 781 s (6486 of 6601 items, 98.26%, against the 80%
-    bar, verdict on standard error as expected); `markdownlint` 40 s (213
-    files, 0 issues, spelling gate included); `nixie` under 1 s;
-    `test-workflow-contracts` 251 s (1666 passed, 3 skipped; 28 script tests);
-    `test-documentation-contracts` 8 s (15 passed, 48 filtered);
-    `test-rfc-stdlib-coverage` 2 s (282 passed); and one full `make kani-ir`
-    inside the scope wrapper, 1819 s, reporting
-    `Complete - 22 successfully verified harnesses, 0 failures, 22 total`,
+  - Final gates (2026-11-14, re-run 2026-11-15). The first full run, against
+    `67e081c93`, predates the rebase onto `main` and is superseded: the rebase
+    changed the tree, so those passes no longer describe the candidate. An
+    intermediate run against the rebased head `23dbf96bb` then found the
+    duplicated module header recorded under *Surprises & discoveries*, which
+    `make check-fmt`, `make lint`, `make typecheck`, and `make test` all
+    rejected at the same unparsable target. After the repair, the scrutineer
+    ran the whole set again, one gate at a time, against `0e4b376cc`, with the
+    working tree unchanged throughout: `check-fmt` 3 s (548 Rust files and 227
+    Markdown files unchanged); `lint` 195 s; `typecheck` 32 s; `test` 155 s
+    (5739 nextest tests passed, 9 skipped; 211 doctests passed, 63 ignored,
+    0 failed); `doc-coverage` 15 s (6552 of 6667 items, 98.28%, against the 80%
+    bar); `nixie` 2 s; `test-workflow-contracts` 550 s (2330 passed, 3 skipped;
+    30 script tests); `test-documentation-contracts` 2 s (15 passed, 50
+    skipped); `test-rfc-stdlib-coverage` 2 s (282 passed); one full `make
+    kani-ir` inside the scope wrapper, 551 s, reporting
+    `Complete - 24 successfully verified harnesses, 0 failures, 24 total`,
     which includes all seven `stdlib::resource_bounds::verification::*`
-    harnesses. Every gate exited 0 and none was retried. The tree as committed
-    is byte-identical to the tree those gates passed, since no file changed
-    between the end of the run and the two commits. `make test-kani-mutations`
-    was not run, for the reason recorded under EP-M4, and is not counted as a
-    pass; `make test-package-verify` does not apply, because no include list,
-    `build.rs`, or `build_l10n_audit/` file changed. Logs are the
+    harnesses; and `make test-kani-mutations` 179 s, compiling all 37 patches
+    through prewarm 11.336 s, negative check 11.465 s, and compile guard
+    151.203 s. Eleven of those twelve gates exited 0. `make markdownlint`
+    exited 2 in its `spelling` prerequisite, which rejected `unparsable`
+    where this plan means `unparsable`; the word is corrected in the commit
+    that carries this paragraph, and the whole set was re-run against that
+    head to leave the record green. `make test-package-verify` does not apply,
+    because no include list, `build.rs`, or `build_l10n_audit/` file changed.
+    Logs are the
     `/tmp/<gate>-netsuke-6-1-3-shared-bounded-materialization-helper.out` files
     named in `Concrete steps`.
 
@@ -656,7 +664,7 @@ conflict in `Decision log`, and escalate.
   during the 2026-11-14 rebase left three duplicated module-header blocks and
   their stray `};` closing braces in the file, so `make check-fmt` exited 2 at
   line 39 and `make lint`, `make typecheck`, and `make test` all failed in the
-  same unparseable `bdd_tests` target. Impact: the file was repaired, and the
+  same unparsable `bdd_tests` target. Impact: the file was repaired, and the
   repaired version differs from `main` only by this task's intended additions;
   the lesson is that a clean `git status` and a successful rebase say nothing
   about whether the resolved tree compiles.
