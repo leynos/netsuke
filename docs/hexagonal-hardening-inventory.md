@@ -252,15 +252,17 @@ helper functions; their sum is the compiler message count.
 ### In-scope commits since the pin
 
 The snapshot remains pinned to the commit above. These are the commits between
-that pin and the branch's 2026-11-14 head that changed `src/`, `build.rs`,
-`tests/`, `test_support/`, or `benches/`: 50 in the current `main` target, one
-adding this inventory's contract test, and eleven refactoring or tightening
-that contract. Regenerate the list with
+that pin and the branch's 2026-11-15 head that changed `src/`, `build.rs`,
+`tests/`, `test_support/`, or `benches/`: 50 in the current `main` target and
+fourteen on this branch, one of them adding this inventory's contract test and
+the rest refactoring or tightening that contract. Regenerate the list with
 `git log 8a961000..HEAD --format=%h -- src build.rs tests test_support benches`;
 it goes stale whenever a commit touches one of those paths, so treat the
 enumeration below, not a remembered count, as the claim. This list is re-sweep
 context for later consumers; it does not move the inventory pin.
 
+- `07dcaeca7` Satisfy the lints the new parsers trip
+- `10e649d47` Close the trace matrix's remaining prose fail-opens
 - `9342e9361` Split the inventory contract into feature modules
 - `218fb8114` Stop trace harvesters absorbing subheading prose
 - `354213289` Name the roadmap closure count and report the observed value
@@ -280,8 +282,8 @@ context for later consumers; it does not move the inventory pin.
   compiler (#1134)
 - `a14a8475b` Reject commas in Jinja glob filenames (#1017) (#1130)
 - `72ff54fa6` Implement candidate-bound declared-asset upload (#1066) (#1111)
-- `8b38ac377` Allow actions to opt into Ninja's console pool for streamed output
-  (22.1.2, 22.2.1) (#946)
+- `8b38ac377` Allow actions to opt into Ninja's console pool for streamed
+  output (22.1.2, 22.2.1) (#946)
 - `e4ef7c511` Add terminal rendering regression tests (3.12.3) (#809)
 - `974428fef` Use POSIX token boundaries when detecting shell comments (#971)
   (#1058)
@@ -321,10 +323,10 @@ context for later consumers; it does not move the inventory pin.
 - `01c7190e1` Reconcile release help with the runtime parser (#1044)
 - `a6009675e` Document which dependency kinds participate in cycle detection
   (4.4.2) (#806)
-- `5ee56f7ec` Introduce the options-carrying manifest loader entry point (7.1.2)
-  (#807)
-- `5f0a4d123` Declare cli value_name so generated help stops showing UTF8PATHBUF
-  and USIZE placeholders (#958)
+- `5ee56f7ec` Introduce the options-carrying manifest loader entry point
+  (7.1.2) (#807)
+- `5f0a4d123` Declare cli value_name so generated help stops showing
+  UTF8PATHBUF and USIZE placeholders (#958)
 - `da06ffb11` Attach clap error context so value validation renders (#961)
   (#1045)
 - `2da4eb673` Restore the man page SYNOPSIS fallback suppressed by ortho_config
@@ -337,8 +339,8 @@ context for later consumers; it does not move the inventory pin.
 - `7929a3fc2` Repin install-whitaker to 5a99aed7 (whitaker-installer 0.2.11)
   (#1042)
 - `e52d3ef49` Show readable inline-recipe progress (3.14.11) (#944) (#956)
-- `1abfd22d3` Name the failing action in command-list failure diagnostics (#945)
-  (#954)
+- `1abfd22d3` Name the failing action in command-list failure diagnostics
+  (#945) (#954)
 - `9edf13cdc` Migrate from ortho_config v0.9.0 to v0.10.0 (#951) (#953)
 - `49f8fb3d6` Plan: Record CI test-speed evidence and adoption gates (#894)
   (#918)

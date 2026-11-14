@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 45. See `Revision note` at the foot of this document. This plan was
+Revision 46. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -723,6 +723,10 @@ pre-rebase history if an old hash must be inspected.
   rules: a removed required heading, a finding owned by an absent task, and an
   exclusion with no reason now each have a case, and the six required-heading
   cases are parameterized over the headings that can actually be removed.
+- [x] (2026-11-15) Regenerated the inventory's post-pin commit list a fifth
+  time (D-31) and re-measured its classification, 50 `main` and 14 branch. D-30
+  and D-29 both touch `tests/`, so the fourth regeneration was stale before the
+  first gate of the batch that validated them had finished.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -905,6 +909,20 @@ pre-rebase history if an old hash must be inspected.
   rather than a sentence, because a trailing full stop is rejected by
   `reference_covers` for the wrong reason and made a dead rule look live.
   Date/Author: 2026-11-14, implementation agent.
+- Decision D-31 (2026-11-15): regenerated the post-pin commit list a fifth
+  time, from 62 identifiers to 64. The two commits D-30 and D-29 authored,
+  `10e649d47` and `07dcaeca7`, both touch `tests/`, so the list went stale as
+  they landed — the fifth recurrence of the mechanism D-21, D-24, D-27 and D-28
+  record. As in D-21 and D-24 but unlike D-28, it was the branch's own commits
+  that made the list stale, not a move in `main`. The set is verified in both
+  directions against the inventory's own `git log` command: `diff` of the
+  sorted identifier lists reports no difference at 64. Classification is
+  measured, not counted by hand: `git merge-base --is-ancestor` on each
+  identifier returned 50 `MAIN` and 14 `BRANCH`, against D-28's 50 and 12, so
+  `main` has not moved and the two new entries are the branch's own. The
+  introductory sentence now names 2026-11-15 as the head it describes and gives
+  both totals. Date/Author: 2026-11-15, implementation agent, before re-gating
+  the candidate.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
   the pin" list for in-scope paths at merge time. Rationale: the roadmap
@@ -2299,6 +2317,13 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   previously unguarded rules (a removed required heading, a finding owned by an
   absent task, a reasonless exclusion) gained cases. The scope measurement
   moves from twenty files to twenty-two.
+- Revision 46 (2026-11-15): regenerated the inventory's post-pin commit list a
+  fifth time (D-31) after the two 2026-11-14 contract commits landed, taking it
+  from 62 identifiers to 64 and re-measuring the split at 50 `main` and 14
+  branch. Nothing else changed; the candidate this revision describes is the
+  same 22-file diff, and it needs its own eleven-gate run because
+  `docs/hexagonal-hardening-inventory.md` is the input to the contract test
+  that guards it.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
