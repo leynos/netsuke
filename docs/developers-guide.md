@@ -4137,6 +4137,15 @@ for a release whose real problem is an asset that must not be overwritten. A
 published digest is a promise to whoever already downloaded it, so
 reconciliation never clobbers: a conflicting asset stops the release.
 
+The three input records — the candidate, the digest record, and the plan — are
+read in that order before the command calls GitHub at all, so an undecodable
+record stops the run before any API call and reports the status its own reader
+carries. That ordering is why an unreadable digest record outranks a plan that
+merely owes an upload: nothing decides from a partial input. A `gh` call that
+fails is reported as `<command> exited <status>: <stderr>`, keeping GitHub's
+own words and trimming only the trailing newline, so the log carries the same
+diagnosis the API returned.
+
 On the registry side the equivalent question is per version, not per crate.
 `release_registry_response.observe_registry_response` maps the recorded HTTP
 status and JSON body into typed observations;
