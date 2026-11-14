@@ -5,7 +5,7 @@ use rstest::rstest;
 
 use super::fixtures::{
     PIN, SIMPLE_ROADMAP, TRANSITIVE_ROADMAP, VALID_SKELETON, expect_validation_error,
-    transitive_skeleton,
+    inventory_with_one_register_item, transitive_skeleton,
 };
 use super::validation::validate_inventory;
 
@@ -16,11 +16,7 @@ fn valid_skeleton_covers_every_dependent_task_as_pending() -> Result<()> {
 
 #[test]
 fn area_and_site_wildcards_cover_register_identifiers() -> Result<()> {
-    let inventory = VALID_SKELETON
-        .replace(
-            "| -- | -- | -- | -- | -- |\n\n### Site rows",
-            "| -- | -- | -- | -- | -- |\n| A1/ast::Rule | Rule | -- | -- | -- |\n\n### Site rows",
-        )
+    let inventory = inventory_with_one_register_item()
         .replace(
             "| -- | -- | -- | -- | -- | -- | -- |\n\n## Landed work",
             "| -- | -- | -- | -- | -- | -- | -- |\n| A1/ast::Rule@Recipe::new#constructor | -- | constructor | -- | -- | -- | -- |\n\n## Landed work",

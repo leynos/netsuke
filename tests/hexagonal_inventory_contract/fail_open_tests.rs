@@ -11,7 +11,7 @@ use rstest::rstest;
 
 use super::fixtures::{
     SIMPLE_ROADMAP, VALID_SKELETON, expect_validation_error,
-    inventory_with_register_item_and_unchanged,
+    inventory_with_one_register_item, inventory_with_register_item_and_unchanged,
 };
 use super::validation::validate_inventory;
 
@@ -141,25 +141,6 @@ fn rejects_a_finding_whose_owner_appears_only_under_a_subheading() -> Result<()>
 }
 
 #[test]
-fn rejects_coverage_claimed_only_by_the_trace_introduction() -> Result<()> {
-    let inventory = VALID_SKELETON
-        .replace(
-            "| -- | -- | -- | -- | -- |\n\n### Site rows",
-            "| -- | -- | -- | -- | -- |\n| A1/ast::Rule | Rule | -- | -- | -- |\n\n### Site rows",
-        )
-        .replace(
-            "## Trace matrix\n\n",
-            "## Trace matrix\n\nA wildcard such as `A1/*` covers the area.\n\n",
-        );
-    expect_validation_error(
-        &inventory,
-        SIMPLE_ROADMAP,
-        "neither traced nor listed unchanged",
-    )?;
-    Ok(())
-}
-
-#[test]
 fn rejects_an_exclusion_bullet_naming_a_task_only_in_its_reason() -> Result<()> {
     let inventory = VALID_SKELETON.replace(
         "- 26.1.2: pending EP-M3.\n",
@@ -184,22 +165,23 @@ fn rejects_an_obligation_matched_only_by_a_longer_identifier() -> Result<()> {
     Ok(())
 }
 
-/// The prose here is the bare identifier, not a sentence about one.
+/// The prose cases name the identifier and nothing else.
 ///
-/// A sentence ending in a full stop does not prove this rule, because
+/// A sentence ending in a full stop would not prove these rules, because
 /// `reference_covers` tokenises on whitespace and the stray punctuation leaves
 /// the token unequal to the identifier; the rule would look live while only the
-/// punctuation was doing the work. A line holding nothing else cannot be
-/// mistaken for a table row or for anything but prose, so the case fails
-/// exactly when the prose filter is removed.
-#[test]
-fn rejects_coverage_claimed_only_by_prose_under_changes() -> Result<()> {
-    let inventory = VALID_SKELETON
-        .replace(
-            "| -- | -- | -- | -- | -- |\n\n### Site rows",
-            "| -- | -- | -- | -- | -- |\n| A1/ast::Rule | Rule | -- | -- | -- |\n\n### Site rows",
-        )
-        .replace("### Changes\n\n", "### Changes\n\nA1/ast::Rule\n\n");
+/// punctuation was doing the work.
+#[rstest]
+#[case::under_changes("### Changes\n\n", "### Changes\n\nA1/ast::Rule\n\n")]
+#[case::under_the_trace_introduction(
+    "## Trace matrix\n\n",
+    "## Trace matrix\n\nA wildcard such as `A1/*` covers the area.\n\n"
+)]
+fn rejects_coverage_claimed_only_by_prose_in_the_trace(
+    #[case] anchor: &str,
+    #[case] prose: &str,
+) -> Result<()> {
+    let inventory = inventory_with_one_register_item().replace(anchor, prose);
     expect_validation_error(
         &inventory,
         SIMPLE_ROADMAP,

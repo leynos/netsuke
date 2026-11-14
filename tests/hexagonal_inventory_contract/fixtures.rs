@@ -95,15 +95,21 @@ pub(super) fn transitive_skeleton() -> String {
     )
 }
 
+/// Add one register row, leaving the rest of the skeleton as it stands.
+///
+/// Cases that need a registered-but-untraced identifier start here, so the
+/// register row and its anchor appear once rather than in every such case.
+pub(super) fn inventory_with_one_register_item() -> String {
+    VALID_SKELETON.replace(
+        "| -- | -- | -- | -- | -- |\n\n### Site rows",
+        "| -- | -- | -- | -- | -- |\n| A1/ast::Rule | Rule | -- | -- | -- |\n\n### Site rows",
+    )
+}
+
 /// Add one register row and replace the skeleton's `Unchanged` body.
 pub(super) fn inventory_with_register_item_and_unchanged(unchanged: &str) -> String {
-    VALID_SKELETON
-        .replace(
-            "| -- | -- | -- | -- | -- |\n\n### Site rows",
-            "| -- | -- | -- | -- | -- |\n| A1/ast::Rule | Rule | -- | -- | -- |\n\n### Site rows",
-        )
-        .replace(
-            "### Unchanged\n\nNone yet.\n",
-            &format!("### Unchanged\n\n{unchanged}"),
-        )
+    inventory_with_one_register_item().replace(
+        "### Unchanged\n\nNone yet.\n",
+        &format!("### Unchanged\n\n{unchanged}"),
+    )
 }

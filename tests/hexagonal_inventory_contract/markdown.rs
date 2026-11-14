@@ -162,24 +162,50 @@ const NON_PRODUCTION_APPENDIX: &str = "Non-production site appendix";
 /// one surviving table is enough. Reporting the header is what turns the skip
 /// into a failure; a table with no header at all reports its first row.
 pub(super) fn non_id_register_headers(register: &str) -> Vec<String> {
-    let mut headers = Vec::new();
-    let mut in_appendix = false;
-    let mut table_open = false;
-
+    let mut scan = RegisterTableScan::default();
     for line in register.lines() {
+        scan.visit(line);
+    }
+    scan.headers
+}
+
+/// Track the register scan's position across lines and collect bad headers.
+///
+/// The position is stateful — whether the next row opens a table depends on
+/// the line before it — so it belongs in one place rather than in three local
+/// variables threaded through a nested loop.
+#[derive(Default)]
+struct RegisterTableScan {
+    headers: Vec<String>,
+    in_appendix: bool,
+    table_open: bool,
+}
+
+impl RegisterTableScan {
+    /// Update the scan position from one line of the register.
+    fn visit(&mut self, line: &str) {
         if let Some(title) = subsection_title(line) {
-            in_appendix = title == NON_PRODUCTION_APPENDIX;
-            table_open = false;
+            self.enter_subsection(title);
         } else if let Some(cell) = first_cell(line) {
-            if is_misheaded_register_table(table_open, in_appendix, cell) {
-                headers.push(cell.to_owned());
-            }
-            table_open = true;
+            self.enter_table_row(cell);
         } else {
-            table_open = false;
+            self.table_open = false;
         }
     }
-    headers
+
+    /// Restart table tracking inside a newly entered register subsection.
+    fn enter_subsection(&mut self, title: &str) {
+        self.in_appendix = title == NON_PRODUCTION_APPENDIX;
+        self.table_open = false;
+    }
+
+    /// Record a misheaded header, then mark the table as open.
+    fn enter_table_row(&mut self, cell: &str) {
+        if is_misheaded_register_table(self.table_open, self.in_appendix, cell) {
+            self.headers.push(cell.to_owned());
+        }
+        self.table_open = true;
+    }
 }
 
 /// Report whether a table row opens a register table that is not `ID`-headed.
