@@ -252,10 +252,10 @@ helper functions; their sum is the compiler message count.
 ### In-scope commits since the pin
 
 The snapshot remains pinned to the commit above. These are the commits between
-that pin and the branch's 2026-11-05 head that changed `src/`, `build.rs`,
+that pin and the branch's 2026-11-09 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 25 in the current `main` target, one
-adding this inventory's contract test, and nine refactoring or tightening that
-contract. Regenerate the list with
+adding this inventory's contract test, and eleven refactoring or tightening
+that contract. Regenerate the list with
 `git log 8a961000..HEAD --format=%h -- src build.rs tests test_support benches`;
 it goes stale whenever a commit touches one of those paths, so treat the
 enumeration below, not a remembered count, as the claim. This list is re-sweep
@@ -305,6 +305,8 @@ context for later consumers; it does not move the inventory pin.
 - `b51702ce3` Honour the Unchanged coverage source and split the test module
 - `7d8c7b6c7` Drop the doc comment from the real-inventory test
 - `10e1f9ce4` Name the roadmap closure count and report the observed value
+- `a8af397f4` Stop trace harvesters absorbing subheading prose
+- `2a7810622` Split the inventory contract into feature modules
 
 Three corrected text sweeps cover compiler blind spots. The Rust source list
 contains 936 files across `src/`, `build.rs`, `tests/`, `test_support/`,

@@ -663,6 +663,25 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   time (D-24). `10e1f9ce4` touches `tests/`, so the list was stale the moment
   it landed; the enumeration and live Git now match as sets in both directions
   at 35 commits.
+- [x] (2026-11-09) Closed the fail-open the tenth review found in the three
+  sibling harvesters (D-25). `excluded_tasks`, `trace_rows`, and
+  `unchanged_ids` now read `harvest_body`, which truncates at the first heading
+  of any depth; `heading_body` keeps nested content because `## Register`
+  legitimately nests `####` tables. Both readings were proved red-green by
+  reverting `markdown.rs` alone, and four new guards in `fail_open_tests.rs`
+  fail against the pre-fix parser.
+- [x] (2026-11-09) Split the contract crate root into feature modules
+  (D-26) after `make lint-whitaker` rejected `markdown` at 424 lines and
+  `tests` at 464 against the 400-line cap. The focused suite is 41/41.
+- [x] (2026-11-09) Ran the complete sequential eleven-gate set at `2a7810622`.
+  Every gate exited 0 with an unchanged HEAD and an empty working tree at both
+  ends of the batch. Doc-comment coverage 6,663/6,778 = 98.30%; 5,112 Nextest
+  cases passed with 7 skipped and every doctest passed; 1,756 workflow-contract
+  tests plus 28 workflow-script tests passed; 217 Markdown files linted with 0
+  issues; every Mermaid diagram validated.
+- [x] (2026-11-09) Regenerated the inventory's post-pin commit list a third
+  time (D-27). The two 2026-11-09 contract commits touch `tests/`, so the list
+  went stale the moment they landed; it now names all 37 in-scope commits.
 - [ ] EP-M4: publish the verified revision, apply the PR body, and take the
   pull request through hosted review to equilibrium.
 
@@ -1081,6 +1100,33 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   classified as 25 in `main`, one adding the contract, and nine refinements.
   Date/Author: 2026-11-05, implementing agent, after the ninth milestone
   CodeRabbit review.
+- Decision D-26 (2026-11-09): split the contract crate root into feature
+  modules. `make lint-whitaker` rejected the candidate at `a8af397f4` with two
+  hard errors, not warnings: `Module markdown spans 424 lines` and
+  `Module tests spans 464 lines`, both against the 400-line cap, target
+  `netsuke-build` test `hexagonal_inventory_contract_tests`. The split is by
+  feature rather than by layer: `register.rs` holds the identifier grammar,
+  `fixtures.rs` the shared skeletons and the `expect_validation_error` helper,
+  `parser_tests.rs` the parser unit cases, `tests.rs` the integrity cases, and
+  `fail_open_tests.rs` the prose-claimed-coverage guards. `markdown.rs` keeps
+  the parsing itself. Two compile errors followed the move and both were real:
+  `markdown.rs` needed `use super::register::is_well_formed_register_id;` for
+  `unchanged_identifier`, and `tests.rs` imported
+  `inventory_with_register_item_and_unchanged` after the only test using it
+  moved out. The focused suite is 41/41 and a targeted `make lint-whitaker` run
+  cleared both modules before the split was committed. Date/Author: 2026-11-09,
+  implementing agent, after the tenth milestone CodeRabbit review.
+- Decision D-27 (2026-11-09): regenerated the post-pin commit list a third
+  time. Both 2026-11-09 commits touch `tests/`, so the list went stale the
+  moment each landed — the third recurrence of the mechanism D-21 and D-24
+  record. The set was re-verified in both directions against the `git log`
+  command recorded in the inventory itself: 37 identifiers, no difference
+  either way, classified as 25 in `main`, one adding the contract, and eleven
+  refinements. The classification was measured rather than counted by hand:
+  `git merge-base --is-ancestor` on each identifier returned 25 `MAIN` and 12
+  `BRANCH`. The earlier prose headings that called this "the branch's
+  2026-11-05 head" now name 2026-11-09. Date/Author: 2026-11-09, implementing
+  agent, after the tenth milestone CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1092,10 +1138,14 @@ the in-scope commits since its unchanged pin.
 
 The hosted CodeScene re-review of `03eb4da90` reported duplicate heading
 wrappers; `7a48c76a5` replaced them with one contract-local `HeadingLevel`
-parser, and `docs/developers-guide.md` states that parser's scope. Every
-CodeRabbit finding raised on this branch is dispositioned in the decision log,
-and the complete sequential eleven-gate set passed on `10e1f9ce4` with an
-unchanged HEAD and an empty working tree at both ends of the batch.
+parser, and `docs/developers-guide.md` states that parser's scope. The tenth
+CodeRabbit review then found that the parser's fail-open applied to three
+sibling harvesters as well; `a8af397f4` closed it by separating the region
+slice from the harvest, and `2a7810622` split the crate root into feature
+modules to satisfy the 400-line cap. Every CodeRabbit finding raised on this
+branch is dispositioned in the decision log, and the complete sequential
+eleven-gate set passed on `2a7810622` with an unchanged HEAD and an empty
+working tree at both ends of the batch.
 
 What remains is not implementation. The pull request is open and still a draft,
 its published head is the earlier `03eb4da90`, and the branch has advanced well
@@ -2068,6 +2118,24 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   with the regenerating command plus a note that the enumeration is the claim.
   The verification candidate is now this revision; the gate run that binds it
   follows.
+- Revision 42 (2026-11-09): dispositioned the tenth milestone CodeRabbit
+  review (D-25). Its backslash-continuation finding was accepted, and its
+  finding-boundary finding was accepted after a new probe failed against the
+  old parser. Its sibling-parser claim was accepted only after my own reading
+  of the code said otherwise and two more probes showed the reading was wrong: a
+  `Subsection` body ran through deeper headings because
+  `"#### Notes".strip_prefix("### ")` fails. `heading_body` now keeps nesting
+  for the `## Register` region, and a new `harvest_body` truncates at the first
+  heading of any depth for the three harvesters. Four `fail_open_tests.rs`
+  guards cover the new rejections. D-26 then split the crate root into feature
+  modules after `make lint-whitaker` rejected two of its modules at 424 and 464
+  lines against the 400-line cap, and D-27 regenerated the inventory's post-pin
+  list because both commits touch `tests/`. The eleven-gate set passed on
+  `2a7810622`. This revision's own changes are documentation-only but not
+  trivial for the gates: `make test` reads both `docs/execplans/*.md` and the
+  inventory, `make markdownlint` reads every changed Markdown file, and
+  `make check-fmt` re-wraps them. A fresh eleven-gate run therefore binds this
+  revision rather than inheriting `2a7810622`'s, and `Progress` records it.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
