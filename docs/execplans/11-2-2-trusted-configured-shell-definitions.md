@@ -309,6 +309,75 @@ explicit and exercise the actual adapters in tests.
     jobs failed earlier, in `Install Whitaker`, on an HTTP 504 fetching
     `dylint-link-x86_64-unknown-linux-gnu-v6.3.0.tgz` from the rolling release;
     that is a transient archive fault and is rerun, not repaired.
+  - [x] 2026-11-14: Rebase the 23-commit series from the previous base
+    `8dfbab416` onto `origin/main` at `750f56a22`, the publishing-merge
+    advance, replaying with `--merge --no-fork-point --no-update-refs
+    --no-autostash --reapply-cherry-picks --keep-empty --empty=stop` and
+    `zdiff3`. Tracked `.gitattributes` opts `shells/spelling.rs` into the Weave
+    driver, so every `rebase` and `--continue` ran with the documented
+    command-scoped bypass, `merge.weave.driver='git merge-file --zdiff3
+    --marker-size=%L %A %O %B'` plus `merge.weave.recursive=text`; the tracked
+    attribute file was left untouched. `range-diff` reports `=` for 20 of the
+    23 pairs. The three that differ each keep both sides' intent:
+    `tests/cli_tests/merge_probe.rs` adopts upstream's new
+    `parse_with_localizer_from(args, &localizer, clap::ColorChoice::Auto)`
+    signature; `src/cli/config/mod.rs` keeps the branch's file, whose
+    `impl Default for CliConfig` block has moved to `defaults.rs`, while
+    upstream's only change there was deleting one blank line inside that block;
+    and the documentation commit keeps upstream's reordered
+    `EXPECTED_EXAMPLE_IDS` list and repository-layout tree
+    (`terminal_rendering/`, `terminal_rendering_tests.rs`) alongside this
+    branch's `guide-configured-shell-definition` identifier and renamed
+    snapshot directory. No conflict marker survives and `git diff --check`
+    is clean.
+  - [x] 2026-11-14: Repair the findings the ExecPlan and proof assessments
+    raised against `93af3ad3f`. Six changes, each with its own red evidence:
+    `is_unc_share` now requires a server and a share name, so `\\`, `//`,
+    `\\server`, and `\\server\` are rejected as rooted without a drive while
+    `\\server\share` and `//server/share/shell.exe` stay accepted; every
+    `shells` occurrence diagnostic, including the unauthorized-key error, now
+    ends `; declared in "<path>"` with the path rendered through the same
+    bounded, escaped preview as a rejected value; composition errors name
+    `shells[index].name` and `shells[first].name` rather than the bare indices;
+    the oracle gained a layered property (zero to eight layers of zero to
+    sixteen definitions), a regrouping property, and a six-class witness test;
+    and the argument budget gained 4095/4096/4097 byte cases built from
+    three-byte characters plus a shared-budget case.
+  - [x] 2026-11-14: Run the four mutation controls the verification plan
+    requires, restoring every mutation before continuing. Removing duplicate
+    rejection from `check_definition` fails
+    `a_duplicate_message_names_both_positions`, both
+    `repeated_names_are_rejected` cases, `every_layer_class_reaches_a_verdict`,
+    `production_composition_agrees_with_the_oracle`, and
+    `layered_registries_agree_with_the_oracle`; removing
+    `!appears_before(names, processed - 1)` from `walk_prefix` fails
+    verification at `walk_prefix_is_accept_prefix` with 8 verified and 1 error.
+    Removing the built-in lookup fails `built_in_names_are_rejected`,
+    `a_reserved_repeat_reports_the_reserved_rule`, and the same three oracle
+    tests; removing `!reserved(names[processed - 1])` fails verification at
+    `walk_prefix_is_accept_prefix` and `non_vacuity_witnesses` with 7 verified
+    and 2 errors. The restored model reports 9 verified and 0 errors.
+  - [x] 2026-11-14: Clear two rounds of Clippy findings the repair introduced,
+    each caught by the `lint` gate rather than by the focused test runs.
+    `clippy::missing_const_for_fn` and `clippy::option_if_let_else` rejected
+    `OccurrenceReport::new` and its `decorate` `match`, which became
+    `const fn new` and `self.source.map_or_else(...)`. The repository also
+    denies `clippy::integer_division` and
+    `clippy::integer_division_remainder_used`, which rejected the byte-budget
+    fixtures' `bytes / 3`, `bytes % 3`, and `MAX_ARGUMENT_BYTES / 2`. Both
+    helpers now avoid arithmetic on the budget: `multibyte_text` appends whole
+    three-byte characters while they still fit and pads with one-byte
+    characters, and the shared-budget case uses a one-byte first element so
+    the second element alone states the remainder. `make lint-clippy` then
+    exits 0.
+  - [x] 2026-11-14: Repair one stale assertion the `test` gate caught after the
+    composition messages were reworded. The BDD step
+    `loading_fails_at_duplicate_name` in
+    `tests/bdd/steps/configured_shells.rs` still demanded the phrase
+    `already names`, which the new message replaced with `already declares`,
+    so `configured_shells_layered_names_must_be_unique` failed with the
+    correct diagnostic in hand. The step now asserts `already declares`; all
+    four `configured_shells` scenarios pass.
 
 ## Surprises & discoveries
 
@@ -446,6 +515,33 @@ now asserted against both host families so a Linux gate catches the class. Note
 also that the job stopped at its first failure, leaving 1429 of 4723 tests
 unrun, so a green rerun is the only evidence for the rest.
 
+A generated property can agree with its oracle on every sample and still be
+nearly vacuous for one of the rules it is meant to cover. The first version of
+the layered generator drew each name uniformly from the seven-name pool, so a
+registry of up to 128 names almost always contained a reserved spelling. Both
+the walk and the oracle then rejected the sample for the reserved rule, and the
+duplicate rule was never the deciding difference. The duplicate mutation
+control passed that property for exactly that reason while failing the
+single-sequence one, whose five-name sequences sometimes avoid the reserved
+names. Weighting unreserved names three to one against reserved spellings made
+duplicate-only registries common, and the same mutation then failed the layered
+property too. Non-vacuity has to be demonstrated against the mutation rather
+than argued from a generator's bounds.
+
+`OrthoError::Validation` carries only a key and a message, so the declaring
+file cannot be reported as structured data. The source therefore appears inside
+the message text, rendered through the same bounded and escaped preview as a
+rejected value, and the JSON diagnostic's `source` field stays `null`. That is
+the honest shape the dependency allows; a consumer that needs the path
+structurally would have to parse it back out.
+
+Verifying that a model mutation fails is only half of the control. Removing the
+duplicate clause from `walk_prefix` leaves the reserved clause in place, so the
+run still discharges eight obligations and reports 8 verified with 1 error. The
+verified and error counts, not merely a non-zero exit, are what distinguish
+"the mutation was caught by the intended obligation" from "the run happened to
+fail".
+
 ## Decision log
 
 - 2026-10-20: Keep the plan approval-gated and the roadmap entry unchecked.
@@ -556,6 +652,35 @@ unrun, so a green rerun is the only evidence for the rest.
   predicates are a coherent unit: pure text inspection shared by both host
   families, holding no state in common with the `ShellExecutable` value they
   validate.
+- 2026-11-14: Require a complete UNC share, not two separators. Windows treats
+  `\\` as unresolved, and `\\server` names no share, so accepting either would
+  claim an absolute program reference that no path resolution can honour. They
+  now report the same `RootedWithoutDrive` fault as `/opt/tool`, which is the
+  closest true statement about a rooted spelling with no drive.
+- 2026-11-14: Report the declaring file inside the diagnostic message rather
+  than as structured source metadata. `OrthoError::Validation` has no source
+  field, and inventing one would mean changing the shared validation helper and
+  the JSON rendering for a single key. The preview goes through the existing
+  bounded, escaped renderer, so a path with a control character or an extreme
+  length is as safe as a rejected value.
+- 2026-11-14: Bundle the declaring path with the collected errors in an
+  `OccurrenceReport` instead of adding a fifth parameter to every check. The
+  repository's four-argument limit binds here, and a type that owns both pieces
+  also makes it impossible to push a diagnostic that silently omits the source.
+- 2026-11-14: Name `shells[index].name` in composition errors. The merged
+  registry has no single declaring file, so the source clause cannot apply, but
+  C5 requires the field path, and `shells[1]` alone leaves the operator to
+  guess which field collided.
+- 2026-11-14: Weight the layered generator towards unreserved names three to
+  one. A uniform draw masks the duplicate rule behind the reserved rule in
+  large registries, which the duplicate mutation control demonstrated. The
+  weights are a coverage choice, not a production limit.
+- 2026-11-14: Commit `proptest-regressions/cli/config/shells/tests/oracle.txt`.
+  It was written while the mutation controls were live, so it pins no real
+  defect, but its four seeds are the minimal witnesses (`["dash", "dash"]`,
+  `[["fish", "fish"]]`, `["sh"]`, `[["sh"]]`) and replaying them first makes
+  both rules' smallest counterexamples deterministic on every run. The
+  repository already tracks nine such files.
 
 ## Outcomes & retrospective
 
@@ -582,6 +707,16 @@ earlier verdict, so the whole set was rerun rather than reasoned about. Second,
 a plan edit is not a docs-only delta, because
 `tests/execplan_status_contract_tests.rs` reads every plan from disk; the
 plan's own prose therefore has to clear the same gates as the code it describes.
+
+The two hosted assessments then found four gaps the local evidence had missed:
+an incomplete UNC share was accepted as absolute, a rejection named the field
+but not the file that declared it, the composition error named indices rather
+than `shells[i].name`, and the layered obligation had no generated test at all.
+All four are repaired here. The third lesson is the sharpest: the layered
+property, once written, agreed with its oracle so consistently that it passed a
+deliberately broken build, because a uniform name pool put a reserved spelling
+into almost every large registry. Only the mutation control exposed that, and
+the property was rewritten before it was trusted.
 
 Executable resolution is 11.2.3 and structured-command integration is 12.3.1;
 neither is claimed here. The wider issue #593 stays open.
@@ -775,7 +910,13 @@ Unicode, all reserved Boolean words, empty/NUL executables, bare/absolute and
 relative path families, 0/1/16/17 arguments, NUL arguments, empty elements, and
 4095/4096/4097 UTF-8 bytes including multibyte characters. Test every supported
 configuration format through the real loader where practical. Missing and extra
-fields must have explicit cases. Conventional tests suffice here.
+fields must have explicit cases. Conventional tests suffice here. The byte
+cases are built from three-byte characters with a one-byte remainder, so a
+limit applied to `chars().count()` rather than to `len()` is rejected at 4096,
+and a separate case proves the budget is shared across elements rather than
+applied to each one. The Windows path cases cover the complete UNC share in
+both separator spellings and reject `\\`, `//`, `\\server`, and `\\server\` as
+rooted without a drive.
 
 C3 combines direct post-merge tests, real OrthoConfig layer tests, the
 unbounded Verus model, and generated oracle comparisons. Generate zero to eight
@@ -785,12 +926,35 @@ are test bounds, not production limits. Acceptance under regrouping of
 unchanged ordered layers must match; order changes may change the first error
 but never validity. Record class coverage and avoid filtering away collisions.
 
+Class coverage is recorded twice. `every_layer_class_reaches_a_verdict` states
+one named witness per class — empty layers only, unique names across layers, a
+reserved spelling, an identical duplicate, a duplicate split across layers, and
+an empty layer that cannot clear an earlier duplicate — and asserts both the
+production verdict and the oracle verdict for it. `generated_layers` reaches
+those classes without filtering, but drawing each name uniformly would let the
+reserved rule mask the duplicate rule in large registries, so the element
+strategy weights unreserved names three to one. The test
+`the_generator_pool_reaches_every_outcome` asserts that both halves of the pool
+are drawn from names the pool really contains, so the weights cannot drift away
+from the pool.
+
 Non-vacuity evidence includes an empty successful registry, two distinct
 configured names succeeding, a built-in rejection, and a duplicate introduced
 only in the last layer. Temporarily remove duplicate rejection and separately
 reserved-name rejection: the focused tests must fail and the corresponding
 model mutation must fail verification. Restore mutations before any commit. No
-incorrect program or intentionally false theorem remains in the tree.
+incorrect program or intentionally false theorem remains in the tree. The
+recorded controls are: removing duplicate rejection from `check_definition`
+fails `a_duplicate_message_names_both_positions`, both
+`repeated_names_are_rejected` cases, `every_layer_class_reaches_a_verdict`,
+`production_composition_agrees_with_the_oracle`, and
+`layered_registries_agree_with_the_oracle`; removing `!appears_before` from
+`walk_prefix` fails verification with 8 verified and 1 error; removing the
+built-in lookup fails `built_in_names_are_rejected`,
+`a_reserved_repeat_reports_the_reserved_rule`, and the same three oracle tests;
+removing `!reserved` fails verification with 7 verified and 2 errors. Every
+mutation was reverted from a byte-identical copy, and the restored model
+reports 9 verified and 0 errors.
 
 C4 is an explicit operator assumption, demonstrated by documented `dash`
 `args = ["-c"]` examples; no proof or test claims arbitrary evaluator-prefix

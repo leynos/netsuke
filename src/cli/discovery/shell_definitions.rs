@@ -12,13 +12,23 @@
 //! appearing in a diagnostic: a mistyped `args` may be an arbitrary string, and
 //! echoing it would break the rule that a diagnostic never prints an argument
 //! vector.
+//!
+//! Every diagnostic also names the file that declared the occurrence, because
+//! the same key and index appear in several layers and the operator needs to
+//! know which file to edit. The path is rendered through the same bounding and
+//! escaping as a rejected value, so an unusual directory name cannot break the
+//! message across lines or emit terminal control sequences.
 
+use camino::Utf8Path;
 use ortho_config::OrthoError;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use std::sync::Arc;
 
-use crate::cli::config::shells::{ShellArguments, ShellExecutable, preview::bounded};
+use crate::cli::config::shells::{
+    ShellArguments, ShellExecutable,
+    preview::{bounded, preview},
+};
 use crate::shell_selection::ShellName;
 
 use super::super::constants::SHELLS_KEY;
@@ -41,8 +51,11 @@ pub(super) fn declares_shells(value: &Value) -> bool {
 }
 
 /// Explain why a source other than an operator root may not declare definitions.
-pub(super) fn untrusted_shells_error() -> Arc<OrthoError> {
-    validation_error(SHELLS_KEY, UNTRUSTED_SHELLS_MESSAGE)
+///
+/// The message names the source when the layer has a file, so an operator can
+/// tell which untrusted file carried the key.
+pub(super) fn untrusted_shells_error(source: Option<&Utf8Path>) -> Arc<OrthoError> {
+    OccurrenceReport::new(source).error(SHELLS_KEY, UNTRUSTED_SHELLS_MESSAGE)
 }
 
 /// State the trust boundary that reserves `shells` for operator configuration.
@@ -56,53 +69,90 @@ const UNTRUSTED_SHELLS_MESSAGE: &str = concat!(
 /// An absent key yields no errors, because the field defaults to an empty
 /// registry. Every fault is collected rather than thrown, so an operator sees
 /// all of a file's mistakes in one run.
-pub(super) fn occurrence_errors(value: &Value) -> Vec<Arc<OrthoError>> {
-    let mut errors = Vec::new();
+pub(super) fn occurrence_errors(value: &Value, source: Option<&Utf8Path>) -> Vec<Arc<OrthoError>> {
+    let mut report = OccurrenceReport::new(source);
     let Some(declared) = value.get(SHELLS_KEY) else {
-        return errors;
+        return report.errors;
     };
     let Some(entries) = declared.as_array() else {
-        errors.push(validation_error(
-            SHELLS_KEY,
-            "must be a list of shell definitions",
-        ));
-        return errors;
+        report.reject(SHELLS_KEY, "must be a list of shell definitions");
+        return report.errors;
     };
     for (index, entry) in entries.iter().enumerate() {
-        check_occurrence(index, entry, &mut errors);
+        check_occurrence(index, entry, &mut report);
     }
-    errors
+    report.errors
+}
+
+/// Collect occurrence diagnostics together with the file that declared them.
+///
+/// Bundling the declaring path with the error list keeps one extra argument on
+/// every check instead of two, and makes it impossible to push a diagnostic
+/// that silently omits the source.
+struct OccurrenceReport<'a> {
+    /// File that declared the occurrence, absent for a source with no path.
+    source: Option<&'a Utf8Path>,
+    /// Collected diagnostics, in the order the checks found them.
+    errors: Vec<Arc<OrthoError>>,
+}
+
+impl<'a> OccurrenceReport<'a> {
+    /// Start a report for one occurrence in `source`.
+    const fn new(source: Option<&'a Utf8Path>) -> Self {
+        Self {
+            source,
+            errors: Vec::new(),
+        }
+    }
+
+    /// Record `message` against `key`, naming the declaring file when known.
+    fn reject(&mut self, key: &str, message: &str) {
+        self.errors.push(self.error(key, message));
+    }
+
+    /// Build one diagnostic without recording it.
+    fn error(&self, key: &str, message: &str) -> Arc<OrthoError> {
+        validation_error(key, &self.decorate(message))
+    }
+
+    /// Append the declaring-file clause to `message`.
+    fn decorate(&self, message: &str) -> String {
+        self.source.map_or_else(
+            || message.to_owned(),
+            |path| format!("{message}; declared in {}", preview(path.as_str())),
+        )
+    }
 }
 
 /// Validate one `shells[index]` entry as a table of exactly three fields.
-fn check_occurrence(index: usize, entry: &Value, errors: &mut Vec<Arc<OrthoError>>) {
+fn check_occurrence(index: usize, entry: &Value, report: &mut OccurrenceReport<'_>) {
     let Some(fields) = entry.as_object() else {
-        errors.push(validation_error(
+        report.reject(
             &format!("{SHELLS_KEY}[{index}]"),
             "must be a table declaring name, executable, and args",
-        ));
+        );
         return;
     };
-    reject_unknown_fields(index, fields, errors);
-    check_text_field::<ShellName>(index, "name", fields, errors);
-    check_text_field::<ShellExecutable>(index, "executable", fields, errors);
-    check_arguments(index, fields, errors);
+    reject_unknown_fields(index, fields, report);
+    check_text_field::<ShellName>(index, "name", fields, report);
+    check_text_field::<ShellExecutable>(index, "executable", fields, report);
+    check_arguments(index, fields, report);
 }
 
 /// Reject any declared field outside the three a definition may carry.
 fn reject_unknown_fields(
     index: usize,
     fields: &Map<String, Value>,
-    errors: &mut Vec<Arc<OrthoError>>,
+    report: &mut OccurrenceReport<'_>,
 ) {
     for field in fields.keys() {
         if DEFINITION_FIELDS.contains(&field.as_str()) {
             continue;
         }
-        errors.push(validation_error(
+        report.reject(
             &format!("{SHELLS_KEY}[{index}].{}", bounded(field)),
             "is not a field of a shell definition; expected name, executable, and args",
-        ));
+        );
     }
 }
 
@@ -114,24 +164,18 @@ fn check_text_field<T: DeserializeOwned>(
     index: usize,
     field: &str,
     fields: &Map<String, Value>,
-    errors: &mut Vec<Arc<OrthoError>>,
+    report: &mut OccurrenceReport<'_>,
 ) {
     let Some(value) = fields.get(field) else {
-        errors.push(missing_field(index, field));
+        report.reject(&field_key(index, field), MISSING_FIELD_MESSAGE);
         return;
     };
     if !value.is_string() {
-        errors.push(validation_error(
-            &field_key(index, field),
-            "must be a string",
-        ));
+        report.reject(&field_key(index, field), "must be a string");
         return;
     }
     if let Err(error) = serde_json::from_value::<T>(value.clone()) {
-        errors.push(validation_error(
-            &field_key(index, field),
-            &error.to_string(),
-        ));
+        report.reject(&field_key(index, field), &error.to_string());
     }
 }
 
@@ -139,42 +183,30 @@ fn check_text_field<T: DeserializeOwned>(
 ///
 /// A non-string element is reported by position and never echoed, because the
 /// element is arbitrary text that a diagnostic must not print.
-fn check_arguments(index: usize, fields: &Map<String, Value>, errors: &mut Vec<Arc<OrthoError>>) {
+fn check_arguments(index: usize, fields: &Map<String, Value>, report: &mut OccurrenceReport<'_>) {
     let Some(value) = fields.get("args") else {
-        errors.push(missing_field(index, "args"));
+        report.reject(&field_key(index, "args"), MISSING_FIELD_MESSAGE);
         return;
     };
     let Some(elements) = value.as_array() else {
-        errors.push(validation_error(
-            &field_key(index, "args"),
-            "must be a list of strings",
-        ));
+        report.reject(&field_key(index, "args"), "must be a list of strings");
         return;
     };
     if let Some(position) = elements.iter().position(|element| !element.is_string()) {
-        errors.push(validation_error(
-            &field_key(index, "args"),
-            &format!("argument {position} must be a string"),
-        ));
+        let message = format!("argument {position} must be a string");
+        report.reject(&field_key(index, "args"), &message);
         return;
     }
     if let Err(error) = serde_json::from_value::<ShellArguments>(value.clone()) {
-        errors.push(validation_error(
-            &field_key(index, "args"),
-            &error.to_string(),
-        ));
+        report.reject(&field_key(index, "args"), &error.to_string());
     }
 }
+
+/// State that a definition must declare every field and one is absent.
+const MISSING_FIELD_MESSAGE: &str =
+    "is required; a shell definition must declare name, executable, and args";
 
 /// Build the diagnostic key for one field of one occurrence.
 fn field_key(index: usize, field: &str) -> String {
     format!("{SHELLS_KEY}[{index}].{field}")
-}
-
-/// Report a field a definition must declare and does not.
-fn missing_field(index: usize, field: &str) -> Arc<OrthoError> {
-    validation_error(
-        &field_key(index, field),
-        "is required; a shell definition must declare name, executable, and args",
-    )
 }

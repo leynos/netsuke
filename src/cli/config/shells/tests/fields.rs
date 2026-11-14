@@ -19,6 +19,8 @@ use rstest::rstest;
 #[case::windows_drive_absolute(HostFamily::Windows, "C:\\tools\\shell.exe")]
 #[case::windows_drive_absolute_forward(HostFamily::Windows, "C:/tools/shell.exe")]
 #[case::windows_unc_share(HostFamily::Windows, "\\\\server\\share\\shell.exe")]
+#[case::windows_unc_share_forward(HostFamily::Windows, "//server/share/shell.exe")]
+#[case::windows_unc_share_without_program(HostFamily::Windows, "\\\\server\\share")]
 fn executable_spellings_are_accepted(#[case] host: HostFamily, #[case] text: &str) {
     assert!(
         ShellExecutable::parse(text, host).is_ok(),
@@ -41,6 +43,22 @@ fn executable_spellings_are_accepted(#[case] host: HostFamily, #[case] text: &st
 #[case::drive_relative(HostFamily::Windows, "C:tool", ExecutableError::DriveRelative)]
 #[case::rooted_without_drive(HostFamily::Windows, "/opt/tool", ExecutableError::RootedWithoutDrive)]
 #[case::windows_relative(HostFamily::Windows, "bin\\dash", ExecutableError::RelativePath)]
+#[case::windows_separators_only(HostFamily::Windows, "\\\\", ExecutableError::RootedWithoutDrive)]
+#[case::windows_unc_without_share(
+    HostFamily::Windows,
+    "\\\\server",
+    ExecutableError::RootedWithoutDrive
+)]
+#[case::windows_unc_trailing_separator(
+    HostFamily::Windows,
+    "\\\\server\\",
+    ExecutableError::RootedWithoutDrive
+)]
+#[case::windows_forward_separators_only(
+    HostFamily::Windows,
+    "//",
+    ExecutableError::RootedWithoutDrive
+)]
 fn executable_spellings_are_rejected(
     #[case] host: HostFamily,
     #[case] text: &str,
@@ -102,6 +120,65 @@ fn the_byte_budget_is_exact() {
     assert!(ShellArguments::parse(&at_budget).is_ok());
 
     let over_budget = vec!["x".repeat(MAX_ARGUMENT_BYTES + 1)];
+    assert_eq!(
+        ShellArguments::parse(&over_budget),
+        Err(ArgumentsError::TooLong)
+    );
+}
+
+/// Count UTF-8 bytes rather than characters at the budget boundary.
+///
+/// A three-byte character repeated to the character limit is three times the
+/// byte budget, so a limit applied to `chars().count()` would accept a vector
+/// that cannot be stored within the stated size.
+#[rstest]
+#[case::one_byte_below(MAX_ARGUMENT_BYTES - 1, true)]
+#[case::exactly_at_the_budget(MAX_ARGUMENT_BYTES, true)]
+#[case::one_byte_above(MAX_ARGUMENT_BYTES + 1, false)]
+fn the_byte_budget_counts_bytes(#[case] bytes: usize, #[case] accepted: bool) {
+    let arguments = vec![multibyte_text(bytes)];
+    assert_eq!(
+        ShellArguments::parse(&arguments).is_ok(),
+        accepted,
+        "{} bytes of multibyte text must be {}",
+        bytes,
+        if accepted { "accepted" } else { "rejected" }
+    );
+}
+
+/// Build text of exactly `bytes` UTF-8 bytes using three-byte characters.
+///
+/// Whole three-byte characters are appended while they still fit, and
+/// one-byte characters fill the rest, so the boundary cases name an exact byte
+/// total without any arithmetic on the budget itself. The repository denies
+/// integer division outright, and counting characters to reach a byte total is
+/// the error these cases exist to catch.
+fn multibyte_text(bytes: usize) -> String {
+    let mut text = String::with_capacity(bytes);
+    while text.len() + '€'.len_utf8() <= bytes {
+        text.push('€');
+    }
+    while text.len() < bytes {
+        text.push('x');
+    }
+    assert_eq!(
+        text.len(),
+        bytes,
+        "the fixture must hit the named byte total"
+    );
+    text
+}
+
+/// Sum the whole vector against one shared budget.
+///
+/// The budget applies to the arguments together, so two elements that are each
+/// comfortably within it can still exceed it as a pair.
+#[test]
+fn the_byte_budget_is_shared_across_elements() {
+    let at_budget = vec!["x".to_owned(), "y".repeat(MAX_ARGUMENT_BYTES - 1)];
+    assert!(ShellArguments::parse(&at_budget).is_ok());
+
+    let over_budget = vec!["x".to_owned(), "y".repeat(MAX_ARGUMENT_BYTES)];
     assert_eq!(
         ShellArguments::parse(&over_budget),
         Err(ArgumentsError::TooLong)

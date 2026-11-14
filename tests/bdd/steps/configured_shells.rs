@@ -276,7 +276,7 @@ fn loading_fails_at_duplicate_name(world: &TestWorld) -> Result<()> {
         "failure should name both duplicate positions, got: {stderr}"
     );
     ensure!(
-        stderr.contains("already names"),
+        stderr.contains("already declares"),
         "failure should explain the collision, got: {stderr}"
     );
     Ok(())
