@@ -7,12 +7,12 @@
 use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, find_script_substitution,
     invalid_command_error,
-    posix_lexical::{
-        EscapeBeforeMarker, PosixCharacter, PosixLexicalState, backslash_escapes_marker,
-    },
+    posix_lexical::{PosixCharacter, PosixLexicalState, SourceChar, backslash_escapes_marker},
 };
 
 mod delimiters;
+
+mod heredoc;
 
 use delimiters::ScriptCommandSubstitution;
 
@@ -36,8 +36,6 @@ pub(super) struct ScriptSubstitutionTraversal<'template, 'bindings> {
     is_escaped: bool,
     /// Retain nested command substitutions whose markers must be rejected.
     command_substitutions: Vec<ScriptCommandSubstitution>,
-    /// Record the `)` that closed the most recent command substitution.
-    closed_command_substitution: Option<usize>,
 }
 
 /// Describe the quoting mode that controls placeholder substitution.
@@ -68,7 +66,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             posix_lexical: PosixLexicalState::new(),
             is_escaped: false,
             command_substitutions: Vec::new(),
-            closed_command_substitution: None,
         }
     }
 
@@ -88,7 +85,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         let substitution = find_script_substitution(self.chars, pos);
         let next = self.append_substitution_or_character(pos, ch, substitution)?;
         if ch == '\n' {
-            self.posix_lexical.begin_pending_heredoc_after_newline(next);
+            self.posix_lexical.begin_pending_heredoc_after_newline();
         }
         Ok(next)
     }
@@ -173,43 +170,19 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         Ok(None)
     }
 
-    /// Preserve unquoted POSIX heredoc declarations before their bodies become inert.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when a delimiter word would lower a
-    /// marker directly after an active escape.
-    fn append_unquoted_posix_lexical_character(
-        &mut self,
-        pos: usize,
-        ch: char,
-    ) -> Result<Option<usize>, IrGenError> {
-        if self.active_quote_context() != ShellQuoteContext::Unquoted
-            || self.backtick_outer_context.is_some()
-        {
-            return Ok(None);
-        }
-        let mut character = PosixCharacter {
-            chars: self.chars,
-            pos,
-            ch,
-            output: &mut self.output,
-        };
-        self.posix_lexical
-            .append_heredoc_declaration(&mut character, self.bindings)
-            .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))
-    }
-
     /// Return whether `ch` begins a POSIX shell comment in ordinary text.
+    ///
+    /// An arithmetic expansion is not ordinary text: `#` there is arithmetic
+    /// syntax, and a comment started inside `$(( ))` would swallow the rest of
+    /// the line the shell still evaluates. The command traversal already
+    /// suspends comment detection inside arithmetic, so this guard keeps both
+    /// traversals on the same contract.
     fn starts_comment(&self, pos: usize, ch: char) -> bool {
-        self.active_quote_context() == ShellQuoteContext::Unquoted
-            && self.backtick_outer_context.is_none()
-            && PosixLexicalState::starts_comment(
-                self.chars,
-                pos,
-                ch,
-                self.closed_command_substitution,
-            )
+        self.is_plain_script_text()
+            && !self.is_in_arithmetic_expansion()
+            && self
+                .posix_lexical
+                .starts_comment(self.chars, pos, SourceChar::new(ch))
     }
 
     /// Report whether a backslash begins an escape of the following character.
@@ -283,6 +256,18 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         self.output
             .push_str(self.bindings.substitution(placeholder, context));
         Ok(pos + skip)
+    }
+
+    /// Return whether the innermost active substitution is arithmetic.
+    ///
+    /// An arithmetic body evaluates numbers, so `<<` there is a shift
+    /// operator. Heredoc tracking must not run inside one: the tracker would
+    /// invent a body the shell never starts and end it at a line that is still
+    /// inside an expansion.
+    fn is_in_arithmetic_expansion(&self) -> bool {
+        self.command_substitutions
+            .last()
+            .is_some_and(delimiters::ScriptCommandSubstitution::is_arithmetic)
     }
 
     /// Return the quote context of the innermost command substitution when active.

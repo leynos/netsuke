@@ -221,7 +221,10 @@ se reescribe en el texto activo de la receta; consulta la nota siguiente).
 
 [^inert]: En las rutas POSIX y Bash, Netsuke copia los marcadores de los
     comentarios y del cuerpo de los heredoc como tokens internos, sin expandirlos;
-    los marcadores de los delimitadores de heredoc sí se expanden. Las recetas
+    los marcadores de los delimitadores de heredoc sí se expanden. Consulte el
+    [límite de seguridad de la guía del usuario](docs/users-guide.md#review-the-safety-boundary)
+    para las reglas de delimitadores y cuerpos de heredoc, incluidas las
+    formas que Netsuke rechaza. Las recetas
     `command:` y `script:` de PowerShell rechazan marcadores entre comillas
     simples o dobles, en here-strings, en `$()` y justo después de un acento
     grave. También se rechaza un marcador pegado a cualquier carácter de comilla

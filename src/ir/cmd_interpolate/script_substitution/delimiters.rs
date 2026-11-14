@@ -8,6 +8,7 @@
 use super::super::command_substitution::{
     CaseNesting, CaseObservation, SubstitutionBoundary, reject_ambiguous_case_comment,
 };
+use super::super::posix_lexical::SubstitutionKind;
 use super::{IrGenError, ScriptSubstitutionTraversal, ShellQuoteContext};
 
 /// Track one nested POSIX command substitution while traversing a script.
@@ -23,6 +24,8 @@ pub(super) struct ScriptCommandSubstitution {
     start: usize,
     /// Track `case ... esac` nesting so a pattern terminator is not a closer.
     pub(super) case_nesting: CaseNesting,
+    /// Record what the delimiter opened: a command list or an arithmetic body.
+    kind: SubstitutionKind,
 }
 
 /// Identify a command-substitution delimiter in a script traversal.
@@ -37,13 +40,19 @@ enum ScriptCommandSubstitutionDelimiter {
 
 impl ScriptCommandSubstitution {
     /// Initialise the outermost group of one command substitution.
-    const fn new(start: usize) -> Self {
+    const fn new(start: usize, kind: SubstitutionKind) -> Self {
         Self {
             quote_context: ShellQuoteContext::Unquoted,
             parenthesis_depth: 1,
             start,
             case_nesting: CaseNesting::new(),
+            kind,
         }
+    }
+
+    /// Report whether this substitution's body is an arithmetic expansion.
+    pub(super) const fn is_arithmetic(&self) -> bool {
+        matches!(self.kind, SubstitutionKind::Arithmetic)
     }
 }
 
@@ -60,7 +69,11 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         match delimiter {
             ScriptCommandSubstitutionDelimiter::Start => {
                 self.command_substitutions
-                    .push(ScriptCommandSubstitution::new(pos));
+                    .push(ScriptCommandSubstitution::new(
+                        pos,
+                        SubstitutionKind::at(self.chars, pos),
+                    ));
+                self.posix_lexical.enter_command_substitution_region();
                 self.output.push_str("$(");
                 Ok(Some(pos + 2))
             }
@@ -92,8 +105,9 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             return Ok(None);
         };
         if is_closed {
+            self.posix_lexical.leave_command_substitution_region();
             reject_ambiguous_case_comment(self.chars, &boundary)?;
-            self.closed_command_substitution = Some(pos);
+            self.posix_lexical.record_closed_command_substitution(pos);
         }
         self.output.push(ch);
         Ok(Some(pos + 1))

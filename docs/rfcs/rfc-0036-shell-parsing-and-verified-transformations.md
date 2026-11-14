@@ -253,7 +253,7 @@ introduce another shell grammar to reconstruct missing spans.
 The adapter MUST analyse marker-neutralized source under section 4.1. It MUST
 NOT hand a qualified parser marker-filled or fully substituted source to decide
 an insertion role or a source extent. The
-[existing heredoc tests](../../src/ir/cmd_interpolate/tests.rs) support
+[existing heredoc tests](../../src/ir/cmd_interpolate/tests/mod.rs) support
 marker-derived delimiters, a role section 4.1 rejects; the qualification ADR
 MUST record that rejection and its migration guidance rather than invent a
 staged parse that would give binding data source authority.

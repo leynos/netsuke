@@ -2611,7 +2611,9 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   vertical tab, or form feed stays part of the delimiter, so the closing line
   must spell the complete word. For a delimiter written `EOF` followed by a
   no-break space and `X`, a body line spelling only `EOF` stays body text, and
-  the heredoc ends only at the line spelling all three components. Netsuke also
+  the heredoc ends only at the line spelling all three components. Netsuke
+  rejects a delimiter form it cannot model rather than guessing; see
+  [Heredoc delimiters and bodies](#heredoc-delimiters-and-bodies). Netsuke also
   rejects a marker that directly follows an unpaired backslash, because that
   backslash would escape the first character of the substituted path; write
   `\\{{ outs }}` to keep one literal backslash, or place the marker inside
@@ -2670,6 +2672,51 @@ The recipe interpolation terms have distinct roles:
 
 Do not run an untrusted `Netsukefile`. Prefer explicit inputs, avoid embedding
 secrets in commands or URLs, and pin dependencies used by recipes.
+
+### Heredoc delimiters and bodies
+
+Netsuke tracks POSIX heredoc bodies so it never lowers a path marker into text
+the shell still expands. The rules below restate the shell's own word and line
+boundaries:
+
+- A delimiter word ends only at a blank, a newline, or a shell operator, so
+  Unicode whitespace such as a no-break space stays inside the delimiter. A
+  body line that repeats only the visible prefix does not end the body.
+- A delimiter form Netsuke cannot model safely is rejected rather than guessed.
+  The rejected forms are a missing delimiter, a leading unquoted `#`, an
+  unclosed quote, a trailing backslash, a backslash-newline continuation
+  whether it is unquoted or inside double quotes, and an unescaped `$` or
+  backtick outside single quotes.
+- Write the delimiter immediately after `<<` or `<<-`, close every quote, and
+  keep the whole word on one line. Quote any part that must survive literally,
+  as in `<<'$DELIM'`. A backslash-escaped `\$` or `` \` `` is also accepted,
+  because the shell performs no expansion on it. Either form quotes the
+  delimiter, and the shell then performs no expansion anywhere in the body, so
+  keep an unquoted literal delimiter such as `<<END` when the body must expand.
+- A marker inside a delimiter expands to every bound path, so a marker that
+  binds more than one path renders several words. Netsuke rejects that rather
+  than guessing which word the shell keeps.
+- An unquoted delimiter leaves the body subject to shell expansion, so the
+  shell removes backslash-newline throughout the body before it looks for the
+  terminator. A trailing backslash run of odd length therefore continues the
+  line, and only the completed logical line can end the body. An even-length
+  run is literal backslashes: the line stands alone, so the next line is
+  compared as its own line, and a terminator there ends the body with whatever
+  follows it read as shell code rather than as body text. A quoted delimiter
+  suppresses that joining, and `<<-` strips leading tabs only at the start of a
+  logical line.
+- A `#` inside a `${ }` parameter expansion is expansion syntax rather than a
+  comment, and `${name# #}` is one such pattern removal, so the rest of that
+  line stays ordinary text and a heredoc declared on it is still recognized.
+  Braces inside a command substitution belong to that substitution, `$( )` and
+  backticks alike, so in `${name:-$(printf }) # #}` the brace inside `$( )`
+  leaves the expansion open and the number signs that follow are still
+  expansion text. Only the final `}` closes it: a `#` that begins a word after
+  that brace starts an ordinary comment and hides any heredoc later on the
+  line. Conversely, a `#` inside a command substitution is still a comment when
+  the substitution itself sits inside an open `${ }`.
+- A `<<` inside a `$(( ))` arithmetic expansion is a left shift, not a heredoc,
+  so arithmetic expressions pass through unchanged.
 
 ## Compatibility links for the imported `rstest-bdd` guides
 

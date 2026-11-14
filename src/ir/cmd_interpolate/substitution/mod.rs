@@ -7,12 +7,15 @@ use super::{
         reject_ambiguous_case_comment,
     },
     find_substitution, invalid_command_error,
-    posix_lexical::PosixLexicalState,
+    posix_lexical::{PosixLexicalState, SubstitutionKind},
 };
 use crate::recipe_shell::RecipeShell;
 
 mod posix;
+
 mod powershell;
+
+mod quotes;
 
 use powershell::{PowerShellLexicalState, PowerShellSourceCharacter, PowerShellStopParsingState};
 
@@ -58,8 +61,6 @@ pub(super) struct SubstitutionTraversal<'template, 'bindings> {
     quote_context: QuoteContext,
     /// Retain nested `$()` parsing state where path insertion is refused.
     command_substitutions: Vec<CommandSubstitution>,
-    /// Record the `)` that closed the most recent command substitution.
-    closed_command_substitution: Option<usize>,
     /// Track POSIX comments and heredocs whose text must remain lexically inert.
     posix_lexical: PosixLexicalState,
 }
@@ -81,7 +82,6 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             power_shell_stop_parsing: PowerShellStopParsingState::new(),
             quote_context: QuoteContext::Unquoted,
             command_substitutions: Vec::new(),
-            closed_command_substitution: None,
             posix_lexical: PosixLexicalState::new(),
         }
     }
@@ -101,6 +101,22 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             return self.append_power_shell_character(character);
         }
         self.append_posix_character(pos, ch)
+    }
+
+    /// Open or close a backtick command-substitution region.
+    ///
+    /// Backticks are the legacy spelling of `$( )`, and bash parses their body
+    /// as its own command region. Scoping the `${ }` count the same way keeps a
+    /// brace inside the body from closing an expansion outside it, which would
+    /// otherwise read the following number sign as a comment and hide a heredoc
+    /// declaration.
+    fn toggle_backtick_region(&mut self) {
+        if self.in_backticks {
+            self.posix_lexical.leave_command_substitution_region();
+        } else {
+            self.posix_lexical.enter_command_substitution_region();
+        }
+        self.in_backticks = !self.in_backticks;
     }
 
     /// Preserve shared shell syntax before lowering a marker for its active context.
@@ -127,8 +143,11 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         };
         match delimiter {
             CommandSubstitutionDelimiter::Start => {
-                self.command_substitutions
-                    .push(CommandSubstitution::new(pos));
+                self.command_substitutions.push(CommandSubstitution::new(
+                    pos,
+                    SubstitutionKind::at(self.chars, pos),
+                ));
+                self.posix_lexical.enter_command_substitution_region();
                 self.output.push_str("$(");
                 Ok(Some(pos + 2))
             }
@@ -195,8 +214,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         }
         let boundary = self.boundary_at(pos);
         if self.decrement_command_substitution_parenthesis_depth() {
+            self.posix_lexical.leave_command_substitution_region();
             self.reject_ambiguous_boundary(&boundary)?;
-            self.closed_command_substitution = Some(pos);
+            self.posix_lexical.record_closed_command_substitution(pos);
         }
         self.output.push(ch);
         Ok(Some(pos + 1))
@@ -258,6 +278,18 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         ch == '$' && self.chars.get(pos + 1) == Some(&'(')
     }
 
+    /// Report whether the innermost active substitution is arithmetic.
+    ///
+    /// An arithmetic body evaluates numbers, so `<<` there is a shift
+    /// operator. Heredoc tracking must not run inside one: the tracker would
+    /// invent a body the shell never starts and end it at a line that is still
+    /// inside an expansion.
+    fn is_in_arithmetic_expansion(&self) -> bool {
+        self.command_substitutions
+            .last()
+            .is_some_and(CommandSubstitution::is_arithmetic)
+    }
+
     /// Report whether `ch` opens a grouped expression inside a `$()` region.
     fn starts_nested_command_substitution_parenthesis(&self, ch: char) -> bool {
         self.is_in_command_substitution() && self.matches_unquoted_quote_context() && ch == '('
@@ -268,56 +300,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         self.is_in_command_substitution() && self.matches_unquoted_quote_context() && ch == ')'
     }
 
-    /// Change POSIX quote state after retaining a delimiter in the output.
-    fn update_quote_context(&mut self, ch: char) {
-        let quote_context = self.active_quote_context_mut();
-        Self::update_quote_context_for_region(quote_context, ch);
-    }
-
-    /// Report whether the traversal is currently enclosed by single quotes.
-    fn matches_single_quote_context(&self) -> bool {
-        matches!(self.active_quote_context(), QuoteContext::Single(_))
-    }
-
-    /// Report whether the active shell region is outside both kinds of quotes.
-    fn matches_unquoted_quote_context(&self) -> bool {
-        matches!(self.active_quote_context(), QuoteContext::Unquoted)
-    }
-
     /// Report whether the traversal is currently inside a command substitution.
     const fn is_in_command_substitution(&self) -> bool {
         !self.command_substitutions.is_empty()
-    }
-
-    /// Return the quote state used by the innermost active shell region.
-    fn active_quote_context(&self) -> QuoteContext {
-        self.command_substitutions
-            .last()
-            .map_or(self.quote_context, |substitution| {
-                substitution.quote_context
-            })
-    }
-
-    /// Return the quote state storage used by the innermost active shell region.
-    fn active_quote_context_mut(&mut self) -> &mut QuoteContext {
-        match self.command_substitutions.last_mut() {
-            Some(substitution) => &mut substitution.quote_context,
-            None => &mut self.quote_context,
-        }
-    }
-
-    /// Update the quote state of one shell region after copying its source character.
-    const fn update_quote_context_for_region(quote_context: &mut QuoteContext, ch: char) {
-        match (*quote_context, ch) {
-            (QuoteContext::Unquoted, '\'') => *quote_context = QuoteContext::Single('\''),
-            (QuoteContext::Unquoted, '"') => *quote_context = QuoteContext::Double('"'),
-            (QuoteContext::Single(quote) | QuoteContext::Double(quote), character)
-                if quote == character =>
-            {
-                *quote_context = QuoteContext::Unquoted;
-            }
-            _ => {}
-        }
     }
 
     /// Increase the grouping depth in the innermost command substitution.
@@ -331,6 +316,8 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     ///
     /// Only the `)` that leaves the substitution belongs to the outer word; a
     /// `)` closing an inner group is still a separator inside the substitution.
+    /// A `true` result also marks the point where the caller ends the region's
+    /// `${ }` bookkeeping, because the region itself has ended here.
     fn decrement_command_substitution_parenthesis_depth(&mut self) -> bool {
         let Some(substitution) = self.command_substitutions.last_mut() else {
             return false;
