@@ -6,11 +6,11 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 Approved by the user on 2026-11-01, with the D-03 and D-12 recommendations
-accepted. EP-M1 started on 2026-11-01, so the status is `IN PROGRESS`; it moves
-to `COMPLETE` only after EP-M5's reconciliation. These are the only values
+accepted. EP-M1 started on 2026-11-01 and EP-M5 reconciled the plan on
+2026-11-14, so the status is `COMPLETE`. These are the only values
 `tests/execplan_status_contract_tests.rs` accepts.
 
 ## Purpose / big picture
@@ -454,7 +454,7 @@ conflict in `Decision log`, and escalate.
     milestone neither depends on it nor restates it; the ExecPlan records the
     local gap instead of claiming a pass, and the rebase that brings ADR-0073
     in is expected to close it.
-- [ ] EP-M5: documentation, ADR, roadmap, and final gates.
+- [x] EP-M5: documentation, ADR, roadmap, and final gates.
   - ADR (2026-11-09, renumbered 2026-11-13).
     `docs/adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md` is
     `Accepted`, dated 2026-11-09, and carries the context, the four options
@@ -498,10 +498,27 @@ conflict in `Decision log`, and escalate.
     observe through an existing helper, and the consumer work that surfaces
     these refusals is 6.1.4, 6.2.1, 6.4.2, and 6.5.3. The conclusion is
     recorded in `Outcomes & retrospective`.
-  - Final gates (pending). The standard gate set plus `make nixie`,
-    `make test-rfc-stdlib-coverage`, and one full `make kani-ir` inside the
-    Kani scope wrapper is run by the scrutineer against the committed
-    candidate; `Status: COMPLETE` is set only once that run is green.
+  - Final gates (2026-11-14). The scrutineer ran the whole set sequentially
+    against the candidate at `67e081c93`, one gate at a time, with the working
+    tree unchanged throughout: `check-fmt` 3 s; `lint` 1203 s; `typecheck`
+    136 s; `test` 314 s (5008 nextest tests passed, 7 skipped; 129 doctests
+    passed); `doc-coverage` 781 s (6486 of 6601 items, 98.26%, against the 80%
+    bar, verdict on standard error as expected); `markdownlint` 40 s (213
+    files, 0 issues, spelling gate included); `nixie` under 1 s;
+    `test-workflow-contracts` 251 s (1666 passed, 3 skipped; 28 script tests);
+    `test-documentation-contracts` 8 s (15 passed, 48 filtered);
+    `test-rfc-stdlib-coverage` 2 s (282 passed); and one full `make kani-ir`
+    inside the scope wrapper, 1819 s, reporting
+    `Complete - 22 successfully verified harnesses, 0 failures, 22 total`,
+    which includes all seven `stdlib::resource_bounds::verification::*`
+    harnesses. Every gate exited 0 and none was retried. The tree as committed
+    is byte-identical to the tree those gates passed, since no file changed
+    between the end of the run and the two commits. `make test-kani-mutations`
+    was not run, for the reason recorded under EP-M4, and is not counted as a
+    pass; `make test-package-verify` does not apply, because no include list,
+    `build.rs`, or `build_l10n_audit/` file changed. Logs are the
+    `/tmp/<gate>-netsuke-6-1-3-shared-bounded-materialization-helper.out` files
+    named in `Concrete steps`.
 
 ## Surprises & discoveries
 
