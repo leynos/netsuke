@@ -15,9 +15,11 @@ later milestones and follow-up work and does not measure EP-M3 scope. The full
 local seven-gate sequence passed on the current candidate, `ebc2418c`. The
 exact-head hosted CI, Netsukefile, and release dry-run workflows also passed;
 the PR remains `IN PROGRESS` because its formal review decision is still
-`CHANGES_REQUESTED` on an older CodeRabbit review. A fresh review is pending a
-user decision about bounding `identity.files` reads in the accepted contract.
-The milestones and their acceptance evidence remain complete. The user approved
+`CHANGES_REQUESTED` on an older CodeRabbit review. The byte bound for
+`identity.files` reads is settled as deferred: ADR-0077 and RFC-0021 state no
+bound, and section 23.1.1 implements `states`, so the bound belongs to that
+implementation's own ADR amendment, which must merge before its code. The
+milestones and their acceptance evidence remain complete. The user approved
 this plan on 2026-10-24 and selected D-19 Option A; approval authorized
 drafting the decision records, and it did not accept them.
 
@@ -382,8 +384,8 @@ decision D-15.
   skipped. CodeScene review `5896368246` approved this exact head. All 21
   review threads are resolved. The formal decision remains `CHANGES_REQUESTED`
   because CodeRabbit review `5892190015` is bound to stale head `2e665651`; no
-  CodeRabbit review is bound to `ebc2418c`. A fresh review remains pending the
-  user decision on the `identity.files` bound.
+  CodeRabbit review is bound to `ebc2418c`. A fresh review is needed, and the
+  `identity.files` byte bound is deferred to the 23.1.1 implementation ADR.
 - [x] EP-M3: reader-side schema version gate, users' guide, CHANGELOG. OBL-1 to
   OBL-5 are discharged by the artefacts listed in the verification plan; the
   gate sequence this milestone names passed at `bd7e6f123`, and the later
@@ -605,6 +607,24 @@ decision D-15.
   `1573e56c32cabc47aeac779c55d64829039e500ac6e307dd3da6f1742e1d6482` was stable
   before and after the run. Logs use the
   `/tmp/*5fe5acf9*20-1-1-ratify-progressive-enhancement-contracts-2.out` prefix.
+- [x] (2026-11-14) Replayed the branch onto current `main` at `750f56a22`
+  from base `8b38ac377`, all 48 commits, with recovery refs recorded under
+  `refs/recovery/20-1-1/`. Two commits conflicted, both in the at-a-glance
+  table of `docs/v0-1-0-migration-guide.md`, and both were resolved as a union:
+  this branch's `Obligation` column kept alongside `main`'s new
+  `Release upload` and `POSIX heredoc delimiters` rows. Rebuilding that table
+  by splitting on `|` unescaped the Ninja row's literal `` `\|` ``, which then
+  read as a real column break and failed Markdown lint with MD056 and MD060;
+  `143a8f330` restores the escape and `1ff680625` carries the replayed head.
+  The nine-gate batch passed on `451ff223d` with the content hash bound before
+  and after, and the exact-head hosted run reported 19 passing and 8 skipped
+  checks with none pending or failing. The `identity.files` question this plan
+  had been waiting on is answered by deferral, so no user decision is
+  outstanding; the wording above and the summary at the head of this plan now
+  record that. The only remaining delivery step is a current-head CodeRabbit
+  review: its check run on `451ff223d` reads `Review paused` with every step
+  skipped, which is the auto-pause after sustained commit volume rather than a
+  completed review, so a resume request is queued.
 
 ## Surprises & discoveries
 
@@ -1128,11 +1148,16 @@ re-deriving the four gate failures that drove the telemetry module's move.
 Implementation and acceptance milestones are complete, but PR delivery is not.
 The current head passes every local and required hosted gate, and its release
 dry-run succeeded. The formal review decision still reflects a stale CodeRabbit
-request for changes. A current-head review is needed after the user decides
-whether `identity.files` receives an 8 MiB aggregate read limit with explicit
-`unknown` outcomes for symlink, non-regular, and over-limit inputs, or whether
-that rule is deferred to the future implementation ADR. The plan remains
-`IN PROGRESS` until that review path reaches equilibrium.
+request for changes bound to a superseded head, so a current-head review is
+needed. The open question this plan carried about `identity.files` is resolved
+by deferral: the accepted ADR-0077 and RFC-0021 state no byte bound, and the 8
+MiB figure named during review is `DEFAULT_FILE_MAX_READ_BYTES` from the
+manifest file-reading filter, not a managed-state rule. `states` is
+unimplemented and owned by roadmap section 23.1.1, so an aggregate read limit
+for `identity.files`, with explicit `unknown` outcomes for symlink,
+non-regular, and over-limit inputs, is that implementation's own ADR amendment
+and must merge before its code. The plan remains `IN PROGRESS` until the review
+path reaches equilibrium.
 
 ## Context and orientation
 
