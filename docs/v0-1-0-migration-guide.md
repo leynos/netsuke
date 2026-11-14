@@ -249,19 +249,37 @@ child remain platform-native and are not subject to this path restriction.
 ## Check filenames used by manifest `glob()`
 
 The beta3 release tightens the Jinja `glob()` helper. A manifest that expands a
-matched filename containing whitespace, control characters, or shell
-punctuation now fails during manifest loading. ASCII letters, digits, `/`, `:`,
-comma, full stop, underscore, and hyphen remain accepted. This beta3 change
-prevents a checkout filename from becoming executable shell syntax when a
-`foreach` item is interpolated into a `command` or `script`.
+matched path containing whitespace, control characters, or shell punctuation
+now fails during manifest loading. Beta3 accepted ASCII letters, digits, `/`,
+`:`, full stop, underscore, hyphen, and comma. The
+[beta5 subsection](#reject-commas-in-glob-matched-paths) drops the comma from
+that set, so only ASCII letters, digits, `/`, `:`, full stop, underscore, and
+hyphen remain accepted. This beta3 change prevents a checkout filename from
+becoming executable shell syntax when a `foreach` item is interpolated into a
+`command` or `script`.
 
-Published beta2 does not reject these non-portable unquoted filenames.
+Published beta2 does not reject these non-portable unquoted paths.
 
 Rename affected files to use the accepted character set, or change the manifest
 so filesystem-derived paths do not cross the Jinja command-template boundary.
 The Rust `manifest::glob_paths` query retains its previous contract and
 continues to return any matching UTF-8 file path because its callers own their
 downstream escaping boundary.
+
+### Reject commas in `glob()` matched paths
+
+The next pre-release (`v0.1.0-beta5`) also rejects a matched path that contains
+a comma. PowerShell cmdlet argument parsing treats a bare comma as an array
+separator, so a pattern such as `foreach: glob('assets/*.txt')` could turn one
+matched path into several arguments of a trusted recipe. Such a manifest now
+fails during manifest loading with `characters that require shell quoting`.
+
+Rename the file so the comma is gone, or remove the matching `glob()` call or
+narrow its pattern so the path is excluded. The rejection happens while
+`glob()` is evaluated, whatever the recipe or the selected shell, so passing
+the path through the `shell_quote` or `shell_join` helper does not rescue it.
+See [Discover files with `glob`](users-guide.md#discover-files-with-glob) for
+the accepted characters.
 
 Relative manifest glob patterns, including parent-relative patterns, now
 resolve from the manifest directory or workspace root rather than the process

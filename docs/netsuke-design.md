@@ -1453,10 +1453,16 @@ providing a secure bridge to the underlying system.
   The Rust query returns those UTF-8 paths unchanged. The Jinja `glob()`
   adapter adds the narrower command-safety boundary: it exposes a result only
   when every path is a portable unquoted shell word made from ASCII letters,
-  digits, `/`, `:`, comma, full stop, underscore, or hyphen. Other matches fail
+  digits, `/`, `:`, full stop, underscore, or hyphen. The boundary covers both
+  POSIX shell syntax and PowerShell argument-mode separators: PowerShell cmdlet
+  argument parsing treats a bare comma as an array separator, so a comma is not
+  admitted even though it is an ordinary filename character. Other matches fail
   manifest loading rather than entering `foreach` variables and potentially
-  reaching command or script recipes as executable shell syntax. A Unix
-  filename containing a literal backslash reaches this adapter unchanged and is
+  reaching command or script recipes as executable shell syntax. The adapter
+  rejects such paths rather than encoding them: inserting a quoted value would
+  need context-aware quoting at every recipe site, so one reject-and-rename
+  boundary preserves the single-argument guarantee instead. A Unix filename
+  containing a literal backslash reaches this adapter unchanged and is
   rejected, rather than being rewritten into a directory separator that would
   name a different file. Direct Rust callers receive the exact matched filename
   and remain responsible for quoting it. This private adapter predicate is

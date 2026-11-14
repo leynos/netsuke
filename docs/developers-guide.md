@@ -8401,14 +8401,24 @@ detail for these rules, not a substitute for them.
 The private `GlobExpansion::into_template_paths` method is the adapter between
 the filesystem query and Jinja values that may later be interpolated into shell
 commands. It accepts only non-empty paths made from ASCII letters, digits, `/`,
-`:`, comma, full stop, underscore, and hyphen. Any whitespace, control
-character, non-ASCII byte, backslash, or other punctuation returns a MiniJinja
-`InvalidOperation` error before `foreach` receives the value. A Unix filename
-containing a literal backslash is rejected here rather than rewritten into an
-accepted directory path, so the value that reaches `foreach` is always the file
-the metadata check selected. This policy is Jinja-specific: `glob_paths`
-retains its filesystem-query contract and returns all matching UTF-8 file paths
-without applying shell-safety validation, leaving quoting to direct callers.
+`:`, full stop, underscore, and hyphen. The allowlist excludes characters
+significant to POSIX shells and to PowerShell argument mode, including the
+comma array separator; it is a character allowlist, not a containment or
+option-safety check. Any whitespace, control character, non-ASCII byte,
+backslash, or other punctuation returns a MiniJinja `InvalidOperation` error
+before `foreach` receives the value. A Unix filename containing a literal
+backslash is rejected here rather than rewritten into an accepted directory
+path, so the value that reaches `foreach` is always the file the metadata check
+selected. The allowlist is deliberately narrow but is not a containment or
+option-safety policy: a leading hyphen, an absolute path, or a parent-relative
+`../` segment remains accepted, so callers that care about option position or
+containment must check those separately. The comma rejection is covered by a
+manifest-level regression test that runs on every platform; it proves rejection
+during manifest loading and does not execute PowerShell, so it does not
+exercise PowerShell's own argument parsing. This policy is Jinja-specific:
+`glob_paths` retains its filesystem-query contract and returns all matching
+UTF-8 file paths without applying shell-safety validation, leaving quoting to
+direct callers.
 
 ### Base-directory seam
 
