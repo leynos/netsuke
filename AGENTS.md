@@ -548,10 +548,11 @@ as `--toolchain`.
   invoking `netsuke` through `assert_cmd` may configure the environment via
   `Command::env`/`Command::env_clear`, because the mutation is confined to the
   child process. A test manipulating the environment in-process does not
-  qualify, whatever layer it claims to occupy. The build-tools harness in
-  `test_support/src/build_tools` is the accepted local form for helpers that
-  spawn `make` or `scripts/` entry points: it uses `std::process::Command` with
-  `env_clear`, so the mutation is confined to the child process.
+  qualify, whatever layer it claims to occupy. The `Sandbox` runners in
+  `test_support/src/build_tools/sandbox/mod.rs` are the accepted local form for
+  helpers that spawn `make` or `scripts/` entry points: they use
+  `std::process::Command` with `env_clear`, so the mutation is confined to the
+  child process.
 
 ### Executable documentation
 
