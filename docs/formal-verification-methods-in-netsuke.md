@@ -45,11 +45,10 @@ manual dispatches, and on pull requests it runs only when a proof input changes
 (see
 [ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).[^3]
 The 24 harnesses live in four verification modules:
-`src/ir/cycle/verification.rs` (11), `src/ir/from_manifest/verification.rs`
-(4), `src/ir/cmd_interpolate/verification.rs` (2), and
-`src/stdlib/resource_bounds/verification.rs` (7).
-`src/ir/graph/kani_map.rs` is `cfg(kani)` support code those harnesses use, not
-a harness location.
+`src/ir/cycle/verification.rs` (11), `src/ir/from_manifest/verification.rs` (4),
+`src/ir/cmd_interpolate/verification.rs` (2), and
+`src/stdlib/resource_bounds/verification.rs` (7). `src/ir/graph/kani_map.rs` is
+`cfg(kani)` support code those harnesses use, not a harness location.
 
 The Makefile pins `rust-prover-tools` to
 [`592558f7183b554fc749696246984c5d7300d029`][upstream]. Kani and Verus
@@ -374,9 +373,8 @@ When the proofs run, it:
   archives, then checks the reported version against `tools/kani/VERSION`,
 - runs the bounded harness suite through `make kani-ir` (24 harnesses across
   the manifest, cycle, command-interpolation, and stdlib resource-bounds
-  verification modules), then
-  `make install-build-tools` and the mutation patch compile gate through
-  `make test-kani-mutations`,
+  verification modules), then `make install-build-tools` and the mutation patch
+  compile gate through `make test-kani-mutations`,
 - restores `.kani-cargo`, `.kani-home`, and `.kani-rustup` together under a key
   containing the runner lane and Kani version, and saves only on a cache miss
   from a push to `main`,

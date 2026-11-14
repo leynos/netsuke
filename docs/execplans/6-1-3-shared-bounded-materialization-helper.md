@@ -428,32 +428,32 @@ conflict in `Decision log`, and escalate.
     in the `cargo-mutants` exclusion paragraph in `docs/developers-guide.md`,
     and in the proof scope's source list in `tools/kani/proof-scope.toml`
     alongside the five production files the harnesses reach.
-  - Compile gate (2026-11-09, updated 2026-11-13). `make test-kani-mutations`
-    did not complete on this host. Its `#[ignore]`d compile guard compiles
-    every patched tree through the Kani frontend, one full workspace-crate
-    codegen per patch, and the directory now holds 35 patches rather than the
-    18 the committed allowance was measured against. Three attempts under the
-    committed 600 s per-test allowance ended in nextest `TIMEOUT` at
-    600.028 s, 600.031 s, and 600.029 s, and one attempt under a raised
-    one-hour local allowance (`/tmp/nextest-long.toml`) ended in `TIMEOUT` at
-    3600.105 s; the gate's own test binary took 144 m 52 s to build cold while
-    the shared compile-admission pool reported capacity 4, held 4, and healthy.
-    Logs: `/tmp/test-kani-mutations-netsuke-6-1-3-shared-bounded-materialization-helper.out`
+  - Compile gate (2026-11-09, resolved 2026-11-14). `make test-kani-mutations`
+    did not complete on this host for the first eleven days of the task. Its
+    `#[ignore]`d compile guard compiles every patched tree through the Kani
+    frontend, one full workspace-crate codegen per patch, and the directory had
+    grown to 35 patches rather than the 18 the committed allowance was measured
+    against. Three attempts under the committed 600 s per-test allowance ended
+    in nextest `TIMEOUT` at 600.028 s, 600.031 s, and 600.029 s, and one
+    attempt under a raised one-hour local allowance (`/tmp/nextest-long.toml`)
+    ended in `TIMEOUT` at 3600.105 s; the gate's own test binary took 144 m 52 s
+    to build cold while the shared compile-admission pool reported capacity 4,
+    held 4, and healthy. Logs:
+    `/tmp/test-kani-mutations-netsuke-6-1-3-shared-bounded-materialization-helper.out`
     and `/tmp/test-kani-mutations-longgate.out`. The working tree afterwards held
-    no mutation residue, only the intended staged EP-M4 changes. This is an
+    no mutation residue, only the intended staged EP-M4 changes. That was an
     environmental and structural limit, not a defect in these patches: each of
     the seven was applied to the worktree, observed failing its own harness,
     and reverted, which is the property the compile guard exists to protect.
-    The authoritative run of this gate is the hosted `kani-smoke` job, whose
-    own log records 257.7 s and 261.5 s for 18 patches there. The structural
-    remedy is already decided upstream: ADR-0073 splits the gate into a
-    prewarm, a negative-compile check, and a patch sweep under a dedicated
-    Nextest profile with 900 s and 2,400 s allowances, so the cold dependency
-    build stops sharing the sweep's budget. That ADR is `Accepted` on a
-    sibling branch but is not on `main` at this branch's base, so this
-    milestone neither depends on it nor restates it; the ExecPlan records the
-    local gap instead of claiming a pass, and the rebase that brings ADR-0073
-    in is expected to close it.
+    ADR-0073 supplies the structural remedy — a prewarm invocation, a
+    negative-compile check, and a patch sweep under a dedicated `kani` nextest
+    profile, so the cold dependency build stops sharing the sweep's budget —
+    and the rebase onto `main` on 2026-11-14 brought it, its Makefile recipe,
+    and two more patches from elsewhere in the tree. The gate then completed on
+    this host in 281 s against 37 patches: prewarm 80.740 s, negative check
+    8.021 s, compile guard 188.941 s, both invocations exit 0. The
+    authoritative run of this gate remains the hosted `kani-smoke` job, whose
+    own log records 257.7 s and 261.5 s for a smaller patch set there.
 - [x] EP-M5: documentation, ADR, roadmap, and final gates.
   - ADR (2026-11-09, renumbered 2026-11-13).
     `docs/adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md` is
@@ -647,9 +647,19 @@ conflict in `Decision log`, and escalate.
   patches, but locally the guard's own test binary took 144 m 52 s to build
   cold under saturated compile admission, and the guard then ended in nextest
   `TIMEOUT` at 600 s on three attempts and at 3,600 s on a fourth. Impact: the
-  local run is recorded as a host limit rather than a pass, the hosted
-  `kani-smoke` job remains the authoritative run, and reducing the guard's
-  per-patch cost belongs to its own task instead of this milestone.
+  local run was recorded as a host limit rather than a pass, and the hosted
+  `kani-smoke` job remained the authoritative run. Resolved 2026-11-14: once
+  ADR-0073's prewarm/negative/sweep split arrived with the rebase onto `main`,
+  the same host finished the gate in 281 s against 37 patches.
+- Observation: a rebase conflict resolution is a tracked edit that needs the
+  full gate set like any other. Evidence: resolving `tests/bdd/fixtures/mod.rs`
+  during the 2026-11-14 rebase left three duplicated module-header blocks and
+  their stray `};` closing braces in the file, so `make check-fmt` exited 2 at
+  line 39 and `make lint`, `make typecheck`, and `make test` all failed in the
+  same unparseable `bdd_tests` target. Impact: the file was repaired, and the
+  repaired version differs from `main` only by this task's intended additions;
+  the lesson is that a clean `git status` and a successful rebase say nothing
+  about whether the resolved tree compiles.
 
 ## Decision log
 
@@ -884,15 +894,18 @@ single `--proof-file` root let the proof be organized by lemma without changing
 the `make verus` invocation. Reverting each mutation patch from a trap meant no
 seeded fault could survive an interrupted sweep. Two things did not work. The
 first harness design compared unbounded symbolic operands against `u128`
-oracles and was never going to finish. And the mutation compile gate cannot run
-locally against 35 patches inside its 600 s allowance on a saturated host; the
-structural remedy is ADR-0073's split, which this branch's base predates.
+oracles and was never going to finish. And the mutation compile gate could not
+run locally against a growing patch set inside its 600 s allowance on a
+saturated host, because the cold dependency build competed with the sweep for
+the same budget; ADR-0073's split, which the rebase onto `main` brought in, is
+what let it finish here in 281 s.
 
 Remaining work, and why it is not this task's. The consumer tasks 6.1.4, 6.2.1,
 6.4.2, and 6.5.3 adopt the module and render its refusals; the canonical-value
 follow-up candidate stays with its own owner; the RFC owner's decision on the
-table 3 row is superseded by the user's approval to amend; and reducing the
-mutation compile gate's local cost belongs to ADR-0073.
+table 3 row is superseded by the user's approval to amend; and the mutation
+compile gate's local cost was reduced by ADR-0073, which the rebase onto `main`
+brought in rather than this branch delivering.
 
 ## Context and orientation
 
