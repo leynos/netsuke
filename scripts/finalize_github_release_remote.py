@@ -43,13 +43,17 @@ def _failed(command: str, exit_code: int, stderr: str | None) -> str:
     exit_code
         The status the command reported.
     stderr
-        Whatever the command wrote to standard error, kept verbatim so its own
-        wording reaches the operator rather than a paraphrase.
+        Whatever the command wrote to standard error, kept in its own words so
+        they reach the operator rather than a paraphrase. The whitespace around
+        that wording is trimmed, because the line break ending a message
+        carries nothing.
 
     Returns
     -------
     str
-        One clause, with the diagnostic appended only when there was one.
+        One clause, with the diagnostic appended only when something remains
+        after trimming, so a stderr holding nothing but a line break adds no
+        colon with an empty diagnosis behind it.
 
     Examples
     --------
@@ -57,9 +61,12 @@ def _failed(command: str, exit_code: int, stderr: str | None) -> str:
     'gh release view exited 5: HTTP 403'
     >>> _failed("gh release view", 5, "")
     'gh release view exited 5'
+    >>> _failed("gh release view", 5, "  \n")
+    'gh release view exited 5'
     """
     detail = f"{command} exited {exit_code}"
-    return f"{detail}: {stderr.strip()}" if stderr else detail
+    diagnostic = (stderr or "").strip()
+    return f"{detail}: {diagnostic}" if diagnostic else detail
 
 
 def read_release(

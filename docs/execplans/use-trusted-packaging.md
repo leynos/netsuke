@@ -4167,6 +4167,30 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   is attempted. `published_inventory`'s new doctest pins the verdict, and
   `make test-release-publication` passed 1468 tests with the doctests enabled.
 
+- [x] (2026-11-14) Answered the twelfth review: the guide no longer claims the
+  I/O module is called where it is only implemented, and the diagnostic clause
+  says what the adapter actually trims.
+
+  **The finding.** CodeRabbit's assessment reply kept two documentation items
+  open after the rebase. The guide said `finalize_github_release_io.py` "holds
+  every effect", which reads as the deciding layer calling it. And it said a
+  failed `gh` call trims "only the trailing newline", when
+  `finalize_github_release_remote._failed` calls `str.strip`.
+
+  **The correction.** The guide now says the I/O module holds the
+  *implementation* of every effect and that the deciding module reaches one
+  only through a port. The diagnostic clause says the whitespace around
+  GitHub's own words is trimmed. Reading `_failed` for that wording turned up a
+  real defect the prose was hiding: `if stderr` was true for a stderr holding
+  only a line break, so the clause became `gh release view exited 5:` with
+  nothing after the colon. It now strips first and appends the diagnosis only
+  when something remains.
+
+  **The evidence.** `_failed` carries the whitespace-only case as a doctest, and
+  `test_read_release_drops_a_diagnostic_that_is_only_whitespace` drives it
+  through `read_release`. `make test-release-publication` passed 1469 tests
+  with the doctests enabled.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

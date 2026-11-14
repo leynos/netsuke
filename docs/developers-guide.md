@@ -3457,21 +3457,23 @@ one rule without importing each other, and a new check of the same kind belongs
 there rather than in a third copy of the comparison.
 
 The modules behind that command line are split by what a reader has to know to
-change them. `finalize_github_release_io.py` holds every effect — the
-allowlisted `gh` runner, the staged JSON records — beside the exit-status
-vocabulary and the `FinalizeError` type that carries a status with its
-diagnosis. `finalize_github_release_remote.py` writes the only two GitHub calls
-a run makes, one read and one edit, and returns what they answered as values
-rather than as exceptions; the process effect is a required
-`release_io.Runner`, supplied by the command layer and by nothing below it, so
-a test supplies recorded answers and starts no `gh`. That module also binds a
-call to one release: `reader_port` and `editor_port` fix the tag and
-repository, so the orchestrator receives a callable it can only call and never
-assembles a token of the call itself. `finalize_github_release_decisions.py`
-decides from those values alone: it reads no file, starts no process, composes
-no prose, and names no exit status. `finalize_github_release_ports.py` states
-the two shapes that decision exchanges with its adapters, `ReleaseRead` and
-`RemoteAnswer`, and the protocols a caller injects to replace either call.
+change them. `finalize_github_release_io.py` holds the implementation of every
+effect — the allowlisted `gh` runner, the staged JSON records — beside the
+exit-status vocabulary and the `FinalizeError` type that carries a status with
+its diagnosis; holding an implementation is not the same as reaching it, and
+the module that decides reaches an effect only through a port.
+`finalize_github_release_remote.py` writes the only two GitHub calls a run
+makes, one read and one edit, and returns what they answered as values rather
+than as exceptions; the process effect is a required `release_io.Runner`,
+supplied by the command layer and by nothing below it, so a test supplies
+recorded answers and starts no `gh`. That module also binds a call to one
+release: `reader_port` and `editor_port` fix the tag and repository, so the
+orchestrator receives a callable it can only call and never assembles a token
+of the call itself. `finalize_github_release_decisions.py` decides from those
+values alone: it reads no file, starts no process, composes no prose, and names
+no exit status. `finalize_github_release_ports.py` states the two shapes that
+decision exchanges with its adapters, `ReleaseRead` and `RemoteAnswer`, and the
+protocols a caller injects to replace either call.
 `finalize_github_release_operations.py` orchestrates the one publishing
 decision from a `PublishInputs` value of decoded records and ports, never
 paths, and `finalize_github_release_records.py` performs the reads and writes
@@ -4158,8 +4160,9 @@ record stops the run before any API call and reports the status its own reader
 carries. That ordering is why an unreadable digest record outranks a plan that
 merely owes an upload: nothing decides from a partial input. A `gh` call that
 fails is reported as `<command> exited <status>: <stderr>`, keeping GitHub's
-own words and trimming only the trailing newline, so the log carries the same
-diagnosis the API returned.
+own words and trimming the whitespace around them, so the log carries the same
+diagnosis the API returned. A stderr that holds nothing but whitespace adds no
+clause at all, rather than leaving a colon with an empty diagnosis behind it.
 
 On the registry side the equivalent question is per version, not per crate.
 `release_registry_response.observe_registry_response` maps the recorded HTTP

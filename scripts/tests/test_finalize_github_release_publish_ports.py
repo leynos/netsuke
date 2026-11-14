@@ -110,6 +110,17 @@ def test_read_release_reports_a_failed_view_as_a_detail() -> None:
     )
 
 
+def test_read_release_drops_a_diagnostic_that_is_only_whitespace() -> None:
+    """Leave no dangling colon when the command wrote only a line break."""
+    runner = Answers(_result(exit_code=5, stdout=None, stderr="  \n"))
+
+    read = release_remote.read_release(TAG, REPOSITORY, runner=runner)
+
+    assert read.detail == "gh release view exited 5", (
+        "a stderr with nothing in it must add no clause"
+    )
+
+
 def test_read_release_reports_an_unusable_response() -> None:
     """Refuse output that is not JSON rather than guess at a state."""
     runner = Answers(_result(stdout="not json"))
