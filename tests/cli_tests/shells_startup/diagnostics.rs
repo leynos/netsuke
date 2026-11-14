@@ -11,9 +11,13 @@ use super::{
 };
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
+use std::path::Path;
 
 /// Mark a value that is visible only to the child process's environment.
 const AMBIENT_MARKER: &str = "ambient-marker-value-that-must-not-be-printed";
+
+/// Text a diagnostic prints immediately before quoting the declaring file.
+const DECLARED_IN: &str = "declared in \"";
 
 #[rstest]
 #[case::non_string_argument(
@@ -72,7 +76,12 @@ fn diagnostics_are_bounded_and_never_echo_argument_vectors(
 ///
 /// The same key and index can appear in several layers, so a diagnostic that
 /// named only `shells[0].executable` would leave the operator guessing which
-/// file to edit.
+/// file to edit. The diagnostic renders the declaring path through the same
+/// escaping and length bound as any other rejected text, and discovery reports
+/// the canonical spelling of a path rather than the one the harness happened to
+/// create, so the assertion compares against both: the quoted preview must be a
+/// faithful escaped prefix of the canonical path, and it must reach far enough
+/// to name the directory holding the file.
 #[test]
 fn a_rejection_names_the_declaring_file() -> Result<()> {
     let startup = Startup::new()?;
@@ -81,31 +90,39 @@ fn a_rejection_names_the_declaring_file() -> Result<()> {
     ensure_rejected_before_compilation(&startup, &output, "shells[0].executable")?;
     let stderr = stderr_of(&output);
     let declaring = startup.path().join(OPERATOR_CONFIG);
+    let canonical = dunce::canonicalize(&declaring)
+        .with_context(|| format!("canonicalize {}", declaring.display()))?;
+    let escaped = escaped_text(&canonical.to_string_lossy());
+    let shown = declared_preview(&stderr)?;
+    let prefix = shown.strip_suffix('…').unwrap_or(shown);
+
     ensure!(
-        stderr.contains(&declaring.to_string_lossy().into_owned()),
-        "diagnostic should name {}, got: {stderr}",
-        declaring.display()
+        !prefix.is_empty() && escaped.starts_with(prefix),
+        "diagnostic should quote a prefix of {escaped}, got: {shown:?}"
+    );
+    let directory = Path::new(OPERATOR_CONFIG)
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .context("the operator configuration should sit in a named directory")?;
+    ensure!(
+        prefix.contains(directory),
+        "diagnostic should reach the configuration directory {directory:?}, got: {shown:?}"
     );
     Ok(())
 }
 
-/// Bound and escape the declaring path before it reaches the terminal.
+/// Bound an overlong declaring path before it reaches the terminal.
 ///
-/// A directory name is operator-supplied text, so it may contain a control
-/// character or be far longer than a readable diagnostic should quote. The
-/// preview must escape the former and truncate the latter, exactly as a
-/// rejected value is rendered.
-#[rstest]
-#[case::control_character("odd\u{7}directory", "\\u{7}", "\u{7}")]
-#[case::overlong_name(&"x".repeat(90), "…", "")]
-fn the_declaring_path_is_bounded_and_escaped(
-    #[case] directory: &str,
-    #[case] expected: &str,
-    #[case] forbidden: &str,
-) -> Result<()> {
+/// A directory name is operator-supplied text, so it may be far longer than a
+/// readable diagnostic should quote. The preview must truncate it and say so.
+/// Escaping has its own tests beside the renderer, because a control character
+/// cannot appear in a directory name on every platform.
+#[test]
+fn an_overlong_declaring_path_is_bounded() -> Result<()> {
     let startup = Startup::new()?;
     let untrusted = startup.write(
-        &format!("{directory}/untrusted.toml"),
+        &format!("{}/untrusted.toml", "x".repeat(90)),
         &definition_body("dash"),
     )?;
     let selector = untrusted.to_string_lossy().into_owned();
@@ -118,14 +135,28 @@ fn the_declaring_path_is_bounded_and_escaped(
     ensure_rejected_before_compilation(&startup, &output, "shells")?;
     let stderr = stderr_of(&output);
     ensure!(
-        stderr.contains(expected),
-        "diagnostic should render {expected:?}, got: {stderr}"
+        declared_preview(&stderr)?.ends_with('…'),
+        "diagnostic should mark a truncated path, got: {stderr}"
     );
-    if !forbidden.is_empty() {
-        ensure!(
-            !stderr.contains(forbidden),
-            "diagnostic should not emit the raw {forbidden:?}, got: {stderr}"
-        );
-    }
     Ok(())
+}
+
+/// Read the quoted preview the diagnostic printed for the declaring file.
+fn declared_preview(stderr: &str) -> Result<&str> {
+    let (_, quoted) = stderr
+        .split_once(DECLARED_IN)
+        .with_context(|| format!("diagnostic should name a declaring file, got: {stderr}"))?;
+    quoted
+        .split_once('"')
+        .map(|(preview, _)| preview)
+        .with_context(|| format!("diagnostic should close the quoted preview, got: {quoted}"))
+}
+
+/// Render text the way a diagnostic does before quoting it.
+///
+/// Control characters take their `escape_debug` spelling. Unlike the production
+/// renderer this never truncates, because the caller allows for the bound
+/// separately.
+fn escaped_text(text: &str) -> String {
+    text.chars().flat_map(char::escape_debug).collect()
 }

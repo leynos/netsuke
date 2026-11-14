@@ -418,9 +418,44 @@ explicit and exercise the actual adapters in tests.
     `markdownlint` 43s, `nixie` 1s. `make verus` reports "9 verified, 0
     errors"; doc-comment coverage is 98.26% against the 80% threshold. The
     gates read the working tree that commit `92d9fb110` records, byte for byte,
-    including this plan file. This bullet is the only content written after
-    that run, and it is prose in this file alone; the Markdown-sensitive gates
-    were re-run over it rather than assumed to cover it.
+    including this plan file. The content written after that run is recorded in
+    the bullets below, which name the run that covers it.
+  - [x] 2026-11-14: Close the two gaps the second assessment round named, in
+    both assessment threads. `production_merge_agrees_with_the_oracle` now
+    compares the merged ordered `(name, executable, args)` definitions for the
+    regrouped layers as well as for the generated ones, so a regrouped merge
+    that accepted the registry and then reordered or rewrote it no longer
+    passes on its verdict alone, and
+    `every_layer_class_reaches_a_verdict` merges each fixed witness through
+    `CliConfig::merge_from_layers` as well as validating it directly, so the
+    empty-layer and cross-layer-duplicate classes reach the production merge on
+    every run. Both comparisons live in one `merge_violation` query so the
+    property and the witnesses cannot drift apart. Two controls: removing
+    duplicate rejection now fails the witness test as well as the property with
+    "merge accepted a rejected registry: [["fish", "fish"]]", and reversing the
+    order the helper pushes generated layers fails the property with "merge
+    changed the registry: [["fish"], ["dash"]]", naming the definitions it got
+    in the reverse of the order the layers declare, which proves the payload
+    comparison is live. Both
+    mutations were reverted from byte-identical copies (sha256 verified). The
+    control's small seed is committed with an annotation saying which control
+    produced it.
+  - [x] 2026-11-15: Repair the two Windows-only failures the hosted
+    `Windows / build-test-windows` job reported for `65f2ccca8`, which no Linux
+    gate can observe. `a_rejection_names_the_declaring_file` compared the
+    diagnostic with the path the harness built, but discovery records the
+    canonical spelling, which on Windows is the long `runneradmin` form of a
+    directory the harness created as `RUNNER~1`, and the preview is bounded at
+    64 characters, so the temporary path was quoted as a truncated escaped
+    prefix. The test now reads the quoted preview out of the diagnostic and
+    requires it to be a faithful escaped prefix of the `dunce::canonicalize`d
+    path that still reaches the configuration directory holding the file.
+    `the_declaring_path_is_bounded_and_escaped` could not create its
+    control-character directory at all, because Windows rejects a control
+    character in a file name with os error 123; escaping is now stated by four
+    `preview` unit tests beside the renderer, which run on every platform, and
+    the integration case keeps only the overlong directory that every supported
+    filesystem can hold.
 
 ## Surprises & discoveries
 
@@ -585,6 +620,20 @@ verified and error counts, not merely a non-zero exit, are what distinguish
 "the mutation was caught by the intended obligation" from "the run happened to
 fail".
 
+Two more Windows-only failures came from tests that asserted about a path
+rather than about behaviour. One compared the diagnostic with the path the
+harness had built, but discovery records the canonical spelling, and on Windows
+that is the long `runneradmin` form of a directory the harness created as
+`RUNNER~1`; the bound then cut the temporary path at 64 characters, so the full
+path was never quoted on that host. The other wrote a directory name containing
+a control character to exercise escaping, which Windows refuses outright with
+os error 123. Both were host assumptions rather than confirmed behaviour. The
+assertion now reads the quoted preview back out of the diagnostic and checks it
+is a faithful escaped prefix of the canonical path, and escaping is proven
+beside the renderer where no filesystem is involved. A test that builds its own
+expectation has to build it the way production does, canonical spelling and
+bound included, or it is testing the harness instead.
+
 ## Decision log
 
 - 2026-10-20: Keep the plan approval-gated and the roadmap entry unchecked.
@@ -724,6 +773,13 @@ fail".
   `[["fish", "fish"]]`, `["sh"]`, `[["sh"]]`) and replaying them first makes
   both rules' smallest counterexamples deterministic on every run. The
   repository already tracks nine such files.
+- 2026-11-15: Compare a declaring-path diagnostic with the canonical spelling of
+  the path it quotes, and prove escaping beside the renderer. Asserting the raw
+  harness path passed only because a Linux temporary path is short and already
+  canonical, and no filesystem-hosted test can carry a control character on
+  Windows. The integration case therefore keeps the overlong directory, which
+  every supported filesystem can create, and reads the quoted preview back out
+  of the diagnostic instead of assuming the whole path is shown.
 - 2026-11-14: Check the correspondence against the production merge, not only
   against `validate_composition`. Every earlier property flattened the layers
   in the test before calling the validator, so the layer boundary was the
@@ -738,6 +794,16 @@ fail".
   original "validator only" scope for adapter evidence; it does not weaken the
   independence of the oracle, which still states the rule pairwise and shares
   no code with either the validator or the merge.
+- 2026-11-14: Check the merged definitions, not only the verdict, for the
+  regrouped layers, and merge the fixed witnesses too. A verdict-only
+  comparison answers "would this be accepted?" and says nothing about what was
+  accepted, so a merge that accepted a regrouped registry and then reordered or
+  rewrote it would pass. The same argument applies to the class witnesses: they
+  named the outcomes on the validator alone, which left the production merge
+  dependent on the generator drawing those classes. Both comparisons are one
+  `merge_violation` query returning the first disagreement, which keeps the
+  property and the witnesses stating the same rule and gives each failure a
+  diagnostic that names the layers.
 
 ## Outcomes & retrospective
 
@@ -784,6 +850,25 @@ generated layer, which is what makes the evidence adapter evidence rather than
 model evidence. The general lesson is that a property is only as strong as the
 production entry point it reaches: a test that pre-processes its input and then
 calls an inner function proves a statement about the inner function alone.
+
+A further round found the same weakness one level down. The regrouped layers
+reached the production merge, but only their verdict was compared, so a merge
+that accepted a regrouped registry and then reordered or rewrote it was
+unobserved; and the fixed class witnesses still stopped at the validator. Both
+now travel through `CliConfig::merge_from_layers` and are compared as ordered
+definitions. A passing verdict is not passing evidence: what a merge accepts is
+as much a part of its contract as whether it accepts.
+
+The hosted Windows job then found a different kind of gap: two startup tests
+asserted something true only of the host that ran them. One built its expected
+path from the harness's temporary directory, which Windows spells in short form
+while discovery records the canonical long form, and whose length the 64-column
+bound then truncated; the other needed a directory name containing a control
+character, which Windows will not create. Both are repaired by asserting the
+property rather than the spelling — the preview must be a faithful escaped
+prefix of the canonical path — and by proving escaping beside the renderer.
+Assertions about paths and other host-supplied text have to be stated in the
+form production uses, or a green Linux run says nothing about another host.
 
 Executable resolution is 11.2.3 and structured-command integration is 12.3.1;
 neither is claimed here. The wider issue #593 stays open.
@@ -1010,10 +1095,15 @@ the validator. `production_merge_agrees_with_the_oracle` turns every generated
 layer into a configuration layer and calls `CliConfig::merge_from_layers`, so
 the sampled layers travel through the schema's append merge and post-merge
 hook. A merge that reordered, replaced, deduplicated, or dropped definitions at
-a layer boundary would fail the payload comparison, and a regrouping of the
-same names at drawn boundaries must not change the verdict. The class witnesses
-above stay in force, because they state the outcomes the generated samples must
-be able to reach.
+a layer boundary would fail the payload comparison. The same two checks apply
+to a regrouping of the same names at drawn boundaries: the verdict must be
+unchanged and, when the registry is accepted, the merged definitions must still
+equal the ordered `(name, executable, args)` triples the names require, because
+a regrouped merge that accepted the registry and then reordered or rewrote it
+would otherwise pass on its verdict alone. The class witnesses above stay in
+force and now also travel through the merge, because they state the outcomes
+the generated samples must be able to reach and a sample is not guaranteed to
+draw the empty-layer or cross-layer-duplicate class on every run.
 
 Non-vacuity evidence includes an empty successful registry, two distinct
 configured names succeeding, a built-in rejection, and a duplicate introduced
@@ -1031,9 +1121,17 @@ rejected registry: [["fish", "fish"]]"; removing `!appears_before` from
 `walk_prefix` fails verification with 8 verified and 1 error; removing the
 built-in lookup fails `built_in_names_are_rejected`,
 `a_reserved_repeat_reports_the_reserved_rule`, and the same three oracle tests;
-removing `!reserved` fails verification with 7 verified and 2 errors. Every
-mutation was reverted from a byte-identical copy, and the restored model
-reports 9 verified and 0 errors.
+removing `!reserved` fails verification with 7 verified and 2 errors. The
+payload comparison has its own control, because no production mutation makes a
+merge reorder an accepted registry: reversing the order in which the test
+helper pushes the generated layers makes
+`production_merge_agrees_with_the_oracle` fail with "merge changed the
+registry: [[\"fish\"], [\"dash\"]]", naming the merged definitions in the
+reverse of the declared order. That sample is the smallest two-layer registry
+whose merge order can differ. Every mutation was reverted from a byte-identical
+copy, and the restored model reports 9 verified and 0 errors. The seed that
+control produced is committed, so the smallest order-sensitive registry is
+replayed on every run.
 
 C4 is an explicit operator assumption, demonstrated by documented `dash`
 `args = ["-c"]` examples; no proof or test claims arbitrary evaluator-prefix
@@ -1142,7 +1240,12 @@ value followed by a later `json = true`: assert parseable JSON, the relevant
 key, nonzero exit, and an untouched manifest/Ninja sentinel. Cover normalized
 environment aliases and malformed nested environment values as denied ingress.
 Assert oversized/control-character inputs yield bounded escaped diagnostics
-without argument contents or ambient values. Use a valid harmless manifest and
+without argument contents or ambient values. The declaring path's escaping is
+proven by the `preview` unit tests beside the renderer, because Windows cannot
+create a directory whose name contains a control character; the startup case
+covers the overlong directory every supported filesystem can hold, and requires
+the quoted preview to be a faithful escaped prefix of the canonical path that
+reaches the configuration directory. Use a valid harmless manifest and
 controlled Ninja stub for success; use an observable sentinel to show invalid
 config prevents later work. Do not depend on an installed `dash`, `bash`, or
 PowerShell.

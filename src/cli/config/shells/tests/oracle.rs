@@ -10,11 +10,11 @@
 //! model walk and this pairwise statement agree at every sequence length. The
 //! properties here supply the bounded, tested correspondence from that model to
 //! the shipped code: they sample generated sequences and layers of validated
-//! names and must agree with the oracle on every sample, and one property drives
-//! the production configuration merge so that a merge which changed behaviour at
-//! a layer boundary would be caught. They do not prove agreement for all
-//! production inputs, and they say nothing about discovery, file loading, or the
-//! rest of the configuration-loading path.
+//! names and must agree with the oracle on every sample, and one property and
+//! one fixed witness set drive the production configuration merge so that a
+//! merge which changed behaviour at a layer boundary would be caught. They do
+//! not prove agreement for all production inputs, and they say nothing about
+//! discovery, file loading, or the rest of the configuration-loading path.
 
 use super::super::{ShellDefinition, validate_composition};
 use super::definitions;
@@ -98,10 +98,12 @@ proptest! {
     /// The properties above flatten the layers themselves, so a production
     /// merge that behaved differently at a layer boundary would pass them. This
     /// property drives `CliConfig::merge_from_layers`, the entry point
-    /// configuration loading uses, and requires three things: the verdict
-    /// matches the oracle, an accepted registry survives with every definition
-    /// in merge order and its payload intact, and regrouping the same names at
-    /// different boundaries cannot change the verdict.
+    /// configuration loading uses, and requires the same three things of the
+    /// generated layers and of the same names regrouped at drawn boundaries:
+    /// the verdict matches the oracle, and an accepted registry survives with
+    /// every definition in merge order and its payload intact. Comparing the
+    /// regrouped payloads, not only the regrouped verdict, is what catches a
+    /// merge that accepts a regrouped registry but reorders or rewrites it.
     #[test]
     fn production_merge_agrees_with_the_oracle(
         layers in generated_layers(),
@@ -109,30 +111,18 @@ proptest! {
     ) {
         let names = merged(&layers);
         let accepted = oracle_accepts(&names);
-        match merge_generated_layers(&layers) {
-            Ok(declarations) => {
-                prop_assert!(accepted, "merge accepted a rejected registry: {:?}", &layers);
-                prop_assert_eq!(
-                    declared_definitions(&declarations),
-                    expected_definitions(&names),
-                    "layers: {:?}",
-                    &layers
-                );
-            }
-            Err(message) => prop_assert!(
-                !accepted,
-                "merge rejected an accepted registry: {:?}: {message}",
-                &layers
-            ),
+        if let Some(violation) = merge_violation(&layers, accepted, &names) {
+            prop_assert!(false, "{violation}");
         }
         let regrouped = regroup(&names, &cuts);
-        prop_assert_eq!(
-            merge_generated_layers(&regrouped).is_ok(),
-            accepted,
-            "regrouped from {:?} with cuts {:?}",
-            &layers,
-            &cuts
-        );
+        if let Some(violation) = merge_violation(&regrouped, accepted, &names) {
+            prop_assert!(
+                false,
+                "regrouped from {:?} with cuts {:?}: {violation}",
+                &layers,
+                &cuts
+            );
+        }
     }
 }
 
@@ -251,6 +241,34 @@ fn declared_definitions(definitions: &[ShellDefinition]) -> Vec<(String, String,
         .collect()
 }
 
+/// State how one layer set's merge disagrees with the rule, if it does.
+///
+/// The verdict and, on acceptance, the ordered definitions are both checked, so
+/// a regrouped registry cannot slip past on its verdict alone: a merge that
+/// accepted the same names but reordered or rewrote them is a disagreement.
+/// Returning the first disagreement lets the generated property and the fixed
+/// witnesses assert the same rule without restating it.
+fn merge_violation(layers: &[Vec<&'static str>], accepted: bool, names: &[&str]) -> Option<String> {
+    match merge_generated_layers(layers) {
+        Ok(declarations) => {
+            if !accepted {
+                return Some(format!("merge accepted a rejected registry: {layers:?}"));
+            }
+            let declared = declared_definitions(&declarations);
+            let expected = expected_definitions(names);
+            (declared != expected).then(|| {
+                format!(
+                    "merge changed the registry: {layers:?} gave {declared:?}, not {expected:?}"
+                )
+            })
+        }
+        Err(message) if accepted => Some(format!(
+            "merge rejected an accepted registry: {layers:?}: {message}"
+        )),
+        Err(_) => None,
+    }
+}
+
 /// Show the oracle reaches both outcomes, so agreement is not vacuous.
 #[test]
 fn the_oracle_distinguishes_accepted_from_rejected() {
@@ -287,10 +305,13 @@ fn the_generator_pool_reaches_every_outcome() {
 /// one appears in a run, so this test states the witness set explicitly: it is
 /// the non-vacuity record for the layered property. Every witness is drawn from
 /// [`NAME_POOL`], so none of them depends on an input the generator cannot
-/// produce.
+/// produce, and every witness is merged through the production configuration
+/// path as well as validated directly, so the empty layer and the cross-layer
+/// duplicate are known to reach the production merge on every run rather than
+/// only when a sample happens to draw them.
 #[test]
 fn every_layer_class_reaches_a_verdict() {
-    let cases: [(&str, Vec<Vec<&str>>, bool); 6] = [
+    let cases: [(&str, Vec<Vec<&'static str>>, bool); 6] = [
         ("empty layers only", vec![vec![], vec![], vec![]], true),
         (
             "unique names across layers",
@@ -321,6 +342,11 @@ fn every_layer_class_reaches_a_verdict() {
             oracle_accepts(&names),
             accepted,
             "oracle disagrees for class {class:?}"
+        );
+        assert_eq!(
+            merge_violation(&layers, accepted, &names),
+            None,
+            "class {class:?} must merge exactly as the oracle says"
         );
     }
 }

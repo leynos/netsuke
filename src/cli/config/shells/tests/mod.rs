@@ -3,7 +3,9 @@
 //! The field suites pin the local validity rules for each declared field. The
 //! composition suite pins the registry rules, and compares the production walk
 //! with an independent quadratic oracle so a divergence between the two shows
-//! up as a test failure rather than as an accepted registry.
+//! up as a test failure rather than as an accepted registry. The rendering
+//! suite pins the bounding and escaping applied to any text a diagnostic
+//! quotes.
 
 use super::{ShellArguments, ShellDefinition, ShellExecutable};
 use crate::shell_selection::{HostFamily, ShellName};
@@ -11,6 +13,7 @@ use crate::shell_selection::{HostFamily, ShellName};
 mod composition;
 mod fields;
 mod oracle;
+mod preview;
 
 /// Build a definition for `name`, using a fixed program and argument vector.
 ///
