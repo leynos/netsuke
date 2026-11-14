@@ -66,7 +66,7 @@ def read_release(
     tag: str,
     repository: str,
     *,
-    runner: release_io.Runner = release_io.run_gh,
+    runner: release_io.Runner,
 ) -> release_ports.ReleaseRead:
     """Read GitHub's current view of the release, decoded or explained.
 
@@ -132,7 +132,7 @@ def edit_release(
     repository: str,
     *,
     is_prerelease: bool,
-    runner: release_io.Runner = release_io.run_gh,
+    runner: release_io.Runner,
 ) -> release_ports.RemoteAnswer:
     """Un-draft the release with the candidate's own prerelease flag.
 
