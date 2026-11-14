@@ -129,6 +129,10 @@ def _words(line: str) -> list[str]:
     """
     lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
+    # The reader has already dropped bash's comments, so a `#` here is not
+    # one: `true foo\ #; gh api ...` keeps it inside a word, and the call after
+    # the `;` still runs.
+    lexer.commenters = ""
     try:
         return list(lexer)
     except ValueError as error:
@@ -162,25 +166,23 @@ _COMMAND_POSITIONS = frozenset({
 })
 
 
-def _names_expansion(word: str, position: _Position) -> bool:
+def _names_expansion(word: str, *, is_command: bool) -> bool:
     """Return whether ``word`` names a command through a variable expansion.
 
-    Which positions count, and why an expansion need not open the word, is set
-    out in :data:`_COMMAND_POSITIONS` and :func:`indirect_command_words`. Two
-    shapes are not commands there: a ``NAME=value`` word is an assignment
-    wherever it sits, because bash stores its value and runs nothing -- the
-    step's own ``trusted_root=$(canonical "$TRUSTED_DIRECTORY")`` is that
-    shape -- and a quoted ``$`` bash would not expand is refused, because the
-    scan cannot tell the two apart.
+    Which words count as commands, and why an expansion need not open the
+    word, is set out in :func:`placed_words` and
+    :func:`indirect_command_words`. Two shapes are not commands there: a
+    ``NAME=value`` word is an assignment wherever it sits, because bash stores
+    its value and runs nothing -- the step's own ``trusted_root=$(canonical
+    "$TRUSTED_DIRECTORY")`` is that shape -- and a quoted ``$`` bash would not
+    expand is refused, because the scan cannot tell the two apart.
 
     Returns
     -------
     bool
         ``True`` when the word is a command name spelt as an expansion.
     """
-    if position not in _COMMAND_POSITIONS:
-        return False
-    if ENVIRONMENT_ASSIGNMENT.match(word) is not None:
+    if not is_command or ENVIRONMENT_ASSIGNMENT.match(word) is not None:
         return False
     return "$" in word
 
@@ -268,33 +270,36 @@ def _wrapped_successor(word: str) -> _Position:
     return _Position.ARGUMENT
 
 
-def _placed_words(line: str) -> list[tuple[str, _Position]]:
-    """Return each word on one joined line with the position bash reads it in.
+def placed_words(line: str) -> list[tuple[str, bool]]:
+    """Return each word on one joined line and whether bash runs it.
 
-    Both command-word checks ask a different question of the same reading, so
-    the traversal is written once and each check supplies its own predicate.
+    Every check built on this reading asks the same question of it: can this
+    word name the command bash ultimately runs? The command-word checks add
+    their own predicate, and the auditing checks read the word *after* a
+    command word to find the ``gh`` subcommand. Returning the one bit they
+    share keeps a single traversal and a single definition of where a command
+    word can appear.
 
     Returns
     -------
-    list[tuple[str, _Position]]
-        The line's words and their positions, in order.
+    list[tuple[str, bool]]
+        The line's words, in order, each with whether bash reads it in
+        a position listed in :data:`_COMMAND_POSITIONS`.
     """
-    placed: list[tuple[str, _Position]] = []
+    placed: list[tuple[str, bool]] = []
     position = _Position.COMMAND
     for word in _words(line):
-        placed.append((word, position))
+        placed.append((word, position in _COMMAND_POSITIONS))
         position = _next_position(word, position)
     return placed
 
 
-def _is_unread_executor(word: str, position: _Position) -> bool:
+def _is_unread_executor(word: str, *, is_command: bool) -> bool:
     """Return whether ``word`` would run text the scan cannot read."""
-    return position in _COMMAND_POSITIONS and word in FORBIDDEN_EXECUTORS
+    return is_command and word in FORBIDDEN_EXECUTORS
 
 
-def _command_words(
-    run: str, matches: cabc.Callable[[str, _Position], bool]
-) -> list[str]:
+def _command_words(run: str, matches: cabc.Callable[..., bool]) -> list[str]:
     """Return every word in a step that ``matches`` accepts, in order.
 
     Parameters
@@ -302,8 +307,8 @@ def _command_words(
     run
         The step's ``run`` text, as the action manifest carries it.
     matches
-        The predicate deciding whether a word, at the position bash reads it
-        in, is one the caller is looking for.
+        The predicate deciding whether a word, and whether bash runs it, is
+        one the caller is looking for.
 
     Returns
     -------
@@ -313,8 +318,8 @@ def _command_words(
     return [
         word
         for line in script_lines(run)
-        for word, position in _placed_words(line)
-        if matches(word, position)
+        for word, is_command in placed_words(line)
+        if matches(word, is_command=is_command)
     ]
 
 

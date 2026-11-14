@@ -3,7 +3,7 @@
 The verification action's safety rests on the commands it runs being the ones
 the contract can read. A ``gh api`` call is inspected for write-implying flags,
 the verifier invocation has its tokens pinned, and a token-bearing step must
-name its commands and its ``gh`` subcommands literally.
+run only the ``gh`` subcommand the scan has a rule for.
 
 This module owns those checks -- the auditing half of the contract. Reading the
 step, by joining its lines and deciding which word bash treats as a command,
@@ -19,7 +19,11 @@ import re
 import shlex
 import typing as typ
 
-from release_verify_inventory_command_words import script_lines
+from release_verify_inventory_command_words import (
+    COMMAND_SEPARATORS,
+    placed_words,
+    script_lines,
+)
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -32,28 +36,48 @@ FORBIDDEN_LONG_FLAGS = ("--field", "--raw-field", "--input")
 #: sets the method. Matching their first two characters covers the joined
 #: forms, such as `-fx=y` and `-XPOST`.
 FORBIDDEN_SHORT_FLAGS = ("-f", "-F", "-X")
-#: A `gh api` call anywhere on a line, including inside a command
-#: substitution, which a check anchored at the start of the line would miss.
-GH_API_CALL = re.compile(r"\bgh\s+api\b")
-#: The `gh release` subcommand, which can write; `gh api` is what a read-only
-#: step must use instead.
-GH_RELEASE_CALL = re.compile(r"\bgh\s+release\b")
-#: A `gh` word and the word bash reads as its subcommand, quoted or bare. Bash
-#: expands that word before `gh` sees it, so `gh "$sub"` runs whatever the
-#: variable holds and the literal `gh api` scan finds no call to inspect.
-GH_SUBCOMMAND = re.compile(r"\bgh\s+(\"[^\"]*\"|'[^']*'|\S+)")
+#: The `gh` subcommand a read-only step may name, and the one that wrote the
+#: release it is checking. Any other subcommand is refused: the contract has a
+#: rule for `api` alone, because that is the only call the action needs.
+READ_ONLY_SUBCOMMAND = "api"
+WRITING_SUBCOMMAND = "release"
+#: The subcommands the scan can read. A word outside this set -- including one
+#: built from a variable, which bash expands before `gh` sees it -- names a
+#: call the flag and release checks have no wording to inspect.
+READABLE_SUBCOMMANDS = frozenset({READ_ONLY_SUBCOMMAND, WRITING_SUBCOMMAND})
 #: The word naming the secrets context inside an expression, whether dotted,
 #: indexed, or passed whole to `toJSON`.
 SECRET_WORD = re.compile(r"\bsecrets\b")
 
 
-def gh_api_invocations(run: str) -> list[list[str]]:
-    """Return the shell tokens of every ``gh api`` invocation in one step.
+def _command_tokens(words: list[tuple[str, bool]]) -> list[str]:
+    """Return the words of one command, stopping at the operator ending it.
 
-    Tokenizing one joined command rather than the whole script keeps the flag
-    checks from seeing text that belongs to an unrelated line. The search
-    starts wherever the call sits on its line, so a call inside a command
-    substitution is scanned like any other.
+    A line can hold more than one command -- ``gh api ...; gh release delete
+    v1`` -- and a flag check that read past the separator would judge the first
+    call by the second one's arguments.
+
+    Returns
+    -------
+    list[str]
+        The command's words, with its operators removed.
+    """
+    tokens: list[str] = []
+    for word, _ in words:
+        if word in COMMAND_SEPARATORS:
+            break
+        tokens.append(word)
+    return tokens
+
+
+def gh_invocations(run: str) -> list[list[str]]:
+    """Return the shell tokens of every ``gh`` command a step runs.
+
+    The command words come from the shared placement, so a call is found
+    wherever bash would read it: at the start of a line, inside a command
+    substitution, or behind a wrapper. The tokens are the ones bash hands
+    ``gh``, with quotes removed, so ``gh "api"`` and ``gh api`` are the same
+    call to every check built on this list.
 
     Parameters
     ----------
@@ -64,40 +88,38 @@ def gh_api_invocations(run: str) -> list[list[str]]:
     -------
     list[list[str]]
         Shell tokens for each invocation, in the order the step runs them.
-
-    Raises
-    ------
-    AssertionError
-        If the script names more ``gh api`` calls than the scan tokenizes. An
-        unmodelled shape must fail the contract rather than slip past it.
     """
-    script = script_lines(run)
-    invocations = [
-        shlex.split(line[call.start() :])
-        for line in script
-        if (call := GH_API_CALL.search(line)) is not None
-    ]
-    mentioned = len(GH_API_CALL.findall("\n".join(script)))
-    if mentioned != len(invocations):
-        msg = (
-            f"every gh api call must be tokenized, found {mentioned} call(s) "
-            f"and {len(invocations)} invocation(s)"
-        )
-        raise AssertionError(msg)
+    invocations: list[list[str]] = []
+    for line in script_lines(run):
+        words = placed_words(line)
+        for index, (word, is_command) in enumerate(words):
+            if is_command and word == "gh":
+                invocations.append(_command_tokens(words[index:]))
     return invocations
 
 
-def unread_subcommand_lines(run: str) -> list[str]:
-    """Return each line whose ``gh`` subcommand the scan cannot read.
+def gh_subcommand(tokens: list[str]) -> str:
+    """Return the word bash hands ``gh`` as its subcommand, or an empty string.
 
-    Placing a command word says bash runs ``gh``; it does not say which
-    subcommand the word after it names. ``subcommand=api; gh "$subcommand"
-    --method POST ...`` runs an ``api`` call with the write-implying flags the
-    contract refuses, yet the literal ``gh api`` scan finds nothing: the word it
-    looks for is the one bash builds from the variable. A word written out
-    before the expansion -- ``gh "a$(printf pi)"`` -- escapes the literal scan
-    the same way, and a quoted ``$`` is refused because the scan cannot tell it
-    from one bash expands.
+    Parameters
+    ----------
+    tokens
+        One ``gh`` invocation's shell tokens.
+
+    Returns
+    -------
+    str
+        The subcommand the call names, or ``""`` when it names none.
+    """
+    return tokens[1] if len(tokens) > 1 else ""
+
+
+def gh_api_invocations(run: str) -> list[list[str]]:
+    """Return the shell tokens of every ``gh api`` invocation in one step.
+
+    The subcommand is read from the tokenized words rather than from the raw
+    text, so a quoted spelling cannot present a call the flag checks never
+    see: bash removes the quotes before ``gh`` runs, and so does the scan.
 
     Parameters
     ----------
@@ -106,20 +128,69 @@ def unread_subcommand_lines(run: str) -> list[str]:
 
     Returns
     -------
-    list[str]
-        The offending joined lines, in the order the step runs them.
+    list[list[str]]
+        Shell tokens for each invocation, in the order the step runs them.
+    """
+    return [
+        tokens
+        for tokens in gh_invocations(run)
+        if gh_subcommand(tokens) == READ_ONLY_SUBCOMMAND
+    ]
+
+
+def gh_release_invocations(run: str) -> list[list[str]]:
+    """Return the shell tokens of every ``gh release`` invocation in one step.
+
+    Parameters
+    ----------
+    run
+        The step's ``run`` text, as the action manifest carries it.
+
+    Returns
+    -------
+    list[list[str]]
+        Shell tokens for each invocation, in the order the step runs them.
+    """
+    return [
+        tokens
+        for tokens in gh_invocations(run)
+        if gh_subcommand(tokens) == WRITING_SUBCOMMAND
+    ]
+
+
+def unread_gh_subcommands(run: str) -> list[list[str]]:
+    """Return each ``gh`` invocation whose subcommand the scan cannot read.
+
+    Placing a command word says bash runs ``gh``; it does not say which
+    subcommand the word after it names. ``subcommand=api; gh "$subcommand"
+    --method POST ...`` runs an ``api`` call with the write-implying flags the
+    contract refuses, yet the tokens hand it ``$subcommand`` rather than
+    ``api``, so the flag check has no call to judge. The same holds for a word
+    written out before an expansion, ``gh "a$(printf pi)"``, and for any
+    subcommand outside :data:`READABLE_SUBCOMMANDS`, which the contract has no
+    rule for.
+
+    Parameters
+    ----------
+    run
+        The step's ``run`` text, as the action manifest carries it.
+
+    Returns
+    -------
+    list[list[str]]
+        The offending invocations' tokens, in the order the step runs them.
 
     Examples
     --------
-    >>> unread_subcommand_lines('sub=api; gh "$sub" --method POST repos/o/r')
-    ['sub=api; gh "$sub" --method POST repos/o/r']
-    >>> unread_subcommand_lines('gh api --method GET "repos/$GITHUB_REPOSITORY/x"')
+    >>> unread_gh_subcommands('sub=api; gh "$sub" --method POST repos/o/r')
+    [['gh', '$sub', '--method', 'POST', 'repos/o/r']]
+    >>> unread_gh_subcommands('gh api --method GET "repos/$GITHUB_REPOSITORY/x"')
     []
     """
     return [
-        line
-        for line in script_lines(run)
-        if any("$" in word for word in GH_SUBCOMMAND.findall(line))
+        tokens
+        for tokens in gh_invocations(run)
+        if gh_subcommand(tokens) not in READABLE_SUBCOMMANDS
     ]
 
 

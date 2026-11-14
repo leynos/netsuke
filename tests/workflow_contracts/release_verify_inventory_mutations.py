@@ -110,9 +110,11 @@ EXECUTOR_MUTATIONS = {
     "gh-api-shell": 'api="gh api --method POST repos/o/r/releases"; bash -c "$api"',
 }
 #: Commands a mutation appends whose command word is the literal ``gh`` but
-#: whose subcommand is not. Placing the command word answers only where bash
-#: looks, so the POST is hidden from the literal ``gh api`` scan by the word
-#: that follows, which the braced spelling writes the same way.
+#: whose subcommand is written so that a scan of the raw text cannot name it.
+#: Placing the command word answers only where bash looks, so the POST is hidden
+#: from a literal ``gh api`` scan by the word that follows: built from a
+#: variable in the first two spellings, and quoted in the last two, which bash
+#: strips before ``gh`` sees the word.
 SUBCOMMAND_MUTATIONS = {
     "gh-api-indirect-subcommand": (
         'subcommand=api; gh "$subcommand" --method POST "repos/o/r/releases"'
@@ -120,6 +122,8 @@ SUBCOMMAND_MUTATIONS = {
     "gh-api-braced-subcommand": (
         'subcommand=api; gh "${subcommand}" --method POST "repos/o/r/releases"'
     ),
+    "gh-api-quoted-subcommand": ('gh "api" --method POST -f tag_name=v1 "repos/o/r"'),
+    "gh-release-quoted-subcommand": ("gh 'release' delete v1"),
 }
 #: Each write-implying argument a mutation adds to the listing call, in the
 #: spellings that whole-token matching would accept.
@@ -151,12 +155,23 @@ def _hide_write_in_substitution(steps: list[dict[str, object]]) -> None:
     """Move the download call into ``$(...)`` and add a write-implying flag.
 
     The call no longer begins its line and the field flag turns it into a POST,
-    so this mutation is detected only if both halves of the scan work.
+    so this mutation is detected only if both halves of the scan work. The
+    substitution is closed at the redirect that ends the call, so the step stays
+    a script the scan can read: the mutation has to fail the flag check, not the
+    refusal of unbalanced shell text.
     """
     download = named_step(steps, DOWNLOAD_STEP)
-    download["run"] = str(download["run"]).replace(
+    hidden = str(download["run"]).replace(
         "gh api --method GET", "body=$(gh api --method GET -f x=y", 1
     )
+    closed = hidden.replace(
+        '>"$DOWNLOAD_DIRECTORY/$asset_name"; then',
+        '>"$DOWNLOAD_DIRECTORY/$asset_name"); then',
+        1,
+    )
+    if closed == hidden:
+        pytest.fail("the download call no longer ends where this mutation closes it")
+    download["run"] = closed
 
 
 def _add_second_verifier_call(steps: list[dict[str, object]]) -> None:

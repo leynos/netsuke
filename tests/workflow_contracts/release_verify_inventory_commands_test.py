@@ -4,8 +4,8 @@ The contract test asserts that the verification step's scans pass over the
 checked-in action. Each such assertion is only as good as its reach: a scan
 anchored at the start of a line misses a call inside a substitution, a scan of
 raw lines misses a command continued across a backslash-newline, a scan of
-command names misses one built from a variable, a scan of literal calls misses
-a subcommand built from one, and no scan of positions can tell what an
+command names misses one built from a variable, a scan of the raw text misses a
+subcommand written in quotes, and no scan of positions can tell what an
 interpreter is handed. These cases are the controls
 for the ``release_verify_inventory_command_words`` and
 ``release_verify_inventory_commands`` modules -- they show the scans do reach
@@ -19,15 +19,14 @@ import pytest
 from release_verify_inventory_command_words import (
     forbidden_executor_words,
     indirect_command_words,
-    script_lines,
 )
 from release_verify_inventory_commands import (
-    GH_RELEASE_CALL,
     forbidden_gh_flags,
     gh_api_invocations,
+    gh_release_invocations,
     reject_secrets,
     run_tokens,
-    unread_subcommand_lines,
+    unread_gh_subcommands,
 )
 
 
@@ -85,7 +84,7 @@ def test_a_continued_command_is_scanned_after_joining() -> None:
         ["--method"],
         ["--method"],
     ], invocations
-    releases = [line for line in script_lines(script) if GH_RELEASE_CALL.search(line)]
+    releases = gh_release_invocations(script)
     assert len(releases) == 2, (
         f"a continued release command must still be recognised, got {releases}"
     )
@@ -161,34 +160,61 @@ def test_a_wrapper_around_a_literal_command_is_not_indirect() -> None:
         'prefix=a; gh "${prefix}pi" --method POST "repos/o/r/releases"',
         'subcommand=api; command gh "$subcommand" --method POST "repos/o/r"',
         'subcommand=api; gh "$subcommand" \\\n  --method POST "repos/o/r"',
+        'subcommand=api; gh "a$(printf pi)" --method POST "repos/o/r"',
+        "subcommand=checkout; gh $subcommand --method POST repos/o/r",
     ],
 )
-def test_a_gh_subcommand_built_from_a_variable_is_rejected(line: str) -> None:
-    """Refuse a ``gh`` call whose subcommand the literal scan cannot read.
+def test_a_gh_subcommand_the_scan_cannot_read_is_rejected(line: str) -> None:
+    """Refuse a ``gh`` call whose subcommand the scan cannot read.
 
     The command word here is the literal ``gh``, which every position check
     accepts; the write hides in the word after it. Bash expands that word before
     ``gh`` runs, so ``gh "$subcommand" --method POST`` issues the POST that the
-    literal ``gh api`` scan has no call to inspect. The spellings cover a bare
+    ``gh api`` check has no call to inspect. The spellings cover a bare
     expansion, a braced one, a bare word with the write flags attached, a
-    literal prefix joined to the expansion, a wrapper before the command, and a
-    call continued across a backslash-newline.
+    literal prefix joined to the expansion, a wrapper before the command, a
+    call continued across a backslash-newline, an expansion inside a quoted
+    word, and a subcommand outside the two the contract has a rule for.
     """
-    unread = unread_subcommand_lines(line)
-    assert unread, f"{line!r} builds a gh subcommand from a variable"
+    unread = unread_gh_subcommands(line)
+    assert unread, f"{line!r} names a gh subcommand the scan cannot read"
+
+
+def test_a_quoted_gh_subcommand_is_read_as_the_call_it_names() -> None:
+    """Read ``gh "api"`` as the api call bash runs, whatever the quotes.
+
+    Quotes are bash's, not ``gh``'s: it receives ``api`` either way. A scan of
+    the raw text finds no ``gh api`` in the quoted spelling, so a write written
+    that way would be neither counted nor checked. The subcommand therefore
+    comes from the tokenized words, which have no quotes left, and the call
+    lands where the flag and release checks can judge it.
+    """
+    quoted_post = 'gh "api" --method POST -f tag_name=v1 "repos/o/r/releases"\n'
+    (tokens,) = gh_api_invocations(quoted_post)
+    assert tokens[:2] == ["gh", "api"], tokens
+    assert forbidden_gh_flags(tokens) == ["--method", "-f"], tokens
+    quoted_release = "gh 'release' delete v1\n"
+    (release,) = gh_release_invocations(quoted_release)
+    assert release[:2] == ["gh", "release"], release
 
 
 def test_a_literal_gh_subcommand_is_not_rejected() -> None:
     """Accept the action's own listing call, whose arguments expand.
 
     The control for the cases above: they must be refused because the
-    *subcommand* is built from a variable, not because a variable appears in the
-    call. The listing step names its release path with one, and a rule that
-    refused any expanded argument would reject the action it is meant to hold.
+    *subcommand* cannot be read, not because a variable or a quote appears in
+    the call. The listing step names its release path with a variable, and a
+    rule that refused any expanded argument would reject the action it is meant
+    to hold.
     """
-    assert not unread_subcommand_lines(
-        'gh api --method GET --paginate --slurp "repos/$GITHUB_REPOSITORY/x"\n'
-    ), "a variable used as an argument must not make the subcommand indirect"
+    for call in (
+        'gh api --method GET --paginate --slurp "repos/$GITHUB_REPOSITORY/x"\n',
+        'gh "api" --method GET --paginate --slurp "repos/$GITHUB_REPOSITORY/x"\n',
+    ):
+        assert not unread_gh_subcommands(call), (
+            f"a readable subcommand must not be refused: {call!r}"
+        )
+        assert len(gh_api_invocations(call)) == 1, call
 
 
 @pytest.mark.parametrize(

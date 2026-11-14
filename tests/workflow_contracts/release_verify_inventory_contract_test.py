@@ -19,15 +19,14 @@ from release_publish_path_verification import check_verify_inventory
 from release_verify_inventory_command_words import (
     forbidden_executor_words,
     indirect_command_words,
-    script_lines,
 )
 from release_verify_inventory_commands import (
-    GH_RELEASE_CALL,
     forbidden_gh_flags,
     gh_api_invocations,
+    gh_release_invocations,
     reject_secrets,
     run_tokens,
-    unread_subcommand_lines,
+    unread_gh_subcommands,
 )
 from release_verify_inventory_mutations import (
     ACTION_MUTATIONS,
@@ -96,8 +95,9 @@ def _assert_gh_api_calls(steps: list[dict[str, object]]) -> None:
     for step in steps:
         name = str(step.get("name"))
         run = str(step.get("run"))
-        assert not any(GH_RELEASE_CALL.search(line) for line in script_lines(run)), (
-            f"{name} must not use the release subcommand: it can write"
+        releases = gh_release_invocations(run)
+        assert not releases, (
+            f"{name} must not use the release subcommand: it can write; {releases!r}"
         )
         # A command word built from a variable executes whatever the variable
         # holds, so the literal scan below would see only the call it can read
@@ -116,12 +116,13 @@ def _assert_gh_api_calls(steps: list[dict[str, object]]) -> None:
             f"{executors!r} would run text the scan cannot read"
         )
         # Naming the command word literally still leaves the subcommand open: a
-        # `gh "$subcommand" --method POST` runs the write the literal scan has
-        # no word to inspect.
-        unread = unread_subcommand_lines(run)
+        # `gh "$subcommand" --method POST` runs the write the api check has no
+        # word to inspect, and a subcommand with no rule behind it is unread
+        # however it is spelt.
+        unread = unread_gh_subcommands(run)
         assert not unread, (
-            f"{name} must name its gh subcommands literally; {unread!r} builds "
-            "one from a variable, which hides the call it makes"
+            f"{name} must name a gh subcommand the contract can read; "
+            f"{unread!r} names one it cannot, which hides the call it makes"
         )
         invocations = gh_api_invocations(run)
         expected = 1 if name in NETWORK_STEPS else 0

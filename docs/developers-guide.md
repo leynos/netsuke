@@ -3329,15 +3329,16 @@ check for exactly the dependencies this job must observe.
 `tests/workflow_contracts/release_verify_inventory_contract_test.py` pins the
 action's shape, the job's wiring, and the credential routing, and proves each
 assertion against a deliberate mutation of the checked documents. It also reads
-each step's shell text as bash does, and refuses three shapes the literal scan
-could not check: a command word built from a variable, including one reached
-through nested wrappers; a `gh` subcommand built from a variable, which hides
-the call the literal `gh api` scan looks for; and any command that would hand a
-run-time string to an interpreter. The job's reachability is computed
-independently in `release_publish_path_verification.py`, from the scenario
-table in `release_publish_path_scenarios.py`; that table includes a publisher
-failure and a publisher skip for each publisher, plus the realistic dry run in
-which both are skipped while the rehearsal job runs.
+each step's shell text as bash does, and refuses three shapes a scan of the raw
+text could not check: a command word built from a variable, including one
+reached through nested wrappers; a `gh` subcommand outside the two the contract
+has a rule for, whether built from a variable or quoted, which hides the call
+the `gh api` check looks for; and any command that would hand a run-time string
+to an interpreter. The job's reachability is computed independently in
+`release_publish_path_verification.py`, from the scenario table in
+`release_publish_path_scenarios.py`; that table includes a publisher failure
+and a publisher skip for each publisher, plus the realistic dry run in which
+both are skipped while the rehearsal job runs.
 
 ### Release-inventory verifier telemetry
 
@@ -3738,10 +3739,13 @@ presents a payload matching its declaration record but not its selection record
 is refused as a conflict.
 
 The provenance chain has six links and each one refuses rather than
-interpolates. Links 1 to 5 run in every tagged workflow; link 6 is written and
-tested but is not yet wired into `release.yml`, so today the record is consumed
-by verification and retained past it, but nothing yet acts on the verified
-result.
+interpolates. Links 1 to 4 are steps of the two publisher jobs, and link 5 runs
+only in a publishing-mode run whose publisher jobs both succeeded: a tagged
+workflow that skips verification, or that stops before reaching it, has not
+verified its assets, so its silence says nothing about the bytes a release
+holds. Link 6 is written and tested but is not yet wired into `release.yml`, so
+today the record is consumed by verification and retained past it, but nothing
+yet acts on the verified result.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
 2. `select_release_payload_cli` hashes the sources it approves, requires them
