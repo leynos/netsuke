@@ -735,6 +735,11 @@ pre-rebase history if an old hash must be inspected.
   10.00 after. The refactor touches `tests/`, so the post-pin list was
   regenerated a sixth time to 65 and the split re-measured at 50 `main` and 15
   branch.
+- [x] (2026-11-15) Ran the eleven-gate set on `e22fac843`: ten gates green and
+  `make check-fmt` red on the contract test's import order. `cargo fmt --all`
+  fixed it, and because a formatting repair still touches `tests/`, the list
+  was regenerated a seventh time to 66 with a 50/16 split before the candidate
+  was gated again.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -953,8 +958,11 @@ pre-rebase history if an old hash must be inspected.
   touches `tests/`, so the post-pin list was regenerated a sixth time, to 65
   identifiers and a 50/15 split — D-31's mechanism recurring within the hour,
   which is now the strongest evidence in this log that the enumeration is worth
-  more than any remembered count. Date/Author: 2026-11-15, implementation
-  agent, after the hosted CodeScene re-review.
+  more than any remembered count. Two further regenerations followed for the
+  same reason: the formatting repair that `make check-fmt` required after this
+  decision was itself a `tests/` commit, taking the list to 66 and the split to
+  50/16. Date/Author: 2026-11-15, implementation agent, after the hosted
+  CodeScene re-review.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
   the pin" list for in-scope paths at merge time. Rationale: the roadmap
@@ -2363,6 +2371,12 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   because the refactor touches `tests/`. The diff is still 22 files; the
   contract's module contents changed, not its file set. This candidate again
   needs its own eleven-gate run, for the same reason Revision 46 gave.
+- Revision 47 follow-up (2026-11-15): the eleven-gate run on `e22fac843` came
+  back ten green and one red, `make check-fmt`, which rejected the contract
+  test's fixture import order. `cargo fmt --all` fixed it and the repair is its
+  own commit; it also touches `tests/`, so the post-pin list advanced a seventh
+  time to 66 identifiers, 50 `main` and 16 branch. The re-gated candidate is
+  66, not the 65 this revision first quoted.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
