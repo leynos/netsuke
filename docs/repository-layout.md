@@ -184,12 +184,20 @@ output and some leaf files so the long-lived structure remains visible.
   deliberately do *not* route through it.
 - `src/stdlib/`: Netsuke standard library modules exposed to manifest
   rendering.
+- `src/stdlib/canonical_value/`: The canonical key and equality relation for
+  template values, with the typed `CanonicalValueError` refusal and the
+  stable-deduplication helper.
 - `src/stdlib/command/`: Structured-command wrappers, including
   `child_argument.rs` (renamed from `quote.rs`), which spells one argument for
   the interpreter a structured command runs under, including `cmd.exe`.
 - `src/stdlib/recipe_text/`: The template-facing `shell_quote` and `shell_join`
   filters, with their dialect telemetry. The filter adapter validates arguments
   and resolves the dialect; the encoding itself is `src/shell_word.rs`.
+- `src/stdlib/resource_bounds/`: The RFC 0006 ceilings, checked cardinality and
+  running-total arithmetic, and typed refusals shared by every bounded template
+  helper (see
+  [ADR-0075](adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md)). Its
+  Kani harnesses live in `verification.rs` behind `#[cfg(kani)]`.
 - `test_support/`: Shared Rust test-support crate used by integration and
   behavioural tests.
 - `test_support/src/terminal/`: Child-process and Unix PTY helpers plus the
@@ -217,7 +225,9 @@ output and some leaf files so the long-lived structure remains visible.
   and proves its own model walk agrees with it; a repository Rust oracle tests
   the production function over bounded generated inputs. `configured_shells/`
   proves the trusted shell-composition rule and `canonical_value/` the
-  action-hash canonicalizer.
+  action-hash canonicalizer. `resource_bounds/` models the stdlib combinatorial
+  and running-total arithmetic; it is run by `make verus` and is not part of
+  the ordinary pull-request gate.
 
 ## Internal support module ownership
 
