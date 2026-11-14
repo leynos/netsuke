@@ -338,8 +338,9 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   parser modules under `tests/hexagonal_inventory_contract/`, the exact-path
   CodeScene exemptions those parsers need, and (only if the spelling gate
   requires it) `typos.local.toml` and its generated `typos.toml`. The measured
-  range `origin/main...HEAD` is sixteen files, so this tolerance fired during
-  the task; the expansion is recorded in D-14 rather than applied silently.
+  range `origin/main...HEAD` is twenty files, so this tolerance fired during
+  the task; the expansion is recorded in D-14 and D-28 rather than applied
+  silently.
 - Drift: if the pin differs from `ebcedaef` and any commit between them
   touches `src/`, `build.rs`, `tests/`, `test_support/`, or `benches/`, re-run
   every sweep; do not patch this plan's planning-time observations. If
@@ -393,6 +394,14 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   accept ADR-0035 in this candidate before completing the roadmap item.
 
 ## Progress
+
+Entries dated before 2026-11-14 quote the commit names the branch carried at
+the time. The rebase recorded in D-28 rewrote them, so those hashes no longer
+resolve. Each historical entry keeps its hash as the name it was written
+against, with the entry's own subject as the durable identifier; the migration
+is one-to-one and every subject survives unchanged. The recovery refs
+`recovery/810-old-head` and `recovery/810-old-base` still resolve the
+pre-rebase history if an old hash must be inspected.
 
 - [x] (2026-09-27) Renamed the working branch to
   `26-1-1-record-model-and-consumer-inventory`.
@@ -682,8 +691,17 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 - [x] (2026-11-09) Regenerated the inventory's post-pin commit list a third
   time (D-27). The two 2026-11-09 contract commits touch `tests/`, so the list
   went stale the moment they landed; it now names all 37 in-scope commits.
-- [ ] EP-M4: publish the verified revision, apply the PR body, and take the
-  pull request through hosted review to equilibrium.
+- [x] (2026-11-14) Published `a05187397` over SSH, applied the PR body, and
+  marked PR #810 ready. The body carries the eleven-gate figures for
+  `a05187397`, the 37-commit post-pin list, and the region-versus-harvest rule.
+  Marking ready is not the endpoint: hosted review remains.
+- [x] (2026-11-14) Found the PR `mergeable: CONFLICTING` against a base 30
+  commits ahead, and rebased onto `origin/main` at `750f56a22` (D-28). Two
+  append-at-the-same-anchor conflicts were resolved by keeping both sides and
+  validating the result by parsing it. `range-diff` reports all 32 commits as
+  `=`; the net diff is 20 files and `git diff --check` is clean.
+- [ ] EP-M4: validate the rebased candidate with the full gate set, refresh the
+  PR body, and take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
 
@@ -861,7 +879,8 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   restate the Scope tolerance accordingly. The plan allowed ten files and one
   Rust path; the branch carries eight Markdown files, the integration test,
   four private modules split from it to stay under the 400-line cap, and three
-  rule files. Each addition is forced by a repository rule rather than by new
+  rule files. D-28 restates the figure after the module split doubled that
+  module count. Each addition is forced by a repository rule rather than by new
   scope: `mdtablefix` and the 400-line cap force the module split, `cs delta`
   forces the exact-path exemptions for test-only parsers, and the spelling gate
   regenerates `typos.toml` from `typos.local.toml`. No production source,
@@ -1127,6 +1146,49 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `BRANCH`. The earlier prose headings that called this "the branch's
   2026-11-05 head" now name 2026-11-09. Date/Author: 2026-11-09, implementing
   agent, after the tenth milestone CodeRabbit review.
+- Decision D-28 (2026-11-14): rebased the branch onto `origin/main` at
+  `750f56a22` and restated the two measurements the rebase moved.
+  - *The rebase*. The PR read `mergeable: CONFLICTING` against a base 30
+    commits ahead. The exclusive boundary was `c82189bf4`, verified inherited
+    by `git merge-base --is-ancestor c82189bf4 origin/main`, giving 32
+    branch-owned commits and no merges in the series. Recovery refs
+    `recovery/810-old-head`, `recovery/810-old-base`, and
+    `recovery/810-target` were created first. Replay used
+    `git -c merge.conflictStyle=zdiff3 rebase --merge --no-fork-point
+    --no-update-refs --no-autostash --reapply-cherry-picks --keep-empty
+    --empty=stop --onto 750f56a22 c82189bf4`. Two conflicts fired, both on the
+    same mechanism — two independent appends to one list at the same anchor —
+    and both were resolved by keeping both sides rather than choosing a
+    side: `typos.local.toml` gained `main`'s `\bNO_COLOR\b` alongside the
+    inventory's `@host::pattern::normalise_host_pattern#consumer`, and
+    `.codescene/code-health-rules.json` gained `main`'s
+    `posix_lexical/tests.rs` exemption before the inventory's two. Both
+    resolutions were validated by parsing the file, not by reading it: the
+    TOML through `tomllib` and the JSON through `json`, the latter confirming
+    nine rule blocks with the three expected paths. `range-diff` reports all
+    32 commits as `=`, and the net diff against `main` is 20 files with
+    `git diff --check` clean.
+  - *The post-pin list, fourth regeneration*. A rebase rewrites every SHA in
+    the series, so the 37 identifiers the list carried no longer resolved.
+    Regenerating against live Git produced 62: `main` grew from 25 in-scope
+    commits to 50 while the branch-owned twelve stayed constant. The count is
+    measured, not read off the prose: `git merge-base --is-ancestor` on each
+    identifier returned 50 `MAIN` and 12 `BRANCH`. The set matches live Git in
+    both directions. This is the fourth recurrence of the mechanism D-21, D-24,
+    and D-27 record, and the first caused by a rebase rather than by a new
+    in-scope commit — the inventory's own for-warning prediction that the list
+    "goes stale whenever a commit touches one of those paths" understates it,
+    because a rewrite is not a new commit. The section now names 2026-11-14
+    as the head it describes.
+  - *The scope measurement*. The Scope tolerance and D-14 said sixteen files.
+    That was true when measured, but the module split added four files under
+    `tests/hexagonal_inventory_contract/` and D-19's correction predates it,
+    so `git diff --name-only origin/main...HEAD` now returns twenty. Both the
+    tolerance and D-14 are restated, and D-14 points here. The additional four
+    are the same forced split D-14 already justifies; no new kind of path
+    appears.
+  Date/Author: 2026-11-14, implementing agent, after the PR was found
+  conflicted against its target.
 
 ## Outcomes & retrospective
 
@@ -1136,23 +1198,30 @@ records the accepted direction and keeps detailed migration choices with their
 owning tasks. The inventory is indexed, linked from the roadmap, and records
 the in-scope commits since its unchanged pin.
 
-The hosted CodeScene re-review of `03eb4da90` reported duplicate heading
-wrappers; `7a48c76a5` replaced them with one contract-local `HeadingLevel`
-parser, and `docs/developers-guide.md` states that parser's scope. The tenth
-CodeRabbit review then found that the parser's fail-open applied to three
-sibling harvesters as well; `a8af397f4` closed it by separating the region
-slice from the harvest, and `2a7810622` split the crate root into feature
-modules to satisfy the 400-line cap. Every CodeRabbit finding raised on this
-branch is dispositioned in the decision log, and the complete sequential
-eleven-gate set passed on `2a7810622` with an unchanged HEAD and an empty
-working tree at both ends of the batch.
+The hosted CodeScene re-review reported duplicate heading wrappers; the commit
+titled "Replace heading wrappers with a level-typed parser" replaced them with
+one contract-local `HeadingLevel` parser, and `docs/developers-guide.md` states
+that parser's scope. The tenth CodeRabbit review then found that the parser's
+fail-open applied to three sibling harvesters as well; "Stop trace harvesters
+absorbing subheading prose" closed it by separating the region slice from the
+harvest, and "Split the inventory contract into feature modules" satisfied the
+400-line cap. Every CodeRabbit finding raised on this branch is dispositioned
+in the decision log, and the complete sequential eleven-gate set passed on
+`a05187397` with an unchanged HEAD and an empty working tree at both ends of
+the batch.
 
-What remains is not implementation. The pull request is open and still a draft,
-its published head is the earlier `03eb4da90`, and the branch has advanced well
-past it — `git rev-list --count 03eb4da90..HEAD` is the count, and it changes
-with every commit. EP-M4's current-head PR assessment — publishing the verified
-revision, applying the PR body, and taking the pull request through hosted
-review to equilibrium — is still open.
+The branch was then rebased onto `origin/main` at `750f56a22` (D-28), which
+rewrote every commit in the series. SHAs quoted in this section are therefore
+given as subjects rather than hashes: a hash written here would stop resolving
+at the next rebase, and this section has already had that happen once. The
+rebase is by construction content-preserving — `range-diff` reports all 32
+commits as `=` — but it is a new candidate, so its own gate run and hosted
+assessment are separate evidence from `a05187397`'s.
+
+What remains is not implementation. The pull request is ready rather than
+draft, and EP-M4's current-head assessment — validating the rebased candidate,
+refreshing the PR body, and taking the pull request through hosted review to
+equilibrium — is open.
 
 ## Verification plan
 
@@ -2136,6 +2205,22 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   inventory, `make markdownlint` reads every changed Markdown file, and
   `make check-fmt` re-wraps them. A fresh eleven-gate run therefore binds this
   revision rather than inheriting `2a7810622`'s, and `Progress` records it.
+- Revision 43 (2026-11-09): documented the region-versus-harvest split in
+  `docs/developers-guide.md`, so the next harvester reaches for `harvest_body`
+  rather than reintroducing the fail-open. The eleven-gate set passed on
+  `a05187397`; the branch was published and PR #810 marked ready.
+- Revision 44 (2026-11-14): rebased onto `origin/main` at `750f56a22` after the
+  PR read `mergeable: CONFLICTING` (D-28). Two same-anchor list conflicts were
+  resolved by keeping both sides. The rebase restated three measurements it
+  invalidated: the post-pin list (fourth regeneration, 37 identifiers to 62
+  because `main` grew from 25 in-scope commits to 50), the Scope tolerance and
+  D-14 (sixteen files to twenty, because the module split landed after D-19
+  measured), and this plan's own SHA citations. The Progress section now opens
+  with the citation policy for post-rebase hashes, and `Outcomes` states the
+  region-versus-harvest rule by commit subject rather than hash. The rebased
+  candidate needs its own eleven-gate run and its own hosted assessment; the
+  `a05187397` evidence does not transfer, however content-preserving
+  `range-diff` shows the rewrite to be.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
