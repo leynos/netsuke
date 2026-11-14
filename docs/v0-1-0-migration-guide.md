@@ -921,7 +921,8 @@ Two consequences matter to anyone re-running a release:
   release the workflow creates is a draft; when the tag already has one, the
   job attaches to that release whether or not it is public. A missing or
   conflicting asset, or an attachment the record never declared, stops the run
-  before it publishes the release.
+  before it publishes the release; a rerun that finds one already public is
+  refused rather than recorded as finalized.
 
 Manifests, local builds, and the published contents are unchanged, and no new
 release input was added: the dry run and the publishing lane keep using the same

@@ -228,14 +228,17 @@ def _published(
     -------
     decisions.PublishOutcome
         :attr:`PublishVerdict.ALREADY_FINALIZED` when the inventory still
-        matches the trusted record, otherwise
-        :attr:`PublishVerdict.PUBLISHED_MISMATCH`.
+        matches the trusted record, otherwise the refusal
+        :func:`finalize_github_release_inventory.published_inventory` names:
+        :attr:`PublishVerdict.PUBLISHED_MISMATCH` for bytes that disagree, or
+        :attr:`PublishVerdict.UNDECLARED_ASSET` for an attachment the record
+        never declared.
 
     Notes
     -----
-    The mismatch case must not be recorded as a success: the release is public
-    and cannot be made a draft again, so the run reports the disagreement
-    rather than leaving it for the next reader to discover.
+    A refusal must not be recorded as a success: the release is public and
+    cannot be made a draft again, so the run reports the disagreement rather
+    than leaving it for the next reader to discover.
 
     Examples
     --------

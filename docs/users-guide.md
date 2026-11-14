@@ -125,9 +125,12 @@ the plan the planner wrote, from a snapshot taken immediately before it
 un-drafts, and from the read-back taken afterwards. The pre-edit snapshot also
 refuses an attachment the record never declared: the inventory verification job
 ran earlier, so an asset added in between would otherwise be published with no
-digest check at all. A read-back that no longer matches the record is reported
-as a failure rather than recorded as a success, so a release that became public
-holding an inventory the record does not describe is named instead of announced.
+digest check at all. The read-back asks that question too, and so does a rerun
+that finds the release already public, so a release that became public holding
+an inventory the record does not describe -- a declared asset whose bytes
+disagree, or an attachment the record never named -- is reported as a failure
+rather than recorded as a success, by the run that published it and by every
+pass after it.
 
 That guard governs the transition the job performs. It cannot make an already
 public release a draft again, so a rerun that begins with a public release
@@ -177,8 +180,9 @@ A failed edit, or an unreadable read-back after one, is reported the same way,
 for the same reason: GitHub may have applied the edit before the response was
 lost. A rerun records an already-public release as finalized without editing it
 a second time, but only when its prerelease flag already matches the validated
-candidate; a public release whose flag disagrees is refused, because it cannot
-be made a draft again. Either way the rerun is safe.
+candidate and its inventory still matches the trusted record; a public release
+whose flag or inventory disagrees is refused, because it cannot be made a draft
+again. Either way the rerun is safe.
 
 A caller that invokes `./.github/actions/upload-declared-assets` directly,
 rather than through `release.yml`, must pass `commit` as the **full, lowercase

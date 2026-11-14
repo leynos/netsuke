@@ -4135,6 +4135,38 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   have each succeeded, so link 6's silence about an unverified payload carries
   as little weight as link 5's.
 
+- [x] (2026-11-14) Answered the eleventh review: a public release carrying an
+  attachment the record never declared is refused, and the guide separates the
+  four verdicts that refusal can carry.
+
+  **The finding.** CodeRabbit declined to close the developers' guide thread
+  that asks the prose to distinguish a released inventory from an undeclared
+  attachment. The paragraph named `UNDECLARED_ASSET` on both later passes, but
+  `published_inventory` raised it only through reconciliation, which asks about
+  the names the record declares and so says nothing about an extra one. Only
+  the pre-edit gate refused an extra attachment. A public release that gained
+  one was therefore recorded as finalized.
+
+  **The correction.** The behavioural gap came first: `published_inventory` now
+  asks the undeclared question itself, after reconciliation, and returns
+  `UNDECLARED_ASSET` with `is_draft=False`, so both later passes refuse rather
+  than succeed. The diagnosis says the release is already public and cannot be
+  made a draft again, which `_undeclared_state` derives from the outcome, so a
+  refusal no longer claims the run did not edit a release it found public. The
+  guide and the users' guide now separate the four verdicts: bytes that disagree
+  (`PUBLISHED_MISMATCH`), an attachment never declared (`UNDECLARED_ASSET`), a
+  public release with the other flag seen before the edit (`NOT_A_DRAFT`), and
+  the same seen on the read-back (`PRERELEASE_MISMATCH`), which is judged apart
+  because a flag is a classification rather than a digest.
+
+  **The evidence.**
+  `test_publish_refuses_a_retry_that_finds_an_undeclared_attachment` and
+  `test_publish_refuses_a_readback_that_found_an_undeclared_attachment` drive
+  both paths through `cmd-mox`, assert the refusal and the "already public"
+  wording, and prove no result is recorded; the retry case also proves no edit
+  is attempted. `published_inventory`'s new doctest pins the verdict, and
+  `make test-release-publication` passed 1468 tests with the doctests enabled.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

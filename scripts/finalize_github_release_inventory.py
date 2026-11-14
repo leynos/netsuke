@@ -7,12 +7,13 @@ read-back that reports what the edit left behind. Both are compared against the
 trusted record the build declared, never against the plan's restatement of it,
 because a plan describes a listing that may already be stale.
 
-The pre-edit gate asks two questions together. Reconciliation decides only
-about the names the record declares, which leaves an extra attachment
-undecided; publishing one would make the release public carrying bytes no
-record vouches for, so :func:`draft_inventory` refuses it as well. The read-back
-asks only the first question, because it reports a state rather than gating an
-edit.
+Both gates ask two questions together. Reconciliation decides only about the
+names the record declares, which leaves an extra attachment undecided;
+publishing one would make the release public carrying bytes no record vouches
+for, so :func:`draft_inventory` refuses it before the edit, and
+:func:`published_inventory` refuses it when a later pass reads the release
+back. A run that lost the race to attach a file, or a retry that finds one, is
+then reported by the pass that observes it rather than recorded as a success.
 
 Everything here is a decision over values. Reading a release, running a
 command, and naming an exit status belong to the adapters and the command edge.
@@ -54,9 +55,21 @@ def published_inventory(
     -------
     decisions.PublishOutcome
         :attr:`decisions.PublishVerdict.VERIFIED` when the release still holds
-        the trusted inventory, otherwise
+        the trusted inventory, :attr:`decisions.PublishVerdict.UNDECLARED_ASSET`
+        naming an attachment the record never declared, and otherwise
         :attr:`decisions.PublishVerdict.PUBLISHED_MISMATCH` naming what
         disagrees.
+
+    Notes
+    -----
+    The extra attachment is refused here for the same reason
+    :func:`draft_inventory` refuses it before the edit. A release that is
+    already public cannot be withdrawn, so the run reports the attachment
+    instead of recording a success that says the release holds the trusted
+    inventory: the record cannot describe bytes it never named, and no digest
+    comparison can vouch for them. A recorded conflict is still reported
+    first, because it names an asset the record describes and so needs no
+    operator judgement about what the bytes should have been.
 
     Examples
     --------
@@ -69,16 +82,28 @@ def published_inventory(
     >>> changed = ReleaseState("v1.2.3", False, False, {"a.deb": "sha256:" + "cd" * 32})
     >>> published_inventory(trusted, changed).conflicts
     ('a.deb',)
+    >>> extra = ReleaseState(
+    ...     "v1.2.3", False, False, {"a.deb": "sha256:" + "ab" * 32, "b.deb": None}
+    ... )
+    >>> published_inventory(trusted, extra).undeclared
+    ('b.deb',)
     """
     assessment = release_reconcile.assess(trusted, state)
-    if assessment.verdict is release_plan.PlanVerdict.VERIFIED:
+    if assessment.verdict is not release_plan.PlanVerdict.VERIFIED:
+        return decisions.PublishOutcome(
+            decisions.PublishVerdict.PUBLISHED_MISMATCH,
+            uploads=assessment.uploads,
+            conflicts=assessment.conflicts,
+            unverifiable=assessment.unverifiable,
+            detail=assessment.detail,
+            is_draft=False,
+        )
+    undeclared = undeclared_assets(trusted, state)
+    if not undeclared:
         return decisions.PublishOutcome(decisions.PublishVerdict.VERIFIED)
     return decisions.PublishOutcome(
-        decisions.PublishVerdict.PUBLISHED_MISMATCH,
-        uploads=assessment.uploads,
-        conflicts=assessment.conflicts,
-        unverifiable=assessment.unverifiable,
-        detail=assessment.detail,
+        decisions.PublishVerdict.UNDECLARED_ASSET,
+        undeclared=undeclared,
         is_draft=False,
     )
 

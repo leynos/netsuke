@@ -174,11 +174,52 @@ def _undeclared(outcome: decisions.PublishOutcome, _context: Diagnosis) -> str:
     ...     "declared: notes.txt; the release remains a draft"
     ... )
     True
+    >>> describe(
+    ...     decisions.PublishOutcome(
+    ...         decisions.PublishVerdict.UNDECLARED_ASSET,
+    ...         undeclared=("notes.txt",),
+    ...         is_draft=False,
+    ...     ),
+    ...     plan_path="plan.json",
+    ...     tag="v1.2.3",
+    ...     is_prerelease=False,
+    ... ) == (
+    ...     "the release carries attachments the trusted record never "
+    ...     "declared: notes.txt; the release is already public and cannot "
+    ...     "be made a draft again, so this run cannot remove it"
+    ... )
+    True
     """
     return (
         "the release carries attachments the trusted record never declared: "
-        f"{', '.join(outcome.undeclared)}; {draft_state(outcome)}"
+        f"{', '.join(outcome.undeclared)}; {_undeclared_state(outcome)}"
     )
+
+
+def _undeclared_state(outcome: decisions.PublishOutcome) -> str:
+    """Name what a refusal over an undeclared attachment leaves behind.
+
+    Parameters
+    ----------
+    outcome
+        The refusal being described.
+
+    Returns
+    -------
+    str
+        The clause :func:`_undeclared` appends. A draft still has an operator
+        remedy, because the attachment can be deleted before the next run. A
+        public release does not: the attachment cannot be removed by this run,
+        and the release cannot be made a draft again, so the clause names the
+        decision the operator is left with instead of promising a later pass
+        will fix it.
+    """
+    if outcome.is_draft is False:
+        return (
+            "the release is already public and cannot be made a draft again, "
+            "so this run cannot remove it"
+        )
+    return draft_state(outcome)
 
 
 def _not_a_draft(outcome: decisions.PublishOutcome, _context: Diagnosis) -> str:

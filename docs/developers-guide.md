@@ -3560,20 +3560,22 @@ as this run's answer and the diagnosis would name the wrong stage.
 *Table 4: `finalize_github_release.py` exit statuses.*
 
 Exits 1 and 2 publish nothing. Exit 1 covers every refusal — an asset with
-different bytes, an asset whose digest could not be established, a candidate
-that names another tag or commit, and a release already public with the wrong
-prerelease flag — and only the last leaves the release public, because it
-already was; the rest leave the draft untouched. Exit 2 names the assets the
-declared upload contract still owes. Exit 3 is an input fault and stops the run
-before the edit, though the snapshot read that precedes the fresh
-reconciliation may already have happened. Exit 4 is always an output fault, and
-where it happens decides what it means: a candidate or snapshot record that
-could not be written leaves the draft untouched, while `publish` failing to
-record its outcome says the release itself is already final, because the edit
-succeeded before the record was written. Read the message rather than the
-status to tell those apart. Exit 5 covers both an unreadable release and an
-edit GitHub accepted without publishing it; the read-back distinguishes them,
-and neither is retried by this stage.
+different bytes, an asset whose digest could not be established, an attachment
+the record never declared, a candidate that names another tag or commit, and a
+release whose public state contradicts the candidate. A refusal made before the
+edit leaves the draft untouched; one made after it, or one about a release an
+earlier attempt published, names a release that is public and that this run
+cannot correct. Exit 2 names the assets the declared upload contract still
+owes. Exit 3 is an input fault and stops the run before the edit, though the
+snapshot read that precedes the fresh reconciliation may already have happened.
+Exit 4 is always an output fault, and where it happens decides what it means: a
+candidate or snapshot record that could not be written leaves the draft
+untouched, while `publish` failing to record its outcome says the release
+itself is already final, because the edit succeeded before the record was
+written. Read the message rather than the status to tell those apart. Exit 5
+covers both an unreadable release and an edit GitHub accepted without
+publishing it; the read-back distinguishes them, and neither is retried by this
+stage.
 
 The finalize step neither sets `continue-on-error` nor swallows the adapter's
 exit status, which is how "leave the release a draft on failure" is
@@ -3592,8 +3594,9 @@ trusted record are the ones the release was built from.
 Four states are worth recognizing:
 
 - **Interrupted after the edit.** The read-back establishes that the release is
-  public with the wanted flag, so the rerun records `already-finalized` and
-  makes no second edit. This is why the command reads before it writes.
+  public with the wanted flag and the trusted inventory, so the rerun records
+  `already-finalized` and makes no second edit. This is why the command reads
+  before it writes.
 - **Interrupted before the edit.** The draft is unchanged, the rerun plans the
   same reconciliation, and the one edit is still to come.
 - **Missing asset.** The planner reports `upload` for it and the finalize step
@@ -3602,6 +3605,11 @@ Four states are worth recognizing:
 - **Conflicting asset.** The planner reports `conflict` and the finalize step
   refuses. A published digest is a promise to whoever already downloaded it, so
   the release stays a draft until a person decides what the correct bytes are.
+- **Public without the recorded inventory.** The rerun reads a release that is
+  already public and finds a declared asset whose bytes disagree, or an
+  attachment the record never declared. It refuses with the name, because a
+  public release cannot be made a draft again and this run replaces nothing:
+  those bytes need a person's decision before the release is announced.
 
 A release left public with the wrong prerelease flag is the one state this
 stage cannot repair; it refuses before editing, because it cannot tell a
@@ -3615,8 +3623,9 @@ permissions, and artefact selection, and the exact command the finalize step
 runs, and proves each assertion against a deliberate mutation. The adapter's
 own behaviour is covered by `make test-release-publication`, which drives
 interrupted retries, an already-finalized release, an already-public release
-that must not be edited, missing and conflicting assets, and API and output
-failures through `cmd-mox`.
+that must not be edited, an undeclared attachment seen before the edit and on
+both later passes, missing and conflicting assets, and API and output failures
+through `cmd-mox`.
 
 ### Crate-package operation telemetry
 
@@ -4112,13 +4121,19 @@ GitHub offers no conditional edit, so a writer that changes the draft in those
 milliseconds is not observed. The window is one API call wide, and both
 endpoints are the same trusted record, which narrows it but does not close it:
 a run that loses the race can publish a release holding bytes the record does
-not match. No later pass repairs that. A rerun that finds the release already
-public compares that listing with the trusted record: a release holding the
-recorded inventory is recorded as finalized, and one whose bytes or flag
-disagree is refused as `PUBLISHED_MISMATCH`, naming what disagrees. The
-post-edit read-back makes the same comparison, so a run that lost the race
-reports the mismatch rather than a success. Neither path can withdraw a release
-that is already public, so the mismatch stands until an operator acts.
+not match. No later pass repairs that, but both later passes report it. A rerun
+that finds the release already public compares that listing with the trusted
+record, and the post-edit read-back makes the same comparison against the same
+record. Bytes that disagree are `PUBLISHED_MISMATCH`, and an attachment the
+record never declared is `UNDECLARED_ASSET`, refused on both paths for the
+reason the pre-edit pass refuses it: the record cannot describe bytes it never
+named, so no digest comparison can vouch for them. The prerelease flag is
+judged separately, because it is a classification rather than a digest. A rerun
+that finds a public release carrying the other flag stops as `NOT_A_DRAFT`, and
+a read-back that sees one reports `PRERELEASE_MISMATCH`; a public release
+cannot be made a draft again, so neither run can correct it. Neither path can
+withdraw a release that is already public, so a refusal stands until an
+operator acts.
 
 | Exit constant            | Code | Meaning                                                  |
 | ------------------------ | ---- | -------------------------------------------------------- |

@@ -198,6 +198,79 @@ def test_publish_refuses_a_readback_that_lost_the_trusted_asset(
     )
 
 
+def test_publish_refuses_a_retry_that_finds_an_undeclared_attachment(
+    tmp_path: pathlib.Path,
+    cmd_mox: CmdMox,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Refuse a public release carrying a file the record cannot describe.
+
+    An earlier attempt can publish and a file can be attached afterwards, so a
+    retry that reads the public release is the last chance to notice. The
+    release cannot be withdrawn by this run, so the retry reports the
+    attachment rather than recording the release as finalized.
+    """
+    extra = release_view(
+        is_draft=False,
+        is_prerelease=False,
+        assets={ARCHIVE: f"sha256:{DIGEST}", "notes.txt": None},
+    )
+    gh = sequenced_gh(cmd_mox, [(extra, "", 0)])
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*publish_arguments(tmp_path))
+
+    assert error.value.code == EXIT_REFUSED, (
+        "an attachment the record never declared must stop the retry"
+    )
+    message = capsys.readouterr().err
+    assert "notes.txt" in message, "the refusal must name the attachment"
+    assert "already public" in message, "the refusal must say the release is public"
+    assert not (tmp_path / "result.json").exists(), (
+        "a release holding an undeclared attachment must not record a success"
+    )
+    assert not [
+        invocation
+        for invocation in gh.invocations
+        if invocation_arguments(invocation)[:2] == ("release", "edit")
+    ], "a public release must not be edited"
+
+
+def test_publish_refuses_a_readback_that_found_an_undeclared_attachment(
+    tmp_path: pathlib.Path,
+    cmd_mox: CmdMox,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Notice an attachment this run published without vouching for it.
+
+    The pre-edit read saw a draft holding only the declared inventory, so the
+    attachment arrived between that read and the edit. The read-back is the
+    only place it can be seen, and the release is public by then.
+    """
+    extra = release_view(
+        is_draft=False,
+        is_prerelease=False,
+        assets={ARCHIVE: f"sha256:{DIGEST}", "notes.txt": None},
+    )
+    sequenced_gh(
+        cmd_mox,
+        [*release_views((True, False)), ("", "", 0), (extra, "", 0)],
+    )
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*publish_arguments(tmp_path))
+
+    assert error.value.code == EXIT_REFUSED, (
+        "a published release holding an undeclared attachment must be refused"
+    )
+    message = capsys.readouterr().err
+    assert "notes.txt" in message, "the refusal must name the attachment"
+    assert "already public" in message, "the refusal must say the release is public"
+    assert not (tmp_path / "result.json").exists(), (
+        "an undeclared attachment must not be recorded as a success"
+    )
+
+
 def test_publish_reports_an_unwritable_result_after_publishing(
     tmp_path: pathlib.Path,
     cmd_mox: CmdMox,
