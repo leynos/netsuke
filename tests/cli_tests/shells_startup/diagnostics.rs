@@ -5,7 +5,10 @@
 //! value: those can carry operator secrets, and the message reaches both a
 //! terminal and a machine consumer.
 
-use super::{SENTINEL, Startup, ensure_rejected_before_compilation, stderr_of};
+use super::{
+    OPERATOR_CONFIG, RELATIVE_EXECUTABLE, SENTINEL, Startup, definition_body,
+    ensure_rejected_before_compilation, generate_with_operator_config, stderr_of,
+};
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 
@@ -62,5 +65,67 @@ fn diagnostics_are_bounded_and_never_echo_argument_vectors(
         !stderr.contains(AMBIENT_MARKER),
         "diagnostic should not echo an ambient value, got: {stderr}"
     );
+    Ok(())
+}
+
+/// Name the file that declared a rejected definition.
+///
+/// The same key and index can appear in several layers, so a diagnostic that
+/// named only `shells[0].executable` would leave the operator guessing which
+/// file to edit.
+#[test]
+fn a_rejection_names_the_declaring_file() -> Result<()> {
+    let startup = Startup::new()?;
+    let output = generate_with_operator_config(&startup, RELATIVE_EXECUTABLE)?;
+
+    ensure_rejected_before_compilation(&startup, &output, "shells[0].executable")?;
+    let stderr = stderr_of(&output);
+    let declaring = startup.path().join(OPERATOR_CONFIG);
+    ensure!(
+        stderr.contains(&declaring.to_string_lossy().into_owned()),
+        "diagnostic should name {}, got: {stderr}",
+        declaring.display()
+    );
+    Ok(())
+}
+
+/// Bound and escape the declaring path before it reaches the terminal.
+///
+/// A directory name is operator-supplied text, so it may contain a control
+/// character or be far longer than a readable diagnostic should quote. The
+/// preview must escape the former and truncate the latter, exactly as a
+/// rejected value is rendered.
+#[rstest]
+#[case::control_character("odd\u{7}directory", "\\u{7}", "\u{7}")]
+#[case::overlong_name(&"x".repeat(90), "…", "")]
+fn the_declaring_path_is_bounded_and_escaped(
+    #[case] directory: &str,
+    #[case] expected: &str,
+    #[case] forbidden: &str,
+) -> Result<()> {
+    let startup = Startup::new()?;
+    let untrusted = startup.write(
+        &format!("{directory}/untrusted.toml"),
+        &definition_body("dash"),
+    )?;
+    let selector = untrusted.to_string_lossy().into_owned();
+
+    let output = startup
+        .command(&["--config", &selector, "generate", "--output", SENTINEL])
+        .output()
+        .context("run netsuke with an explicit selector")?;
+
+    ensure_rejected_before_compilation(&startup, &output, "shells")?;
+    let stderr = stderr_of(&output);
+    ensure!(
+        stderr.contains(expected),
+        "diagnostic should render {expected:?}, got: {stderr}"
+    );
+    if !forbidden.is_empty() {
+        ensure!(
+            !stderr.contains(forbidden),
+            "diagnostic should not emit the raw {forbidden:?}, got: {stderr}"
+        );
+    }
     Ok(())
 }

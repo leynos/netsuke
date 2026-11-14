@@ -92,7 +92,7 @@ fn check_definition<'a>(
 pub enum CompositionError {
     /// Reject a definition that reuses a built-in shell name.
     #[error(
-        "shells[{index}] names `{name}`, which is a built-in shell; \
+        "shells[{index}].name is `{name}`, which is a built-in shell; \
          built-in names may not be redefined"
     )]
     Reserved {
@@ -103,8 +103,9 @@ pub enum CompositionError {
     },
     /// Reject a second definition of a name already declared earlier.
     #[error(
-        "shells[{index}] names `{name}`, which shells[{first}] already names; \
-         each shell name may be declared once across the merged configuration"
+        "shells[{index}].name is `{name}`, which shells[{first}].name already \
+         declares; each shell name may be declared once across the merged \
+         configuration"
     )]
     Duplicate {
         /// Report the position of the later definition.

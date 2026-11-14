@@ -1,0 +1,15 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+# Recorded while mutation-testing the oracle (the duplicate check and then the
+# built-in-name check were disabled to prove the properties detect them), not
+# from a defect in the composition itself. The reserved-name seeds pin the
+# smallest registry the reserved rule rejects; the duplicate seeds pin a repeat
+# inside one layer and a repeat across two layers.
+cc d0d0a5a9c6761a6fdac3798356c0b34892cd3a4250c99124fcbdf8c29404baf5 # shrinks to names = ["dash", "dash"]
+cc 8fbea5a0263456a355c2cffd5153efb6435355179f99352fa1979448717b8141 # shrinks to layers = [["fish", "fish"]]
+cc 9411b85962fbbb5f852406b453241b615f9ebf1e98a9e50b13dfcd0c49ffdd8e # shrinks to names = ["sh"]
+cc e24c4dc8f91646887081a91dab35571c17a5af9d2c58da752102b92884f8493c # shrinks to layers = [["sh"]]

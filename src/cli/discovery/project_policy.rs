@@ -6,6 +6,7 @@
 //! discovered project chain; fetch requests retain each project occurrence's
 //! provenance.
 
+use camino::Utf8Path;
 use ortho_config::{MergeLayer, OrthoError, OrthoResult};
 use serde::de::DeserializeOwned;
 use std::borrow::Cow;
@@ -189,7 +190,7 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
     {
         let path = layer.path().map(ToOwned::to_owned);
         let mut value = layer.into_value();
-        check_shells_occurrence(&value, authority, &mut resolved);
+        check_shells_occurrence(&value, path.as_deref(), authority, &mut resolved);
         if let Some(json) = json_from_value(&value) {
             resolved.json_preference = json;
         }
@@ -217,8 +218,11 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
 /// [`occurrence_errors`], whose diagnosis names `shells[index].name`,
 /// `shells[index].executable`, or `shells[index].args`; the error becomes an
 /// ordinary discovery error, so startup stops before any manifest is read.
+/// Both paths name the declaring file when the layer has one, because the same
+/// key and index can appear in several layers.
 fn check_shells_occurrence(
     value: &serde_json::Value,
+    source: Option<&Utf8Path>,
     authority: RootAuthority,
     resolved: &mut ResolvedFileLayers,
 ) {
@@ -226,8 +230,8 @@ fn check_shells_occurrence(
         return;
     }
     match authority {
-        RootAuthority::Operator => resolved.errors.extend(occurrence_errors(value)),
-        RootAuthority::Untrusted => resolved.errors.push(untrusted_shells_error()),
+        RootAuthority::Operator => resolved.errors.extend(occurrence_errors(value, source)),
+        RootAuthority::Untrusted => resolved.errors.push(untrusted_shells_error(source)),
     }
 }
 

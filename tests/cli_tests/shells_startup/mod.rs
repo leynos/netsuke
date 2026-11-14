@@ -130,11 +130,11 @@ fn duplicate_trusted_definitions_are_rejected() -> Result<()> {
     ensure_rejected_before_compilation(&startup, &output, "shells")?;
     let stderr = stderr_of(&output);
     ensure!(
-        stderr.contains("shells[1]") && stderr.contains("shells[0]"),
-        "failure should name both duplicate positions, got: {stderr}"
+        stderr.contains("shells[1].name") && stderr.contains("shells[0].name"),
+        "failure should name both duplicate fields, got: {stderr}"
     );
     ensure!(
-        stderr.contains("already names"),
+        stderr.contains("already declares"),
         "failure should explain the collision, got: {stderr}"
     );
     Ok(())

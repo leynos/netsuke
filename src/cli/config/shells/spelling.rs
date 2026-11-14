@@ -87,14 +87,23 @@ fn has_drive_prefix(text: &str) -> bool {
     )
 }
 
-/// Report whether `text` begins with the two separators of a UNC share.
+/// Report whether `text` names a complete UNC share.
+///
+/// Two leading separators alone are not a share: `\\`, `//`, `\\server`, and
+/// `\\server\` each name something unresolved, so they are reported as rooted
+/// without a drive rather than accepted as absolute. A share needs a server and
+/// a share name, which is what the two components after the separators supply.
 fn is_unc_share(text: &str) -> bool {
-    let mut characters = text.chars();
-    matches!(
-        (characters.next(), characters.next()),
-        (Some(first), Some(second))
-            if is_windows_separator(first) && is_windows_separator(second)
-    )
+    text.strip_prefix(['/', '\\'])
+        .and_then(|rest| rest.strip_prefix(['/', '\\']))
+        .is_some_and(names_server_and_share)
+}
+
+/// Report whether `remainder` starts with two non-empty path components.
+fn names_server_and_share(remainder: &str) -> bool {
+    let mut components = remainder.split(['/', '\\']);
+    components.next().is_some_and(|server| !server.is_empty())
+        && components.next().is_some_and(|share| !share.is_empty())
 }
 
 /// Report whether `character` separates Windows path components.
