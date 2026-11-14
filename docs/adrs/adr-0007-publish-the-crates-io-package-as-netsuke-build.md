@@ -343,6 +343,14 @@ above.
   The package record's identity is re-decoded and re-checked rather than copied
   on trust, and the `publish` command re-reads the candidate and requires its
   tag and commit, so a hand-edited record cannot reclassify the release.
+- No module below the command line names a process. Each helper that reads or
+  writes takes the `gh` runner as a required argument, and only
+  `finalize_github_release.py` supplies `release_io.run_gh`; the two release
+  calls are bound to the candidate's tag and repository at that same edge, so
+  the orchestrator receives ports rather than an argv and a test drives the
+  whole composition with recorded answers. A stage that printed its own
+  sentence would own prose as well as a write, so each writer returns the value
+  it recorded and the command line composes the line an operator reads.
 - A verification failure, or a refusal made from the pre-edit snapshot of the
   release, leaves the release as a draft. A refusal made before the release is
   read — a candidate from another revision, or a plan that still owes an upload

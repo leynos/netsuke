@@ -16,7 +16,7 @@ import typing as typ
 import finalize_github_release_decisions as decisions
 import finalize_github_release_operations as operations
 import finalize_github_release_ports as release_ports
-from finalize_github_release_records_support import ARCHIVE, DIGEST, REPOSITORY, TAG
+from finalize_github_release_records_support import ARCHIVE, DIGEST, TAG
 from finalize_github_release_state import ReleaseState
 from release_candidate import ReleaseIdentity
 from release_digest_record import DigestRecord
@@ -118,7 +118,6 @@ def decide(
             identity=candidate(is_prerelease=is_prerelease),
             trusted=trusted(),
             plan_document=plan,
-            repository=REPOSITORY,
             reader=script.read,
             editor=script.edit,
         )

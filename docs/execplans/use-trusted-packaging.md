@@ -4063,6 +4063,37 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   decoded records and the two ports, and the operations module no longer imports
   `pathlib`.
 
+- [x] (2026-11-14) Answered the ninth review: the runner and the ports are
+  required, and no stage below the command line composes a sentence.
+
+  **The finding.** The Unit Architecture pre-merge row held that the injection
+  above was stated but not complete. `snapshot_release`, `record_snapshot`, and
+  `PublishInputs.runner` all defaulted to `release_io.run_gh`, so the process
+  dependency was optional at every one of those seams even though the command
+  line passed it explicitly; `publish_release` built its own reader and editor
+  from that runner through `_bound_ports`, which put adapter construction back
+  inside the orchestrator; and `record_candidate`, `record_snapshot`, and
+  `record_outcome` returned operator-facing sentences, which the command line
+  printed verbatim. The last point also contradicted the developers' guide's
+  claim that the messages module is the only one turning a decision into prose.
+
+  **The correction.** Every helper that starts a process now requires its
+  `runner`: the three defaults are gone and the only production supplier is
+  `finalize_github_release.py`. The binding of a call to one release moved to
+  `remote.reader_port` and `remote.editor_port`, which fix the tag and
+  repository beside the adapter that owns the argv; `PublishInputs` therefore
+  takes two required ports and no runner at all, and `_bound_ports` is deleted.
+  The three stage writers return the value they recorded — the identity, the
+  release state, `None` — and the command line composes the one line each
+  prints, so the only prose in the tower is a decision's sentence in the
+  messages module and the stage reports at the edge.
+
+  **The test that pins it.** `test_finalize_github_release_publish_ports`
+  composes both ports from one scripted `Replies` runner and calls
+  `publish_release`: the finalized path must ask `release view`, `release edit`,
+  `release view` in that order, and the refusal path must ask exactly one
+  `release view` and no edit.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

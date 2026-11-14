@@ -22,11 +22,17 @@ import dataclasses
 
 # ``SnapshotPaths`` reads its field annotations from the class at runtime.
 import pathlib  # ruff: ignore[typing-only-standard-library-import]
+import typing as typ
 
 import finalize_github_release_io as release_io
 import finalize_github_release_records as release_records
 import release_candidate
 import release_identity_record
+
+if typ.TYPE_CHECKING:
+    # The state is returned, never constructed or inspected here, so importing
+    # it would only cost start-up on a path every finalization run takes.
+    import finalize_github_release_state as release_state
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -85,7 +91,7 @@ def _recorded_identity(source: pathlib.Path) -> release_candidate.ReleaseIdentit
 
 def record_candidate(
     identity: pathlib.Path, *, tag: str, commit: str, output: pathlib.Path
-) -> str:
+) -> release_candidate.ReleaseIdentity:
     """Check the package record's identity, then record the candidate.
 
     The package record nests the identity under ``identity`` beside the crate
@@ -105,9 +111,8 @@ def record_candidate(
 
     Returns
     -------
-    str
-        The sentence an operator should read. Returning it rather than printing
-        it keeps output in the command layer.
+    release_candidate.ReleaseIdentity
+        The identity the record named, as it was written.
 
     Raises
     ------
@@ -137,21 +142,20 @@ def record_candidate(
     ...         json.dumps({"identity": identity}), encoding="utf-8"
     ...     )
     ...     output = pathlib.Path(directory) / "candidate.json"
-    ...     print(
-    ...         record_candidate(
-    ...             source, tag="v1.2.3", commit="0" * 40, output=output
-    ...         )
+    ...     recorded = record_candidate(
+    ...         source, tag="v1.2.3", commit="0" * 40, output=output
     ...     )
-    ...     json.loads(output.read_text(encoding="utf-8"))["version"]
-    recorded candidate v1.2.3 at 0000000000000000000000000000000000000000
-    '1.2.3'
+    ...     recorded.version, json.loads(
+    ...         output.read_text(encoding="utf-8")
+    ...     )["version"]
+    ('1.2.3', '1.2.3')
     """
     recorded = _recorded_identity(identity)
     reason = release_candidate.identity_refusal(recorded, tag=tag, commit=commit)
     if reason is not None:
         raise release_io.FinalizeError(release_io.EXIT_REFUSED, reason)
     release_io.write_json(output, recorded.as_record())
-    return f"recorded candidate {recorded.tag} at {recorded.commit}"
+    return recorded
 
 
 def record_snapshot(
@@ -159,8 +163,8 @@ def record_snapshot(
     repository: str,
     *,
     paths: SnapshotPaths,
-    runner: release_io.Runner = release_io.run_gh,
-) -> str:
+    runner: release_io.Runner,
+) -> release_state.ReleaseState:
     """Record the release's draft flag, prerelease flag, and reported digests.
 
     Parameters
@@ -172,15 +176,14 @@ def record_snapshot(
     paths
         The two records this stage writes.
     runner
-        The process effect that answers the read. The command line supplies the
-        Cuprum-backed one; a test supplies a function returning recorded
-        answers.
+        The process effect that answers the read. It has no default: the
+        command layer supplies the Cuprum-backed one, and a test supplies a
+        function returning recorded answers.
 
     Returns
     -------
-    str
-        The sentence an operator should read. Returning it rather than printing
-        it keeps output in the command layer.
+    release_state.ReleaseState
+        The state the read established, as it was written.
 
     Notes
     -----
@@ -201,7 +204,4 @@ def record_snapshot(
         },
     )
     release_io.write_json(paths.assets, state.assets)
-    return (
-        f"release {tag}: draft={state.is_draft} "
-        f"prerelease={state.is_prerelease} assets={len(state.assets)}"
-    )
+    return state

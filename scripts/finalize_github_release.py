@@ -17,10 +17,13 @@ Both properties are enforced below the command line, in
 ``finalize_github_release_operations`` and ``finalize_github_release_remote``;
 this module names the three operations the composite action invokes, the
 options each one takes, and the words an operator reads. Reading the input
-records, recording the outcome, and mapping a verdict to an exit status all
-happen here, because those are the only steps that belong to the process edge.
-The command set is therefore part of the action's contract, and the example
-below is what the action's coverage asserts:
+records, recording the outcome, mapping a verdict to an exit status, and
+composing the sentence each stage prints all happen here, because those are the
+only steps that belong to the process edge. It is also the one place a process
+is bound: the Cuprum-backed runner is supplied here and nowhere below, so every
+helper underneath takes the effect it uses as a required argument. The command
+set is therefore part of the action's contract, and the example below is what
+the action's coverage asserts:
 
 >>> sorted(name for name in app.resolved_commands() if not name.startswith("-"))
 ['publish', 'resolve', 'snapshot']
@@ -68,6 +71,7 @@ import finalize_github_release_io as release_io
 import finalize_github_release_messages as messages
 import finalize_github_release_operations as operations
 import finalize_github_release_records as release_records
+import finalize_github_release_remote as release_remote
 import finalize_github_release_stage_records as stage_records
 
 from cyclopts import App, Parameter
@@ -134,9 +138,10 @@ def resolve(
     reports: ``3`` when the record cannot be read or decoded, and ``1`` when it
     names another tag or revision. Nothing is written in either case.
     """
-    print(
-        stage_records.record_candidate(identity, tag=tag, commit=commit, output=output)
+    recorded = stage_records.record_candidate(
+        identity, tag=tag, commit=commit, output=output
     )
+    print(f"recorded candidate {recorded.tag} at {recorded.commit}")
 
 
 @app.command
@@ -168,13 +173,15 @@ def snapshot(
     either record cannot be written. This command only reads GitHub, so a
     failure never changes the release.
     """
+    state = stage_records.record_snapshot(
+        tag,
+        repository,
+        paths=stage_records.SnapshotPaths(state=state_path, assets=assets_path),
+        runner=release_io.run_gh,
+    )
     print(
-        stage_records.record_snapshot(
-            tag,
-            repository,
-            paths=stage_records.SnapshotPaths(state=state_path, assets=assets_path),
-            runner=release_io.run_gh,
-        )
+        f"release {tag}: draft={state.is_draft} "
+        f"prerelease={state.is_prerelease} assets={len(state.assets)}"
     )
 
 
@@ -260,18 +267,24 @@ def publish(
             identity=identity,
             trusted=trusted,
             plan_document=plan_document,
-            repository=request.repository,
-            runner=release_io.run_gh,
+            reader=release_remote.reader_port(
+                identity.tag, request.repository, runner=release_io.run_gh
+            ),
+            editor=release_remote.editor_port(
+                identity.tag, request.repository, runner=release_io.run_gh
+            ),
         )
     )
     if outcome.verdict in _PUBLIC:
+        release_records.record_outcome(
+            request.result_path,
+            request.github_output,
+            outcome.verdict.value,
+            identity,
+        )
         print(
-            release_records.record_outcome(
-                request.result_path,
-                request.github_output,
-                outcome.verdict.value,
-                identity,
-            )
+            f"release {identity.tag} is public (outcome {outcome.verdict.value}, "
+            f"prerelease {identity.is_prerelease})"
         )
         return
     # ``release_records.candidate`` has already refused a record that names no

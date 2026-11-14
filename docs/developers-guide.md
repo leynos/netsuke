@@ -3460,18 +3460,23 @@ allowlisted `gh` runner, the staged JSON records — beside the exit-status
 vocabulary and the `FinalizeError` type that carries a status with its
 diagnosis. `finalize_github_release_remote.py` writes the only two GitHub calls
 a run makes, one read and one edit, and returns what they answered as values
-rather than as exceptions; the process is an injected `release_io.Runner`, so a
-test supplies recorded answers and starts no `gh`.
-`finalize_github_release_decisions.py` decides from those values alone: it
-reads no file, starts no process, composes no prose, and names no exit status.
-`finalize_github_release_ports.py` states the two shapes that decision
-exchanges with its adapters, `ReleaseRead` and `RemoteAnswer`, and the
-protocols a caller injects to replace either call.
+rather than as exceptions; the process effect is a required
+`release_io.Runner`, supplied by the command layer and by nothing below it, so
+a test supplies recorded answers and starts no `gh`. That module also binds a
+call to one release: `reader_port` and `editor_port` fix the tag and
+repository, so the orchestrator receives a callable it can only call and never
+assembles a token of the call itself. `finalize_github_release_decisions.py`
+decides from those values alone: it reads no file, starts no process, composes
+no prose, and names no exit status. `finalize_github_release_ports.py` states
+the two shapes that decision exchanges with its adapters, `ReleaseRead` and
+`RemoteAnswer`, and the protocols a caller injects to replace either call.
 `finalize_github_release_operations.py` orchestrates the one publishing
 decision from a `PublishInputs` value of decoded records and ports, never
 paths, and `finalize_github_release_records.py` performs the reads and writes
-around the edit. The path-bearing `PublishRequest` is the `publish` command's
-own parameter in `finalize_github_release.py`.
+around the edit. Both ports are required fields with no default, because a
+default would have to name the process the orchestrator is meant to decide
+without. The path-bearing `PublishRequest` is the `publish` command's own
+parameter in `finalize_github_release.py`.
 `finalize_github_release_stage_records.py` writes what the two read-only
 commands observed, so a reader asking what a refusal might have left on disk
 need not open the module that surrounds the edit.
@@ -3479,17 +3484,20 @@ need not open the module that surrounds the edit.
 reconciliation to a snapshot taken later in the same run, and
 `finalize_github_release_plan.py` and `finalize_github_release_state.py` decide
 from decoded values and touch no file. `finalize_github_release_messages.py` is
-the only module that turns an outcome into the sentence an operator reads, so
-changing how a refusal reads cannot change what the step decides. Fallibility
-is in each helper's signature rather than in a process effect a reader has to
-trace: every helper that cannot continue raises `FinalizeError`, declaring it
-under *Raises* where it raises directly and under *Notes* where it only
-propagates one, and only `finalize_github_release.py` turns that status into
-the step's exit. A publishing decision travels as a `PublishOutcome` instead,
-which `_exit_status` maps and `messages.describe` renders.
-`make test-release-publication` names all of them on its doctest command line,
-so deleting either the module or its example fails the bank rather than quietly
-dropping coverage.
+the only module that turns a decision into the sentence an operator reads, so
+changing how a refusal reads cannot change what the step decides. The writers
+it does not cover return the value they wrote rather than a description of it:
+`resolve`, `snapshot`, and the recorded outcome each print one line that
+`finalize_github_release.py` composes, which is why a stage's wording cannot
+change what it wrote either. Fallibility is in each helper's signature rather
+than in a process effect a reader has to trace: every helper that cannot
+continue raises `FinalizeError`, declaring it under *Raises* where it raises
+directly and under *Notes* where it only propagates one, and only
+`finalize_github_release.py` turns that status into the step's exit. A
+publishing decision travels as a `PublishOutcome` instead, which `_exit_status`
+maps and `messages.describe` renders. `make test-release-publication` names all
+of them on its doctest command line, so deleting either the module or its
+example fails the bank rather than quietly dropping coverage.
 
 Its PEP 723 block pins `cyclopts` and `cuprum` to exact versions, as the
 `scripts/ci` helpers do, rather than to the ranges most scripts declare. The

@@ -22,8 +22,12 @@ Every branch here returns a
 :class:`finalize_github_release_decisions.PublishOutcome`. Nothing in this
 module raises for a decision, prints, or names an exit status: the command layer
 renders the outcome. The two effects it depends on — reading the release and
-un-drafting it — are injected ports, defaulting to the Cuprum adapters, so a
-test can state what the run decides with no process at all.
+un-drafting it — are required ports with no defaults. The command layer binds
+them, through :func:`finalize_github_release_remote.reader_port` and
+:func:`finalize_github_release_remote.editor_port`, to the candidate's release
+and the production runner; a test supplies its own and starts no process. An
+unset port would have to be filled here, and filling it would mean this module
+naming a process it is supposed to decide without.
 
 The inventory verifier's output is deliberately not an input: comparing GitHub
 against a record derived from GitHub would agree with itself however the upload
@@ -41,10 +45,8 @@ import dataclasses
 # the types it names are imported here rather than for type checking alone.
 import finalize_github_release_decisions as decisions
 import finalize_github_release_inventory as release_inventory
-import finalize_github_release_io as release_io
 import finalize_github_release_plan as release_plan
 import finalize_github_release_ports as release_ports  # ruff: ignore[typing-only-third-party-import] - a field annotation names it
-import finalize_github_release_remote as release_remote
 import finalize_github_release_state as release_state
 import release_candidate  # ruff: ignore[typing-only-third-party-import] - a field annotation names it
 import release_digest_record  # ruff: ignore[typing-only-third-party-import] - a field annotation names it
@@ -67,25 +69,20 @@ class PublishInputs:
         The decoded digest record the build declared before upload.
     plan_document
         The decoded reconciliation plan ``finalize_github_release_cli`` wrote.
-    repository
-        The ``OWNER/REPO`` the release belongs to.
-    runner
-        The process effect the default ports are built from. It is consulted
-        only when ``reader`` or ``editor`` is omitted, so a test that supplies
-        both never starts a process.
     reader
-        Reads the release. Defaults to the Cuprum adapter.
+        Reads the release. The command layer binds the Cuprum adapter to the
+        candidate's tag and repository; a test supplies its own.
     editor
-        Un-drafts the release. Defaults to the Cuprum adapter.
+        Un-drafts the release, bound the same way. Both ports are required,
+        because a default here would have to name the process this module is
+        meant to decide without.
     """
 
     identity: release_candidate.ReleaseIdentity
     trusted: release_digest_record.DigestRecord
     plan_document: object
-    repository: str
-    runner: release_io.Runner = release_io.run_gh
-    reader: release_ports.ReleaseReader | None = None
-    editor: release_ports.ReleaseEditor | None = None
+    reader: release_ports.ReleaseReader
+    editor: release_ports.ReleaseEditor
 
 
 def publish_release(inputs: PublishInputs) -> decisions.PublishOutcome:
@@ -128,11 +125,14 @@ def publish_release(inputs: PublishInputs) -> decisions.PublishOutcome:
     --------
     >>> from release_candidate import ReleaseIdentity
     >>> from release_digest_record import DigestRecord
+    >>> def never_called(**_kwargs):
+    ...     raise AssertionError("a plan that owes an upload asks no port")
     >>> inputs = PublishInputs(
     ...     identity=ReleaseIdentity("v1.2.3", "0" * 40, "p", "1.2.3", "b", False),
     ...     trusted=DigestRecord.from_mapping({"a.deb": "ab" * 32}),
     ...     plan_document={"actions": [["a.deb", "upload"]]},
-    ...     repository="o/r",
+    ...     reader=never_called,
+    ...     editor=never_called,
     ... )
     >>> publish_release(inputs).verdict.value
     'upload-required'
@@ -140,45 +140,10 @@ def publish_release(inputs: PublishInputs) -> decisions.PublishOutcome:
     plan_outcome = decisions.assess(release_plan.assess_plan(inputs.plan_document))
     if plan_outcome.verdict is not decisions.PublishVerdict.VERIFIED:
         return plan_outcome
-    read, edit = _bound_ports(inputs)
-    inspected = _inspect_draft(inputs, read)
+    inspected = _inspect_draft(inputs, inputs.reader)
     if inspected.verdict is not decisions.PublishVerdict.VERIFIED:
         return inspected
-    return _edit_and_confirm(inputs, read, edit)
-
-
-def _bound_ports(
-    inputs: PublishInputs,
-) -> tuple[release_ports.ReleaseReader, release_ports.ReleaseEditor]:
-    """Bind the two effects to the release the candidate names.
-
-    Parameters
-    ----------
-    inputs
-        The candidate, which supplies the tag both effects are bound to, and
-        the ports a caller may have supplied instead.
-
-    Returns
-    -------
-    tuple[release_ports.ReleaseReader, release_ports.ReleaseEditor]
-        The read and the edit this run uses, in that order.
-
-    Notes
-    -----
-    Only a port left unset consults the runner, so a caller that supplied both
-    never starts a process.
-    """
-    read = (
-        inputs.reader
-        if inputs.reader is not None
-        else _reader(inputs.identity.tag, inputs.repository, inputs.runner)
-    )
-    edit = (
-        inputs.editor
-        if inputs.editor is not None
-        else _editor(inputs.identity.tag, inputs.repository, inputs.runner)
-    )
-    return read, edit
+    return _edit_and_confirm(inputs, inputs.reader, inputs.editor)
 
 
 def _inspect_draft(
@@ -285,79 +250,3 @@ def _published(
     if inventory.verdict is not decisions.PublishVerdict.VERIFIED:
         return inventory
     return decisions.already_finalized()
-
-
-def _reader(
-    tag: str | None, repository: str, runner: release_io.Runner
-) -> release_ports.ReleaseReader:
-    """Bind the release read to one tag and repository.
-
-    Parameters
-    ----------
-    tag
-        The release to read. ``require_candidate`` has already refused a
-        tagless identity, so the ``None`` branch is defensive only.
-    repository
-        The ``OWNER/REPO`` the release belongs to.
-    runner
-        The process effect that answers the read.
-
-    Returns
-    -------
-    release_ports.ReleaseReader
-        A callable taking only the ``after_edit`` fact, so the orchestrator
-        names no argument vector.
-
-    Raises
-    ------
-    ValueError
-        If no tag is bound, which no validated candidate can reach.
-    """
-    if tag is None:
-        msg = "a release read needs a tag"
-        raise ValueError(msg)
-
-    def read(*, after_edit: bool) -> release_ports.ReleaseRead:
-        """Read the bound release."""
-        del after_edit  # A read answers the same way whenever it is asked.
-        return release_remote.read_release(tag, repository, runner=runner)
-
-    return read
-
-
-def _editor(
-    tag: str | None, repository: str, runner: release_io.Runner
-) -> release_ports.ReleaseEditor:
-    """Bind the un-drafting edit to one tag and repository.
-
-    Parameters
-    ----------
-    tag
-        The release to un-draft, already validated against the candidate.
-    repository
-        The ``OWNER/REPO`` the release belongs to.
-    runner
-        The process effect that performs the edit.
-
-    Returns
-    -------
-    release_ports.ReleaseEditor
-        A callable taking only the prerelease flag, so the flag is the only
-        decision the orchestrator has to make about the call.
-
-    Raises
-    ------
-    ValueError
-        If no tag is bound, which no validated candidate can reach.
-    """
-    if tag is None:
-        msg = "a release edit needs a tag"
-        raise ValueError(msg)
-
-    def edit(*, is_prerelease: bool) -> release_ports.RemoteAnswer:
-        """Un-draft the bound release."""
-        return release_remote.edit_release(
-            tag, repository, is_prerelease=is_prerelease, runner=runner
-        )
-
-    return edit

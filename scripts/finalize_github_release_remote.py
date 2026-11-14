@@ -9,11 +9,15 @@ about what it means belongs to
 :mod:`finalize_github_release_decisions`, and a test can state that decision
 without starting a process.
 
-The process itself is the injected ``runner``. In production it is
+The process itself is the injected ``runner``, and it has no default. In
+production the command layer supplies
 :func:`finalize_github_release_io.run_gh`, which launches ``gh`` through
 Cuprum's allowlisted catalogue; a test supplies a function returning recorded
 answers. That keeps the argv construction here, where it can be asserted token
-by token, and the decision elsewhere, where it needs no process at all.
+by token, and the decision elsewhere, where it needs no process at all. The tag
+and repository that pin a call to one release are fixed here too, by
+:func:`reader_port` and :func:`editor_port`, so the orchestrator receives
+callables it can only call and never assembles a token of the call itself.
 
 Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
 ``scripts/tests/test_finalize_github_release_publish_ports.py``.
@@ -177,6 +181,118 @@ def edit_release(
         exit_code=result.exit_code,
         detail=_failed(EDIT_COMMAND, result.exit_code, result.stderr),
     )
+
+
+def reader_port(
+    tag: str | None, repository: str, *, runner: release_io.Runner
+) -> release_ports.ReleaseReader:
+    """Bind the release read to one tag and one repository.
+
+    Parameters
+    ----------
+    tag
+        The release to read. ``require_candidate`` refuses a tagless identity
+        before this is asked, so the ``None`` branch is defensive only.
+    repository
+        The ``OWNER/REPO`` the release belongs to.
+    runner
+        The process effect that answers the read.
+
+    Returns
+    -------
+    release_ports.ReleaseReader
+        A callable taking only the ``after_edit`` fact, so the decision layer
+        names no argument vector.
+
+    Raises
+    ------
+    ValueError
+        If no tag is bound, which no validated candidate can reach.
+
+    Notes
+    -----
+    The two facts that pin a call to a release are fixed here, at the edge,
+    rather than inside :func:`finalize_github_release_operations.publish_release`.
+    The orchestrator therefore receives a port it can only call, which is what
+    keeps the process dependency out of the module that decides.
+
+    Examples
+    --------
+    >>> import types
+    >>> payload = (
+    ...     '{"tagName": "v1.2.3", "isDraft": true, '
+    ...     '"isPrerelease": false, "assets": []}'
+    ... )
+    >>> answer = types.SimpleNamespace(stdout=payload, stderr="", exit_code=0)
+    >>> read = reader_port("v1.2.3", "o/r", runner=lambda *a, **k: answer)
+    >>> read(after_edit=False).state.is_draft
+    True
+    """
+    if tag is None:
+        msg = "a release read needs a tag"
+        raise ValueError(msg)
+
+    def read(*, after_edit: bool) -> release_ports.ReleaseRead:
+        """Read the bound release."""
+        del after_edit  # A read answers the same way whenever it is asked.
+        return read_release(tag, repository, runner=runner)
+
+    return read
+
+
+def editor_port(
+    tag: str | None, repository: str, *, runner: release_io.Runner
+) -> release_ports.ReleaseEditor:
+    """Bind the un-drafting edit to one tag and one repository.
+
+    Parameters
+    ----------
+    tag
+        The release to un-draft, already validated against the candidate.
+    repository
+        The ``OWNER/REPO`` the release belongs to.
+    runner
+        The process effect that performs the edit.
+
+    Returns
+    -------
+    release_ports.ReleaseEditor
+        A callable taking only the prerelease flag, so the flag is the only
+        decision the orchestrator has to make about the call.
+
+    Raises
+    ------
+    ValueError
+        If no tag is bound, which no validated candidate can reach.
+
+    Notes
+    -----
+    Binding the call here leaves the decision layer with "may this release be
+    un-drafted", and every token that addresses the release with the adapter
+    that already owns the only write this feature performs.
+
+    Examples
+    --------
+    >>> import types
+    >>> calls = []
+    >>> def runner(*args, **kwargs):
+    ...     calls.append(args)
+    ...     return types.SimpleNamespace(stdout="", stderr="", exit_code=0)
+    >>> edit = editor_port("v1.2.3", "o/r", runner=runner)
+    >>> edit(is_prerelease=True).exit_code
+    0
+    >>> calls[0][:3]
+    ('release', 'edit', 'v1.2.3')
+    """
+    if tag is None:
+        msg = "a release edit needs a tag"
+        raise ValueError(msg)
+
+    def edit(*, is_prerelease: bool) -> release_ports.RemoteAnswer:
+        """Un-draft the bound release."""
+        return edit_release(tag, repository, is_prerelease=is_prerelease, runner=runner)
+
+    return edit
 
 
 def unknown_state_message(*, after_edit: bool) -> str:

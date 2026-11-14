@@ -48,7 +48,7 @@ def snapshot_release(
     repository: str,
     *,
     after_edit: bool = False,
-    runner: release_io.Runner = release_io.run_gh,
+    runner: release_io.Runner,
 ) -> release_state.ReleaseState:
     """Read GitHub's current view of the release and decode it.
 
@@ -64,10 +64,10 @@ def snapshot_release(
         A read that fails then cannot promise the release is unedited, because
         GitHub may have applied the edit before the response was lost.
     runner
-        The process effect that answers the read. The command line supplies the
-        Cuprum-backed one; a test supplies a function returning recorded
-        answers, which is why no test needs a mocked process to exercise a
-        decision.
+        The process effect that answers the read. It has no default: the
+        command layer supplies the Cuprum-backed one, and a test supplies a
+        function returning recorded answers, so no reader here can start a
+        process by omission.
 
     Returns
     -------
@@ -219,7 +219,7 @@ def record_outcome(
     github_output: pathlib.Path | None,
     outcome: str,
     identity: release_candidate.ReleaseIdentity,
-) -> str:
+) -> None:
     """Record the outcome atomically, then publish it to the workflow.
 
     Parameters
@@ -234,15 +234,12 @@ def record_outcome(
         The validated candidate, which supplies the tag and prerelease flag
         the record and the outputs carry.
 
-    Returns
-    -------
-    str
-        The sentence an operator should read now that the release is public.
-        Returning it rather than printing it keeps the decision about output in
-        the command layer.
-
     Notes
     -----
+    Nothing is returned and nothing is printed: this module writes records, and
+    the command layer composes the sentence an operator reads from the outcome
+    it already holds.
+
     A ``FinalizeError`` from either write propagates unchanged, with
     :data:`EXIT_OUTPUT_UNWRITABLE`; the release is already public by then, and
     the diagnosis says so.
@@ -260,9 +257,8 @@ def record_outcome(
     ... )
     >>> with tempfile.TemporaryDirectory() as directory:
     ...     result = pathlib.Path(directory) / "result.json"
-    ...     print(record_outcome(result, None, "finalized", identity))
+    ...     record_outcome(result, None, "finalized", identity)
     ...     json.loads(result.read_text(encoding="utf-8"))["prerelease"]
-    release v1.2.3 is public (outcome finalized, prerelease False)
     False
     """
     release_io.write_json(
@@ -276,8 +272,4 @@ def record_outcome(
     )
     release_io.write_github_output(
         github_output, outcome, is_prerelease=identity.is_prerelease
-    )
-    return (
-        f"release {identity.tag} is public (outcome {outcome}, "
-        f"prerelease {identity.is_prerelease})"
     )
