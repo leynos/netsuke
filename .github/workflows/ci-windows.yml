@@ -116,7 +116,7 @@ jobs:
             exit $LASTEXITCODE
           }
       - name: Install sccache
-        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2  # v2.90.2
         with:
           tool: sccache@0.16.0
           fallback: none
@@ -148,7 +148,7 @@ jobs:
       - name: Setup uv
         # `make check-fmt` runs the uv-driven Ruff format check on every
         # platform, so the Windows job needs uv on the PATH as well.
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           enable-cache: 'false'
@@ -282,7 +282,7 @@ jobs:
       - name: Setup uv
         # The sccache report is a scripts/ci helper run through
         # `uv run --script`; uv's own cache is not part of this lane's keys.
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           python-version: '3.14'
           enable-cache: 'false'
@@ -295,7 +295,7 @@ jobs:
             exit $LASTEXITCODE
           }
       - name: Install sccache
-        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2  # v2.90.2
         with:
           tool: sccache@0.16.0
           fallback: none
@@ -310,7 +310,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2  # v2.90.2
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Reset sccache statistics
@@ -415,7 +415,7 @@ jobs:
           "MSI_VALIDATION_DIRECTORY=$(Join-Path $env:RUNNER_TEMP 'netsuke-msi-upgrade-validation')" |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Setup Python
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           enable-cache: 'false'
