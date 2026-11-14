@@ -244,3 +244,38 @@ fn project_cannot_self_authorize_fetch_policy_widening() -> Result<()> {
     );
     assert_scheme_not_allowed(&merged, &url("http://169.254.169.254")?)
 }
+
+/// A home-dotfile user policy must outrank a valid system policy.
+///
+/// The home dotfile is a supported user location that the dependency probes
+/// after the system scope, so a system file could otherwise replace the
+/// operator's fetch restrictions.
+#[rstest]
+fn home_dotfile_user_policy_outranks_system_policy() -> Result<()> {
+    let system_config = r#"
+fetch_default_deny = true
+fetch_allow_host = ["system.example.org"]
+"#;
+    let user_config = r#"
+fetch_default_deny = true
+fetch_allow_host = ["home.example.org"]
+"#;
+    let merged = merge_fetch_policy(
+        &FetchPolicyFileLayers {
+            system: Some(system_config),
+            user_dotfile: Some(user_config),
+            ..FetchPolicyFileLayers::default()
+        },
+        &[],
+        &["netsuke"],
+    )?;
+
+    ensure!(
+        merged
+            .network_policy()?
+            .evaluate(&url("https://home.example.org")?)
+            .is_ok(),
+        "the home dotfile allowlist entry should remain effective"
+    );
+    assert_host_not_allowlisted(&merged, &url("https://system.example.org")?)
+}

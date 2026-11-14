@@ -127,6 +127,28 @@ discovery and manifest lookup only. The production implementation is
 `selector::resolve_config_selector` in `src/cli/discovery/selector.rs`, with
 `src/cli/discovery/mod.rs` owning the layer-loading boundary.
 
+## Addendum — 2026-11-12
+
+Automatic discovery now also owns user-before-system ordering. OrthoConfig
+0.10.0 assembles automatic candidates as `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`,
+`APPDATA`/`LOCALAPPDATA`, then the home fallbacks, and stops at the first
+candidate that loads. A valid system file therefore suppressed
+`$HOME/.config/netsuke/config.toml` or `$HOME/.netsuke.toml` whenever
+`XDG_CONFIG_HOME` did not name that user file directly, which let a system file
+replace the operator's fetch and environment policy.
+
+Netsuke now runs its own user-scope pass before calling `compose_layers()`.
+`paths::user_scope_candidates` derives the user subset from the injected
+environment in preference order, and `layers` loads the first candidate that
+exists, returning a load error rather than continuing to a lower-priority file.
+`compose_layers()` runs only when no user candidate exists, so system scope and
+the project roots remain reachable exactly as before. Authority assignment is
+deliberately unchanged: a user file that is also the project configuration
+stays project-scoped and keeps its existing quarantine, because reading the
+user scope first changes which candidates are considered, not how a loaded file
+is trusted. This is a Netsuke CLI-adapter decision for the same reason as the
+original one: the ordering is Netsuke policy, not a generic library contract.
+
 ## Related documents
 
 - [`docs/developers-guide.md`](../developers-guide.md)

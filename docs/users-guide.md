@@ -1736,13 +1736,35 @@ Configuration precedence, from lowest to highest, is:
 4. Explicit command-line options.
 
 System and user configuration are discovered from platform conventions rather
-than merged as two separately named Netsuke layers. On Unix, this means the XDG
-base directories and the home directory; on Windows it means the
-application-data directories, such as `%APPDATA%\netsuke\config.toml`.
-Automatic discovery chooses one exclusive winner among system configuration,
-user configuration, and built-in defaults. Netsuke then appends the project
+than merged as two separately named Netsuke layers. Netsuke checks every user
+location before any system location, so a user file always outranks a system
+file. On Unix, the user locations are checked in this order:
+
+1. `$XDG_CONFIG_HOME/netsuke/config.toml`
+2. `$XDG_CONFIG_HOME/.netsuke.toml`
+3. `$HOME/.config/netsuke/config.toml`
+4. `$HOME/.config/.netsuke.toml`
+5. `$HOME/.netsuke.toml`
+
+`HOME` supplies the home directory when it is set and non-empty; otherwise
+`USERPROFILE` does. An empty `XDG_CONFIG_HOME` counts as unset. On Windows the
+user locations are `%APPDATA%\netsuke\config.toml`, `%APPDATA%\.netsuke.toml`,
+`%LOCALAPPDATA%\netsuke\config.toml`, and `%LOCALAPPDATA%\.netsuke.toml`,
+followed by the same home locations.
+
+System configuration is consulted only when no user file exists. On Unix that
+means each directory in `$XDG_CONFIG_DIRS`, defaulting to `/etc/xdg`, looking
+for `netsuke/config.toml` and `.netsuke.toml`.
+
+Automatic discovery chooses one exclusive winner among user configuration,
+system configuration, and built-in defaults. Netsuke then appends the project
 configuration chain, so ordinary project values can override the winner while
 fields present only in the winner remain available.
+
+When the discovered user file is the same file as the project `.netsuke.toml` —
+which happens when the working directory is the home directory — Netsuke treats
+that single occurrence as project scope. Its fetch and environment grants are
+then quarantined like any other project configuration.
 
 Fetch-policy fields are the security-sensitive exception to this ordinary
 precedence. Every occurrence selected through the project `.netsuke.toml` and
@@ -1774,7 +1796,9 @@ configuration chain remains operator-scoped.
 When automatic discovery finds no configuration file, Netsuke uses its built-in
 defaults. When it finds a candidate that cannot be loaded, such as malformed
 TOML or a file whose `extends` parent is missing, Netsuke reports the load
-error. A broken discovered configuration is therefore not treated as absent.
+error. A broken discovered configuration is therefore not treated as absent. A
+broken user file stops discovery: Netsuke does not fall back to a system file,
+because doing so would silently replace the operator's own settings.
 
 ### Resource budgets
 

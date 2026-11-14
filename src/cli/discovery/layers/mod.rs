@@ -1,26 +1,28 @@
 //! Discover configuration layers while preserving each root's authority.
 //!
 //! Runs the `OrthoConfig` scan and applies the project-scope second pass, so a
-//! project `.netsuke.toml` outranks user-scope files. Project-chain occurrences
-//! retain project authority through quarantine; the same file reached from an
-//! operator root keeps operator authority. Path comparison and its fallback
-//! policy live here because that policy is a discovery decision.
+//! project `.netsuke.toml` outranks user-scope files. Automatic discovery reads
+//! the user scope first, because the dependency's own candidate order consults
+//! system locations before the home fallbacks. Project-chain occurrences retain
+//! project authority through quarantine; the same file reached from an operator
+//! root keeps operator authority. Path comparison and its fallback policy live
+//! here because that policy is a discovery decision.
 
 #[cfg(test)]
 use ortho_config::MapEnv;
 use ortho_config::{
-    ConfigDiscovery, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
+    ConfigDiscovery, EnvSource, FileLayerChain, MergeLayer, OrthoResult, SharedEnvSource,
+    load_config_file_as_chain,
 };
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
-#[cfg(test)]
 use std::sync::Arc;
 
 use super::CONFIG_ENV_VAR;
 use super::diagnostics::{
     BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
 };
-use super::paths::{PathNormalizer, comparison_key, project_scope_file};
+use super::paths::{PathNormalizer, comparison_key, project_scope_file, user_scope_candidates};
 use super::project_policy::scope_project_chain;
 pub(super) use super::project_policy::{
     ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
@@ -108,7 +110,8 @@ pub(super) fn collect_file_layers_with_normalizer(
     // Leave selector and home variables unset so this test cannot inherit the
     // host configuration; XDG_CONFIG_DIRS points at an isolated absent path.
     test_env.insert("XDG_CONFIG_DIRS", isolated_config_dirs.into_os_string());
-    collect_file_layers_with_normalizer_and_trace(directory, normalizer, Arc::new(test_env))
+    let env_source: SharedEnvSource = Arc::new(test_env);
+    collect_file_layers_with_normalizer_and_trace(directory, normalizer, &env_source)
         .1
         .map(|layers| layers.into_iter().map(|scoped| scoped.layer).collect())
 }
@@ -117,17 +120,12 @@ pub(super) fn collect_file_layers_with_normalizer(
 pub(super) fn collect_file_layers_with_normalizer_and_trace(
     directory: Option<&Path>,
     normalizer: &impl PathNormalizer,
-    env_source: SharedEnvSource,
+    env_source: &SharedEnvSource,
 ) -> (Option<ProjectScopeTrace>, OrthoResult<Vec<ScopedFileLayer>>) {
-    let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), env_source);
-    let mut file_layers = discovery.compose_layers();
-    let mut errors = file_layers.required_errors;
-    if file_layers.value.is_empty() {
-        errors.append(&mut file_layers.optional_errors);
-    }
-    if let Some(err) = errors.into_iter().next() {
-        return (None, Err(err));
-    }
+    let base_layers = match discover_base_layers(directory, env_source) {
+        Ok(layers) => layers,
+        Err(error) => return (None, Err(error)),
+    };
 
     let project_file = project_scope_file(directory);
     let project_key = project_file
@@ -138,7 +136,7 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
         .filter(|path| path.to_str().is_none())
         .map(Path::to_string_lossy);
     let project_index = project_key.as_deref().and_then(|key| {
-        file_layers.value.iter().position(|layer| {
+        base_layers.iter().position(|layer| {
             layer.path().is_some_and(|path| {
                 key.as_os_str() == path.as_std_path().as_os_str()
                     || lossy_project_key
@@ -148,23 +146,87 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
         })
     });
     let project_trace_path = BoundedConfigPath::from_path(project_file.as_deref());
-    if let Some(index) = project_index.filter(|index| *index + 1 == file_layers.value.len()) {
+    if let Some(index) = project_index.filter(|index| *index + 1 == base_layers.len()) {
         return (
             Some(ProjectScopeTrace::Included(project_trace_path)),
-            Ok(scope_project_chain(file_layers.value, index)),
+            Ok(scope_project_chain(base_layers, index)),
         );
     }
 
-    merge_project_scope_layers(
-        file_layers.value,
-        project_file.as_deref(),
-        project_trace_path,
-    )
+    merge_project_scope_layers(base_layers, project_file.as_deref(), project_trace_path)
+}
+
+/// Load the automatic discovery base layers, preferring the user scope.
+///
+/// The user pass runs first so a valid system file cannot outrank the user's own
+/// configuration. The dependency's scan runs only when no user file exists, so
+/// system-provided configuration and the project roots it contributes still work
+/// as documented.
+fn discover_base_layers(
+    directory: Option<&Path>,
+    env_source: &SharedEnvSource,
+) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    if let Some(layers) = user_scope_base_layers(env_source.as_ref())? {
+        return Ok(layers);
+    }
+    let discovery = config_discovery(
+        directory.map(PathBuf::from).as_ref(),
+        Arc::clone(env_source),
+    );
+    discovery_base_layers(&discovery)
+}
+
+/// Load the first user-scope configuration file, if one exists.
+///
+/// # Errors
+///
+/// Returns an error when a candidate exists but cannot be read, parsed, or
+/// resolved through its `extends` chain. Falling through to a later candidate
+/// would silently substitute another scope, letting a broken user file re-enable
+/// the system policy it was meant to override.
+fn user_scope_base_layers(
+    env_source: &dyn EnvSource,
+) -> OrthoResult<Option<Vec<MergeLayer<'static>>>> {
+    user_scope_candidates(env_source)
+        .into_iter()
+        .find_map(|candidate| match load_config_file_as_chain(&candidate) {
+            Ok(Some(chain)) => Some(Ok(chain_to_layers(chain))),
+            Ok(None) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .transpose()
+}
+
+/// Run `OrthoConfig`'s scan and apply its error policy.
+///
+/// # Errors
+///
+/// Returns the first required error, or the first optional error when the scan
+/// produced no layers at all.
+fn discovery_base_layers(discovery: &ConfigDiscovery) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    let mut file_layers = discovery.compose_layers();
+    let mut errors = file_layers.required_errors;
+    if file_layers.value.is_empty() {
+        errors.append(&mut file_layers.optional_errors);
+    }
+    match errors.into_iter().next() {
+        Some(error) => Err(error),
+        None => Ok(file_layers.value),
+    }
+}
+
+/// Convert a loaded file chain into owned merge layers.
+fn chain_to_layers(chain: FileLayerChain) -> Vec<MergeLayer<'static>> {
+    chain
+        .values
+        .into_iter()
+        .map(|(value, layer_path)| MergeLayer::file(Cow::Owned(value), Some(layer_path)))
+        .collect()
 }
 
 /// Load project layers and preserve authority when operator and project paths overlap.
 fn merge_project_scope_layers(
-    discovered_layers: Vec<MergeLayer<'static>>,
+    base_layers: Vec<MergeLayer<'static>>,
     project_file: Option<&Path>,
     project_trace_path: BoundedConfigPath,
 ) -> (Option<ProjectScopeTrace>, OrthoResult<Vec<ScopedFileLayer>>) {
@@ -173,28 +235,27 @@ fn merge_project_scope_layers(
         deduplication: None,
     };
     let result = project_scope_layers(project_file).map(|project_layers| {
-        let discovered_layer_count = discovered_layers.len();
+        let base_layer_count = base_layers.len();
         let project_layer_count = project_layers.len();
         let project_index = project_layers
             .last()
             .and_then(MergeLayer::path)
             .and_then(|project| {
-                discovered_layers
+                base_layers
                     .iter()
                     .position(|layer| layer.path() == Some(project))
             });
         // A shared file reached by both roots has two authorities. Retain both
         // occurrences so project-chain quarantine cannot consume an operator
         // grant, and an operator occurrence cannot suppress a project request.
-        let project_is_root =
-            project_index.is_some_and(|index| index + 1 == discovered_layer_count);
+        let project_is_root = project_index.is_some_and(|index| index + 1 == base_layer_count);
         let appended_layer_count = if project_is_root {
             0
         } else {
             project_layer_count
         };
         let deduplication = ProjectLayerDeduplication::new(
-            discovered_layer_count,
+            base_layer_count,
             project_layer_count,
             appended_layer_count,
         );
@@ -211,7 +272,7 @@ fn merge_project_scope_layers(
                 deduplication: Some(deduplication),
             })
         };
-        let layers = scope_merged_layers(discovered_layers, project_layers, project_index);
+        let layers = scope_merged_layers(base_layers, project_layers, project_index);
         (trace, layers)
     });
     match result {
@@ -222,19 +283,22 @@ fn merge_project_scope_layers(
 
 /// Assign authority per root occurrence without discarding shared files.
 ///
-/// The operator root keeps its occurrence as operator-scoped. The separately
-/// loaded project chain scopes its inherited parents through the project file.
+/// When `project_index` names the last base layer, the base chain was rooted at
+/// the project file, so it scopes every occurrence through that index.
+/// Otherwise the operator root keeps its occurrence as operator-scoped and the
+/// separately loaded project chain scopes its inherited parents through the
+/// project file.
 fn scope_merged_layers(
-    discovered_layers: Vec<MergeLayer<'static>>,
+    base_layers: Vec<MergeLayer<'static>>,
     project_layers: Vec<MergeLayer<'static>>,
     project_index: Option<usize>,
 ) -> Vec<ScopedFileLayer> {
-    let project_is_root = project_index.is_some_and(|index| index + 1 == discovered_layers.len());
+    let project_is_root = project_index.is_some_and(|index| index + 1 == base_layers.len());
     if let Some(index) = project_index.filter(|_| project_is_root) {
-        return scope_project_chain(discovered_layers, index);
+        return scope_project_chain(base_layers, index);
     }
     let primary_index = project_layers.len().saturating_sub(1);
-    discovered_layers
+    base_layers
         .into_iter()
         .map(ScopedFileLayer::operator)
         .chain(scope_project_chain(project_layers, primary_index))
@@ -250,15 +314,7 @@ fn project_scope_layers(project_file: Option<&Path>) -> OrthoResult<Vec<MergeLay
     let Some(path) = project_file else {
         return Ok(Vec::new());
     };
-    match load_config_file_as_chain(path) {
-        Ok(Some(chain)) => Ok(chain
-            .values
-            .into_iter()
-            .map(|(value, layer_path)| MergeLayer::file(Cow::Owned(value), Some(layer_path)))
-            .collect()),
-        Ok(None) => Ok(Vec::new()),
-        Err(err) => Err(err),
-    }
+    Ok(load_config_file_as_chain(path)?.map_or_else(Vec::new, chain_to_layers))
 }
 
 #[cfg(test)]
