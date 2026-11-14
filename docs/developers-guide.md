@@ -6024,8 +6024,9 @@ test run no faster), so there is no case for adopting it.
   `StubEnv::is_declared`, the question `var` asserts on, for every generated
   sequence, and two `#[should_panic]` tests cover the panic itself.
   `accept_connection_respects_accept_timeout` is a `#[should_panic]` test on
-  the timeout message; the responsiveness its elapsed-time bounds checked is
-  now tested directly on the nap length
+  the timeout message. The elapsed-time bounds it used to assert are not
+  restored end to end; what they guarded, that the loop never sleeps a whole
+  poll interval past a short deadline, is tested on the nap calculation
   (`nap_is_shortened_to_the_time_remaining`).
 - Three tests are new on this pin, and only one is about unwinding.
   `rejects_unsupported_json_values::case_3` and
@@ -8312,7 +8313,7 @@ Current usage in this repository is:
   as a deprecated compatibility alias: `emit_runtime_deprecation_warning` in
   the macros crate turns it into a warning, and that warning reaches the
   compiler because this repository builds on a nightly channel
-  (`nightly-2026-10-22`), which is the condition `rstest_bdd_nightly` selects. A
+  (`nightly-2026-11-10`), which is the condition `rstest_bdd_nightly` selects. A
   `-D warnings` build would therefore escalate it to an error. Nothing here
   selects a harness yet; ordinary synchronous scenarios stay ordinary and need
   no harness at all.
