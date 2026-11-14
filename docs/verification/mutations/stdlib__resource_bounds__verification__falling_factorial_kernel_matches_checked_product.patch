@@ -1,0 +1,15 @@
+diff --git a/src/stdlib/resource_bounds/kernel.rs b/src/stdlib/resource_bounds/kernel.rs
+index 0ad0ded55..5f414587a 100644
+--- a/src/stdlib/resource_bounds/kernel.rs
++++ b/src/stdlib/resource_bounds/kernel.rs
+@@ -119,8 +119,8 @@ pub(super) fn checked_falling_factorial(n: u64, r: u64) -> Option<u64> {
+         return None;
+     }
+     let mut product = 1_u64;
+-    for i in 0..r {
+-        product = product.checked_mul(n - i)?;
++    for _ in 0..r {
++        product = product.checked_mul(n)?;
+     }
+     Some(product)
+ }

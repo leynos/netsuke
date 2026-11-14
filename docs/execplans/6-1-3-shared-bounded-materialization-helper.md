@@ -363,8 +363,145 @@ conflict in `Decision log`, and escalate.
     `build-limits-status` reported `capacity 4, held 4, healthy` throughout and
     the gate's own `cargo` child was continuously compiling, so the duration
     was queueing rather than a hang.
-- [ ] EP-M4: Verus proof and Kani harnesses.
+- [x] EP-M4: Verus proof and Kani harnesses.
+  - Proof (2026-11-07). `make verus
+    VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'` reports
+    `verification results:: 64 verified, 0 errors`. The proof crate holds no
+    `assume`, no `admit`, and no `external_body`, and its trusted base is
+    `vstd` alone. All nine plan lemmas are proved in the seven files D-18
+    records; the largest is `binomial.rs` at 388 lines.
+  - Harness tractability (2026-11-09). The first harness draft compared
+    unbounded symbolic `u64` operands against `u128` quotient oracles. kissat
+    could not decide it: `falling_factorial_kernel_matches_checked_product`
+    ran for over forty minutes with symbolic execution finished in 0.19
+    seconds, and `binomial_kernel_never_panics_for_small_r` breached the
+    sixty-second tolerance at 72.6 s with `n <= 2^40`, at 45.1 s with
+    `n <= 2^12`, at 63.2 s with `n <= 64`, and at 133.9 s with five concrete
+    reduced indices. Symbolic `u64` products and 128-bit division circuits are
+    the cost, not loop depth. The harnesses were redesigned so each symbolic
+    operand is bounded to where its arithmetic stays bit-blastable, concrete
+    witnesses carry the `u64` boundary a small domain cannot reach, and the
+    twenty-step `20!` witness moved into its own harness: inside the exactness
+    harness it forced `unwind(21)` there and cost 47 s to 61 s, while alone it
+    costs 0.37 s because both its loops are concrete. The general mathematical
+    claim remains the Verus theorem; the harnesses are the correspondence
+    check on the compiled code. Recorded as D-19.
+  - Green (2026-11-09). Inside the documented eight-minute Kani scope wrapper,
+    `make kani-full KANI_FLAGS='--harness stdlib::resource_bounds::verification'`
+    reports `Complete - 7 successfully verified harnesses, 0 failures, 7
+    total`, in this order and with these verification times:
+    `running_total_never_admits_past_its_limit` 1.05 s,
+    `admission_never_exceeds_ceiling` 0.27 s,
+    `falling_factorial_boundary_is_pinned` 0.37 s,
+    `falling_factorial_kernel_matches_checked_product` 9.34 s,
+    `binomial_kernel_never_panics_for_small_r` 30.31 s,
+    `binomial_kernel_matches_closed_form_for_r_up_to_two` 29.64 s, and
+    `product_kernel_respects_zero_and_repeat` 4.93 s. Every cover is
+    `SATISFIED`: three in the product harness, three in the admission harness,
+    two in the closed-form harness, and one in the no-panic harness.
+  - Mutation evidence (2026-11-09). Each of the seven patches under
+    `docs/verification/mutations/` was applied to the worktree, the harness it
+    names was run alone, and the patch was reverted from a trap so no seeded
+    fault could survive an interruption. Six were caught on the first pass:
+    `product_kernel_respects_zero_and_repeat` on "a zero operand after
+    overflowing operands still yields zero"; the closed-form harness on both
+    its oracle comparison and "a step above `u64::MAX` still yields a
+    representable coefficient"; the no-panic harness on "attempt to subtract
+    with overflow"; the boundary harness on "the largest representable falling
+    factorial is admitted"; the admission harness on "an exceeded refusal is
+    above its ceiling"; and the running-total harness on "no refusal within
+    the limit".
+  - Mutation re-seed (2026-11-09). The seventh patch, for
+    `falling_factorial_kernel_matches_checked_product`, replaced the step
+    `checked_mul(n - i)` with `checked_mul(n)` while leaving `i` in the loop
+    header. The patched tree did not compile — `error: unused variable: \`i\``
+    under the gate's `-D warnings` — so the run was inconclusive rather than a
+    catch: a patch that does not build never reaches its harness. The patch was
+    re-seeded as `for _in 0..r { product.checked_mul(n)?; }`, which compiles
+    and still forgets to decrement the operand, and it is then caught on "the
+    falling factorial matches the checked`u128` product on the bounded
+    domain". That failure mode is what `make test-kani-mutations` guards,
+    because it compiles every patched tree.
+  - Registration (2026-11-09). `src/stdlib/resource_bounds/verification.rs` is
+    in the `exclude-globs` input of `.github/workflows/mutation-testing.yml`,
+    in `KANI_EXCLUDES` in `tests/workflow_contracts/mutation_testing_test.py`,
+    in the `cargo-mutants` exclusion paragraph in `docs/developers-guide.md`,
+    and in the proof scope's source list in `tools/kani/proof-scope.toml`
+    alongside the five production files the harnesses reach.
+  - Compile gate (2026-11-09, updated 2026-11-13). `make test-kani-mutations`
+    did not complete on this host. Its `#[ignore]`d compile guard compiles
+    every patched tree through the Kani frontend, one full workspace-crate
+    codegen per patch, and the directory now holds 35 patches rather than the
+    18 the committed allowance was measured against. Three attempts under the
+    committed 600 s per-test allowance ended in nextest `TIMEOUT` at
+    600.028 s, 600.031 s, and 600.029 s, and one attempt under a raised
+    one-hour local allowance (`/tmp/nextest-long.toml`) ended in `TIMEOUT` at
+    3600.105 s; the gate's own test binary took 144 m 52 s to build cold while
+    the shared compile-admission pool reported capacity 4, held 4, and healthy.
+    Logs: `/tmp/test-kani-mutations-netsuke-6-1-3-shared-bounded-materialization-helper.out`
+    and `/tmp/test-kani-mutations-longgate.out`. The working tree afterwards held
+    no mutation residue, only the intended staged EP-M4 changes. This is an
+    environmental and structural limit, not a defect in these patches: each of
+    the seven was applied to the worktree, observed failing its own harness,
+    and reverted, which is the property the compile guard exists to protect.
+    The authoritative run of this gate is the hosted `kani-smoke` job, whose
+    own log records 257.7 s and 261.5 s for 18 patches there. The structural
+    remedy is already decided upstream: ADR-0073 splits the gate into a
+    prewarm, a negative-compile check, and a patch sweep under a dedicated
+    Nextest profile with 900 s and 2,400 s allowances, so the cold dependency
+    build stops sharing the sweep's budget. That ADR is `Accepted` on a
+    sibling branch but is not on `main` at this branch's base, so this
+    milestone neither depends on it nor restates it; the ExecPlan records the
+    local gap instead of claiming a pass, and the rebase that brings ADR-0073
+    in is expected to close it.
 - [ ] EP-M5: documentation, ADR, roadmap, and final gates.
+  - ADR (2026-11-09, renumbered 2026-11-13).
+    `docs/adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md` is
+    `Accepted`, dated 2026-11-09, and carries the context, the four options
+    with a captioned comparison table, the outcome, the consequences, and the
+    known risks (the `serde_json` off-by-one, the output-content row, and the
+    diagnostic hand-off to 6.1.4 and 6.4.2). The plan provisionally named 057;
+    the allocation sweep first returned 0069, and the ADR was written as 0070.
+    Re-running the sweep across every remote on 2026-11-13 found 0070 already
+    allocated to `adr-0070-deny-by-default-test-mode-stdlib` on
+    `adr-reservation/3-12-3-terminal-rendering-regression-tests` and 0074 as
+    the highest allocation, so the file, its heading, and every reference were
+    moved to 0075. The first sweep under-reported because it compared the
+    zero-padded numbers as strings, so `0069 >= "060"` was false and the whole
+    range was filtered out; the corrected sweep compares numerically. The ADR
+    is indexed in `docs/contents.md` as ADR-0075.
+  - Design and layout (2026-11-09). `docs/netsuke-design.md` §4.7 gains a
+    "Resource bounds" subsection with the ceilings, the exactness and
+    precedence rules, the ownership boundary, and the ADR reference.
+    `docs/repository-layout.md` gains `src/stdlib/canonical_value/` (missing
+    since 6.1.2), `src/stdlib/resource_bounds/`, and `verus/resource_bounds/`.
+  - Developers' guide (2026-11-09). A "Resource bounds for template helpers"
+    section follows "Canonical value identity for template helpers" and states
+    the public surface, the seven-point re-use policy, the depth definition,
+    the `serde_json` difference, the canonical-value follow-up candidate, and
+    the Polonius classification note. The Kani harness table gains the four
+    corrected rows and the measured-cost paragraph, and the Verus policy
+    paragraph lists the third accepted kernel.
+  - Formal-verification document (2026-11-09).
+    `docs/formal-verification-methods-in-netsuke.md` records the
+    resource-bounds kernel under "Optional Verus proof kernel" and "Current
+    repository state".
+  - Roadmap and RFC (2026-11-09). `docs/roadmap.md` marks 6.1.3 `- [x]` with
+    the text shape `tests/rfc_stdlib_coverage/roadmap.rs` parses. RFC 0006
+    table 3 gains the output-content row for the 8 MiB ceiling, plus the
+    sentence that materialized output is charged as elements are appended,
+    under the user's approval to amend referenced RFCs; the table's column
+    shape is unchanged and the ADR records the row.
+  - User-facing documents (2026-11-09). `docs/users-guide.md` and
+    `docs/stdlib-yaml-and-jinja-guide.md` need no change: the module is
+    private, no filter or function gains a new refusal that a user can
+    observe through an existing helper, and the consumer work that surfaces
+    these refusals is 6.1.4, 6.2.1, 6.4.2, and 6.5.3. The conclusion is
+    recorded in `Outcomes & retrospective`.
+  - Final gates (pending). The standard gate set plus `make nixie`,
+    `make test-rfc-stdlib-coverage`, and one full `make kani-ir` inside the
+    Kani scope wrapper is run by the scrutineer against the committed
+    candidate; `Status: COMPLETE` is set only once that run is green.
 
 ## Surprises & discoveries
 
@@ -422,6 +559,18 @@ conflict in `Decision log`, and escalate.
   branch is 056 (`issue-592-…`), so the next free number is 057. Evidence:
   remote-branch sweep on 2026-10-17. Impact: the ADR in EP-M5 is provisionally
   ADR-057 and must be re-derived immediately before it is committed.
+- Observation: an ADR allocation sweep can report a free number that another
+  branch has already taken, in two independent ways. Evidence: the sweep this
+  plan prescribes compares the zero-padded serials with `awk '$1 >= "050"'`,
+  which is a string comparison, so `0069` sorts below `"060"` and the whole
+  range is dropped; and the worktree's `origin` was not the ref that carried
+  the newest allocations, which sat under an `adr-reservation` remote. The
+  first run of the corrected sweep returned 0069 as the highest allocation and
+  the ADR was written as 0070; the run across every remote on 2026-11-13 found
+  0070 already allocated to `adr-0070-deny-by-default-test-mode-stdlib` and
+  0074 as the highest, so the ADR, its heading, and its five references were
+  moved to 0075. Impact: compare serials numerically, and sweep every remote
+  under `refs/remotes/`, not one named remote.
 - Observation: the installed Verus 0.2026.10.04.426d8b0 runs offline from
   `.verus/0.2026.10.04.426d8b0/verus/`. `rust_verify` needs two variables that
   the wrapper does not set for a direct invocation: `VERUS_Z3_PATH` pointing at
@@ -446,6 +595,44 @@ conflict in `Decision log`, and escalate.
   `assert … by (nonlinear_arith)`. Evidence: `/tmp/6-1-3-verus-check/div4.rs`
   verifies 3 obligations with that shape. Impact: the exact-division lemma in
   the proof cites it rather than attempting the division directly.
+- Observation: `--proof-file` is single-valued, but Verus treats that file as a
+  crate root and follows `mod` declarations, so a proof may span several files
+  while `make verus` still takes one path. Evidence: a two-file scratch crate
+  (`main.rs` declaring `mod sub;`) verified 2 obligations with 0 errors, and
+  the seven-file `verus/resource_bounds/` crate verifies 64 with 0 errors.
+  Impact: D-18.
+- Observation: a `spec fn` declared `pub` in a non-root module must say
+  `pub open` or `pub closed`; a bare `pub spec fn` is rejected with
+  "non-private spec function must be marked open or closed". Evidence: the
+  first two-file scratch run failed on exactly that diagnostic. Impact: every
+  cross-module spec in `verus/resource_bounds/model.rs` is `pub open`.
+- Observation: Kani's cost for these kernels is set by the width of the
+  symbolic arithmetic, not by loop depth or by the number of cases. Evidence:
+  `falling_factorial_kernel_matches_checked_product` with unbounded symbolic
+  `u64` operands and a `u128` oracle finished symbolic execution in 0.19 s and
+  then ran in kissat for over forty minutes without a verdict; bounding `n` to
+  16 and `r` to 4 brought it to 9.34 s. The no-panic harness took 133.9 s over
+  five concrete reduced indices, each iteration paying for a 128-bit division
+  circuit, and 30.31 s once that was cut to the two indices a template reaches
+  most often. Impact: D-19's bounded-domain shape. A harness that appears to
+  hang is usually a wide symbolic multiply or divide, not an unwind bound that
+  is too low.
+- Observation: a mutation patch can fail to be evidence by failing to compile.
+  Evidence: the first falling-factorial patch kept `for i in 0..r` while
+  replacing `n - i` with `n`, and the gate's `-D warnings` rejected the
+  resulting unused variable before Kani ran, so the harness reported nothing
+  and the sweep recorded the run as inconclusive. Impact: patch authorship has
+  to keep the mutated tree warning-clean; `make test-kani-mutations` is the
+  gate that makes that a standing contract rather than a one-off check.
+- Observation: a mutation compile guard measured against 18 patches does not
+  extend to 35 by arithmetic alone on a shared host. Evidence: the committed
+  allowance of 600 s was derived from CI runs of 257.7 s and 261.5 s for 18
+  patches, but locally the guard's own test binary took 144 m 52 s to build
+  cold under saturated compile admission, and the guard then ended in nextest
+  `TIMEOUT` at 600 s on three attempts and at 3,600 s on a fourth. Impact: the
+  local run is recorded as a host limit rather than a pass, the hosted
+  `kani-smoke` job remains the authoritative run, and reducing the guard's
+  per-patch cost belongs to its own task instead of this milestone.
 
 ## Decision log
 
@@ -593,12 +780,102 @@ conflict in `Decision log`, and escalate.
   the EP-M2 commit impossible. Stashing is not used to juggle red files,
   because the stash stack is shared with other worktrees. Date/Author:
   2026-10-17, after panel review.
+- D-18. Decision: the Verus proof is a seven-file crate under
+  `verus/resource_bounds/` — `main`, `model`, `lens_product`, `power_product`,
+  `binomial`, `falling`, and `admit` — rather than the single `main.rs` this
+  plan names. Rationale: the assembled single-file proof was 451 lines against
+  the 400-line cap in `AGENTS.md`, and `prover-tools verus run` rejects a
+  repeated `--proof-file` (`Parameter --proof-file specified multiple times`,
+  exit 2), so the cap could not be met by splitting the run. Verus treats the
+  proof file as a crate root and follows `mod` declarations, which keeps
+  `--proof-file verus/resource_bounds/main.rs` as the one documented command
+  while every file stays under the cap (largest: `binomial.rs` at 388). No
+  lemma was dropped or weakened to fit; all nine plan lemmas are proved.
+  Date/Author: 2026-11-05.
+- D-19. Decision: a Kani harness in `src/stdlib/resource_bounds/verification.rs`
+  bounds every symbolic operand to a domain where the arithmetic is decidable,
+  and states the boundary of `u64` with concrete witnesses rather than with a
+  symbolic operand. The twenty-step falling-factorial witness is its own
+  harness. Rationale: kissat cannot discharge a symbolic `u64` product or a
+  symbolic `u128` quotient in reasonable time, and the first draft's unbounded
+  form neither verified nor falsified inside forty minutes, which is worse than
+  a bounded claim because it yields no evidence at all. A bounded symbolic
+  domain plus concrete witnesses keeps each harness under sixty seconds while
+  still exercising every branch the callers depend on, and the general
+  mathematical statement remains the Verus theorem rather than a Kani claim.
+  The cost is explicit: the harnesses check correspondence on a stated domain,
+  not universally, and the module comment and the developers' guide say so.
+  Date/Author: 2026-11-09.
 
 ## Outcomes & retrospective
 
-Not yet started. Complete this section at each milestone boundary and at
-completion, comparing the result against `Purpose / big picture` and
-reconciling every discovery with the artefacts in `Conformance basis`.
+Outcome against `Purpose / big picture`. The task asked whether one shared
+contract can carry every later helper. It can: `src/stdlib/resource_bounds/`
+now owns the RFC 0006 table 3 ceilings, the checked cardinality and
+running-total arithmetic, and the typed refusals, and it is independent of
+`minijinja`, so a template adapter can call it without the kernel depending on
+a template engine. The module is private to the crate, which is what makes the
+re-use policy enforceable: there is no public surface to freeze before the
+consumer tasks land.
+
+What was delivered:
+
+- `src/stdlib/resource_bounds/`: ceilings per `StreamKind`, checked binomial
+  and falling-factorial kernels with structural iteration caps of 33 and 20,
+  `admit` for exact cardinality comparison, `RunningTotal` with a checked
+  `admit(amount)`, `try_collect_matches` for fallible streams, and the refusal
+  types with their `Display` renderings. The kernel is exercised by Proptest
+  oracles, unit tests, and rstest-bdd behavioural scenarios.
+- `verus/resource_bounds/`: a seven-file proof crate behind one
+  `--proof-file` root. `make verus` reports
+  `verification results:: 64 verified, 0 errors`, with no `assume`, `admit`, or
+  `external_body` and `vstd` as the only trusted base.
+- `src/stdlib/resource_bounds/verification.rs`: seven Kani harnesses that
+  report `Complete - 7 successfully verified harnesses, 0 failures, 7 total`
+  inside the eight-minute scope wrapper, every `kani::cover!` `SATISFIED`.
+- Seven committed mutation patches, each observed failing its own harness
+  before being reverted, plus registration in the mutation workflow's
+  `exclude-globs`, `KANI_EXCLUDES`, the `cargo-mutants` exclusion paragraph,
+  and the Kani proof scope.
+- ADR-0075, the design §4.7 subsection, the developers'-guide re-use policy,
+  the formal-verification record, the repository layout, the regenerated Kani
+  harness table, the roadmap checkbox, and the RFC 0006 table 3 output-content
+  row.
+
+Documentation that deliberately did not change. `docs/users-guide.md` and
+`docs/stdlib-yaml-and-jinja-guide.md` are unchanged, because the module is
+private, no existing filter or function gains a refusal a user can observe, and
+the surface that renders these refusals belongs to 6.1.4, 6.2.1, 6.4.2, and
+6.5.3.
+
+Discoveries and how they landed. The `serde_json` off-by-one (127 admitted
+containers for a nominal 128) is recorded in D-06, in the developers' guide,
+and in ADR-0075 rather than being silently matched. The missing table 3
+output-content row became D-12, the RFC amendment, and the ADR. Fluent's `f64`
+number storage is recorded as a hazard for counts above `2^53`, which matters
+because 100000 and 10000 are both far below it today but a future ceiling need
+not be. Kani's cost model, set by symbolic arithmetic width rather than loop
+depth, is D-19 and the harness table's measured-cost paragraph. The mutation
+patch that failed to compile is recorded because it shows the difference
+between "the harness stayed silent" and "the harness caught the fault".
+
+Retrospective. Three things worked and are worth repeating. A bounded symbolic
+domain plus a concrete boundary witness separated the tractable part of a
+harness from the part a solver cannot do, which took the most expensive harness
+from an undecided forty-minute run to 30 s. A multi-file Verus crate behind a
+single `--proof-file` root let the proof be organized by lemma without changing
+the `make verus` invocation. Reverting each mutation patch from a trap meant no
+seeded fault could survive an interrupted sweep. Two things did not work. The
+first harness design compared unbounded symbolic operands against `u128`
+oracles and was never going to finish. And the mutation compile gate cannot run
+locally against 35 patches inside its 600 s allowance on a saturated host; the
+structural remedy is ADR-0073's split, which this branch's base predates.
+
+Remaining work, and why it is not this task's. The consumer tasks 6.1.4, 6.2.1,
+6.4.2, and 6.5.3 adopt the module and render its refusals; the canonical-value
+follow-up candidate stays with its own owner; the RFC owner's decision on the
+table 3 row is superseded by the user's approval to amend; and reducing the
+mutation compile gate's local cost belongs to ADR-0073.
 
 ## Context and orientation
 
