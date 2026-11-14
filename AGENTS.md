@@ -23,7 +23,7 @@
   related to a domain concept rather than splitting by type.
 - **Use consistent spelling and grammar.** Comments must use en-GB-oxendict
   ("-ize" / "-yse" / "-our") spelling and grammar, with the exception of
-  references to external APIs.
+  references to external APIs. See [Spelling](#spelling).
 - **Illustrate with clear examples.** Function documentation must include clear
   examples demonstrating the usage and outcome of the function. Test
   documentation should omit examples where the example serves only to reiterate
@@ -50,18 +50,62 @@
   Decision Record (ADR) following the documentation style guide, and reference
   that ADR from the design document.
 - **User-facing behaviour:** Update [users' guide](docs/users-guide.md) for
-  behaviour or user-interface changes that users should know about.
+  behaviour or user-interface changes that users should know about. Add
+  migration guidance for compatibility or usage changes, and keep maintained
+  translations synchronized.
 - **Internal interfaces:** Document internally facing interfaces in the
   relevant component architecture document. Document internally facing
   conventions and practices in [developers' guide](docs/developers-guide.md).
+- **Build tooling:** When changing build tooling, document the effective
+  toolchain, inherited flags, backend and linker selection, and deliberate
+  differences between validation commands.
 - **Style:** All documentation must adhere to the
   [documentation style guide](docs/documentation-style-guide.md).
+- **Accuracy:** Verify changed examples, commands, imports, links, paths, and
+  stated guarantees against the implementation. Update maintained copies and
+  indexes when names or locations change. Keep transient validation results in
+  the PR or execution record.
+- **Decision history:** Preserve accepted ADR decisions; record subsequent
+  changes as amendments, following the
+  [ADR guidance in the documentation style guide](docs/documentation-style-guide.md#architectural-decision-records-adrs).
+  Capture proof-driven API, representation, and invariant decisions in the
+  design documentation.
+- **Completed execplans:** Completed execplans are historical documents and
+  should reflect the state of the repository at time of implementation. Do not
+  retroactively update completed execplan documents to reflect subsequent
+  changes in API, structures, or behaviour.
 - **ExecPlans:** Keep an ExecPlan's header `Status:` line to one bare value
   from the closed set `DRAFT | APPROVED | IN PROGRESS | BLOCKED | COMPLETE`,
   and move free-text qualifiers into a sentence beneath the header. The plan's
   `Progress` and `Outcomes & retrospective` sections and its roadmap checkbox
   are authoritative over that line. See *ExecPlan* in the
   [documentation style guide](docs/documentation-style-guide.md).
+
+## Planning and verification
+
+- For non-trivial work, prepare or update a self-contained ExecPlan using the
+  available planning guidance. Identify the outcome, relevant roadmap and
+  design references, prerequisites, scope exclusions, and observable acceptance
+  criteria. Signpost relevant documentation and skills.
+- Identify affected behavioural contracts, invariants, and failure modes before
+  choosing the implementation. Use these to pressure-test the proposed API and
+  verification strategy.
+- Plan the smallest useful increment. Preserve decision gates and stopping
+  conditions; defer abstractions, dependencies, macros, or published components
+  until the preceding evidence justifies them.
+- Where formal verification is selected, first sketch the independent model,
+  premises, invariants, representation relationships, and principal proof
+  obligations. Treat proposed lemmas as provisional. Defer detailed proof
+  engineering until implementation exposes the verification conditions; do not
+  add assumptions, admissions, or trusted proof bodies merely to make
+  incomplete proofs pass. Unproved statements may remain in the plan until that
+  milestone.
+- Give each major milestone explicit acceptance commands, including applicable
+  proof checks and the formatting, linting, and test gates. Keep commits
+  coherent and useful as rollback points.
+- When plan approval is required, deliver the plan for review and wait for
+  approval before implementation. Keep the active plan current, and mark
+  relevant roadmap entries complete only after their acceptance criteria pass.
 
 ## Change quality & committing
 
@@ -78,6 +122,11 @@
     above.
   - Passes lint checks
   - Adheres to formatting standards tested using a formatting validator.
+- **Before review:** Inspect the complete diff, including tests, fixtures,
+  scripts, examples, and documentation. Check file-size limits, module
+  documentation, doc-comment placement, assertion diagnostics, duplicated test
+  setup, and applicable spelling and formatting gates. Link relevant roadmap
+  entries, issues, and the ExecPlan in the PR description.
 - **Committing:**
   - Only changes that meet all the quality gates above should be committed.
   - Write clear, descriptive commit messages summarizing the change, following
@@ -116,8 +165,9 @@
     different classes or functions.
 - **Abstraction / port / helper policy:** Before implementing an abstraction,
   port, or extracted helper, the agent must:
-  1. Sweep the repository to confirm there is no existing equivalent helper,
-     port, or abstraction.
+  1. Sweep the repository and approved dependencies for equivalent behaviour.
+     Reuse it unless demonstrably unsuitable. New abstractions must simplify
+     the current change or have a concrete reuse case.
   2. Document the new abstraction's intended scope and re-use policy
      (ownership boundaries, permitted call-sites, and composition rules).
   3. Record the decision in the appropriate architecture, design, or
@@ -132,6 +182,29 @@
   - Ensure refactoring adheres to the testing guidelines (behavioural tests
     pass before and after, unit tests added for new units).
   - Ensure the refactoring commit itself passes all quality gates.
+
+## Architecture and operational boundaries
+
+- Keep domain policy separate from filesystem, process, network, framework,
+  and telemetry adapters. Inject dependencies where needed through existing
+  interfaces or narrow closures; avoid speculative layers and dependency cycles.
+- Make fallibility, mutation, and side-effects explicit in APIs. Preserve I/O,
+  parsing, and permission errors rather than silently converting them into
+  absence, `false`, or empty success. Compose side-effects at orchestration
+  boundaries; queries must not hide writes or unrelated workflow policy.
+- For streams, subprocesses, retries, caches, queues, and background tasks,
+  define applicable size limits, deadlines, ownership, cancellation, and
+  cleanup. A timeout does not bound accumulated bytes. Include waiting and
+  cleanup in the operation's budget. Define partial-failure and retry behaviour
+  where updates span multiple effects; keep locks narrow and ordered, avoiding
+  holds across awaits or external calls unless explicitly justified.
+- Validate untrusted inputs before privileged effects, use structured APIs
+  instead of executable string construction, and grant only required
+  permissions.
+- When performance materially motivates a change, measure realistic inputs and
+  distinguish build, execution, queueing, and cache state. Avoid repeated I/O
+  or unnecessary allocation in per-item loops and blocking work on async
+  executors.
 
 ## Rust specific guidance
 
@@ -173,24 +246,24 @@ directive anywhere.
 
 - Run `make check-fmt`, `make lint`, `make doc-coverage`, and `make test`
   before committing. `make test` runs the Rust suite only, and `make lint`
-  lints the Python sources without executing them, so neither runs the Python
-  suites below. When the change touches a workflow or a workflow-contract suite
-  under `tests/workflow_contracts/`, also run `make test-workflow-contracts`.
-  When it touches the package's `include` list, `build.rs`, or
-  `build_l10n_audit/`, also run `make test-package-verify`, which runs Cargo's
-  publish verification build outside the test suite (ADR-0059). When it touches
-  the coverage artefact validators under `scripts/`, also run
-  `make test-coverage-artifact`; `validate-coverage-artifact` is an
-  operator-run validator rather than a test, and needs a downloaded artefact
-  directory, so it is not part of this set. No one of these targets runs
-  another: `make test-workflow-contracts` does not run either coverage-artefact
-  target. These targets wrap the following commands, so contributors understand
-  the exact behaviour and policy enforced:
+  lints the Python sources and loads the workflow scripts, but it does not run
+  the Python suites below. When the change touches a workflow or a
+  workflow-contract suite under `tests/workflow_contracts/`, also run
+  `make test-workflow-contracts`. When it touches the package's `include` list,
+  `build.rs`, or `build_l10n_audit/`, also run `make test-package-verify`,
+  which runs Cargo's publish verification build outside the test suite
+  (ADR-0059). When it touches the coverage artefact validators under
+  `scripts/`, also run `make test-coverage-artifact`;
+  `validate-coverage-artifact` is an operator-run validator rather than a test,
+  and needs a downloaded artefact directory, so it is not part of this set. No
+  one of these targets runs another: `make test-workflow-contracts` does not
+  run either coverage-artefact target. These targets wrap the following
+  commands, so contributors understand the exact behaviour and policy enforced:
   - `make check-fmt` executes:
 
     ```sh
     cargo fmt --all -- --check
-    ruff format --check scripts tests/workflow_contracts
+    ruff format --check .github/scripts scripts tests/workflow_contracts
     mdtablefix --check --git --include-untracked \
       --wrap --renumber --breaks --ellipsis --fences
     ```
@@ -209,15 +282,22 @@ directive anywhere.
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
     RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
-    env -u CARGO_ENCODED_RUSTFLAGS RUSTFLAGS="-D warnings" \
-    whitaker --lib whitaker_suite --fail-on-no-libraries --no-deps \
-      --package netsuke-build -- --all-targets --all-features
+    env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$(cat dylint.toml)" \
+    RUSTFLAGS="-D warnings" whitaker --lib whitaker_suite \
+      --fail-on-no-libraries --no-deps --package netsuke-build -- \
+      --all-targets --all-features
+    cd test_support && env -u CARGO_ENCODED_RUSTFLAGS \
+    DYLINT_TOML="$(cat dylint.toml)" RUSTFLAGS="-D warnings" whitaker \
+      --lib whitaker_suite --fail-on-no-libraries --no-deps \
+      --package test_support -- --all-targets --all-features
     yamllint --config-file .yamllint.yml .github/workflows
     actionlint
     ```
 
     The Makefile composes the rustdoc and Clippy `RUSTFLAGS` value from one
-    variable; the Whitaker line takes neither it nor the caller's flags.
+    variable; the Whitaker lines take neither it nor the caller's flags. The
+    second Whitaker run starts in `test_support/` so that Whitaker loads the
+    crate's `dylint.toml` exemption.
     `-Clink-arg=-fuse-ld=mold` is Linux-only, so every sample in this section
     drops it elsewhere — macOS and Windows use their platform linker and the
     value ends `-D warnings -Zthreads=8`. Only that one flag is platform-gated;
@@ -231,13 +311,13 @@ directive anywhere.
     `docs/whitaker-users-guide.md`; install via `cargo install
     whitaker-installer && whitaker-installer`). `make lint-clippy` runs the
     Clippy-only subset when Whitaker is unavailable. `make lint` also runs
-    `make lint-python`, which lints the Python sources with Ruff, Pylint, the
-    df12 house lints, and `ambrleaks`, and first runs
+    `make lint-python`, which lints the Python sources with Ruff, Pylint,
+    Interrogate, the df12 house lints, and `ambrleaks`, and first runs
     `make lint-workflow-scripts`, which loads every trusted module under
     `.github/scripts` on the Python baseline; see "Python tooling and
     baseline" in `docs/developers-guide.md` for the gate inventory and the
-    Python 3.14
-    baseline it enforces. `make github-actions-lint` validates GitHub Actions
+    Python 3.14 baseline it enforces. `make github-actions-lint` validates
+    GitHub Actions
     workflows with yamllint and actionlint alone; `make lint` includes it.
     The Makefile curates `$HOME/.cargo/bin`, `$HOME/.local/bin`,
     `$HOME/.bun/bin`, and the Go tool directory onto `PATH` for its recipes,
@@ -266,9 +346,11 @@ directive anywhere.
     [cargo-nextest](https://nexte.st/), then the doctests separately because
     nextest cannot execute them. Both passes deny warnings, and `make test`
     fails if either does. `make test-nextest` and `make doctest` run the
-    individual passes. Use `make fmt` (`cargo fmt --workspace`) to apply
-    formatting fixes reported by the formatter check.
-  - `make doc-coverage` executes:
+    individual passes. Use `make fmt` (`cargo fmt --all`, then Ruff,
+    mdtablefix, and markdownlint-cli2 with `--fix`) to apply formatting fixes
+    reported by the formatter check.
+  - `make doc-coverage` runs the `make doc-coverage-test` pytest modules first,
+    then executes:
 
     ```sh
     RUSTDOCFLAGS="--cfg docsrs -D warnings" \
@@ -284,31 +366,45 @@ directive anywhere.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
+- Every `assert!`, `assert_eq!`, and `assert_ne!` invocation must include a
+  custom diagnostic message that states the failed expectation and, where
+  useful, the relevant values.
 - Where a function is too long, extract meaningfully named helper functions
   adhering to separation of concerns and CQRS.
 - Where a function has too many parameters, group related parameters in
   meaningfully named structs.
-- Where a function is returning a large error, consider using `Arc` to reduce
-  the amount of data returned.
+- Keep returned error types semantically focused and small. If a necessary
+  payload makes an error variant large, place that payload behind `Box`; use
+  `Arc` only when shared ownership or cheap cloning is required.
 - Ensure that new features are validated with unit tests using `rstest` and
   behavioural tests using `rstest-bdd` where applicable. Cover happy paths,
   unhappy paths, and relevant edge cases.
-- Add snapshot tests using `insta` where multivariant output format consistency
-  is relevant to the requirements.
+- Add snapshot tests using `insta` where structured output, user-interface
+  output, diagnostics, or other multivariant output formats need meaningful,
+  stable assertions. Keep snapshots focused on stable output boundaries, pair
+  them with semantic assertions for business rules and schema contracts, and
+  normalize nondeterministic fields before snapshotting. Do not accept brittle
+  snapshots that churn after unrelated changes; update snapshots only after
+  confirming a snapshot failure identifies a real contract change.
+- Add compile-time behaviour tests using `trybuild` where macro expansion,
+  trait bounds, feature-gated APIs, or other compile-fail and compile-pass
+  contracts are relevant to the requirements. Keep compile-time fixtures free
+  of unrelated runtime work.
 - Add end-to-end tests where a change affects externally observable workflows,
   integration contracts, persistence, command-line behaviour, network
   boundaries, UI flows, or other system-level behaviour.
-- Use property tests with `proptest` or a bounded model checker with `kani`
-  when a change introduces an invariant over a range of inputs, states,
-  orderings, or transitions. Use judgement to choose the appropriate level of
-  rigour.
-- Use an exhaustive proof with `verus` for introduced lemmas or contractual
-  business logic. Proofs must be substantive, rigorous, and well-founded, not
-  merely a restatement of the assumed property.
+- Select verification proportionately: named examples or `rstest` tables for
+  finite contracts, `proptest` for broad input spaces or operation sequences,
+  and `kani` for exhaustive exploration within explicit bounds. Use `verus` for
+  selected lemmas or contractual invariants requiring unbounded proof over a
+  suitable semantic model. Proofs must establish the property from appropriate
+  premises, not restate or assume it. Straightforward integration and
+  presentation work must not acquire artificial proof obligations. Keep
+  executable integration and behavioural tests alongside proofs.
 - Run relevant unit, behavioural, property, model-checking, proof, and
   end-to-end suites before and after making any change.
 - Every module **must** begin with a module level (`//!`) comment explaining the
-  module's purpose and utility.
+  module's purpose and utility, including test modules and fixture crate roots.
 - Every public and private function and method **must** carry a `///` doc
   comment: an imperative one-line summary starting with a verb, a rationale
   paragraph only where a design choice is non-obvious, and a `# Errors` section
@@ -318,6 +414,8 @@ directive anywhere.
   its exemptions.
 
 - Prefer immutable data and avoid unnecessary `mut` bindings.
+- Clone to express intentional ownership, sharing, or snapshot semantics;
+  prefer borrowing or ownership transfer when a new owned value is unnecessary.
 - Use explicit version ranges in `Cargo.toml` and keep dependencies up-to-date.
 - Avoid `unsafe` code unless absolutely necessary, and document any usage
   clearly with a "SAFETY" comment.
@@ -326,6 +424,10 @@ directive anywhere.
 - Use predicate functions for conditional criteria with more than two branches.
 - Lints must not be silenced except as a **last resort**.
 - Lint rule suppressions must be tightly scoped and include a clear reason.
+- Use item-scoped `#[expect(lint, reason = "...")]`; blanket allowances and
+  artificial references that hide unused code are forbidden. Narrow feature and
+  test-support compilation boundaries instead. Delete unused helpers unless
+  concrete tracked work justifies a temporary expectation linked to that work.
 - Use `concat!()` to combine long string literals rather than escaping newlines
   with a backslash.
 - Prefer single line versions of functions where appropriate. i.e.,
@@ -346,16 +448,15 @@ directive anywhere.
   `newt-hype` when introducing many homogeneous wrappers that share behaviour;
   add small shims such as `From<&str>` and `AsRef<str>` for string-backed
   wrappers. For path-centric wrappers implement `AsRef<Path>` alongside
-  `into_inner()` and `to_path_buf()`, avoid attempting
-  `impl From<Wrapper> for PathBuf` because of the orphan rule. Prefer explicit
-  tuple structs whenever bespoke validation or tailored trait surfaces are
-  required, customizing `Deref`, `AsRef`, and `TryFrom` per type. Use
-  `the-newtype` when defining traits and needing blanket implementations that
-  apply across wrappers satisfying `Newtype + AsRef/AsMut<Inner>`, or when
-  establishing a coherent internal convention that keeps trait forwarding
-  consistent without per-type boilerplate. Combine approaches: lean on
-  `newt-hype` for the common case, tuple structs for outliers, and
-  `the-newtype` to unify behaviour when owning the trait definitions.
+  `into_inner()` and `to_path_buf()`. Prefer explicit tuple structs whenever
+  bespoke validation or tailored trait surfaces are required, customizing
+  `Deref`, `AsRef`, and `TryFrom` per type. Use `the-newtype` when defining
+  traits and needing blanket implementations that apply across wrappers
+  satisfying `Newtype + AsRef/AsMut<Inner>`, or when establishing a coherent
+  internal convention that keeps trait forwarding consistent without per-type
+  boilerplate. Combine approaches: lean on `newt-hype` for the common case,
+  tuple structs for outliers, and `the-newtype` to unify behaviour when owning
+  the trait definitions.
 - Use `cap_std` and `cap_std::fs_utf8` / `camino` in place of `std::fs` and
   `std::path` for enhanced cross-platform support and capabilities oriented
   filesystem access.
@@ -406,6 +507,18 @@ as `--toolchain`.
   `docs/developers-guide.md`. Environment-dependent tests use injected
   providers or isolated child processes; there is no serialized environment
   test group. Do not add retries to hide a flaky test; fix the test.
+- For each changed behaviour, identify a plausible incorrect implementation
+  and ensure the test rejects it. Assert observable results, errors, and
+  side-effects; mock calls or configuration text alone do not prove execution.
+  Negative tests must establish the precondition that would expose the defect.
+- Exercise the boundary that owns the promise: public API, executable, or
+  protocol adapter. Private-helper tests complement this coverage. Fakes must
+  support relevant failures and verify their propagation through orchestration.
+  Test local integration contracts rather than third-party tools themselves.
+- Test relevant partial failures, cancellation, shutdown, and cleanup with
+  deterministic coordination where practical. Avoid relying solely on sleeps or
+  exact deltas from shared global counters. Restore fixture resources even when
+  assertions fail, and account for host capabilities and privileges.
 - Use `rstest` fixtures for shared setup.
 - Replace duplicated tests with `#[rstest(...)]` parameterized cases.
 - Prefer `mockall` for ad hoc mocks/stubs.
@@ -435,7 +548,11 @@ as `--toolchain`.
   invoking `netsuke` through `assert_cmd` may configure the environment via
   `Command::env`/`Command::env_clear`, because the mutation is confined to the
   child process. A test manipulating the environment in-process does not
-  qualify, whatever layer it claims to occupy.
+  qualify, whatever layer it claims to occupy. The `Sandbox` runners in
+  `test_support/src/build_tools/sandbox/mod.rs` are the accepted local form for
+  helpers that spawn `make` or `scripts/` entry points: they use
+  `std::process::Command` with `env_clear`, so the mutation is confined to the
+  child process.
 
 ### Executable documentation
 
@@ -510,11 +627,18 @@ semantic documentation contracts. For changes to these examples, also run
 - Libraries may emit `metrics` and `tracing` instrumentation, but must not
   install global recorders or subscribers. Applications should initialize
   exporters/subscribers once, as early as practical in startup.
+- Keep secrets, credentials, raw payloads, and sensitive paths out of logs,
+  errors, traces, and snapshots. Prefer stable error categories and bounded
+  contextual fields over arbitrary error text.
+- For new operational telemetry, document and exercise the application's
+  collection path. Verify a relevant event produces a non-zero signal through
+  that path; helper-only assertions or comparisons of zero counters do not
+  establish useful instrumentation.
 
 ## Markdown guidance
 
 - Validate Markdown files using `make markdownlint`. This target also runs
-  `make spelling`, the shared en-GB-oxendict (Oxford) spelling gate.
+  the spelling gate, the shared en-GB-oxendict (Oxford) spelling check.
 - Run `make fmt` after any documentation changes to format all Markdown
   files and fix table markup.
 - Validate Mermaid diagrams in Markdown files by running `make nixie`.
@@ -524,6 +648,13 @@ semantic documentation contracts. For changes to these examples, also run
 - Use dashes (`-`) for list bullets.
 - Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
   footnotes.
+- Avoid first-person prose outside README and BDD feature files; allow
+  second-person prose in README, AGENTS, BDD feature files, and agent skill
+  directories. These exceptions qualify the documentation style guide.
+- Quoted API names and identifiers retain upstream spelling. Mark them as
+  code using backticks or fenced blocks rather than adding spelling exceptions.
+- The spelling gate runs `typos`; run `typos --write-changes` to apply its
+  corrections mechanically.
 
 <!-- typos-config-builder:agents-md:start -->
 
@@ -551,53 +682,6 @@ Update `docs/users-guide.md` for any change to application behaviour or user
 interface that a user should know about. Document internally facing interfaces
 or practices in the relevant component architecture document. Document
 internally facing conventions or practices in `docs/developers-guide.md`.
-
-## Additional tooling
-
-The following tooling is available in this environment:
-
-- `mbake` — A Makefile validator. Run using `mbake validate Makefile`.
-- `strace` — Traces system calls and signals made by a process; useful for
-  debugging runtime behaviour and syscalls.
-- `gdb` — The GNU Debugger, for inspecting and controlling programs as they
-  execute (or post-mortem via core dumps).
-- `ripgrep` — Fast, recursive text search tool (`grep` alternative) that
-  respects `.gitignore` files.
-- `ltrace` — Traces calls to dynamic library functions made by a process.
-- `valgrind` — Suite for detecting memory leaks, profiling, and debugging
-  low-level memory errors.
-- `bpftrace` — High-level tracing tool for eBPF, using a custom scripting
-  language for kernel and application tracing.
-- `lsof` — Lists open files and the processes using them.
-- `htop` — Interactive process viewer (visual upgrade to `top`).
-- `iotop` — Displays and monitors I/O usage by processes.
-- `ncdu` — NCurses-based disk usage viewer for finding large files/folders.
-- `tree` — Displays directory structure as a tree.
-- `bat` — `cat` clone with syntax highlighting, Git integration, and paging.
-- `delta` — Syntax-highlighted pager for Git and diff output.
-- `tcpdump` — Captures and analyses network traffic at the packet level.
-- `nmap` — Network scanner for host discovery, port scanning, and service
-  identification.
-- `lldb` — LLVM debugger, alternative to `gdb`.
-- `eza` — Modern `ls` replacement with more features and better defaults.
-- `fzf` — Interactive fuzzy finder for selecting files, commands, etc.
-- `hyperfine` — Command-line benchmarking tool with statistical output.
-- `shellcheck` — Linter for shell scripts, identifying errors and bad practices.
-- `fd` — Fast, user-friendly `find` alternative with sensible defaults.
-- `checkmake` — Linter for `Makefile`s, ensuring they follow best practices and
-  conventions.
-- `srgn` — [Structural grep](https://github.com/alexpovel/srgn), searches code
-  and enables editing by syntax tree patterns.
-- `difft` **(Difftastic)** — Semantic diff tool that compares code structure
-  rather than just text differences.
-- `typos` — Source-code and prose spell checker. `make spelling` runs it
-  against Markdown through the shared gate to enforce en-GB-oxendict spelling;
-  run it with `--write-changes` to apply corrections mechanically.
-
-## Key takeaway
-
-These practices help maintain a high-quality codebase and facilitate
-collaboration.
 
 ## Build standard
 
