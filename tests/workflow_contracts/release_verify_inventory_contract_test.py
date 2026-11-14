@@ -11,6 +11,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import copy
+import re
 import typing as typ
 
 import pytest
@@ -27,6 +28,10 @@ from release_verify_inventory_commands import (
     reject_secrets,
     run_tokens,
     unread_gh_subcommands,
+)
+from release_verify_inventory_mutation_diagnostics import (
+    ACTION_DIAGNOSTICS,
+    WORKFLOW_DIAGNOSTICS,
 )
 from release_verify_inventory_mutations import (
     ACTION_MUTATIONS,
@@ -307,6 +312,20 @@ def _assert_complete_contract(
     assert not violations, f"verify-job reachability contract: {violations}"
 
 
+def test_every_mutation_records_the_diagnostic_it_must_trigger() -> None:
+    """Require each mutation to say which check its rejection proves.
+
+    A mutation rejected by an unrelated guard proves nothing about the check it
+    was written for, so the pairing is part of the suite rather than a comment.
+    """
+    assert set(ACTION_DIAGNOSTICS) == set(ACTION_MUTATIONS), (
+        "every action mutation must record the diagnostic it triggers"
+    )
+    assert set(WORKFLOW_DIAGNOSTICS) == set(WORKFLOW_MUTATIONS), (
+        "every workflow mutation must record the diagnostic it triggers"
+    )
+
+
 @pytest.mark.parametrize("mutation", ACTION_MUTATIONS)
 def test_action_mutations_are_rejected(mutation: str) -> None:
     """Prove the action contract detects each verifier mutation."""
@@ -314,7 +333,7 @@ def test_action_mutations_are_rejected(mutation: str) -> None:
     workflow = copy.deepcopy(_workflow())
     mutate_action(action, mutation)
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match=re.escape(ACTION_DIAGNOSTICS[mutation])):
         _assert_complete_contract(action, workflow)
 
 
@@ -325,7 +344,7 @@ def test_workflow_mutations_are_rejected(mutation: str) -> None:
     workflow = copy.deepcopy(_workflow())
     mutate_workflow(workflow, mutation)
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match=re.escape(WORKFLOW_DIAGNOSTICS[mutation])):
         _assert_complete_contract(action, workflow)
 
 
