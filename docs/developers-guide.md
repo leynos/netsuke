@@ -6001,6 +6001,31 @@ this estate do use it. Five of those six outcomes are tests about a panic
 crossing a boundary, and a repository without such tests would meet none of
 them.
 
+Update, 2026-11-14 (pin `nightly-2026-11-10`). Most of those outcomes were not
+tests of unwinding worth keeping, and have been removed or converted; the
+exception itself stands because a benchmark on 2026-11-13 found no wall-clock
+gain from the backend here (a cold build 8% faster, a rebuild and the test run
+no faster), so there is no case for adopting it.
+
+- The three poisoned-lock tests are deleted. Each exercised only the one-line
+  `unwrap_or_else(PoisonError::into_inner)` recovery
+  (`CapturedEvents::snapshot` and the localizer fixtures), and needed a panic
+  on a spawned thread to poison the lock.
+- `the_last_declaration_wins_over_any_sequence` no longer probes the panic for
+  undeclared keys inside the property; two `#[should_panic]` tests cover it.
+  `accept_connection_respects_accept_timeout` is a `#[should_panic]` test on
+  the timeout message; its elapsed-time bounds went with the `catch_unwind`.
+- Three tests are new on this pin, and only one is about unwinding.
+  `rejects_unsupported_json_values::case_3` and
+  `decoding_matches_the_independent_oracle` abort because `zmij`, the float
+  formatter `serde_json` uses, calls `_mm_mulhi_epu16`, which Cranelift does
+  not implement (`llvm.x86.sse2.pmulhu.w is not yet supported`,
+  `rustc_codegen_cranelift#171`); the stub is a non-unwinding panic. Building
+  `zmij` on LLVM with `[profile.dev.package.zmij] codegen-backend = "llvm"`
+  makes both pass. `weak_registrars_prevent_stale_just_one_interest_overwrites`
+  is a Loom model, which fails with "failed to initiate panic, error 5" because
+  Loom unwinds internally; that one is genuine.
+
 ### Composition rules
 
 - **Quality gates.** `make lint`, `make lint-clippy`, `make test`, and

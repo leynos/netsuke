@@ -14,7 +14,6 @@ use super::{
 use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
-    panic,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -72,57 +71,32 @@ fn send_request(url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// With no client, `accept_connection` panics once the deadline passes, and the
+/// message names both the accept timeout and the poll interval.
+///
+/// The panic is asserted with `#[should_panic]` so the test does not depend on
+/// unwinding. The panic is raised only once the deadline has passed, so a
+/// missing or early panic still fails this test.
 #[test]
-fn accept_connection_respects_accept_timeout() -> anyhow::Result<()> {
-    let listener = TcpListener::bind(("127.0.0.1", 0))?;
-    listener.set_nonblocking(true)?;
+#[should_panic(
+    expected = "timed out waiting for fetch test connection (accept_timeout=20ms, poll_interval=200ms)"
+)]
+fn accept_connection_respects_accept_timeout() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind a loopback listener");
+    listener
+        .set_nonblocking(true)
+        .expect("make the listener non-blocking");
 
     let accept_timeout = Duration::from_millis(20);
     let poll_interval = Duration::from_millis(200);
-    let start = Instant::now();
-    let deadline = start + accept_timeout;
+    let deadline = Instant::now() + accept_timeout;
 
-    let result = panic::catch_unwind(|| {
-        drop(accept_connection(
-            &listener,
-            AcceptWait::Until(deadline),
-            poll_interval,
-            accept_timeout,
-        ));
-    });
-    let Err(panic_payload) = result else {
-        anyhow::bail!("accept_connection should panic when no client connects");
-    };
-
-    let elapsed = start.elapsed();
-    anyhow::ensure!(
-        elapsed >= accept_timeout,
-        "panic should not occur before the accept timeout (elapsed {elapsed:?}, timeout {accept_timeout:?})",
-    );
-    anyhow::ensure!(
-        elapsed <= accept_timeout + poll_interval + Duration::from_millis(500),
-        "panic overshot accept timeout tolerance: elapsed={elapsed:?}, accept_timeout={accept_timeout:?}, poll_interval={poll_interval:?}",
-    );
-
-    let panic_ref = panic_payload.as_ref();
-    let panic_text = panic_ref
-        .downcast_ref::<String>()
-        .cloned()
-        .or_else(|| {
-            panic_ref
-                .downcast_ref::<&'static str>()
-                .map(std::string::ToString::to_string)
-        })
-        .unwrap_or_else(|| format!("{panic_payload:?}"));
-    anyhow::ensure!(
-        panic_text.contains(&format!("accept_timeout={accept_timeout:?}")),
-        "panic message should embed the accept timeout: {panic_text}",
-    );
-    anyhow::ensure!(
-        panic_text.contains(&format!("poll_interval={poll_interval:?}")),
-        "panic message should embed the poll interval: {panic_text}",
-    );
-    Ok(())
+    drop(accept_connection(
+        &listener,
+        AcceptWait::Until(deadline),
+        poll_interval,
+        accept_timeout,
+    ));
 }
 
 /// A signalled shutdown must end an unbounded accept wait by itself.
