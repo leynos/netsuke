@@ -77,6 +77,9 @@ mod kernel;
 mod limits;
 mod streams;
 
+#[cfg(kani)]
+mod verification;
+
 #[cfg(test)]
 mod tests;
 

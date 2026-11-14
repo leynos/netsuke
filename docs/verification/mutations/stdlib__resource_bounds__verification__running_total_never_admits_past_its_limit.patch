@@ -1,0 +1,13 @@
+diff --git a/src/stdlib/resource_bounds/kernel.rs b/src/stdlib/resource_bounds/kernel.rs
+index 0ad0ded55..a191f6d53 100644
+--- a/src/stdlib/resource_bounds/kernel.rs
++++ b/src/stdlib/resource_bounds/kernel.rs
+@@ -131,7 +131,7 @@ pub(super) fn checked_falling_factorial(n: u64, r: u64) -> Option<u64> {
+ /// certainly above the ceiling, and the only alternative would be to wrap or
+ /// saturate, both of which would misreport how much was admitted.
+ pub(super) fn admit_total(limit: u64, total: u64, amount: u64) -> Option<u64> {
+-    total.checked_add(amount).filter(|sum| *sum <= limit)
++    total.checked_add(amount).filter(|sum| *sum < limit)
+ }
+ 
+ /// Classify an exact cardinality against the ceiling for its request kind.

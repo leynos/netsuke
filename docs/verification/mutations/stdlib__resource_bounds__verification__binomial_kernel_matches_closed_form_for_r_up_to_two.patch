@@ -1,0 +1,13 @@
+diff --git a/src/stdlib/resource_bounds/kernel.rs b/src/stdlib/resource_bounds/kernel.rs
+index 0ad0ded55..1146ab0a3 100644
+--- a/src/stdlib/resource_bounds/kernel.rs
++++ b/src/stdlib/resource_bounds/kernel.rs
+@@ -94,7 +94,7 @@ pub(super) fn checked_binomial(n: u64, r: u64) -> Option<u64> {
+     }
+     let mut coefficient: u128 = 1;
+     for i in 0..k {
+-        let scaled = coefficient.checked_mul(u128::from(n - i))?;
++        let scaled = coefficient.checked_mul(u128::from(n))?;
+         // The divisor is `i + 1`, which is never zero; `checked_div` states
+         // that without a panic path, and L5 proves the quotient is exact.
+         coefficient = scaled.checked_div(u128::from(i + 1))?;
