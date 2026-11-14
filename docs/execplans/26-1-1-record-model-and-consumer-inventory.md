@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 46. See `Revision note` at the foot of this document. This plan was
+Revision 47. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -727,6 +727,14 @@ pre-rebase history if an old hash must be inspected.
   time (D-31) and re-measured its classification, 50 `main` and 14 branch. D-30
   and D-29 both touch `tests/`, so the fourth regeneration was stale before the
   first gate of the batch that validated them had finished.
+- [x] (2026-11-15) Cleared the two CodeScene advisory findings the new parsers
+  raised (D-32): `non_id_register_headers`'s nested conditionals became a
+  `RegisterTableScan`, and the two trace-prose cases became one `rstest` table
+  over a shared `inventory_with_one_register_item` fixture. Both findings were
+  reproduced locally with `cs delta` before any edit, and both files report
+  10.00 after. The refactor touches `tests/`, so the post-pin list was
+  regenerated a sixth time to 65 and the split re-measured at 50 `main` and 15
+  branch.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -923,6 +931,30 @@ pre-rebase history if an old hash must be inspected.
   introductory sentence now names 2026-11-15 as the head it describes and gives
   both totals. Date/Author: 2026-11-15, implementation agent, before re-gating
   the candidate.
+- Decision D-32 (2026-11-15): cleared the two CodeScene advisory findings the
+  new parsers raised, by decomposition rather than suppression. Both were
+  reproduced locally with `cs delta 5c707ef33 b8cedf778` before any edit, so
+  the hosted report and the local engine agreed on the candidate.
+  `non_id_register_headers` was flagged *Bumpy Road Ahead*: three pieces of
+  position state — appendix-or-not, table-open-or-not, and the collected
+  headers — threaded through a loop with a nested conditional. The state now
+  lives in a `RegisterTableScan` whose `visit` dispatches one line to
+  `enter_subsection` or `enter_table_row`, and the rule itself is untouched;
+  disabling the predicate still fails exactly
+  `rejects_a_register_table_whose_header_is_not_id`. The duplication finding
+  was real: `rejects_coverage_claimed_only_by_the_trace_introduction` and
+  `rejects_coverage_claimed_only_by_prose_under_changes` shared their setup
+  verbatim, so they became one `rstest` table over the anchor each replaces,
+  `rejects_coverage_claimed_only_by_prose_in_the_trace`. The bare register-row
+  literal also appeared in three modules and is now
+  `inventory_with_one_register_item`, which `tests.rs` uses too. Both table
+  cases were re-probed: replacing `trace_rows` with the whole trace region
+  fails case 2, and keeping only the prose filter fails case 1. The refactor
+  touches `tests/`, so the post-pin list was regenerated a sixth time, to 65
+  identifiers and a 50/15 split — D-31's mechanism recurring within the hour,
+  which is now the strongest evidence in this log that the enumeration is worth
+  more than any remembered count. Date/Author: 2026-11-15, implementation
+  agent, after the hosted CodeScene re-review.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
   the pin" list for in-scope paths at merge time. Rationale: the roadmap
@@ -2324,6 +2356,13 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   same 22-file diff, and it needs its own eleven-gate run because
   `docs/hexagonal-hardening-inventory.md` is the input to the contract test
   that guards it.
+- Revision 47 (2026-11-15): cleared the two CodeScene advisory findings on the
+  previous candidate (D-32) — a bumpy-road smell in `non_id_register_headers`
+  and a duplication smell between two prose cases — and regenerated the
+  post-pin list a sixth time to 65 identifiers, 50 `main` and 15 branch,
+  because the refactor touches `tests/`. The diff is still 22 files; the
+  contract's module contents changed, not its file set. This candidate again
+  needs its own eleven-gate run, for the same reason Revision 46 gave.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

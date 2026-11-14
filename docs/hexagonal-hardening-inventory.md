@@ -254,13 +254,14 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-15 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 50 in the current `main` target and
-fourteen on this branch, one of them adding this inventory's contract test and
+fifteen on this branch, one of them adding this inventory's contract test and
 the rest refactoring or tightening that contract. Regenerate the list with
 `git log 8a961000..HEAD --format=%h -- src build.rs tests test_support benches`;
 it goes stale whenever a commit touches one of those paths, so treat the
 enumeration below, not a remembered count, as the claim. This list is re-sweep
 context for later consumers; it does not move the inventory pin.
 
+- `b8cedf778` Replace the register scan's locals with a stateful type
 - `07dcaeca7` Satisfy the lints the new parsers trip
 - `10e649d47` Close the trace matrix's remaining prose fail-opens
 - `9342e9361` Split the inventory contract into feature modules
