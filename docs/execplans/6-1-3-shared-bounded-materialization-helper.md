@@ -498,33 +498,40 @@ conflict in `Decision log`, and escalate.
     observe through an existing helper, and the consumer work that surfaces
     these refusals is 6.1.4, 6.2.1, 6.4.2, and 6.5.3. The conclusion is
     recorded in `Outcomes & retrospective`.
-  - Final gates (2026-11-14, re-run 2026-11-15). The first full run, against
-    `67e081c93`, predates the rebase onto `main` and is superseded: the rebase
-    changed the tree, so those passes no longer describe the candidate. An
-    intermediate run against the rebased head `23dbf96bb` then found the
+  - Final gates (2026-11-14, confirmed 2026-11-15). The first full run,
+    against `67e081c93`, predates the rebase onto `main` and is superseded: the
+    rebase changed the tree, so those passes no longer describe the candidate.
+    An intermediate run against the rebased head `23dbf96bb` then found the
     duplicated module header recorded under *Surprises & discoveries*, which
     `make check-fmt`, `make lint`, `make typecheck`, and `make test` all
     rejected at the same unparsable target. After the repair, the scrutineer
-    ran the whole set again, one gate at a time, against `0e4b376cc`, with the
-    working tree unchanged throughout: `check-fmt` 3 s (548 Rust files and 227
-    Markdown files unchanged); `lint` 195 s; `typecheck` 32 s; `test` 155 s
-    (5739 nextest tests passed, 9 skipped; 211 doctests passed, 63 ignored,
-    0 failed); `doc-coverage` 15 s (6552 of 6667 items, 98.28%, against the 80%
-    bar); `nixie` 2 s; `test-workflow-contracts` 550 s (2330 passed, 3 skipped;
-    30 script tests); `test-documentation-contracts` 2 s (15 passed, 50
-    skipped); `test-rfc-stdlib-coverage` 2 s (282 passed); one full `make
-    kani-ir` inside the scope wrapper, 551 s, reporting
+    ran the whole set again, one gate at a time, with the working tree
+    unchanged throughout, at `0e4b376cc`: `check-fmt` 3 s; `lint` 195 s;
+    `typecheck` 32 s; `test` 155 s; `doc-coverage` 15 s; `nixie` 2 s;
+    `test-workflow-contracts` 550 s; `test-documentation-contracts` 2 s;
+    `test-rfc-stdlib-coverage` 2 s; `kani-ir` 551 s; and
+    `test-kani-mutations` 179 s. Eleven of those twelve gates exited 0;
+    `markdownlint` exited 2 in its `spelling` prerequisite, which rejected a
+    misspelling of `unparsable` in this plan. With that corrected, a
+    confirming batch at `c5b0c81b9` ran the same twelve gates in the same
+    order, and all twelve exited 0 in 31 m 8 s: `check-fmt` 3 s (548 Rust
+    files and 227 Markdown files unchanged); `lint` 33 s; `typecheck` 20 s;
+    `test` 66 s (5739 nextest tests passed, 9 skipped; 211 doctests passed, 63
+    ignored, 0 failed); `doc-coverage` 11 s (6552 of 6667 items, 98.28%,
+    against the 80% bar); `markdownlint` 40 s (227 files, 0 issues, spelling
+    gate included, `typos.toml` current); `nixie` 2 s;
+    `test-workflow-contracts` 558 s (2330 passed, 3 skipped; 30 script tests);
+    `test-documentation-contracts` 2 s (15 passed, 50 skipped);
+    `test-rfc-stdlib-coverage` 1 s (282 passed); one full `make kani-ir` inside
+    the scope wrapper, 764 s, reporting
     `Complete - 24 successfully verified harnesses, 0 failures, 24 total`,
     which includes all seven `stdlib::resource_bounds::verification::*`
-    harnesses; and `make test-kani-mutations` 179 s, compiling all 37 patches
-    through prewarm 11.336 s, negative check 11.465 s, and compile guard
-    151.203 s. Eleven of those twelve gates exited 0. `make markdownlint`
-    exited 2 in its `spelling` prerequisite, which rejected `unparsable`
-    where this plan means `unparsable`; the word is corrected in the commit
-    that carries this paragraph, and the whole set was re-run against that
-    head to leave the record green. `make test-package-verify` does not apply,
-    because no include list, `build.rs`, or `build_l10n_audit/` file changed.
-    Logs are the
+    harnesses; and `make test-kani-mutations` 368 s, sweeping all 37 tracked
+    patches through prewarm 32.0 s, negative check 26.2 s, and compile guard
+    271.7 s. No gate was retried. The commit that carries this paragraph
+    changes prose only, so those twelve passes still stand for the tree they
+    ran against; `make test-package-verify` does not apply, because no include
+    list, `build.rs`, or `build_l10n_audit/` file changed. Logs are the
     `/tmp/<gate>-netsuke-6-1-3-shared-bounded-materialization-helper.out` files
     named in `Concrete steps`.
 
