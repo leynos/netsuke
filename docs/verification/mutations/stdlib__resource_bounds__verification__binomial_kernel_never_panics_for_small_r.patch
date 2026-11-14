@@ -1,0 +1,14 @@
+diff --git a/src/stdlib/resource_bounds/kernel.rs b/src/stdlib/resource_bounds/kernel.rs
+index 0ad0ded55..76e0d824f 100644
+--- a/src/stdlib/resource_bounds/kernel.rs
++++ b/src/stdlib/resource_bounds/kernel.rs
+@@ -85,9 +85,6 @@ fn checked_power(base: u64, repeat: u64) -> Option<u64> {
+ /// exceed `u64` even when the coefficient it computes still fits; the step is
+ /// exact, so the division leaves no remainder.
+ pub(super) fn checked_binomial(n: u64, r: u64) -> Option<u64> {
+-    if r > n {
+-        return Some(0);
+-    }
+     let k = r.min(n - r);
+     if k >= BINOMIAL_ITERATION_CAP {
+         return None;

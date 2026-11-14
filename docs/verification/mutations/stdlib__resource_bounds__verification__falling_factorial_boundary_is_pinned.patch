@@ -1,0 +1,13 @@
+diff --git a/src/stdlib/resource_bounds/kernel.rs b/src/stdlib/resource_bounds/kernel.rs
+index 0ad0ded55..5b80cc6bf 100644
+--- a/src/stdlib/resource_bounds/kernel.rs
++++ b/src/stdlib/resource_bounds/kernel.rs
+@@ -32,7 +32,7 @@ const BINOMIAL_ITERATION_CAP: u64 = 34;
+ /// Falling-factorial count at which the product exceeds `u64::MAX`.
+ ///
+ /// `20!` fits and `21!` does not, and every longer product is at least `21!`.
+-const FALLING_FACTORIAL_ITERATION_CAP: u64 = 21;
++const FALLING_FACTORIAL_ITERATION_CAP: u64 = 20;
+ 
+ /// Largest exponent a base of at least two can take without overflowing.
+ ///
