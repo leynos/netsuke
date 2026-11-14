@@ -346,6 +346,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0074](adrs/adr-0074-typed-records-for-release-policy-boundaries.md):
   Frozen slotted records at release policy boundaries, with adapters owning
   external record shapes and domain-shaped mappings retained.
+- [ADR-0075](adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md):
+  Sharing one resource-bounds module across stdlib helpers, so the RFC 0006
+  ceilings, checked arithmetic, and typed refusals are written once.
 
 ## Proposals
 

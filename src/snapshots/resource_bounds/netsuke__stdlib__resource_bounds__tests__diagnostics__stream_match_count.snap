@@ -1,0 +1,5 @@
+---
+source: src/stdlib/resource_bounds/tests/diagnostics.rs
+expression: rendered
+---
+the match stream exceeds the ceiling of 100000 matches

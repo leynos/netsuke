@@ -1,0 +1,5 @@
+---
+source: src/stdlib/resource_bounds/tests/diagnostics.rs
+expression: rendered
+---
+input length 18446744073709551615 bytes exceeds the ceiling of 8388608 bytes

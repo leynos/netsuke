@@ -1,0 +1,14 @@
+diff --git a/src/stdlib/resource_bounds/kernel.rs b/src/stdlib/resource_bounds/kernel.rs
+index 0ad0ded55..37d3dfbe4 100644
+--- a/src/stdlib/resource_bounds/kernel.rs
++++ b/src/stdlib/resource_bounds/kernel.rs
+@@ -50,9 +50,6 @@ pub(super) fn checked_product(lengths: &[usize], repeat: u64) -> Option<u64> {
+     if repeat == 0 {
+         return Some(1);
+     }
+-    if lengths.contains(&0) {
+-        return Some(0);
+-    }
+     let base = lengths.iter().try_fold(1_u64, |acc, length| {
+         let factor = u64::try_from(*length).ok()?;
+         acc.checked_mul(factor)

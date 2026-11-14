@@ -16,7 +16,8 @@ use netsuke::output_prefs::OutputPrefs;
 use netsuke::runner::CommandEnv;
 use netsuke::shell_selection::ShellSelection;
 use netsuke::stdlib::{
-    CanonicalKey, ClockProvider, NetworkPolicy, StdlibState as NetsukeStdlibState,
+    CanonicalKey, CardinalityError, ClockProvider, DepthExceeded, NetworkPolicy,
+    StdlibState as NetsukeStdlibState, StreamLimitExceeded,
 };
 use rstest::fixture;
 use rstest_bdd::Slot;
@@ -26,6 +27,34 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::MutexGuard;
 use test_support::http::HttpServer;
+
+
+//! Fixture modules for BDD scenarios.
+//!
+//! The `TestWorld` struct holds all state for BDD scenarios. Non-Clone types
+//! use `RefCell<Option<T>>` directly, while Clone types use `Slot<T>`.
+//!
+//! With rstest-bdd 0.3.1+, fixtures are injected directly into step functions
+//! as parameters, eliminating the need for thread-local storage.
+};
+
+
+//! Fixture modules for BDD scenarios.
+//!
+//! The `TestWorld` struct holds all state for BDD scenarios. Non-Clone types
+//! use `RefCell<Option<T>>` directly, while Clone types use `Slot<T>`.
+//!
+//! With rstest-bdd 0.3.1+, fixtures are injected directly into step functions
+//! as parameters, eliminating the need for thread-local storage.
+};
+//! Fixture modules for BDD scenarios.
+//!
+//! The `TestWorld` struct holds all state for BDD scenarios. Non-Clone types
+//! use `RefCell<Option<T>>` directly, while Clone types use `Slot<T>`.
+//!
+//! With rstest-bdd 0.3.1+, fixtures are injected directly into step functions
+//! as parameters, eliminating the need for thread-local storage.
+};
 
 /// Combined test world for all BDD scenarios.
 ///
@@ -148,6 +177,24 @@ pub struct TestWorld {
     pub canonical_offending: Slot<Value>,
     /// Rendered kind named by the refusal of [`Self::canonical_offending`].
     pub canonical_refusal_kind: Slot<String>,
+
+    // Bounded materialization state (Clone)
+    /// Operand lengths of the product request under test.
+    pub resource_lengths: Slot<Vec<usize>>,
+    /// Repetition count of the product request under test.
+    pub resource_repeat: Slot<u64>,
+    /// Item count and positions of the permutation request under test.
+    pub resource_permutation: Slot<(usize, u64)>,
+    /// Outcome of admitting the request under test, or its typed refusal.
+    pub resource_admission: Slot<Result<usize, CardinalityError>>,
+    /// Depth the nesting scenario walked to before descending once more.
+    pub resource_depth: Slot<u32>,
+    /// Refusal raised by the descent past the nesting ceiling.
+    pub resource_depth_refusal: Slot<DepthExceeded>,
+    /// Refusal raised by collecting a stream past the match ceiling.
+    pub resource_stream_refusal: Slot<StreamLimitExceeded>,
+    /// Items the stream collector pulled before refusing.
+    pub resource_pulled: Slot<usize>,
 
     // Localization state (non-Clone)
     /// Lock guarding process-wide localizer mutations during scenarios.

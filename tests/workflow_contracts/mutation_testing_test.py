@@ -52,6 +52,7 @@ KANI_EXCLUDES = (
     "src/ir/cmd_interpolate/verification.rs",
     "src/ir/from_manifest/verification.rs",
     "src/ir/graph/kani_map.rs",
+    "src/stdlib/resource_bounds/verification.rs",
 )
 
 #: The shared workflow input that installs the pinned linker.

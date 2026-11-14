@@ -6,6 +6,7 @@ mod config;
 mod parsing;
 mod policy;
 mod rendering;
+mod resource_bounds;
 mod types;
 mod workspace;
 
