@@ -7,7 +7,7 @@
 
 use super::{
     HttpResponse, HttpServerConfig,
-    accept::{AcceptWait, accept_connection},
+    accept::{AcceptWait, accept_connection, nap_duration},
     response::render_response,
 };
 
@@ -71,12 +71,51 @@ fn send_request(url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The accept loop never sleeps past its deadline.
+///
+/// This replaces the elapsed-time bounds the panic test used to assert after
+/// catching the panic: the responsiveness lives in the nap length, which can be
+/// checked directly and without timing.
+#[test]
+fn nap_is_shortened_to_the_time_remaining() {
+    let poll_interval = Duration::from_millis(200);
+
+    let near = nap_duration(
+        AcceptWait::Until(Instant::now() + Duration::from_millis(20)),
+        poll_interval,
+    );
+    assert!(
+        near <= Duration::from_millis(20),
+        "a 20 ms deadline must not be overslept by a full poll interval, got {near:?}"
+    );
+
+    let far = nap_duration(
+        AcceptWait::Until(Instant::now() + Duration::from_secs(60)),
+        poll_interval,
+    );
+    assert_eq!(
+        far, poll_interval,
+        "a distant deadline polls at the interval"
+    );
+
+    let passed = nap_duration(AcceptWait::Until(Instant::now()), poll_interval);
+    assert_eq!(passed, Duration::ZERO, "a passed deadline does not sleep");
+
+    let unbounded = AtomicBool::new(false);
+    assert_eq!(
+        nap_duration(AcceptWait::UntilShutdown(&unbounded), poll_interval),
+        poll_interval,
+        "an unbounded wait polls at the interval"
+    );
+}
+
 /// With no client, `accept_connection` panics once the deadline passes, and the
 /// message names both the accept timeout and the poll interval.
 ///
 /// The panic is asserted with `#[should_panic]` so the test does not depend on
 /// unwinding. The panic is raised only once the deadline has passed, so a
-/// missing or early panic still fails this test.
+/// missing or early panic still fails this test; how promptly it arrives is
+/// covered by `nap_is_shortened_to_the_time_remaining`.
 #[test]
 #[should_panic(
     expected = "timed out waiting for fetch test connection (accept_timeout=20ms, poll_interval=200ms)"

@@ -155,10 +155,32 @@ impl StubEnv {
     }
 }
 
+impl StubEnv {
+    /// Return whether the test declared `key`, so that reading it is allowed.
+    ///
+    /// [`LocaleEnvProvider::var`] panics for an undeclared key; this answers
+    /// the same question without panicking, so a test can check the
+    /// declaration bookkeeping directly.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use test_support::locale_stubs::StubEnv;
+    ///
+    /// let env = StubEnv::strict().allowing("X");
+    /// assert!(env.is_declared("X"));
+    /// assert!(!env.is_declared("Y"));
+    /// ```
+    #[must_use]
+    pub fn is_declared(&self, key: &str) -> bool {
+        self.allowed.iter().any(|allowed| allowed == key)
+    }
+}
+
 impl LocaleEnvProvider for StubEnv {
     fn var(&self, key: &str) -> Option<String> {
         assert!(
-            self.allowed.iter().any(|allowed| allowed == key),
+            self.is_declared(key),
             concat!(
                 "StubEnv was asked for {:?}, which the test did not declare. ",
                 "Declare it with `.with_var(..)` or `.allowing(..)` if the read ",

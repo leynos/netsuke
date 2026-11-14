@@ -95,12 +95,14 @@ mod properties {
     }
 
     proptest! {
-        /// Every declared key answers per its last declaration.
+        /// Every declared key answers per its last declaration; undeclared
+        /// keys stay undeclared.
         ///
-        /// Undeclared keys panic, but that is asserted by the
-        /// `#[should_panic]` tests above rather than here: observing a panic
-        /// from inside a property needs `catch_unwind`, which a Cranelift-built
-        /// test binary cannot honour.
+        /// Reading an undeclared key panics, and the `#[should_panic]` tests
+        /// above assert that. Observing a panic from inside a property needs
+        /// `catch_unwind`, which a Cranelift-built test binary cannot honour,
+        /// so the property asks `is_declared`, the question `var` asserts on,
+        /// across every generated sequence.
         ///
         /// The model is a plain last-write-wins map, independent of the
         /// stub's split `values`/`allowed` representation, so a bookkeeping
@@ -126,7 +128,10 @@ mod properties {
             }
             for key in ["A", "B", "C"] {
                 if let Some(expected) = model.get(key) {
+                    prop_assert!(stub.is_declared(key), "declared {} must be readable", key);
                     prop_assert_eq!(stub.var(key), expected.clone());
+                } else {
+                    prop_assert!(!stub.is_declared(key), "undeclared {} must stay undeclared", key);
                 }
             }
         }
