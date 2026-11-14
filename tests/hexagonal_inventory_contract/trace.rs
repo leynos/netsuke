@@ -105,12 +105,17 @@ fn exclusion_reason(line: &str, task: &str) -> String {
 /// make the claim that a table row has to make — the same fail-open this
 /// function already closes for the introduction.
 pub(super) fn trace_rows(trace: &str) -> String {
-    ["Changes", "Consumes"]
+    let mut rows = String::new();
+    for body in ["Changes", "Consumes"]
         .iter()
         .filter_map(|heading| harvest_body(trace, heading))
-        .flat_map(|body| body.lines().filter(|line| first_cell(line).is_some()))
-        .map(|line| format!("{line}\n"))
-        .collect()
+    {
+        for line in body.lines().filter(|line| first_cell(line).is_some()) {
+            rows.push_str(line);
+            rows.push('\n');
+        }
+    }
+    rows
 }
 
 /// Collect register identifiers from the trace matrix's `Unchanged` bullets.

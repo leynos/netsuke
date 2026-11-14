@@ -171,7 +171,7 @@ pub(super) fn non_id_register_headers(register: &str) -> Vec<String> {
             in_appendix = title == NON_PRODUCTION_APPENDIX;
             table_open = false;
         } else if let Some(cell) = first_cell(line) {
-            if !table_open && !in_appendix && cell != "ID" {
+            if is_misheaded_register_table(table_open, in_appendix, cell) {
                 headers.push(cell.to_owned());
             }
             table_open = true;
@@ -180,6 +180,15 @@ pub(super) fn non_id_register_headers(register: &str) -> Vec<String> {
         }
     }
     headers
+}
+
+/// Report whether a table row opens a register table that is not `ID`-headed.
+///
+/// Only the row that opens a table can be a header, so a later row's text is
+/// never a header however it reads, and the appendix classifies oracles rather
+/// than registering items.
+fn is_misheaded_register_table(table_open: bool, in_appendix: bool, cell: &str) -> bool {
+    !table_open && !in_appendix && cell != "ID"
 }
 
 /// Return the title of a third-level heading line, if the line is one.

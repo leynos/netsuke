@@ -722,7 +722,7 @@ pre-rebase history if an old hash must be inspected.
   194 tests the target runs. Also closed the assessment's three unguarded
   rules: a removed required heading, a finding owned by an absent task, and an
   exclusion with no reason now each have a case, and the six required-heading
-  cases are parameterised over the headings that can actually be removed.
+  cases are parameterized over the headings that can actually be removed.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -875,7 +875,7 @@ pre-rebase history if an old hash must be inspected.
   headings at depths one to six, numbered or not, interleaved with prose and
   indented fences, which is exactly the shape `is_heading` documents: it tests
   a line prefix, so an unindented fence holding a `#` line lies outside the
-  rule it implements and is not generated. The hand-written cases stay; a
+  rule it implements and is not generated. The handwritten cases stay; a
   property that fails does not report which boundary was crossed as clearly as
   a named `#[case]` does. Placement is contractual, not stylistic:
   `make proptest` selects by module path segment, so the file is named

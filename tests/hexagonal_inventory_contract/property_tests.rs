@@ -5,7 +5,7 @@
 //! headings at depths one to six, numbered or not, interleaved with prose and
 //! indented fenced blocks. Each property restates a rule the parser claims in
 //! prose, so a change that relaxes that rule fails here even when no
-//! hand-written example happens to sit on the boundary.
+//! handwritten example happens to sit on the boundary.
 //!
 //! The generated fences are indented, matching the domain `is_heading`
 //! documents: it tests a line prefix, so an unindented fence containing a `#`
@@ -73,8 +73,9 @@ fn deeper_headings_before_boundary(
     index: usize,
     boundary_depth: u8,
 ) -> Vec<String> {
-    headings[index + 1..]
+    headings
         .iter()
+        .skip(index + 1)
         .take_while(|(depth, _, _)| *depth > boundary_depth)
         .map(|(_, _, line)| line.clone())
         .collect()
