@@ -20,6 +20,11 @@ What a read established and what an edit replied travel as the values and port
 protocols in ``finalize_github_release_ports``, so this module remains a
 statement of policy: what the run decides, never how it asks.
 
+The vocabulary below is shared by every decision in this package. Judging a
+release snapshot against the record — including the two gates the pre-edit read
+serves — lives in ``finalize_github_release_inventory``, so this module holds
+only what a verdict is and how a plan or a failed call becomes one.
+
 Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
 ``scripts/tests/test_finalize_github_release_publish_decisions.py`` and
 ``scripts/tests/test_finalize_github_release_publish_ports.py``.
@@ -30,13 +35,11 @@ import enum
 import typing as typ
 
 import finalize_github_release_plan as release_plan
-import finalize_github_release_reconcile as release_reconcile
-import finalize_github_release_state as release_state
 
 if typ.TYPE_CHECKING:
-    # ``DigestRecord`` is named only in annotations, which the Python 3.14
-    # baseline resolves lazily, so importing it here buys nothing at run time.
-    import release_digest_record
+    # The state appears only in an annotation: this module judges a snapshot
+    # another module read, and never constructs or inspects one at runtime.
+    import finalize_github_release_state as release_state
 
 
 class PublishVerdict(enum.Enum):
@@ -57,6 +60,9 @@ class PublishVerdict(enum.Enum):
 
     #: The plan still expects an upload, which this stage never performs.
     UPLOAD_REQUIRED = "upload-required"
+
+    #: The draft carries an attachment the trusted record never declared.
+    UNDECLARED_ASSET = "undeclared-asset"
 
     #: An asset disagrees, or its digest could not be established.
     REFUSED = "refused"
@@ -98,6 +104,11 @@ class PublishOutcome:
         Asset names whose bytes disagree with the trusted record.
     unverifiable
         Asset names whose digest the release did not report usably.
+    undeclared
+        Asset names attached to the release that the trusted record never
+        declared. They are named here because the record cannot describe them
+        at all, so no digest comparison can: the run reports the attachment
+        rather than vouching for it.
     detail
         The source's own explanation: why a plan could not be decoded, or the
         clause naming the command that failed.
@@ -120,6 +131,7 @@ class PublishOutcome:
     uploads: tuple[str, ...] = ()
     conflicts: tuple[str, ...] = ()
     unverifiable: tuple[str, ...] = ()
+    undeclared: tuple[str, ...] = ()
     detail: str = ""
     is_draft: bool | None = None
     after_edit: bool = False
@@ -220,98 +232,6 @@ def draft_gate(state: release_state.ReleaseState) -> PublishOutcome:
     return PublishOutcome(PublishVerdict.NOT_A_DRAFT, is_draft=False)
 
 
-def published_inventory(
-    trusted: release_digest_record.DigestRecord,
-    state: release_state.ReleaseState,
-) -> PublishOutcome:
-    """Judge a public release's inventory against the trusted record.
-
-    Parameters
-    ----------
-    trusted
-        The digest record the build declared before upload.
-    state
-        The public release as a read reported it.
-
-    Returns
-    -------
-    PublishOutcome
-        :attr:`PublishVerdict.VERIFIED` when the release still holds the
-        trusted inventory, otherwise :attr:`PublishVerdict.PUBLISHED_MISMATCH`
-        naming what disagrees.
-
-    Examples
-    --------
-    >>> from finalize_github_release_state import ReleaseState
-    >>> from release_digest_record import DigestRecord
-    >>> trusted = DigestRecord.from_mapping({"a.deb": "ab" * 32})
-    >>> state = ReleaseState("v1.2.3", False, False, {"a.deb": "sha256:" + "ab" * 32})
-    >>> published_inventory(trusted, state).verdict.value
-    'verified'
-    >>> changed = ReleaseState("v1.2.3", False, False, {"a.deb": "sha256:" + "cd" * 32})
-    >>> published_inventory(trusted, changed).conflicts
-    ('a.deb',)
-    """
-    assessment = release_reconcile.assess(trusted, state)
-    if assessment.verdict is release_plan.PlanVerdict.VERIFIED:
-        return PublishOutcome(PublishVerdict.VERIFIED)
-    return PublishOutcome(
-        PublishVerdict.PUBLISHED_MISMATCH,
-        uploads=assessment.uploads,
-        conflicts=assessment.conflicts,
-        unverifiable=assessment.unverifiable,
-        detail=assessment.detail,
-        is_draft=False,
-    )
-
-
-def readback(
-    published: release_state.ReleaseState,
-    *,
-    is_prerelease: bool,
-    trusted: release_digest_record.DigestRecord,
-) -> PublishOutcome:
-    """Judge the read-back taken after the un-drafting call.
-
-    Parameters
-    ----------
-    published
-        The release as the post-edit read reported it.
-    is_prerelease
-        The prerelease state the validated candidate requires.
-    trusted
-        The digest record the build declared before upload.
-
-    Returns
-    -------
-    PublishOutcome
-        :attr:`PublishVerdict.FINALIZED` when the release is public with the
-        candidate's flag and the trusted inventory, and the mismatching verdict
-        otherwise.
-
-    Examples
-    --------
-    >>> from finalize_github_release_state import ReleaseState
-    >>> from release_digest_record import DigestRecord
-    >>> trusted = DigestRecord.from_mapping({"a.deb": "ab" * 32})
-    >>> state = ReleaseState("v1.2.3", False, False, {"a.deb": "sha256:" + "ab" * 32})
-    >>> readback(state, is_prerelease=False, trusted=trusted).verdict.value
-    'finalized'
-    >>> readback(state, is_prerelease=True, trusted=trusted).verdict.value
-    'prerelease-mismatch'
-    """
-    match release_state.classify_readback(published, is_prerelease=is_prerelease):
-        case release_state.Readback.FINALIZED:
-            inventory = published_inventory(trusted, published)
-            if inventory.verdict is PublishVerdict.VERIFIED:
-                return PublishOutcome(PublishVerdict.FINALIZED)
-            return inventory
-        case release_state.Readback.STILL_DRAFT:
-            return PublishOutcome(PublishVerdict.STILL_DRAFT)
-        case _:
-            return PublishOutcome(PublishVerdict.PRERELEASE_MISMATCH, is_draft=False)
-
-
 def already_finalized() -> PublishOutcome:
     """Record a retry that found the release already public and matching.
 
@@ -332,42 +252,6 @@ def already_finalized() -> PublishOutcome:
     'already-finalized'
     """
     return PublishOutcome(PublishVerdict.ALREADY_FINALIZED, is_draft=False)
-
-
-def draft_inventory(
-    trusted: release_digest_record.DigestRecord,
-    state: release_state.ReleaseState,
-) -> PublishOutcome:
-    """Judge the draft's inventory immediately before the edit.
-
-    Parameters
-    ----------
-    trusted
-        The digest record the build declared before upload.
-    state
-        The draft as this run's pre-edit read reported it.
-
-    Returns
-    -------
-    PublishOutcome
-        :attr:`PublishVerdict.VERIFIED` when the draft still holds the trusted
-        inventory, otherwise the same upload or refusal verdict the planner
-        would have reached, with ``is_draft`` true because the read saw one.
-
-    Examples
-    --------
-    >>> from finalize_github_release_state import ReleaseState
-    >>> from release_digest_record import DigestRecord
-    >>> trusted = DigestRecord.from_mapping({"a.deb": "ab" * 32})
-    >>> state = ReleaseState("v1.2.3", True, False, {"a.deb": "sha256:" + "ab" * 32})
-    >>> draft_inventory(trusted, state).verdict.value
-    'verified'
-    """
-    return assess(
-        release_reconcile.assess(trusted, state),
-        source="the release's current inventory",
-        draft_confirmed=True,
-    )
 
 
 def remote_failure(detail: str, *, after_edit: bool) -> PublishOutcome:

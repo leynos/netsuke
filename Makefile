@@ -554,6 +554,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/finalize_github_release_cli.py \
 		scripts/finalize_github_release.py \
 		scripts/finalize_github_release_decisions.py \
+		scripts/finalize_github_release_inventory.py \
 		scripts/finalize_github_release_io.py \
 		scripts/finalize_github_release_messages.py \
 		scripts/finalize_github_release_operations.py \

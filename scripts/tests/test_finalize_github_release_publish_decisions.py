@@ -293,17 +293,45 @@ def test_a_draft_that_lost_a_declared_asset_owes_an_upload() -> None:
 
 
 def test_a_draft_whose_bytes_changed_is_refused() -> None:
-    """Stop before the edit when the draft disagrees with the trusted record."""
-    script = Scripted(reads=[draft(assets={ARCHIVE: "sha256:" + "cd" * 32})])
+    """Stop before the edit when the draft disagrees with the trusted record.
+
+    The listing also holds an undeclared attachment, which proves the conflict
+    is reported first: it names an asset the record does describe.
+    """
+    assets = {ARCHIVE: "sha256:" + "cd" * 32, "notes.txt": f"sha256:{DIGEST}"}
+    script = Scripted(reads=[draft(assets=assets)])
 
     outcome = decide(script)
 
     assert outcome.verdict is decisions.PublishVerdict.REFUSED, (
-        "a draft whose bytes changed must be refused"
+        "a changed declared asset must be refused before an undeclared one is named"
     )
     assert outcome.conflicts == (ARCHIVE,), "the refusal must name the asset"
     assert outcome.is_draft is True, "the read established the release is a draft"
     assert not script.edit_calls, "a changed asset must not be published"
+
+
+def test_a_draft_holding_an_undeclared_attachment_is_refused() -> None:
+    """Refuse the last read before the edit when the record cannot describe it.
+
+    The planner decides only about the names the record declares, so its
+    verdict leaves an extra attachment undecided. Nothing later would check it:
+    the release would become public carrying bytes no record vouches for.
+    """
+    script = Scripted(
+        reads=[draft(assets={ARCHIVE: f"sha256:{DIGEST}", "notes.txt": None})]
+    )
+
+    outcome = decide(script)
+
+    assert outcome.verdict is decisions.PublishVerdict.UNDECLARED_ASSET, (
+        "an attachment the record never declared must stop the run"
+    )
+    assert outcome.undeclared == ("notes.txt",), (
+        "the refusal must name the attachment the record cannot describe"
+    )
+    assert outcome.is_draft is True, "the read established the release is a draft"
+    assert not script.edit_calls, "an undeclared attachment must not be published"
 
 
 def test_a_failed_edit_is_reported_as_possibly_applied() -> None:

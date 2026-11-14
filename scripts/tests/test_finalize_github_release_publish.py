@@ -352,15 +352,16 @@ def test_a_retry_refuses_a_public_release_that_lost_the_trusted_asset(
     )
 
 
-def test_publish_tolerates_an_asset_the_record_never_declared(
-    tmp_path: pathlib.Path, cmd_mox: CmdMox
+def test_publish_refuses_an_asset_the_record_never_declared(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Leave an undeclared attachment alone, exactly as the planner does.
+    """Refuse a release carrying an attachment added after verification.
 
-    The reconciliation decides only about names the trusted record declares, so
-    a file it never claimed must not stop a release the record verified. The
-    pre-edit pass applies the same rule, so an extra attachment is tolerated
-    twice for the same reason rather than by a second, weaker check.
+    The inventory verifier stops a release holding an asset the declaration
+    does not name, but finalization runs later. An attachment added in between
+    would otherwise be published with no digest check at all, because the
+    trusted record cannot describe bytes it never claimed. The pre-edit gate
+    therefore refuses it, naming the attachment, before the irreversible edit.
     """
     gh = sequenced_gh(
         cmd_mox,
@@ -373,16 +374,22 @@ def test_publish_tolerates_an_asset_the_record_never_declared(
                 ),
                 "",
                 0,
-            ),
-            ("", "", 0),
-            *release_views((False, False)),
+            )
         ],
     )
 
-    run_finalizer(*publish_arguments(tmp_path))
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*publish_arguments(tmp_path))
 
-    assert [
-        invocation_arguments(invocation)[:2] for invocation in gh.invocations
-    ].count(("release", "edit")) == 1, (
-        "an undeclared attachment must not block the record's verified release"
+    assert error.value.code == EXIT_REFUSED, (
+        "an undeclared attachment must stop the run before the edit"
+    )
+    assert [invocation_arguments(invocation)[:2] for invocation in gh.invocations] == [
+        ("release", "view")
+    ], "a refused run must not edit the release"
+    assert "notes.txt" in capsys.readouterr().err, (
+        "the refusal must name the attachment the record never declared"
+    )
+    assert not (tmp_path / "result.json").exists(), (
+        "an undeclared attachment must not be recorded as this run's finalization"
     )

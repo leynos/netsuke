@@ -5,8 +5,15 @@ policy to a snapshot taken later, by the same run. Two later reads need it: the
 pre-edit read, which guards the one mutating call, and the post-edit read-back,
 which is the only place a writer that changed the draft between the two can be
 observed. Reusing the planner's own reconciliation rather than a cheaper
-comparison keeps every caller judging an asset exactly as the plan judged it,
-including the rule that an undeclared extra attachment is tolerated.
+comparison keeps every caller judging an asset exactly as the plan judged it.
+
+That policy decides only about the names the trusted record declares, so it
+says nothing about an attachment the record never named. The finalization gate
+asks that second question separately, in
+``finalize_github_release_inventory.draft_inventory``, and refuses an
+undeclared attachment before the edit; this module deliberately keeps the
+planner's narrower answer so the plan and the pre-edit pass cannot disagree
+about a declared asset.
 
 The record arrives decoded. Reading it is an adapter's job
 (:func:`finalize_github_release_io.load_digest_record`), so this module holds no

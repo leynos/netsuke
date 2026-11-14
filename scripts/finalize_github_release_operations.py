@@ -10,10 +10,13 @@ The plan answers for the snapshot the planner read, so the release is
 reconciled a second time against the trusted record immediately before the
 edit. That second pass is the planner's own policy, not a cheaper copy of it: a
 draft that lost or replaced an asset between the two reads is judged exactly as
-a first read would judge it. The same reconciliation runs on the read-back after
-the edit, and on a retry that finds the release already public, so a change made
-in the window between the pre-edit read and the edit is reported rather than
-recorded as a success.
+a first read would judge it. It asks one question the planner does not, because
+the planner reconciles only the names the record declares: a draft carrying an
+attachment the record never declared is refused, since no digest comparison
+could vouch for bytes the record cannot describe. The same reconciliation runs
+on the read-back after the edit, and on a retry that finds the release already
+public, so a change made in the window between the pre-edit read and the edit is
+reported rather than recorded as a success.
 
 Every branch here returns a
 :class:`finalize_github_release_decisions.PublishOutcome`. Nothing in this
@@ -37,6 +40,7 @@ import dataclasses
 # ``PublishInputs`` reads its field annotations from the class at run time, so
 # the types it names are imported here rather than for type checking alone.
 import finalize_github_release_decisions as decisions
+import finalize_github_release_inventory as release_inventory
 import finalize_github_release_io as release_io
 import finalize_github_release_plan as release_plan
 import finalize_github_release_ports as release_ports  # ruff: ignore[typing-only-third-party-import] - a field annotation names it
@@ -205,7 +209,7 @@ def _inspect_draft(
     gate = decisions.draft_gate(current.state)
     if gate.verdict is not decisions.PublishVerdict.VERIFIED:
         return gate
-    return decisions.draft_inventory(inputs.trusted, current.state)
+    return release_inventory.draft_inventory(inputs.trusted, current.state)
 
 
 def _edit_and_confirm(
@@ -242,7 +246,7 @@ def _edit_and_confirm(
     published = read(after_edit=True)
     if published.state is None:
         return decisions.remote_failure(published.detail, after_edit=True)
-    return decisions.readback(
+    return release_inventory.readback(
         published.state,
         is_prerelease=inputs.identity.is_prerelease,
         trusted=inputs.trusted,
@@ -277,7 +281,7 @@ def _published(
     >>> _published(trusted, state).verdict.value
     'already-finalized'
     """
-    inventory = decisions.published_inventory(trusted, state)
+    inventory = release_inventory.published_inventory(trusted, state)
     if inventory.verdict is not decisions.PublishVerdict.VERIFIED:
         return inventory
     return decisions.already_finalized()

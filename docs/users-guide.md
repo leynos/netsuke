@@ -122,10 +122,12 @@ un-drafts the release only when every declared asset already holds its trusted
 digest, taking the prerelease flag from the validated candidate identity. The
 finalization job reconciles the release against that record three times: from
 the plan the planner wrote, from a snapshot taken immediately before it
-un-drafts, and from the read-back taken afterwards. A read-back that no longer
-matches the record is reported as a failure rather than recorded as a success,
-so a release that became public holding an inventory the record does not
-describe is named instead of announced.
+un-drafts, and from the read-back taken afterwards. The pre-edit snapshot also
+refuses an attachment the record never declared: the inventory verification job
+ran earlier, so an asset added in between would otherwise be published with no
+digest check at all. A read-back that no longer matches the record is reported
+as a failure rather than recorded as a success, so a release that became public
+holding an inventory the record does not describe is named instead of announced.
 
 That guard governs the transition the job performs. It cannot make an already
 public release a draft again, so a rerun that begins with a public release
@@ -157,11 +159,12 @@ call for different remedies. A plan that still owes an upload, or one that
 reports a conflicting or unverifiable asset, is refused before the release is
 read: the run makes no edit, and says only that, rather than claiming a state
 it has not observed. A refusal made from the snapshot taken just before the
-edit -- a declared asset that is missing, one whose bytes changed, or an
-unreadable record -- stops the run with the release still a draft. In either
-case, correct the cause and rerun the verification and finalization jobs, which
-read the retained records and never rebuild the release. Rerunning a job is
-therefore safe, and a rerun cannot swap a release's bytes for a second build's.
+edit -- a declared asset that is missing, one whose bytes changed, an
+attachment the record never declared, or an unreadable record -- stops the run
+with the release still a draft. In either case, correct the cause and rerun the
+verification and finalization jobs, which read the retained records and never
+rebuild the release. Rerunning a job is therefore safe, and a rerun cannot swap
+a release's bytes for a second build's.
 
 A GitHub call that fails before the edit is different. The run has not edited
 the release, but it cannot say what state the release is in: a retry can begin

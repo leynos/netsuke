@@ -3224,8 +3224,10 @@ depends on the other, so an upload interrupted on one surface can be resumed
 without repeating the other. `verify-release-inventory` runs only after both. A
 tagged run in which either publisher fails or is skipped therefore leaves the
 draft unverified, and `finalize-github-release` runs only after the verifier as
-well, so the two surfaces cannot diverge at the point this finalizer makes the
-release public.
+well, so both surfaces are reconciled once more by a read taken immediately
+before the edit. Those checks narrow the gap between the verified snapshot and
+the release this finalizer publishes; they cannot close it, because an asset
+can still change between that read and the edit.
 
 That gate governs the transition, not a state. A rerun that begins with a
 release already public leaves it public whether or not the verifier and
@@ -4083,9 +4085,17 @@ rule. A declared asset that vanished is `EXIT_UPLOAD_REQUIRED`; one whose bytes
 changed is `EXIT_REFUSED`; an unreadable record is `EXIT_INPUT_UNREADABLE`. The
 plan answers for the snapshot the record step took, so publishing a release
 whose inventory has since changed would report a completeness nothing checked.
-The second pass decides only about the record's own names, which leaves the
-tolerance above intact: an undeclared attachment neither blocks the run nor is
-removed from the release.
+
+That pass asks one question the plan does not. The planner tolerates an
+attachment the record never declared, because a plan naming every extra file
+would refuse a release over something it was never asked about. The verifier
+rejects such an attachment, but it ran earlier, and one added in between would
+reach publication with no digest check at all, since the record cannot describe
+bytes it never claimed. The pre-edit pass therefore refuses an undeclared
+attachment as `EXIT_REFUSED`, naming it, before the irreversible edit.
+`finalize_github_release_inventory` holds that decision, so the planner's own
+reconciliation keeps its narrower answer and the plan and the pre-edit pass
+cannot disagree about a declared asset.
 
 What the second pass cannot close is the window between its read and the edit.
 GitHub offers no conditional edit, so a writer that changes the draft in those

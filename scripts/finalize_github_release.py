@@ -30,7 +30,8 @@ Exit statuses are the vocabulary the workflow branches on:
 ``0``
     The release is public with the candidate's prerelease state.
 ``1``
-    The plan or candidate refuses publication, or the release contradicts the
+    The plan or candidate refuses publication, the draft carries an attachment
+    the trusted record never declared, or the release contradicts the
     candidate: before the edit when it is already public with the wrong flag,
     and after one when the read-back disagrees.
 ``2``
@@ -96,6 +97,7 @@ _STATUS = {
     decisions.PublishVerdict.REMOTE_FAILED: release_io.EXIT_REMOTE_FAILED,
     decisions.PublishVerdict.STILL_DRAFT: release_io.EXIT_REMOTE_FAILED,
     decisions.PublishVerdict.REFUSED: release_io.EXIT_REFUSED,
+    decisions.PublishVerdict.UNDECLARED_ASSET: release_io.EXIT_REFUSED,
     decisions.PublishVerdict.NOT_A_DRAFT: release_io.EXIT_REFUSED,
     decisions.PublishVerdict.PRERELEASE_MISMATCH: release_io.EXIT_REFUSED,
     decisions.PublishVerdict.PUBLISHED_MISMATCH: release_io.EXIT_REFUSED,

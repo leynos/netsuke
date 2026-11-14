@@ -147,6 +147,40 @@ def _refused(outcome: decisions.PublishOutcome, _context: Diagnosis) -> str:
     return f"{blocked(outcome)}; {draft_state(outcome)}"
 
 
+def _undeclared(outcome: decisions.PublishOutcome, _context: Diagnosis) -> str:
+    """Name the attachments the trusted record never declared.
+
+    Returns
+    -------
+    str
+        The refusal, the names, and the state the run left behind. The names
+        are the whole diagnosis: the record cannot say what those bytes should
+        be, so an operator has to decide whether the attachment belongs to the
+        release before rerunning.
+
+    Examples
+    --------
+    >>> describe(
+    ...     decisions.PublishOutcome(
+    ...         decisions.PublishVerdict.UNDECLARED_ASSET,
+    ...         undeclared=("notes.txt",),
+    ...         is_draft=True,
+    ...     ),
+    ...     plan_path="plan.json",
+    ...     tag="v1.2.3",
+    ...     is_prerelease=False,
+    ... ) == (
+    ...     "the release carries attachments the trusted record never "
+    ...     "declared: notes.txt; the release remains a draft"
+    ... )
+    True
+    """
+    return (
+        "the release carries attachments the trusted record never declared: "
+        f"{', '.join(outcome.undeclared)}; {draft_state(outcome)}"
+    )
+
+
 def _not_a_draft(outcome: decisions.PublishOutcome, _context: Diagnosis) -> str:
     """Refuse a public release the candidate would have to re-classify."""
     return (
@@ -214,6 +248,7 @@ _RENDERERS: dict[decisions.PublishVerdict, _Renderer] = {
     decisions.PublishVerdict.INPUT_UNREADABLE: _unreadable,
     decisions.PublishVerdict.UPLOAD_REQUIRED: _upload_required,
     decisions.PublishVerdict.REFUSED: _refused,
+    decisions.PublishVerdict.UNDECLARED_ASSET: _undeclared,
     decisions.PublishVerdict.NOT_A_DRAFT: _not_a_draft,
     decisions.PublishVerdict.PRERELEASE_MISMATCH: _prerelease_mismatch,
     decisions.PublishVerdict.PUBLISHED_MISMATCH: _published_mismatch,
