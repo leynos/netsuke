@@ -8086,27 +8086,38 @@ Netsuke uses a mixed strategy:
   as a general Markdown API. `validate_inventory` must accept the skeleton
   fixture's empty sections, so `validate_populated` carries the separate
   requirement that the real document populate the register, obligations, and
-  findings; without it a renamed table header or a changed identifier format
-  would leave every per-entry check with nothing to visit and pass silently.
+  findings; without it a changed identifier format would leave every per-entry
+  check with nothing to visit and pass silently. That register requirement is a
+  whole-section claim: at least one identifier exists somewhere in the
+  register. It is not a per-table guarantee, so a single table renamed away
+  from an `ID` header is caught by `validate_register`, which reports every
+  register table header that is not `ID`; one surviving table is otherwise
+  enough to keep `validate_populated` green while the renamed table's rows
+  silently escape the uniqueness, well-formedness, and coverage checks.
   Register and obligation coverage both derive from `trace_rows`, the `Changes`
-  and `Consumes` tables alone, so a mention in the trace introduction or an
-  exclusion reason cannot satisfy either. A register item may instead be listed
-  by an `Unchanged` bullet that opens with the identifier; a sentence that
-  merely names one does not count. The contract separates a *region slice* from
-  a *harvest* because the two need different rules. `heading_body` keeps nested
-  content, since `## Register` legitimately nests its `####` area tables inside
-  the `### A1`-`### A7` headings; `harvest_body` truncates at the first heading
-  of any depth, since every harvester reads its body for a claim a table row or
-  a bullet has to make, and prose under a deeper subheading must not supply
-  one. Reach for `harvest_body` in any new harvester.
+  and `Consumes` table rows alone, so a sentence in the trace introduction, a
+  line of prose directly under `### Changes`, or an exclusion reason cannot
+  satisfy either. A register item may instead be listed by an `Unchanged`
+  bullet that opens with the identifier; a sentence that merely names one does
+  not count. The contract separates a *region slice* from a *harvest* because
+  the two need different rules. `heading_body` keeps nested content, since
+  `## Register` legitimately nests its `####` area tables inside the
+  `### A1`-`### A7` headings; `harvest_body` truncates at the first heading of
+  any depth, since every harvester reads its body for a claim a table row or a
+  bullet has to make, and prose under a deeper subheading must not supply one.
+  Reach for `harvest_body` in any new harvester.
 - The contract's modules are split by feature rather than by layer, forced by
-  the 400-line file cap: `markdown.rs` (parsers), `register.rs` (identifier
-  grammar), `roadmap.rs` (task and dependency parsing), `validation.rs` (the
-  cross-document checks), `fixtures.rs` (shared skeletons), and the three
-  `cfg(test)` case modules `parser_tests.rs`, `tests.rs`, and
-  `fail_open_tests.rs`. `fail_open_tests.rs` holds the regression guards for
-  prose-claimed coverage; each fails against the parser rule it protects, so
-  add a case there rather than to `tests.rs` when closing a new fail-open.
+  the 400-line file cap: `markdown.rs` (parsers), `trace.rs` (the trace
+  matrix's four harvesters), `register.rs` (identifier grammar), `roadmap.rs`
+  (task and dependency parsing), `validation.rs` (the cross-document checks),
+  `fixtures.rs` (shared skeletons), and the three `cfg(test)` case modules
+  `parser_tests.rs`, `tests.rs`, and `fail_open_tests.rs`. Each trace
+  subsection admits exactly one shape of claim — a table row for `Changes` and
+  `Consumes`, a reason-bearing bullet for `Excluded`, an identifier bullet for
+  `Unchanged` — and every harvester drops the prose around it.
+  `fail_open_tests.rs` holds the regression guards for prose-claimed coverage;
+  each fails against the parser rule it protects, so add a case there rather
+  than to `tests.rs` when closing a new fail-open.
 - Behavioural tests use Gherkin feature files in `tests/features/` and
   `tests/features_unix/`.
 - Behavioural step definitions and fixtures live in `tests/bdd/`.

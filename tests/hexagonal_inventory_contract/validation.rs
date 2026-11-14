@@ -5,12 +5,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context, Result, ensure};
 
 use super::markdown::{
-    HeadingLevel, declared_pin, excluded_tasks, finding_entries, heading_body, pins,
-    reference_covers, regex_values, register_ids, task_ids, trace_rows, trace_table_tasks,
-    unchanged_ids,
+    HeadingLevel, declared_pin, finding_entries, heading_body, non_id_register_headers, pins,
+    regex_values, register_ids, task_ids,
 };
 use super::register::is_well_formed_register_id;
 use super::roadmap::{dependents_of, roadmap_tasks};
+use super::trace::{
+    excluded_tasks, reference_covers, trace_rows, trace_table_tasks, unchanged_ids,
+};
 
 /// The identifier form the compatibility obligations and trace matrix share.
 const OBLIGATION_PATTERN: &str = r"\bCO-\d+\b";
@@ -23,9 +25,15 @@ const OBLIGATION_PATTERN: &str = r"\bCO-\d+\b";
 /// to no entries.
 ///
 /// `validate_inventory` must accept the skeleton fixture's empty sections, so a
-/// renamed table header or a changed identifier format would leave its loops
-/// with nothing to visit and turn every check into a silent pass. Holding the
-/// real document to non-emptiness is what keeps those loops live.
+/// changed identifier format would leave its loops with nothing to visit and
+/// turn every check into a silent pass. Holding the real document to
+/// non-emptiness keeps those loops live.
+///
+/// The register requirement is deliberately about the section as a whole: it
+/// says the inventory registers at least one identifier, not that any
+/// particular table does. A table whose header is not `ID` is caught by
+/// `validate_register` instead, which reports the header rather than relying on
+/// the section's other tables to keep the check non-empty.
 pub(super) fn validate_populated(inventory: &str) -> Result<()> {
     ensure!(
         !register_ids(inventory).is_empty(),
@@ -216,7 +224,8 @@ fn validate_exclusions(trace: &str, tasks: &BTreeMap<String, BTreeSet<String>>) 
 ///
 /// # Errors
 ///
-/// Returns an error when identifiers are duplicated, malformed, or untraced.
+/// Returns an error when a register table is not `ID`-headed, or when
+/// identifiers are duplicated, malformed, or untraced.
 ///
 /// A register item is covered by a `Changes` or `Consumes` row, or by an
 /// `Unchanged` bullet that opens with the identifier. Requiring the bullet
@@ -225,6 +234,11 @@ fn validate_exclusions(trace: &str, tasks: &BTreeMap<String, BTreeSet<String>>) 
 /// can satisfy coverage by merely mentioning an identifier.
 fn validate_register(inventory: &str) -> Result<()> {
     let register = heading_body(inventory, "Register", HeadingLevel::Section).unwrap_or_default();
+    ensure!(
+        non_id_register_headers(register).is_empty(),
+        "every register table should be `ID`-headed; found {:?}",
+        non_id_register_headers(register)
+    );
     let register_document = format!("## Register\n{register}");
     let register_identifiers = register_ids(&register_document);
     let unique: BTreeSet<&str> = register_identifiers.iter().map(String::as_str).collect();

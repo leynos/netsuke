@@ -18,6 +18,9 @@ mod markdown;
 #[cfg(test)]
 #[path = "hexagonal_inventory_contract/parser_tests.rs"]
 mod parser_tests;
+#[cfg(test)]
+#[path = "hexagonal_inventory_contract/property_tests.rs"]
+mod property_tests;
 #[path = "hexagonal_inventory_contract/register.rs"]
 mod register;
 #[path = "hexagonal_inventory_contract/roadmap.rs"]
@@ -25,6 +28,8 @@ mod roadmap;
 #[cfg(test)]
 #[path = "hexagonal_inventory_contract/tests.rs"]
 mod tests;
+#[path = "hexagonal_inventory_contract/trace.rs"]
+mod trace;
 #[path = "hexagonal_inventory_contract/validation.rs"]
 mod validation;
 

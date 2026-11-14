@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 41. See `Revision note` at the foot of this document. This plan was
+Revision 45. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -338,9 +338,9 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   parser modules under `tests/hexagonal_inventory_contract/`, the exact-path
   CodeScene exemptions those parsers need, and (only if the spelling gate
   requires it) `typos.local.toml` and its generated `typos.toml`. The measured
-  range `origin/main...HEAD` is twenty files, so this tolerance fired during
-  the task; the expansion is recorded in D-14 and D-28 rather than applied
-  silently.
+  range `origin/main...HEAD` is twenty-two files, so this tolerance fired
+  during the task; the expansion is recorded in D-14, D-28, and D-30 rather
+  than applied silently.
 - Drift: if the pin differs from `ebcedaef` and any commit between them
   touches `src/`, `build.rs`, `tests/`, `test_support/`, or `benches/`, re-run
   every sweep; do not patch this plan's planning-time observations. If
@@ -700,8 +700,30 @@ pre-rebase history if an old hash must be inspected.
   append-at-the-same-anchor conflicts were resolved by keeping both sides and
   validating the result by parsing it. `range-diff` reports all 32 commits as
   `=`; the net diff is 20 files and `git diff --check` is clean.
-- [ ] EP-M4: validate the rebased candidate with the full gate set, refresh the
-  PR body, and take the pull request through hosted review to equilibrium.
+- [x] (2026-11-14) Ran the complete sequential eleven-gate set on the rebased
+  candidate `558b3e312` with `HEAD` unchanged and an empty working tree at both
+  ends, and refreshed the PR body for it: 62 post-pin commits, 20 files,
+  doc-coverage 98.26% (6,478/6,593), Nextest 5,710 passed and 9 skipped,
+  workflow contracts 2,330 passed plus 30 script tests, 227 Markdown files with
+  zero issues, 228 diagrams.
+- [x] (2026-11-14) Dispositioned CodeRabbit's third hosted round (D-30). Three
+  inline findings, all verified against source and all fixed rather than
+  rebutted: `trace_rows` now keeps only table rows, `trace_table_tasks` reads
+  only `Changes` and `Consumes`, and `validate_register` reports register
+  tables whose header is not `ID`. Codex filed the same `trace_rows` finding
+  independently, which is corroboration rather than a second defect. Closing
+  them pushed `markdown.rs` to 429 lines, so the trace harvesters moved to
+  `trace.rs`. Four liveness probes confirmed each new guard fails against the
+  rule it protects; the first prose fixture was dead and was replaced.
+- [x] (2026-11-14) Reversed D-2's `proptest` finding and added
+  `tests/hexagonal_inventory_contract/property_tests.rs` (D-29) on the
+  completeness assessment's advice. Four properties over generated documents,
+  selected by `make proptest` and counted there rather than assumed: 4 of the
+  194 tests the target runs. Also closed the assessment's three unguarded
+  rules: a removed required heading, a finding owned by an absent task, and an
+  exclusion with no reason now each have a case, and the six required-heading
+  cases are parameterised over the headings that can actually be removed.
+- [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
 
@@ -833,11 +855,56 @@ pre-rebase history if an old hash must be inspected.
   legitimate code changes. Characterization fixtures belong to 26.1.2, and a
   code-reading completeness guard would need a new dependency or duplicate RFC
   0027's checker, and would fail on every legitimate phase-26 change to a
-  snapshot. `rstest-bdd`, `insta`, `proptest`, Kani, and Verus are not
-  applicable: no user-visible behaviour, multivariant output, input-domain
-  invariant, bounded state space, or contractual lemma is introduced. The
-  approver may strike this test; the rest of the plan does not depend on it.
-  Date/Author: 2026-09-27, planning agent, after review.
+  snapshot. `rstest-bdd`, `insta`, Kani, and Verus are not applicable: no
+  user-visible behaviour, multivariant output, bounded state space, or
+  contractual lemma is introduced. The approver may strike this test; the rest
+  of the plan does not depend on it. Date/Author: 2026-09-27, planning agent,
+  after review.
+- Decision D-29 (2026-11-14): reverse D-2's finding that `proptest` does not
+  apply, and add `tests/hexagonal_inventory_contract/property_tests.rs`. D-2's
+  claim was that no input-domain invariant exists, and it was true of the
+  contract as first written: every check then either compared two documents
+  literally or read one flat list. It stopped being true when `markdown.rs`
+  split a *region slice* (`heading_body`, which keeps nested content) from a
+  *harvest* (`harvest_body`, which truncates at the first heading of any
+  depth). Those two functions now make four claims about every document in
+  their domain — a section keeps its deeper headings, stops at its sibling, a
+  subsection stops at depth three, and a harvest is a heading-free prefix of
+  its region — and each claim is a statement about an arbitrary document, not
+  about a case a reader thought to write down. The generated domain is the
+  headings at depths one to six, numbered or not, interleaved with prose and
+  indented fences, which is exactly the shape `is_heading` documents: it tests
+  a line prefix, so an unindented fence holding a `#` line lies outside the
+  rule it implements and is not generated. The hand-written cases stay; a
+  property that fails does not report which boundary was crossed as clearly as
+  a named `#[case]` does. Placement is contractual, not stylistic:
+  `make proptest` selects by module path segment, so the file is named
+  `property_tests.rs` and is declared from the crate root. Date/Author:
+  2026-11-14, implementation agent, on the CodeRabbit pre-merge row.
+- Decision D-30 (2026-11-14): split the trace matrix's four harvesters out of
+  `markdown.rs` into `trace.rs`, and take the contract to twenty-two files. The
+  immediate cause is mechanical: closing the three findings below pushed
+  `markdown.rs` from 359 to 429 lines, past the 400-line module cap the
+  `module-max-lines` lint enforces on nested modules. The seam is not
+  mechanical. `Changes`, `Consumes`, `Excluded`, and `Unchanged` each admit
+  exactly one shape of claim — a table row, a table row, a reason-bearing
+  bullet, an identifier bullet — and all four refuse prose; `markdown.rs` keeps
+  the generic line and cell primitives they share. That is a judgement about
+  what the trace matrix is, not a line count, which is the rule the developers'
+  guide gives for where to cut. Two of the three findings that forced the split
+  changed the harvesters themselves: `trace_rows` now keeps only pipe-delimited
+  rows, because prose directly under `### Changes` was inside the harvest body
+  and could make a coverage claim; `trace_table_tasks` now reads only `Changes`
+  and `Consumes`, because a `Task` table under `#### Notes` inside
+  `### Excluded` supplied task coverage that the exclusion harvester had
+  already refused. The third changed `validate_register`: it now reports any
+  register table whose header is not `ID`, since `register_ids` silently skips
+  such a table and one surviving table kept `validate_populated` green. Each of
+  the four new guards was probed by reverting the rule it protects and
+  confirming it failed; the prose case needed a fixture of a bare identifier
+  rather than a sentence, because a trailing full stop is rejected by
+  `reference_covers` for the wrong reason and made a dead rule look live.
+  Date/Author: 2026-11-14, implementation agent.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
   the pin" list for in-scope paths at merge time. Rationale: the roadmap
@@ -1183,10 +1250,11 @@ pre-rebase history if an old hash must be inspected.
   - *The scope measurement*. The Scope tolerance and D-14 said sixteen files.
     That was true when measured, but the module split added four files under
     `tests/hexagonal_inventory_contract/` and D-19's correction predates it,
-    so `git diff --name-only origin/main...HEAD` now returns twenty. Both the
+    so `git diff --name-only origin/main...HEAD` returned twenty. Both the
     tolerance and D-14 are restated, and D-14 points here. The additional four
     are the same forced split D-14 already justifies; no new kind of path
-    appears.
+    appears. D-30 then added two more of the same kind, plus the
+    `property_tests.rs` module, taking the count to twenty-two.
   Date/Author: 2026-11-14, implementing agent, after the PR was found
   conflicted against its target.
 
@@ -2221,6 +2289,16 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   candidate needs its own eleven-gate run and its own hosted assessment; the
   `a05187397` evidence does not transfer, however content-preserving
   `range-diff` shows the rewrite to be.
+- Revision 45 (2026-11-14): dispositioned CodeRabbit's third hosted round on
+  the rebased head (D-30), and reversed D-2's `proptest` finding (D-29). Three
+  inline findings were fixed, all in the trace and register parsers; closing
+  them pushed `markdown.rs` past the module cap, so the four trace harvesters
+  moved to `trace.rs`. Four new regression guards were added to
+  `fail_open_tests.rs` and each was liveness-probed by reverting its rule.
+  `property_tests.rs` adds four properties over generated documents, and three
+  previously unguarded rules (a removed required heading, a finding owned by an
+  absent task, a reasonless exclusion) gained cases. The scope measurement
+  moves from twenty files to twenty-two.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

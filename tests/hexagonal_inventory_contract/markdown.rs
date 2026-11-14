@@ -1,10 +1,8 @@
 //! Parse the Markdown structures used by the inventory integrity contract.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use regex::Regex;
-
-use super::register::is_well_formed_register_id;
 
 /// Select a heading depth supported by the inventory contract parser.
 #[derive(Clone, Copy)]
@@ -84,7 +82,7 @@ fn first_heading_offset(body: &str) -> usize {
 /// A `#` inside a fenced code block would have to open the line to be
 /// mistaken for a heading, and the inventory's fences are indented, so a
 /// line-prefix test is sufficient rather than a full Markdown parse.
-fn is_heading(line: &str) -> bool {
+pub(super) fn is_heading(line: &str) -> bool {
     let depth = line
         .chars()
         .take_while(|character| *character == '#')
@@ -93,7 +91,7 @@ fn is_heading(line: &str) -> bool {
 }
 
 /// Report whether a line is a Markdown heading at or above `level`.
-fn is_heading_at_or_above(line: &str, level: HeadingLevel) -> bool {
+pub(super) fn is_heading_at_or_above(line: &str, level: HeadingLevel) -> bool {
     let depth = line
         .chars()
         .take_while(|character| *character == '#')
@@ -146,6 +144,50 @@ pub(super) fn regex_values(pattern: &str, text: &str) -> BTreeSet<String> {
         .collect()
 }
 
+/// The register subsection whose table classifies oracles rather than items.
+///
+/// Its rows name an item and a non-production context; they never register an
+/// identifier, so it is the one place in the register where a table header
+/// other than `ID` is correct.
+const NON_PRODUCTION_APPENDIX: &str = "Non-production site appendix";
+
+/// Return the headers of register tables that do not open with `ID`.
+///
+/// `register_ids` skips every row whose table header it does not recognise,
+/// which is the right reading rule for a parser but the wrong contract for the
+/// register: a table renamed from `ID` to anything else would drop its
+/// identifiers from the uniqueness, well-formedness, and coverage checks and
+/// leave them silently untraced. `validate_populated` cannot close that hole,
+/// because it only requires the section to supply at least one identifier and
+/// one surviving table is enough. Reporting the header is what turns the skip
+/// into a failure; a table with no header at all reports its first row.
+pub(super) fn non_id_register_headers(register: &str) -> Vec<String> {
+    let mut headers = Vec::new();
+    let mut in_appendix = false;
+    let mut table_open = false;
+
+    for line in register.lines() {
+        if let Some(title) = subsection_title(line) {
+            in_appendix = title == NON_PRODUCTION_APPENDIX;
+            table_open = false;
+        } else if let Some(cell) = first_cell(line) {
+            if !table_open && !in_appendix && cell != "ID" {
+                headers.push(cell.to_owned());
+            }
+            table_open = true;
+        } else {
+            table_open = false;
+        }
+    }
+    headers
+}
+
+/// Return the title of a third-level heading line, if the line is one.
+fn subsection_title(line: &str) -> Option<&str> {
+    let title = line.trim_end_matches(['\r', '\n']).strip_prefix("### ")?;
+    Some(strip_heading_number(title))
+}
+
 /// Return first-column identifiers from the inventory's register tables.
 pub(super) fn register_ids(text: &str) -> Vec<String> {
     let Some(register) = heading_body(text, "Register", HeadingLevel::Section) else {
@@ -174,143 +216,18 @@ fn is_register_entry(reading_table: bool, cell: &str) -> bool {
 }
 
 /// Return the first cell of a pipe-delimited Markdown table row.
-fn first_cell(line: &str) -> Option<&str> {
+pub(super) fn first_cell(line: &str) -> Option<&str> {
     let rest = line.trim().strip_prefix('|')?;
     let (cell, _) = rest.split_once('|')?;
     Some(cell.trim())
 }
 
 /// Identify a Markdown table's delimiter cell.
-fn is_table_separator(cell: &str) -> bool {
+pub(super) fn is_table_separator(cell: &str) -> bool {
     !cell.is_empty()
         && cell
             .chars()
             .all(|character| matches!(character, '-' | ':' | ' '))
-}
-
-/// Collect task identifiers from the first column of trace-matrix tables.
-pub(super) fn trace_table_tasks(trace: &str) -> BTreeSet<String> {
-    let mut in_task_table = false;
-    let mut tasks = BTreeSet::new();
-    for line in trace.lines() {
-        let Some(cell) = first_cell(line) else {
-            in_task_table = false;
-            continue;
-        };
-        if cell == "Task" {
-            in_task_table = true;
-        } else if in_task_table && !is_table_separator(cell) {
-            tasks.extend(task_ids(cell));
-        }
-    }
-    tasks
-}
-
-/// Collect excluded tasks and the reason text following each identifier.
-pub(super) fn excluded_tasks(trace: &str) -> BTreeMap<String, String> {
-    let Some(excluded) = harvest_body(trace, "Excluded") else {
-        return BTreeMap::new();
-    };
-    let mut tasks = BTreeMap::new();
-    for line in excluded.lines() {
-        let Some(identifier) = exclusion_identifier(line) else {
-            continue;
-        };
-        tasks.insert(identifier.to_owned(), exclusion_reason(line, identifier));
-    }
-    tasks
-}
-
-/// Extract the single task identifier that opens an exclusion bullet.
-///
-/// An exclusion is a `- 26.1.2: reason` bullet. Scanning the whole line would
-/// also register any task named in the reason, which can silently mark a
-/// dependent that has no trace row as covered, so only the identifier before
-/// the first colon counts.
-fn exclusion_identifier(line: &str) -> Option<&str> {
-    let bullet = line.trim_start().strip_prefix("- ")?;
-    let (leading, _) = bullet.split_once(':')?;
-    let candidate = leading.trim();
-    let identifiers = task_ids(candidate);
-    (identifiers.len() == 1 && identifiers.contains(candidate)).then_some(candidate)
-}
-
-/// Return the trace matrix's table rows, dropping its introductory prose.
-///
-/// The introduction explains wildcard semantics and names an area wildcard as
-/// an example. Letting that prose satisfy coverage would mark an area as traced
-/// even after every row naming it was deleted, so only the `Changes` and
-/// `Consumes` subsections count. Their absence yields no references at all;
-/// dropping the introduction by splitting at the first `### ` would hand the
-/// `Excluded` and `Unchanged` prose the same power the introduction had.
-/// `Unchanged` entries reach register coverage through `unchanged_ids`, which
-/// accepts only the bullet form.
-pub(super) fn trace_rows(trace: &str) -> String {
-    ["Changes", "Consumes"]
-        .iter()
-        .filter_map(|heading| harvest_body(trace, heading))
-        .collect()
-}
-
-/// Collect register identifiers from the trace matrix's `Unchanged` bullets.
-///
-/// A register item no task changes is listed as `- A1/ast::Rule: reason`, so
-/// only an identifier that opens a bullet counts. A sentence that merely names
-/// an identifier would let prose satisfy coverage, the same fail-open that
-/// `trace_rows` closes for the introduction and the exclusions. Only exact
-/// identifiers count; an unchanged entry names one item, so the wildcard forms
-/// `reference_covers` accepts would be ambiguous here.
-///
-/// The identifier is the bullet's first word, not its text up to the first
-/// colon: register identifiers themselves contain `::`, so splitting on a colon
-/// would truncate `A1/ast::Rule` to `A1/ast` and reject every real entry.
-pub(super) fn unchanged_ids(trace: &str) -> BTreeSet<String> {
-    let Some(unchanged) = harvest_body(trace, "Unchanged") else {
-        return BTreeSet::new();
-    };
-    unchanged
-        .lines()
-        .filter_map(unchanged_identifier)
-        .map(str::to_owned)
-        .collect()
-}
-
-/// Return the register identifier that opens an unchanged bullet.
-fn unchanged_identifier(line: &str) -> Option<&str> {
-    let bullet = line.trim_start().strip_prefix("- ")?;
-    let candidate = bullet.split_whitespace().next()?.trim_end_matches(':');
-    is_well_formed_register_id(candidate).then_some(candidate)
-}
-
-/// Return the prose that follows an excluded task identifier.
-fn exclusion_reason(line: &str, task: &str) -> String {
-    line.split_once(task)
-        .map_or_else(String::new, |(_, remainder)| {
-            remainder
-                .trim_start_matches(|character: char| {
-                    matches!(character, ':' | '|' | '-' | '–' | '—' | ' ')
-                })
-                .trim()
-                .to_owned()
-        })
-}
-
-/// Check whether an exact register identifier or supported wildcard covers an ID.
-pub(super) fn reference_covers(identifier: &str, references: &str) -> bool {
-    references
-        .split_whitespace()
-        .map(|reference| reference.trim_matches(['|', ',', ';', '`', '(', ')']))
-        .any(|reference| {
-            reference == identifier
-                || reference
-                    .strip_suffix("/*")
-                    .is_some_and(|prefix| identifier.starts_with(prefix))
-                || reference.strip_suffix("@*").is_some_and(|prefix| {
-                    identifier
-                        .strip_prefix(prefix)
-                        .is_some_and(|suffix| suffix.starts_with('@'))
-                })
-        })
 }
 
 /// Collect finding bullets whose ownership must be recorded.
