@@ -2351,6 +2351,58 @@ Nothing in this subsection registers a template helper. The existing `uniq` and
 `unique` behaviour is unchanged and no manifest-visible behaviour changes at
 this stage; later helpers decide their own bounds, diagnostics, and integration.
 
+#### Resource bounds
+
+Every standard-library helper that parses untrusted input, enumerates a
+combinatorial space, scans text for matches, or materializes output refuses
+unreasonable expansion **before** allocating. `src/stdlib/resource_bounds/`
+owns that decision for the whole standard library, so a ceiling is written once
+and every consumer inherits the same value, the same arithmetic, and the same
+refusal vocabulary.
+
+The ceilings are the RFC 0006 table 3 defaults, plus the output-content bound
+that six accepted child RFCs require, recorded in
+[ADR-0075](adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md):
+
+| Constant                    | Value  | Applies to                                            |
+| --------------------------- | ------ | ----------------------------------------------------- |
+| `INPUT_LENGTH_CEILING`      | 8 MiB  | parsers and decoders, measured in bytes               |
+| `NESTING_DEPTH_CEILING`     | 128    | containers enclosing the current value                |
+| `OUTPUT_TUPLE_CEILING`      | 100000 | `product` and `combinations` output tuples            |
+| `PERMUTATION_TUPLE_CEILING` | 10000  | `permutations` output tuples                          |
+| `MATCH_COUNT_CEILING`       | 100000 | match counts from regular-expression helpers          |
+| `OUTPUT_BYTES_CEILING`      | 8 MiB  | materialized helper output, counted as it is produced |
+
+*Table: Resource-bounds ceilings owned by the stdlib module.*
+
+Three rules decide which refusal a request receives, and their order matters:
+
+1. **Overflow is reported before excess.** A cardinality that cannot be
+   represented in `u64` is `CardinalityError::Overflow`, even when it would
+   also exceed the ceiling. The ceiling is carried in the refusal so a reader
+   can see what the request was measured against; no computed cardinality is
+   invented.
+2. **A ceiling is inclusive.** A request exactly at its ceiling is admitted; the
+   first refusal is the first value above it. Refusals report the observed
+   value and the ceiling it exceeded.
+3. **Zero and identity are exact.** `product` with `repeat == 0` yields one
+   empty tuple, and `product` with a zero-length operand yields zero tuples.
+   Both are answered before any ceiling comparison, because neither can grow.
+
+The ownership boundary follows from the module's purpose. It owns the
+constants, the checked arithmetic, the depth and running-total state machines,
+and the refusal types. It does not own diagnostics: refusals are typed, `Copy`,
+and English-only, and each consumer maps them to the module code RFC 0006
+assigns to that helper. Localized messages, Fluent keys, and `minijinja::Error`
+conversion arrive with the consumer that can trigger them (roadmap 6.1.4 and
+the child helpers), never with this module.
+
+The module is also where the mathematical claim lives. `verus/resource_bounds/`
+mirrors the arithmetic kernel in Verus, and the six `#[kani::proof]` harnesses
+in `src/stdlib/resource_bounds/verification.rs` drive the production kernels
+over bounded symbolic inputs; both are described in the
+[developer's guide](developers-guide.md#resource-bounds-for-template-helpers).
+
 ## Section 5: The Bridge to Ninja: Intermediate Representation and Code Generation
 
 After the user's manifest has been deserialized into the AST and remaining

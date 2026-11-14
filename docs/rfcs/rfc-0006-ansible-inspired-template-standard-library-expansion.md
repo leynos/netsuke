@@ -397,6 +397,7 @@ materialized output rejects unreasonable expansion **before** allocating.
 | Output tuples          | 100000                          | `product`, `combinations`                                            |
 | Output tuples          | 10000                           | `permutations`                                                       |
 | Match count            | 100000                          | `regex_findall`                                                      |
+| Output content bytes   | 8 MiB                           | every materializing helper                                           |
 | Compiled pattern size  | 1 MiB                           | every regular-expression helper                                      |
 | Compiled pattern cache | 64 entries, least-recently-used | every regular-expression helper                                      |
 
@@ -404,9 +405,12 @@ _Table 3: Default resource bounds by helper family._
 
 Combinatorial cardinality is computed with checked arithmetic and compared
 against the ceiling before any allocation. The diagnostic reports both the
-computed cardinality and the ceiling. Defaults are constants in the first
-implementation slice; exposing them as configuration is deferred until a
-consumer needs it.
+computed cardinality and the ceiling. Materialized output is charged against
+the output-content ceiling as each element is appended, so a helper that is
+admitted on cardinality can still refuse before the total exceeds the bound
+([ADR-0075](../adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md)).
+Defaults are constants in the first implementation slice; exposing them as
+configuration is deferred until a consumer needs it.
 
 ### 6.9. Diagnostics and localization
 

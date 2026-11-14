@@ -903,7 +903,7 @@ ordinary additions or need individual design passes. See RFC 0006 §§6 and 14.1
   - Success: property tests show the relation is reflexive, symmetric, and
     transitive; that deduplication preserves first appearance; and that no
     public helper exposes a hash-map iteration order.
-- [ ] 6.1.3. Implement the shared bounded-materialization helper. Requires
+- [x] 6.1.3. Implement the shared bounded-materialization helper. Requires
   6.1.2.
   - See RFC 0006 §6.8 and table 3.
   - Cover input length, nesting depth, checked combinatorial cardinality, and
