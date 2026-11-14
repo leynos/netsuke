@@ -975,10 +975,12 @@ Two consequences matter to anyone re-running a release:
 - The declaration and both digest records are retained as a
   `declared-assets-<job>-<attempt>` workflow artefact before the transfer, so a
   refusal later in the run does not cost the operator the evidence of what was
-  declared. No later job consumes those artefacts yet, and no job in this
-  workflow publishes a release. Only a release the workflow creates is a draft;
-  when the tag already has one, the job attaches to that release whether or not
-  it is public. A person still promotes a newly created draft.
+  declared. The `verify-release-inventory` job then downloads what the release
+  holds and compares it with those records, so a release whose bytes differ
+  from the build stops the run. No job in this workflow publishes a release.
+  Only a release the workflow creates is a draft; when the tag already has one,
+  the job attaches to that release whether or not it is public. A person still
+  promotes a newly created draft.
 
 Manifests, local builds, and the published contents are unchanged, and no new
 release input was added: the dry run and the publishing lane keep using the same

@@ -149,6 +149,41 @@ def test_the_declaration_ignores_blank_lines(tmp_path: pathlib.Path) -> None:
     assert code == EXIT_OK, f"blank lines must not be read as asset names, got {code}"
 
 
+def test_the_cli_rejects_a_repeated_declaration_name(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Refuse a declaration that names one asset twice.
+
+    The trusted-record coverage check compares sets, so a repeated declaration
+    line is the only evidence that the declaration is not the list the build
+    wrote. Accepting it would let a second record entry hide behind the first.
+    """
+    staging = tmp_path / "dist"
+    _stage(staging)
+    declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, ARCHIVE, SIDECAR])
+    trusted = _write_record(tmp_path / "trusted.json", _trusted(staging))
+    destination = tmp_path / "verified.json"
+
+    code = main([
+        "--directory",
+        str(staging),
+        "--expected",
+        str(declaration),
+        "--trusted",
+        str(trusted),
+        "--output",
+        str(destination),
+    ])
+
+    assert code == EXIT_INVENTORY_REJECTED, (
+        f"a repeated declaration name must be refused, got {code}"
+    )
+    assert not destination.exists(), "a rejected declaration must leave no record"
+    diagnostic = capsys.readouterr().err
+    assert ARCHIVE in diagnostic, diagnostic
+    assert "repeats" in diagnostic, diagnostic
+
+
 def test_the_cli_reports_an_unreadable_declaration_separately(
     tmp_path: pathlib.Path,
 ) -> None:

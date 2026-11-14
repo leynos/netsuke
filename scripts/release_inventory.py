@@ -14,9 +14,10 @@ its six archives' ``.sha256`` sidecars and none of the archives they describe:
 every file present passed inspection, and the release was unusable through
 ``cargo binstall``. Comparing against the declared set catches it.
 
-Directory scanning and archive-name discovery belong to the release adapters.
-This module accepts observed names and sizes, and every rejection carries a
-diagnosis rather than an exit code.
+Directory scanning, archive-name discovery, and the declaration file's own
+line layout belong to the release adapters. This module accepts observed names,
+sizes, and declared names, and every rejection carries a diagnosis rather than
+an exit code.
 
 Run via the release workflow's inventory verification; behavioural coverage
 lives in ``scripts/tests/test_release_inventory.py``.
@@ -60,6 +61,10 @@ class EscapingAssetNameError(InventoryError):
 
 class MalformedAssetNameError(InventoryError):
     """Report a name that is not a bare file name."""
+
+
+class DuplicateDeclarationError(InventoryError):
+    """Report a declaration that names one asset more than once."""
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -264,6 +269,54 @@ def _unexpected_assets(staged: set[str], declared: set[str]) -> list[str]:
     ['extra']
     """
     return sorted(staged - declared)
+
+
+def require_unique_declaration(names: cabc.Iterable[str]) -> list[str]:
+    r"""Return the declared names in order, refusing any repetition.
+
+    Parameters
+    ----------
+    names
+        Declared asset names, in declaration order.
+
+    Returns
+    -------
+    list[str]
+        The same names, in the same order.
+
+    Raises
+    ------
+    DuplicateDeclarationError
+        If any name appears more than once.
+
+    Notes
+    -----
+    A correct producer never repeats a name, so a repetition means the
+    declaration is not the list the build wrote. Collapsing it silently would
+    let a second, substituted digest-record entry hide behind the first: the
+    trusted-record coverage check compares sets, so the declaration's own
+    repetition is the only place that disagreement can surface.
+
+    Examples
+    --------
+    >>> require_unique_declaration(["a.tar.gz", "a.tar.gz.sha256"])
+    ['a.tar.gz', 'a.tar.gz.sha256']
+    >>> require_unique_declaration(["a.tar.gz", "a.tar.gz"])  # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+        ...
+    release_inventory.DuplicateDeclarationError: the declaration repeats ...
+    """
+    ordered = list(names)
+    counts: dict[str, int] = {}
+    for name in ordered:
+        counts[name] = counts.get(name, 0) + 1
+    repeated = sorted(name for name, count in counts.items() if count > 1)
+    if repeated:
+        msg = "the declaration repeats asset names: " + ", ".join(
+            repr(name) for name in repeated
+        )
+        raise DuplicateDeclarationError(msg)
+    return ordered
 
 
 def validate_inventory(

@@ -7,6 +7,7 @@ from release_publish_crates_io_contracts import (
     ACTION_PATH,
     check_crates_io_action_contract,
 )
+from release_publish_path_verification import VERIFY_JOB
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
     job_steps,
@@ -116,8 +117,8 @@ def _assert_crates_io_contract(release: dict[str, object]) -> None:
 
 
 def _assert_checkouts_do_not_persist_credentials(release: dict[str, object]) -> None:
-    """Disable checkout credential persistence for staging and both publishers."""
-    for job_name in ("release", "publish-release", "publish-crates-io"):
+    """Disable checkout credential persistence for staging and every writer."""
+    for job_name in ("release", "publish-release", "publish-crates-io", VERIFY_JOB):
         steps = job_steps(release, job_name)
         checkout_index = step_index_by_key(steps, "uses", "actions/checkout@")
         checkout_with = require_mapping(

@@ -1,0 +1,313 @@
+---
+name: Verify release inventory
+description: >-
+  Download a draft release's attached assets with read-only API calls and verify
+  them against the declaration and trusted digest record the publisher retained,
+  writing the digest record that the release's inventory has been confirmed.
+
+# The token is an input rather than an implicit `secrets.GITHUB_TOKEN` so this
+# action can be read in one place: the caller grants a token, and the steps that
+# need one receive it through the environment. Draft releases are visible only
+# with write access, so the caller's `contents: write` is what makes the listing
+# return anything at all.
+inputs:
+  tag:
+    description: >-
+      The release tag whose single draft release is verified. A published
+      release with the tag is refused: the draft this action expects is gone.
+    required: true
+  repository:
+    description: >-
+      The `OWNER/REPOSITORY` the release lives in. Passed explicitly because the
+      listing endpoints are addressed by it, and because a fork's release is not
+      the upstream's.
+    required: true
+  trusted-directory:
+    description: >-
+      The directory holding the publisher's retained declaration and digest
+      record. It must be disjoint from the download directory, so a downloaded
+      file can never stand in for a trusted input.
+    required: true
+  declaration-file:
+    description: >-
+      The file listing the declared asset names. It must resolve inside
+      `trusted-directory`; a relative path resolves from the working directory,
+      as in `trusted/declaration.txt`. The verifier compares the downloaded
+      names against it exactly.
+    required: true
+  trusted-record-file:
+    description: >-
+      The digest record produced from the built bytes before upload. It must
+      resolve inside `trusted-directory`; a relative path resolves from the
+      working directory. It is the only input that can detect a substituted
+      attachment that agrees with its own sidecar.
+    required: true
+  download-directory:
+    description: >-
+      The directory the release's attached assets are downloaded into. It must
+      be absent or empty, so a leftover file from an earlier attempt cannot be
+      counted as part of this release.
+    required: true
+  output-path:
+    description: The verified digest record the verification step writes.
+    required: true
+  github-token:
+    description: >-
+      The token used for the release and asset listings and for each attachment
+      download. It is not given to the verification step, which reads only bytes
+      already on disk.
+    required: true
+
+outputs:
+  verified-record-path:
+    description: The verified digest record written by the verification step.
+    value: ${{ steps.verify.outputs.verified-record-path }}
+  # The job times the three phases from inside the action, because the workflow
+  # cannot see the boundary between the two listings, the downloads, and the
+  # verifier. Reporting them separately is what lets an operator tell a listing
+  # failure from a download failure from a release that disagrees with its
+  # build. The listing phase spans both listing steps: it starts when the
+  # release listing starts and ends when the asset listing ends. Its outcome is
+  # the release listing's whenever that step does not succeed, because the
+  # asset listing never runs then and reports only that it was skipped.
+  release-listing-outcome:
+    description: Outcome of the two listing steps together.
+    value: ${{ steps.list-releases.outcome != 'success' && steps.list-releases.outcome || steps.list-assets.outcome }}
+  release-listing-started-ns:
+    description: Release listing start time in nanoseconds.
+    value: ${{ steps.list-releases.outputs.started_ns }}
+  release-listing-ended-ns:
+    description: Asset listing end time in nanoseconds.
+    value: ${{ steps.list-assets.outputs.ended_ns }}
+  release-download-outcome:
+    description: Outcome of the attachment downloads alone.
+    value: ${{ steps.download.outcome }}
+  release-download-started-ns:
+    description: Attachment download start time in nanoseconds.
+    value: ${{ steps.download.outputs.started_ns }}
+  release-download-ended-ns:
+    description: Attachment download end time in nanoseconds.
+    value: ${{ steps.download.outputs.ended_ns }}
+  inventory-verification-outcome:
+    description: Outcome of the verifier alone.
+    value: ${{ steps.verify.outcome }}
+  inventory-verification-started-ns:
+    description: Verifier start time in nanoseconds.
+    value: ${{ steps.verify.outputs.started_ns }}
+  inventory-verification-ended-ns:
+    description: Verifier end time in nanoseconds.
+    value: ${{ steps.verify.outputs.ended_ns }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      id: validate
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        TRUSTED_DIRECTORY: ${{ inputs['trusted-directory'] }}
+        DECLARATION_FILE: ${{ inputs['declaration-file'] }}
+        TRUSTED_RECORD_FILE: ${{ inputs['trusted-record-file'] }}
+        DOWNLOAD_DIRECTORY: ${{ inputs['download-directory'] }}
+        OUTPUT_PATH: ${{ inputs['output-path'] }}
+      run: |
+        set -euo pipefail
+        require_value() {
+          local name="$1" value="$2"
+          if [[ -z "$value" ]]; then
+            printf '%s must not be empty\n' "$name" >&2
+            exit 1
+          fi
+        }
+        # `realpath -m` resolves a path that does not exist yet, so an output
+        # path is comparable before the verifier creates it. Without that, an
+        # overlap involving the output would only be noticed after a download
+        # had already written into the trusted inputs' directory.
+        canonical() {
+          realpath -m -- "$1"
+        }
+        overlaps() {
+          local first="${1%/}/" second="${2%/}/"
+          [[ "$1" == "$2" || "$1" == "$second"* || "$2" == "$first"* ]]
+        }
+        require_disjoint() {
+          local first_label="$1" first="$2" second_label="$3" second="$4"
+          if overlaps "$first" "$second"; then
+            printf '%s (%s) and %s (%s) must be disjoint\n' \
+              "$first_label" "$first" "$second_label" "$second" >&2
+            exit 1
+          fi
+        }
+        require_inside() {
+          local label="$1" path="$2" root="$3"
+          if [[ "$path" != "${root%/}/"* ]]; then
+            printf '%s (%s) must be inside %s\n' "$label" "$path" "$root" >&2
+            exit 1
+          fi
+        }
+        require_value tag "$RELEASE_TAG"
+        for name in TRUSTED_DIRECTORY DECLARATION_FILE TRUSTED_RECORD_FILE \
+          DOWNLOAD_DIRECTORY OUTPUT_PATH; do
+          require_value "$name" "${!name}"
+        done
+        trusted_root="$(canonical "$TRUSTED_DIRECTORY")"
+        download_root="$(canonical "$DOWNLOAD_DIRECTORY")"
+        output_file="$(canonical "$OUTPUT_PATH")"
+        declaration="$(canonical "$DECLARATION_FILE")"
+        record="$(canonical "$TRUSTED_RECORD_FILE")"
+        require_disjoint trusted-directory "$trusted_root" \
+          download-directory "$download_root"
+        require_disjoint trusted-directory "$trusted_root" \
+          output-path "$output_file"
+        require_disjoint download-directory "$download_root" \
+          output-path "$output_file"
+        require_inside declaration-file "$declaration" "$trusted_root"
+        require_inside trusted-record-file "$record" "$trusted_root"
+        for file in "$declaration" "$record"; do
+          if [[ ! -f "$file" ]]; then
+            printf 'trusted input %s is not a regular file\n' "$file" >&2
+            exit 1
+          fi
+        done
+        # The download directory is what the verifier walks to build the
+        # observed inventory, so anything already in it would be counted as an
+        # attachment of this release. Refusing a non-empty directory keeps a
+        # re-run on the same runner from succeeding on the previous attempt's
+        # bytes.
+        if [[ -e "$DOWNLOAD_DIRECTORY" ]]; then
+          if [[ ! -d "$DOWNLOAD_DIRECTORY" ]]; then
+            printf 'download-directory (%s) must be a directory\n' \
+              "$DOWNLOAD_DIRECTORY" >&2
+            exit 1
+          fi
+          if [[ -n "$(ls -A -- "$DOWNLOAD_DIRECTORY")" ]]; then
+            printf 'download-directory (%s) must be empty\n' \
+              "$DOWNLOAD_DIRECTORY" >&2
+            exit 1
+          fi
+        fi
+
+    - name: List draft releases
+      id: list-releases
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_REPOSITORY: ${{ inputs.repository }}
+        GH_TOKEN: ${{ inputs['github-token'] }}
+        INVENTORY_WORK_DIR: ${{ runner.temp }}/release-inventory
+      run: |
+        set -euo pipefail
+        printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        record_ended_ns() {
+          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        }
+        trap record_ended_ns EXIT
+        mkdir -p "$INVENTORY_WORK_DIR"
+        # GET with `--slurp` wraps every page in one array, which is the shape
+        # the selection policy models. A POST would be rejected by the endpoint,
+        # but the `--method GET` is explicit so no later flag can change it.
+        gh api --method GET --paginate --slurp \
+          "repos/$RELEASE_REPOSITORY/releases" \
+          >"$INVENTORY_WORK_DIR/releases.json"
+        uv run --no-project --python 3.14 scripts/release_draft_assets_cli.py \
+          select-release \
+          --listing "$INVENTORY_WORK_DIR/releases.json" \
+          --tag "$RELEASE_TAG" \
+          --output "$INVENTORY_WORK_DIR/release-id.txt"
+
+    - name: List draft assets
+      id: list-assets
+      shell: bash
+      env:
+        RELEASE_REPOSITORY: ${{ inputs.repository }}
+        GH_TOKEN: ${{ inputs['github-token'] }}
+        INVENTORY_WORK_DIR: ${{ runner.temp }}/release-inventory
+      run: |
+        set -euo pipefail
+        record_ended_ns() {
+          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        }
+        trap record_ended_ns EXIT
+        release_id="$(cat "$INVENTORY_WORK_DIR/release-id.txt")"
+        gh api --method GET --paginate --slurp \
+          "repos/$RELEASE_REPOSITORY/releases/$release_id/assets" \
+          >"$INVENTORY_WORK_DIR/assets.json"
+        uv run --no-project --python 3.14 scripts/release_draft_assets_cli.py \
+          plan-downloads \
+          --listing "$INVENTORY_WORK_DIR/assets.json" \
+          --output "$INVENTORY_WORK_DIR/download-plan.txt"
+
+    - name: Download draft assets
+      id: download
+      shell: bash
+      env:
+        RELEASE_REPOSITORY: ${{ inputs.repository }}
+        GH_TOKEN: ${{ inputs['github-token'] }}
+        INVENTORY_WORK_DIR: ${{ runner.temp }}/release-inventory
+        DOWNLOAD_DIRECTORY: ${{ inputs['download-directory'] }}
+      run: |
+        set -euo pipefail
+        printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        record_ended_ns() {
+          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        }
+        trap record_ended_ns EXIT
+        mkdir -p "$DOWNLOAD_DIRECTORY"
+        # A name repeated in the plan would otherwise let the second download
+        # replace the first, so the plan is refused for duplicates upstream and
+        # noclobber turns any survivor into a failure rather than a silent
+        # overwrite. No retry: a partial download must stop the job, not be
+        # papered over, because the verifier cannot tell it from a truncated
+        # attachment that somehow matched.
+        set -o noclobber
+        # `read` fails on a final line with no trailing newline, which a
+        # plain `while read` would skip as though the plan had ended. Repeating
+        # the non-empty test on the read keeps that last entry in the loop.
+        while IFS=$'\t' read -r asset_id asset_name || [[ -n "$asset_id" ]]; do
+          [[ -n "$asset_id" ]] || continue
+          # Without a name the redirect would target the directory itself and
+          # fail with a message about a path nobody asked for.
+          if [[ -z "$asset_name" ]]; then
+            printf 'download plan entry %s has no asset name\n' "$asset_id" >&2
+            exit 1
+          fi
+          # The identifier and the name are the only facts about the failure
+          # that are safe to print: the response body and the token are not.
+          # Naming the asset is what lets an operator tell which attachment
+          # stopped the run without reading the whole plan.
+          if ! gh api --method GET \
+            -H 'Accept: application/octet-stream' \
+            "repos/$RELEASE_REPOSITORY/releases/assets/$asset_id" \
+            >"$DOWNLOAD_DIRECTORY/$asset_name"; then
+            printf 'download of asset %s (%s) failed\n' \
+              "$asset_id" "$asset_name" >&2
+            exit 1
+          fi
+        done <"$INVENTORY_WORK_DIR/download-plan.txt"
+
+    - name: Verify inventory
+      id: verify
+      shell: bash
+      env:
+        DOWNLOAD_DIRECTORY: ${{ inputs['download-directory'] }}
+        DECLARATION_FILE: ${{ inputs['declaration-file'] }}
+        TRUSTED_RECORD_FILE: ${{ inputs['trusted-record-file'] }}
+        OUTPUT_PATH: ${{ inputs['output-path'] }}
+      run: |
+        set -euo pipefail
+        printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        record_ended_ns() {
+          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        }
+        trap record_ended_ns EXIT
+        # This step deliberately receives no token: every byte it reads is
+        # already on disk, so a credential here could only widen the blast
+        # radius of a compromised verifier.
+        mkdir -p "$(dirname "$OUTPUT_PATH")"
+        uv run --no-project --python 3.14 scripts/verify_release_inventory_cli.py \
+          --directory "$DOWNLOAD_DIRECTORY" \
+          --expected "$DECLARATION_FILE" \
+          --trusted "$TRUSTED_RECORD_FILE" \
+          --output "$OUTPUT_PATH"
+        printf 'verified-record-path=%s\n' "$OUTPUT_PATH" >>"$GITHUB_OUTPUT"

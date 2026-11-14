@@ -136,6 +136,30 @@ def _read_inventory(directory: pathlib.Path) -> list[release_inventory.Published
     return sorted(assets, key=lambda asset: asset.name)
 
 
+def _declared_names(declared_text: str) -> list[str]:
+    r"""Return the names a declaration file lists, one per line.
+
+    The declaration's layout is a property of the file the producer writes, so
+    this adapter owns it: the domain module is handed names, not text. Blank
+    lines separate the names the producer writes and carry no meaning, which is
+    what lets a trailing newline go unnoticed. A repeated name is refused by
+    :func:`release_inventory.require_unique_declaration`, because repetition is
+    a fault in the declaration rather than in its layout.
+
+    Returns
+    -------
+    list[str]
+        The non-blank names, in declaration order.
+
+    Examples
+    --------
+    >>> _declared_names("a.tar.gz\n\na.tar.gz.sha256\n")
+    ['a.tar.gz', 'a.tar.gz.sha256']
+    """
+    names = [line.strip() for line in declared_text.splitlines() if line.strip()]
+    return release_inventory.require_unique_declaration(names)
+
+
 def _digests_of_downloads(
     directory: pathlib.Path,
     present: cabc.Iterable[release_inventory.PublishedAsset],
@@ -262,6 +286,45 @@ def _record_verification(output: pathlib.Path, verified: dict[str, str]) -> int:
     return EXIT_OK
 
 
+def _verify_and_record(
+    arguments: argparse.Namespace,
+    *,
+    expected: list[str],
+    trusted: release_digest_record.DigestRecord,
+) -> int:
+    """Verify the download and record the digests, reporting either fault.
+
+    Returns
+    -------
+    int
+        ``EXIT_OK`` when the release verified and the record was written,
+        ``EXIT_INVENTORY_REJECTED`` when an agreement failed, or
+        ``EXIT_INPUT_UNREADABLE`` when the download could not be read.
+
+    Notes
+    -----
+    The policy modules raise one distinct type per agreement, and all of them
+    reach this single translation point so the exit code never depends on
+    parsing a message. An ``OSError`` here is about the downloaded tree rather
+    than the Cargo inputs, which is why it stays an input fault while a
+    malformed trusted record is a rejection.
+    """
+    try:
+        verified = verify(arguments.directory, expected=expected, trusted=trusted)
+    except (
+        release_inventory.InventoryError,
+        release_digest.DigestError,
+        release_digest_record.DigestRecordError,
+        UnicodeDecodeError,
+    ) as error:
+        print(f"release inventory rejected: {error}", file=sys.stderr)
+        return EXIT_INVENTORY_REJECTED
+    except OSError as error:
+        print(f"release inventory unreadable: {error}", file=sys.stderr)
+        return EXIT_INPUT_UNREADABLE
+    return _record_verification(arguments.output, verified)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Verify the inventory and write the digests that were confirmed.
 
@@ -322,21 +385,12 @@ def main(argv: list[str] | None = None) -> int:
     except release_digest_record.DigestRecordError as error:
         print(f"trusted digest record rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED
-    expected = [line.strip() for line in declared_text.splitlines() if line.strip()]
     try:
-        verified = verify(arguments.directory, expected=expected, trusted=trusted)
-    except (
-        release_inventory.InventoryError,
-        release_digest.DigestError,
-        release_digest_record.DigestRecordError,
-        UnicodeDecodeError,
-    ) as error:
-        print(f"release inventory rejected: {error}", file=sys.stderr)
+        expected = _declared_names(declared_text)
+    except release_inventory.DuplicateDeclarationError as error:
+        print(f"declaration rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED
-    except OSError as error:
-        print(f"release inventory unreadable: {error}", file=sys.stderr)
-        return EXIT_INPUT_UNREADABLE
-    return _record_verification(arguments.output, verified)
+    return _verify_and_record(arguments, expected=expected, trusted=trusted)
 
 
 if __name__ == "__main__":

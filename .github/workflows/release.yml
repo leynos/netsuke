@@ -812,7 +812,8 @@ jobs:
       needs.build-macos.result == 'success' &&
       needs.windows-native-recipe-smoke.result == 'success' &&
       needs.metadata.outputs.should_publish == 'true'
-    # Only publication needs contents: write access to the release API.
+    # Publication writes the release. The verifier holds this scope too, but
+    # only to read a draft release's listing.
     permissions:
       contents: write
     needs:
@@ -821,7 +822,15 @@ jobs:
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
-    # Only publication needs contents: write access to the release API.
+    # The retained record's name is attempt-scoped, and this output is how
+    # verification learns it. A "Re-run failed jobs" reuses this job's
+    # successful result instead of running it again, so the verifier must read
+    # the name this job recorded. Recomputing it from the re-run's own attempt
+    # number would name an artefact this job never uploaded.
+    outputs:
+      trusted-artifact: declared-assets-publish-release-${{ github.run_attempt }}
+    # Publication writes the release. The verifier holds this scope too, but
+    # only to read a draft release's listing.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -907,8 +916,9 @@ jobs:
         # Selects, declares, and digests this run's assets before uploading
         # only the declared names, and refuses to replace attached bytes. The
         # declaration and both digest records it retains are the account the
-        # inventory verifier and finalizer will compare against once those
-        # jobs run here; neither is wired into this workflow yet.
+        # `verify-release-inventory` job compares the downloaded assets
+        # against; the finalizer that un-drafts the release on that result is
+        # not wired into this workflow yet.
         uses: ./.github/actions/upload-declared-assets
         with:
           release-tag: ${{ needs.metadata.outputs.release_tag }}
@@ -949,6 +959,121 @@ jobs:
           UPLOAD_PLAN_VALIDATION_STARTED_NS: ${{ steps.upload_plan_start.outputs.started_ns }}
           UPLOAD_PLAN_VALIDATION_ENDED_NS: ${{ steps.upload_plan_end.outputs.ended_ns }}
           UPLOAD_ERROR_PRESENT: ${{ steps.upload_assets.outputs.upload-error == 'true' }}
+          OBSERVABILITY_PATH: ${{ runner.temp }}/release-operation-observability.jsonl
+        run: |
+          set -euo pipefail
+          python3 scripts/release_operation_observability.py
+      - name: Upload release operation observability
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        # v7.0.1
+        with:
+          name: release-operation-observability-${{ github.job }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-operation-observability.jsonl
+          if-no-files-found: ignore
+
+  verify-release-inventory:
+    # Verifies what both publishers produced, so it runs only once each has
+    # succeeded. The rehearsal job `release` is deliberately absent: a dry run
+    # never publishes a release, so there is no draft inventory to verify.
+    # Every dependency result is named explicitly because `!cancelled()` is a
+    # status function, and a status function suppresses the implicit success
+    # check GitHub would otherwise apply. Omitting one would let the job run
+    # after a failed or skipped publisher and record an inventory that was
+    # never completed.
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.publish-crates-io.result == 'success' &&
+      needs.publish-release.result == 'success' &&
+      needs.metadata.outputs.should_publish == 'true'
+    needs:
+      - metadata
+      - publish-crates-io
+      - publish-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The verification step itself runs without a token: it reads only bytes
+    # already downloaded.
+    permissions:
+      # zizmor reads the key's own line, so the justification sits on it.
+      contents: write  # Reading a draft release's listing requires write access.
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          # Verify the published inventory with the candidate's own scripts, as
+          # the publisher does, rather than with whatever the tag resolves to.
+          ref: ${{ needs.metadata.outputs.candidate_commit }}
+          persist-credentials: false
+      - id: release_operation_start
+        name: Start release operation timing
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.14'
+          # The release helpers are stdlib-only, so a dependency cache would add
+          # an unnecessary supply-chain input.
+          enable-cache: false
+      - name: Download the trusted inventory record
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1. One exact name, never a pattern: the declaration and digest
+        # record the publisher retained are the only ones this verification
+        # trusts. The name comes from the publisher's output rather than from
+        # this job's attempt number, because a "Re-run failed jobs" reuses a
+        # successful publisher without running it again.
+        with:
+          name: ${{ needs.publish-release.outputs.trusted-artifact }}
+          path: trusted
+      - id: verify_inventory
+        name: Verify the downloaded release inventory
+        uses: ./.github/actions/verify-release-inventory
+        with:
+          tag: ${{ needs.metadata.outputs.release_tag }}
+          repository: ${{ github.repository }}
+          trusted-directory: trusted
+          declaration-file: trusted/declaration.txt
+          trusted-record-file: trusted/trusted.json
+          download-directory: release-download
+          output-path: verified/verified-digests.json
+          github-token: ${{ github.token }}
+      # Verification is where a release is first compared with the record the
+      # publisher kept, so its phases are what an operator reads after a
+      # failure. The summary runs even when verification refused the release,
+      # because that refusal is the outcome it exists to report.
+      - name: Record release operation observability
+        if: always()
+        env:
+          RELEASE_OPERATION: verify_release_inventory
+          # Verification runs only when the run is publishing, so the mode is
+          # fixed rather than read from an output that could disagree.
+          RELEASE_DRY_RUN: 'false'
+          JOB_STATUS: ${{ job.status }}
+          OPERATION_STARTED_NS: ${{ steps.release_operation_start.outputs.started_ns }}
+          RELEASE_LISTING_OUTCOME: >-
+            ${{ steps.verify_inventory.outputs.release-listing-outcome }}
+          RELEASE_LISTING_STARTED_NS: >-
+            ${{ steps.verify_inventory.outputs.release-listing-started-ns }}
+          RELEASE_LISTING_ENDED_NS: >-
+            ${{ steps.verify_inventory.outputs.release-listing-ended-ns }}
+          RELEASE_DOWNLOAD_OUTCOME: >-
+            ${{ steps.verify_inventory.outputs.release-download-outcome }}
+          RELEASE_DOWNLOAD_STARTED_NS: >-
+            ${{ steps.verify_inventory.outputs.release-download-started-ns }}
+          RELEASE_DOWNLOAD_ENDED_NS: >-
+            ${{ steps.verify_inventory.outputs.release-download-ended-ns }}
+          INVENTORY_VERIFICATION_OUTCOME: >-
+            ${{ steps.verify_inventory.outputs.inventory-verification-outcome }}
+          INVENTORY_VERIFICATION_STARTED_NS: >-
+            ${{ steps.verify_inventory.outputs.inventory-verification-started-ns }}
+          INVENTORY_VERIFICATION_ENDED_NS: >-
+            ${{ steps.verify_inventory.outputs.inventory-verification-ended-ns }}
+          # The verifier never uploads, so there is no upload error to report.
+          UPLOAD_ERROR_PRESENT: 'false'
           OBSERVABILITY_PATH: ${{ runner.temp }}/release-operation-observability.jsonl
         run: |
           set -euo pipefail

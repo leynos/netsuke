@@ -52,6 +52,43 @@ def _retained_names(step: dict[str, object]) -> set[str]:
     }
 
 
+def _retained_paths(with_block: dict[str, object]) -> list[pathlib.PurePosixPath]:
+    """Return each path a retention step names, in the order it names them.
+
+    Returns
+    -------
+    list[pathlib.PurePosixPath]
+        The retained paths, with blank lines dropped so a trailing newline in
+        the YAML block does not read as an unnamed file.
+    """
+    return [
+        pathlib.PurePosixPath(line.strip())
+        for line in str(with_block["path"]).splitlines()
+        if line.strip()
+    ]
+
+
+def _assert_retained_layout(paths: list[pathlib.PurePosixPath]) -> None:
+    """Require the retained files to sit directly in one artefact root.
+
+    ``upload-artifact`` stores every file relative to the deepest directory its
+    paths share, and the verifier downloads that artefact into ``trusted``
+    before reading ``trusted/declaration.txt`` and ``trusted/trusted.json``.
+    Naming one retained file from a different directory lifts that shared
+    root, nesting the two files the verifier reads under an extra segment, so
+    every retained path has to share one parent.
+    """
+    roots = {path.parent for path in paths}
+    assert len(roots) == 1, (
+        "every retained file must share the artefact root, got "
+        f"{sorted(str(root) for root in roots)}"
+    )
+    # The declaration travels with both digest records: one from the selection
+    # and one from the declaration step, so verification can compare them.
+    names = {path.name for path in paths}
+    assert names == {"declaration.txt", "selection.json", "trusted.json"}, names
+
+
 def test_the_declared_record_is_retained_before_the_upload() -> None:
     """Retain the declaration and both digest records, failing if any is absent."""
     document = action_document()
@@ -66,17 +103,32 @@ def test_the_declared_record_is_retained_before_the_upload() -> None:
         "the declared record must be retained before the step that may refuse"
     )
     retain = steps[retain_index]
-    # The declaration travels with both digest records: one from the selection
-    # and one from the declaration step, so verification can compare them.
-    assert _retained_names(retain) == {
-        "declaration.txt",
-        "selection.json",
-        "trusted.json",
-    }, "the declaration must travel with both digest records"
     with_block = require_mapping(retain.get("with"), f"{ACTION} {RETAIN_STEP} with")
+    _assert_retained_layout(_retained_paths(with_block))
     assert with_block["if-no-files-found"] == "error", (
         "a missing record must fail the step rather than silently upload"
     )
+
+
+def test_a_record_retained_outside_the_artefact_root_is_rejected() -> None:
+    """Prove the layout contract notices a retain path in another directory.
+
+    The unmutated manifest keeps all three files in one directory, so only a
+    case that moves one of them shows whether the shared-root assertion is
+    live. Moving ``selection.json`` into a subdirectory is the smallest such
+    change: it looks harmless in the manifest and still breaks the verifier's
+    ``trusted/...`` reads.
+    """
+    document = action_document()
+    steps = action_steps(ACTION, document)
+    retain = steps[require_action_step(ACTION, document, RETAIN_STEP)]
+    with_block = require_mapping(retain.get("with"), f"{ACTION} {RETAIN_STEP} with")
+    moved = [
+        path.parent / "selection" / path.name if path.name == "selection.json" else path
+        for path in _retained_paths(with_block)
+    ]
+    with pytest.raises(AssertionError):
+        _assert_retained_layout(moved)
 
 
 def test_the_upload_plan_is_retained_after_the_upload() -> None:

@@ -3,6 +3,7 @@
 import dataclasses
 import typing as typ
 
+from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
 from release_publish_path_scenarios import CRATES_IO_NEEDS, REQUIRED_NEEDS
 from workflow_loading import (
@@ -108,11 +109,8 @@ def _publication_needs(
     check: PublicationCheck,
 ) -> dict[str, object]:
     """Resolve the metadata, build and smoke jobs required for publication."""
-    raw_needs = job.get("needs", [])
-    declared = [raw_needs] if isinstance(raw_needs, str) else raw_needs
-    if not isinstance(declared, list) or any(
-        not isinstance(name, str) for name in declared
-    ):
+    declared = job_names(job.get("needs", []))
+    if declared is None:
         check.violations.append("publish-release.needs: dependencies must be job names")
         return {}
     required = REQUIRED_NEEDS
@@ -232,9 +230,8 @@ def check_publication_path(check: PublicationCheck) -> None:
 
 def _check_crates_io_needs(job: dict[str, object], check: PublicationCheck) -> bool:
     """Require the publisher's dependency names and report malformed declarations."""
-    declared = job.get("needs", [])
-    names = [declared] if isinstance(declared, str) else declared
-    if not isinstance(names, list) or any(not isinstance(name, str) for name in names):
+    names = job_names(job.get("needs", []))
+    if names is None:
         check.violations.append(
             "publish-crates-io.needs: dependencies must be job names"
         )

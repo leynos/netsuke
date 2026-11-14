@@ -192,6 +192,33 @@ rehearsal boundary are held by tests, the latter as a workflow-contract
 assertion that the offline step's shell text names no credential flag, fetch
 tool, or registry URL.
 
+## Addendum (2026-11-08): inventory verification stage implemented
+
+`release.yml` now declares `verify-release-inventory`, which downloads the
+draft release's attached assets with GET-only API calls and compares every one
+of them against the declaration and the pre-upload digest record
+`publish-release` retained. The job needs `metadata`, `publish-crates-io`, and
+`publish-release`, and runs only when all three succeeded and
+`should_publish == 'true'`. Every dependency result is named explicitly in its
+guard: `!cancelled()` is a status function, and GitHub suppresses its implicit
+`success()` check for a condition containing one, so the mode output alone
+would let verification run after a failed or skipped publisher.
+
+The job holds `contents: write` and nothing else. A draft release is visible
+only with write access, so the listings need that scope; the action itself
+performs no write, and the verifier step receives no token at all, because
+every byte it reads is already on disk. The job declares no `environment` and no
+`id-token`, so it stays disjoint from the registry exchange's credentials and
+protection rules.
+
+`publish-release` is still not gated on `publish-crates-io`; the two remain
+independent siblings so that an upload interrupted on one surface can be
+resumed without repeating the other. The gate sits one step later:
+`verify-release-inventory` observes both, and the finalizer that will un-draft
+the release depends on it. The finalizer and the consumer smoke test remain
+open in the trusted-packaging ExecPlan. No live release, tag, registry
+publication, or credential exchange has exercised this stage.
+
 ## Addendum (2026-11-09): the GitHub asset publisher
 
 This addendum records the mechanism the GitHub half of a release uses to attach
@@ -255,3 +282,37 @@ returns as soon as the tag already has a release, without checking whether it
 is public. A rerun therefore attaches assets to whatever release the tag
 already names, which may well be public by then. Nothing here can widen that
 guarantee, so it is recorded rather than assumed.
+
+## Addendum (2026-11-12): the downloaded inventory verifier implemented
+
+The verifier that the *inventory verification stage implemented* addendum
+declared is now built: `./.github/actions/verify-release-inventory` performs
+the stage's five steps, and the decisions it makes from the listings live in
+`scripts/` rather than in shell. This supersedes the status line of the
+2026-11-09 *the GitHub asset publisher* addendum, which records the verifier as
+not yet written.
+
+**Decision.** The action reads both listings with
+`gh api --method GET --paginate --slurp`, downloads each planned asset, and
+hands the downloaded tree, the publisher's declaration, and the trusted digest
+record to `verify_release_inventory_cli.py`. Three modules keep the listing
+decisions out of the shell:
+
+- `release_github_draft_listing.py` translates GitHub's page shape and field
+  names into release and asset records, refusing an entry whose field is
+  missing or of the wrong type.
+- `release_draft_assets.py` decides from those records alone: exactly one draft
+  carries the tag, no published release does, and every asset is a stored,
+  non-empty attachment with a unique, bare, safe name. A published release
+  carrying the tag is refused outright, because it means the draft this job was
+  asked to verify is gone.
+- `release_download_plan.py` renders the plan text and refuses a name holding a
+  tab, a line feed, or a carriage return. The step reads the plan line by line
+  and splits each line on tabs, so a line feed would forge a record and
+  download an asset the listing never named.
+
+`verify-release-inventory` is wired to `publish-release`'s retained artefact
+and is its consumer. The GitHub release finalizer and the consumer smoke test
+remain open in the trusted-packaging ExecPlan, so nothing un-drafts a release
+on the strength of a verified inventory yet, and no live release has exercised
+this stage.

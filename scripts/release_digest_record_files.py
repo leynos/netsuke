@@ -5,9 +5,9 @@ errors for digest records. It delegates entry validation to
 :class:`release_digest_record.DigestRecord`, so every consumer receives the
 same validated record after decoding.
 
-The declaration and upload CLIs use it in the release workflow today. The
-inventory-verification and finalization CLIs use it too and their suites pass,
-but no workflow job invokes either yet.
+The declaration, upload, and inventory-verification CLIs use it in the release
+workflow today. The finalization CLI uses it too and its suite passes, but no
+workflow job invokes it yet.
 
 Run via the declaration, inventory-verification, and finalization CLIs;
 behavioural coverage lives in ``scripts/tests/test_release_digest_record_files.py``.
@@ -28,6 +28,57 @@ ASSETS_MEMBER = "assets"
 
 class UnreadableDigestRecordError(release_digest_record.DigestRecordError):
     """Report that a trusted record file could not be read."""
+
+
+class DuplicateKeyError(release_digest_record.DigestRecordError):
+    """Report a JSON object that names one key more than once."""
+
+
+def _object_without_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Decode one JSON object, refusing a repeated key at any depth.
+
+    Parameters
+    ----------
+    pairs
+        The key and value pairs ``json`` decoded for one object.
+
+    Returns
+    -------
+    dict[str, object]
+        The object, when every key appeared once.
+
+    Raises
+    ------
+    DuplicateKeyError
+        If a key repeats, because ordinary decoding would silently keep the
+        last value and hide the one that was discarded.
+
+    Notes
+    -----
+    The hook runs for every object in the document, so a repeated ``assets``
+    member and a repeated asset name are both refused. A record that repeats
+    an entry cannot say which digest it means, which is the substitution the
+    trusted record exists to catch.
+
+    Examples
+    --------
+    >>> _object_without_duplicates([("a", 1)]) == {"a": 1}
+    True
+    >>> _object_without_duplicates([("a", 1), ("a", 2)])  # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+        ...
+    release_digest_record_files.DuplicateKeyError: the digest record repeats ...
+    """
+    decoded: dict[str, object] = {}
+    for key, value in pairs:
+        if key in decoded:
+            msg = (
+                f"the digest record repeats the JSON key {key!r}, so the value "
+                "it names is ambiguous"
+            )
+            raise DuplicateKeyError(msg)
+        decoded[key] = value
+    return decoded
 
 
 def read_digest_record(
@@ -60,7 +111,9 @@ def read_digest_record(
     True
     """
     try:
-        decoded = json.loads(source.read_bytes())
+        decoded = json.loads(
+            source.read_bytes(), object_pairs_hook=_object_without_duplicates
+        )
     except OSError as error:
         msg = f"the digest record {source} could not be read: {error}"
         raise UnreadableDigestRecordError(msg) from error

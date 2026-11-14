@@ -25,20 +25,25 @@ Run via ``make test-workflow-contracts``.
 import collections.abc as cabc
 import dataclasses
 import json
-import subprocess  # ruff: ignore[suspicious-subprocess-import] - the action's own steps are under test.
 import sys
 import typing as typ
 
+from composite_action_execution import (
+    output_file,
+    read_step_outputs,
+    run_shell,
+    write_stub,
+)
 from upload_declared_assets_manifest import (
     UPLOAD_STEP,
     manifest_step_id,
     run_bodies,
     step_environment,
 )
-from upload_declared_assets_records import output_file, read_step_outputs
 from upload_declared_assets_stubs import GH_HELPER, GH_STUB, UV_STUB
 
 if typ.TYPE_CHECKING:
+    import subprocess
     from pathlib import Path
 
     from upload_declared_assets_staging import Facts
@@ -165,12 +170,6 @@ class Release:
 NO_RELEASE = Release()
 
 
-def _write_stub(path: Path, body: str) -> None:
-    """Install one executable stand-in for an external command."""
-    path.write_text(body, encoding="utf-8")
-    path.chmod(0o755)
-
-
 def _sandbox(tmp_path: Path, attached: list[dict[str, str]] | None) -> Sandbox:
     """Create the stubs and logs one run needs.
 
@@ -189,8 +188,8 @@ def _sandbox(tmp_path: Path, attached: list[dict[str, str]] | None) -> Sandbox:
     root.mkdir()
     stubs = root / "stubs"
     stubs.mkdir()
-    _write_stub(stubs / "uv", UV_STUB)
-    _write_stub(stubs / "gh", GH_STUB)
+    write_stub(stubs / "uv", UV_STUB)
+    write_stub(stubs / "gh", GH_STUB)
     # The helper lives beside the stubs but is run, not exec'd from PATH, so it
     # needs no execute bit and cannot be picked up as a command by accident.
     helper = stubs / "gh_state.py"
@@ -244,26 +243,6 @@ def _environment(sandbox: Sandbox) -> dict[str, str]:
         "UV_BASELINE_LOG": str(sandbox.baseline_log),
         "UV_PYTHON": sys.executable,
     }
-
-
-def _run_one(
-    workspace: Path, script: Path, environment: dict[str, str]
-) -> subprocess.CompletedProcess[str]:
-    """Run one step's shell body as a child process.
-
-    Returns
-    -------
-    subprocess.CompletedProcess[str]
-        The completed step.
-    """
-    return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - the step body is the shell script.
-        ["bash", str(script)],  # ruff: ignore[start-process-with-partial-path] - resolved from the fixed PATH.
-        cwd=workspace,
-        check=False,
-        env=environment,
-        text=True,
-        capture_output=True,
-    )
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -342,7 +321,7 @@ def run_steps(
         environment["GITHUB_OUTPUT"] = str(
             output_file(sandbox.outputs_directory, step_id)
         )
-        result = _run_one(workspace, script, environment)
+        result = run_shell(workspace, script, environment)
         completed.append(result)
         if result.returncode != 0:
             break

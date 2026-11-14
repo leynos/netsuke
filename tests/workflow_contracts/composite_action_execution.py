@@ -1,39 +1,67 @@
-"""Decode the records one executed action run leaves behind.
+"""Hold what every harness that executes a composite action needs.
 
-The action under test writes a ``GITHUB_OUTPUT`` file and names an interpreter
-for each step it runs. Both are text formats of GitHub's, not of this
-repository, so their decoders live here rather than in the harness that
-happens to call them: a change to how a step is executed should not have to
-touch the code that reads what the step wrote.
+Two harnesses in this directory run a composite action's real shell bodies as
+child processes: ``upload_declared_assets_harness`` for the publisher and
+``verify_release_inventory_harness`` for the inventory verifier. What they share
+is not the action's behaviour but the mechanics of pretending to be a runner:
+reading ``GITHUB_OUTPUT``, checking the interpreter pin a step names, installing
+an executable stand-in, and starting one step under Bash.
 
-The heredoc form is the part worth naming. A multi-line diagnostic is written
-as ``name<<DELIMITER``, the value's lines, then the delimiter again, and a
-reader that split on ``=`` alone would silently record the delimiter as the
-value. The entries this action writes never carry ``<<`` in a plain value,
-which is what lets the two forms be told apart by the marker alone.
+Keeping those here is what stops the two copies drifting. The output decoder is
+the one that matters: a heredoc value that one harness decoded and the other
+truncated would make a multi-line diagnostic pass in one suite and fail in the
+other while both read the same action output.
 
 Run via ``make test-workflow-contracts``.
 """
 
 import re
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - the actions' own steps are under test.
 import typing as typ
 
 from workflow_loading import REPO_ROOT
 
 if typ.TYPE_CHECKING:
-    import pathlib
-
-__all__ = [
-    "BASELINE_PATTERN",
-    "interpreter_baseline",
-    "output_file",
-    "read_outputs",
-    "read_step_outputs",
-]
+    from pathlib import Path
 
 #: The Makefile declaration every step must agree with when it names an
 #: interpreter, read rather than restated so a pin bump changes one file.
 BASELINE_PATTERN = r"^PYTHON_BASELINE \?= (\S+)$"
+
+
+def write_stub(path: Path, body: str) -> None:
+    """Install one executable stand-in for an external command."""
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def run_shell(
+    workspace: Path, script: Path, environment: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    """Run one step's shell body as a child process.
+
+    Parameters
+    ----------
+    workspace
+        The directory the runner would start the step in.
+    script
+        The file holding the step's ``run`` body.
+    environment
+        The environment the step inherits.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The completed step.
+    """
+    return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - the step body is the shell script.
+        ["bash", str(script)],  # ruff: ignore[start-process-with-partial-path] - resolved from the fixed PATH.
+        cwd=workspace,
+        check=False,
+        env=environment,
+        text=True,
+        capture_output=True,
+    )
 
 
 def _take_heredoc(
@@ -54,12 +82,12 @@ def _take_heredoc(
     return end + 1
 
 
-def read_outputs(path: pathlib.Path) -> dict[str, str]:
+def read_outputs(path: Path) -> dict[str, str]:
     """Decode a ``GITHUB_OUTPUT`` file, including its heredoc values.
 
     A heredoc value is written as ``name<<DELIMITER``, one or more lines, then
     the delimiter again, so a multi-line diagnostic survives the encoding. The
-    entries this action writes never carry ``<<`` in a plain value, which is
+    entries these actions write never carry ``<<`` in a plain value, which is
     what lets the two forms be told apart by the marker alone.
 
     Returns
@@ -81,7 +109,7 @@ def read_outputs(path: pathlib.Path) -> dict[str, str]:
     return outputs
 
 
-def output_file(outputs_directory: pathlib.Path, step_id: str) -> pathlib.Path:
+def output_file(outputs_directory: Path, step_id: str) -> Path:
     """Return the ``GITHUB_OUTPUT`` file one manifest step writes.
 
     The file is created empty when first asked for, which is how a runner
@@ -90,7 +118,7 @@ def output_file(outputs_directory: pathlib.Path, step_id: str) -> pathlib.Path:
 
     Returns
     -------
-    pathlib.Path
+    Path
         The file the step appends to.
     """
     path = outputs_directory / f"{step_id}.output"
@@ -99,7 +127,7 @@ def output_file(outputs_directory: pathlib.Path, step_id: str) -> pathlib.Path:
 
 
 def read_step_outputs(
-    outputs_directory: pathlib.Path,
+    outputs_directory: Path,
 ) -> dict[str, dict[str, str]]:
     """Read every step's ``GITHUB_OUTPUT`` entries, keyed by step id.
 
@@ -126,3 +154,14 @@ def interpreter_baseline() -> str:
     match = re.search(BASELINE_PATTERN, text, flags=re.MULTILINE)
     assert match is not None, "the Makefile must declare PYTHON_BASELINE ?="
     return match.group(1)
+
+
+__all__ = [
+    "BASELINE_PATTERN",
+    "interpreter_baseline",
+    "output_file",
+    "read_outputs",
+    "read_step_outputs",
+    "run_shell",
+    "write_stub",
+]

@@ -151,6 +151,9 @@ PHASES = {
         "Registry byte verification",
         "registry_byte_verification",
     ),
+    "release_listing": ("Release listing", "release_listing"),
+    "release_download": ("Release download", "release_download"),
+    "inventory_verification": ("Inventory verification", "inventory_verification"),
 }
 OPERATION_PHASES = {
     "release_staging": (
@@ -179,6 +182,15 @@ OPERATION_PHASES = {
         "registry_upload",
         "registry_download",
         "registry_byte_verification",
+    ),
+    # Verification reads what the release holds. Its phases are the two
+    # listings, the attachment downloads, and the verifier itself, which are
+    # the boundaries an operator needs to tell a listing failure from a
+    # download failure from a release that disagrees with its build.
+    "verify_release_inventory": (
+        "release_listing",
+        "release_download",
+        "inventory_verification",
     ),
 }
 OPERATIONS = frozenset(OPERATION_PHASES)
