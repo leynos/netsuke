@@ -5,23 +5,23 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 EP-M0 through EP-M5 are complete and roadmap item 20.1.1 is marked done. The
 D-20 audit passes at the EP-M3 boundary: the conservative range from the last
 EP-M2 commit through the post-EP-M3/EP-M4 checkpoint is within the approved
 line and file ceilings. The larger count through the current candidate included
-later milestones and follow-up work and does not measure EP-M3 scope. The full
-local seven-gate sequence passed on the current candidate, `ebc2418c`. The
-exact-head hosted CI, Netsukefile, and release dry-run workflows also passed;
-the PR remains `IN PROGRESS` because its formal review decision is still
-`CHANGES_REQUESTED` on an older CodeRabbit review. The byte bound for
-`identity.files` reads is settled as deferred: ADR-0077 and RFC-0021 state no
-bound, and section 23.1.1 implements `states`, so the bound belongs to that
-implementation's own ADR amendment, which must merge before its code. The
-milestones and their acceptance evidence remain complete. The user approved
-this plan on 2026-10-24 and selected D-19 Option A; approval authorized
-drafting the decision records, and it did not accept them.
+later milestones and follow-up work and does not measure EP-M3 scope. Every
+milestone and its acceptance evidence is complete, and the EP-M5 completion
+outcome is discharged: the ADRs read `Accepted`, the design document references
+them, and the roadmap marks 20.1.1 and its three sub-bullets `[x]`. Merging the
+pull request is the remaining delivery step, not a milestone, so it does not
+gate this plan's status. The byte bound for `identity.files` reads is settled
+as deferred: ADR-0077 and RFC-0021 state no bound, and section 23.1.1 implements
+`states`, so the bound belongs to that implementation's own ADR amendment,
+which must merge before its code. The user approved this plan on 2026-10-24 and
+selected D-19 Option A; approval authorized drafting the decision records, and
+it did not accept them.
 
 Acceptance was given by the user on 2026-11-09 as a direct instruction to
 accept the seven records and mark the roadmap item complete, and no amendment
@@ -1145,19 +1145,19 @@ drafted decision from being presented as a settled one, and the plan's
 `Progress` entries were specific enough to resume after context loss without
 re-deriving the four gate failures that drove the telemetry module's move.
 
-Implementation and acceptance milestones are complete, but PR delivery is not.
-The current head passes every local and required hosted gate, and its release
-dry-run succeeded. The formal review decision still reflects a stale CodeRabbit
-request for changes bound to a superseded head, so a current-head review is
-needed. The open question this plan carried about `identity.files` is resolved
-by deferral: the accepted ADR-0077 and RFC-0021 state no byte bound, and the 8
-MiB figure named during review is `DEFAULT_FILE_MAX_READ_BYTES` from the
-manifest file-reading filter, not a managed-state rule. `states` is
-unimplemented and owned by roadmap section 23.1.1, so an aggregate read limit
-for `identity.files`, with explicit `unknown` outcomes for symlink,
-non-regular, and over-limit inputs, is that implementation's own ADR amendment
-and must merge before its code. The plan remains `IN PROGRESS` until the review
-path reaches equilibrium.
+Implementation and acceptance milestones are complete, and this plan is
+`COMPLETE`. The current head passes every local and required hosted gate, and
+its release dry-run succeeded. The formal review decision still reflects a
+stale CodeRabbit request for changes bound to a superseded head, so a
+current-head review is needed before the pull request merges; that is delivery
+work, and the plan's own milestone outcomes do not depend on it. The open
+question this plan carried about `identity.files` is resolved by deferral: the
+accepted ADR-0077 and RFC-0021 state no byte bound, and the 8 MiB figure named
+during review is `DEFAULT_FILE_MAX_READ_BYTES` from the manifest file-reading
+filter, not a managed-state rule. `states` is unimplemented and owned by
+roadmap section 23.1.1, so an aggregate read limit for `identity.files`, with
+explicit `unknown` outcomes for symlink, non-regular, and over-limit inputs, is
+that implementation's own ADR amendment and must merge before its code.
 
 ## Context and orientation
 
@@ -1531,8 +1531,9 @@ roadmap item done, and completes this plan.
 ### EP-M5: acceptance and completion
 
 - Precondition: the user has explicitly accepted ADR-0075 to ADR-0081 in
-  review, possibly with amendments. Until then this plan stays `IN PROGRESS`
-  with a sentence beneath the status naming the pending acceptance.
+  review, possibly with amendments. The plan stayed `IN PROGRESS` with a
+  sentence beneath the status naming the pending acceptance until 2026-11-09,
+  when the user accepted the seven records.
 - Outcome: each accepted ADR reads `Accepted` with its date and a one-line
   summary; the design document's registry and resolution table reference the
   accepted ADRs; `docs/roadmap-progressive-enhancement.md` marks 20.1.1 and its

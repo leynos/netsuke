@@ -21,7 +21,10 @@ use rstest::rstest;
 use serde_json::Value;
 use test_support::{EnLocalizer, en_localizer};
 
-use crate::snapshot_test_support::diagnostic_json_snapshot_settings as snapshot_settings;
+use crate::snapshot_test_support::{
+    diagnostic_json_snapshot_settings as snapshot_settings,
+    schema_admission_diagnostic_snapshot_settings,
+};
 
 mod shape_tests;
 
@@ -182,7 +185,11 @@ fn render_schema_version_diagnostic_matches_snapshot(en_localizer: EnLocalizer) 
     let rendered =
         serde_json::to_string_pretty(&value).context("render schema diagnostic snapshot")?;
 
-    snapshot_settings().bind(|| {
+    // The two schema releases and the manifest name are fixture values, not
+    // properties of the diagnostic shape. Redacting them keeps the row from
+    // failing when `SupportedSchema::max_minor` advances, or because a
+    // different fixture supplied another version pair.
+    schema_admission_diagnostic_snapshot_settings().bind(|| {
         assert_snapshot!("schema_version_error", rendered);
     });
     Ok(())
