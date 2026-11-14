@@ -96,9 +96,37 @@ Ninja or output consumption.
   [`src/runner/dyndep/publication.rs`](../../src/runner/dyndep/publication.rs)
 - Atomic sidecar materialization:
   [`src/runner/process/dyndep/files/mod.rs`](../../src/runner/process/dyndep/files/mod.rs)
+- Verified generated-state directory:
+  [`src/runner/process/dyndep/directory/mod.rs`](../../src/runner/process/dyndep/directory/mod.rs)
 - Retention and lease implementation:
   [retention implementation](../../src/runner/process/dyndep/retention/mod.rs)
 - User contract:
   [user's guide](../users-guide.md#run-direct-dependencies-serially)
 - Serial dyndep architecture:
   [ADR-0011](adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md)
+
+## Amendment — 2026-11-12: Reject generated-state aliases
+
+The original decision assumed `.netsuke` and `.netsuke/dyndep` were ordinary
+directories. They are project-controlled state, so a manifest can ship either
+component as a symbolic link or a Windows junction. A capability rooted at the
+workspace resolves such an alias, and retention would then treat unrelated
+workspace files as disposable cache entries and delete them.
+
+Netsuke now establishes the generated-state directory through
+`src/runner/process/dyndep/directory/mod.rs`. The module walks `.netsuke` and
+`.netsuke/dyndep` one component at a time, refuses any entry that is a symbolic
+link, junction, other reparse point, or non-directory, and returns a verified
+handle. Publication, locking, and retention address bare entry names through
+that handle. The refusal is checked on the entry before it is opened, so the
+diagnostic names the aliased component, and again on the opened handle, so an
+entry swapped in between cannot smuggle an alias past the check. Unix opens with
+`O_NOFOLLOW`; Windows opens the reparse point itself and rejects every reparse
+attribute, not only the tags `std` reports as symlinks.
+
+The lease remains advisory: it coordinates cooperating Netsuke processes and
+does not defend against a process that ignores it. The `--directory` root may
+itself be a symbolic link, because it is the caller's chosen capability root
+rather than generated state. A project that previously relied on an aliased
+`.netsuke` directory must replace it with a real directory; the command now
+fails with a localized error and deletes nothing.

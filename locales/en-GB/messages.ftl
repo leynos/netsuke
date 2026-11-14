@@ -1,6 +1,8 @@
 # Netsuke CLI localisation resources (British English, Oxford spelling).
 
 runner.io.dyndep.retention = Failed to apply generated dyndep retention beneath { $path }.
+runner.io.dyndep.alias = The generated dyndep path { $path } is a symbolic link, junction, or not a directory; replace it with a real directory.
+runner.io.dyndep.open = Failed to open the generated dyndep directory { $path }.
 cli.about = Netsuke compiles YAML + Jinja manifests into Ninja build plans.
 cli.long_about = Netsuke transforms YAML + Jinja manifests into reproducible Ninja graphs and runs Ninja with safe defaults.
 cli.usage = { $usage }

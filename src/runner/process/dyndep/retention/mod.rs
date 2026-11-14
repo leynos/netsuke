@@ -5,92 +5,55 @@
 //! module owns a capability-scoped advisory lease and deterministic cleanup.
 //! Every serial command holds the lease until it finishes consuming its bundle,
 //! so a concurrent Netsuke command cannot prune active sidecars.
+//!
+//! Every path here is a bare entry name relative to a verified
+//! [`DyndepDirectory`] handle. The workspace capability is used only to
+//! establish that handle, so retention can never resolve a component outside
+//! the generated-state directory it verified.
+
+mod lease;
 
 use super::super::DYNDEP_DIR;
+use super::directory::{DyndepDirectory, entry_display_path, is_alias};
 use super::telemetry;
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedDyndep;
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::fs_utf8::{Dir, File, OpenOptions};
-use fs4::FileExt;
-use std::{
-    collections::{BTreeMap, HashSet},
-    io::ErrorKind,
-    path::Path,
-};
+use cap_std::fs_utf8::Dir;
+use std::collections::{BTreeMap, HashSet};
+
+pub(crate) use lease::DyndepPublicationLease;
 
 /// Maximum number of obsolete sidecars retained after one publication.
 pub const MAX_RETAINED_DYNDEP_FILES: usize = 32;
 /// Maximum bytes occupied by obsolete sidecars retained after one publication.
 pub(super) const MAX_RETAINED_DYNDEP_BYTES: u64 = 1024 * 1024;
 
-/// Relative path of the advisory lock file guarding sidecar publication.
-const DYNDEP_LOCK: &str = ".netsuke/dyndep/.netsuke-publication.lock";
-
-/// Exclusive sidecar-directory lease held while a serial command consumes a bundle.
-pub(crate) struct DyndepPublicationLease {
-    /// Held lock file, absent for a sidecar-free bundle.
-    lock_file: Option<File>,
-}
-
-impl DyndepPublicationLease {
-    /// Construct a lease for a sidecar-free bundle without opening a directory.
-    pub(crate) const fn empty() -> Self {
-        Self { lock_file: None }
-    }
-
-    /// Acquire the advisory sidecar-directory lease through `dir`.
-    pub(crate) fn acquire(dir: &Dir) -> Result<Self> {
-        let mut options = OpenOptions::new();
-        options.read(true).write(true).create(true);
-        let file = dir
-            .open_with(DYNDEP_LOCK, &options)
-            .with_context(|| retention_error(Utf8Path::new(DYNDEP_LOCK)))?;
-        let std_file = file.into_std();
-        match FileExt::try_lock(&std_file) {
-            Ok(()) => {}
-            Err(fs4::TryLockError::WouldBlock) => {
-                tracing::debug!(
-                    lock_path = DYNDEP_LOCK,
-                    "waiting for dyndep publication lease"
-                );
-                FileExt::lock(&std_file)
-                    .with_context(|| retention_error(Utf8Path::new(DYNDEP_LOCK)))?;
-            }
-            Err(fs4::TryLockError::Error(error)) => {
-                return Err(error).with_context(|| retention_error(Utf8Path::new(DYNDEP_LOCK)));
-            }
-        }
-        Ok(Self {
-            lock_file: Some(File::from_std(std_file)),
-        })
-    }
-
-    /// Apply the standard retention policy while this lease remains alive.
-    pub(crate) fn prune(&self, dir: &Dir, current: &[GeneratedDyndep]) -> Result<RetentionSummary> {
-        prune_dyndep_sidecars(dir, self, current, RetentionPolicy::standard())
-    }
-}
+/// Entry name of the advisory lock file guarding sidecar publication.
+const DYNDEP_LOCK: &str = ".netsuke-publication.lock";
 
 /// Apply retention after a sidecar-free clean command succeeds.
 pub(crate) fn prune_dyndep_cache(
-    dir: &Dir,
+    workspace: &Dir,
     current: &[GeneratedDyndep],
 ) -> Result<RetentionSummary> {
     telemetry::instrument_retention(
-        || prune_dyndep_cache_inner(dir, current),
+        || prune_dyndep_cache_inner(workspace, current),
         |summary| (summary.reclaimed_files, summary.reclaimed_bytes),
     )
 }
 
-/// Prune an unleased cache after checking its directory and acquiring its lease.
-fn prune_dyndep_cache_inner(dir: &Dir, current: &[GeneratedDyndep]) -> Result<RetentionSummary> {
-    if !dyndep_directory_exists(dir)? {
+/// Prune an unleased cache after establishing its verified directory.
+fn prune_dyndep_cache_inner(
+    workspace: &Dir,
+    current: &[GeneratedDyndep],
+) -> Result<RetentionSummary> {
+    let Some(dyndep) = DyndepDirectory::open_existing(workspace)? else {
         return Ok(RetentionSummary::default());
-    }
-    let lease = DyndepPublicationLease::acquire(dir)?;
-    prune_dyndep_sidecars_inner(dir, &lease, current, RetentionPolicy::standard())
+    };
+    let lease = DyndepPublicationLease::acquire(&dyndep)?;
+    prune_verified_sidecars(dyndep.dir(), &lease, current, RetentionPolicy::standard())
 }
 
 /// Fixed, deterministic budget for obsolete content-addressed sidecars.
@@ -130,67 +93,101 @@ pub(crate) struct RetentionSummary {
 }
 
 /// Remove obsolete sidecars through an already-held publication lease.
+///
+/// Test-only seam: production paths prune through
+/// [`DyndepPublicationLease::prune`], which owns the verified handle. This entry
+/// point lets a test inject a smaller budget and exercise the workspace-level
+/// re-verification that a sidecar-free command performs.
+#[cfg(test)]
 pub(super) fn prune_dyndep_sidecars(
-    dir: &Dir,
+    workspace: &Dir,
     lease: &DyndepPublicationLease,
     current: &[GeneratedDyndep],
     policy: RetentionPolicy,
 ) -> Result<RetentionSummary> {
     telemetry::instrument_retention(
-        || prune_dyndep_sidecars_inner(dir, lease, current, policy),
+        || prune_dyndep_sidecars_inner(workspace, lease, current, policy),
         |summary| (summary.reclaimed_files, summary.reclaimed_bytes),
     )
 }
 
-/// Prune obsolete sidecars under an active lease, if the lease holds a lock.
+/// Verify the generated-state directory, then prune through the lease.
 ///
 /// # Errors
 ///
-/// Returns an error when the sidecar directory cannot be traversed or a
-/// candidate cannot be inspected or removed.
+/// Returns an error when the generated-state directory is aliased or cannot be
+/// opened, or when a candidate cannot be inspected or removed.
+#[cfg(test)]
 fn prune_dyndep_sidecars_inner(
-    dir: &Dir,
+    workspace: &Dir,
     lease: &DyndepPublicationLease,
     current: &[GeneratedDyndep],
     policy: RetentionPolicy,
 ) -> Result<RetentionSummary> {
-    if lease.lock_file.is_none() {
+    if lease.is_empty() {
         return Ok(RetentionSummary::default());
     }
-    let current_paths = current
-        .iter()
-        .map(|sidecar| sidecar.relative_path().as_std_path())
-        .collect::<HashSet<_>>();
+    let Some(dyndep) = DyndepDirectory::open_existing(workspace)? else {
+        return Ok(RetentionSummary::default());
+    };
+    prune_verified_sidecars(dyndep.dir(), lease, current, policy)
+}
+
+/// Prune obsolete sidecars relative to a verified dyndep directory handle.
+fn prune_verified_sidecars(
+    dyndep: &Dir,
+    lease: &DyndepPublicationLease,
+    current: &[GeneratedDyndep],
+    policy: RetentionPolicy,
+) -> Result<RetentionSummary> {
+    if lease.is_empty() {
+        return Ok(RetentionSummary::default());
+    }
+    let current_names = current_sidecar_names(current);
     let mut summary = RetentionSummary::default();
-    retain_obsolete_sidecars(dir, &current_paths, policy, &mut summary)?;
+    retain_obsolete_sidecars(dyndep, &current_names, policy, &mut summary)?;
     Ok(summary)
+}
+
+/// Collect the bare entry names of the sidecars the current bundle consumes.
+fn current_sidecar_names(current: &[GeneratedDyndep]) -> HashSet<&str> {
+    current
+        .iter()
+        .filter_map(|sidecar| dyndep_entry_name(sidecar.relative_path()))
+        .collect()
+}
+
+/// Return `path`'s bare entry name when it names a direct dyndep child.
+fn dyndep_entry_name(path: &Utf8Path) -> Option<&str> {
+    let name = path.strip_prefix(DYNDEP_DIR).ok()?;
+    (name.components().count() == 1).then(|| name.as_str())
 }
 
 /// Select obsolete sidecars during one directory traversal with bounded memory.
 fn retain_obsolete_sidecars(
-    dir: &Dir,
-    current_paths: &HashSet<&Path>,
+    dyndep: &Dir,
+    current_names: &HashSet<&str>,
     policy: RetentionPolicy,
     summary: &mut RetentionSummary,
 ) -> Result<()> {
     let mut pass = RetentionPass {
-        current_paths,
+        current_names,
         retained: RetentionSelection::new(policy),
         summary,
     };
-    for entry_result in dir
-        .read_dir(DYNDEP_DIR)
+    for entry_result in dyndep
+        .entries()
         .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?
     {
-        retain_directory_entry(dir, entry_result, &mut pass)?;
+        retain_directory_entry(dyndep, entry_result, &mut pass)?;
     }
     Ok(())
 }
 
 /// Mutable state scoped to one leased directory traversal.
 struct RetentionPass<'current, 'summary> {
-    /// Relative paths of the sidecars the current command still consumes.
-    current_paths: &'current HashSet<&'current Path>,
+    /// Bare entry names of the sidecars the current command still consumes.
+    current_names: &'current HashSet<&'current str>,
     /// Lexical selection state for obsolete sidecar retention.
     retained: RetentionSelection,
     /// Aggregate counts of removed candidates so far.
@@ -199,7 +196,7 @@ struct RetentionPass<'current, 'summary> {
 
 /// Apply retention policy to one directory entry while the lease is held.
 fn retain_directory_entry(
-    dir: &Dir,
+    dyndep: &Dir,
     entry_result: std::io::Result<cap_std::fs_utf8::DirEntry>,
     pass: &mut RetentionPass<'_, '_>,
 ) -> Result<()> {
@@ -207,21 +204,31 @@ fn retain_directory_entry(
     let name = entry
         .file_name()
         .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
-    let path = Utf8Path::new(DYNDEP_DIR).join(name);
-    if Path::new(DYNDEP_LOCK) == path.as_std_path()
-        || pass.current_paths.contains(path.as_std_path())
-    {
+    retain_entry(dyndep, &name, pass)
+}
+
+/// Apply retention policy to one entry name while the lease is held.
+fn retain_entry(dyndep: &Dir, name: &str, pass: &mut RetentionPass<'_, '_>) -> Result<()> {
+    if name == DYNDEP_LOCK || pass.current_names.contains(name) {
         return Ok(());
     }
-    if has_extension(&path, "tmp") {
+    let display = entry_display_path(name);
+    let metadata = dyndep
+        .symlink_metadata(name)
+        .with_context(|| retention_error(&display))?;
+    if is_alias(&metadata) {
+        // A link inside the cache is not a cache entry. Removing it would
+        // delete the link, and following it would make its target disposable.
+        return Ok(());
+    }
+    if has_extension(Utf8Path::new(name), "tmp") {
         // Every current atomic writer owns the same exclusive lease, so a
         // temporary file observed here cannot belong to an active Netsuke
         // publication protocol.
-        let bytes = candidate_size(dir, &path)?;
-        return remove_candidate(dir, &path, bytes, pass.summary);
+        return remove_candidate(dyndep, name, metadata.len(), pass.summary);
     }
-    if is_obsolete_sidecar(&path, pass.current_paths) {
-        retain_or_remove_sidecar(dir, path, &mut pass.retained, pass.summary)?;
+    if is_sidecar(Utf8Path::new(name)) {
+        retain_or_remove_sidecar(dyndep, name, metadata.len(), pass)?;
     }
     Ok(())
 }
@@ -273,22 +280,30 @@ impl RetentionSelection {
 }
 
 /// Retain an obsolete sidecar or reclaim paths rejected by lexical selection.
+///
+/// Takes the size the traversal already read rather than re-statting the entry:
+/// each sidecar would otherwise pay a second metadata round trip, and the
+/// second read could disagree with the one the alias check approved.
 fn retain_or_remove_sidecar(
-    dir: &Dir,
-    path: Utf8PathBuf,
-    retained: &mut RetentionSelection,
-    summary: &mut RetentionSummary,
+    dyndep: &Dir,
+    name: &str,
+    bytes: u64,
+    pass: &mut RetentionPass<'_, '_>,
 ) -> Result<()> {
-    let bytes = candidate_size(dir, &path)?;
-    for (reclaimed_path, reclaimed_bytes) in retained.select(path, bytes) {
-        remove_candidate(dir, &reclaimed_path, reclaimed_bytes, summary)?;
+    for (reclaimed_name, reclaimed_bytes) in pass.retained.select(Utf8PathBuf::from(name), bytes) {
+        remove_candidate(
+            dyndep,
+            reclaimed_name.as_str(),
+            reclaimed_bytes,
+            pass.summary,
+        )?;
     }
     Ok(())
 }
 
-/// Return whether `path` is an obsolete `.dd` sidecar not in current use.
-fn is_obsolete_sidecar(path: &Utf8Path, current_paths: &HashSet<&Path>) -> bool {
-    has_extension(path, "dd") && !current_paths.contains(path.as_std_path())
+/// Return whether `path` names a `.dd` sidecar.
+fn is_sidecar(path: &Utf8Path) -> bool {
+    has_extension(path, "dd")
 }
 
 /// Return whether `path`'s extension matches `extension` case-insensitively.
@@ -297,47 +312,24 @@ fn has_extension(path: &Utf8Path, extension: &str) -> bool {
         .is_some_and(|actual| actual.eq_ignore_ascii_case(extension))
 }
 
-/// Return a candidate's byte length from its metadata.
-///
-/// # Errors
-///
-/// Returns an error when the candidate's metadata cannot be read.
-fn candidate_size(dir: &Dir, path: &Utf8Path) -> Result<u64> {
-    dir.metadata(path)
-        .map(|metadata| metadata.len())
-        .with_context(|| retention_error(path))
-}
-
 /// Remove a reclaimed sidecar and accumulate its size into the summary.
 ///
 /// # Errors
 ///
 /// Returns an error when the sidecar cannot be removed.
 fn remove_candidate(
-    dir: &Dir,
-    path: &Utf8Path,
+    dyndep: &Dir,
+    name: &str,
     bytes: u64,
     summary: &mut RetentionSummary,
 ) -> Result<()> {
-    dir.remove_file(path)
-        .with_context(|| retention_error(path))?;
+    let display = entry_display_path(name);
+    dyndep
+        .remove_file(name)
+        .with_context(|| retention_error(&display))?;
     summary.reclaimed_files += 1;
     summary.reclaimed_bytes = summary.reclaimed_bytes.saturating_add(bytes);
     Ok(())
-}
-
-/// Return whether the dyndep sidecar directory exists under `dir`.
-///
-/// # Errors
-///
-/// Returns an error when the directory cannot be opened for a reason other
-/// than its absence.
-fn dyndep_directory_exists(dir: &Dir) -> Result<bool> {
-    match dir.open_dir(DYNDEP_DIR) {
-        Ok(_) => Ok(true),
-        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(error).with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR))),
-    }
 }
 
 /// Build the localized retention error message for a dyndep `path`.

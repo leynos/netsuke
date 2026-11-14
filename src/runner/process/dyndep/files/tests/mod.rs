@@ -170,19 +170,20 @@ fn oversized_existing_sidecar_is_rejected() -> Result<()> {
 fn sidecar_growth_during_verification_is_a_mismatch() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/growing.dd");
-    let expected = "expected";
     dir.create_dir_all(DYNDEP_DIR)?;
-    dir.write(rel, expected)?;
-    let mut file = open_existing_sidecar(&dir, rel)?.context("sidecar must exist")?;
-    let size = verified_sidecar_size(&file, rel)?;
+    let dyndep = dir.open_dir(DYNDEP_DIR)?;
+    let name = Utf8Path::new("growing.dd");
+    let expected = "expected";
+    dyndep.write(name, expected)?;
+    let mut file = open_existing_sidecar(&dyndep, name)?.context("sidecar must exist")?;
+    let size = verified_sidecar_size(&file, name)?;
     let mut append_options = OpenOptions::new();
     append_options.append(true);
-    let mut writer = dir.open_with(rel, &append_options)?;
+    let mut writer = dyndep.open_with(name, &append_options)?;
     writer.write_all(b" growth")?;
     writer.flush()?;
 
-    let (content, grew_while_reading) = read_sidecar_content(&mut file, size, rel)?;
+    let (content, grew_while_reading) = read_sidecar_content(&mut file, size, name)?;
 
     ensure!(
         grew_while_reading,
@@ -193,134 +194,6 @@ fn sidecar_growth_during_verification_is_a_mismatch() -> Result<()> {
         "a sidecar that grows during verification must not be reused"
     );
     Ok(())
-}
-
-#[test]
-fn no_temp_files_left_behind() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    materialize_dyndep_files(&dir, &[sidecar(".netsuke/dyndep/x.dd", "content")])?;
-    ensure_no_temp_files(&dir)?;
-    Ok(())
-}
-
-#[test]
-fn failed_atomic_write_removes_temp_file() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/destination.dd");
-    dir.create_dir_all(rel)?;
-
-    let result = write_atomic(&dir, rel, "content");
-
-    ensure!(result.is_err(), "rename over a directory must fail");
-    ensure_no_temp_files(&dir)?;
-    Ok(())
-}
-
-#[test]
-fn stale_temp_file_does_not_block_materialization() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/stale.dd");
-    let content = "ninja_dyndep_version = 1\n";
-    dir.create_dir_all(DYNDEP_DIR)?;
-    let stale = TempNameSource::new("stale".to_owned()).next_name(rel);
-    dir.write(stale, "stale temporary content")?;
-
-    materialize_dyndep_files(&dir, &[sidecar(rel.as_str(), content)])?;
-
-    ensure_matching(&dir, rel.as_str(), content)
-}
-
-#[test]
-fn separate_temp_names_for_same_sidecar_differ() {
-    let rel = Utf8Path::new(".netsuke/dyndep/names.dd");
-    let mut names = TempNameSource::new("fixture".to_owned());
-    let first = names.next_name(rel);
-    let second = names.next_name(rel);
-
-    assert_ne!(first, second, "temporary names must differ per attempt");
-    assert_eq!(first.parent(), rel.parent());
-    assert_eq!(second.parent(), rel.parent());
-}
-
-#[test]
-fn temporary_name_collision_retries_are_bounded() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/collisions.dd");
-    dir.create_dir_all(DYNDEP_DIR)?;
-    let mut occupied_names = TempNameSource::new("collisions".to_owned());
-    for _ in 0..MAX_TEMP_FILE_ATTEMPTS {
-        dir.write(occupied_names.next_name(rel), "occupied")?;
-    }
-    let mut attempted_names = TempNameSource::new("collisions".to_owned());
-
-    let (result, snapshot) =
-        recorded(|| create_unique_temp_file_with_source(&dir, rel, &mut attempted_names));
-    let error = result
-        .err()
-        .context("all occupied temporary names must exhaust the retry bound")?;
-    let expected = localization::message(keys::RUNNER_IO_DYNDEP_TEMP_COLLISIONS)
-        .with_arg("path", rel.as_str())
-        .to_string();
-    ensure!(
-        format!("{error:#}").contains(&expected),
-        "expected localized collision error, got: {error:#}"
-    );
-    ensure!(
-        temporary_file_retry_count(&snapshot, "retry") == Some(MAX_TEMP_FILE_ATTEMPTS as u64),
-        "every collision must record a retry"
-    );
-    ensure!(
-        temporary_file_retry_count(&snapshot, "exhausted") == Some(1),
-        "retry exhaustion must record its fixed outcome"
-    );
-    Ok(())
-}
-
-#[test]
-fn temporary_name_collision_retry_is_observed_before_success() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/retry.dd");
-    dir.create_dir_all(DYNDEP_DIR)?;
-    let mut occupied_names = TempNameSource::new("retry".to_owned());
-    dir.write(occupied_names.next_name(rel), "occupied")?;
-    let mut attempted_names = TempNameSource::new("retry".to_owned());
-
-    let (result, snapshot) =
-        recorded(|| create_unique_temp_file_with_source(&dir, rel, &mut attempted_names));
-    let (temp_path, file) = result?;
-    drop(file);
-    dir.remove_file(temp_path)?;
-
-    ensure!(
-        temporary_file_retry_count(&snapshot, "retry") == Some(1),
-        "a recovered collision must record one retry"
-    );
-    ensure!(
-        temporary_file_retry_count(&snapshot, "exhausted").is_none(),
-        "a successful retry must not record exhaustion"
-    );
-    Ok(())
-}
-
-#[test]
-fn matching_final_sidecar_succeeds_with_another_temp_file() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/matching.dd");
-    let content = "ninja_dyndep_version = 1\n";
-    dir.create_dir_all(DYNDEP_DIR)?;
-    dir.write(rel, content)?;
-    let other_temp = TempNameSource::new("concurrent".to_owned()).next_name(rel);
-    dir.write(other_temp, "concurrent temporary content")?;
-
-    write_atomic(&dir, rel, content)?;
-
-    ensure_matching(&dir, rel.as_str(), content)
 }
 
 #[test]
@@ -349,6 +222,38 @@ fn retention_prunes_historical_sidecars_but_keeps_the_current_bundle() -> Result
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn materialization_rejects_a_netsuke_directory_symlink() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temporary_dir(&temp)?;
+    let victim = temp.path().join("victim");
+    test_support::fs::create_dir(&victim)?;
+    test_support::fs::symlink("victim", temp.path().join(".netsuke"))?;
+
+    let result = materialize_dyndep_files(&dir, &[sidecar(".netsuke/dyndep/abc.dd", "content")]);
+
+    let Err(error) = result else {
+        anyhow::bail!("materialization must reject a .netsuke directory symlink");
+    };
+    let expected = localization::message(keys::RUNNER_IO_DYNDEP_ALIAS)
+        .with_arg("path", ".netsuke")
+        .to_string();
+    ensure!(
+        format!("{error:#}").contains(&expected),
+        "the refusal must name the aliased component: {error:#}"
+    );
+    ensure!(
+        !test_support::fs::exists(victim.join("dyndep/abc.dd")),
+        "materialization must not write a sidecar through the alias"
+    );
+    ensure!(
+        !test_support::fs::exists(victim.join("dyndep/.netsuke-publication.lock")),
+        "materialization must not create a lock through the alias"
+    );
+    Ok(())
+}
+
 fn ensure_matching(dir: &Dir, path: &str, expected: &str) -> Result<()> {
     anyhow::ensure!(
         dir.read_to_string(path)? == expected,
@@ -372,5 +277,7 @@ fn ensure_no_temp_files(dir: &Dir) -> Result<()> {
     );
     Ok(())
 }
+
+mod atomic_write;
 
 mod telemetry_tests;
