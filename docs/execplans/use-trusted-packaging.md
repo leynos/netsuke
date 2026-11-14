@@ -4191,6 +4191,30 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   through `read_release`. `make test-release-publication` passed 1469 tests
   with the doctests enabled.
 
+- [x] (2026-11-14) Answered the thirteenth review: the ownership sentence now
+  names which effects the I/O module implements and which two it does not.
+
+  **The finding.** CodeRabbit approved `f2e992afb` and, in the same reply,
+  named one remaining inaccuracy: the sentence still said the I/O module
+  "implements every effect", yet the digest record's decoding is
+  `release_digest_record_files` and the operator report is printed by the
+  command layer. Both are visible in the source it cited.
+
+  **The correction.** The sentence now lists the effects a run performs that
+  the module does implement — launching `gh`, reading and staging the JSON
+  records, appending the action's outputs — and adds the two it deliberately
+  does not own, with the reason for each: decoding is shared with the verifier
+  so a record is accepted on one rule wherever it is read, and the report is
+  printed at the edge because that is where a stage's value becomes a sentence.
+
+  **The second item.** CodeRabbit also asked for #1115's read-only command
+  contract and exact-set asset rule to be reviewed at `ed436b133`. Neither file
+  is touched by this branch — `git diff --name-only ed436b133..HEAD` names no
+  `release_verify_inventory*`, `verify_release_inventory*`, or
+  `release_inventory.py` path — so this candidate's `test-workflow-contracts`
+  run executes the reviewed versions, and `pytest tests/workflow_contracts`
+  covers the whole directory rather than a selected subset.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
