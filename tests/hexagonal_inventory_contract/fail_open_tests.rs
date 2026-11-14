@@ -10,8 +10,8 @@ use anyhow::Result;
 use rstest::rstest;
 
 use super::fixtures::{
-    SIMPLE_ROADMAP, VALID_SKELETON, expect_validation_error,
-    inventory_with_one_register_item, inventory_with_register_item_and_unchanged,
+    SIMPLE_ROADMAP, VALID_SKELETON, expect_validation_error, inventory_with_one_register_item,
+    inventory_with_register_item_and_unchanged,
 };
 use super::validation::validate_inventory;
 
