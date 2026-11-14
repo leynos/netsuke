@@ -4094,6 +4094,31 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `release view` in that order, and the refusal path must ask exactly one
   `release view` and no edit.
 
+- [x] (2026-11-14) Answered the tenth review: the guide says which surface the
+  final pre-edit read covers, and what a rerun and a read-back compare.
+
+  **The finding.** CodeRabbit's reply in the developers' guide thread declined
+  to mark the earlier correction addressed, citing two sentences that were
+  still wrong. The first said the read taken immediately before the edit
+  reconciles "both surfaces"; it reconciles the GitHub release only, because
+  the registry was verified earlier. The second said "neither path re-reads the
+  assets" when a rerun finds the release already public.
+
+  **The correction.** The guide now says the pre-edit read covers the GitHub
+  release alone and that the registry is not read again, and it describes both
+  later passes accurately: a rerun that finds a public release compares its
+  listing with the trusted record and refuses a disagreement as
+  `PUBLISHED_MISMATCH`, the post-edit read-back makes the same comparison, and
+  neither can withdraw a release that is already public. Both statements match
+  `finalize_github_release_inventory.published_inventory`, which `readback`
+  calls before it records a success.
+
+  **The evidence.** A retry that finds a public release holding different bytes
+  is already pinned by
+  `test_a_retry_that_finds_changed_bytes_reports_a_published_mismatch`, and
+  `readback`'s doctest pins the read-back's comparison: it reports `finalized`
+  only for the trusted inventory.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

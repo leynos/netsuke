@@ -3224,10 +3224,12 @@ depends on the other, so an upload interrupted on one surface can be resumed
 without repeating the other. `verify-release-inventory` runs only after both. A
 tagged run in which either publisher fails or is skipped therefore leaves the
 draft unverified, and `finalize-github-release` runs only after the verifier as
-well, so both surfaces are reconciled once more by a read taken immediately
-before the edit. Those checks narrow the gap between the verified snapshot and
-the release this finalizer publishes; they cannot close it, because an asset
-can still change between that read and the edit.
+well, so the release's inventory is reconciled once more by a read taken
+immediately before the edit. That read covers the GitHub release alone: the
+registry was verified earlier and is not read again. Those checks narrow the
+gap between the verified snapshot and the release this finalizer publishes;
+they cannot close it, because an asset can still change between that read and
+the edit.
 
 That gate governs the transition, not a state. A rerun that begins with a
 release already public leaves it public whether or not the verifier and
@@ -4110,10 +4112,13 @@ GitHub offers no conditional edit, so a writer that changes the draft in those
 milliseconds is not observed. The window is one API call wide, and both
 endpoints are the same trusted record, which narrows it but does not close it:
 a run that loses the race can publish a release holding bytes the record does
-not match. No later pass repairs that. A rerun of an already-public release
-records it as finalized when the flag agrees and refuses it when the flag
-disagrees; neither path re-reads the assets. The mismatch therefore stands
-until an operator finds it.
+not match. No later pass repairs that. A rerun that finds the release already
+public compares that listing with the trusted record: a release holding the
+recorded inventory is recorded as finalized, and one whose bytes or flag
+disagree is refused as `PUBLISHED_MISMATCH`, naming what disagrees. The
+post-edit read-back makes the same comparison, so a run that lost the race
+reports the mismatch rather than a success. Neither path can withdraw a release
+that is already public, so the mismatch stands until an operator acts.
 
 | Exit constant            | Code | Meaning                                                  |
 | ------------------------ | ---- | -------------------------------------------------------- |
