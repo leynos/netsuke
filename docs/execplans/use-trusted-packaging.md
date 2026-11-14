@@ -10,11 +10,11 @@ Status: IN PROGRESS
 The plan is approved and implementation has begun. EP-M1 and EP-M2 are
 complete. Issue #1064 delivers the first crates.io publisher and its workflow
 contracts, #1066 replaces the shared upload action in `publish-release` with a
-candidate-bound declared-asset upload, and #1067 adds the downloaded-inventory
-verifier. Stage C remains partial because GitHub finalization and consumer
-smoke are still open. Stage D is in progress. No release, tag, registry
-publication, live credential exchange, GitHub Release, or account setting has
-been changed by this work.
+candidate-bound declared-asset upload, #1067 adds the downloaded-inventory
+verifier, and #1068 adds digest-aware GitHub release finalization. Stage C
+remains partial because the consumer smoke test is still open. Stage D is in
+progress. No release, tag, registry publication, live credential exchange,
+GitHub Release, or account setting has been changed by this work.
 
 ## Purpose / big picture
 
@@ -26,9 +26,9 @@ publishes the package through crates.io Trusted Publishing, verifies the
 registry bytes, and then finalizes the GitHub Release. Issue #1064 adds the
 candidate-backed crates.io publisher, and #1067 verifies the downloaded GitHub
 inventory against the digest record `publish-release` retained, not against the
-crates.io publisher or its package bytes. The finalizer that un-drafts the
-release only after both surfaces are proven, and the consumer smoke test,
-remain open before the full release path can make that end-to-end claim.
+crates.io publisher or its package bytes. #1068 un-drafts the release only
+after both surfaces are proven; the consumer smoke test remains open before the
+full release path can make that end-to-end claim.
 
 The registry upload itself stops depending on a long-lived secret. GitHub mints
 a short-lived, repository-scoped token from an OIDC identity; the token exists
@@ -103,8 +103,10 @@ Its jobs are:
 
 The two jobs are mutually exclusive: a dry run takes `release`, a tag push takes
 `publish-release`, and a job that needs a skipped job is itself skipped.
-Nothing in that path publishes to a registry, and nothing un-drafts the
-release: today a human publishes the draft.
+Nothing in that path publishes to a registry or un-drafts the release. The
+draft is created and populated there; `finalize-github-release` later un-drafts
+it, and only after the registry publication and the downloaded inventory have
+both been verified.
 
 **The packaging contract.** `.github/release-staging.toml` names six targets
 (`linux-x86_64`, `linux-aarch64`, `windows-x86_64`, `windows-aarch64`,
@@ -667,10 +669,13 @@ against the declaration and the pre-upload digest record the publisher
 retained; its job needs both publishers and holds `contents: write` for draft
 visibility alone.
 
-Two job-matched actions remain open:
+One job-matched action remains open:
 
-- `finalize-github-release/` — reconcile the draft, then un-draft.
 - `consumer-smoke/` — download, verify, extract and run the published bytes.
+
+`finalize-github-release/` is **delivered** (#1068): it reconciles the draft
+against the trusted digest record and un-drafts it only when every declared
+asset already holds its recorded bytes.
 
 The separate `upload-declared-assets/` helper is **delivered** (#1066) and
 called by `publish-release`; the Decision log records why the upload step
@@ -731,16 +736,15 @@ staged" rather than passed over. And it is supplied or omitted as a whole,
 which is why a caller that skips it falls back to the count alone rather than
 to a partial observation.
 
-The `trusted.json` record is now produced and retained for downstream
-consumption (`declared-assets-${job}-${attempt}`), and the upload step requires
-it to agree with `selection.json` before acting. The `verify-release-inventory`
-job consumes it: it downloads the published assets and compares every digest
-with that record, which the producer computed from the staged payload before
-upload rather than from the copies GitHub later serves. The record is therefore
-an independent witness to the bytes, not a restatement of what was downloaded.
-`finalize-github-release/` is still one of the open actions listed above, so
-un-drafting the release on the verifier's result is the one hand-off this path
-does not yet perform.
+The `trusted.json` record is produced and retained for downstream consumption
+(`declared-assets-${job}-${attempt}`), and the upload step requires it to agree
+with `selection.json` before acting. Both intended consumers now read it:
+`verify-release-inventory` downloads every declared asset into its own
+directory and compares each one against the record, which the producer computed
+from its own build tree before upload and never from the bytes it describes, and
+`finalize-github-release` reconciles the recorded listing against the same
+record before un-drafting. Neither consumer reads the verifier's output, so the
+release is never compared against a set derived from GitHub itself.
 
 Each new job's name matches the composite action it calls, so a reader moving
 between `release.yml` and `.github/actions/` does not have to translate.
@@ -782,9 +786,9 @@ non-vacuity, so the stricter rule cannot pass by having nothing to check.
 
 The intended end-state in `.github/workflows/release.yml` adds the sequence
 below after the existing `metadata`, `build-*`, `windows-native-recipe-smoke`,
-and `release-admission-canaries` jobs. `package-crate`, `publish-crates-io`, and
-`verify-release-inventory` are delivered; finalization and consumer smoke
-remain:
+and `release-admission-canaries` jobs. `package-crate`, `publish-crates-io`,
+`verify-release-inventory`, and `finalize-github-release` are delivered;
+consumer smoke remains:
 
 1. `package-crate` — `needs: metadata`; `contents: read`; ubuntu-latest. The
    order is: resolve candidate -> package -> verify.
@@ -825,10 +829,15 @@ remain:
    contain no `gh release` call at all, which is what keeps "holds write scope"
    from drifting into "writes". `id-token: write` stays out, so this job
    remains disjoint from the registry-exchange job's credentials.
-4. `finalize-github-release` — `needs: [verify-release-inventory]`;
-   `contents: write`, no `id-token`. Named `finalize-` rather than
-   `publish-github-` to keep it distinct from the existing `publish-release`,
-   which it follows rather than replaces.
+4. `finalize-github-release` — delivered by #1068.
+   `needs: [metadata, package-crate, publish-crates-io, publish-release,
+   verify-release-inventory]`;
+   `contents: write`, no `id-token`; the guard names every dependency's
+   `result` explicitly alongside `should_publish == 'true'`, because
+   `!cancelled()` is a status function and suppresses the implicit success
+   check. The rehearsal job `release` is absent: a dry run never creates a
+   draft. Named `finalize-` rather than `publish-github-` to keep it distinct
+   from the existing `publish-release`, which it follows rather than replaces.
 5. `consumer-smoke` — `needs: [finalize-github-release]`; verifies the
    published bytes without compiling anything (see `Surprises & discoveries`:
    `cargo install` is forbidden in CI by policy). It fetches
@@ -843,8 +852,9 @@ remain:
 running the draft-creation steps; `release` holds `contents: read` and runs the
 dry-run rehearsal. Issue #1064 leaves `publish-release` unchanged, with its
 existing five-job dependency list. `publish-crates-io` and `publish-release`
-are currently independent; the later inventory and finalizer work must define
-how their outcomes gate the completed release path. Stage C as first drafted
+remain independent of one another, and `finalize-github-release` is what makes
+their outcomes gate the completed release path: it needs both, so neither can
+finish unproven while the release becomes public. Stage C as first drafted
 attributed the write permission to `release`; that predates PR #834, which
 split rehearsal from publication.
 
@@ -961,16 +971,16 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 - Recovery: the sequence is additive after `release`; a revert restores the
   current behaviour exactly.
 - Remaining gaps: `package-crate`, `publish-crates-io`,
-  `verify-release-inventory`, and `upload-declared-assets` (called by
-  `publish-release`) are in the workflow graph. Two job-matched actions and
-  jobs remain (`finalize-github-release` and `consumer-smoke`), together with
-  the separate LEM-5 suite. The finalizer is the remaining consumer the retained
-  `trusted.json` is waiting for; #1066 produces and retains that record, #1067
-  verifies it against the downloaded assets, and un-drafting the release on
-  that result is the finalizer's work. No live exchange or release has
-  exercised the publisher, and trusted-publisher registration and account
-  settings remain maintainer actions. The package already exists on crates.io
-  (`0.1.0-beta1` through `beta4`), so no initial publication is outstanding.
+  `verify-release-inventory`, `finalize-github-release`, and
+  `upload-declared-assets` (called by `publish-release`) are in the workflow
+  graph. One job-matched action and job remains (`consumer-smoke`), together
+  with the separate LEM-5 suite. The retained `trusted.json` has both of its
+  consumers: #1066 produces and retains that record, #1067 verifies it against
+  the downloaded assets, and #1068 un-drafts the release only on that result.
+  No live exchange or release has exercised the publisher, and
+  trusted-publisher registration and account settings remain maintainer
+  actions. The package already exists on crates.io (`0.1.0-beta1` through
+  `beta4`), so no initial publication is outstanding.
 - Compatibility decision: the reusable interface is preserved because
   `release-dry-run.yml` and the repository's release runbook depend on it.
 
@@ -1002,24 +1012,28 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   version that was published before the interruption classifies as `identical`,
   so the rerun skips the upload and verifies the public bytes.
 - Remaining gaps: no live exchange or release has exercised the action; the
-  package archive file list, inventory verifier, release finalizer, and
-  consumer smoke remain open.
+  package archive file list and the consumer smoke remain open. The inventory
+  verifier (#1067) and the release finalizer (#1068) are delivered.
 - Compatibility decision: none.
 
 **EP-M5 — recoverability and reconciliation.**
 
-- Outcome (target): re-running a tag run reconciles rather than duplicating; the
-  finalizer completes a matching release and fails closed otherwise.
-- Requirements: LEM-3 and LEM-4 policy and CLI decisions are implemented;
-  workflow orchestration and recovery remain open.
+- Outcome: re-running a tag run reconciles rather than duplicating; the
+  finalizer completes a matching release and fails closed otherwise. Delivered
+  by #1066 (upload), #1067 (verification), and #1068 (finalization).
+- Requirements: LEM-3 and LEM-4 policy and CLI decisions are implemented, and
+  the finalizer's workflow orchestration and the documented recovery sequence
+  have landed. No live release has exercised the path yet.
 - Acceptance evidence: a simulated second run against a partially populated
-  release reports exactly the missing assets and uploads only those.
+  release reports exactly the missing assets and uploads only those, and the
+  finalizer's suites cover an interrupted retry, an already-finalized release,
+  a missing asset, a conflicting asset, and an output or API failure.
 - Conformance check: `cancel-in-progress` is `false` for a tag; no
   `--clobber` is used for reconciliation.
 - Recovery: a failed run leaves the draft and the published version intact
   and is safe to re-run.
-- Remaining gaps: the remote orchestration and partial-publication recovery
-  sequence have not landed. No cross-service atomicity is claimed.
+- Remaining gaps: the consumer smoke test and a live exercise of the release
+  path. No cross-service atomicity is claimed.
 - Compatibility decision: none.
 
 **EP-M6 — gates, guards, and documentation.**
@@ -1132,7 +1146,14 @@ missing and `EXIT_CONFLICT` when one disagrees, and only un-drafts when every
 asset is already the declared one. Its own upload path was removed by the
 2026-10-19 Decision entry, because a job that both verified and wrote could not
 report a missing asset as a failure. Nothing in this change deletes a remote
-object.
+object. The delivered job holds that shape: a verification failure, or a
+reconciliation refusal made from the pre-edit snapshot, leaves the release as a
+draft, because the read that decided it saw a draft. A failed API call reports
+the state as unknown instead, since a retry can begin after an earlier attempt
+already published the release. In either case a retry re-reads the retained
+records rather than rebuilding anything. An interruption after the edit but
+before the result is recorded converges on the next run, which recognizes the
+release as already finalized.
 
 Local recovery: `git switch --detach ebcedaef` restores the pre-change tree.
 Re-running a release is a maintainer action and is documented, not performed
@@ -1693,11 +1714,12 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `publish-crates-io` actions and jobs have landed, with workflow contracts for
   publisher permissions, prerequisite reachability, artefact use, action order,
   and dry-run isolation, #1066 has replaced the shared upload action in
-  `publish-release` with `./.github/actions/upload-declared-assets`, and #1067
-  has added `verify-release-inventory`, which compares the downloaded assets
-  with the retained declaration and digest record. `finalize-github-release` and
-  `consumer-smoke` remain; the finalizer un-drafts the release on the
-  verifier's result and is not yet wired. No live exchange or release has
+  `publish-release` with `./.github/actions/upload-declared-assets`, #1067 has
+  added `verify-release-inventory`, which compares the downloaded assets with
+  the retained declaration and digest record, and #1068 has added
+  `finalize-github-release`, which reconciles the recorded listing against that
+  record and un-drafts the release only when every declared asset already holds
+  its trusted digest. `consumer-smoke` remains. No live exchange or release has
   exercised the publisher; the external GitHub `crates-io` environment and
   crates.io publisher registration remain unverified, so Stage C remains open.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
@@ -3115,8 +3137,65 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   **Deviation, retained:** `release.yml` is 1023 lines, and `Verification plan`
   row 5 still asks for 400 or fewer. That row is unsatisfiable as written and
   stays unedited so the deviation remains visible; no repository contract caps
-  workflow YAML. Finalization and consumer smoke remain open, and the ExecPlan
-  is not complete.
+  workflow YAML. Consumer smoke remains open, and the ExecPlan is not complete.
+
+- [x] (2026-11-09) Landed `finalize-github-release`, the digest-aware
+  finalization stage (issue #1068). `publish-release` keeps creating and
+  populating the draft; this job only decides whether the draft may become
+  public. It needs `metadata`, `package-crate`, `publish-crates-io`,
+  `publish-release`, and `verify-release-inventory`, holds `contents: write`
+  and nothing else, and names every dependency's `result` explicitly beside
+  `should_publish == 'true'` because `!cancelled()` is a status function.
+
+  The action has five steps: validate the inputs, then `resolve`, `snapshot`,
+  and `publish` through `scripts/finalize_github_release.py`, with the
+  reconciliation between the second and third run by
+  `scripts/finalize_github_release_cli.py`. `resolve` reads the package stage's
+  retained identity and refuses a record that names another tag, another
+  commit, or no tag at all — a rehearsal identity cannot be finalized as a
+  release. `snapshot` takes one read-only `gh release view` for the draft flag,
+  prerelease flag, and reported digests, and refuses a response that names
+  another tag, omits a flag, or repeats an asset name. The planner reconciles
+  that listing against the **build's** trusted digest record rather than the
+  verifier's output, and `publish` makes the single mutating call,
+  `gh release edit`, only when every declared asset already holds its recorded
+  digest.
+
+  The asymmetry is the design. An asset GitHub reports with the recorded digest
+  is skipped; an identical release is recognized as already finalized, so a
+  retry after an interruption converges instead of failing; a missing asset is
+  reported as a missing asset rather than being uploaded here; and an asset
+  with different bytes is a conflict that stops the run, because a published
+  digest is a promise to whoever already downloaded it. A verification failure
+  or a reconciliation refusal made from the pre-edit snapshot leaves the
+  release as a draft, because the read that decided it saw a draft. A failed
+  API call reports the state as unknown instead, since the edit may have landed
+  before the response was lost. In either case the guide records how to recover
+  without rebuilding.
+
+  Exit statuses are the workflow's vocabulary: 0 final, 1 refused or
+  conflicting, 2 upload required, 3 input unreadable, 4 output unwritable, 5
+  remote failed. The action sets no `continue-on-error` and does not swallow
+  either status. Each adapter invocation is bounded with GNU `timeout`, because
+  Cuprum 0.1.0 offers no in-process timeout and a hung `gh` would otherwise
+  hold the job to its own 30-minute cap. The bound cannot be a step
+  `timeout-minutes`: the runner does not support that key inside a composite
+  action (actions/runner#1979), so the workflow step that calls the action
+  carries the aggregate 28-minute ceiling instead.
+
+  `release_finalize_contract_test.py` and
+  `release_finalize_contract_support.py` hold the job and action contracts,
+  each with mutation cases so a passing assertion is shown to notice a change: a
+  `GH_TOKEN` on the plan step, an unbounded adapter command, a missing step
+  timeout, a `gh release` call inside a `run`, a wrong output expression, an
+  `id-token` grant, a `release` dependency, a missing verifier dependency, a
+  download pattern instead of a name, an attempt-scoped artefact literal, and
+  the verifier's record in place of the build's. `docs/developers-guide.md`
+  gains a *Finalizing the verified release* section with the step, status, and
+  recovery material; `docs/users-guide.md` now describes the draft ending as
+  the delivered two-job hand-off; and ADR-0007 gains an addendum recording the
+  decision. Finalization is verified against checked documents and recorded
+  responses only — no live release, tag, or credential was exercised.
 
 - [x] (2026-11-09) Closed the seventh CodeRabbit pass's remaining obligations:
   executed coverage for the producer hand-off and the candidate checks, a
@@ -3211,6 +3290,51 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   branches are separate strategies rather than one `assume`-guarded case, so
   neither can silently lose coverage when the generator drifts.
 
+- [x] (2026-11-09) Closed the ninth CodeRabbit pass on the finalization
+  stage, including one finding that was a defect rather than a style preference.
+
+  **A public release with the wrong flag was edited, not refused.** The pass
+  read `publish_release` and found that `is_already_finalized` returns `False`
+  when a public release carries the other prerelease flag, so the run fell
+  through to `gh release edit` and rewrote the flag of a release someone may
+  already have downloaded -- then reported success. The guide and the ADR
+  already claimed the stage "refuses rather than editing", so the documents
+  described the intended behaviour and the code did not implement it. The
+  repair is `_require_draft`, called after the already-finalized check and
+  before the edit: a release that is public at that point has the other flag,
+  and the run stops. The old case exercised the post-edit contradiction; it is
+  now two cases, one proving that a public release is refused with no
+  `gh release edit` invocation at all, the other keeping the read-back
+  contradiction diagnosed when an edit comes back with the wrong flag.
+
+  **`publish` takes one grouped argument again.** The seven-parameter signature
+  needed an inline Pylint disable and a file-level Ruff `too-many-arguments`
+  ignore in `pyproject.toml`. Cyclopts 4.25.3 flattens a dataclass parameter
+  declared `Parameter(name="*")`, which was verified against the installed
+  release before relying on it: `--tag`, `--commit`, `--repository`,
+  `--candidate-path`, `--plan-path`, `--result-path`, and `--github-output`
+  keep their spellings, and the six fields without defaults stay required. Both
+  suppressions are gone and the existing suites pass unchanged.
+
+  **The `contents: write` claim named two jobs; three hold it.**
+  `verify-release-inventory` holds the scope because a draft release is visible
+  only with write access. The guide and the workflow comment now name all three
+  and keep the distinction that matters: only the publisher and the finalizer
+  change the release.
+
+  **The release token reached a step that never calls GitHub.** The validate
+  step held `GH_TOKEN` only to test that it was non-empty; it now receives a
+  boolean presence flag. The contract's expected-environment map records the
+  new name, and a new rule rejects any step outside the token set that forwards
+  the token expression under any name. The rule is asserted before the map
+  comparison because the map is what recorded the leak as correct, and a
+  `token-on-validate` mutation proves it fires.
+
+  **Two documentation and spelling corrections.** Table 3 said the finalize
+  step makes one `gh` call, but `publish` makes two `gh release view` reads
+  around one `gh release edit`. The captions after the release section ran 8,
+  6, 9, 10, so they are renumbered 9, 10, 11. A test module docstring used
+  "-ised" rather than the repository's -ize spelling.
 - [x] (2026-11-10) Closed the ninth CodeRabbit pass's two architecture rows by
   splitting effect from decision at both upload boundaries, and made an
   unattributable package a refusal rather than a silent acceptance.
@@ -3503,6 +3627,38 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the module is registered in four places rather than one: each registration is
   a separate reachability claim.
 
+- [x] (2026-11-09) Closed the tenth CodeRabbit pass on the finalization stage:
+  one finding that removed a bound the design depended on, and two smaller
+  corrections.
+
+  **`timeout-minutes` is not supported inside a composite action, so the five
+  step ceilings were not bounds at all.** The action declared one on every
+  step, and three documents described it as the only thing stopping a hung `gh`
+  call from holding the job open. The metadata-syntax reference lists the keys
+  a composite step may carry, and `timeout-minutes` is not among them;
+  `actions/runner`'s ADR 0549 says "We will not support `timeout-minutes` in a
+  composite action", and actions/runner#1979 is the still-open request for it.
+  The bound moved to where the runner honours it: each adapter invocation now
+  runs under `timeout --kill-after=30s` -- 300 s for the resolver, the
+  snapshot, and the planner, and 600 s for the finalizer -- and the workflow
+  step that calls the action carries a 28-minute ceiling inside the job's 30.
+  The contract now asserts the *absence* of the unsupported key on every step
+  and a bounded invocation on each of the four adapter steps; the
+  `unbounded-command` and `missing-step-timeout` mutations prove both
+  assertions fire.
+
+  **The PEP 723 block pins two packages, not the resolution.** A workflow
+  comment and a guide paragraph said `uv run` "resolves that fixed pair". Only
+  `cyclopts` and `cuprum` are pinned; their transitive closure resolves on
+  every run. The prose now says the block narrows the graph rather than
+  freezing it.
+
+  **The plan decoder's `isinstance` chain became pattern matching.** Four
+  branches of type-and-length checks became four `match` arms reporting the
+  same three diagnoses, and `_ROW_WIDTH` went with them. Those diagnoses had no
+  test of their own, so `test_each_malformed_row_reports_its_own_diagnosis` now
+  distinguishes a row that is not a pair, a row without a usable name, and a
+  row with an unknown action.
 - [x] (2026-11-13) Closed the four findings of the review over `13e935517`.
   All four were about *where* a thing lives rather than what it computes, so
   each was repaired by moving a responsibility to the module that already owned
@@ -3563,6 +3719,501 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   2062 passed, 3 skipped, plus 30 in the follow-on invocation; `make check-fmt`,
   `make fmt`, `make spelling`, and `make lint-python` (Pylint 10.00/10) all
   exit 0.
+
+- [x] (2026-11-09) Closed the eleventh CodeRabbit pass on the finalization
+  stage: the aggregate timeout invariant, a planner run that records no plan,
+  and the public helpers' docstrings.
+
+  **The step ceiling was asserted but never summed.** Each adapter command was
+  capped at 600 s, and four of them at that cap total 40 minutes — more than
+  the 28-minute step and the 30-minute job. `_assert_command_bound` now returns
+  the bound, `_assert_action_contract` sums the four, and the contract requires
+  the total to stay under `FINALIZE_STEP_TIMEOUT_MINUTES * 60`. The
+  `aggregate-bound-exceeded` mutation keeps every command inside its own cap
+  and is caught by the sum alone.
+
+  **A planner exit status that wrote no plan was read as success.** The step
+  accepted `0`, `1`, and `2` and then published `plan-path`, but `argparse`
+  usage errors and `uv` resolution failures also exit `2`, and an uncaught
+  exception exits `1`. The step now deletes any earlier plan before running the
+  planner and refuses to report a path when the run wrote none, so the release
+  stays a draft and the diagnosis names the planner rather than the finalizer's
+  unreadable-JSON message. The `stale-plan-kept` and `missing-plan-guard`
+  mutations prove both assertions fire.
+
+  **The public helpers' docstrings carry their contracts.** `run_gh`,
+  `write_json`, `write_github_output`, `fail`, and the operations module's
+  public functions now document their parameters, return values, and the exit
+  statuses they can produce. Those statuses appear under *Notes*, not *Raises*:
+  Ruff's `docstring-extraneous-exception` (DOC503) accepts only an exception a
+  function raises literally, and each of these stops through `release_io.fail`,
+  which raises `SystemExit` on its behalf. Declaring `Raises: SystemExit` failed
+  `make lint` with four such diagnostics, and the module docstring now records
+  why the information lives under *Notes* rather than silencing the rule.
+
+- [x] (2026-11-09) Split two modules the docstring work pushed past Pylint's
+  `max-module-lines = 400`, and registered the new one everywhere the existing
+  finalizer modules are named.
+
+  The written contracts arrived with a size cost. Documenting every public
+  helper in `scripts/finalize_github_release_operations.py` took it to 493
+  lines and `tests/workflow_contracts/release_finalize_contract_test.py` to
+  454, and `make lint-python` reported `C0302` for both. Neither was fixed by
+  thinning the documentation: each was split on a boundary the code already had.
+
+  The operations module answered two questions — "may this release be
+  un-drafted, and with which flag" and "what did GitHub say, and what did this
+  run record". The second now lives in
+  `scripts/finalize_github_release_records.py` (302 and 258 lines), which owns
+  the two read-only operations and the three records, including the renamed
+  public `report_remote_failure`. The contract test likewise held the action's
+  own step assertions beside the job that calls it; those moved to
+  `tests/workflow_contracts/release_finalize_action_contract.py`, leaving 218
+  lines behind.
+
+  A new source module is a registration, not just a file.
+  `release_publication_modules.SOURCE_MODULES` must equal
+  `POLICY_MODULES | ADAPTER_MODULES` exactly, so the records module joined both
+  `SOURCE_MODULES` and the adapter side, and the `Makefile`'s
+  `test-release-publication` doctest list. That target asserts every named
+  source carries a docstring example, so `record_outcome` gained one; and
+  because the split moved `import json` out of the operations module, its
+  existing `candidate` example now imports `json` itself, exactly as the
+  earlier type-checking-import discovery predicted.
+
+  Evidence: `make lint-python`, `make test-workflow-contracts` (2068 passed, 3
+  skipped), and `make test-release-publication` (1169 passed).
+
+- [x] (2026-11-09) Closed the twelfth CodeRabbit pass: a missing adapter name,
+  a misattributed `isinstance` finding, a duplicated candidate rule, and the
+  unconstrained closure of the token-bearing script's dependencies.
+
+  **A processes-test docstring named three callers and omitted a fourth.**
+  `release_publication_processes` said the finalizer's three modules issue no
+  process of their own, but the `gh` invocations live in
+  `finalize_github_release_io`, which it never named. The docstring now names
+  it alongside the two `gh release` commands it runs.
+
+  **The `isinstance`-chain finding did not apply, and the skip is recorded
+  rather than mechanical.** The finding asked for structural pattern matching in
+  `record_candidate`, whose guard is a single validation test
+  (`not isinstance(envelope, dict) or not isinstance(envelope.get("identity"), dict)`).
+  The df12 rule R9101 is emitted only when "consecutive branches select
+  behaviour with `isinstance()` checks on one subject" — a dispatch chain, not
+  one guard that rejects a malformed record. A `match` around that pair of
+  checks would be a single arm with a `|` pattern over two unrelated
+  expressions, which reads worse than the guard. The tenth pass already
+  converted the parse decoder's genuine chain; nothing else here is one.
+
+  **One candidate rule was implemented twice.** `resolve` and `publish` each
+  compared the recorded identity's tag and commit against the run's, and the
+  two copies differed where it mattered: only the package-record side had a
+  dedicated diagnosis for a tagless rehearsal record. The comparison is now the
+  pure `release_candidate.identity_refusal`, returning a reason or `None`;
+  `operations.require_candidate` (public, and shared by `candidate` and
+  `publish`) and `records.record_candidate` each map that one answer onto their
+  own exit status. The helper sits in the policy module, so neither adapter
+  imports the other and no cycle is introduced.
+
+  **The one script that runs with a write token left its closure unpinned.**
+  The PEP 723 block pins `cyclopts` and `cuprum`, so their transitive closure
+  resolves afresh on every run, and `uv` resolves and installs while the step's
+  `GH_TOKEN` is in scope. A lockfile would freeze the closure exactly, but the
+  repository keeps no per-script locks and `--locked` would fail the release
+  job the first time a pin was edited without relocking — a failure no local
+  gate would catch. The measured mitigation is a `[tool.uv]` table with
+  `exclude-newer`, which refuses any dependency release published after the
+  cutoff. Two probes on this host confirmed the mechanism and that it is
+  usable: a `2000-01-01` cutoff failed with "`cyclopts` was filtered by
+  `exclude-newer` … was published at 2026-09-17", and a `2026-11-10` cutoff
+  installed nine packages. The action contract gained
+  `assert_adapter_pins_its_closure`, which requires both the table and the
+  cutoff, and `test_the_dependency_cutoff_contract_rejects_a_removed_cutoff`
+  proves the assertion notices a block from which the line was stripped.
+
+- [x] (2026-11-10) Closed the thirteenth pass, which found the cutoff
+  insufficient on its own: two steps still let a dependency run code, and the
+  suites ran a different tool pair from the adapter's.
+
+  **`exclude-newer` chooses a release; it does not say what installing one
+  does.** A dependency with no wheel for the interpreter is built from source by
+  `uv`, and a build backend runs arbitrary code with the environment's
+  `GH_TOKEN` in scope. Both token-bearing steps — `snapshot` and `finalize` —
+  now pass `--no-build`, so resolution fails closed instead of building. The
+  other two adapter steps hold no token and keep the default. A probe on this
+  host confirmed the flag is viable for this closure:
+  `uv run --no-project
+  --no-build --python 3.14 scripts/finalize_github_release.py --help`
+  resolved and printed usage, so no dependency of the adapter lacks a wheel.
+
+  The contract asserts the flag on both token-bearing steps (the finalize step
+  also through the exact `FINALIZE_COMMAND` token list), and the new
+  `source-build-allowed` mutation strips it from the snapshot step alone,
+  keeping that step's bound and token, so the assertion is shown to fire on the
+  flag rather than on a neighbouring property.
+
+  **`test-release-publication` resolved a different Cuprum and Cyclopts from
+  the adapter's.** The target used `cuprum>=0.1.0,<0.2.0` and
+  `cyclopts>=4.25.3,<5` while the script pins `cuprum==0.1.0` and
+  `cyclopts==4.25.3`; the adapter depends on version-specific behaviour
+  (`Parameter(name="*")` flattening and the `run_sync` signature), so the next
+  release of either could have passed here and failed in the release job. The
+  target now pins the two exactly, as `test-workflow-contracts`,
+  `test-release-admission`, and the CI script helpers already do.
+
+- [x] (2026-11-10) Rebased onto the #1067 head, resolving two documentation
+  conflicts and adopting the parent's retained-layout contract as a property
+  this stage depends on.
+
+  **Both branches renumbered the same captions, for different reasons.** The
+  base's developers' guide numbered two different tables `Table 6`; #1067 fixed
+  it by shifting the trailing captions up one, while this branch had inserted
+  two tables of its own and shifted the same captions by two. Taking either
+  side wholesale would have produced a duplicate or a gap, so each conflict
+  took this branch's number — the scheme that already accounts for both new
+  tables — and the replayed series was checked to end at eleven unique,
+  sequential captions. The two conflicting commits are the only ones the
+  post-rebase `range-diff` reports as changed, and they differ only in those
+  caption lines.
+
+  **The parent pinned the artefact layout this stage reads.** `upload-artifact`
+  stores each retained file relative to the deepest directory the paths share,
+  so the publisher's records download flat and `trusted/trusted.json` resolves.
+  #1067 added a retention assertion requiring every retained path to share one
+  parent, with a case that moves `selection.json` into a subdirectory to prove
+  the assertion fires. The finalization job reads that record by the same flat
+  path, so the constraint is inherited rather than merely neighbouring: the
+  developers' guide now states why `trusted/trusted.json` is the right path and
+  what a lifted shared root would do to it.
+
+- [x] (2026-11-10) Answered the fourth review's four findings: three described
+  comments or spelling that had drifted from the code, and one closed a real
+  gap between the plan and the release.
+
+  **The comments described an older shape.** The snapshot step claimed two `gh`
+  calls where `record_snapshot` makes one `gh release view` and writes both
+  records from it; the workflow step claimed to bound "the five" commands where
+  the action bounds four (300 + 300 + 300 + 600 seconds); and one docstring used
+  `capitalised` where the house spelling is `-ize`.
+
+  **A verified plan is a claim about a snapshot, and the release can move after
+  it.** `publish_release` re-read the release but decided only from the plan,
+  so a draft that lost an asset between the record step and the edit would
+  still be un-drafted, publishing an inventory nothing had checked.
+  `PlanAssessment` now carries the names a verified plan accepted, and
+  `_require_editable` refuses with `EXIT_REFUSED` when the pre-edit read no
+  longer attaches one of them. The reviewer's own remedy — refuse when the
+  fresh read names an asset the plan never named — was not adopted: it would
+  reverse the documented decision that an undeclared attachment is left alone,
+  and `test_publish_tolerates_an_asset_the_plan_never_named` holds that
+  boundary in place. Comparing the two reads cannot re-check digests, because
+  the plan records actions rather than digests; it detects a release that lost
+  what was verified, which is the failure the extra read can settle.
+
+- [x] (2026-11-11) Rebased onto the advanced #1067 head (`c40601b3f`, nine new
+  commits) and answered the fifth review's three findings.
+
+  **The rebase conflicted only in prose.** Five of the seventeen replayed
+  commits touch `docs/developers-guide.md` or this plan, and the base had
+  rewritten the same passages to say publication was *not* gated on
+  verification and that the verifier proves the staged bytes rather than
+  package origin. Both intents survive: the base's corrected claims about what
+  the verifier establishes are kept, and this branch's statement that
+  `finalize-github-release` now depends on it replaces the base's "planned
+  finalizer" framing. `range-diff` shows commits 1–4 and 6–17 identical and
+  only the documentation commit changed.
+
+  **P1 — reconcile the current inventory before publishing.** The previous pass
+  compared the pre-edit read with the names the plan verified, which detected a
+  vanished asset and nothing else. The reviewer was right that the plan answers
+  for an earlier snapshot: a replaced asset, or one whose digest changed,
+  passed unremarked. `publish` now re-runs the planner's own reconciliation —
+  `release_digest_record_files.read_digest_record` → `normalise_github_digest` →
+  `plan_asset_actions` — against the fresh snapshot, and judges it with the
+  same `_verdict` precedence via the new `assess_actions`. Missing is
+  `EXIT_UPLOAD_REQUIRED`, changed is `EXIT_REFUSED`, unreadable record is
+  `EXIT_INPUT_UNREADABLE`, and an undeclared extra stays ignored exactly as the
+  planner ignores it. `missing_names` and its suite were deleted: they
+  implemented a weaker rule that the second reconciliation subsumes. The
+  residual read→edit race is now documented rather than implied, since GitHub
+  offers no conditional edit.
+
+  **P2 — do not claim a draft after an ambiguous edit failure.** Every `gh`
+  failure reported "the release remains a draft", which is false once the edit
+  has been attempted: GitHub may have applied it before the response was lost,
+  and the suite's own retry tests model exactly that. `snapshot_release` and
+  `report_remote_failure` take `after_edit`, and `release_state_failure`
+  reports the state as **unknown** after an edit, naming the two ways to
+  establish it — inspect the release, or rerun, which records
+  `already-finalized` without a second edit. Before the edit the message still
+  promises the draft was untouched (superseded by the sixth round below). The
+  users' guide, the action's step comment, and both module docstrings were
+  corrected with it.
+
+  **P3 — stale implementation status.** `release.yml` said the finalizer was
+  not wired; the developers' guide called links 5 and 6 *Planned*; and two
+  module docstrings said no job invokes them. All four now describe the
+  workflow as it is.
+
+- [x] (2026-11-11) Answered the sixth review: the pre-edit half of the
+  draft-state guarantee was still an overclaim.
+
+  **The finding.** `release_state_failure` treated "no edit was attempted" as
+  sufficient to say the release "remains a draft". It is not. A retry can begin
+  after an earlier attempt already made the release public, and the retry's
+  first `gh release view` is exactly the call that failed — so this run never
+  read the state it was asserting.
+
+  **The rule now.** A message may say the release "remains a draft" only when a
+  read taken for this run saw `isDraft: true`. Everything else states the
+  weaker, checkable fact: *this run has not edited the release*.
+  `release_state_failure` reports the failing read's state as **unknown** and
+  names the two ways to establish it. `require_verified` takes
+  `draft_confirmed`, set only by the call reached after `_require_draft`, so
+  the refusal made from the plan alone claims no state at all.
+  `require_candidate`, `run_gh`'s launch-failure message, and the action's
+  three plan-step messages were corrected the same way: none of them reads the
+  release.
+
+  **Why the weaker claim is the honest one.** "Not edited by this run" is
+  provable from the code path; "still a draft" is a claim about GitHub that
+  only a successful read supports. The two coincide for a first attempt and
+  diverge precisely on the retry the feature exists to make safe.
+
+  The users' guide now separates the three cases — refused after a draft was
+  read, unreadable before any edit, ambiguous after an edit — and the
+  developers' guide and both module docstrings follow the same distinction.
+
+- [x] (2026-11-12) Answered the seventh review: the prose still merged the two
+  reconciliation passes, and the CLI commands carried one-line docstrings.
+
+  **The finding.** The users' guide said a missing asset, a changed asset, or
+  an unreadable record "stops the run with the release still a draft", but the
+  first reconciliation runs over the saved plan, before `publish` reads GitHub
+  at all. The same merged claim appeared in the migration guide and in
+  ADR-0007. The guide now separates the passes: a plan refusal happens before
+  the read and claims no state, while a refusal from the pre-edit snapshot may
+  say the release is still a draft. The migration guide says only that the run
+  stops before publication, and the ADR states the three cases explicitly.
+
+  **The trivial finding.** `resolve`, `snapshot`, and `publish` had one-line
+  docstrings. Each now carries a NumPy-style `Parameters` section and a `Notes`
+  section naming the exit statuses it can produce. Cyclopts consumes the
+  `Parameters` section as the flag help — the two read-only commands previously
+  showed no help for their flags — and drops `Notes` from `--help`, so the
+  command-line surface is unchanged.
+
+- [x] (2026-11-13) Answered the eighth review: the finalizer now partitions
+  into policy and adapter modules, and a refusal is a value rather than an
+  exception.
+
+  **The finding.** `finalize_github_release_operations` both decided whether a
+  release may be un-drafted and performed the effects that decision needed, so
+  a test could only reach a decision through a mocked process, and the module
+  was the one place where a policy branch and a shell invocation sat in the
+  same function. The four new modules keep the partition the workflow-contract
+  suite asserts: `..._decisions` and `..._ports` are policy, `..._remote` and
+  `..._messages` are adapters, and exactly one side owns each.
+
+  **The policy half.** `finalize_github_release_decisions` decides from values
+  alone: it takes the planner's document and the trusted record, and every
+  branch returns a `PublishOutcome` naming a verdict, the assets it rests on,
+  and whether an edit was attempted. `finalize_github_release_ports` holds the
+  two value types a port answers with — `ReleaseRead` and `RemoteAnswer` — and
+  the `ReleaseReader`/`ReleaseEditor` protocols they satisfy. Neither module
+  prints, raises for a decision, or names an exit status.
+
+  **The adapter half.** `finalize_github_release_remote` is the only module
+  that invokes `gh release view` or `gh release edit`, and it hands both back
+  as values, so its failures are inputs to the decision rather than exceptions
+  thrown past it. `finalize_github_release_messages` is the only module that
+  turns an outcome into a sentence, which is what keeps the operator-facing
+  prose in one place and lets the verdicts change without touching it. The
+  process effect itself is the injected `release_io.Runner`, defaulting to the
+  Cuprum adapter, so a test that supplies both ports never starts a process.
+  The raising wrapper the `snapshot` stage needs survives as
+  `records.release_state_failure`, and it composes the same
+  `remote.unknown_state_message` the CLI uses, so the two diagnoses cannot
+  drift.
+
+  **What shaped the split.** Three lint limits decided the shape rather than
+  the other way round. `max-args = 4` made a seven-parameter `publish` a grouped
+  `PublishInputs`, and the same limit grouped the stage writers' arguments into
+  `SnapshotPaths`. `max-complexity = 8` measured the nine-arm `describe` match
+  as complexity 9, so each verdict's sentence became its own named function
+  behind a `_RENDERERS` table, which also made "which sentence does this
+  verdict get" a single readable mapping. The 400-line module cap split
+  `publish_release` into `_bound_ports`, `_inspect_draft`, and
+  `_edit_and_confirm`, each of which answers one question: which effects does
+  this run use, may this release be edited, and what did the edit leave behind.
+
+  **Evidence and prose.** Every operator-visible sentence is byte-identical to
+  the one it replaced; the refactor moved where the words live, not what they
+  say. `test_finalize_github_release_publish_decisions.py` exercises the 15
+  decisions through scripted ports with no process at all, and
+  `test_finalize_github_release_publish_ports.py` asserts the 9 argument
+  vectors the adapters build and the answers they decode. Both suites are in
+  the Makefile recipe and in the contract module's `SECTION_MODULES`, and the
+  developers' guide's module map and boundary bullet now describe the four new
+  modules and their allowed directions.
+
+  **Paths at the edge.** The path-bearing `PublishRequest` moved from
+  `finalize_github_release_operations` to `finalize_github_release.py`, so the
+  decision module names no filesystem path at all: `PublishInputs` carries the
+  decoded records and the two ports, and the operations module no longer imports
+  `pathlib`.
+
+- [x] (2026-11-14) Answered the ninth review: the runner and the ports are
+  required, and no stage below the command line composes a sentence.
+
+  **The finding.** The Unit Architecture pre-merge row held that the injection
+  above was stated but not complete. `snapshot_release`, `record_snapshot`, and
+  `PublishInputs.runner` all defaulted to `release_io.run_gh`, so the process
+  dependency was optional at every one of those seams even though the command
+  line passed it explicitly; `publish_release` built its own reader and editor
+  from that runner through `_bound_ports`, which put adapter construction back
+  inside the orchestrator; and `record_candidate`, `record_snapshot`, and
+  `record_outcome` returned operator-facing sentences, which the command line
+  printed verbatim. The last point also contradicted the developers' guide's
+  claim that the messages module is the only one turning a decision into prose.
+
+  **The correction.** Every helper that starts a process now requires its
+  `runner`: the three defaults are gone and the only production supplier is
+  `finalize_github_release.py`. The binding of a call to one release moved to
+  `remote.reader_port` and `remote.editor_port`, which fix the tag and
+  repository beside the adapter that owns the argv; `PublishInputs` therefore
+  takes two required ports and no runner at all, and `_bound_ports` is deleted.
+  The three stage writers return the value they recorded — the identity, the
+  release state, `None` — and the command line composes the one line each
+  prints, so the only prose in the tower is a decision's sentence in the
+  messages module and the stage reports at the edge.
+
+  **The test that pins it.** `test_finalize_github_release_publish_ports`
+  composes both ports from one scripted `Replies` runner and calls
+  `publish_release`: the finalized path must ask `release view`, `release edit`,
+  `release view` in that order, and the refusal path must ask exactly one
+  `release view` and no edit.
+
+- [x] (2026-11-14) Answered the tenth review: the guide says which surface the
+  final pre-edit read covers, and what a rerun and a read-back compare.
+
+  **The finding.** CodeRabbit's reply in the developers' guide thread declined
+  to mark the earlier correction addressed, citing two sentences that were
+  still wrong. The first said the read taken immediately before the edit
+  reconciles "both surfaces"; it reconciles the GitHub release only, because
+  the registry was verified earlier. The second said "neither path re-reads the
+  assets" when a rerun finds the release already public.
+
+  **The correction.** The guide now says the pre-edit read covers the GitHub
+  release alone and that the registry is not read again, and it describes both
+  later passes accurately: a rerun that finds a public release compares its
+  listing with the trusted record and refuses a disagreement as
+  `PUBLISHED_MISMATCH`, the post-edit read-back makes the same comparison, and
+  neither can withdraw a release that is already public. Both statements match
+  `finalize_github_release_inventory.published_inventory`, which `readback`
+  calls before it records a success.
+
+  **The evidence.** A retry that finds a public release holding different bytes
+  is already pinned by
+  `test_a_retry_that_finds_changed_bytes_reports_a_published_mismatch`, and
+  `readback`'s doctest pins the read-back's comparison: it reports `finalized`
+  only for the trusted inventory.
+
+- [x] (2026-11-14) Rebased onto the parent's `ed436b133` and resolved its one
+  conflict.
+
+  **The conflict.** The parent branch now explains that link 5 runs only in a
+  publishing-mode run whose publisher jobs both succeeded, replacing the older
+  "links 1 to 5 run in every tagged workflow". This branch's own commit had
+  rewritten the same paragraph to report link 6 as wired, which dropped that
+  condition.
+
+  **The resolution.** The paragraph keeps the parent's condition, extended to
+  link 6 as well, and names the two jobs that host the last links. The
+  extension is what the workflow says: `finalize-github-release` runs only when
+  the registry publication, the draft upload, and the inventory verification
+  have each succeeded, so link 6's silence about an unverified payload carries
+  as little weight as link 5's.
+
+- [x] (2026-11-14) Answered the eleventh review: a public release carrying an
+  attachment the record never declared is refused, and the guide separates the
+  four verdicts that refusal can carry.
+
+  **The finding.** CodeRabbit declined to close the developers' guide thread
+  that asks the prose to distinguish a released inventory from an undeclared
+  attachment. The paragraph named `UNDECLARED_ASSET` on both later passes, but
+  `published_inventory` raised it only through reconciliation, which asks about
+  the names the record declares and so says nothing about an extra one. Only
+  the pre-edit gate refused an extra attachment. A public release that gained
+  one was therefore recorded as finalized.
+
+  **The correction.** The behavioural gap came first: `published_inventory` now
+  asks the undeclared question itself, after reconciliation, and returns
+  `UNDECLARED_ASSET` with `is_draft=False`, so both later passes refuse rather
+  than succeed. The diagnosis says the release is already public and cannot be
+  made a draft again, which `_undeclared_state` derives from the outcome, so a
+  refusal no longer claims the run did not edit a release it found public. The
+  guide and the users' guide now separate the four verdicts: bytes that disagree
+  (`PUBLISHED_MISMATCH`), an attachment never declared (`UNDECLARED_ASSET`), a
+  public release with the other flag seen before the edit (`NOT_A_DRAFT`), and
+  the same seen on the read-back (`PRERELEASE_MISMATCH`), which is judged apart
+  because a flag is a classification rather than a digest.
+
+  **The evidence.**
+  `test_publish_refuses_a_retry_that_finds_an_undeclared_attachment` and
+  `test_publish_refuses_a_readback_that_found_an_undeclared_attachment` drive
+  both paths through `cmd-mox`, assert the refusal and the "already public"
+  wording, and prove no result is recorded; the retry case also proves no edit
+  is attempted. `published_inventory`'s new doctest pins the verdict, and
+  `make test-release-publication` passed 1468 tests with the doctests enabled.
+
+- [x] (2026-11-14) Answered the twelfth review: the guide no longer claims the
+  I/O module is called where it is only implemented, and the diagnostic clause
+  says what the adapter actually trims.
+
+  **The finding.** CodeRabbit's assessment reply kept two documentation items
+  open after the rebase. The guide said `finalize_github_release_io.py` "holds
+  every effect", which reads as the deciding layer calling it. And it said a
+  failed `gh` call trims "only the trailing newline", when
+  `finalize_github_release_remote._failed` calls `str.strip`.
+
+  **The correction.** The guide now says the I/O module holds the
+  *implementation* of every effect and that the deciding module reaches one
+  only through a port. The diagnostic clause says the whitespace around
+  GitHub's own words is trimmed. Reading `_failed` for that wording turned up a
+  real defect the prose was hiding: `if stderr` was true for a stderr holding
+  only a line break, so the clause became `gh release view exited 5:` with
+  nothing after the colon. It now strips first and appends the diagnosis only
+  when something remains.
+
+  **The evidence.** `_failed` carries the whitespace-only case as a doctest, and
+  `test_read_release_drops_a_diagnostic_that_is_only_whitespace` drives it
+  through `read_release`. `make test-release-publication` passed 1469 tests
+  with the doctests enabled.
+
+- [x] (2026-11-14) Answered the thirteenth review: the ownership sentence now
+  names which effects the I/O module implements and which two it does not.
+
+  **The finding.** CodeRabbit approved `f2e992afb` and, in the same reply,
+  named one remaining inaccuracy: the sentence still said the I/O module
+  "implements every effect", yet the digest record's decoding is
+  `release_digest_record_files` and the operator report is printed by the
+  command layer. Both are visible in the source it cited.
+
+  **The correction.** The sentence now lists the effects a run performs that
+  the module does implement — launching `gh`, reading and staging the JSON
+  records, appending the action's outputs — and adds the two it deliberately
+  does not own, with the reason for each: decoding is shared with the verifier
+  so a record is accepted on one rule wherever it is read, and the report is
+  printed at the edge because that is where a stage's value becomes a sentence.
+
+  **The second item.** CodeRabbit also asked for #1115's read-only command
+  contract and exact-set asset rule to be reviewed at `ed436b133`. Neither file
+  is touched by this branch — `git diff --name-only ed436b133..HEAD` names no
+  `release_verify_inventory*`, `verify_release_inventory*`, or
+  `release_inventory.py` path — so this candidate's `test-workflow-contracts`
+  run executes the reviewed versions, and `pytest tests/workflow_contracts`
+  covers the whole directory rather than a selected subset.
 
 ## Surprises & discoveries
 
@@ -3752,6 +4403,10 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Evidence: the only `gh release` invocations in the repository are
   `gh release view` and `gh release create --draft`. Impact: "publish GitHub
   Release" is new behaviour, not a preserved one, and the runbook must say so.
+  Update 2026-11-09: #1068 adds the third reach.
+  `scripts/finalize_github_release_operations.py` makes exactly one
+  `gh release edit --draft=false` call, so "publish GitHub Release" is now
+  delivered rather than merely planned.
 
 - Observation: **the repository root holds a tracked `cyclopts/__init__.pyi`
   stub, and a namespace-package `cyclopts/` directory with no `__init__.py` wins

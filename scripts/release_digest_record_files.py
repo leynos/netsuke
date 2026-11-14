@@ -5,9 +5,10 @@ errors for digest records. It delegates entry validation to
 :class:`release_digest_record.DigestRecord`, so every consumer receives the
 same validated record after decoding.
 
-The declaration, upload, and inventory-verification CLIs use it in the release
-workflow today. The finalization CLI uses it too and its suite passes, but no
-workflow job invokes it yet.
+The declaration, upload, inventory-verification, and finalization CLIs all use
+it in the release workflow. The finalizer reads the record twice: once through
+the planner, and again immediately before the edit, so the release is
+reconciled against the same account at both points.
 
 Run via the declaration, inventory-verification, and finalization CLIs;
 behavioural coverage lives in ``scripts/tests/test_release_digest_record_files.py``.

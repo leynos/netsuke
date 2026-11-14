@@ -1,0 +1,267 @@
+---
+name: Finalize GitHub release
+description: >-
+  Un-draft a release only after its inventory has been verified, reconciling the
+  draft against the trusted pre-upload digest record and leaving it as a draft
+  whenever the evidence is incomplete or contradictory.
+
+# The token is an input rather than an implicit `secrets.GITHUB_TOKEN` so the
+# caller grants it once and this action reads it in one place. Draft releases
+# are visible only with write access, so the caller's `contents: write` is what
+# makes the snapshot return anything at all. Neither the candidate record nor
+# the digest record needs a token: both are read from disk.
+inputs:
+  tag:
+    description: >-
+      The release tag being finalized. It must match the tag the package
+      record names, or the run refuses before touching the release.
+    required: true
+  commit:
+    description: >-
+      The full commit the release publishes. The package record must name this
+      revision, so a finalizer cannot publish bytes from another candidate.
+    required: true
+  repository:
+    description: >-
+      The `OWNER/REPOSITORY` the release lives in. Passed explicitly because a
+      fork's release is not the upstream's.
+    required: true
+  identity-path:
+    description: >-
+      The package record `package-crate` retained. Its nested `identity`
+      object is the candidate whose tag, commit, and prerelease flag govern
+      the release.
+    required: true
+  digest-record-path:
+    description: >-
+      The trusted digest record the uploader wrote from the built bytes before
+      upload. It is the only comparison that can detect a substituted
+      attachment; the inventory verifier's output is deliberately not used,
+      because a record derived from GitHub agrees with GitHub however the
+      upload was tampered with.
+    required: true
+  work-directory:
+    description: >-
+      The directory holding this run's intermediate records: the candidate,
+      the release snapshot, the asset listing, the reconciliation plan, and the
+      outcome. It is created when absent.
+    required: true
+  github-token:
+    description: >-
+      The token used to read the draft release and to un-draft it. It is not
+      given to the planning step, which reads only bytes already on disk.
+    required: true
+
+outputs:
+  outcome:
+    description: >-
+      `finalized` when this run un-drafted the release, `already-finalized`
+      when an earlier attempt had already done so.
+    value: ${{ steps.finalize.outputs.outcome }}
+  prerelease:
+    description: >-
+      `true` or `false`, the prerelease state the validated candidate required.
+    value: ${{ steps.finalize.outputs.prerelease }}
+  plan-path:
+    description: The reconciliation plan the planning step recorded.
+    value: ${{ steps.plan.outputs.plan-path }}
+
+runs:
+  using: composite
+  # A composite action's steps cannot carry `timeout-minutes`: the runner does
+  # not support the key there (actions/runner#1979), so writing one would leave
+  # an inert key and no bound at all. Each adapter invocation is bounded by GNU
+  # `timeout` in the shell instead, and the workflow step that calls this action
+  # carries the aggregate ceiling. The pinned Cuprum release bounds no call in
+  # process, so without these a hung `gh` would hold the job open until the
+  # job's own timeout, with nothing naming the command that stopped answering.
+  steps:
+    - name: Validate inputs
+      id: validate
+      shell: bash
+      # No command bound, because this step runs only shell builtins and
+      # `mkdir`: there is no child process here that can hang.
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_REPOSITORY: ${{ inputs.repository }}
+        IDENTITY_PATH: ${{ inputs['identity-path'] }}
+        DIGEST_RECORD_PATH: ${{ inputs['digest-record-path'] }}
+        WORK_DIRECTORY: ${{ inputs['work-directory'] }}
+        # A presence flag rather than the token: this step only checks that the
+        # caller supplied one, and a step that does not call GitHub must not
+        # hold the credential the snapshot and finalize steps need.
+        HAS_GITHUB_TOKEN: ${{ inputs['github-token'] != '' }}
+      run: |
+        set -euo pipefail
+        require_value() {
+          local name="$1" value="$2"
+          if [[ -z "$value" ]]; then
+            printf '%s must not be empty\n' "$name" >&2
+            exit 1
+          fi
+        }
+        require_file() {
+          local name="$1" path="$2"
+          if [[ ! -f "$path" ]]; then
+            printf '%s (%s) is not a regular file\n' "$name" "$path" >&2
+            exit 1
+          fi
+        }
+        require_value tag "$RELEASE_TAG"
+        require_value commit "$RELEASE_COMMIT"
+        require_value repository "$RELEASE_REPOSITORY"
+        for name in IDENTITY_PATH DIGEST_RECORD_PATH WORK_DIRECTORY; do
+          require_value "$name" "${!name}"
+        done
+        if [[ "$HAS_GITHUB_TOKEN" != "true" ]]; then
+          printf 'github-token must not be empty\n' >&2
+          exit 1
+        fi
+        # Both records are read-only inputs, and a mistyped path would
+        # otherwise be reported later as an unreadable record rather than as
+        # the wiring fault it is.
+        require_file identity-path "$IDENTITY_PATH"
+        require_file digest-record-path "$DIGEST_RECORD_PATH"
+        mkdir -p "$WORK_DIRECTORY"
+
+    - name: Resolve the release candidate
+      id: resolve
+      shell: bash
+      # The record is local, but `uv` still builds the script's environment
+      # from its pinned dependencies, which is the slow part on a cold,
+      # cacheless runner.
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        IDENTITY_PATH: ${{ inputs['identity-path'] }}
+        WORK_DIRECTORY: ${{ inputs['work-directory'] }}
+      run: |
+        set -euo pipefail
+        # The package record's identity is re-validated here rather than
+        # trusted because `package-crate` wrote it: a hand-edited record must
+        # not be able to reclassify the release as a prerelease.
+        timeout --kill-after=30s 300s \
+          uv run --no-project --python 3.14 scripts/finalize_github_release.py \
+            resolve \
+            --identity "$IDENTITY_PATH" \
+            --tag "$RELEASE_TAG" \
+            --commit "$RELEASE_COMMIT" \
+            --output "$WORK_DIRECTORY/candidate.json"
+
+    - name: Snapshot the release state
+      id: snapshot
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_REPOSITORY: ${{ inputs.repository }}
+        WORK_DIRECTORY: ${{ inputs['work-directory'] }}
+        GH_TOKEN: ${{ inputs['github-token'] }}
+      run: |
+        set -euo pipefail
+        # One read-only release read, issued by the adapter and bounded by the
+        # same 300s as every other command here: a draft's asset listing is
+        # small, so anything slower is a stalled API. The single response is
+        # recorded twice — state.json for the draft flag and assets.json for
+        # the planner — because one call is the only way the two records can
+        # agree.
+        # `--no-build` matters here because this step holds the token: a source
+        # distribution would run its build backend with the token in scope, and
+        # the script's own `exclude-newer` bounds which releases uv may choose,
+        # not what a chosen package's build code does.
+        timeout --kill-after=30s 300s \
+          uv run --no-project --no-build --python 3.14 \
+            scripts/finalize_github_release.py \
+            snapshot \
+            --tag "$RELEASE_TAG" \
+            --repository "$RELEASE_REPOSITORY" \
+            --state-path "$WORK_DIRECTORY/state.json" \
+            --assets-path "$WORK_DIRECTORY/assets.json"
+
+    - name: Plan the release reconciliation
+      id: plan
+      shell: bash
+      env:
+        DIGEST_RECORD_PATH: ${{ inputs['digest-record-path'] }}
+        WORK_DIRECTORY: ${{ inputs['work-directory'] }}
+      run: |
+        set -euo pipefail
+        # The planner exits 1 for a conflict, 2 for a missing asset, 3 for an
+        # unreadable input, and 4 for an unwritable plan. The first two still
+        # write the plan, and the finalize step turns that plan into the
+        # diagnosis, so only a run that produced no plan stops here.
+        set +e
+        # A plan left by an earlier attempt must not outlive a run that wrote
+        # none: the presence check below would read the stale file as this
+        # run's answer, and the finalizer would act on a plan for other bytes.
+        rm -f "$WORK_DIRECTORY/plan.json"
+        timeout --kill-after=30s 300s \
+          uv run --no-project --python 3.14 scripts/finalize_github_release_cli.py \
+            --identity "$DIGEST_RECORD_PATH" \
+            --assets "$WORK_DIRECTORY/assets.json" \
+            --output "$WORK_DIRECTORY/plan.json"
+        status=$?
+        set -e
+        case "$status" in
+          0 | 1 | 2) ;;
+          124)
+            printf 'the reconciliation plan was not recorded within its 300s ' >&2
+            printf 'bound; this run has not edited the release\n' >&2
+            exit 1
+            ;;
+          *)
+            printf 'the reconciliation plan could not be recorded (status %s); ' \
+              "$status" >&2
+            printf 'this run has not edited the release\n' >&2
+            exit 1
+            ;;
+        esac
+        # The status alone cannot say a plan exists: `argparse` usage errors and
+        # `uv` resolution failures also exit 2, and an uncaught exception exits
+        # 1. Reporting the plan's path without checking would pass the step and
+        # leave the finalizer diagnosing an absent file as unreadable JSON.
+        if [[ ! -f "$WORK_DIRECTORY/plan.json" ]]; then
+          printf 'the planner exited %s without recording a plan; ' "$status" >&2
+          printf 'this run has not edited the release\n' >&2
+          exit 1
+        fi
+        printf 'plan-path=%s\n' "$WORK_DIRECTORY/plan.json" >>"$GITHUB_OUTPUT"
+
+    - name: Finalize the release
+      id: finalize
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_REPOSITORY: ${{ inputs.repository }}
+        DIGEST_RECORD_PATH: ${{ inputs['digest-record-path'] }}
+        WORK_DIRECTORY: ${{ inputs['work-directory'] }}
+        GH_TOKEN: ${{ inputs['github-token'] }}
+      run: |
+        set -euo pipefail
+        # This is the only step that changes the release, and it changes
+        # exactly one thing: the draft flag. A missing or conflicting asset,
+        # an unreadable record, and a failed API call each stop it before the
+        # edit, so a retry starts from verified bytes rather than from a
+        # rebuilt release. The release is reconciled against the trusted
+        # record a second time here, from a snapshot taken immediately before
+        # the edit, so a draft that changed since the planner's read is judged
+        # by the same policy. A failure after the edit has been attempted
+        # reports the release state as unknown rather than claiming it is
+        # still a draft. The 600s bound covers three `gh` calls; a timeout
+        # here leaves the release in the state the last call left it, so a
+        # retry converges either way. `--no-build` is the same guard as the
+        # snapshot step's: this is the other step holding the token, and no
+        # dependency of the adapter needs a build backend.
+        timeout --kill-after=30s 600s \
+          uv run --no-project --no-build --python 3.14 \
+            scripts/finalize_github_release.py \
+            publish \
+            --tag "$RELEASE_TAG" \
+            --commit "$RELEASE_COMMIT" \
+            --repository "$RELEASE_REPOSITORY" \
+            --candidate-path "$WORK_DIRECTORY/candidate.json" \
+            --plan-path "$WORK_DIRECTORY/plan.json" \
+            --digest-record-path "$DIGEST_RECORD_PATH" \
+            --result-path "$WORK_DIRECTORY/result.json" \
+            --github-output "$GITHUB_OUTPUT"

@@ -1,0 +1,339 @@
+"""Decide what a recorded release-reconciliation plan permits.
+
+The planner records one action per declared asset. This module turns that
+document into the single decision the finalizer needs: whether every asset is
+already correct, whether an upload is still owed, or whether the plan refuses
+publication. It also carries the decoding fault a malformed plan produces, so
+an unreadable plan is a verdict rather than an exception the adapter has to
+anticipate at every call site.
+
+Nothing here reads a file or runs a command; the adapter decodes the JSON and
+asks :func:`assess_plan` what it means.
+
+Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
+``scripts/tests/test_finalize_github_release_state.py``.
+"""
+
+import collections.abc as cabc
+import dataclasses
+import enum
+
+import release_reconcile_github
+
+
+class FinalizePolicyError(ValueError):
+    """Report a recorded value that cannot support a finalization decision."""
+
+
+class PlanVerdict(enum.Enum):
+    """What a recorded reconciliation plan says about publishing."""
+
+    #: Every declared asset is present with the expected digest.
+    VERIFIED = "verified"
+
+    #: At least one declared asset is absent and must be uploaded first.
+    UPLOAD_REQUIRED = "upload-required"
+
+    #: An asset disagrees with the trusted record, or could not be read.
+    REFUSED = "refused"
+
+    #: The plan document itself is not shaped like a plan.
+    UNREADABLE = "unreadable"
+
+
+_ACTION_VALUES = frozenset(
+    action.value for action in release_reconcile_github.AssetAction
+)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class PlanAssessment:
+    """Record what a plan permits and which assets stopped it.
+
+    Attributes
+    ----------
+    verdict
+        Whether the plan permits publication, requires an upload, refuses, or
+        could not be decoded.
+    conflicts
+        Names whose recorded bytes disagree with the trusted record.
+    unverifiable
+        Names whose recorded digest could not be established.
+    uploads
+        Names the plan still expects to upload.
+    detail
+        Why the document could not be read, for an
+        :attr:`PlanVerdict.UNREADABLE` verdict; empty otherwise.
+    """
+
+    verdict: PlanVerdict
+    conflicts: tuple[str, ...] = ()
+    unverifiable: tuple[str, ...] = ()
+    uploads: tuple[str, ...] = ()
+    detail: str = ""
+
+
+def _plan_rows(plan: cabc.Mapping[str, object]) -> tuple[tuple[str, str], ...]:
+    """Decode the plan's per-asset rows, refusing any other shape.
+
+    Returns
+    -------
+    tuple[tuple[str, str], ...]
+        One ``(name, action)`` pair per row, in the recorded order.
+
+    Raises
+    ------
+    FinalizePolicyError
+        If the rows are not pairs of a non-empty name and a known action.
+
+    Examples
+    --------
+    >>> _plan_rows({"actions": [["a", "skip-verified"]]})
+    (('a', 'skip-verified'),)
+    """
+    raw_rows = plan.get("actions")
+    if not isinstance(raw_rows, list):
+        msg = "the plan does not carry an actions list"
+        raise FinalizePolicyError(msg)
+    rows: list[tuple[str, str]] = []
+    # Sequence patterns match any two-element list or tuple, and never a
+    # string, so each arm below stands for exactly one of the diagnoses the
+    # original width-then-type-then-value checks reported.
+    for row in raw_rows:
+        match row:
+            case [str() as name, str() as action] if name and action in _ACTION_VALUES:
+                rows.append((name, action))
+            case [str() as name, _] if name:
+                msg = f"the plan row {row!r} carries an unknown action"
+                raise FinalizePolicyError(msg)
+            case [_, _]:
+                msg = f"the plan row {row!r} does not name an asset"
+                raise FinalizePolicyError(msg)
+            case _:
+                msg = f"the plan row {row!r} is not a name and action pair"
+                raise FinalizePolicyError(msg)
+    return tuple(rows)
+
+
+def _is_asset_name(value: object) -> bool:
+    """Report whether a decoded value is a usable asset name.
+
+    Returns
+    -------
+    bool
+        ``True`` for a non-empty string, which is the only shape an asset name
+        takes once decoded.
+    """
+    if not isinstance(value, str):
+        return False
+    return bool(value)
+
+
+def _asset_names(raw: object) -> list[str] | None:
+    """Return the decoded names when ``raw`` is a list of asset names.
+
+    Returns
+    -------
+    list[str] | None
+        The names, or ``None`` when the value is some other shape. Returning
+        the decoded list rather than a verdict keeps the caller from having to
+        re-check a value it has just been told is sound.
+    """
+    if not isinstance(raw, list):
+        return None
+    if not all(_is_asset_name(name) for name in raw):
+        return None
+    return raw
+
+
+def _named(plan: cabc.Mapping[str, object], member: str) -> tuple[str, ...]:
+    """Decode one optional list of asset names from the plan.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The recorded names, or an empty tuple when the member is absent.
+
+    Raises
+    ------
+    FinalizePolicyError
+        If the member is not a list of non-empty strings.
+
+    Examples
+    --------
+    >>> _named({}, "conflicts")
+    ()
+    >>> _named({"conflicts": ["a"]}, "conflicts")
+    ('a',)
+    """
+    names = _asset_names(plan.get(member, []))
+    if names is None:
+        msg = f"the plan's {member} member is not a list of asset names"
+        raise FinalizePolicyError(msg)
+    return tuple(names)
+
+
+def _selected(
+    rows: tuple[tuple[str, str], ...],
+    action: release_reconcile_github.AssetAction,
+) -> tuple[str, ...]:
+    """Return the names one action applies to, preserving the recorded order."""
+    return tuple(name for name, recorded in rows if recorded == action.value)
+
+
+def assess_plan(plan: object) -> PlanAssessment:
+    """Decide whether a recorded reconciliation plan permits publication.
+
+    Parameters
+    ----------
+    plan
+        The decoded JSON document ``finalize_github_release_cli`` wrote.
+
+    Returns
+    -------
+    PlanAssessment
+        The verdict, the names that justify it, and any decoding fault.
+
+    Notes
+    -----
+    A conflict outranks an upload, matching the planner's own precedence. The
+    plan's top-level name lists are unioned with the per-asset rows because the
+    two are written from the same decision but neither is derivable from the
+    other: a hand-edited plan may carry a row its summary omits, and a plan
+    from an older producer may carry only the summary.
+
+    An empty action list is refused rather than treated as fully verified. No
+    actions also describes a release with nothing declared, and un-drafting on
+    no evidence is the one outcome this stage exists to prevent.
+
+    Examples
+    --------
+    >>> assess_plan({"actions": [["a", "skip-verified"]]}).verdict.value
+    'verified'
+    >>> verdict = assess_plan({"actions": [["a", "upload"]]}).verdict
+    >>> verdict.value
+    'upload-required'
+    >>> assessment = assess_plan(
+    ...     {"actions": [["a", "conflict"]], "conflicts": ["a"]}
+    ... )
+    >>> assessment.verdict.value, assessment.conflicts
+    ('refused', ('a',))
+    >>> assess_plan({"actions": []}).verdict.value
+    'refused'
+    >>> assess_plan({"assets": {}}).verdict.value
+    'unreadable'
+    """
+    if not isinstance(plan, cabc.Mapping):
+        return PlanAssessment(
+            PlanVerdict.UNREADABLE, detail="the plan is not a JSON object"
+        )
+    try:
+        rows = _plan_rows(plan)
+        conflicts = (
+            *_named(plan, "conflicts"),
+            *_selected(rows, release_reconcile_github.AssetAction.CONFLICT),
+        )
+        unverifiable = (
+            *_named(plan, "unverifiable"),
+            *_selected(rows, release_reconcile_github.AssetAction.UNVERIFIABLE),
+        )
+    except FinalizePolicyError as error:
+        return PlanAssessment(PlanVerdict.UNREADABLE, detail=str(error))
+    return _verdict(rows, conflicts, unverifiable)
+
+
+def assess_actions(
+    actions: cabc.Iterable[tuple[str, release_reconcile_github.AssetAction]],
+) -> PlanAssessment:
+    """Decide whether a freshly planned action set permits publication.
+
+    Parameters
+    ----------
+    actions
+        One ``(name, action)`` pair per declared asset, as
+        :func:`release_reconcile_github.plan_asset_actions` returned them.
+
+    Returns
+    -------
+    PlanAssessment
+        The same verdict :func:`assess_plan` would reach for a recorded plan
+        holding these rows.
+
+    Notes
+    -----
+    The finalizer re-runs the planner's own reconciliation against the release
+    as it is immediately before the edit, so a draft that changed between the
+    planner's snapshot and the edit is judged by the same policy rather than
+    by a second, weaker rule. Going through the action values rather than
+    through a serialized plan keeps the two paths from drifting: there is one
+    precedence, stated once in :func:`_verdict`.
+
+    Examples
+    --------
+    >>> from release_reconcile_github import AssetAction
+    >>> assess_actions([("a", AssetAction.SKIP_VERIFIED)]).verdict.value
+    'verified'
+    >>> assess_actions([("a", AssetAction.UPLOAD)]).verdict.value
+    'upload-required'
+    >>> assess_actions([("a", AssetAction.CONFLICT)]).verdict.value
+    'refused'
+    >>> assess_actions([]).verdict.value
+    'refused'
+    """
+    settled = tuple(actions)
+    return _verdict(
+        tuple((name, action.value) for name, action in settled),
+        release_reconcile_github.conflicts(settled),
+        release_reconcile_github.unverifiable(settled),
+    )
+
+
+def _verdict(
+    rows: tuple[tuple[str, str], ...],
+    conflicts: tuple[str, ...],
+    unverifiable: tuple[str, ...],
+) -> PlanAssessment:
+    """Return the assessment a decoded plan's rows and name lists support.
+
+    Returns
+    -------
+    PlanAssessment
+        The verdict and the names that justify it. The order of the checks is
+        the policy: no decisions at all is refused before any finding is read,
+        because emptiness cannot be told apart from a plan nothing was checked
+        against, and the two refusals outrank an upload.
+    """
+    if not rows:
+        return PlanAssessment(
+            PlanVerdict.REFUSED,
+            detail=(
+                "the plan carries no asset decisions, so it is "
+                "indistinguishable from a release nothing was checked against"
+            ),
+        )
+    if conflicts or unverifiable:
+        return PlanAssessment(
+            PlanVerdict.REFUSED,
+            conflicts=_unique(conflicts),
+            unverifiable=_unique(unverifiable),
+        )
+    uploads = _selected(rows, release_reconcile_github.AssetAction.UPLOAD)
+    if uploads:
+        return PlanAssessment(PlanVerdict.UPLOAD_REQUIRED, uploads=_unique(uploads))
+    return PlanAssessment(PlanVerdict.VERIFIED)
+
+
+def _unique(names: cabc.Iterable[str]) -> tuple[str, ...]:
+    """Return names in first-seen order without repetition.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The distinct names, in the order they first appeared.
+
+    Examples
+    --------
+    >>> _unique(["b", "a", "b"])
+    ('b', 'a')
+    """
+    return tuple(dict.fromkeys(names))

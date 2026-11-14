@@ -2,10 +2,11 @@
 
 A child process is not a socket, but every source here is spawned from a
 workflow step that already holds a credential, so a source that runs a command
-is a place the release can reach an outside service. Three of them do and must:
+is a place the release can reach an outside service. Four of them do and must:
 ``package_crate_cli`` runs ``cargo package``, ``release_upload_remote`` runs
-``gh release upload`` and ``gh release view``, and ``ensure_draft_release``
-runs ``gh release view`` and ``gh release create``.
+``gh release upload`` and ``gh release view``, ``ensure_draft_release``
+runs ``gh release view`` and ``gh release create``, and
+``finalize_github_release_io`` runs ``gh release view`` and ``gh release edit``.
 
 The distinction matters because the command, not the import, decides whether
 the network is touched. ``subprocess`` alone says nothing about that, so a

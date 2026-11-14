@@ -115,33 +115,74 @@ is not one of the declared names. Build material that ships inside the packages
 -- the binary, licences, completions, and manual pages -- carries no release
 suffix and is simply left out of the upload. The job then hashes the declared
 bytes and retains the declaration and the digest record as workflow artefacts,
-so what was uploaded stays on record. No job in this workflow publishes a
-release. Only a release the workflow creates is a draft; when the tag already
-has one, the job attaches to that release whether or not it is public. An
-attached asset GitHub already reports with the recorded digest is skipped; an
-attached asset with different bytes stops the run, and the uploader never
-replaces an existing asset. An attached asset whose bytes cannot be established
--- GitHub reports no usable digest for it and the download that would settle
-the question fails -- stops the run too, but the upload plan records it apart
-from a conflict, because "the release holds the wrong bytes" and "nobody could
-read the bytes" call for different remedies. Rerunning a job is therefore safe,
-and a rerun cannot swap a release's bytes for a second build's.
+so what was uploaded stays on record. The release stays a draft until two later
+jobs have used them: the inventory verification job downloads every attached
+asset and checks it against that record, and the finalization job then
+un-drafts the release only when every declared asset already holds its trusted
+digest, taking the prerelease flag from the validated candidate identity. The
+finalization job reconciles the release against that record three times: from
+the plan the planner wrote, from a snapshot taken immediately before it
+un-drafts, and from the read-back taken afterwards. The pre-edit snapshot also
+refuses an attachment the record never declared: the inventory verification job
+ran earlier, so an asset added in between would otherwise be published with no
+digest check at all. The read-back asks that question too, and so does a rerun
+that finds the release already public, so a release that became public holding
+an inventory the record does not describe -- a declared asset whose bytes
+disagree, or an attachment the record never named -- is reported as a failure
+rather than recorded as a success, by the run that published it and by every
+pass after it.
+
+That guard governs the transition the job performs. It cannot make an already
+public release a draft again, so a rerun that begins with a public release
+leaves it public whether or not the verification and finalization jobs run: the
+guarantee is that this workflow never publishes an unverified draft, not that
+every public release it encounters has been verified.
 
 A publishing run then verifies what GitHub ended up holding. The
-`verify-release-inventory` job downloads every asset the draft release carries
-and compares it with the declaration and the digest record the publisher
-retained, so it judges the release against bytes recorded before the upload
-rather than against anything it downloaded itself. The job runs only when the
-metadata, crates.io, and release publishers all succeeded and the run is
-publishing, and it never contacts the registry: it holds `contents: write` to
-read a draft's listing, the verifier step receives no token at all, and its own
-bytes are already on disk. It stops the run when the release carries an asset
-the declaration does not name, when a declared asset is missing, when a
-downloaded asset's digest differs from the recorded one, or when the record
-does not cover exactly the declared set -- including a package swapped for
-another build's, which travels without a sidecar of its own. It does not
-publish, un-draft, or replace anything, and a person still promotes a valid
-draft.
+`verify-release-inventory` job runs only when the metadata, crates.io, and
+release publishers all succeeded and the run is publishing, and it never
+contacts the registry: it holds `contents: write` to read a draft's listing,
+the verifier step receives no token at all, and its own bytes are already on
+disk. It stops the run when the release carries an asset the declaration does
+not name, when a declared asset is missing, when a downloaded asset's digest
+differs from the recorded one, or when the record does not cover exactly the
+declared set -- including a package swapped for another build's, which travels
+without a sidecar of its own. It does not publish, un-draft, or replace
+anything.
+
+Only a release the workflow creates is a draft: when the tag already has one,
+the job attaches to that release whether or not it is public. An attached asset
+GitHub already reports with the recorded digest is skipped; an attached asset
+with different bytes stops the run, and the uploader never replaces an existing
+asset. An attached asset whose bytes cannot be established -- GitHub reports no
+usable digest for it and the download that would settle the question fails --
+stops the run too, but the upload plan records it apart from a conflict,
+because "the release holds the wrong bytes" and "nobody could read the bytes"
+call for different remedies. A plan that still owes an upload, or one that
+reports a conflicting or unverifiable asset, is refused before the release is
+read: the run makes no edit, and says only that, rather than claiming a state
+it has not observed. A refusal made from the snapshot taken just before the
+edit -- a declared asset that is missing, one whose bytes changed, an
+attachment the record never declared, or an unreadable record -- stops the run
+with the release still a draft. In either case, correct the cause and rerun the
+verification and finalization jobs, which read the retained records and never
+rebuild the release. Rerunning a job is therefore safe, and a rerun cannot swap
+a release's bytes for a second build's.
+
+A GitHub call that fails before the edit is different. The run has not edited
+the release, but it cannot say what state the release is in: a retry can begin
+after an earlier attempt already published it, and this attempt's first read is
+exactly what failed. The run therefore reports the state as **unknown** rather
+than claiming the release is still a draft. Inspect the release, or simply
+rerun the finalization job.
+
+A failed edit, or an unreadable read-back after one, is reported the same way,
+for the same reason: GitHub may have applied the edit before the response was
+lost. A rerun records an already-public release as finalized without editing it
+a second time, but only when its prerelease flag already matches the validated
+candidate and its inventory still matches the trusted record; a public release
+whose flag or inventory disagrees is refused, because it cannot be made a draft
+again. Either way the rerun is safe.
 
 A caller that invokes `./.github/actions/upload-declared-assets` directly,
 rather than through `release.yml`, must pass `commit` as the **full, lowercase

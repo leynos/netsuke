@@ -316,3 +316,65 @@ and is its consumer. The GitHub release finalizer and the consumer smoke test
 remain open in the trusted-packaging ExecPlan, so nothing un-drafts a release
 on the strength of a verified inventory yet, and no live release has exercised
 this stage.
+
+## Addendum (2026-11-13): digest-aware release finalization
+
+**Decision.** `release.yml` declares `finalize-github-release`, which un-drafts
+the release only after the registry publication and the downloaded GitHub
+inventory have both been verified. `publish-release` keeps creating and
+populating the draft; this job adds the decision of whether the draft may
+become public, rather than replacing the publisher. It needs `metadata`,
+`package-crate`, `publish-crates-io`, `publish-release`, and
+`verify-release-inventory`, holds `contents: write` and nothing else, declares
+no `environment`, and takes no `id-token`. Every dependency result is named
+explicitly in its guard for the reason recorded in the verification addendum
+above.
+
+- Reconciliation compares the draft's listing against the trusted digest
+  record the uploader wrote before upload, never against the verifier's output.
+  A record derived from GitHub agrees with GitHub however the upload was
+  tampered with, so reading back the verifier's result would make the check
+  vacuous.
+- A verified asset is skipped, and a missing asset is reported as an upload
+  gap. An asset with different bytes is a conflict. The job never uploads,
+  replaces, or deletes an asset, so the publication contract that refuses
+  conflicting bytes survives finalization unchanged.
+- The release and prerelease flags come from the validated candidate identity.
+  The package record's identity is re-decoded and re-checked rather than copied
+  on trust, and the `publish` command re-reads the candidate and requires its
+  tag and commit, so a hand-edited record cannot reclassify the release.
+- No module below the command line names a process. Each helper that reads or
+  writes takes the `gh` runner as a required argument, and only
+  `finalize_github_release.py` supplies `release_io.run_gh`; the two release
+  calls are bound to the candidate's tag and repository at that same edge, so
+  the orchestrator receives ports rather than an argv and a test drives the
+  whole composition with recorded answers. A stage that printed its own
+  sentence would own prose as well as a write, so each writer returns the value
+  it recorded and the command line composes the line an operator reads.
+- A verification failure, or a refusal made from the pre-edit snapshot of the
+  release, leaves the release as a draft. A refusal made before the release is
+  read — a candidate from another revision, or a plan that still owes an upload
+  — stops the run without an edit and claims nothing about a state it has not
+  read. A failed GitHub call reports the state as unknown, because a retry may
+  begin after an earlier attempt already published the release. A retry
+  converges: an interruption after the edit but before the result was recorded
+  is recognized on the next run as already finalized.
+- A public release whose prerelease flag disagrees with the candidate cannot be
+  repaired, because a public release cannot be made a draft again. The run
+  refuses before editing it, rather than rewriting the flag of a release
+  someone may already have downloaded.
+
+**What this decision does not claim.** Un-drafting is irreversible, so this
+stage is the one place where "verified" has to mean the bytes already attached,
+not the bytes a rebuild would produce. It does not re-verify the downloaded
+assets; that is the inventory job's work, and this job depends on it having
+succeeded. It does not repair a release: every fault it can see is a refusal
+that leaves the release unpublished for an operator.
+
+**Status.** Implemented, with job and action contracts in
+`tests/workflow_contracts/release_finalize_contract_test.py` and
+recorded-response suites for the adapter and planner. Not yet exercised by a
+live release, tag, or credential. This addendum supersedes the sentences in the
+2026-11-09 *the GitHub asset publisher* addendum's **Status** and in the
+2026-11-12 addendum above that name the finalizer as open; both record the
+state before this stage existed and are left as they were written.

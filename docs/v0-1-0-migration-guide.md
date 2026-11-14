@@ -975,12 +975,25 @@ Two consequences matter to anyone re-running a release:
 - The declaration and both digest records are retained as a
   `declared-assets-<job>-<attempt>` workflow artefact before the transfer, so a
   refusal later in the run does not cost the operator the evidence of what was
-  declared. The `verify-release-inventory` job then downloads what the release
-  holds and compares it with those records, so a release whose bytes differ
-  from the build stops the run. No job in this workflow publishes a release.
-  Only a release the workflow creates is a draft; when the tag already has one,
-  the job attaches to that release whether or not it is public. A person still
-  promotes a newly created draft.
+  declared. Two later jobs read them: the `verify-release-inventory` job
+  downloads what the release holds and compares it with those records, so a
+  release whose downloaded bytes differ from the staged ones stops the run, and
+  the finalizer un-drafts the release only when every declared asset already
+  holds its recorded digest and the release carries no attachment the record
+  never declared. Comparing the downloads with the record witnesses the bytes
+  the publisher staged; it does not prove those bytes came from the intended
+  build, as the [developers' guide](developers-guide.md) explains. Those checks
+  narrow the gap between the verified snapshot and the published release
+  without closing it, because an asset can still change between the finalizer's
+  own reconciliation and its edit. The finalizer's check governs the un-draft
+  it performs: a release that is already public stays public whether or not
+  those jobs run, so the guarantee is that the workflow never publishes an
+  unverified draft, not that it verifies one it finds already published. Only a
+  release the workflow creates is a draft; when the tag already has one, the
+  job attaches to that release whether or not it is public. A missing or
+  conflicting asset, or an attachment the record never declared, stops the run
+  before it publishes the release; a rerun that finds one already public is
+  refused rather than recorded as finalized.
 
 Manifests, local builds, and the published contents are unchanged, and no new
 release input was added: the dry run and the publishing lane keep using the same

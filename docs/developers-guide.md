@@ -2837,17 +2837,18 @@ selector that wrote nothing fails there rather than at the uploader. Each of
 those fails the action's own step, which is what stops a bad tree from reaching
 the network at all.
 
-The upload path ends here for now. The retained `trusted.json` is consumed by
-the `verify-release-inventory` job, which compares the downloaded release
-assets against it. `finalize-github-release` and `consumer-smoke` are planned
-job-matched actions that do not exist yet, and no job in this workflow
-publishes a release. Only a release the workflow creates is a draft:
-`ensure_draft_release.py` returns as soon as the tag already has one, without
-checking whether it is public, so a rerun attaches assets to whatever release
-the tag already names. The record is retained *for* those jobs, and the
-verifier is the first of them; wiring the finalizer is its own work. Read the
-section above as describing the implemented upload path, not a completed
-finalization hand-off.
+The upload path ends here. The retained `trusted.json` is consumed by
+`verify-release-inventory`, which compares the downloaded release assets
+against it, and then by `finalize-github-release`, which reconciles the draft
+against the same record before un-drafting it. Only a release the workflow
+creates is a draft: `ensure_draft_release.py` returns as soon as the tag
+already has one, without checking whether it is public, so a rerun attaches
+assets to whatever release the tag already names. `consumer-smoke` remains a
+planned job-matched action, so the release path ends at a public release whose
+published bytes have not yet been exercised as a consumer would. Read the
+section above as describing the upload path; the verification and finalization
+hand-off is described under *Verifying the downloaded release inventory* and
+*Finalizing the verified release*.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
@@ -3178,6 +3179,7 @@ the separate GitHub release writer after their prerequisites succeed.
 | `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: read`                    | `dry_run == 'true'`            |
 | `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | `should_publish == 'true'`     |
 | `verify-release-inventory`    | `metadata`, `publish-crates-io`, `publish-release`          | `contents: write`                   | both publishers succeeded      |
+| `finalize-github-release`     | `metadata`, `package-crate`, both publishers, the verifier  | `contents: write`                   | every prerequisite succeeded   |
 
 *Table 1: `release.yml` jobs, their dependencies, permissions, and mode.*
 
@@ -3187,12 +3189,14 @@ declared in `release.yml` itself because crates.io Trusted Publishing
 identifies the workflow that requests the OIDC token. It has exactly
 `contents: read` and `id-token: write`, plus the `crates-io` environment. The
 short-lived token is exchanged only after the registry decision says `publish`.
-`publish-release` and `verify-release-inventory` are the only jobs with
-`contents: write`; no other job holds it, and neither publishing job receives
-the other's authority. The verifier holds the scope only because a draft's
-assets are invisible without it, while its own calls stay read-only, as the
-verification section below describes. `release-admission-canaries` additionally
-takes `actions: read` to inspect prior runs.
+`publish-release`, `verify-release-inventory`, and `finalize-github-release`
+are the only jobs with `contents: write`. Only the first and last change the
+release: the verifier holds the scope because a draft release is visible only
+with write access, and it reads without mutating, as the verification section
+below describes. Neither publishing job receives the other's authority, and the
+finalizer takes no `id-token` and declares no `environment`, so it can neither
+exchange nor hold a registry credential. `release-admission-canaries`
+additionally takes `actions: read` to inspect prior runs.
 
 `release` and `publish-release` carry the same five-job dependency list and
 mutually exclusive guards, so a run is a rehearsal or a publication and never
@@ -3218,13 +3222,22 @@ and digest before it probes crates.io. Its action consumes the recorded
 `cargo build`.
 
 The registry job and `publish-release` remain independent siblings: neither
-needs the other, so an upload interrupted on one surface can be resumed without
-repeating the other. `verify-release-inventory` needs both. A tagged run in
-which either publisher fails or is skipped therefore leaves the draft
-unverified. Nothing gates publication on that result yet: a person can still
-publish the draft by hand. The planned finalizer closes that gap by depending
-on this job before it un-drafts the release, so the two surfaces cannot diverge
-at the point the release becomes public.
+depends on the other, so an upload interrupted on one surface can be resumed
+without repeating the other. `verify-release-inventory` runs only after both. A
+tagged run in which either publisher fails or is skipped therefore leaves the
+draft unverified, and `finalize-github-release` runs only after the verifier as
+well, so the release's inventory is reconciled once more by a read taken
+immediately before the edit. That read covers the GitHub release alone: the
+registry was verified earlier and is not read again. Those checks narrow the
+gap between the verified snapshot and the release this finalizer publishes;
+they cannot close it, because an asset can still change between that read and
+the edit.
+
+That gate governs the transition, not a state. A rerun that begins with a
+release already public leaves it public whether or not the verifier and
+finalizer run, so the guarantee is that this finalizer never publishes an
+unverified draft; it cannot vouch for a release that was already public before
+the run, including one whose publishers both fail.
 
 ### Verifying the downloaded release inventory
 
@@ -3369,6 +3382,260 @@ JSONL carry only fixed operation, phase, outcome, and error-category labels.
 They name no asset, tag, path, or raw error text, and the record omits the
 upload error because the verifier never uploads.
 
+### Finalizing the verified release
+
+`finalize-github-release` is the last stage of the publication path and the
+only one whose effect cannot be undone: a release that becomes public cannot be
+made a draft again. It runs after `verify-release-inventory`, whose success is
+the permission to proceed, and it makes exactly one change — the draft flag. It
+never uploads, replaces, or deletes an asset; a release missing a declared
+asset is a failure for the uploader to repair, not an invitation to attach one
+here.
+
+The job needs `metadata`, `package-crate`, `publish-crates-io`,
+`publish-release`, and `verify-release-inventory`, and its guard names each
+result explicitly beside `!cancelled()` and `should_publish == 'true'`, for the
+same reason the verifier's does. It checks out
+`needs.metadata.outputs.candidate_commit` with `persist-credentials: false`, so
+the finalizer that decides is the code the publisher ran, and it downloads two
+artefacts by exact name: `release-crate-package` for the candidate identity and
+the publisher's `trusted-artifact` output for the pre-upload digest record.
+
+Both downloads land at the artefact's own root, and that is what makes
+`trusted/trusted.json` the record's path: `upload-artifact` stores each
+retained file relative to the deepest directory its paths share, and the
+publisher's three records share one, so the downloaded tree is flat. The
+retention contract pins that layout — every retained path must share a parent —
+and a case that moves `selection.json` into a subdirectory shows the assertion
+fires. Without it, retaining one record from a sibling directory would lift the
+shared root, nest the files a segment deeper, and leave this job reading a path
+that no longer resolves.
+
+`.github/actions/finalize-github-release` holds five bounded steps:
+
+| Step                          | Network calls                                         | Token      |
+| ----------------------------- | ----------------------------------------------------- | ---------- |
+| Validate inputs               | none                                                  | none       |
+| Resolve the release candidate | none                                                  | none       |
+| Snapshot the release state    | one `gh release view`                                 | `GH_TOKEN` |
+| Plan the reconciliation       | none                                                  | none       |
+| Finalize the release          | two `gh release view` reads and one `gh release edit` | `GH_TOKEN` |
+
+*Table 3: The finalization action's steps and credential routing.*
+
+Every adapter invocation runs under GNU `timeout`. A composite action's steps
+cannot carry `timeout-minutes`: the runner does not support the key there
+([actions/runner#1979](https://github.com/actions/runner/issues/1979)), so a
+key written in the action would be inert and the step would look bounded
+without being bounded. The bound therefore lives in the shell, as
+`timeout --kill-after=30s` around each `uv run`: 300 seconds for the resolver,
+the snapshot, and the planner, and 600 for the finalizer. The workflow step
+that calls the action carries the aggregate ceiling of 28 minutes, inside the
+job's own 30, so a hung `gh` call is reported against that step rather than as
+the whole job. The pinned Cuprum release bounds no call in process, so these
+are the only bounds there are. Expressions reach the shell only through `env`,
+so each is evaluated once, and both records the planner reads are checked to
+exist before anything is written. The validate step confirms that the caller
+supplied a token by testing a presence flag rather than by holding the token,
+so the credential exists in exactly the two steps that reach GitHub.
+
+`scripts/finalize_github_release.py` names the three commands the action
+invokes. `resolve` decodes the package record and refuses an identity whose
+tag, commit, or prerelease shape is not this run's candidate. `snapshot` reads
+the draft's flags and reported digests. `publish` is the only command that
+changes anything, and it decides from two records already on disk:
+
+- the candidate, which the resolved identity supplies; and
+- the reconciliation plan, which `finalize_github_release_cli.py` wrote from
+  the trusted record and the snapshot's asset listing.
+
+Both ends of the run apply the same agreement, and it exists once.
+`release_candidate.identity_refusal` takes an identity and the run's tag and
+commit and returns the reason they disagree, or `None`. `resolve` and
+`publish`, on the package record and the candidate record respectively, each
+map that one answer onto the exit status their stage reports. The helper sits
+in the policy module rather than in either adapter, so the two adapters apply
+one rule without importing each other, and a new check of the same kind belongs
+there rather than in a third copy of the comparison.
+
+The modules behind that command line are split by what a reader has to know to
+change them. `finalize_github_release_io.py` holds the implementation of the
+effects a run performs — launching the allowlisted `gh` command, reading and
+staging the JSON records, and appending the action's outputs — beside the
+exit-status vocabulary and the `FinalizeError` type that carries a status with
+its diagnosis; holding an implementation is not the same as reaching it, and
+the module that decides reaches an effect only through a port. Two effects it
+deliberately does not own. Decoding the digest record belongs to
+`release_digest_record_files`, which the verifier reads through as well, so a
+record is accepted on one rule wherever it is read. Printing the operator's
+report belongs to the command layer, which is the only place a stage's value
+becomes a sentence. `finalize_github_release_remote.py` writes the only two
+GitHub calls a run makes, one read and one edit, and returns what they answered
+as values rather than as exceptions; the process effect is a required
+`release_io.Runner`, supplied by the command layer and by nothing below it, so
+a test supplies recorded answers and starts no `gh`. That module also binds a
+call to one release: `reader_port` and `editor_port` fix the tag and
+repository, so the orchestrator receives a callable it can only call and never
+assembles a token of the call itself. `finalize_github_release_decisions.py`
+decides from those values alone: it reads no file, starts no process, composes
+no prose, and names no exit status. `finalize_github_release_ports.py` states
+the two shapes that decision exchanges with its adapters, `ReleaseRead` and
+`RemoteAnswer`, and the protocols a caller injects to replace either call.
+`finalize_github_release_operations.py` orchestrates the one publishing
+decision from a `PublishInputs` value of decoded records and ports, never
+paths, and `finalize_github_release_records.py` performs the reads and writes
+around the edit. Both ports are required fields with no default, because a
+default would have to name the process the orchestrator is meant to decide
+without. The path-bearing `PublishRequest` is the `publish` command's own
+parameter in `finalize_github_release.py`.
+`finalize_github_release_stage_records.py` writes what the two read-only
+commands observed, so a reader asking what a refusal might have left on disk
+need not open the module that surrounds the edit.
+`finalize_github_release_reconcile.py` re-applies the planner's own
+reconciliation to a snapshot taken later in the same run, and
+`finalize_github_release_plan.py` and `finalize_github_release_state.py` decide
+from decoded values and touch no file. `finalize_github_release_messages.py` is
+the only module that turns a decision into the sentence an operator reads, so
+changing how a refusal reads cannot change what the step decides. The writers
+it does not cover return the value they wrote rather than a description of it:
+`resolve`, `snapshot`, and the recorded outcome each print one line that
+`finalize_github_release.py` composes, which is why a stage's wording cannot
+change what it wrote either. Fallibility is in each helper's signature rather
+than in a process effect a reader has to trace: every helper that cannot
+continue raises `FinalizeError`, declaring it under *Raises* where it raises
+directly and under *Notes* where it only propagates one, and only
+`finalize_github_release.py` turns that status into the step's exit. A
+publishing decision travels as a `PublishOutcome` instead, which `_exit_status`
+maps and `messages.describe` renders. `make test-release-publication` names all
+of them on its doctest command line, so deleting either the module or its
+example fails the bank rather than quietly dropping coverage.
+
+Its PEP 723 block pins `cyclopts` and `cuprum` to exact versions, as the
+`scripts/ci` helpers do, rather than to the ranges most scripts declare. The
+pins cover those two direct dependencies only, so their transitive closure
+still resolves on every run: the block narrows the graph rather than freezing
+it. The other release scripts run earlier in the chain; this one un-drafts a
+release with a write token, and the two pins are one fewer thing that can
+differ between the run that was rehearsed and the run that publishes.
+
+The same block sets `exclude-newer`, because `uv` resolves and installs while
+the step's `GH_TOKEN` is in the environment. A dependency release published
+after the cutoff is refused rather than installed, which keeps a compromised
+later release of a transitive package out of the step that can un-draft. A
+lockfile would pin the closure exactly, but the repository keeps no per-script
+locks, and running with `--locked` would fail the release job the first time
+someone edited a pin without relocking — a generated file no gate verifies. The
+cutoff needs neither. The action contract asserts the `[tool.uv]` table and the
+cutoff line, so removing either fails `make test-workflow-contracts`.
+
+A cutoff bounds which releases `uv` may choose; it says nothing about what a
+chosen package does while it installs. The two steps that hold `GH_TOKEN`
+therefore run `uv run --no-build`, so a dependency that ships no wheel fails
+resolution instead of running a build backend beside the credential, and the
+two steps that hold no token keep the default. The contract requires the flag
+on both token-bearing steps as well as asserting the finalize step's whole
+command, and the `source-build-allowed` mutation proves the requirement fires.
+`make test-release-publication` pins Cuprum and Cyclopts at the same exact
+releases for the same reason: the suites must exercise the pair the adapter
+runs on rather than whichever release a range resolves to next.
+
+The trusted record is the input, never the verifier's output. A record derived
+from GitHub agrees with GitHub however the upload was tampered with: replace an
+archive together with its sidecar and the download still agrees perfectly.
+Comparing the draft against the record written before upload is what makes a
+substitution visible, and that comparison is only meaningful if the record
+comes from the build.
+
+`publish` exits with the vocabulary below. The plan step runs the planner
+instead, whose own statuses are in Table 10, and reads `0`, `1`, and `2` as
+normal: a conflict and a missing asset are both decisions the finalize step
+turns into a diagnosis, and only a run whose planner could not record a plan
+stops there. The status alone cannot say a plan exists, because an `argparse`
+usage error and a `uv` resolution failure also exit `2` and an uncaught
+exception exits `1`. The step therefore deletes any plan an earlier attempt
+left behind before it runs the planner, and refuses to report a plan path if
+the run wrote no plan — otherwise a stale file, or an absent one, would be read
+as this run's answer and the diagnosis would name the wrong stage.
+
+| Exit | Meaning                                                      |
+| ---- | ------------------------------------------------------------ |
+| 0    | the release is public with the candidate's prerelease state  |
+| 1    | the candidate or plan refuses, or the release contradicts it |
+| 2    | the plan still requires an upload                            |
+| 3    | an input record could not be read or decoded                 |
+| 4    | an output record could not be written                        |
+| 5    | GitHub could not be read, or would not perform the edit      |
+
+*Table 4: `finalize_github_release.py` exit statuses.*
+
+Exits 1 and 2 publish nothing. Exit 1 covers every refusal — an asset with
+different bytes, an asset whose digest could not be established, an attachment
+the record never declared, a candidate that names another tag or commit, and a
+release whose public state contradicts the candidate. A refusal made before the
+edit leaves the draft untouched; one made after it, or one about a release an
+earlier attempt published, names a release that is public and that this run
+cannot correct. Exit 2 names the assets the declared upload contract still
+owes. Exit 3 is an input fault and stops the run before the edit, though the
+snapshot read that precedes the fresh reconciliation may already have happened.
+Exit 4 is always an output fault, and where it happens decides what it means: a
+candidate or snapshot record that could not be written leaves the draft
+untouched, while `publish` failing to record its outcome says the release
+itself is already final, because the edit succeeded before the record was
+written. Read the message rather than the status to tell those apart. Exit 5
+covers both an unreadable release and an edit GitHub accepted without
+publishing it; the read-back distinguishes them, and neither is retried by this
+stage.
+
+The finalize step neither sets `continue-on-error` nor swallows the adapter's
+exit status, which is how "leave the release a draft on failure" is
+implemented: any refusal fails the step, and a failed step leaves the draft
+exactly as the previous attempt left it.
+
+#### Recovering a release that was not finalized
+
+Recovery is a rerun, never a rebuild. Fix what the diagnosis names — usually by
+rerunning the uploader so the missing asset is attached, or by investigating
+the bytes for a conflict — and then rerun the finalization job in the same
+workflow run. It reuses the run's `release-crate-package` and
+`declared-assets-publish-release-<attempt>` artefacts, so the candidate and the
+trusted record are the ones the release was built from.
+
+Four states are worth recognizing:
+
+- **Interrupted after the edit.** The read-back establishes that the release is
+  public with the wanted flag and the trusted inventory, so the rerun records
+  `already-finalized` and makes no second edit. This is why the command reads
+  before it writes.
+- **Interrupted before the edit.** The draft is unchanged, the rerun plans the
+  same reconciliation, and the one edit is still to come.
+- **Missing asset.** The planner reports `upload` for it and the finalize step
+  refuses with the name. Rerun the uploader first; there is no path here that
+  attaches an asset.
+- **Conflicting asset.** The planner reports `conflict` and the finalize step
+  refuses. A published digest is a promise to whoever already downloaded it, so
+  the release stays a draft until a person decides what the correct bytes are.
+- **Public without the recorded inventory.** The rerun reads a release that is
+  already public and finds a declared asset whose bytes disagree, or an
+  attachment the record never declared. It refuses with the name, because a
+  public release cannot be made a draft again and this run replaces nothing:
+  those bytes need a person's decision before the release is announced.
+
+A release left public with the wrong prerelease flag is the one state this
+stage cannot repair; it refuses before editing, because it cannot tell a
+mistaken flag from a deliberate one and a public release cannot be made a draft
+again. The output `prerelease` names the flag the validated candidate required,
+which is what an operator needs to decide.
+
+`tests/workflow_contracts/release_finalize_contract_test.py` pins the action's
+steps, their environment, and their token routing, the job's guard,
+permissions, and artefact selection, and the exact command the finalize step
+runs, and proves each assertion against a deliberate mutation. The adapter's
+own behaviour is covered by `make test-release-publication`, which drives
+interrupted retries, an already-finalized release, an already-public release
+that must not be edited, an undeclared attachment seen before the edit and on
+both later passes, missing and conflicting assets, and API and output failures
+through `cmd-mox`.
+
 ### Crate-package operation telemetry
 
 The `package-crate` job records the `release_package` operation through
@@ -3466,7 +3733,7 @@ one from the other.
 | Installed binary | `netsuke`                       | `[[bin]] name`   |
 | Packaged archive | `netsuke-build-<version>.crate` | `cargo package`  |
 
-*Table 3: The package-versus-binary identity contract.* (ADR-0007 records why
+*Table 5: The package-versus-binary identity contract.* (ADR-0007 records why
 the crate cannot be called `netsuke`.)
 
 The trusted-publication plan targets a flat set of twenty names: the six
@@ -3484,7 +3751,7 @@ Linux, two `.pkg` for macOS, two `.msi` for Windows.
 | Hoist adapter's `expected_archive_names`        | six archives and their six sidecars |
 | `PLATFORM_FORMATS` held against the staged tree | eight operating-system packages     |
 
-*Table 4: The two sources of the planned twenty-name declaration.*
+*Table 6: The two sources of the planned twenty-name declaration.*
 
 Holding the staged tree to a count is what makes a failed package build a
 refusal rather than a smaller declaration. The
@@ -3525,7 +3792,7 @@ state determines whether the workflow exchanges credentials or stops:
 | `yanked`        | Fail without mutation                    | No                  | None                      |
 | `indeterminate` | Fail closed without mutation             | No                  | None                      |
 
-*Table 5: crates.io version-state decisions.*
+*Table 7: crates.io version-state decisions.*
 
 The `crates_io_registry_http.py` adapter permits HTTPS requests only to
 `crates.io` and `static.crates.io`. urllib applies the same host and scheme
@@ -3605,7 +3872,7 @@ check run for both `publish` and `skip` decisions.
 | Upload failure or ambiguous response              | 2         | Stop; do not retry in the same job     |
 | Downloaded bytes match / fail verification        | 0 / 2     | Verified / fail the job                |
 
-*Table 6: Exit statuses used by the candidate and registry CLIs.*
+*Table 8: Exit statuses used by the candidate and registry CLIs.*
 
 ### Recovering a partial crates.io publication
 
@@ -3639,11 +3906,11 @@ configuration. Configure GitHub environment `crates-io` and register the
 repository, `release.yml`, and that environment with crates.io. The workflow
 contains the pinned short-lived OIDC exchange, but no live exchange or release
 has exercised this publisher. `publish-release` still starts without waiting
-for crates.io, so the two surfaces can be briefly out of step; the later
-`verify-release-inventory` job needs both publishers to succeed and records the
-digests of the GitHub assets. `publish-crates-io` alone verifies the registry
-bytes. The finalizer that would refuse to make the release public while either
-surface is unproven is still open.
+for crates.io, so the two surfaces can be briefly out of step;
+`verify-release-inventory` needs both publishers to succeed and records the
+digests of the GitHub assets, and `finalize-github-release` needs the verifier,
+so the release cannot become public while either surface is unproven.
+`publish-crates-io` alone verifies the registry bytes.
 
 ### Selecting the declared payload
 
@@ -3741,13 +4008,13 @@ presents a payload matching its declaration record but not its selection record
 is refused as a conflict.
 
 The provenance chain has six links and each one refuses rather than
-interpolates. Links 1 to 4 are steps of the two publisher jobs, and link 5 runs
-only in a publishing-mode run whose publisher jobs both succeeded: a tagged
-workflow that skips verification, or that stops before reaching it, has not
-verified its assets, so its silence says nothing about the bytes a release
-holds. Link 6 is written and tested but is not yet wired into `release.yml`, so
-today the record is consumed by verification and retained past it, but nothing
-yet acts on the verified result.
+interpolates. Links 1 to 4 are steps of the two publisher jobs, and links 5 and
+6 run only in a publishing-mode run whose earlier stages all succeeded: a
+tagged workflow that skips verification, or that stops before reaching it, has
+not verified its assets, so its silence says nothing about the bytes a release
+holds. Link 5 runs in `verify-release-inventory` and link 6 in
+`finalize-github-release`. Nothing in the chain reads another link's output as
+its evidence; each compares against the record the declaration stage wrote.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
 2. `select_release_payload_cli` hashes the sources it approves, requires them
@@ -3763,13 +4030,15 @@ yet acts on the verified result.
    against the record, and refuses a record that does not cover exactly the
    declared set. `verify-release-inventory` runs it over the assets GitHub
    actually attached.
-6. *Planned.* `finalize_github_release_cli --identity` reads the same record to
-   decide what a re-run should do.
+6. `finalize_github_release_cli --identity` reads the same record to decide
+   what a re-run should do, and `finalize_github_release.py publish` re-reads
+   it to reconcile the release again immediately before the edit.
 
 The action retains `declaration.txt`, `selection.json`, and `trusted.json` as a
-workflow artefact for exactly that reason: a job added to the chain later needs
-this run's account of the release, and a record reconstructed after the fact
-would be derived from the bytes it is meant to judge.
+workflow artefact because the later links run in other jobs and need this run's
+account of the release. A record reconstructed after the fact would be derived
+from the bytes it is meant to judge, which is the substitution the chain exists
+to detect.
 
 The record is never derived from downloaded bytes, and that is the whole point.
 A record derived from the download proves only that GitHub agrees with itself:
@@ -3817,7 +4086,7 @@ four actions, and the name's own evidence decides which:
 | `CONFLICT`      | the attached digest was read and differs from the record's     |
 | `UNVERIFIABLE`  | the name is attached and no digest could be established for it |
 
-*Table 7: The four actions `plan_asset_actions` assigns.*
+*Table 9: The four actions `plan_asset_actions` assigns.*
 
 `CONFLICT` and `UNVERIFIABLE` both stop the upload, and they are kept apart
 because their remedies differ. A conflict says the release holds demonstrably
@@ -3826,6 +4095,9 @@ name says the listing or the download failed, so the release may be perfectly
 correct. A run that reported the second as the first would send an operator
 hunting for wrong bytes that do not exist, which is why `write_plan` records
 them under separate keys and `blocked_message` names each clause that applies.
+`finalize_github_release_cli` prints each clause too, so the distinction
+survives in the workflow log and an operator does not have to open the retained
+plan to learn which of the two stopped the run.
 
 `finalize_github_release_cli` turns a plan of all four actions into an exit
 status, with `UNVERIFIABLE` sharing `EXIT_CONFLICT` because both must stop the
@@ -3833,6 +4105,44 @@ run just as firmly; only the plan keeps them apart. Only names the record
 declares are decided: an attached asset the record never claimed is left alone
 here because refusing over it would block a release over a file the plan never
 named.
+
+The finalize step does not take that decision on trust. It re-reads the release
+immediately before the single edit and reconciles that fresh listing against
+the trusted record again, using the planner's own policy rather than a second
+rule. A declared asset that vanished is `EXIT_UPLOAD_REQUIRED`; one whose bytes
+changed is `EXIT_REFUSED`; an unreadable record is `EXIT_INPUT_UNREADABLE`. The
+plan answers for the snapshot the record step took, so publishing a release
+whose inventory has since changed would report a completeness nothing checked.
+
+That pass asks one question the plan does not. The planner tolerates an
+attachment the record never declared, because a plan naming every extra file
+would refuse a release over something it was never asked about. The verifier
+rejects such an attachment, but it ran earlier, and one added in between would
+reach publication with no digest check at all, since the record cannot describe
+bytes it never claimed. The pre-edit pass therefore refuses an undeclared
+attachment as `EXIT_REFUSED`, naming it, before the irreversible edit.
+`finalize_github_release_inventory` holds that decision, so the planner's own
+reconciliation keeps its narrower answer and the plan and the pre-edit pass
+cannot disagree about a declared asset.
+
+What the second pass cannot close is the window between its read and the edit.
+GitHub offers no conditional edit, so a writer that changes the draft in those
+milliseconds is not observed. The window is one API call wide, and both
+endpoints are the same trusted record, which narrows it but does not close it:
+a run that loses the race can publish a release holding bytes the record does
+not match. No later pass repairs that, but both later passes report it. A rerun
+that finds the release already public compares that listing with the trusted
+record, and the post-edit read-back makes the same comparison against the same
+record. Bytes that disagree are `PUBLISHED_MISMATCH`, and an attachment the
+record never declared is `UNDECLARED_ASSET`, refused on both paths for the
+reason the pre-edit pass refuses it: the record cannot describe bytes it never
+named, so no digest comparison can vouch for them. The prerelease flag is
+judged separately, because it is a classification rather than a digest. A rerun
+that finds a public release carrying the other flag stops as `NOT_A_DRAFT`, and
+a read-back that sees one reports `PRERELEASE_MISMATCH`; a public release
+cannot be made a draft again, so neither run can correct it. Neither path can
+withdraw a release that is already public, so a refusal stands until an
+operator acts.
 
 | Exit constant            | Code | Meaning                                                  |
 | ------------------------ | ---- | -------------------------------------------------------- |
@@ -3842,7 +4152,7 @@ named.
 | `EXIT_INPUT_UNREADABLE`  | 3    | the record cannot support a decision at all              |
 | `EXIT_OUTPUT_UNWRITABLE` | 4    | the reconciliation plan could not be written             |
 
-*Table 8: `finalize_github_release_cli` exit statuses.*
+*Table 10: `finalize_github_release_cli` exit statuses.*
 
 Conflict outranks upload when a draft holds both kinds of finding. The
 precedence is stated in `_verdict` rather than taken from the numeric maximum,
@@ -3850,6 +4160,16 @@ because `2 > 1` would report a missing asset and skip the conflict diagnostic
 for a release whose real problem is an asset that must not be overwritten. A
 published digest is a promise to whoever already downloaded it, so
 reconciliation never clobbers: a conflicting asset stops the release.
+
+The three input records — the candidate, the digest record, and the plan — are
+read in that order before the command calls GitHub at all, so an undecodable
+record stops the run before any API call and reports the status its own reader
+carries. That ordering is why an unreadable digest record outranks a plan that
+merely owes an upload: nothing decides from a partial input. A `gh` call that
+fails is reported as `<command> exited <status>: <stderr>`, keeping GitHub's
+own words and trimming the whitespace around them, so the log carries the same
+diagnosis the API returned. A stderr that holds nothing but whitespace adds no
+clause at all, rather than leaving a colon with an empty diagnosis behind it.
 
 On the registry side the equivalent question is per version, not per crate.
 `release_registry_response.observe_registry_response` maps the recorded HTTP
@@ -3980,6 +4300,22 @@ those operations at the file or transport boundary:
   the split exists to keep honest.
 - `finalize_github_release_cli` normalizes GitHub's `sha256:` digest prefix;
   `release_reconcile_github` receives bare digests and only plans actions.
+- `finalize_github_release_io` owns the finalizer's allowlisted `gh` runner
+  and the `FinalizeError` type that carries an exit status with its diagnosis;
+  `finalize_github_release_remote` builds the one read and one edit from that
+  runner and returns their answers as values;
+  `finalize_github_release_decisions` decides from those values alone and
+  `finalize_github_release_ports` states the shapes it exchanges with them;
+  `finalize_github_release_messages` renders the outcome as prose.
+  `finalize_github_release_records` reads and writes the records around the
+  edit and `finalize_github_release_stage_records` writes the ones the
+  read-only commands produce. `finalize_github_release_operations` orchestrates
+  the publishing decision, `finalize_github_release_reconcile` re-applies the
+  planner's policy to a snapshot taken later, and
+  `finalize_github_release_plan` and `finalize_github_release_state` decide
+  from decoded values alone. `finalize_github_release.py` is the only module
+  that reads the input records, records the public outcome, and turns a status
+  into a process exit.
 
 External record shapes cross the boundary exactly once. A module that already
 owns a file, stream, or provider response decodes its field names and shape
@@ -4049,7 +4385,7 @@ CLI also refuses, so the mistake surfaces as the input that caused it.
 | `version`      | yes      | the crate version from the manifest                   |
 | `bin-name`     | yes      | `netsuke`, the installed binary name                  |
 
-*Table 9: `package-crate` action inputs.*
+*Table 11: `package-crate` action inputs.*
 
 The action publishes three outputs — `identity-path`, `crate-name`, and
 `crate-path` — and resolves the archive name from the record it just wrote
