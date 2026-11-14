@@ -5805,13 +5805,15 @@ The measurement that decides this is the whole suite rather than a probe, and
 it is the one to re-run on a toolchain bump. It is recorded under *The suite
 under Cranelift* below.
 
-Status on the current pin: the repository pins `nightly-2026-10-22`, and no
-measurement was taken on it. The question stays shelved until 2027-03-21,
-tracked by issue #764, so the measurements recorded below describe
-`nightly-2026-08-23` and are stale from the moment the pin moved past it. A
-toolchain bump before the deferral date does not oblige anyone to re-run the
-suite, but it does oblige whoever moves the pin to update this paragraph with
-the new pin, whether a measurement was taken on it, and the deferral date.
+Status on the current pin: the repository pins `nightly-2026-11-10`. The full
+suite was last measured on `nightly-2026-10-22` (2026-11-13), and the three
+newest failures were re-checked on the current pin (2026-11-14); see the update
+at the end of *The suite under Cranelift*. The question stays shelved until
+2027-03-21, tracked by issue #764, so the table of measurements recorded below
+describes `nightly-2026-08-23` and is stale from the moment the pin moved past
+it. A toolchain bump before the deferral date does not oblige anyone to re-run
+the suite, but it does oblige whoever moves the pin to update this paragraph
+with the new pin, whether a measurement was taken on it, and the deferral date.
 
 Measured on 2026-09-18 on `nightly-2026-08-23`, whose Cranelift is
 `librustc_codegen_cranelift-1.100.0-nightly.so`, in a crate with no
@@ -6000,6 +6002,42 @@ None of this says Cranelift is unusable elsewhere, and other repositories on
 this estate do use it. Five of those six outcomes are tests about a panic
 crossing a boundary, and a repository without such tests would meet none of
 them.
+
+Update, 2026-11-14 (pin `nightly-2026-11-10`). Most of those outcomes were not
+tests of unwinding worth keeping, and have been removed or converted; the
+exception itself stands because a benchmark on 2026-11-13 found no overall gain
+from the backend here (a cold build 8% faster, but a rebuild, clippy and the
+test run no faster), so there is no case for adopting it.
+
+- Two poisoned-lock test functions are deleted
+  (`snapshot_recovers_from_a_poisoned_lock`, which ran in two test targets, and
+  `en_localizer_recovers_from_a_poisoned_lock`): the three executions in the
+  table above. Each exercised only the one-line
+  `unwrap_or_else(PoisonError::into_inner)` recovery
+  (`CapturedEvents::snapshot` and the localizer fixtures), and needed a panic
+  on a spawned thread to poison the lock. What they checked beyond the compiler
+  (a snapshot still returns the captured data; the fixture works repeatedly
+  while the poison flag stays set) follows from that one line and is no longer
+  tested. That loss is accepted rather than moved to an LLVM lane.
+- `the_last_declaration_wins_over_any_sequence` no longer probes the panic for
+  undeclared keys inside the property. The property now asks
+  `StubEnv::is_declared`, the question `var` asserts on, for every generated
+  sequence, and two `#[should_panic]` tests cover the panic itself.
+  `accept_connection_respects_accept_timeout` is a `#[should_panic]` test on
+  the timeout message. The elapsed-time bounds it used to assert are not
+  restored end to end; what they guarded, that the loop never sleeps a whole
+  poll interval past a short deadline, is tested on the nap calculation
+  (`nap_is_shortened_to_the_time_remaining`).
+- Three tests are new on this pin, and only one is about unwinding.
+  `rejects_unsupported_json_values::case_3` and
+  `decoding_matches_the_independent_oracle` abort because `zmij`, the float
+  formatter `serde_json` uses, calls `_mm_mulhi_epu16`, which Cranelift does
+  not implement (`llvm.x86.sse2.pmulhu.w is not yet supported`,
+  `rustc_codegen_cranelift#171`); the stub is a non-unwinding panic. Building
+  `zmij` on LLVM with `[profile.dev.package.zmij] codegen-backend = "llvm"`
+  makes both pass. `weak_registrars_prevent_stale_just_one_interest_overwrites`
+  is a Loom model, which fails with "failed to initiate panic, error 5" because
+  Loom unwinds internally; that one is genuine.
 
 ### Composition rules
 
@@ -8275,7 +8313,7 @@ Current usage in this repository is:
   as a deprecated compatibility alias: `emit_runtime_deprecation_warning` in
   the macros crate turns it into a warning, and that warning reaches the
   compiler because this repository builds on a nightly channel
-  (`nightly-2026-10-22`), which is the condition `rstest_bdd_nightly` selects. A
+  (`nightly-2026-11-10`), which is the condition `rstest_bdd_nightly` selects. A
   `-D warnings` build would therefore escalate it to an error. Nothing here
   selects a harness yet; ordinary synchronous scenarios stay ordinary and need
   no harness at all.

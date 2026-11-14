@@ -83,6 +83,17 @@ fn remaining_until_deadline(deadline: Instant) -> Duration {
     }
 }
 
+/// Return how long to sleep before the next accept attempt.
+///
+/// This is the poll interval, shortened to the time left when `wait` has a
+/// deadline, so a short deadline is honoured promptly instead of being
+/// overshot by a whole interval.
+pub(super) fn nap_duration(wait: AcceptWait<'_>, poll_interval: Duration) -> Duration {
+    wait.deadline().map_or(poll_interval, |deadline| {
+        remaining_until_deadline(deadline).min(poll_interval)
+    })
+}
+
 /// Accept a client, retrying transient errors until `wait` is satisfied.
 ///
 /// Returns `None` when the fixture is shut down before a client connects. A
@@ -106,10 +117,7 @@ pub(super) fn accept_connection(
         match listener.accept() {
             Ok((stream, _)) => return Some(stream),
             Err(err) if should_retry_accept(&err, wait, poll_interval, accept_timeout) => {
-                let nap = wait.deadline().map_or(poll_interval, |deadline| {
-                    remaining_until_deadline(deadline).min(poll_interval)
-                });
-                thread::sleep(nap);
+                thread::sleep(nap_duration(wait, poll_interval));
             }
             Err(err) => panic!("failed to accept connection: {err}"),
         }

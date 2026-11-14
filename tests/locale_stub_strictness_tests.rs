@@ -19,6 +19,16 @@ fn the_panic_names_the_offending_key() {
     StubEnv::with_locale("es-ES").var("SOME_OTHER_VARIABLE");
 }
 
+/// Declaring one key must not make a different key readable.
+#[test]
+#[should_panic(expected = "\"B\"")]
+fn declaring_other_keys_does_not_admit_an_undeclared_one() {
+    StubEnv::strict()
+        .with_var("A", "set")
+        .allowing("C")
+        .var("B");
+}
+
 #[test]
 fn declared_reads_do_not_panic() {
     assert_eq!(
@@ -66,10 +76,7 @@ mod properties {
     use super::{LocaleEnvProvider, StubEnv};
     use proptest::collection::vec;
     use proptest::prelude::*;
-    use std::cell::Cell;
     use std::collections::HashMap;
-    use std::panic::{AssertUnwindSafe, catch_unwind};
-    use std::sync::Once;
 
     #[derive(Debug, Clone)]
     enum Declaration {
@@ -87,44 +94,15 @@ mod properties {
         ]
     }
 
-    thread_local! {
-        static SILENCED: Cell<bool> = const { Cell::new(false) };
-    }
-
-    /// Install the gated hook exactly once, wrapping whatever hook was
-    /// current when the first probe ran.
-    fn install_gated_hook() {
-        let prior = std::panic::take_hook();
-        let gated = move |info: &std::panic::PanicHookInfo<'_>| {
-            if SILENCED.with(Cell::get) {
-                return;
-            }
-            prior(info);
-        };
-        std::panic::set_hook(Box::new(gated));
-    }
-
-    /// Run `probe` with the default panic hook silenced for this thread only.
-    ///
-    /// Each undeclared read otherwise prints its full panic message, and 256
-    /// cases times three keys of that buries any genuine failure output. The
-    /// hook is process-wide, so instead of swapping it around each probe —
-    /// which under the threaded in-process coverage runner could eat another
-    /// test's panic or race the restore — a wrapper is installed once and
-    /// consults a thread-local flag, leaving every other thread's panics on
-    /// the prior hook.
-    fn silenced<T>(probe: impl FnOnce() -> T) -> T {
-        static INSTALL: Once = Once::new();
-        INSTALL.call_once(install_gated_hook);
-
-        SILENCED.with(|flag| flag.set(true));
-        let result = probe();
-        SILENCED.with(|flag| flag.set(false));
-        result
-    }
-
     proptest! {
-        /// Every key answers per its last declaration; undeclared keys panic.
+        /// Every declared key answers per its last declaration; undeclared
+        /// keys stay undeclared.
+        ///
+        /// Reading an undeclared key panics, and the `#[should_panic]` tests
+        /// above assert that. Observing a panic from inside a property needs
+        /// `catch_unwind`, which a Cranelift-built test binary cannot honour,
+        /// so the property asks `is_declared`, the question `var` asserts on,
+        /// across every generated sequence.
         ///
         /// The model is a plain last-write-wins map, independent of the
         /// stub's split `values`/`allowed` representation, so a bookkeeping
@@ -150,10 +128,10 @@ mod properties {
             }
             for key in ["A", "B", "C"] {
                 if let Some(expected) = model.get(key) {
+                    prop_assert!(stub.is_declared(key), "declared {} must be readable", key);
                     prop_assert_eq!(stub.var(key), expected.clone());
                 } else {
-                    let read = silenced(|| catch_unwind(AssertUnwindSafe(|| stub.var(key))));
-                    prop_assert!(read.is_err(), "undeclared {} should panic", key);
+                    prop_assert!(!stub.is_declared(key), "undeclared {} must stay undeclared", key);
                 }
             }
         }
