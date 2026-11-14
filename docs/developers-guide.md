@@ -6549,7 +6549,21 @@ Netsuke uses a mixed strategy:
   and `Consumes` tables alone, so a mention in the trace introduction or an
   exclusion reason cannot satisfy either. A register item may instead be listed
   by an `Unchanged` bullet that opens with the identifier; a sentence that
-  merely names one does not count.
+  merely names one does not count. The contract separates a *region slice* from
+  a *harvest* because the two need different rules. `heading_body` keeps nested
+  content, since `## Register` legitimately nests its `####` area tables inside
+  the `### A1`-`### A7` headings; `harvest_body` truncates at the first heading
+  of any depth, since every harvester reads its body for a claim a table row or
+  a bullet has to make, and prose under a deeper subheading must not supply
+  one. Reach for `harvest_body` in any new harvester.
+- The contract's modules are split by feature rather than by layer, forced by
+  the 400-line file cap: `markdown.rs` (parsers), `register.rs` (identifier
+  grammar), `roadmap.rs` (task and dependency parsing), `validation.rs` (the
+  cross-document checks), `fixtures.rs` (shared skeletons), and the three
+  `cfg(test)` case modules `parser_tests.rs`, `tests.rs`, and
+  `fail_open_tests.rs`. `fail_open_tests.rs` holds the regression guards for
+  prose-claimed coverage; each fails against the parser rule it protects, so
+  add a case there rather than to `tests.rs` when closing a new fail-open.
 - Behavioural tests use Gherkin feature files in `tests/features/` and
   `tests/features_unix/`.
 - Behavioural step definitions and fixtures live in `tests/bdd/`.
