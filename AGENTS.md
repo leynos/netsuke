@@ -66,8 +66,8 @@
   indexes when names or locations change. Keep transient validation results in
   the PR or execution record.
 - **Decision history:** Preserve accepted ADR decisions; record subsequent
-  changes through the
-  [ADR amendment and supersession process](docs/documentation-style-guide.md#architectural-decision-records-adrs).
+  changes as amendments, following the
+  [ADR guidance in the documentation style guide](docs/documentation-style-guide.md#architectural-decision-records-adrs).
   Capture proof-driven API, representation, and invariant decisions in the
   design documentation.
 - **Completed execplans:** Completed execplans are historical documents and
@@ -282,15 +282,22 @@ directive anywhere.
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
     RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
-    env -u CARGO_ENCODED_RUSTFLAGS RUSTFLAGS="-D warnings" \
-    whitaker --lib whitaker_suite --fail-on-no-libraries --no-deps \
-      --package netsuke-build -- --all-targets --all-features
+    env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$(cat dylint.toml)" \
+    RUSTFLAGS="-D warnings" whitaker --lib whitaker_suite \
+      --fail-on-no-libraries --no-deps --package netsuke-build -- \
+      --all-targets --all-features
+    cd test_support && env -u CARGO_ENCODED_RUSTFLAGS \
+    DYLINT_TOML="$(cat dylint.toml)" RUSTFLAGS="-D warnings" whitaker \
+      --lib whitaker_suite --fail-on-no-libraries --no-deps \
+      --package test_support -- --all-targets --all-features
     yamllint --config-file .yamllint.yml .github/workflows
     actionlint
     ```
 
     The Makefile composes the rustdoc and Clippy `RUSTFLAGS` value from one
-    variable; the Whitaker line takes neither it nor the caller's flags.
+    variable; the Whitaker lines take neither it nor the caller's flags. The
+    second Whitaker run starts in `test_support/` so that Whitaker loads the
+    crate's `dylint.toml` exemption.
     `-Clink-arg=-fuse-ld=mold` is Linux-only, so every sample in this section
     drops it elsewhere — macOS and Windows use their platform linker and the
     value ends `-D warnings -Zthreads=8`. Only that one flag is platform-gated;
@@ -342,7 +349,8 @@ directive anywhere.
     individual passes. Use `make fmt` (`cargo fmt --all`, then Ruff,
     mdtablefix, and markdownlint-cli2 with `--fix`) to apply formatting fixes
     reported by the formatter check.
-  - `make doc-coverage` executes:
+  - `make doc-coverage` runs the `make doc-coverage-test` pytest modules first,
+    then executes:
 
     ```sh
     RUSTDOCFLAGS="--cfg docsrs -D warnings" \
