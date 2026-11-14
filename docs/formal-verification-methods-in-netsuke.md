@@ -44,9 +44,10 @@ required job covering every harness on pushes to `main`, nightly schedules, and
 manual dispatches, and on pull requests it runs only when a proof input changes
 (see
 [ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).[^3]
-The 17 harnesses live in three verification modules:
+The 24 harnesses live in four verification modules:
 `src/ir/cycle/verification.rs` (11), `src/ir/from_manifest/verification.rs`
-(4), and `src/ir/cmd_interpolate/verification.rs` (2).
+(4), `src/ir/cmd_interpolate/verification.rs` (2), and
+`src/stdlib/resource_bounds/verification.rs` (7).
 `src/ir/graph/kani_map.rs` is `cfg(kani)` support code those harnesses use, not
 a harness location.
 
@@ -216,8 +217,22 @@ reserved name, and a duplicate in the last position. Runtime correspondence is
 carried by the independent quadratic oracle in
 `src/cli/config/shells/tests/oracle.rs`, not by Verus.
 
+The fourth is the resource-bounds arithmetic behind
+`src/stdlib/resource_bounds/kernel.rs`, proved in
+`verus/resource_bounds/main.rs` across seven files under one crate root. It
+establishes the checked product's zero and repeat cases and its power-of-base
+form, the binomial kernel's symmetry, absorption, step, and monotonicity lemmas
+together with the caps that keep its intermediate `u128` arithmetic safe, the
+falling factorial's monotonicity and iteration cap, and the admission and
+running-total rules that keep a count or a stream total inside its ceiling. The
+proof is a transcription of the production algorithm into abstract
+specifications, so the production functions themselves are outside it; seven
+Kani harnesses in `src/stdlib/resource_bounds/verification.rs` drive those
+production kernels instead, and each has a committed mutation patch under
+`docs/verification/mutations/`.
+
 Production `HashMap` structures, MiniJinja values, filesystem helpers, and
-subprocess orchestration remain outside all three proof boundaries. The second
+subprocess orchestration remain outside all four proof boundaries. The second
 kernel's keys are an abstract sort standing in for the runtime's byte strings,
 so the template-to-key conversion, the runtime's own membership structure, and
 the production adapter are each outside what it proves, and the kernel carries
@@ -357,8 +372,9 @@ When the proofs run, it:
 
 - installs the pinned Kani front-end and release bundle from checksummed
   archives, then checks the reported version against `tools/kani/VERSION`,
-- runs the bounded harness suite through `make kani-ir` (17 harnesses across
-  the manifest, cycle, and command-interpolation verification modules), then
+- runs the bounded harness suite through `make kani-ir` (24 harnesses across
+  the manifest, cycle, command-interpolation, and stdlib resource-bounds
+  verification modules), then
   `make install-build-tools` and the mutation patch compile gate through
   `make test-kani-mutations`,
 - restores `.kani-cargo`, `.kani-home`, and `.kani-rustup` together under a key

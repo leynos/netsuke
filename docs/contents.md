@@ -369,6 +369,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0083: Accept environment Boolean digits and case-insensitive policy
   values](adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md):
   Accepted configuration value forms and the indexed-list rejection.
+- [ADR-0075](adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md):
+  Sharing one resource-bounds module across stdlib helpers, so the RFC 0006
+  ceilings, checked arithmetic, and typed refusals are written once.
 
 ## Proposals
 
