@@ -410,6 +410,17 @@ explicit and exercise the actual adapters in tests.
     `.map(|name| ...)`, and the repository denies `clippy::shadow_reuse`, so the
     owned binding is now `owned`. The gate aborted at `lint` (42 s) with exit 2;
     `make lint-clippy` and the focused oracle run (7 of 7) pass afterwards.
+  - [x] 2026-11-14: Pass the whole eleven-gate set against the merge-property
+    tree. The run tagged `final18` executed every gate sequentially and
+    finished `failed=0` in 859 s: `check-fmt` 3s, `lint` 107s, `typecheck`
+    28s, `doc-coverage` 15s, `test` 109s, `test-workflow-contracts` 534s,
+    `test-package-verify` 13s, `test-documentation-contracts` 4s, `verus` 2s,
+    `markdownlint` 43s, `nixie` 1s. `make verus` reports "9 verified, 0
+    errors"; doc-comment coverage is 98.26% against the 80% threshold. The
+    gates read the working tree that commit `92d9fb110` records, byte for byte,
+    including this plan file. This bullet is the only content written after
+    that run, and it is prose in this file alone; the Markdown-sensitive gates
+    were re-run over it rather than assumed to cover it.
 
 ## Surprises & discoveries
 
