@@ -35,7 +35,7 @@ fn entry_display_path_keeps_slash_separators() {
     // inherit the host separator. `Utf8PathBuf::push` would render `.netsuke\dyndep`
     // on Windows and make the message platform-dependent.
     assert_eq!(
-        entry_display_path("entry.dd"),
+        entry_display_path("entry.dd").as_str(),
         ".netsuke/dyndep/entry.dd",
         "the entry display path must use the slash spelling of the namespace"
     );

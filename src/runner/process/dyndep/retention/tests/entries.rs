@@ -96,7 +96,7 @@ fn retention_cleanup_failure_has_localized_context(
         anyhow::bail!("retention must report an unremovable candidate");
     };
     let expected = localization::message(keys::RUNNER_IO_DYNDEP_RETENTION)
-        .with_arg("path", entry_display_path("unremovable.dd"))
+        .with_arg("path", entry_display_path("unremovable.dd").as_str())
         .to_string();
     ensure!(
         format!("{error:#}").contains(&expected),

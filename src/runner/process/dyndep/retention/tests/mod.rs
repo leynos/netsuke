@@ -48,11 +48,8 @@ fn sidecar(name: &str, content: &str) -> GeneratedDyndep {
 fn sidecar_names(dir: &Dir) -> Result<Vec<Utf8PathBuf>> {
     dir.read_dir(DYNDEP_DIR)?
         .map(|entry_result| {
-            entry_result.and_then(|dir_entry| {
-                dir_entry
-                    .file_name()
-                    .map(|name| Utf8PathBuf::from(entry_display_path(&name)))
-            })
+            entry_result
+                .and_then(|dir_entry| dir_entry.file_name().map(|name| entry_display_path(&name)))
         })
         .collect::<std::io::Result<Vec<_>>>()
         .map_err(Into::into)

@@ -18,7 +18,7 @@
 use super::super::DYNDEP_DIR;
 use crate::localization::{self, keys};
 use anyhow::{Context, Result, anyhow};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_primitives::fs::open_dir_nofollow;
 use cap_std::fs_utf8::{Dir, Metadata};
 use std::io::ErrorKind;
@@ -47,8 +47,8 @@ impl DyndepDirectory {
         // Creation means a missing component is never the outcome a caller
         // observes, so absence here can only follow a concurrent remover. The
         // diagnostic still names the directory the walk promised to establish.
-        let dir =
-            open_dyndep_dir(workspace, true)?.ok_or_else(|| anyhow!(open_error(DYNDEP_DIR)))?;
+        let dir = open_dyndep_dir(workspace, true)?
+            .ok_or_else(|| anyhow!(open_error(Utf8Path::new(DYNDEP_DIR))))?;
         Ok(Self { dir })
     }
 
@@ -75,10 +75,10 @@ impl DyndepDirectory {
 /// never sees absence unless the component disappears between the create and
 /// the open, which `create_component` reports as an error.
 fn open_dyndep_dir(workspace: &Dir, create_missing: bool) -> Result<Option<Dir>> {
-    let mut current = clone_handle(workspace, ".")?;
-    let mut display = String::new();
+    let mut current = clone_handle(workspace, Utf8Path::new("."))?;
+    let mut display = Utf8PathBuf::new();
     for component in DYNDEP_COMPONENTS {
-        push_component(&mut display, component);
+        display = push_component(&display, component);
         current = match open_component(&current, component, &display)? {
             Some(dir) => dir,
             None if create_missing => create_component(&current, component, &display)?,
@@ -94,11 +94,12 @@ fn open_dyndep_dir(workspace: &Dir, create_missing: bool) -> Result<Option<Dir>>
 /// Windows diagnostic as `.netsuke/dyndep\entry.dd`. Diagnostics are compared
 /// and snapshotted as text, so the display keeps the slash spelling the
 /// namespace constant uses on every platform.
-fn push_component(display: &mut String, component: &str) {
-    if !display.is_empty() {
-        display.push('/');
+fn push_component(display: &Utf8Path, component: &str) -> Utf8PathBuf {
+    if display.as_str().is_empty() {
+        Utf8PathBuf::from(component)
+    } else {
+        Utf8PathBuf::from(format!("{display}/{component}"))
     }
-    display.push_str(component);
 }
 
 /// Whether `metadata` describes a symbolic link, junction, or other reparse
@@ -127,7 +128,7 @@ fn rejects_component(metadata: &Metadata) -> bool {
 }
 
 /// Open one component without following an alias, reporting absence as `None`.
-fn open_component(parent: &Dir, name: &str, display: &str) -> Result<Option<Dir>> {
+fn open_component(parent: &Dir, name: &str, display: &Utf8Path) -> Result<Option<Dir>> {
     let metadata = match parent.symlink_metadata(name) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
@@ -148,7 +149,7 @@ fn open_component(parent: &Dir, name: &str, display: &str) -> Result<Option<Dir>
 }
 
 /// Create one missing component and open the result without following aliases.
-fn create_component(parent: &Dir, name: &str, display: &str) -> Result<Dir> {
+fn create_component(parent: &Dir, name: &str, display: &Utf8Path) -> Result<Dir> {
     match parent.create_dir(name) {
         Ok(()) => {}
         Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
@@ -167,30 +168,30 @@ fn open_nofollow(parent: &Dir, name: &str) -> std::io::Result<Dir> {
 }
 
 /// Clone a directory handle, attaching the localized open diagnostic.
-fn clone_handle(dir: &Dir, display: &str) -> Result<Dir> {
+fn clone_handle(dir: &Dir, display: &Utf8Path) -> Result<Dir> {
     dir.try_clone().with_context(|| open_error(display))
 }
 
 /// Build the localized alias diagnostic for a dyndep `path`.
-fn alias_error(path: &str) -> crate::localization::LocalizedMessage {
-    localization::message(keys::RUNNER_IO_DYNDEP_ALIAS).with_arg("path", path)
+fn alias_error(path: &Utf8Path) -> crate::localization::LocalizedMessage {
+    localization::message(keys::RUNNER_IO_DYNDEP_ALIAS).with_arg("path", path.as_str())
 }
 
 /// Build the localized open diagnostic for a dyndep `path`.
-fn open_error(path: &str) -> crate::localization::LocalizedMessage {
-    localization::message(keys::RUNNER_IO_DYNDEP_OPEN).with_arg("path", path)
+fn open_error(path: &Utf8Path) -> crate::localization::LocalizedMessage {
+    localization::message(keys::RUNNER_IO_DYNDEP_OPEN).with_arg("path", path.as_str())
 }
 
 /// Build the localized create diagnostic for a dyndep `path`.
-fn create_error(path: &str) -> crate::localization::LocalizedMessage {
-    localization::message(keys::RUNNER_IO_DYNDEP_CREATE_DIR).with_arg("path", path)
+fn create_error(path: &Utf8Path) -> crate::localization::LocalizedMessage {
+    localization::message(keys::RUNNER_IO_DYNDEP_CREATE_DIR).with_arg("path", path.as_str())
 }
 
 /// Return the workspace-relative display path of a dyndep entry.
 ///
 /// The result is slash-separated on every platform; see [`push_component`].
-pub(crate) fn entry_display_path(name: &str) -> String {
-    format!("{DYNDEP_DIR}/{name}")
+pub(crate) fn entry_display_path(name: &str) -> Utf8PathBuf {
+    Utf8PathBuf::from(format!("{DYNDEP_DIR}/{name}"))
 }
 
 #[cfg(test)]
