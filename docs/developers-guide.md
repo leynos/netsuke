@@ -3745,8 +3745,15 @@ job's summary and the catalogue cannot drift apart: the log is the only source
 of a phase outcome. Every phase is emitted, `skipped` included. The summary
 reads each output unconditionally, so an omitted output would arrive there as
 an empty string and be reported as `unknown`; emitting `skipped` for a phase
-the log does not name keeps a planning failure from reading as five
-indeterminate outcomes.
+the log does not name, or for a run whose log is absent, keeps a planning
+failure from reading as five indeterminate outcomes.
+
+The work directory belongs to the attempt that validated it. A refused
+validation — a re-run's leftovers, an overlapping record, a missing input —
+leaves an earlier attempt's records in place, so the report step reads nothing
+from a work directory that validation refused: every phase is reported as
+`skipped` and no verdict path is named, rather than attributing stale evidence
+to a smoke that never began.
 
 `tests/workflow_contracts/release_publish_path_consumer_shape.py` holds the
 job's dependencies, permissions, checkout, environment, artefact selection,
@@ -3755,9 +3762,14 @@ action inputs, and compilation checks, and
 reachability oracle, re-exporting the shape names its callers use; the split
 keeps each module inside the 400-line cap. The checkout check is what keeps the
 workflow token from being persisted into the job's git config, the one
-credential a read-only job could still acquire.
+credential a read-only job could still acquire. The credential scans live in
+`release_publish_path_consumer_credentials.py`, which reads the composite
+action's step environments as well as the job's, because those steps run in the
+same process but appear nowhere in the workflow; the invocation check refuses a
+step-level `if` on the smoke, so the job guard alone decides whether it runs.
 `release_publish_path_consumer_mutations.py` registers one labelled regression
-for each of those properties and
+for each of those properties, each with the violation it must produce stated in
+`release_publish_path_consumer_expectations.py`, and
 `release_publish_path_consumer_mutations_test.py` requires the contract to
 report it.
 `tests/workflow_contracts/release_publish_path_consumer_smoke_test.py` holds
