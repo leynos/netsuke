@@ -2662,15 +2662,15 @@ below map each dependent roadmap task to its change or consumption boundary.
 | Task   | Register items                           | Findings                      | Obligations                                                                                    |
 | ------ | ---------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------- |
 | 26.1.2 | A1/*, A2/*                               | H1, OBS-1, OBS-2, OBS-12      | CO-1, CO-6, CO-12                                                                              |
-| 26.2.1 | A1/*, A2/*, A3/*, A4/*                   | H1, OBS-10, OBS-12, OBS-17    | CO-1, CO-3, CO-9, CO-10, CO-12, CO-13, CO-14                                                   |
-| 26.2.2 | A1/*, A2/*, A3/*, A4/*                   | H1, H2, OBS-1, OBS-11, OBS-18 | CO-2, CO-7, CO-9, CO-13, CO-15                                                                 |
+| 26.2.1 | A1/*, A2/*, A3/*, A4/*                   | H1, OBS-10, OBS-12, OBS-17    | CO-1, CO-3, CO-9, CO-10, CO-12, CO-13, CO-14, CO-15                                            |
+| 26.2.2 | A1/*, A2/*, A3/*, A4/*                   | H1, H2, OBS-1, OBS-11, OBS-18 | CO-1, CO-2, CO-4, CO-7, CO-9, CO-10, CO-13, CO-15                                              |
 | 26.2.3 | A3/*, A4/*                               | H1, OBS-10, OBS-13            | CO-2, CO-3, CO-10, CO-14                                                                       |
 | 26.3.1 | A2/*, A4/*, A5/*                         | H2, OBS-7, OBS-8              | CO-2, CO-7, CO-13, CO-15                                                                       |
 | 26.3.2 | A4/*, A5/*                               | H2, OBS-7, OBS-11             | CO-2, CO-7, CO-13, CO-15                                                                       |
 | 27.1.1 | A1/*, A2/*, A6/*                         | H4, OBS-3, OBS-4, OBS-14      | CO-5, CO-6, CO-13                                                                              |
 | 27.1.2 | A1/*, A2/*, A6/*                         | H4, OBS-5                     | CO-1, CO-5, CO-6                                                                               |
 | 27.1.3 | A5/*, A6/*                               | H4, OBS-6                     | CO-5, CO-6                                                                                     |
-| 27.2.1 | A5/*, A7/*                               | H3, OBS-15                    | CO-8, CO-11, CO-13                                                                             |
+| 27.2.1 | A5/*, A7/*                               | H3, OBS-15                    | CO-5, CO-8, CO-10, CO-11, CO-13                                                                |
 | 27.2.2 | A5/*, A7/*                               | H3, OBS-16                    | CO-8, CO-9, CO-10, CO-11, CO-13                                                                |
 | 27.2.3 | A5/*, A6/*, A7/*                         | H3, OBS-15, OBS-16            | CO-4, CO-5, CO-8, CO-10, CO-11, CO-13                                                          |
 | 28.1.2 | A1/*, A2/*, A3/*, A4/*, A5/*, A6/*, A7/* | H1, H2, H3, H4                | CO-1, CO-2, CO-3, CO-4, CO-5, CO-6, CO-7, CO-8, CO-9, CO-10, CO-11, CO-12, CO-13, CO-14, CO-15 |
