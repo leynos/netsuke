@@ -42,7 +42,7 @@ fn open_or_create_creates_the_dyndep_namespace(
         "the returned handle must be a real directory"
     );
     ensure!(
-        dir.open(DYNDEP_DIR).is_ok(),
+        dir.open_dir(DYNDEP_DIR).is_ok(),
         "the namespace must exist beneath the workspace"
     );
     Ok(())

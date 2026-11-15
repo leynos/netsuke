@@ -91,10 +91,10 @@ pub fn junction(target: impl AsRef<Path>, link: impl AsRef<Path>) -> io::Result<
     use std::os::windows::process::CommandExt as _;
     use std::process::Command;
 
-    let target = target.as_ref();
-    let link = link.as_ref();
-    let target_text = target.to_string_lossy();
-    let link_text = link.to_string_lossy();
+    let target_path = target.as_ref();
+    let link_path = link.as_ref();
+    let target_text = target_path.to_string_lossy();
+    let link_text = link_path.to_string_lossy();
     if target_text.contains('"') || link_text.contains('"') {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -117,8 +117,8 @@ pub fn junction(target: impl AsRef<Path>, link: impl AsRef<Path>) -> io::Result<
         .arg("/V:OFF")
         .arg("/C")
         .raw_arg(r#"mklink /J "%NETSUKE_JUNCTION_LINK%" "%NETSUKE_JUNCTION_TARGET%""#)
-        .env("NETSUKE_JUNCTION_LINK", link.as_os_str())
-        .env("NETSUKE_JUNCTION_TARGET", target.as_os_str())
+        .env("NETSUKE_JUNCTION_LINK", link_path.as_os_str())
+        .env("NETSUKE_JUNCTION_TARGET", target_path.as_os_str())
         .output()
     {
         Ok(output) => output,

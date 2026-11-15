@@ -125,7 +125,7 @@ fn empty_sidecar_list_does_not_create_dyndep_directory() -> Result<()> {
     materialize_dyndep_files(&dir, &[])?;
 
     ensure!(
-        dir.open(DYNDEP_DIR).is_err(),
+        !dir.try_exists(DYNDEP_DIR)?,
         "empty sidecar list must not create {DYNDEP_DIR}"
     );
     Ok(())
