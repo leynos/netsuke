@@ -2909,10 +2909,11 @@ Hazards: `action`/操作 collides with the generic sense of "operation", which
 Bazel's own Simplified Chinese rule documentation also uses for "action"
 (`一系列操作`, per the
 [Bazel zh-CN rules page](https://bazel.build/extending/rules?hl=zh-cn)) —
-Netsuke's diagnostics must keep 操作 scoped to "implicitly phony target" and
-never reuse it loosely for arbitrary program actions. `placeable`/占位符 is the
-same word Fluent-based Simplified Chinese localizations already use for Fluent
-placeables (see the
+Netsuke's diagnostics must keep 操作 for the build-model action, covering both
+manifest actions and the IR `Action` records that any build edge references,
+and never reuse it loosely for arbitrary program actions. `placeable`/占位符 is
+the same word Fluent-based Simplified Chinese localizations already use for
+Fluent placeables (see the
 [grammy.dev Fluent i18n guide](https://grammy.dev/zh/plugins/i18n)), but 占位符
 also denotes ordinary UI input placeholder text, so notes explaining a
 placeable must state that it is a Fluent variable substitution, not a hint
@@ -2948,7 +2949,7 @@ Table 38: Chinese, Simplified terminology
 | ---------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | manifest               | 清单         | Standard technical sense (cf. Android/Kubernetes 清单文件); context needed to avoid the generic "checklist" reading.                                                                                                                                                                                 |
 | target                 | 目标         | Matches Bazel's zh-CN/zh-TW glossary for "target".                                                                                                                                                                                                                                                   |
-| action                 | 操作         | Matches Bazel zh-CN rules docs ("一系列操作"); keep scoped to implicitly-phony targets, not generic "operation".                                                                                                                                                                                     |
+| action                 | 操作         | Matches Bazel zh-CN rules docs (一系列操作); covers manifest actions and IR `Action` records referenced by any build edge, not generic "operation".                                                                                                                                                  |
 | rule                   | 规则         | Matches Bazel zh-CN/zh-TW glossary for "rule".                                                                                                                                                                                                                                                       |
 | dependency             | 依赖项       | Standard in Rust Book zh-CN and Microsoft docs; 依赖 (no 项) is common informally but less precise as a noun.                                                                                                                                                                                        |
 | order-only dependency  | 仅顺序依赖项 | Community term from the Chinese Ninja manual translation; no official body governs Ninja terminology in zh-Hans.                                                                                                                                                                                     |
