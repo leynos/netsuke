@@ -140,15 +140,12 @@ def normalised_member_name(name: str) -> str:
         Its path relative to the extraction root, with empty and ``.``
         components removed.
 
-    Raises
-    ------
-    UnsafeMemberNameError
-        If the name is empty, contains a NUL or backslash, is absolute or
-        drive-qualified under either path flavour, or contains ``..``.
-
     Notes
     -----
-    Every ``..`` is refused, not only the one that escapes. ``a/../b``
+    An unsafe name is refused as :class:`UnsafeMemberNameError`: empty,
+    NUL-bearing, backslash-bearing, absolute or drive-qualified under either
+    path flavour, or carrying ``..``. Every ``..`` is refused, not only the
+    one that escapes. ``a/../b``
     resolves inside the root, but it is a traversal component all the same,
     and accepting it means the duplicate check compares a spelling no honest
     producer writes.
@@ -164,19 +161,69 @@ def normalised_member_name(name: str) -> str:
         ...
     release_consumer_archive_policy.UnsafeMemberNameError: archive member ...
     """
-    if not name:
-        msg = "archive member has an empty name"
-        raise UnsafeMemberNameError(msg)
-    if "\x00" in name:
-        msg = f"archive member name {name!r} contains a NUL byte"
-        raise UnsafeMemberNameError(msg)
-    if "\\" in name:
-        msg = f"archive member name {name!r} contains a backslash"
-        raise UnsafeMemberNameError(msg)
+    _require_printable_name(name)
+    _require_contained_name(name)
+    return "/".join(_normalised_parts(name))
+
+
+#: A predicate over a member name, used to table-drive the spelling refusals.
+type _Hazard = cabc.Callable[[str], bool]
+
+
+def _is_absent(name: str) -> bool:
+    """Return whether the archive declared no name at all."""
+    return not name
+
+
+def _holds_nul_byte(name: str) -> bool:
+    """Return whether the name carries a NUL byte."""
+    return "\x00" in name
+
+
+def _holds_backslash(name: str) -> bool:
+    """Return whether the name carries a backslash."""
+    return "\\" in name
+
+
+#: Hazards judged on the name's spelling alone, each with the message its
+#: refusal carries. The message is formatted with the name, so a refusal says
+#: which member it refused whatever hazard matched.
+_SPELLING_HAZARDS: tuple[tuple[_Hazard, str], ...] = (
+    (_is_absent, "archive member has an empty name"),
+    (_holds_nul_byte, "archive member name {name!r} contains a NUL byte"),
+    (_holds_backslash, "archive member name {name!r} contains a backslash"),
+)
+
+
+def _require_printable_name(name: str) -> None:
+    """Refuse a name that is empty or carries a NUL byte or a backslash."""
+    for hazard, message in _SPELLING_HAZARDS:
+        if hazard(name):
+            raise UnsafeMemberNameError(message.format(name=name))
+
+
+def _require_contained_name(name: str) -> None:
+    """Refuse a name either path flavour reads as rooted or escaping."""
     for flavour in _PATH_FLAVOURS:
         if _resolves_outside_root(flavour, name):
             msg = f"archive member name {name!r} resolves outside the extraction root"
             raise UnsafeMemberNameError(msg)
+
+
+def _normalised_parts(name: str) -> tuple[str, ...]:
+    """Return the name's path components, refusing an empty or traversing path.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The components with empty and ``.`` entries removed.
+
+    Raises
+    ------
+    UnsafeMemberNameError
+        If nothing is left once those entries are removed, or a component is
+        ``..``.
+    """
     parts = tuple(part for part in name.split("/") if part not in {"", "."})
     if not parts:
         msg = f"archive member name {name!r} names no path"
@@ -184,7 +231,7 @@ def normalised_member_name(name: str) -> str:
     if ".." in parts:
         msg = f"archive member name {name!r} contains a traversal component"
         raise UnsafeMemberNameError(msg)
-    return "/".join(parts)
+    return parts
 
 
 def _resolves_outside_root(flavour: type[PurePath], name: str) -> bool:
