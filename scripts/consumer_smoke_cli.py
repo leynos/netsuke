@@ -29,6 +29,55 @@ reports:
 
 Run from ``.github/actions/consumer-smoke/action.yml``; behavioural coverage
 lives in ``scripts/tests/test_consumer_smoke_cli.py``.
+
+Examples
+--------
+A rehearsal identity records no tag, so planning against it is refused before
+any download is named. The diagnosis goes to standard error, which a doctest
+does not compare:
+
+>>> import json, tempfile
+>>> from pathlib import Path
+>>> with tempfile.TemporaryDirectory() as tmp:
+...     root = Path(tmp)
+...     identity = root / "identity.json"
+...     record = {
+...         "crate": "netsuke-build-1.2.3.crate",
+...         "identity": {
+...             "tag": None, "commit": "0" * 40,
+...             "package_name": "netsuke-build", "version": "1.2.3",
+...             "bin_name": "netsuke", "is_prerelease": False,
+...         },
+...         "sha256": "ab" * 32,
+...     }
+...     _ = identity.write_text(json.dumps(record), encoding="utf-8")
+...     trusted = root / "trusted.json"
+...     _ = trusted.write_text(
+...         json.dumps({"assets": {"a": "ab" * 32}}), encoding="utf-8"
+...     )
+...     staging = root / "staging.toml"
+...     _ = staging.write_text(
+...         '[targets.linux]' + chr(10)
+...         + 'target = "x86_64-unknown-linux-gnu"' + chr(10),
+...         encoding="utf-8",
+...     )
+...     manifest = root / "Cargo.toml"
+...     _ = manifest.write_text(
+...         '[package]' + chr(10) + 'name = "netsuke-build"' + chr(10),
+...         encoding="utf-8",
+...     )
+...     main([
+...         "plan",
+...         "--identity", str(identity),
+...         "--trusted", str(trusted),
+...         "--staging-config", str(staging),
+...         "--manifest", str(manifest),
+...         "--repository", "leynos/netsuke",
+...         "--target", "x86_64-unknown-linux-gnu",
+...         "--commit", "0" * 40,
+...         "--output", str(root / "plan.json"),
+...     ])
+1
 """
 
 import argparse
@@ -103,6 +152,30 @@ def _evidence_parser() -> argparse.ArgumentParser:
     return parser
 
 
+#: Each saved download ``verify`` is handed: its option name, the help naming
+#: the saved body, and the help naming the status file curl recorded beside it.
+_SAVED_DOWNLOADS = (
+    ("crate", "the saved crate archive", "the HTTP status curl recorded for the crate"),
+    (
+        "archive",
+        "the saved binstall archive",
+        "the HTTP status curl recorded for the archive",
+    ),
+    (
+        "sidecar",
+        "the saved checksum sidecar",
+        "the HTTP status curl recorded for the sidecar",
+    ),
+)
+
+#: The outputs ``verify`` writes, with the help naming each.
+_VERIFY_OUTPUTS = (
+    ("--extract-dir", "a fresh, empty directory the binary is extracted into"),
+    ("--verdict", "where to write the bounded phase-and-verdict record"),
+    ("--phase-log", "where to write the bounded per-phase outcome and timing record"),
+)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the parser for the consumer-smoke CLI.
 
@@ -122,72 +195,52 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[_evidence_parser()],
         help="derive the public downloads this run must perform",
     )
+    _add_plan_options(plan)
+    verify_command = commands.add_parser(
+        "verify",
+        parents=[_evidence_parser()],
+        help="check the saved downloads and the shipped executable",
+    )
+    _add_verify_options(verify_command)
+    return parser
+
+
+def _add_plan_options(plan: argparse.ArgumentParser) -> None:
+    """Add where the ``plan`` command writes the plan document."""
     plan.add_argument(
         "--output",
         required=True,
         type=pathlib.Path,
         help="where to write the plan document",
     )
-    verify_command = commands.add_parser(
-        "verify",
-        parents=[_evidence_parser()],
-        help="check the saved downloads and the shipped executable",
-    )
+
+
+def _add_verify_options(verify_command: argparse.ArgumentParser) -> None:
+    """Add the saved downloads, plan, and outputs the ``verify`` command reads.
+
+    Notes
+    -----
+    The downloads are tabled rather than spelled three times: each saved body
+    carries the status file curl recorded beside it, so a download added here
+    cannot arrive without the status the payload check requires.
+    """
     verify_command.add_argument(
         "--plan",
         required=True,
         type=pathlib.Path,
         help="the plan document this run re-derives and enforces",
     )
-    verify_command.add_argument(
-        "--crate", required=True, type=pathlib.Path, help="the saved crate archive"
-    )
-    verify_command.add_argument(
-        "--crate-status",
-        required=True,
-        type=pathlib.Path,
-        help="the HTTP status curl recorded for the crate",
-    )
-    verify_command.add_argument(
-        "--archive", required=True, type=pathlib.Path, help="the saved binstall archive"
-    )
-    verify_command.add_argument(
-        "--archive-status",
-        required=True,
-        type=pathlib.Path,
-        help="the HTTP status curl recorded for the archive",
-    )
-    verify_command.add_argument(
-        "--sidecar",
-        required=True,
-        type=pathlib.Path,
-        help="the saved checksum sidecar",
-    )
-    verify_command.add_argument(
-        "--sidecar-status",
-        required=True,
-        type=pathlib.Path,
-        help="the HTTP status curl recorded for the sidecar",
-    )
-    verify_command.add_argument(
-        "--extract-dir",
-        required=True,
-        type=pathlib.Path,
-        help="a fresh, empty directory the binary is extracted into",
-    )
-    verify_command.add_argument(
-        "--verdict",
-        required=True,
-        type=pathlib.Path,
-        help="where to write the bounded phase-and-verdict record",
-    )
-    verify_command.add_argument(
-        "--phase-log",
-        required=True,
-        type=pathlib.Path,
-        help="where to write the bounded per-phase outcome and timing record",
-    )
-    return parser
+    for name, body_help, status_help in _SAVED_DOWNLOADS:
+        verify_command.add_argument(
+            f"--{name}", required=True, type=pathlib.Path, help=body_help
+        )
+        verify_command.add_argument(
+            f"--{name}-status", required=True, type=pathlib.Path, help=status_help
+        )
+    for option, help_text in _VERIFY_OUTPUTS:
+        verify_command.add_argument(
+            option, required=True, type=pathlib.Path, help=help_text
+        )
 
 
 def main(
@@ -211,54 +264,11 @@ def main(
     int
         One of the exit codes stated in the module docstring.
 
-    Examples
-    --------
-    A rehearsal identity records no tag, so planning against it is refused
-    before any download is named. The diagnosis goes to standard error, which a
-    doctest does not compare:
-
-    >>> import json, tempfile
-    >>> from pathlib import Path
-    >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     root = Path(tmp)
-    ...     identity = root / "identity.json"
-    ...     record = {
-    ...         "crate": "netsuke-build-1.2.3.crate",
-    ...         "identity": {
-    ...             "tag": None, "commit": "0" * 40,
-    ...             "package_name": "netsuke-build", "version": "1.2.3",
-    ...             "bin_name": "netsuke", "is_prerelease": False,
-    ...         },
-    ...         "sha256": "ab" * 32,
-    ...     }
-    ...     _ = identity.write_text(json.dumps(record), encoding="utf-8")
-    ...     trusted = root / "trusted.json"
-    ...     _ = trusted.write_text(
-    ...         json.dumps({"assets": {"a": "ab" * 32}}), encoding="utf-8"
-    ...     )
-    ...     staging = root / "staging.toml"
-    ...     _ = staging.write_text(
-    ...         '[targets.linux]' + chr(10)
-    ...         + 'target = "x86_64-unknown-linux-gnu"' + chr(10),
-    ...         encoding="utf-8",
-    ...     )
-    ...     manifest = root / "Cargo.toml"
-    ...     _ = manifest.write_text(
-    ...         '[package]' + chr(10) + 'name = "netsuke-build"' + chr(10),
-    ...         encoding="utf-8",
-    ...     )
-    ...     main([
-    ...         "plan",
-    ...         "--identity", str(identity),
-    ...         "--trusted", str(trusted),
-    ...         "--staging-config", str(staging),
-    ...         "--manifest", str(manifest),
-    ...         "--repository", "leynos/netsuke",
-    ...         "--target", "x86_64-unknown-linux-gnu",
-    ...         "--commit", "0" * 40,
-    ...         "--output", str(root / "plan.json"),
-    ...     ])
-    1
+    Notes
+    -----
+    The module docstring's example walks a rehearsal identity to its refusal;
+    behavioural coverage of both commands lives in
+    ``scripts/tests/test_consumer_smoke_cli.py``.
     """
     arguments = build_parser().parse_args(argv)
     if arguments.command == "plan":
