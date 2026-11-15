@@ -19,6 +19,29 @@ policy has not accepted, and it writes no member but the binary.
 
 Run through ``scripts/consumer_smoke_cli.py``; behavioural coverage lives in
 ``scripts/tests/test_release_binstall_extract.py``.
+
+Examples
+--------
+Extraction writes the one root binary and names it, so the caller runs exactly
+the file the archive shipped:
+
+>>> import io, tarfile, tempfile
+>>> from pathlib import Path
+>>> import release_binstall_archive as archive_adapter
+>>> import release_digest_files
+>>> with tempfile.TemporaryDirectory() as tmp:
+...     root = Path(tmp)
+...     path = root / "netsuke.tar.gz"
+...     with tarfile.open(path, "w:gz") as archive:
+...         entry = tarfile.TarInfo("netsuke")
+...         entry.size = 1
+...         _ = archive.addfile(entry, io.BytesIO(b"x"))
+...     digest = release_digest_files.digest_of_file(path)
+...     layout = archive_adapter.scan_archive(path, expected_sha256=digest)
+...     out = root / "out"
+...     out.mkdir()
+...     extract_binary(path, layout, out, expected_sha256=digest).read_bytes()
+b'x'
 """
 
 import contextlib
@@ -88,27 +111,8 @@ def extract_binary(
     :class:`release_binstall_archive.ArchiveCorruptError`, and an archive that
     no longer passes the member rules as a
     :class:`release_consumer_archive_policy.ArchiveLayoutError`; both are
-    raised while the archive is reopened.
-
-    Examples
-    --------
-    >>> import io, tarfile, tempfile
-    >>> from pathlib import Path
-    >>> import release_binstall_archive as archive_adapter
-    >>> import release_digest_files
-    >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     root = Path(tmp)
-    ...     path = root / "netsuke.tar.gz"
-    ...     with tarfile.open(path, "w:gz") as archive:
-    ...         entry = tarfile.TarInfo("netsuke")
-    ...         entry.size = 1
-    ...         _ = archive.addfile(entry, io.BytesIO(b"x"))
-    ...     digest = release_digest_files.digest_of_file(path)
-    ...     layout = archive_adapter.scan_archive(path, expected_sha256=digest)
-    ...     out = root / "out"
-    ...     out.mkdir()
-    ...     extract_binary(path, layout, out, expected_sha256=digest).read_bytes()
-    b'x'
+    raised while the archive is reopened. The module docstring shows a complete
+    extraction of a one-member archive.
     """
     _require_fresh_directory(destination)
     _require_trusted_bytes(archive_path, expected_sha256)
@@ -208,36 +212,65 @@ def _write_entry(
     pathlib.Path
         The path of the written binary, which is executable.
 
-    Raises
-    ------
-    ExtractionError
-        If the file already exists, cannot be created, or the copied size
-        differs from the declared size.
-
     Notes
     -----
-    The member's data failing part-way is
-    :class:`release_binstall_archive.ArchiveCorruptError`, raised by
-    :func:`_copy_member`; the partial file is deleted either way.
+    The file is created by :func:`_created_exclusively`, which refuses an
+    existing entry as :class:`ExtractionError`, and the bytes are copied by
+    :func:`_copy_member`, which refuses a short or over-long member as
+    :class:`ExtractionError` and damaged data as
+    :class:`release_binstall_archive.ArchiveCorruptError`. The partial file is
+    deleted either way.
     """
     target = destination / layout.binary_name
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
-    try:
-        descriptor = os.open(target, flags, BINARY_MODE)
-    except OSError as error:
-        msg = f"could not create {target} exclusively: {error}"
-        raise ExtractionError(msg) from error
+    descriptor = _created_exclusively(target)
     try:
         os.fchmod(descriptor, BINARY_MODE)
         _copy_member(archive, entry, descriptor, layout)
     except BaseException:
-        with contextlib.suppress(OSError):
-            target.unlink(missing_ok=True)
+        _discard(target)
         raise
     finally:
-        with contextlib.suppress(OSError):
-            os.close(descriptor)
+        _closed(descriptor)
     return target
+
+
+def _created_exclusively(target: pathlib.Path) -> int:
+    """Open ``target`` for writing, refusing one that already exists or is a link.
+
+    Returns
+    -------
+    int
+        The descriptor of the newly created file.
+
+    Raises
+    ------
+    ExtractionError
+        If the file exists, is a symlink, or cannot be created.
+
+    Notes
+    -----
+    ``O_EXCL`` and ``O_NOFOLLOW`` together mean a pre-existing entry cannot
+    absorb the write, whether it is a file, a directory, or a link planted to
+    redirect the extraction.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    try:
+        return os.open(target, flags, BINARY_MODE)
+    except OSError as error:
+        msg = f"could not create {target} exclusively: {error}"
+        raise ExtractionError(msg) from error
+
+
+def _discard(target: pathlib.Path) -> None:
+    """Delete a partial output, ignoring a failure to remove it."""
+    with contextlib.suppress(OSError):
+        target.unlink(missing_ok=True)
+
+
+def _closed(descriptor: int) -> None:
+    """Close ``descriptor``, ignoring a failure to do so."""
+    with contextlib.suppress(OSError):
+        os.close(descriptor)
 
 
 def _copy_member(
@@ -302,7 +335,7 @@ def _member_source(
 def _stream_member(
     source: typ.BinaryIO, descriptor: int, layout: policy.ArchiveLayout
 ) -> int:
-    """Copy the member's bytes into ``descriptor``, refusing an overrun.
+    """Copy the member's bytes into ``descriptor`` under the declared size.
 
     Returns
     -------
@@ -312,24 +345,45 @@ def _stream_member(
 
     Raises
     ------
-    ExtractionError
-        If the member carries more bytes than its header declares.
     ArchiveCorruptError
         If the compressed data fails part-way through.
+
+    Notes
+    -----
+    A member that carries more bytes than its header declares is refused as
+    :class:`ExtractionError` by :func:`_copy_under_cap`.
     """
-    written = 0
     with source, os.fdopen(descriptor, "wb") as sink:
         try:
-            while block := source.read(COPY_CHUNK_BYTES):
-                written += len(block)
-                if written > layout.binary_size:
-                    msg = (
-                        f"the archive member {layout.binary_name!r} carries more "
-                        "bytes than its header declares"
-                    )
-                    raise ExtractionError(msg)
-                _ = sink.write(block)
+            return _copy_under_cap(source, sink, layout)
         except CORRUPT_STREAM as error:
             msg = f"the archive's data failed part-way through: {error}"
             raise ArchiveCorruptError(msg) from error
+
+
+def _copy_under_cap(
+    source: typ.BinaryIO, sink: typ.BinaryIO, layout: policy.ArchiveLayout
+) -> int:
+    """Copy ``source`` into ``sink``, refusing to write past the declared size.
+
+    Returns
+    -------
+    int
+        The number of bytes written.
+
+    Raises
+    ------
+    ExtractionError
+        If the member carries more bytes than its header declares.
+    """
+    written = 0
+    while block := source.read(COPY_CHUNK_BYTES):
+        written += len(block)
+        if written > layout.binary_size:
+            msg = (
+                f"the archive member {layout.binary_name!r} carries more "
+                "bytes than its header declares"
+            )
+            raise ExtractionError(msg)
+        _ = sink.write(block)
     return written

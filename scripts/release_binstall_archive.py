@@ -333,18 +333,34 @@ def verify_sidecar(archive_path: pathlib.Path, sidecar_path: pathlib.Path) -> st
 
 
 def _read_sidecar_text(sidecar_path: pathlib.Path) -> str:
-    """Return the sidecar's text, or refuse a body that is not one checksum line.
+    """Return the sidecar's text, or refuse one that is not one checksum line.
 
     Returns
     -------
     str
         The decoded sidecar body.
 
+    Notes
+    -----
+    Every refusal is :class:`SidecarVerificationError`, raised by the two
+    helpers this composes.
+    """
+    return _decode_sidecar(sidecar_path, _read_sidecar_bytes(sidecar_path))
+
+
+def _read_sidecar_bytes(sidecar_path: pathlib.Path) -> bytes:
+    """Return the sidecar's body, refusing one that is unreadable or not one line.
+
+    Returns
+    -------
+    bytes
+        The body, which is neither empty nor larger than the cap.
+
     Raises
     ------
     SidecarVerificationError
-        If the sidecar cannot be read, is empty, is larger than
-        :data:`MAX_SIDECAR_BYTES`, or is not UTF-8 text.
+        If the sidecar cannot be read, is empty, or is larger than
+        :data:`MAX_SIDECAR_BYTES`.
 
     Notes
     -----
@@ -366,6 +382,11 @@ def _read_sidecar_text(sidecar_path: pathlib.Path) -> str:
             f"{MAX_SIDECAR_BYTES} bytes, so it is not one checksum line"
         )
         raise SidecarVerificationError(msg)
+    return text_bytes
+
+
+def _decode_sidecar(sidecar_path: pathlib.Path, text_bytes: bytes) -> str:
+    """Decode the sidecar's body, refusing bytes that are not UTF-8 text."""
     try:
         return text_bytes.decode("utf-8")
     except UnicodeDecodeError as error:
