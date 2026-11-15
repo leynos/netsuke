@@ -699,6 +699,26 @@ conflict in `Decision log`, and escalate.
     commit's head, whose result is recorded in the pull request rather than in
     the plan the batch validates. `make test-package-verify` does not apply,
     because no include list, `build.rs`, or `build_l10n_audit/` file changed.
+  - Review repair: the zero-exponent case is proved (2026-11-15). CodeRabbit's
+    pre-merge walkthrough read `verus/resource_bounds/power_product.rs` against
+    this plan's promise that "the model is proved for all `u64` inputs" and
+    found that `checked_power` required `repeat >= 1`, so the production
+    kernel's `repeat == 0` branch — which returns one empty tuple before it
+    looks at the base — had no model at all. The finding is correct, and
+    `checked_product` carried the same requirement, so both are repaired: each
+    returns `Option::Some(1)` on `repeat == 0`, discharging
+    `spec_power(base, 0) == 1` through the existing `lemma_pow_zero`, and each
+    early return is followed by `assert(repeat >= 1)` so the rest of the proof
+    keeps the domain it already had. `make verus
+    VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'` reports
+    `64 verified, 0 errors`; removing the `checked_product` branch reports
+    `63 verified, 1 errors` ("precondition not satisfied", "invariant not
+    satisfied before loop"), so the branch carries proof weight rather than
+    being decorative. `docs/formal-verification-methods-in-netsuke.md` now
+    names the zero-operand, zero-exponent, and repeat cases separately. The
+    proof sits outside the Cargo workspace, so this delta owes `make verus` and
+    the Markdown and plan-edit gates; `kani-ir` and `test-kani-mutations` read
+    the production kernel, which the repair does not touch.
 
 ## Surprises & discoveries
 
