@@ -537,6 +537,29 @@ explicit and exercise the actual adapters in tests.
     formal-verification document, developers' guide, and repository layout now
     record the third kernel, the `discovery/layers/` pass, and the executable
     spelling rules.
+  - [x] 2026-11-15: Repair the one hosted finding this branch caused. The
+    typed-diagnostic tests took `src/cli/discovery/shell_definitions.rs` to 438
+    lines, and Whitaker's `module-max-lines` rule — which counts every source
+    line, tests and comments included — rejected the Windows lint job at 400.
+    The body of `#[cfg(test)] mod tests` moved to
+    `src/cli/discovery/shell_definitions/tests.rs`, declared from the parent
+    with an explicit `#[path]`, which is the shape `project_policy.rs` already
+    uses beside its own `tests.rs`. The production module is 269 lines, and no
+    test, assertion, diagnostic key, or rule text changed. The run tagged
+    `final31` finished `failed=0` against `c1142b602` with the split in the
+    worktree: `check-fmt` 3s, `lint-clippy` 2404s, `lint-python` 31s,
+    `github-actions-lint` 1s, `typecheck` 431s, `doc-coverage` 998s, `test` 594s
+    (5806 passed, 9 skipped, plus doctests), `test-workflow-contracts` 593s,
+    `test-package-verify` 161s, `test-documentation-contracts` 57s, `verus` 8s
+    (both kernels, 16 and 9 verified), `markdownlint` 66s, `nixie` 5s.
+  - [x] 2026-11-15: Rebase the branch onto `fa06bdb21`, the merge of PR #1139,
+    which supplies the `dylint.toml` `min_bump_lines` floor for
+    `bumpy_road_function` 0.3.0. The branch had been gating with the three
+    split lint targets because the suite tip reported 18 pre-existing findings;
+    with the floor in tree, `make lint` is the expected gate again. Thirty-eight
+    commits replayed without a conflict, the driver was bypassed because Weave
+    is selected only by ambient global attributes here, and no file content
+    changed apart from what `main` brought in.
 
 ## Surprises & discoveries
 
@@ -977,6 +1000,19 @@ first failure can hide a whole class of such tests behind one earlier red one.
   moving the default. The documentation now states which kernel the default
   proves and how to select the others, and every gate run for this plan passes
   both `--proof-file` values so the new kernel is proved as well.
+- 2026-11-15: Meet the 400-line module limit by moving the unit tests rather
+  than by splitting the production code. The rule counts every line of the
+  module, so test-heavy modules reach it first, and the tests here are the
+  guards for the checks directly above them; `project_policy.rs` in the same
+  directory already keeps its own tests in `project_policy/tests.rs` behind an
+  explicit `#[path]`, so this follows an established house shape instead of
+  inventing a second one. Splitting the production code would have been the
+  larger change and would have broken three things that name the parent path:
+  the `tools/kani/proof-scope.toml` entry, the developers' guide, and this
+  plan. The parent path staying stable also keeps the proof scope honest: the
+  harness closure still reaches `shell_definitions.rs`, and the new file is
+  `#[cfg(test)]`-only, which `cargo kani` never compiles, so no scope entry is
+  owed for it.
 
 ## Outcomes & retrospective
 
