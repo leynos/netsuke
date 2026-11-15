@@ -180,6 +180,74 @@ fn prune_rejects_a_netsuke_directory_symlink(
     Ok(())
 }
 
+/// Replacing the verified directory after the lease is acquired must not
+/// redirect retention at the new occupant.
+///
+/// The lease holds the handle opened by `open_component`, so retention
+/// addresses bare entry names in the directory that handle names. Swapping the
+/// path afterwards cannot make the replacement disposable: pruning removes
+/// obsolete sidecars from the directory that was verified and never resolves
+/// the alias now sitting at the original path. This is the second half of the
+/// double check: an entry swapped between the pre-open inspection and the open
+/// is refused, and an entry swapped after the open is simply not the inode the
+/// handle names.
+#[cfg(unix)]
+#[rstest]
+fn retention_prunes_the_verified_directory_after_a_path_replacement(
+    published_current_sidecar: Result<PublishedCurrentSidecar>,
+) -> Result<()> {
+    let PublishedCurrentSidecar {
+        _workspace: workspace,
+        dir,
+        current,
+        lease,
+    } = published_current_sidecar?;
+    for index in 0..40 {
+        dir.write(
+            format!(".netsuke/dyndep/obsolete-{index:02}.dd"),
+            "obsolete",
+        )?;
+    }
+
+    let victim = workspace.path().join("victim");
+    test_support::fs::create_dir(&victim)?;
+    test_support::fs::write(victim.join("keep.dd"), "keep")?;
+    test_support::fs::write(victim.join("stale.tmp"), "stale")?;
+
+    dir.rename(".netsuke/dyndep", &dir, ".netsuke/dyndep-original")?;
+    test_support::fs::symlink("../victim", workspace.path().join(".netsuke/dyndep"))?;
+
+    let summary = lease.prune(std::slice::from_ref(&current))?;
+
+    ensure!(
+        summary.reclaimed_files == 8,
+        "retention must reclaim the 8 obsolete sidecars beyond the 32-file budget, got {}",
+        summary.reclaimed_files
+    );
+    let verified = workspace.path().join(".netsuke/dyndep-original");
+    ensure!(
+        !test_support::fs::exists(verified.join("obsolete-39.dd")),
+        "retention must prune the directory the handle verified, not the path"
+    );
+    ensure!(
+        test_support::fs::exists(verified.join("obsolete-00.dd")),
+        "the directory the handle verified must retain its budget of sidecars"
+    );
+    ensure!(
+        test_support::fs::exists(verified.join("current.dd")),
+        "the current sidecar must survive in the verified directory"
+    );
+    ensure!(
+        test_support::fs::exists(victim.join("keep.dd")),
+        "replacing the path after verification must not make the new target disposable"
+    );
+    ensure!(
+        test_support::fs::exists(victim.join("stale.tmp")),
+        "temporary-file pruning must not reach the replacement target"
+    );
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn retention_skips_symlink_entries_and_preserves_their_targets() -> Result<()> {

@@ -14,6 +14,21 @@ fn workspace() -> Result<(tempfile::TempDir, Dir)> {
     Ok((temp, dir))
 }
 
+/// Assert that `result` refused the alias at `path` with the localized message.
+fn assert_alias_refusal<T>(result: Result<T>, path: &str) -> Result<()> {
+    let Err(error) = result else {
+        anyhow::bail!("a generated-state alias must be refused");
+    };
+    let expected = localization::message(keys::RUNNER_IO_DYNDEP_ALIAS)
+        .with_arg("path", path)
+        .to_string();
+    ensure!(
+        format!("{error:#}").contains(&expected),
+        "the refusal must name the aliased component: {error:#}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn open_or_create_creates_the_dyndep_namespace(
     workspace: Result<(tempfile::TempDir, Dir)>,
@@ -55,21 +70,12 @@ fn open_existing_reports_an_absent_namespace(
     workspace: Result<(tempfile::TempDir, Dir)>,
 ) -> Result<()> {
     let (_temp, dir) = workspace?;
-
     ensure!(
         DyndepDirectory::open_existing(&dir)?.is_none(),
         "a workspace without .netsuke must report an absent namespace"
     );
-    Ok(())
-}
 
-#[rstest]
-fn open_existing_reports_an_absent_dyndep_directory(
-    workspace: Result<(tempfile::TempDir, Dir)>,
-) -> Result<()> {
-    let (_temp, dir) = workspace?;
     dir.create_dir(".netsuke")?;
-
     ensure!(
         DyndepDirectory::open_existing(&dir)?.is_none(),
         "a .netsuke directory without dyndep must report an absent namespace"
@@ -84,17 +90,7 @@ fn open_or_create_refuses_a_netsuke_regular_file(
     let (_temp, dir) = workspace?;
     dir.write(".netsuke", "not a directory")?;
 
-    let Err(error) = DyndepDirectory::open_or_create(&dir) else {
-        anyhow::bail!("a .netsuke regular file must be refused");
-    };
-    let expected = localization::message(keys::RUNNER_IO_DYNDEP_ALIAS)
-        .with_arg("path", ".netsuke")
-        .to_string();
-    ensure!(
-        format!("{error:#}").contains(&expected),
-        "the refusal must name the non-directory component: {error:#}"
-    );
-    Ok(())
+    assert_alias_refusal(DyndepDirectory::open_or_create(&dir), ".netsuke")
 }
 
 #[cfg(unix)]
@@ -107,16 +103,7 @@ fn open_or_create_refuses_a_netsuke_directory_symlink(
     test_support::fs::create_dir(&victim)?;
     test_support::fs::symlink("victim", temp.path().join(".netsuke"))?;
 
-    let Err(error) = DyndepDirectory::open_or_create(&dir) else {
-        anyhow::bail!("a .netsuke symlink must be refused");
-    };
-    let expected = localization::message(keys::RUNNER_IO_DYNDEP_ALIAS)
-        .with_arg("path", ".netsuke")
-        .to_string();
-    ensure!(
-        format!("{error:#}").contains(&expected),
-        "the refusal must name the aliased component: {error:#}"
-    );
+    assert_alias_refusal(DyndepDirectory::open_or_create(&dir), ".netsuke")?;
     ensure!(
         !test_support::fs::exists(victim.join("dyndep")),
         "creation must not follow the .netsuke alias"
@@ -135,17 +122,7 @@ fn open_existing_refuses_a_dyndep_directory_symlink(
     test_support::fs::create_dir(temp.path().join(".netsuke"))?;
     test_support::fs::symlink("../victim", temp.path().join(".netsuke/dyndep"))?;
 
-    let Err(error) = DyndepDirectory::open_existing(&dir) else {
-        anyhow::bail!("a dyndep symlink must be refused");
-    };
-    let expected = localization::message(keys::RUNNER_IO_DYNDEP_ALIAS)
-        .with_arg("path", DYNDEP_DIR)
-        .to_string();
-    ensure!(
-        format!("{error:#}").contains(&expected),
-        "the refusal must name the aliased component: {error:#}"
-    );
-    Ok(())
+    assert_alias_refusal(DyndepDirectory::open_existing(&dir), DYNDEP_DIR)
 }
 
 #[cfg(unix)]
@@ -157,15 +134,7 @@ fn open_existing_refuses_a_dangling_dyndep_symlink(
     test_support::fs::create_dir(temp.path().join(".netsuke"))?;
     test_support::fs::symlink("absent", temp.path().join(".netsuke/dyndep"))?;
 
-    let Err(error) = DyndepDirectory::open_existing(&dir) else {
-        anyhow::bail!("a dangling dyndep symlink must be refused");
-    };
-    let expected = localization::message(keys::RUNNER_IO_DYNDEP_ALIAS)
-        .with_arg("path", DYNDEP_DIR)
-        .to_string();
-    ensure!(
-        format!("{error:#}").contains(&expected),
-        "a dangling alias must not be mistaken for an absent namespace: {error:#}"
-    );
-    Ok(())
+    // A dangling alias is still an alias: `open_existing` must refuse it rather
+    // than translate the failed open into an absent namespace.
+    assert_alias_refusal(DyndepDirectory::open_existing(&dir), DYNDEP_DIR)
 }

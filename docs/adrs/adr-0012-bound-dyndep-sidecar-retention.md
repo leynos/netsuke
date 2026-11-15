@@ -129,4 +129,8 @@ does not defend against a process that ignores it. The `--directory` root may
 itself be a symbolic link, because it is the caller's chosen capability root
 rather than generated state. A project that previously relied on an aliased
 `.netsuke` directory must replace it with a real directory; the command now
-fails with a localized error and deletes nothing.
+fails with a localized error. The refusal precedes any retention deletion, but
+it is not always the first thing a command does: a bundle with no dyndep
+sidecars opens the directory only when retention runs, and `clean` runs
+`ninja -t clean` before that, so a sidecar-free `clean` may report the alias
+after its declared build outputs have already been removed.

@@ -44,16 +44,12 @@ impl DyndepDirectory {
     /// Returns an error when a component cannot be created or opened, or when
     /// either component is a symbolic link, junction, or non-directory.
     pub(crate) fn open_or_create(workspace: &Dir) -> Result<Self> {
-        let mut current = clone_handle(workspace, Utf8Path::new("."))?;
-        let mut display = Utf8PathBuf::new();
-        for component in DYNDEP_COMPONENTS {
-            display.push(component);
-            current = match open_component(&current, component, &display)? {
-                Some(dir) => dir,
-                None => create_component(&current, component, &display)?,
-            };
-        }
-        Ok(Self { dir: current })
+        // Creation means a missing component is never the outcome a caller
+        // observes, so absence here can only follow a concurrent remover. The
+        // diagnostic still names the directory the walk promised to establish.
+        let dir = open_dyndep_dir(workspace, true)?
+            .ok_or_else(|| anyhow!(open_error(Utf8Path::new(DYNDEP_DIR))))?;
+        Ok(Self { dir })
     }
 
     /// Open the generated dyndep directory, reporting absence as `None`.
@@ -63,22 +59,33 @@ impl DyndepDirectory {
     /// Returns an error when a component cannot be opened, or when either
     /// component is a symbolic link, junction, or non-directory.
     pub(crate) fn open_existing(workspace: &Dir) -> Result<Option<Self>> {
-        let mut current = clone_handle(workspace, Utf8Path::new("."))?;
-        let mut display = Utf8PathBuf::new();
-        for component in DYNDEP_COMPONENTS {
-            display.push(component);
-            let Some(dir) = open_component(&current, component, &display)? else {
-                return Ok(None);
-            };
-            current = dir;
-        }
-        Ok(Some(Self { dir: current }))
+        Ok(open_dyndep_dir(workspace, false)?.map(|dir| Self { dir }))
     }
 
     /// Borrow the verified directory handle.
     pub(crate) const fn dir(&self) -> &Dir {
         &self.dir
     }
+}
+
+/// Walk the generated-state components, optionally creating missing ones.
+///
+/// Returns `None` only when a component is absent and `create_missing` is
+/// false. Creation keeps the walk going, so a caller that asked for creation
+/// never sees absence unless the component disappears between the create and
+/// the open, which `create_component` reports as an error.
+fn open_dyndep_dir(workspace: &Dir, create_missing: bool) -> Result<Option<Dir>> {
+    let mut current = clone_handle(workspace, Utf8Path::new("."))?;
+    let mut display = Utf8PathBuf::new();
+    for component in DYNDEP_COMPONENTS {
+        display.push(component);
+        current = match open_component(&current, component, &display)? {
+            Some(dir) => dir,
+            None if create_missing => create_component(&current, component, &display)?,
+            None => return Ok(None),
+        };
+    }
+    Ok(Some(current))
 }
 
 /// Whether `metadata` describes a symbolic link, junction, or other reparse
