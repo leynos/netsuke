@@ -27,6 +27,9 @@ enum UserFileLocation {
     /// `$HOME/.config/netsuke/config.toml`, reached through the home fallback
     /// when `XDG_CONFIG_HOME` names no usable user directory.
     HomeConfigDirectory,
+    /// `$HOME/.config/.netsuke.toml`, the dotfile spelling within the home
+    /// `.config` base.
+    HomeConfigDotfile,
 }
 
 impl UserFileLocation {
@@ -35,6 +38,7 @@ impl UserFileLocation {
         match self {
             Self::HomeDotfile => home.join(".netsuke.toml"),
             Self::HomeConfigDirectory => home.join(".config/netsuke/config.toml"),
+            Self::HomeConfigDotfile => home.join(".config/.netsuke.toml"),
         }
     }
 }
@@ -127,6 +131,12 @@ fn assert_user_precedence_applied(merged: &Cli) -> Result<()> {
     UserFileLocation::HomeConfigDirectory,
     XdgConfigHomeMode::NoConfigFile
 )]
+#[case::home_config_dotfile_unset(UserFileLocation::HomeConfigDotfile, XdgConfigHomeMode::Unset)]
+#[case::home_config_dotfile_empty(UserFileLocation::HomeConfigDotfile, XdgConfigHomeMode::Empty)]
+#[case::home_config_dotfile_no_config(
+    UserFileLocation::HomeConfigDotfile,
+    XdgConfigHomeMode::NoConfigFile
+)]
 fn user_scope_config_takes_precedence_without_usable_xdg_config_home(
     #[case] location: UserFileLocation,
     #[case] mode: XdgConfigHomeMode,
@@ -198,6 +208,35 @@ fn unloadable_user_config_stops_discovery_without_system_fallback(
     ensure!(
         error_chain.contains(expected_fragment),
         "the error should name {expected_fragment}: {error_chain}"
+    );
+    Ok(())
+}
+
+/// A user file that exists but does not resolve stops discovery instead of
+/// falling back to a valid system file.
+///
+/// `OrthoConfig` reports a symbolic link whose target is missing as an absent
+/// file, so without a separate presence probe the link would be skipped and the
+/// system file would reinstate the policy the user meant to override.
+#[cfg(unix)]
+#[rstest]
+fn dangling_user_config_symlink_stops_discovery_without_system_fallback() -> Result<()> {
+    let scenario = Scenario::new()?;
+    let link = scenario.home.path().join(".netsuke.toml");
+    // The target is relative, so the link stays inside the home directory and
+    // the loader reports it as an absent file rather than refusing it as a
+    // path escape.
+    std::os::unix::fs::symlink("absent-target.toml", &link)
+        .context("create dangling user configuration symlink")?;
+
+    let environment = scenario.system_scope_environment();
+    let error = scenario
+        .merge(&environment)
+        .expect_err("a dangling user file must not fall back to system configuration");
+    let error_chain = format!("{error:#}");
+    ensure!(
+        error_chain.contains(".netsuke.toml"),
+        "the error should name the dangling user configuration: {error_chain}"
     );
     Ok(())
 }
