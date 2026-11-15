@@ -496,6 +496,13 @@ explicit and exercise the actual adapters in tests.
     child's `&Output` like the sibling helpers instead of an extracted string.
     `cs delta` now reports the module at Code Health 10.00 with the rule no
     longer above its threshold, and the startup suite still passes 21 of 21.
+  - [x] 2026-11-15: Pass the whole eleven-gate set against the CodeScene repair
+    at `080159e2e`. The run tagged `final24` finished `failed=0` in 933 s:
+    `check-fmt` 3s, `lint` 81s, `typecheck` 14s, `doc-coverage` 83s, `test`
+    89s, `test-workflow-contracts` 586s, `test-package-verify` 41s,
+    `test-documentation-contracts` 1s, `verus` 2s, `markdownlint` 33s,
+    `nixie` 0s. `make verus` reports "9 verified, 0 errors" and doc-comment
+    coverage is 98.26%.
 
 ## Surprises & discoveries
 
