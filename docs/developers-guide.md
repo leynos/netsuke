@@ -3032,7 +3032,9 @@ cannot be derived at all is reported rather than assumed read-only, because the
 repository default can grant write. A clause hidden inside a negation does not
 count as a conjunct, and a guard holding any `||` is refused outright: `&&`
 binds tighter than `||`, so an appended always-true disjunct leaves every
-required clause visible while making the guard always true. The same module
+required clause visible while making the guard always true. The optional
+`${{ }}` wrapper is removed before the guard is read, so the wrapped and bare
+spellings GitHub both accepts for one guard are judged alike. The same module
 requires `release-admission-canaries`, `package-crate`, and `release` to hold
 no write scope, so the jobs that must stay reachable cannot mutate anything.
 

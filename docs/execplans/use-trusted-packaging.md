@@ -4422,6 +4422,56 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   operator rather than fixed here, because rewriting eighteen unrelated
   functions is not this issue's scope.
 
+- [x] (2026-11-15) Answered the second CodeRabbit review of #1070: the gate
+  reads a wrapped guard, the harness writes evidence where the run reads it,
+  and the decoder's recursion failure is refused.
+
+  **Findings and dispositions.** The review raised three items, all minor and
+  all confirmed against the code.
+
+  *Wrapped guard.* GitHub accepts a job-level `if` bare or wrapped in `${{ }}`,
+  and the contract split the wrapped form on `&&` without removing the wrapper,
+  leaving `}}` on the final clause. A guard carrying every check was therefore
+  reported as missing
+  `needs.release-admission-canaries.outputs.candidate_commit == github.sha`.
+  `unwrap_expression` in `actions_expressions` now removes one complete wrapper
+  and leaves anything else untouched, and `check_write_guard` reads its result;
+  the helper is public now rather than private, because the case it needs is a
+  verdict about one job, not about a whole workflow. A direct control probe
+  over a fully wrapped guard reports `[]` with the fix and the candidate clause
+  with `unwrap_expression` stubbed to identity.
+
+  *Harness evidence path.* `run_gate` wrote the fixture at its own default path
+  and then applied the case's environment overrides, so a case that redirected
+  `NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE` left the redirected path empty and
+  a fresh document arrived as `missing_evidence`. The fixture is now written at
+  the merged environment's value, falling back to the default only when the
+  variable is unset or empty — a state no run can decide, because an enforcing
+  run refuses the configuration without a document and a rehearsal reads none.
+  The new case in `test_release_admission_environment_contract` runs the gate
+  in publishing mode against a redirected path and requires admission, its own
+  document at that path, and nothing at the harness default.
+
+  *Decoder recursion.* The first review raised this and measurement rejected
+  it; the second raised it with a 60,001-byte document. Re-measured on the
+  pinned 3.14.7: 30,000 nested arrays decode, as do 40,000, and the first
+  `RecursionError` sits between 40,000 and 80,000 depth — at least 80,001 bytes
+  against a 65,536-byte cap. The finding's document is still inside the cap and
+  still decodes, so the branch remains unreachable on this interpreter. The
+  catch was added anyway, because `RecursionError` is not a `ValueError` and
+  the nesting limit is a property of the interpreter rather than of this
+  reader: on a host whose decoder refuses earlier, the failure would escape as
+  an unclassified gate failure instead of a refusal. The mapping is pinned
+  directly, and the new module also pins the deepest document the cap admits as
+  `malformed_evidence`, so the size bound and the decoder limit are each held
+  by a case.
+
+  **Gate-contract consequence.** Adding a release-admission test module broke
+  `test_make_target_runs_only_the_release_admission_runtime_modules`, which
+  pins the target's exact module list. The list is now sixteen modules, with
+  the new one in its Makefile position; the target itself was left as the only
+  place the suite is enumerated.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
