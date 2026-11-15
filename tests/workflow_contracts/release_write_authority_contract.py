@@ -23,7 +23,11 @@ Run via ``make test-workflow-contracts``.
 
 import re
 
-from actions_expressions import contains_unquoted_or, top_level_conjuncts
+from actions_expressions import (
+    contains_unquoted_or,
+    top_level_conjuncts,
+    unwrap_expression,
+)
 from release_admission_gate_contract import ADMISSION_JOB
 from release_publish_needs import job_names
 from workflow_loading import require_mapping, workflow_job
@@ -179,7 +183,7 @@ def _check_write_authority(release: dict[str, object], violations: list[str]) ->
         return
     for name, job in sorted(jobs.items()):
         _check_write_needs(name, job, violations)
-        _check_write_guard(name, job, violations)
+        check_write_guard(name, job, violations)
 
 
 def _check_permissions_declared(
@@ -210,11 +214,24 @@ def _check_write_needs(
         violations.append(f"write-authority.{name}.needs: missing {missing!r}")
 
 
-def _check_write_guard(
-    name: str, job: dict[str, object], violations: list[str]
-) -> None:
-    """Require every gate clause as a top-level conjunct, and no status bypass."""
-    guard = " ".join(str(job.get("if", "")).split())
+def check_write_guard(name: str, job: dict[str, object], violations: list[str]) -> None:
+    """Require every gate clause as a top-level conjunct, and no status bypass.
+
+    The optional ``${{ }}`` wrapper is removed first, because GitHub accepts
+    the wrapped and bare spellings of one guard and both must be judged the
+    same way. Leaving it on would attach ``}}`` to the final clause and report
+    a check the guard does carry as missing.
+
+    Parameters
+    ----------
+    name
+        The job's name, used to label each finding.
+    job
+        One release job.
+    violations
+        Collector for every finding.
+    """
+    guard = " ".join(unwrap_expression(str(job.get("if", ""))).split())
     clauses = set(top_level_conjuncts(guard))
     violations.extend(
         f"write-authority.{name}.guard: missing top-level check {clause!r}"
@@ -262,6 +279,7 @@ __all__ = (
     "check_publication_gate",
     "check_read_only_jobs",
     "check_rehearsal_caller",
+    "check_write_guard",
     "effective_permissions",
     "write_authority_jobs",
 )
