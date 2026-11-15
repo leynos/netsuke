@@ -403,6 +403,19 @@ accepted decision; an operator fixes them in different places, which is why
 they are not one category. Metric and label names are unchanged, and the
 extension is reviewed as the accepted decision requires.
 
+The window is read twice, not once. `check_scan_freshness` refuses a document
+whose timestamps lie outside the maximum age, and `verify_evidence` re-reads
+the window once identity and results have been accepted, refusing with
+`stale_evidence` if the document expired in between. Two clock commands and the
+telemetry writes separate the two readings -- 14 ms per clock command on the
+development host -- so a manifest observed a moment inside its window can be
+outside it by the time the gate admits on it; the accepted decision's
+requirement that stale admission evidence remains a gate failure then holds at
+the decision rather than only at the observation. The recheck runs only after a
+success and can only replace it with a refusal, so it adds no path to
+admission. The category and metric vocabulary are unchanged: a recheck refusal
+is attributed to `verify_evidence`, which is the operation that decided it.
+
 `tests/workflow_contracts/release_admission_gate_contract.py` evaluates the
 enforcement expression in every modelled scenario rather than matching its
 text, so either hard-coded mode is reported for the run that exposes it.

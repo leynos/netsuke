@@ -4659,6 +4659,90 @@ seven-gate set passes: `check-fmt`, `lint`, `typecheck`, `markdownlint`,
 then required the rewrap `make fmt` applies. Both Markdown gates were re-run,
 and pass, on the final wording.
 
+- [x] (2026-11-15) Answered the fifth CodeRabbit review of #1070: the evidence
+  window is re-read at the admission decision, and the review's other finding
+  was refuted against the suite it named.
+
+  **Findings and dispositions.** The review raised two items: a minor one on
+  the final admission decision in `gate.py`, and a major one on the admission
+  timeout cases in `release_admission_test_cases.py`.
+
+  *The window is re-read at the decision (implemented).* `check_scan_freshness`
+  classified the manifest against a wall-clock reading, and `verify_evidence`
+  then admitted on identity and results alone. Two clock commands and the
+  telemetry writes run between the two readings -- 14 ms per clock command,
+  measured with `hyperfine` on this host -- so a document observed just inside
+  its window can expire before the gate admits on it, and the gate would have
+  admitted evidence older than the bound it publishes. The wall-clock read and
+  the freshness classification became one helper that both evidence checks
+  call, so the window is measured the same way at both moments. The second call
+  runs only after `evidence.verify` succeeds, so a candidate mismatch or an
+  unsuccessful canary keeps its own category and the recheck can only replace a
+  success with a refusal. A recheck refusal is attributed to `verify_evidence`
+  with `stale_evidence`, so the metric and label vocabulary are unchanged.
+
+  *The evidence decisions moved out of the orchestration module (forced).* The
+  recheck took `gate.py` to 426 lines, past the repository's 400-line ceiling,
+  which the lint gate reported as `C0302`. Rather than trim the prose that
+  explains the decisions, the two evidence checks and the read they share moved
+  to `.github/scripts/_release_admission/admission_evidence.py`, leaving
+  `gate.py` at 340 lines as orchestration and composition root. The package
+  docstring indexes the new module, which keeps the filesystem port and the
+  wall-clock reader as injected collaborators; `Gate` passes in its own clock
+  reader, so the window is still measured where the record is written.
+
+  *The monotonic clock in the timeout cases (refuted).* The finding stated that
+  the default clock double answers `1` for every monotonic read, that the
+  timeout cases therefore record a duration of `0.0`, and that the
+  positive-duration assertion in `test_release_admission_metric_boundedness.py`
+  fails for them. The premise does not hold. `install_boundaries` registers a
+  clock double, but `_gate_environment` never names
+  `NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER`, so the child runs the real
+  interpreter and its durations are genuine elapsed times.
+  `test_operation_durations_measure_controlled_delay` states the same contract
+  in its own notes ("The real clock is in use, so the undelayed run's durations
+  are the genuine elapsed times rather than a double's constant"), and
+  `make test-release-admission` passed all 138 cases before this round changed
+  anything. The assertion the finding cites is what keeps a double from
+  silently replacing that clock, so no change was made.
+
+  **Evidence that the new case is not vacuous.**
+  `scripts/tests/test_release_admission_freshness_recheck.py` scripts the wall
+  clock: a case names the readings in order, the double answers them in that
+  order, and monotonic reads come from a rising counter so no duration decides
+  a case about freshness. Three cases: a document inside the window at the
+  check and outside it at the decision is refused (`stale_evidence`, exit 1,
+  with the freshness operation itself recorded as successful); the same
+  document inside at both readings is admitted; and observation mode records
+  the same refusal while exiting 0. Each asserts the readings it was served, so
+  a gate that stopped re-reading fails there rather than passing for want of a
+  second reading. Probed by removing the two recheck lines from the admission
+  path as it stood before the extraction: all three cases fail, and the file
+  was restored byte-identical (`9357f0d3…`, confirmed by `md5sum` against the
+  copy taken before the probe).
+
+  **Contracts that pinned the old shape.** `test_release_admission_metrics.py`
+  required eleven clock invocations and exactly one wall-clock read in an
+  admitting run; it now requires twelve and two. The Makefile target and
+  `tests/workflow_contracts/release_admission_runtime_gate_test.py` list the
+  runtime modules in the same order and compare them, so the new module was
+  added to both. The developers' guide's copy of that list had been three
+  modules behind the target before this change; it now enumerates all eighteen,
+  states that the list is contractual, and describes the scripted clock.
+
+  **Documentation.** The 2026-11-15 addendum to ADR-0020 records the second
+  reading: why it exists, what it can and cannot do, and why a recheck refusal
+  is `stale_evidence` on `verify_evidence`.
+
+  **Verification for this round.** The four admission modules nearest the
+  change pass together (38 cases: `metrics`, `freshness_recheck`,
+  `metric_degradation`, `metric_boundedness`). The full gate set for the round
+  is `test-release-admission`, `test-workflow-contracts`, `check-fmt`, `lint`,
+  `typecheck`, `markdownlint`, `nixie` and `test`; it is the batch this
+  document's commit is gated on, and its results are recorded in the pull
+  request rather than here, so the record of a passing run is not itself an
+  edit that invalidates the run.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

@@ -5651,7 +5651,7 @@ Python gate. It uses the repository's Python 3.14 baseline and provisions
 `pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
 `cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
 `cyclopts==4.25.3` for the entry point the tests import. The target runs the
-fourteen runtime modules with `python -m pytest`, `-c /dev/null`,
+eighteen runtime modules with `python -m pytest`, `-c /dev/null`,
 `--rootdir=.`, and `-p no:cacheprovider`, so the test run is isolated from
 repository-local pytest configuration and cache state:
 
@@ -5661,6 +5661,7 @@ repository-local pytest configuration and cache state:
 - `scripts/tests/test_release_admission_process_bounds.py`
 - `scripts/tests/test_release_admission_environment_contract.py`
 - `scripts/tests/test_release_admission_configuration_resolution.py`
+- `scripts/tests/test_release_admission_destination_resolution.py`
 - `scripts/tests/test_release_admission_artefact_initialization.py`
 - `scripts/tests/test_release_admission_artefact_truncation.py`
 - `scripts/tests/test_release_admission_default_forms.py`
@@ -5668,7 +5669,16 @@ repository-local pytest configuration and cache state:
 - `scripts/tests/test_release_admission_status_translation.py`
 - `scripts/tests/test_release_admission_runner_contract.py`
 - `scripts/tests/test_release_admission_metric_degradation.py`
+- `scripts/tests/test_release_admission_manifest_parsing.py`
+- `scripts/tests/test_release_admission_evidence_reading.py`
+- `scripts/tests/test_release_admission_freshness_recheck.py`
 - `scripts/tests/test_release_admission_sink_persistence.py`
+
+The module list is itself contractual.
+`tests/workflow_contracts/release_admission_runtime_gate_test.py` compares the
+target's recipe against the same paths in the same order, so a module added to
+one without the other fails the workflow-contract suite rather than running
+unnoticed or not at all.
 
 Three of these reach past the doubles. `..._process_bounds.py` holds the
 bound's own regression cases: a child and a descendant it starts, both trapping
@@ -5681,6 +5691,14 @@ file descriptor can observe an inherited stream. `..._status_translation.py`
 calls `statuses.as_bash_status` and `statuses.launch_failure_status` directly
 and drives real sink processes, so a signal death and a refused launch are
 observed rather than fabricated.
+
+`..._freshness_recheck.py` does something the others do not: it scripts the
+wall clock. The gate reads that clock once when it checks the evidence window
+and again when it is about to admit, so a case names the readings in order and
+the double answers them in that order, leaving the monotonic reads to a rising
+counter so no duration decides a case about freshness. Each case also asserts
+which readings it was actually served, so a gate that stopped re-reading the
+window fails there instead of passing for want of a second reading.
 
 The runtime modules drive the gate as a real process and intercept its external
 commands with cmd-mox doubles registered under the gate's own adapter names.
