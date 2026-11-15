@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc 84b5d5de85b5fbb52be106a63c71caab5a21e27f41325304ac948a22c95293b2 # shrinks to (text, headings) = ("### 0\nSome prose that makes no claim.\n\n```text\n  # indented, so not a heading\n```\n\n", [(3, "0", "### 0\n")])
