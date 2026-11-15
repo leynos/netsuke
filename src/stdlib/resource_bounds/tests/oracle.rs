@@ -44,9 +44,11 @@ pub(super) fn width_of(length: usize) -> u64 {
 /// The zero repeat and the zero operand are answered before anything is
 /// multiplied, because those two answers do not depend on the operands. That
 /// ordering keeps the oracle sound where the kernel's does: the prefix
-/// `[usize::MAX, usize::MAX, 0]` overflows a `u128` fold partway through, and
-/// folding first would report "above `u64::MAX`" for a request the kernel
-/// answers with zero.
+/// `[usize::MAX, usize::MAX, 2]` overflows a `u128` fold before it reaches the
+/// trailing zero, and folding first would report "above `u64::MAX`" for a
+/// request the kernel answers with zero. Two maximal operands alone do not
+/// overflow a `u128` on a 64-bit target, which is why the witness carries a
+/// third operand.
 ///
 /// Otherwise the operands are folded and the result raised in `u128`, which is
 /// the same quantity the kernel computes by a route that shares no code with
@@ -153,17 +155,39 @@ fn the_written_maximum_matches_u64() {
     );
 }
 
+/// Check that the witness prefix really overflows the oracle's own `u128`.
+///
+/// The short-circuit case below relies on `[usize::MAX, usize::MAX, 2]`
+/// overflowing before it reaches the trailing zero. That premise is arithmetic,
+/// not prose, and on a 64-bit target it is the third operand that makes it
+/// true: `usize::MAX * usize::MAX` is `2^128 - 2^65 + 1`, which still fits a
+/// `u128`. Without this case a two-operand prefix would leave the short-circuit
+/// case passing for a reason other than the one it claims.
+#[test]
+fn the_witness_prefix_overflows_u128() {
+    let max = u128::try_from(usize::MAX).expect("a usize always fits in a u128");
+    let square = max
+        .checked_mul(max)
+        .expect("two maximal operands fit a u128 on a 64-bit target");
+    assert_eq!(
+        square.checked_mul(2),
+        None,
+        "the witness prefix must overflow u128, or the short-circuit case proves nothing"
+    );
+}
+
 /// Check the product oracle answers the cases the kernel answers first.
 ///
-/// Each operand here is wide enough that a fold over the whole tuple overflows
-/// the oracle's own `u128`. The oracle must still report the zero operand and
-/// the zero repeat exactly as the kernel does, and must still report "above
-/// `u64::MAX`" when the product really is out of range, so this case pins the
-/// short circuits without excusing the overflow answer.
+/// The three-operand prefix here overflows the oracle's own `u128` before it
+/// reaches the trailing zero, which the case above pins. The oracle must still
+/// report the zero operand and the zero repeat exactly as the kernel does, and
+/// must still report "above `u64::MAX`" when the product really is out of
+/// range, so this case covers the short circuits without excusing the overflow
+/// answer.
 #[test]
 fn the_product_oracle_short_circuits_like_the_kernel() {
     assert_eq!(
-        product(&[usize::MAX, usize::MAX, 0], 1),
+        product(&[usize::MAX, usize::MAX, 2, 0], 1),
         Some(0),
         "a zero operand must absorb an overflowing prefix"
     );
