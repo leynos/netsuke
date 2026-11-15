@@ -1,4 +1,11 @@
-"""Provide shared dynamic-import fixtures for script test modules."""
+"""Provide shared dynamic imports and the admission package's import path.
+
+The release-admission gate is a package under ``.github/scripts``, which the
+``PYTHONPATH`` the Makefile exports does not name. The directory is added here,
+once, so the modules that exercise the gate import it without each editing the
+import path during its own collection. The fixtures below import one
+``scripts`` module under a required name.
+"""
 
 import importlib.util
 import pathlib
@@ -11,6 +18,10 @@ if typ.TYPE_CHECKING:
     import types
 
 SCRIPT_DIRECTORY = pathlib.Path(__file__).resolve().parents[1]
+#: The directory holding the release-admission gate, which is imported by name
+#: rather than loaded from a path.
+ADMISSION_SCRIPTS = SCRIPT_DIRECTORY.parent / ".github" / "scripts"
+sys.path.insert(0, str(ADMISSION_SCRIPTS))
 
 
 def load_script_module(module_name: str, file_name: str) -> types.ModuleType:

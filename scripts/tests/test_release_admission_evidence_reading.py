@@ -23,14 +23,14 @@ Example (run from the repository root)::
 
 import dataclasses
 import os
-import sys
 import threading
-from pathlib import Path
+import typing as typ
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".github" / "scripts"))
 from _release_admission import filesystem
+
+if typ.TYPE_CHECKING:
+    import pathlib
 
 #: How long a read that must be refused may take before it is called a wait.
 #: The refusal itself is immediate; the allowance is for thread start-up only.
@@ -51,7 +51,7 @@ class ReadAttempt:
 
 
 def test_the_byte_bound_admits_exactly_the_bound_and_refuses_one_more(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Read a document of exactly the bound and refuse one byte more."""
     target = tmp_path / "evidence.json"
@@ -64,13 +64,13 @@ def test_the_byte_bound_admits_exactly_the_bound_and_refuses_one_more(
         filesystem.read_bytes(str(target), 4)
 
 
-def test_an_absent_document_propagates_the_absence(tmp_path: Path) -> None:
+def test_an_absent_document_propagates_the_absence(tmp_path: pathlib.Path) -> None:
     """Let the caller tell an absent document from one that cannot be read."""
     with pytest.raises(FileNotFoundError):
         filesystem.read_bytes(str(tmp_path / "absent.json"), 64)
 
 
-def test_a_directory_is_refused_as_not_a_document(tmp_path: Path) -> None:
+def test_a_directory_is_refused_as_not_a_document(tmp_path: pathlib.Path) -> None:
     """Refuse a directory before reading, rather than reading it as nothing."""
     with pytest.raises(filesystem.NotRegularFileError):
         filesystem.read_bytes(str(tmp_path), 64)
@@ -79,7 +79,9 @@ def test_a_directory_is_refused_as_not_a_document(tmp_path: Path) -> None:
 @pytest.mark.skipif(
     not hasattr(os, "mkfifo"), reason="a FIFO is a POSIX filesystem object"
 )
-def test_a_fifo_without_a_writer_is_refused_without_waiting(tmp_path: Path) -> None:
+def test_a_fifo_without_a_writer_is_refused_without_waiting(
+    tmp_path: pathlib.Path,
+) -> None:
     """Refuse a FIFO rather than wait for a writer that is not coming.
 
     Notes

@@ -25,11 +25,8 @@ Example (run from the repository root)::
         -c /dev/null --rootdir=. -p no:cacheprovider
 """
 
-import sys
-from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".github" / "scripts"))
 from _release_admission import evidence, manifest, policy
 
 #: The deepest nesting a 65,536-byte document can hold: one bracket pair per
