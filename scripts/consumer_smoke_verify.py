@@ -81,6 +81,7 @@ _REFUSALS: tuple[tuple[tuple[type[Exception], ...], int, str], ...] = (
         (
             payload.PayloadUnavailableError,
             payload.PayloadEmptyError,
+            payload.PayloadUnreadableError,
             payload.PayloadDigestMissingError,
             payload.PayloadMismatchError,
         ),
@@ -270,14 +271,9 @@ def _run_phases(
     :class:`release_consumer_archive_policy.ArchiveLayoutError` for members
     that cannot be extracted safely.
     """
-    crate = _saved(arguments.crate, arguments.crate_status)
-    archive = _saved(arguments.archive, arguments.archive_status)
-    sidecar = _saved(arguments.sidecar, arguments.sidecar_status)
-    _ = ledger.run(
+    crate = ledger.run(
         "crate_download",
-        lambda: payload.require_delivered(
-            facts=crate.facts, asset_name=plan.crate_name
-        ),
+        lambda: _delivered(arguments.crate, arguments.crate_status, plan.crate_name),
     )
     _ = ledger.run(
         "crate_verification",
@@ -287,9 +283,9 @@ def _run_phases(
             expected_sha256=plan.crate_sha256,
         ),
     )
-    _ = ledger.run(
+    archive, sidecar = ledger.run(
         "archive_download",
-        lambda: _require_delivered_assets(plan, archive, sidecar),
+        lambda: _delivered_assets(arguments, plan),
     )
     layout = ledger.run(
         "archive_verification",
@@ -310,6 +306,53 @@ def _run_phases(
     )
 
 
+def _delivered(
+    body: pathlib.Path, status: pathlib.Path, asset_name: str
+) -> SavedDownload:
+    """Require one download to have arrived and return the facts observed for it.
+
+    Returns
+    -------
+    SavedDownload
+        The facts the host's response established, and the saved path.
+
+    Notes
+    -----
+    The facts are gathered here, inside the phase, so a read that fails is
+    recorded against the download that needed it; reading them up front would
+    let an ``OSError`` escape the ledger and end the run without a verdict.
+
+    An undelivered download fails as
+    :class:`release_consumer_payload.PayloadUnavailableError`, an empty one as
+    :class:`release_consumer_payload.PayloadEmptyError`, and an unreadable one
+    as :class:`release_consumer_payload.PayloadUnreadableError`.
+    """
+    saved = _saved(body, status)
+    _ = payload.require_delivered(facts=saved.facts, asset_name=asset_name)
+    return saved
+
+
+def _delivered_assets(
+    arguments: argparse.Namespace, plan: smoke.SmokePlan
+) -> tuple[SavedDownload, SavedDownload]:
+    """Require both release downloads to have arrived.
+
+    Returns
+    -------
+    tuple[SavedDownload, SavedDownload]
+        The archive and its sidecar, each with the facts gathered for it.
+
+    Notes
+    -----
+    The refusals are the ones :func:`_delivered` raises, under the archive's
+    and then the sidecar's asset name.
+    """
+    return (
+        _delivered(arguments.archive, arguments.archive_status, plan.archive_name),
+        _delivered(arguments.sidecar, arguments.sidecar_status, plan.sidecar_name),
+    )
+
+
 def _saved(body: pathlib.Path, status: pathlib.Path) -> SavedDownload:
     """Pair a saved body with the HTTP status recorded beside it.
 
@@ -317,25 +360,20 @@ def _saved(body: pathlib.Path, status: pathlib.Path) -> SavedDownload:
     -------
     SavedDownload
         The facts the host's response established, and the saved path.
+
+    Raises
+    ------
+    PayloadUnreadableError
+        If the saved file could not be stat'ed or hashed. The host's
+        ``OSError`` is translated here so the download phase records a refusal
+        rather than the run escaping with an untranslated failure.
     """
-    facts = evidence.payload_facts(body=body, status=status)
+    try:
+        facts = evidence.payload_facts(body=body, status=status)
+    except OSError as error:
+        msg = f"the saved download {body} could not be read: {error}"
+        raise payload.PayloadUnreadableError(msg) from error
     return SavedDownload(facts=facts, path=body)
-
-
-def _require_delivered_assets(
-    plan: smoke.SmokePlan, archive: SavedDownload, sidecar: SavedDownload
-) -> None:
-    """Require both release downloads to have been delivered.
-
-    Notes
-    -----
-    A missing download fails as
-    :class:`release_consumer_payload.PayloadUnavailableError` and an empty one
-    as :class:`release_consumer_payload.PayloadEmptyError`, both raised by
-    :func:`release_consumer_payload.require_delivered`.
-    """
-    _ = payload.require_delivered(facts=archive.facts, asset_name=plan.archive_name)
-    _ = payload.require_delivered(facts=sidecar.facts, asset_name=plan.sidecar_name)
 
 
 def _report_refusal(error: Exception) -> int:

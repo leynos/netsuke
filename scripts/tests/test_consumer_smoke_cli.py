@@ -15,6 +15,7 @@ Run via ``make test-release-publication``.
 import json
 import typing as typ
 
+import consumer_smoke_evidence
 import pytest
 from consumer_smoke_harness import (
     ARCHIVE_NAME,
@@ -165,6 +166,38 @@ def test_verify_reports_a_download_the_host_did_not_deliver(
     assert failure["outcome"] == "failure", "the phase in flight must be recorded"
     assert failure["ended_ns"] is None, (
         "a phase that never finished must record no end timestamp"
+    )
+
+
+def test_verify_reports_a_saved_download_it_cannot_read(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Record an unreadable saved download as that phase's own refusal.
+
+    The file is present, so this is not "the host did not deliver it": the run
+    listed the file and then a stat or a hash of it failed. That belongs to the
+    download phase, which must record the failure and return the download
+    status rather than letting the host's ``OSError`` end the run with no
+    verdict at all.
+    """
+    staged = _prepared(tmp_path)
+
+    def unreadable(**_kwargs: object) -> object:
+        """Fail the way a stat or a hash of the saved body would."""
+        msg = "permission denied"
+        raise OSError(msg)
+
+    monkeypatch.setattr(consumer_smoke_evidence, "payload_facts", unreadable)
+
+    assert run_verify(staged, runner=fake_probe()) == 2, (
+        "a download the smoke cannot read must be refused as a download"
+    )
+    verdict = read_verdict(staged)
+    assert verdict["phases"]["crate_download"] == "failure", (
+        "the phase that needed the facts must be recorded as failed"
+    )
+    assert verdict["phases"]["crate_verification"] == "skipped", (
+        "no later phase may run once the download is refused"
     )
 
 

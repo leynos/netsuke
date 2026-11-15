@@ -71,6 +71,15 @@ class PayloadDigestMissingError(ConsumerSmokeError):
     """Report a present download whose digest could not be computed."""
 
 
+class PayloadUnreadableError(ConsumerSmokeError):
+    """Report a saved download whose bytes could not be read.
+
+    The file was present when the run listed it, and then a stat or a read
+    failed. That is a download the smoke cannot vouch for, so it is refused in
+    the download phase rather than escaping as the host's own ``OSError``.
+    """
+
+
 class PayloadMismatchError(ConsumerSmokeError, release_digest.DigestMismatchError):
     """Report downloaded bytes that differ from the trusted digest."""
 
