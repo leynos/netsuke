@@ -51,6 +51,12 @@ if typ.TYPE_CHECKING:
 #: to look, and a case may point the child somewhere else entirely.
 EVIDENCE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE"
 
+#: The prefix every admission control shares. An inherited name under it is
+#: dropped before the case's own values are applied: the harness runs one
+#: declared scenario, and a developer's exported tag, mode, bound, or adapter
+#: would otherwise decide what a case exercises.
+ADMISSION_VARIABLE_PREFIX = "NETSUKE_RELEASE_ADMISSION_"
+
 
 def run_gate(
     cmd_mox: CmdMox,
@@ -90,8 +96,8 @@ def run_gate(
     The tag is left unset unless a case supplies it, so the default run is the
     rehearsal form: the revision resolves and compares with itself.
     """
-    paths = _gate_paths(tmp_path)
-    environment = _gate_environment(
+    paths = gate_paths(tmp_path)
+    environment = gate_environment(
         cmd_mox, GateInputs(tmp_path, evidence_state, extra_environment, paths)
     )
     write_evidence(
@@ -124,7 +130,7 @@ def _evidence_path(environment: dict[str, str], paths: dict[str, Path]) -> Path:
     environment
         The merged child environment, after the case's overrides.
     paths
-        Named output paths returned by :func:`_gate_paths`.
+        Named output paths returned by :func:`gate_paths`.
 
     Returns
     -------
@@ -148,7 +154,7 @@ def _read_workflow_outputs(paths: dict[str, Path]) -> dict[str, str]:
     Parameters
     ----------
     paths
-        Named output paths returned by :func:`_gate_paths`.
+        Named output paths returned by :func:`gate_paths`.
 
     Returns
     -------
@@ -172,7 +178,7 @@ def _read_workflow_outputs(paths: dict[str, Path]) -> dict[str, str]:
     )
 
 
-def _gate_paths(tmp_path: Path) -> dict[str, Path]:
+def gate_paths(tmp_path: Path) -> dict[str, Path]:
     """Name the files one gate run writes into.
 
     Parameters
@@ -212,9 +218,10 @@ class GateInputs:
     paths: dict[str, Path]
 
 
-def _gate_environment(
+def gate_environment(
     cmd_mox: CmdMox,
     inputs: GateInputs,
+    inherited: cabc.Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     """Build an isolated environment for one real gate invocation.
 
@@ -225,6 +232,13 @@ def _gate_environment(
     one cannot run the shim at all -- which reads as an unexplained missing
     invocation rather than as the configuration error it is.
 
+    Every admission variable the parent exported is dropped rather than
+    inherited, because the child reads its tag, mode, bounds, adapters, and
+    sinks from this harness and from the case itself: a developer with
+    ``NETSUKE_RELEASE_ADMISSION_TAG`` exported would otherwise turn the default
+    rehearsal into a tagged run, and the resulting failure would read as a
+    defect in the gate.
+
     Parameters
     ----------
     cmd_mox
@@ -232,6 +246,9 @@ def _gate_environment(
     inputs
         Runner-local inputs: the isolated directory, the fixture state, the
         case's own overrides, and the named output paths.
+    inherited
+        The environment to inherit from before the fixed inputs and the case's
+        overrides are applied; the process environment by default.
 
     Returns
     -------
@@ -247,13 +264,18 @@ def _gate_environment(
     """
     shim_dir = cmd_mox.environment.shim_dir
     assert shim_dir is not None, "CmdMox must create its command shim directory"
+    base = os.environ if inherited is None else inherited
     paths = inputs.paths
     # The overrides are merged below, where a ``None`` *removes* a name rather
     # than being stored: the returned mapping therefore holds only ``str``
     # values, and the annotation is what says so rather than a narrowed view a
     # reader would have to reconstruct.
     environment: dict[str, str] = {
-        **os.environ,
+        name: value
+        for name, value in base.items()
+        if not name.startswith(ADMISSION_VARIABLE_PREFIX)
+    }
+    environment.update({
         "GITHUB_OUTPUT": str(paths["output"]),
         "GITHUB_REPOSITORY": GITHUB_REPOSITORY,
         "GITHUB_RUN_ID": WORKFLOW_RUN_ID,
@@ -261,9 +283,9 @@ def _gate_environment(
         EVIDENCE_FILE_VARIABLE: str(paths["evidence"]),
         "NETSUKE_RELEASE_ADMISSION_METRICS_FILE": str(paths["metrics"]),
         "NETSUKE_RELEASE_ADMISSION_TRACE_FILE": str(paths["trace"]),
-        "PATH": os.pathsep.join([str(shim_dir), os.environ["PATH"]]),
+        "PATH": os.pathsep.join([str(shim_dir), base["PATH"]]),
         "RUNNER_TEMP": str(inputs.tmp_path),
-    }
+    })
     # Mapping a name to ``None`` *unsets* it, which is not the same as mapping
     # it to ``""``: the gate's colon-form default substitutes for an empty
     # value, so only an unset variable reaches the earlier arm.
@@ -283,7 +305,7 @@ def _read_gate_records(
     Parameters
     ----------
     paths
-        Named output paths returned by :func:`_gate_paths`.
+        Named output paths returned by :func:`gate_paths`.
 
     Returns
     -------
@@ -337,6 +359,9 @@ __all__ = (
     "PYTHON_PATH",
     "REVISION",
     "SCRIPT_PATH",
+    "GateInputs",
     "GateRun",
+    "gate_environment",
+    "gate_paths",
     "run_gate",
 )

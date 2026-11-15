@@ -5673,6 +5673,7 @@ repository-local pytest configuration and cache state:
 - `scripts/tests/test_release_admission_evidence_reading.py`
 - `scripts/tests/test_release_admission_freshness_recheck.py`
 - `scripts/tests/test_release_admission_sink_persistence.py`
+- `scripts/tests/test_release_admission_harness_isolation.py`
 
 The module list is itself contractual.
 `tests/workflow_contracts/release_admission_runtime_gate_test.py` compares the

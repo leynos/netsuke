@@ -214,6 +214,9 @@ from release_admission_test_harness import (
     METRICS_VALIDATOR,
     PYTHON_PATH,
     SCRIPT_PATH,
+    GateInputs,
+    gate_environment,
+    gate_paths,
     run_gate,
 )
 from release_admission_test_records import (
@@ -252,6 +255,7 @@ __all__ = (
     "AdaptedBoundaries",
     "Boundaries",
     "Candidate",
+    "GateInputs",
     "GateRun",
     "Handler",
     "RunShape",
@@ -265,6 +269,8 @@ __all__ = (
     "candidate_for",
     "expected_gate_labels",
     "expected_operation_labels",
+    "gate_environment",
+    "gate_paths",
     "install_adapted",
     "install_boundaries",
     "operation_duration",
