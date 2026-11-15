@@ -8,14 +8,12 @@ use super::markdown::{
     HeadingLevel, declared_pin, finding_entries, heading_body, non_id_register_headers, pins,
     regex_values, register_ids, task_ids,
 };
+use super::obligations::{OBLIGATION_PATTERN, validate_obligation_tasks};
 use super::register::is_well_formed_register_id;
 use super::roadmap::{dependents_of, roadmap_tasks};
 use super::trace::{
     excluded_tasks, reference_covers, trace_rows, trace_table_tasks, unchanged_ids,
 };
-
-/// The identifier form the compatibility obligations and trace matrix share.
-const OBLIGATION_PATTERN: &str = r"\bCO-\d+\b";
 
 /// Require the real inventory to populate the sections whose checks iterate.
 ///
@@ -72,6 +70,10 @@ pub(super) fn validate_inventory(inventory: &str, roadmap: &str) -> Result<()> {
     validation.validate_trace_coverage()?;
     validate_register(inventory)?;
     validate_obligations(inventory)?;
+    validate_obligation_tasks(
+        section(inventory, "Compatibility obligations"),
+        section(inventory, "Trace matrix"),
+    )?;
     validation.validate_findings()
 }
 

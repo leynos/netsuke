@@ -16,6 +16,11 @@ mod fixtures;
 #[path = "hexagonal_inventory_contract/markdown.rs"]
 mod markdown;
 #[cfg(test)]
+#[path = "hexagonal_inventory_contract/obligation_tests.rs"]
+mod obligation_tests;
+#[path = "hexagonal_inventory_contract/obligations.rs"]
+mod obligations;
+#[cfg(test)]
 #[path = "hexagonal_inventory_contract/parser_tests.rs"]
 mod parser_tests;
 #[cfg(test)]

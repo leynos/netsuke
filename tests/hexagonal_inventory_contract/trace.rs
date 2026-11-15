@@ -10,6 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::markdown::{first_cell, harvest_body, is_table_separator, task_ids};
+use super::obligations::row_obligations;
 use super::register::is_well_formed_register_id;
 
 /// Collect task identifiers from the first column of the trace-matrix tables.
@@ -62,6 +63,28 @@ fn task_table_rows(subsection: &str) -> Vec<&str> {
 /// Report whether a table row names at least one roadmap task.
 fn is_task_row(in_task_table: bool, cell: &str) -> bool {
     in_task_table && !is_table_separator(cell) && !task_ids(cell).is_empty()
+}
+
+/// Map each traced task to the obligation identifiers its row names.
+///
+/// Selection is `task_table_rows`, the same one `trace_table_tasks` and
+/// `trace_rows` use, so a row cannot be a task for one check and a non-row for
+/// another. A task appearing in both `Changes` and `Consumes` keeps the union:
+/// the two tables describe one task's change and consumption duties, and
+/// dropping either would report a bound obligation as missing.
+pub(super) fn trace_task_obligations(trace: &str) -> BTreeMap<String, BTreeSet<String>> {
+    let mut by_task = BTreeMap::<String, BTreeSet<String>>::new();
+    let rows = trace_subsections(trace).flat_map(task_table_rows);
+    for row in rows {
+        let obligations = row_obligations(row);
+        for task in task_ids(first_cell(row).unwrap_or_default()) {
+            by_task
+                .entry(task)
+                .or_default()
+                .extend(obligations.iter().cloned());
+        }
+    }
+    by_task
 }
 
 /// Collect excluded tasks and the reason text following each identifier.
