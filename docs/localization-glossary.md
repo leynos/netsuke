@@ -1783,6 +1783,14 @@ elsewhere in Korean technical prose; Netsuke's Korean text should keep 작업 fo
 build-system sense unambiguous, and prefer 작업 항목 or rephrasing if a passage
 could be misread as a generic task list.
 
+**Particles after substituted values.** When a substituted value’s final sound
+is unknown, use the paired forms `은(는)`, `이(가)`, and `을(를)` where those
+particles are required. Attach the particle directly to the value, or to its
+closing quotation mark, without a space. For example, write
+`‘{ $output }’은(는)` and `‘{ $pool }’을(를)`. Do not apply paired forms to
+invariant particles such as `의`. When the particle follows a fixed Korean noun
+rather than the substituted value, select the particle for that noun.
+
 The worked example, preserving the placeable exactly:
 
 ```text
