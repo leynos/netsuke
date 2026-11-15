@@ -8094,31 +8094,34 @@ Netsuke uses a mixed strategy:
   register table header that is not `ID`; one surviving table is otherwise
   enough to keep `validate_populated` green while the renamed table's rows
   silently escape the uniqueness, well-formedness, and coverage checks.
-  Register and obligation coverage both derive from `trace_rows`, the `Changes`
-  and `Consumes` table rows alone, so a sentence in the trace introduction, a
-  line of prose directly under `### Changes`, or an exclusion reason cannot
-  satisfy either. A register item may instead be listed by an `Unchanged`
-  bullet that opens with the identifier; a sentence that merely names one does
-  not count. The contract separates a *region slice* from a *harvest* because
-  the two need different rules. `heading_body` keeps nested content, since
-  `## Register` legitimately nests its `####` area tables inside the
-  `### A1`-`### A7` headings; `harvest_body` truncates at the first heading of
-  any depth, since every harvester reads its body for a claim a table row or a
-  bullet has to make, and prose under a deeper subheading must not supply one.
-  Reach for `harvest_body` in any new harvester. Obligation *coverage* is not
-  obligation *binding*: `validate_obligations` asks only whether an obligation
-  is referenced somewhere, while `validate_obligation_tasks` reads each
+  Register and obligation coverage both derive from the `Changes` and
+  `Consumes` table rows alone, so a sentence in the trace introduction, a line
+  of prose directly under `### Changes`, or an exclusion reason cannot satisfy
+  either. A register item may instead be listed by an `Unchanged` bullet that
+  opens with the identifier; a sentence that merely names one does not count.
+  The contract separates a *region slice* from a *harvest* because the two need
+  different rules. `heading_body` keeps nested content, since `## Register`
+  legitimately nests its `####` area tables inside the `### A1`-`### A7`
+  headings; `harvest_body` truncates at the first heading of any depth, since
+  every harvester reads its body for a claim a table row or a bullet has to
+  make, and prose under a deeper subheading must not supply one. Reach for
+  `harvest_body` in any new harvester. Obligation *coverage* is not obligation
+  *binding*: `validate_obligations` asks only whether an obligation is
+  referenced somewhere, while `validate_obligation_tasks` reads each
   obligation's own `Tasks:` clause and requires that task's row to name it. The
   one-directional rule is deliberate — a row may name obligations whose clause
   does not bind that task, as `28.1.2` does for every obligation — so do not
   "tighten" it to set equality. Both readers refuse a shape they cannot read
   rather than taking the nearest interpretation, because each fallback is a
-  fail-open. A row's Obligations column is read only when the row is the width
-  its header declares; an identifier in the register or findings column is not
-  evidence, and neither is one in a short row whose trailing cells are missing,
-  since its last supplied cell is not the obligations column. An obligation's
-  identifier is its bullet label, read by `OBLIGATION_LABEL` from the start of
-  the bullet, not the lowest `CO-` identifier anywhere in the entry: the entry
+  fail-open. A row that is not the width its header declares is refused
+  outright, and what its cells say is read from the cell the question belongs
+  to: register coverage reads `Register items`, obligation coverage reads
+  `Obligations`, and neither reads the other's column or the whole row as text.
+  An identifier in a neighbouring cell is not evidence, however plainly it
+  names the item, and neither is one in a short row whose trailing cells are
+  missing, since its cells have all shifted left. An obligation's identifier is
+  its bullet label, read by `OBLIGATION_LABEL` from the start of the bullet,
+  not the lowest `CO-` identifier anywhere in the entry: the entry
   `- CO-2: Preserve CO-1 too.` declares `CO-2`. A label in a form the pattern
   does not match, such as a backticked `` `CO-1` `` or a bold `- **CO-1**:`, is
   reported as an error rather than skipped, because a skipped entry binds

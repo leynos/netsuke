@@ -13,7 +13,8 @@ use super::obligations::{OBLIGATION_PATTERN, validate_obligation_tasks};
 use super::register::is_well_formed_register_id;
 use super::roadmap::{dependents_of, roadmap_tasks};
 use super::trace::{
-    excluded_tasks, reference_covers, trace_rows, trace_table_tasks, unchanged_ids,
+    excluded_tasks, reference_covers, trace_obligation_references, trace_register_references,
+    trace_table_tasks, unchanged_ids,
 };
 
 /// Require the real inventory to populate the sections whose checks iterate.
@@ -231,11 +232,14 @@ fn validate_exclusions(trace: &str, tasks: &BTreeMap<String, BTreeSet<String>>) 
 /// Returns an error when a register table is not `ID`-headed, or when
 /// identifiers are duplicated, malformed, or untraced.
 ///
-/// A register item is covered by a `Changes` or `Consumes` row, or by an
-/// `Unchanged` bullet that opens with the identifier. Requiring the bullet
-/// form, rather than searching the subsection, keeps the two sources
-/// symmetrical: neither the trace introduction nor a sentence in `Unchanged`
-/// can satisfy coverage by merely mentioning an identifier.
+/// A register item is covered by a `Changes` or `Consumes` row that names it in
+/// that row's `Register items` cell, or by an `Unchanged` bullet that opens
+/// with the identifier. Reading the cell rather than the row keeps the column's
+/// meaning: an identifier pasted into `Findings` or `Obligations` names no
+/// change, so it must not cover the item it mentions. Requiring the bullet form
+/// keeps the two sources symmetrical: neither the trace introduction nor a
+/// sentence in `Unchanged` can satisfy coverage by merely mentioning an
+/// identifier.
 fn validate_register(inventory: &str) -> Result<()> {
     let register = heading_body(inventory, "Register", HeadingLevel::Section).unwrap_or_default();
     ensure!(
@@ -251,7 +255,7 @@ fn validate_register(inventory: &str) -> Result<()> {
         "register identifiers should be unique"
     );
     let trace = section(inventory, "Trace matrix");
-    let references = trace_rows(trace);
+    let references = trace_register_references(trace)?;
     let unchanged = unchanged_ids(trace);
     for identifier in &register_identifiers {
         ensure!(
@@ -272,12 +276,13 @@ fn validate_register(inventory: &str) -> Result<()> {
 ///
 /// Returns an error when an obligation identifier is missing from the trace.
 ///
-/// Only the `Changes` and `Consumes` tables count, exactly as for register
-/// coverage: the introduction, the exclusion reasons, and the `Unchanged` prose
-/// would otherwise satisfy an obligation without any row having to reference it.
+/// Only the `Obligations` cells of the `Changes` and `Consumes` tables count,
+/// exactly as register coverage reads only `Register items`: the introduction,
+/// the other columns, the exclusion reasons, and the `Unchanged` prose would
+/// otherwise satisfy an obligation without any row having to reference it.
 fn validate_obligations(inventory: &str) -> Result<()> {
     let obligations = section(inventory, "Compatibility obligations");
-    let trace = trace_rows(section(inventory, "Trace matrix"));
+    let trace = trace_obligation_references(section(inventory, "Trace matrix"))?;
     let traced = regex_values(OBLIGATION_PATTERN, &trace);
     for obligation in regex_values(OBLIGATION_PATTERN, obligations) {
         ensure!(

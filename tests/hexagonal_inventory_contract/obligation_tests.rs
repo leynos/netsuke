@@ -150,11 +150,17 @@ fn ignores_a_task_named_in_prose_after_the_obligation_list() -> Result<()> {
 /// An obligation identifier outside the obligations column is not evidence.
 ///
 /// `row_obligations` reads only the `Obligations` column. Reading the whole row
-/// would let a `CO-1` parked in the register column satisfy the binding, and
-/// here it does satisfy `validate_obligations`, which reads the row as text.
+/// would let a `CO-1` parked in the register column satisfy the binding. The
+/// row here does that while another task's row traces `CO-1`, so global
+/// coverage passes and only the binding can reject — the shape that would
+/// otherwise leave 26.1.2's duty unverified because a neighbouring cell names
+/// the obligation.
 #[test]
 fn rejects_an_obligation_named_outside_the_obligations_column() -> Result<()> {
-    let inventory = inventory_with_rows(ONE_BINDING, "| 26.1.2 | CO-1 | -- | -- |");
+    let inventory = inventory_with_rows(
+        ONE_BINDING,
+        &rows(&[ELSEWHERE, "| 26.1.2 | CO-1 | -- | -- |"]),
+    );
     expect_validation_error(&inventory, SIMPLE_ROADMAP, "should name obligation CO-1")?;
     Ok(())
 }

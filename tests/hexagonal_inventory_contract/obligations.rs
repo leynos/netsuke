@@ -168,17 +168,60 @@ fn declared_tasks(entry: &str) -> Result<(String, BTreeSet<String>)> {
 /// trace tables use, so a row of any other width is malformed.
 pub(super) const TRACE_COLUMNS: usize = 4;
 
+/// The two claim cells of a trace row that a coverage rule reads.
+///
+/// The row's header is `| Task | Register items | Findings | Obligations |`.
+/// `Task` is read from the first cell by the selectors that decide whether a
+/// line is a row at all, and `Findings` is read by no rule here, so only the
+/// two columns a rule asks a question of are carried. Parsing names them, so a
+/// caller asks for the claim it wants rather than for a column index and no
+/// reader can take the wrong column by miscounting pipes.
+pub(super) struct TraceRow {
+    /// The `Register items` cell: what the task changes or consumes.
+    pub(super) register_items: String,
+    /// The `Obligations` cell: what the task must preserve.
+    pub(super) obligations: String,
+}
+
+/// Split one trace row into the claim cells the coverage rules read.
+///
+/// The width check lives here, so every reader refuses a row it cannot read
+/// rather than reading a neighbour's column. That refusal is the point: after an
+/// omitted cell every later cell shifts left, so `| 26.1.2 | CO-1 |` would hand
+/// `Register items` the value `CO-1` and leave `Obligations` absent.
+///
+/// # Errors
+///
+/// Returns an error when `row` is not a pipe-delimited row of `TRACE_COLUMNS`
+/// cells, naming the row and the width it carries.
+pub(super) fn parse_trace_row(row: &str) -> Result<TraceRow> {
+    let cells = table_cells(row);
+    let width = cells.len();
+    let Ok(cells) = <[String; TRACE_COLUMNS]>::try_from(cells) else {
+        bail!(
+            concat!(
+                "trace row should carry {} cells, the width its `Task`-headed header ",
+                "declares, but carries {}: {}"
+            ),
+            TRACE_COLUMNS,
+            width,
+            row
+        );
+    };
+    let [_task, register_items, _findings, obligations] = cells;
+    Ok(TraceRow {
+        register_items,
+        obligations,
+    })
+}
+
 /// Read the obligation identifiers a single trace row names.
 ///
-/// Only the `Obligations` column counts, and only when the row is the width its
-/// header declares. Both restrictions refuse a different way of naming an
-/// obligation in the wrong place:
-///
-/// - The register and findings cells carry identifiers of their own, so reading
-///   the whole row would let one parked there satisfy a binding it never names.
-/// - Taking the last supplied cell as `Obligations` would do the same for a
-///   short row: `| 26.1.2 | CO-1 |` puts `CO-1` in `Register items` and leaves
-///   `Obligations` absent, yet its last cell is `CO-1`.
+/// Only the `Obligations` cell counts, and only when the row is the width its
+/// header declares. Restricting the cell refuses the way an obligation is most
+/// easily named in the wrong place: the register and findings cells carry
+/// identifiers of their own, so reading the whole row would let one parked
+/// there satisfy a binding it never names.
 ///
 /// # Errors
 ///
@@ -186,21 +229,8 @@ pub(super) const TRACE_COLUMNS: usize = 4;
 /// cells. Reporting the malformed row is the point: a binding check that
 /// returned an empty set would pass a bound task whose row names nothing.
 pub(super) fn row_obligations(row: &str) -> Result<BTreeSet<String>> {
-    let cells = table_cells(row);
-    ensure!(
-        cells.len() == TRACE_COLUMNS,
-        concat!(
-            "trace row should carry {} cells, the width its `Task`-headed header ",
-            "declares, but carries {}: {}"
-        ),
-        TRACE_COLUMNS,
-        cells.len(),
-        row
-    );
-    let Some(obligations) = cells.last() else {
-        bail!("trace row should carry an `Obligations` cell: {row}");
-    };
-    Ok(regex_values(OBLIGATION_PATTERN, obligations))
+    let parsed = parse_trace_row(row)?;
+    Ok(regex_values(OBLIGATION_PATTERN, &parsed.obligations))
 }
 
 /// Split a pipe-delimited Markdown table row into its trimmed cells.

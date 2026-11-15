@@ -210,6 +210,31 @@ fn rejects_register_coverage_claimed_by_something_other_than_a_task_row(
     Ok(())
 }
 
+/// Only the `Register items` cell of a task row names what the task changes.
+///
+/// A row carries four kinds of claim side by side, so reading it as text lets
+/// any column answer for any other. The listed cases put the identifier in each
+/// of the row's other cells in turn: a row that changes nothing but mentions
+/// the item under `Findings` or `Obligations` covers nothing, and accepting it
+/// would let an identifier pasted one cell too far right stand in for a change
+/// no task makes. The row is otherwise well formed, so the width check cannot
+/// be what rejects it.
+#[rstest]
+#[case::in_the_findings_cell("| 26.1.2 | -- | A1/ast::Rule | -- |")]
+#[case::in_the_obligations_cell("| 26.1.2 | -- | -- | A1/ast::Rule |")]
+fn rejects_register_coverage_claimed_from_another_column(#[case] row: &str) -> Result<()> {
+    let inventory = inventory_with_one_register_item().replace(
+        "| -- | -- | -- | -- |\n\n### Consumes",
+        &format!("| -- | -- | -- | -- |\n{row}\n\n### Consumes"),
+    );
+    expect_validation_error(
+        &inventory,
+        SIMPLE_ROADMAP,
+        "neither traced nor listed unchanged",
+    )?;
+    Ok(())
+}
+
 #[test]
 fn rejects_an_obligation_claimed_only_by_prose_under_consumes() -> Result<()> {
     let inventory = VALID_SKELETON

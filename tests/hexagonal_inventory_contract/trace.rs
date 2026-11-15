@@ -6,13 +6,18 @@
 //! is harvested on its own terms here, and each one refuses to read prose, so
 //! the four harvesters share a single rule — a claim must be made by the form
 //! the subsection defines — even though their return types differ.
+//!
+//! Within a task row the rule narrows again: a claim is made by a named column,
+//! not by the row's text. Every reader here therefore selects a row through
+//! `task_table_rows` and then reads the cell its question belongs to, so a
+//! token parked in a neighbouring column cannot answer for it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 
 use super::markdown::{first_cell, harvest_body, is_table_separator, task_ids};
-use super::obligations::row_obligations;
+use super::obligations::{TraceRow, parse_trace_row, row_obligations};
 use super::register::is_well_formed_register_id;
 
 /// Collect task identifiers from the first column of the trace-matrix tables.
@@ -20,9 +25,8 @@ use super::register::is_well_formed_register_id;
 /// Only the `Changes` and `Consumes` subsections are read. Scanning the whole
 /// trace region would let a `Task` table nested under `Excluded`, or under a
 /// deeper heading inside it, satisfy task coverage even though the exclusion
-/// harvester had already refused that nested content. `trace_rows` restricts
-/// the obligation and register references the same way, so one rule covers all
-/// three.
+/// harvester had already refused that nested content. The register and
+/// obligation readers restrict the same way, so one rule covers all three.
 pub(super) fn trace_table_tasks(trace: &str) -> BTreeSet<String> {
     trace_subsections(trace)
         .flat_map(task_table_rows)
@@ -70,7 +74,7 @@ fn is_task_row(in_task_table: bool, cell: &str) -> bool {
 /// Map each traced task to the obligation identifiers its row names.
 ///
 /// Selection is `task_table_rows`, the same one `trace_table_tasks` and
-/// `trace_rows` use, so a row cannot be a task for one check and a non-row for
+/// `trace_column` use, so a row cannot be a task for one check and a non-row for
 /// another. A task appearing in both `Changes` and `Consumes` keeps the union:
 /// the two tables describe one task's change and consumption duties, and
 /// dropping either would report a bound obligation as missing.
@@ -136,7 +140,7 @@ fn exclusion_reason(line: &str, task: &str) -> String {
         })
 }
 
-/// Return the trace matrix's table rows, dropping its prose.
+/// Collect the `Register items` cells of the trace matrix's task rows.
 ///
 /// The introduction explains wildcard semantics and names an area wildcard as
 /// an example. Letting that prose satisfy coverage would mark an area as traced
@@ -155,13 +159,50 @@ fn exclusion_reason(line: &str, task: &str) -> String {
 /// line is prose in a table's clothing and is refused by the same rule: a row
 /// that belongs to no `Task`-headed table traces nothing, however it is
 /// punctuated.
-pub(super) fn trace_rows(trace: &str) -> String {
-    let mut rows = String::new();
+///
+/// One column is read, not the whole row. A row carries four kinds of claim
+/// side by side, and a token in a neighbour's cell is not a claim about this
+/// one: `| 26.1.2 | -- | A1/ast::Rule | CO-1 |` puts the item in `Findings`
+/// and says nothing about what the task changes, however plainly it names it.
+/// Reading the row as text would let any column answer for any other, which is
+/// the fail-open this rule exists to refuse — and it is the shape a row that
+/// traces nothing takes when someone pastes an identifier one cell too far
+/// right.
+///
+/// # Errors
+///
+/// Returns an error when a selected row is not the width its header declares,
+/// because a shifted row cannot be read as evidence for any column.
+pub(super) fn trace_register_references(trace: &str) -> Result<String> {
+    trace_column(trace, |row| &row.register_items)
+}
+
+/// Collect the `Obligations` cells of the trace matrix's task rows.
+///
+/// Selection follows `trace_register_references` exactly — the same
+/// subsections, the same `Task`-headed tables, the same width check — and
+/// differs only in the cell, so obligation coverage and register coverage
+/// cannot disagree about which rows are evidence.
+///
+/// # Errors
+///
+/// Returns an error when a selected row is not the width its header declares.
+pub(super) fn trace_obligation_references(trace: &str) -> Result<String> {
+    trace_column(trace, |row| &row.obligations)
+}
+
+/// Collect one cell from every trace-matrix task row.
+///
+/// # Errors
+///
+/// Returns an error when a selected row is not the width its header declares.
+fn trace_column(trace: &str, select: impl Fn(&TraceRow) -> &str) -> Result<String> {
+    let mut cells = String::new();
     for row in trace_subsections(trace).flat_map(task_table_rows) {
-        rows.push_str(row);
-        rows.push('\n');
+        cells.push_str(select(&parse_trace_row(row)?));
+        cells.push('\n');
     }
-    rows
+    Ok(cells)
 }
 
 /// Collect register identifiers from the trace matrix's `Unchanged` bullets.
@@ -169,7 +210,7 @@ pub(super) fn trace_rows(trace: &str) -> String {
 /// A register item no task changes is listed as `- A1/ast::Rule: reason`, so
 /// only an identifier that opens a bullet counts. A sentence that merely names
 /// an identifier would let prose satisfy coverage, the same fail-open that
-/// `trace_rows` closes for the introduction and the exclusions. Only exact
+/// `trace_column` closes for the introduction and the exclusions. Only exact
 /// identifiers count; an unchanged entry names one item, so the wildcard forms
 /// `reference_covers` accepts would be ambiguous here.
 ///
