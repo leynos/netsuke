@@ -20,6 +20,14 @@
   `--explain` prints the rule reference. Suppression is a comment that names
   the rules it silences and states a reason; there is no blanket disable
   ([#592](https://github.com/leynos/netsuke/issues/592))
+- Allow operators to declare additional structured-command shells in system or
+  user configuration with a `[[shells]]` registry whose `name`, `executable`,
+  and fixed `args` are validated as they are read, and whose layers concatenate
+  in merge order without replacing entries. A project file, a file selected with
+  `--config` or `NETSUKE_CONFIG`, and the environment each reject the key
+  before a manifest is compiled. See the
+  [users' guide](docs/users-guide.md#configure-shell-definitions)
+  ([#593](https://github.com/leynos/netsuke/issues/593))
 - Add the public `InterpreterExecutable` binding, its
   `InterpreterExecutableError` rejection, `generate_with_interpreter`, and
   `generate_bundle_with_interpreter`, so embedders can render Windows recipes
