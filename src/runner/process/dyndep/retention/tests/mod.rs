@@ -51,7 +51,7 @@ fn sidecar_names(dir: &Dir) -> Result<Vec<Utf8PathBuf>> {
             entry_result.and_then(|dir_entry| {
                 dir_entry
                     .file_name()
-                    .map(|name| Utf8Path::new(DYNDEP_DIR).join(name))
+                    .map(|name| Utf8PathBuf::from(entry_display_path(&name)))
             })
         })
         .collect::<std::io::Result<Vec<_>>>()

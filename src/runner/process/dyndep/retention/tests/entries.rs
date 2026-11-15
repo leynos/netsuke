@@ -1,7 +1,6 @@
 //! Retention entry handling and alias-refusal tests.
 
 use super::*;
-use std::path::Path;
 #[test]
 fn retention_preserves_sidecars_selected_by_overlapping_bundles() -> Result<()> {
     let temp = tempfile::tempdir()?;
@@ -96,10 +95,8 @@ fn retention_cleanup_failure_has_localized_context(
     let Err(error) = result else {
         anyhow::bail!("retention must report an unremovable candidate");
     };
-    let native_failing_path = Path::new(DYNDEP_DIR).join("unremovable.dd");
-    let native_failing_path_display = native_failing_path.to_string_lossy().into_owned();
     let expected = localization::message(keys::RUNNER_IO_DYNDEP_RETENTION)
-        .with_arg("path", native_failing_path_display)
+        .with_arg("path", entry_display_path("unremovable.dd"))
         .to_string();
     ensure!(
         format!("{error:#}").contains(&expected),
@@ -280,6 +277,10 @@ fn retention_skips_symlink_entries_and_preserves_their_targets() -> Result<()> {
 }
 
 #[cfg(windows)]
+#[expect(
+    clippy::print_stderr,
+    reason = "test harness: a host without cmd.exe must report the skip in the captured test output instead of passing silently"
+)]
 #[rstest]
 fn retention_rejects_a_dyndep_directory_junction(
     dyndep_workspace: Result<(tempfile::TempDir, Dir)>,

@@ -30,6 +30,18 @@ fn assert_alias_refusal<T>(result: Result<T>, path: &str) -> Result<()> {
 }
 
 #[rstest]
+fn entry_display_path_keeps_slash_separators() {
+    // Diagnostics are compared and snapshotted as text, so the display must not
+    // inherit the host separator. `Utf8PathBuf::push` would render `.netsuke\dyndep`
+    // on Windows and make the message platform-dependent.
+    assert_eq!(
+        entry_display_path("entry.dd"),
+        ".netsuke/dyndep/entry.dd",
+        "the entry display path must use the slash spelling of the namespace"
+    );
+}
+
+#[rstest]
 fn open_or_create_creates_the_dyndep_namespace(
     workspace: Result<(tempfile::TempDir, Dir)>,
 ) -> Result<()> {

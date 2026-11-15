@@ -144,6 +144,10 @@ fn create_dir_all_creates_missing_parent_directories(temp_dir: TempDir) -> anyho
 /// expands `%NAME%` in the command text, so the junction helper must carry the
 /// paths out of band; this guards that it does.
 #[cfg(windows)]
+#[expect(
+    clippy::print_stderr,
+    reason = "test harness: a host without cmd.exe must report the skip in the captured test output instead of passing silently"
+)]
 #[rstest]
 fn junction_preserves_a_literal_percent_expansion(temp_dir: TempDir) -> anyhow::Result<()> {
     let temp = temp_dir?;

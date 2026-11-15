@@ -177,7 +177,7 @@ fn retain_obsolete_sidecars(
     };
     for entry_result in dyndep
         .entries()
-        .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?
+        .with_context(|| retention_error(DYNDEP_DIR))?
     {
         retain_directory_entry(dyndep, entry_result, &mut pass)?;
     }
@@ -200,10 +200,10 @@ fn retain_directory_entry(
     entry_result: std::io::Result<cap_std::fs_utf8::DirEntry>,
     pass: &mut RetentionPass<'_, '_>,
 ) -> Result<()> {
-    let entry = entry_result.with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
+    let entry = entry_result.with_context(|| retention_error(DYNDEP_DIR))?;
     let name = entry
         .file_name()
-        .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
+        .with_context(|| retention_error(DYNDEP_DIR))?;
     retain_entry(dyndep, &name, pass)
 }
 
@@ -333,8 +333,8 @@ fn remove_candidate(
 }
 
 /// Build the localized retention error message for a dyndep `path`.
-fn retention_error(path: &Utf8Path) -> crate::localization::LocalizedMessage {
-    localization::message(keys::RUNNER_IO_DYNDEP_RETENTION).with_arg("path", path.as_str())
+fn retention_error(path: &str) -> crate::localization::LocalizedMessage {
+    localization::message(keys::RUNNER_IO_DYNDEP_RETENTION).with_arg("path", path)
 }
 
 #[cfg(test)]
