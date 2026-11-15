@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result, ensure};
 use assert_cmd::Command;
+use netsuke::locale_resolution::{LocaleEnvProvider, SystemEnv};
 use predicates::prelude::*;
 use rstest::rstest;
 use std::fs;
@@ -25,9 +26,32 @@ fn setup_workspace_with_subdir(context: &str) -> Result<(TempDir, PathBuf)> {
     Ok((temp, workdir))
 }
 
+/// Build a `netsuke` command whose child environment this test alone decides.
+///
+/// Clearing first is what makes an assertion here a statement about the code
+/// rather than about the ambient shell. `NETSUKE_FILE` would otherwise pick a
+/// different manifest, and `NETSUKE_JSON` would route a human-output test
+/// through the JSON renderer, so either would fail a row for a reason no commit
+/// introduced. With `HOME`, `XDG_CONFIG_HOME`, and the rest unset, the child
+/// also discovers no operator configuration, so only the manifest each test
+/// stages can affect the result.
+///
+/// `PATH` is forwarded because the child still has to locate executables a
+/// manifest names, and `SystemRoot` because a Windows process needs it to
+/// start; both are platform plumbing rather than test inputs. They are read
+/// through the project's environment seam rather than `std::env` so the lint
+/// that forbids direct environment access still holds in tests.
 fn create_netsuke_command(current_dir: &Path) -> Command {
     let mut command = assert_cmd::cargo::cargo_bin_cmd!("netsuke");
-    command.current_dir(current_dir);
+    command.current_dir(current_dir).env_clear();
+    if let Some(path) = SystemEnv.var("PATH") {
+        command.env("PATH", path);
+    }
+    if cfg!(windows)
+        && let Some(system_root) = SystemEnv.var("SystemRoot")
+    {
+        command.env("SystemRoot", system_root);
+    }
     command
 }
 

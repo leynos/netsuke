@@ -175,6 +175,13 @@ and 0011. While it remains unadmitted, later features wait for roadmap item
 descriptor, not a separate allocation. Manifest versions and range comparators
 use patch zero.
 
+Because `1.1.0` is shared, the freeze in point 3 applies to the reservation as
+a whole rather than to one feature at a time. A tag that carries minor `1.1`
+must not publish while either `structured-commands` or `named-shells` is still
+unadmitted; the remaining feature would otherwise need a later minor, which
+point 8's contiguity rule then forbids skipping. Roadmap item 14.3.3 confirms
+that ordering at release time.
+
 ### Rejecting unsupported syntax
 
 The schema admission vocabulary includes new keys, new command discriminators,

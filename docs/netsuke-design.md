@@ -283,6 +283,14 @@ must not skip a reserved minor. See
 [ADR-0075](adrs/adr-0075-manifest-schema-versions-and-admission.md) for the
 full lifecycle and the rejection rules.
 
+Sharing `1.1` is a release gate, not just a registry note. A tag freezes every
+minor it contains, so publishing `1.1` while only `structured-commands` is
+admitted would freeze `named-shells` out of the reservation it shares, and its
+admission would then need `1.2`. Both features must therefore be admitted
+before the first tag that carries minor `1.1`; a release that would tag `1.1`
+with `named-shells` still unadmitted must wait for it. Roadmap item 14.3.3 owns
+the final confirmation of that ordering.
+
 RFC 0029's `host_facts.schema` is an additional nested schema version, not a
 replacement for the manifest version. RFCs 0002 and 0003 own the exact version
 relationship between a document and its included or bundled documents.
