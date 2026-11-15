@@ -193,12 +193,15 @@ def test_gate_admits_the_candidate_on_valid_evidence(
     The two modes differ in one request and one output. A rehearsal names no
     tag, so commit resolution is asked about ``GITHUB_SHA`` and the tag itself
     never appears; a publishing run names the release tag, so the same step
-    resolves the tag to its commit and compares that with the candidate. Both
-    must reach the same admission, and the mode the gate reports is the one it
-    actually ran in, because publication refuses a report-only success.
+    resolves the tag under its ``tags/`` namespace and compares the answer with
+    the candidate. The namespace is part of the request because a bare name
+    would also match a branch of that name, so the tag's own existence would go
+    unchecked. Both must reach the same admission, and the mode the gate
+    reports is the one it actually ran in, because publication refuses a
+    report-only success.
     """
     enforce = mode == "publishing"
-    subject = RELEASE_TAG if enforce else REVISION
+    subject = f"tags/{RELEASE_TAG}" if enforce else REVISION
     commit_query = ("api", f"repos/leynos/netsuke/commits/{subject}", "--jq", ".sha")
     boundaries = install_boundaries(cmd_mox)
     run = run_gate(

@@ -255,15 +255,19 @@ class Gate:
         A publishing run names the tag it is about to release, so the API is
         asked what that tag resolves to and the answer is compared with the
         candidate: a tag that moved between the workflow's read and this one is
-        a mismatch. A rehearsal names no tag, so the revision is resolved and
-        compared with itself, which keeps the request contract and the
-        self-check without inventing a tag.
+        a mismatch. The tag is asked about as ``tags/<name>`` rather than by
+        its bare name, because the commits endpoint resolves a bare name
+        against branches as well, so a branch sharing the release tag's name
+        would answer for a tag that does not exist. A rehearsal names no tag,
+        so the revision is resolved and compared with itself, which keeps the
+        request contract and the self-check without inventing a tag.
 
         The comparison is a policy decision about two revisions, so it runs only
         once the command succeeded; anything else is classified by its own
         outcome and the operation's ``api_error`` category.
         """
-        subject = self._configuration.tag or self._configuration.revision
+        tag = self._configuration.tag
+        subject = f"tags/{tag}" if tag else self._configuration.revision
         result = commands.github_resolve_commit(
             self._configuration.programs,
             repository=self._configuration.repository,
