@@ -337,9 +337,13 @@ def install_boundaries(cmd_mox: CmdMox) -> Boundaries:
 def reply_to_github(invocation: Invocation) -> tuple[str, str, int]:
     """Answer one admission query as the host's own ``gh`` would.
 
-    A commit lookup echoes the revision the workflow supplied, whichever
-    subject -- revision or tag -- was asked about. A run lookup reports the
-    candidate as that run's head, because only the release's own run admits it.
+    Both lookups answer with the child's own ``GITHUB_SHA``: a commit lookup
+    echoes the revision the workflow supplied, whichever subject -- revision or
+    tag -- was asked about, and a run lookup reports that same revision as the
+    run's head, because only the release's own run admits it. Answering a run
+    lookup from this module's fixed revision instead would refuse a case that
+    sets its own ``GITHUB_SHA`` as a candidate mismatch, so the scenario it
+    meant to exercise would never run.
 
     Returns
     -------
@@ -349,13 +353,10 @@ def reply_to_github(invocation: Invocation) -> tuple[str, str, int]:
     Examples
     --------
     The commit lookup answers ``("api", "repos/o/r/commits/<sha>", "--jq",
-    ".sha")`` with the child's own ``GITHUB_SHA``; the run lookup answers
-    ``.head_sha // empty`` with the candidate revision.
+    ".sha")`` and the run lookup answers ``.head_sha // empty``, both from
+    ``GITHUB_SHA``.
     """
-    query = " ".join(invocation.args)
-    if "/commits/" in query:
-        return f"{invocation.env.get('GITHUB_SHA', '')}\n", "", 0
-    return f"{REVISION}\n", "", 0
+    return f"{invocation.env.get('GITHUB_SHA', '')}\n", "", 0
 
 
 def reply_to_git(invocation: Invocation) -> tuple[str, str, int]:

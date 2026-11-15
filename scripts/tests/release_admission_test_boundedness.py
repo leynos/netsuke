@@ -3,11 +3,15 @@ r"""Run the gate under generated identifiers and assert what they reached.
 Split from :mod:`test_release_admission_metric_boundedness` when that module
 reached the project's file-size ceiling. The seam is the kind of code each half
 carries: this module owns the *mechanism* -- the strategies that generate
-identifiers, the doubles' answer to a workflow-run query, the run itself, and
-the four claims the property makes about one run -- while its sibling owns the
-two tests and the argument that explains what each is for. A reader wanting to
-know *why* the property exists reads the test module; a reader wanting to know
-*what it does* reads this one.
+identifiers, the run itself, and the four claims the property makes about one
+run -- while its sibling owns the two tests and the argument that explains what
+each is for. A reader wanting to know *why* the property exists reads the test
+module; a reader wanting to know *what it does* reads this one.
+
+Every double here is the shared one: the run lookup answers with the child's own
+``GITHUB_SHA``, which is the generated revision, so the property exercises the
+same answer a scenario does rather than a bespoke handler that agreed with the
+candidate by construction.
 
 The generated identifiers all carry :data:`IDENTIFIER_MARKER` at both ends, for
 two reasons that are argued in full on that constant: it keeps them outside the
@@ -18,18 +22,15 @@ API's answer before storing it.
 
 import pathlib
 import tempfile
-import typing as typ
 
 from cmd_mox import CmdMox
 from hypothesis import strategies as st
-from release_admission_test_scenarios import is_workflow_run_query
 from release_admission_test_support import (
     GITHUB_REPOSITORY,
     METRICS_VALIDATOR,
     OPERATION_SEQUENCE,
     Boundaries,
     GateRun,
-    Handler,
     RunShape,
     assert_complete_records,
     assert_identifiers_excluded_from_diagnostics,
@@ -37,9 +38,6 @@ from release_admission_test_support import (
     install_boundaries,
     run_gate,
 )
-
-if typ.TYPE_CHECKING:
-    from cmd_mox.ipc import Invocation
 
 #: The environment variables the property uses to carry generated identifiers
 #: that are not the revision. Production never reads these names -- there is no
@@ -113,26 +111,6 @@ GIT_OBJECT_ID = st.text(alphabet="0123456789abcdef", min_size=40, max_size=40)
 RUN_QUERY_FILTER = ".head_sha // empty"
 
 
-def answer_run_head(revision: str) -> Handler:
-    """Return a handler that reports *revision* as the running run's head.
-
-    The answer is what makes the run lookup agree with the candidate, so the
-    gate reaches the evidence operations rather than stopping at a candidate
-    mismatch.
-
-    Returns
-    -------
-    Handler
-        An answer for the run query that carries the candidate revision.
-    """
-
-    def answer(_invocation: Invocation) -> tuple[str, str, int]:
-        """Succeed with the candidate as the run's head."""
-        return f"{revision}\n", "", 0
-
-    return answer
-
-
 def run_under_generated_identifiers(
     revision: str, run_id: str, path: str, url: str
 ) -> tuple[GateRun, Boundaries]:
@@ -168,13 +146,6 @@ def run_under_generated_identifiers(
         CmdMox(verify_on_exit=False) as cmd_mox,
     ):
         boundaries = install_boundaries(cmd_mox)
-        boundaries.gh.wraps(
-            lambda invocation, handler: (
-                answer_run_head(revision)(invocation)
-                if is_workflow_run_query(invocation)
-                else handler(invocation)
-            )
-        )
         cmd_mox.replay()
         run = run_gate(
             cmd_mox,
