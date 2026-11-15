@@ -403,6 +403,7 @@ test-release-admission: ## Validate the release-admission runtime contract
 		scripts/tests/test_release_admission_status_translation.py \
 		scripts/tests/test_release_admission_runner_contract.py \
 		scripts/tests/test_release_admission_metric_degradation.py \
+		scripts/tests/test_release_admission_manifest_parsing.py \
 		scripts/tests/test_release_admission_sink_persistence.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 

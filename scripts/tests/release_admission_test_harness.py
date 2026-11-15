@@ -24,7 +24,6 @@ which reads the first line of the file and its executable bit.
 """
 
 import dataclasses
-import importlib.util
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
 import typing as typ
@@ -42,100 +41,15 @@ from release_admission_test_doubles import (
     WORKFLOW_RUN_ID,
     GateRun,
 )
+from release_admission_validator import METRICS_VALIDATOR
 
 if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-METRICS_VALIDATOR_PATH = (
-    REPO_ROOT / "tests" / "workflow_contracts" / "release_admission_metrics.py"
-)
-
-
-class MetricsValidator(typ.Protocol):
-    """Define finite-JSON parsing and fixed-label validation operations.
-
-    Enforce ordered schemas, bounded vocabularies, and finite JSON values.
-    """
-
-    def parse_metrics(self, lines: list[str]) -> list[dict[str, object]]:
-        """Parse finite JSON Lines metric records into mappings.
-
-        Parameters
-        ----------
-        lines
-            JSON Lines containing release-admission metric records.
-
-        Returns
-        -------
-        list[dict[str, object]]
-            Decoded metric objects in input order.
-        """
-
-    def validate_metrics(self, records: list[dict[str, object]]) -> None:
-        """Validate records against the fixed metric contract.
-
-        Parameters
-        ----------
-        records
-            Decoded metric records to validate.
-        """
-
-    def parse_traces(self, lines: list[str]) -> list[dict[str, object]]:
-        """Parse finite JSON Lines release-admission trace records.
-
-        Parameters
-        ----------
-        lines
-            JSON Lines containing release-admission trace records.
-
-        Returns
-        -------
-        list[dict[str, object]]
-            Decoded trace objects in input order.
-        """
-
-    def validate_traces(self, records: list[dict[str, object]]) -> None:
-        """Validate traces against the fixed trace contract.
-
-        Parameters
-        ----------
-        records
-            Decoded trace records to validate.
-        """
-
-
-def load_metrics_validator() -> MetricsValidator:
-    """Load the workflow-contract validator without changing the import path.
-
-    Returns
-    -------
-    MetricsValidator
-        Validator implementation loaded from the workflow-contract module.
-
-    Raises
-    ------
-    AssertionError
-        If the workflow-contract module has no importable loader.
-
-    Notes
-    -----
-    File loading preserves one validator contract without package installation,
-    and keeps the record schema shared with the workflow-contract tests rather
-    than restated here.
-    """
-    specification = importlib.util.spec_from_file_location(
-        "release_admission_metrics_contract", METRICS_VALIDATOR_PATH
-    )
-    if specification is None or specification.loader is None:
-        message = "the release-admission metrics validator must be loadable"
-        raise AssertionError(message)
-    module = importlib.util.module_from_spec(specification)
-    specification.loader.exec_module(module)
-    return typ.cast("MetricsValidator", module)
-
-
-METRICS_VALIDATOR = load_metrics_validator()
+#: The variable the child reads its evidence manifest from. The harness owns
+#: this spelling because it must write the fixture wherever the child is told
+#: to look, and a case may point the child somewhere else entirely.
+EVIDENCE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE"
 
 
 def run_gate(
@@ -180,7 +94,9 @@ def run_gate(
     environment = _gate_environment(
         cmd_mox, GateInputs(tmp_path, evidence_state, extra_environment, paths)
     )
-    write_evidence(paths["evidence"], evidence_state, candidate_for(environment))
+    write_evidence(
+        _evidence_path(environment, paths), evidence_state, candidate_for(environment)
+    )
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed test target.
         [str(PYTHON_PATH), str(SCRIPT_PATH)],
         capture_output=True,
@@ -192,6 +108,38 @@ def run_gate(
     metrics, traces = _read_gate_records(paths)
     outputs = _read_workflow_outputs(paths)
     return GateRun(result, metrics, traces, outputs, paths)
+
+
+def _evidence_path(environment: dict[str, str], paths: dict[str, Path]) -> Path:
+    """Return the evidence path the child under test will actually read.
+
+    A case may redirect the child's evidence file, and the fixture has to be
+    written where that case pointed it. Writing to the harness's own default
+    instead leaves the redirected path absent, so a state the case asked for
+    arrives as a *missing evidence* refusal -- a failure that names the
+    document rather than the harness defect producing it.
+
+    Parameters
+    ----------
+    environment
+        The merged child environment, after the case's overrides.
+    paths
+        Named output paths returned by :func:`_gate_paths`.
+
+    Returns
+    -------
+    Path
+        The configured evidence path, or the harness default when the
+        variable is unset or empty.
+
+    Notes
+    -----
+    Neither remaining case can be decided by the fixture's location: an
+    enforcing run refuses the configuration outright without an evidence file,
+    and a rehearsal reads no evidence at all.
+    """
+    configured = environment.get(EVIDENCE_FILE_VARIABLE, "")
+    return Path(configured) if configured else paths["evidence"]
 
 
 def _read_workflow_outputs(paths: dict[str, Path]) -> dict[str, str]:
@@ -310,7 +258,7 @@ def _gate_environment(
         "GITHUB_REPOSITORY": GITHUB_REPOSITORY,
         "GITHUB_RUN_ID": WORKFLOW_RUN_ID,
         "GITHUB_SHA": REVISION,
-        "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE": str(paths["evidence"]),
+        EVIDENCE_FILE_VARIABLE: str(paths["evidence"]),
         "NETSUKE_RELEASE_ADMISSION_METRICS_FILE": str(paths["metrics"]),
         "NETSUKE_RELEASE_ADMISSION_TRACE_FILE": str(paths["trace"]),
         "PATH": os.pathsep.join([str(shim_dir), os.environ["PATH"]]),
@@ -386,13 +334,9 @@ def _parse_records(
 __all__ = (
     "GITHUB_REPOSITORY",
     "METRICS_VALIDATOR",
-    "METRICS_VALIDATOR_PATH",
     "PYTHON_PATH",
-    "REPO_ROOT",
     "REVISION",
     "SCRIPT_PATH",
     "GateRun",
-    "MetricsValidator",
-    "load_metrics_validator",
     "run_gate",
 )

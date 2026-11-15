@@ -108,9 +108,13 @@ def parse_manifest(raw: bytes) -> Parsed:
     """
     try:
         document = json.loads(raw)
-    except ValueError:
-        # `json.loads` reports both a UTF-8 failure and a syntax error this
-        # way, and admits nothing else here.
+    except ValueError, RecursionError:
+        # `json.loads` reports both a UTF-8 failure and a syntax error as a
+        # `ValueError`, and admits nothing else here. A decoder that refuses a
+        # deeply nested document raises `RecursionError` instead, which is not
+        # a `ValueError`; it is the same operator problem -- a document this
+        # verifier cannot read -- so it takes the same refusal rather than
+        # escaping as an unclassified failure of the gate.
         return _refused()
     manifest = _manifest(document)
     if manifest is None:

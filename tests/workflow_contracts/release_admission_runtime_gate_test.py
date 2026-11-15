@@ -34,6 +34,7 @@ RUNTIME_MODULES = (
     "scripts/tests/test_release_admission_status_translation.py",
     "scripts/tests/test_release_admission_runner_contract.py",
     "scripts/tests/test_release_admission_metric_degradation.py",
+    "scripts/tests/test_release_admission_manifest_parsing.py",
     "scripts/tests/test_release_admission_sink_persistence.py",
 )
 #: The pinned dependencies the runtime modules import: pytest drives the suite,
