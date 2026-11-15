@@ -52,6 +52,9 @@ pub(super) struct FilterCase {
     pub(super) exact: &'static str,
     /// Expected render for the `sub/inner.txt` fixture (contents `inner`).
     pub(super) inner: &'static str,
+    /// Expected render for the `sub/file` fixture (contents `linked\nparent`),
+    /// which a `..` behind the `alias` link names.
+    pub(super) linked: &'static str,
 }
 
 impl FilterCase {
@@ -92,6 +95,7 @@ pub(super) const CONTENTS: FilterCase = FilterCase {
     followed: "data",
     exact: "12345",
     inner: "inner",
+    linked: "linked\nparent",
 };
 
 /// The `linecount` filter, which counts lines in UTF-8 text.
@@ -101,6 +105,7 @@ pub(super) const LINECOUNT: FilterCase = FilterCase {
     followed: "1",
     exact: "1",
     inner: "1",
+    linked: "2",
 };
 
 /// The `hash` filter, which hashes raw bytes with the default algorithm.
@@ -110,6 +115,7 @@ pub(super) const HASH: FilterCase = FilterCase {
     followed: "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
     exact: "5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5",
     inner: "33bf6fbd7cd8379785a21e233d8e09f824e7bab459168a96312c1c882c1d7e1f",
+    linked: "e6487c5f24c9b6c470cdefc1f7442b9b113de64d1ab559b31616332fb3772270",
 };
 
 /// The `digest` filter, which renders the requested prefix of a hash.
@@ -119,6 +125,7 @@ pub(super) const DIGEST: FilterCase = FilterCase {
     followed: "3a6eb079",
     exact: "5994471a",
     inner: "33bf6fbd",
+    linked: "e6487c5f",
 };
 
 /// Assert that `link` really is a symlink, failing setup when it is not.

@@ -6,9 +6,11 @@
 //! workspace, and opening a parent there hands the caller ambient authority
 //! that the rest of the stdlib does not grant. [`ReadingRoot`] carries the
 //! workspace capability and its optional absolute spelling, and resolves each
-//! request to a path relative to that capability. The capability open then
-//! enforces the boundary for the parts a lexical check cannot see, such as a
-//! link in an intermediate component.
+//! request to a path relative to that capability. The request keeps its `..`
+//! components, so the filesystem resolves them exactly as it would for a path
+//! typed at a shell; only the capability open decides where that leads, and
+//! it enforces the boundary for the parts a lexical check cannot see, such as
+//! a link in an intermediate component.
 use std::io;
 use std::sync::Arc;
 
@@ -43,17 +45,24 @@ impl ReadingRoot {
     /// Resolve a template-supplied path to one relative to the workspace.
     ///
     /// A relative request is used as written, and an absolute request is
-    /// accepted only when it lies beneath the configured workspace path. Both
-    /// forms are normalized lexically afterwards, and a request whose `..`
-    /// components would climb above the root is refused. Lexical normalization
-    /// cannot see a link in an intermediate component; that case is caught by
-    /// the capability open, which returns the same diagnostic.
+    /// accepted only when it lies beneath the configured workspace path, with
+    /// that path's spelling removed. `.` components are dropped; every other
+    /// component is kept, including `..`, so the filesystem gives the request
+    /// the meaning it would give a path typed at a shell: `alias/../file`
+    /// resolves against whatever `alias` names, and a request through a
+    /// component that does not exist fails when it is opened rather than
+    /// being folded away first.
+    ///
+    /// Only a request that begins by climbing above the root is refused here,
+    /// because the workspace capability has no parent to climb into. The
+    /// capability open refuses every other way out, such as a link in an
+    /// intermediate component, and reports it with the same diagnostic.
     ///
     /// # Errors
     ///
     /// Returns an outside-workspace template error when the request is
     /// absolute without a configured root path, is not beneath that path, or
-    /// escapes the root through `..` components.
+    /// begins with a `..` component.
     pub(crate) fn resolve(&self, requested: &Utf8Path) -> Result<Utf8PathBuf, Error> {
         let relative = if requested.is_absolute() {
             let root = self
@@ -65,7 +74,7 @@ impl ReadingRoot {
         } else {
             requested.to_path_buf()
         };
-        normalise_within(&relative).ok_or_else(|| outside_workspace_error(requested))
+        relative_to_root(&relative).ok_or_else(|| outside_workspace_error(requested))
     }
 
     /// Open the parent directory of an already-resolved relative path.
@@ -147,21 +156,11 @@ pub(crate) fn outside_workspace_error(path: &Utf8Path) -> Error {
 fn strip_workspace_prefix(requested: &Utf8Path, root: &Utf8Path) -> Option<Utf8PathBuf> {
     let mut remaining = requested.components();
     for root_component in root.components() {
-        let component = remaining.next()?;
-        if !components_match(component, root_component) {
+        if !components_match(remaining.next()?, root_component) {
             return None;
         }
     }
-    let mut relative = Utf8PathBuf::new();
-    for component in remaining {
-        match component {
-            Utf8Component::CurDir => {}
-            Utf8Component::ParentDir => relative.push(".."),
-            Utf8Component::Normal(part) => relative.push(part),
-            Utf8Component::RootDir | Utf8Component::Prefix(_) => return None,
-        }
-    }
-    Some(relative)
+    Some(remaining.as_path().to_path_buf())
 }
 
 /// Compare two path components under the platform's name rules.
@@ -176,27 +175,26 @@ fn components_match(left: Utf8Component<'_>, right: Utf8Component<'_>) -> bool {
     }
 }
 
-/// Normalize `path` lexically, returning `None` if a `..` escapes it.
+/// Rewrite `path` relative to the root, or refuse it when it starts above.
 ///
-/// The result is always relative and contains no `.` or `..` components, so a
-/// later capability open has nothing left to interpret. Keeping the escape
-/// decision here rather than relying on the open alone gives the diagnostic
-/// the request's own spelling instead of a resolved path.
-fn normalise_within(path: &Utf8Path) -> Option<Utf8PathBuf> {
-    let mut normalised = Utf8PathBuf::new();
+/// `.` components are dropped because they name nothing. `..` is kept so the
+/// capability open interprets it with the filesystem's own rules, which is
+/// what lets `alias/../file` mean whatever the directory `alias` names makes
+/// it mean. A path whose first meaningful component is `..` has no root-side
+/// directory to come back to, so it is refused here rather than left for the
+/// open, which would have no name to report.
+fn relative_to_root(path: &Utf8Path) -> Option<Utf8PathBuf> {
+    let mut relative = Utf8PathBuf::new();
     for component in path.components() {
         match component {
             Utf8Component::CurDir => {}
-            Utf8Component::ParentDir => {
-                if !normalised.pop() {
-                    return None;
-                }
-            }
-            Utf8Component::Normal(part) => normalised.push(part),
+            Utf8Component::ParentDir if relative.as_str().is_empty() => return None,
+            Utf8Component::ParentDir => relative.push(".."),
+            Utf8Component::Normal(part) => relative.push(part),
             Utf8Component::RootDir | Utf8Component::Prefix(_) => return None,
         }
     }
-    Some(normalised)
+    Some(relative)
 }
 
 #[cfg(test)]

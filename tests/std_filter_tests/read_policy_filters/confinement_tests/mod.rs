@@ -6,6 +6,9 @@
 //! of path that stays inside it still renders. Both halves run through the
 //! shared filter table so a filter that quietly keeps its ambient open cannot
 //! pass on a sibling's behaviour.
+//!
+//! Refusals reached by following a link live in [`links`], beside the resolver
+//! rule they depend on.
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::ErrorKind;
@@ -14,6 +17,8 @@ use test_support::fluent::normalize_fluent_isolates;
 
 use super::fallible::{ConfinementWorkspace, SECRET_CONTENT, confinement_workspace};
 use super::{CONTENTS, DIGEST, FilterCase, HASH, LINECOUNT, ReadTarget, rejection, render_case};
+
+mod links;
 
 /// Diagnostics that must accompany a path resolved outside the workspace.
 const OUTSIDE_WORKSPACE_FRAGMENT: &str = "outside the workspace";
@@ -66,6 +71,25 @@ fn skip_without_links(case: FilterCase) {
     );
 }
 
+/// Report that this host has no `cmd.exe`, so the junction fixture cannot be
+/// created.
+///
+/// `Ok(None)` from the fixture means the tool it needs is absent. Skipping is
+/// visible in the captured output for the same reason as
+/// [`skip_without_links`]: a silent skip would make an unexercised policy look
+/// like a pass.
+#[cfg(windows)]
+#[expect(
+    clippy::print_stderr,
+    reason = "test harness: an unavailable fixture must be visible in the captured test output instead of passing silently"
+)]
+fn skip_without_cmd(case: FilterCase) {
+    eprintln!(
+        "skipped: {} — this host has no cmd.exe to create the junction fixture",
+        case.name
+    );
+}
+
 #[rstest]
 #[case::contents(CONTENTS)]
 #[case::linecount(LINECOUNT)]
@@ -112,56 +136,57 @@ fn reading_filters_reject_an_absolute_parent_escape(#[case] case: FilterCase) ->
     )
 }
 
-/// An intermediate directory link must not smuggle the parent open out of the
-/// workspace.
+/// A `..` behind an intermediate directory that does not exist must not be
+/// folded away.
 ///
-/// `workspace/escape` is a real link to `../outside`. The final component is
-/// therefore an ordinary file inside the *linked* directory, so the
-/// final-component symlink policy never sees a link; only resolving the parent
-/// through the capability stops the read.
+/// Unix resolves `..` only after looking the preceding component up, so
+/// `missing/../file` fails: the request names nothing. Folding the `..` first
+/// would make it read the root's `file`, which is a different request. Windows
+/// folds `..` before any lookup, as its filesystem does, so there the request
+/// legitimately names the root's `file`; the case asserts each platform's own
+/// rule rather than a portable fiction.
 #[rstest]
 #[case::contents(CONTENTS)]
 #[case::linecount(LINECOUNT)]
 #[case::hash(HASH)]
 #[case::digest(DIGEST)]
-fn reading_filters_reject_an_intermediate_link_that_escapes(
+fn reading_filters_do_not_fold_a_missing_intermediate_directory(
     #[case] case: FilterCase,
 ) -> Result<()> {
     let ws = confinement_workspace()?;
-    let Some(links) = ws.links.as_ref() else {
-        skip_without_links(case);
-        return Ok(());
-    };
-    refuse(
+    let requested = Utf8Path::new("missing/../file");
+    let rendered = render_case(
         case,
-        ReadTarget::new(&ws.root, &links.escape.join("secret"), 1024),
+        "missing-parent",
+        ReadTarget::new(&ws.root, requested, 1024),
         &case.template(),
-    )
-}
-
-/// The follow-symlinks opt-in waives the final-component refusal, not the
-/// workspace boundary.
-///
-/// `workspace/out` is a real link to `../outside/secret`, so this is the case
-/// where the opt-in would otherwise open an outside file by design.
-#[rstest]
-#[case::contents(CONTENTS)]
-#[case::linecount(LINECOUNT)]
-#[case::hash(HASH)]
-#[case::digest(DIGEST)]
-fn reading_filters_reject_a_final_link_that_escapes_when_following(
-    #[case] case: FilterCase,
-) -> Result<()> {
-    let ws = confinement_workspace()?;
-    let Some(links) = ws.links.as_ref() else {
-        skip_without_links(case);
-        return Ok(());
-    };
-    refuse(
-        case,
-        ReadTarget::new(&ws.root, &links.out, 1024),
-        &case.template_with("follow_symlinks=true"),
-    )
+    )?;
+    #[cfg(unix)]
+    {
+        let err = rejection(case, rendered)?;
+        ensure!(
+            err.kind() == ErrorKind::InvalidOperation,
+            "{}: a missing intermediate directory should fail the open: {err}",
+            case.name
+        );
+        let message = normalize_fluent_isolates(&err.to_string());
+        ensure!(
+            !message.contains(SECRET_CONTENT),
+            "{}: the failure must not disclose the outside file: {message}",
+            case.name
+        );
+    }
+    #[cfg(windows)]
+    {
+        let rendered = rendered?;
+        ensure!(
+            rendered == case.followed,
+            "{}: Windows folds the missing component away, so the root file should render {} but rendered {rendered}",
+            case.name,
+            case.followed
+        );
+    }
+    Ok(())
 }
 
 /// One inside-working-directory spelling, with the case field holding its
@@ -199,6 +224,10 @@ fn inside_targets(ws: &ConfinementWorkspace) -> Vec<InsideTarget> {
         InsideTarget {
             path: Utf8PathBuf::from("sub/inner.txt"),
             expected: |case| case.inner,
+        },
+        InsideTarget {
+            path: Utf8PathBuf::from("sub/file"),
+            expected: |case| case.linked,
         },
         InsideTarget {
             path: ws.root.join("sub/inner.txt"),

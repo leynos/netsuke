@@ -63,9 +63,9 @@ fn resolved(root: &ReadingRoot, requested: &str) -> Option<Utf8PathBuf> {
 #[case::bare_name("file", "file")]
 #[case::nested("sub/inner.txt", "sub/inner.txt")]
 #[case::current_directory("./file", "file")]
-#[case::inside_parent("sub/../file", "file")]
+#[case::inside_parent("sub/../file", "sub/../file")]
 #[case::redundant_separators("sub//inner.txt", "sub/inner.txt")]
-fn relative_requests_normalise_beneath_the_root(
+fn relative_requests_keep_every_component_the_filesystem_must_interpret(
     #[case] requested: &str,
     #[case] expected: &str,
 ) -> Result<()> {
@@ -82,17 +82,146 @@ fn relative_requests_normalise_beneath_the_root(
 
 #[rstest]
 #[case::leading_parent("../outside/secret")]
-#[case::parent_above_root("sub/../../outside/secret")]
 #[case::only_parent("..")]
-fn relative_requests_escaping_the_root_are_refused(#[case] requested: &str) -> Result<()> {
+#[case::current_then_parent("./../outside/secret")]
+fn requests_that_start_above_the_root_are_refused(#[case] requested: &str) -> Result<()> {
     let (_temp, _path, root) = scratch()?;
     let err = root
         .resolve(Utf8Path::new(requested))
-        .expect_err("an escaping relative request must be refused");
+        .expect_err("a request starting above the root must be refused");
     ensure!(
         err.kind() == ErrorKind::InvalidOperation,
         "{requested:?}: should report InvalidOperation but was {:?}",
         err.kind()
+    );
+    Ok(())
+}
+
+/// A request that climbs above the root only after naming an entry is left to
+/// the capability, which holds the directory handles and can tell where the
+/// climb actually lands.
+///
+/// `sub` must exist for the case to exercise the climb: a missing entry would
+/// fail with `NotFound` before the second `..` was ever interpreted, and the
+/// case would pass for the wrong reason.
+#[rstest]
+#[case::parent_above_root("sub/../../outside/secret")]
+fn requests_that_climb_above_the_root_are_refused_by_the_capability(
+    #[case] requested: &str,
+) -> Result<()> {
+    let (_temp, path, root) = scratch()?;
+    Dir::open_ambient_dir(&path, ambient_authority())
+        .context("open the scratch directory to create the climb fixture")?
+        .create_dir("sub")
+        .context("create the directory the climb starts from")?;
+    let relative = resolved(&root, requested)
+        .ok_or_else(|| anyhow!("{requested:?} should reach the capability open"))?;
+    let err = root
+        .open_parent(&relative)
+        .expect_err("the capability must refuse a climb above the root");
+    ensure!(
+        is_capability_escape(&err),
+        "{requested:?}: should report a capability escape but reported {err}"
+    );
+    Ok(())
+}
+
+/// `..` after a link names the directory the link points at, not the link's
+/// own lexical parent.
+///
+/// The two readings differ only when the link's target is more than one level
+/// deep: `alias -> sub/deep` makes `alias/../file` the file in `sub`, while a
+/// resolver that folded `..` before opening would look for it at the root.
+#[cfg(unix)]
+#[rstest]
+fn parent_components_follow_the_directory_a_link_names() -> Result<()> {
+    let temp = tempfile::tempdir().context("create the link semantics fixture")?;
+    let base = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+        .map_err(|path| anyhow!("fixture path is not valid UTF-8: {path:?}"))?;
+    let workspace = base.join("workspace");
+    Dir::open_ambient_dir(&base, ambient_authority())
+        .context("open the link semantics tree")?
+        .create_dir("workspace")
+        .context("create the link semantics workspace")?;
+    let handle = Dir::open_ambient_dir(&workspace, ambient_authority())
+        .context("open the link semantics fixture")?;
+    handle
+        .create_dir_all("sub/deep")
+        .context("create the link target directory")?;
+    handle
+        .write("sub/file", b"chosen through the link")
+        .context("write the file beside the link target")?;
+    handle
+        .symlink("sub/deep", "alias")
+        .context("create the directory link")?;
+
+    let root = root_at(&workspace)?;
+    let relative = root
+        .resolve(Utf8Path::new("alias/../file"))
+        .context("resolve through the link's parent")?;
+    let parent = root
+        .open_parent(&relative)
+        .context("open the link's parent directory")?;
+    let contents = parent
+        .read_to_string("file")
+        .context("read the file the link's parent names")?;
+    ensure!(
+        contents == "chosen through the link",
+        "alias/../file should open sub/file, but read {contents:?}"
+    );
+    Ok(())
+}
+
+/// A `..` behind a component that does not exist fails on Unix, where the
+/// filesystem resolves `..` after looking the component up.
+///
+/// Windows folds `..` lexically before it looks anything up, so there the same
+/// request names the file at the root; the companion case below pins that
+/// platform's rule rather than pretending it matches Unix.
+#[cfg(unix)]
+#[rstest]
+fn parent_components_through_a_missing_directory_are_refused() -> Result<()> {
+    let (_temp, _path, root) = scratch()?;
+    let relative = root
+        .resolve(Utf8Path::new("missing/../file"))
+        .context("resolve through the missing directory")?;
+    let err = root
+        .open_parent(&relative)
+        .expect_err("a missing intermediate directory must fail the open");
+    ensure!(
+        err.kind() == std::io::ErrorKind::NotFound,
+        "the missing directory should report NotFound, but reported {err}"
+    );
+    Ok(())
+}
+
+/// Windows resolves `..` before any lookup, so the missing directory is never
+/// consulted and the request names the root's own file.
+#[cfg(windows)]
+#[rstest]
+fn parent_components_through_a_missing_directory_fold_first() -> Result<()> {
+    let temp = tempfile::tempdir().context("create the lexical fold fixture")?;
+    let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+        .map_err(|path| anyhow!("fixture path is not valid UTF-8: {path:?}"))?;
+    let handle = Dir::open_ambient_dir(&path, ambient_authority())
+        .context("open the lexical fold fixture")?;
+    handle
+        .write("file", b"folded")
+        .context("write the fixture file")?;
+
+    let root = root_at(&path)?;
+    let relative = root
+        .resolve(Utf8Path::new("missing/../file"))
+        .context("resolve through the missing directory")?;
+    let parent = root
+        .open_parent(&relative)
+        .context("open the folded parent")?;
+    let contents = parent
+        .read_to_string("file")
+        .context("read the folded file")?;
+    ensure!(
+        contents == "folded",
+        "Windows should fold missing/.. away, but read {contents:?}"
     );
     Ok(())
 }
@@ -108,8 +237,8 @@ fn absolute_requests_beneath_the_recorded_root_are_accepted() -> Result<()> {
     );
     ensure!(
         resolved(&root, recorded.join("sub/../file").as_str()).as_deref()
-            == Some(Utf8Path::new("file")),
-        "an absolute path should be normalized after the root is stripped"
+            == Some(Utf8Path::new("sub/../file")),
+        "an absolute path should keep the components the filesystem interprets"
     );
     Ok(())
 }

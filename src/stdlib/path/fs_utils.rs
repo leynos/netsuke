@@ -17,7 +17,7 @@ use minijinja::Error;
 #[cfg(unix)]
 use rustix::fs::OFlags;
 
-use crate::localization::{self, keys};
+use crate::localization::{self, LocalizedMessage, keys};
 
 use super::path_utils::normalise_parent;
 use super::reading_root::{self, ReadingRoot};
@@ -107,10 +107,13 @@ pub(crate) fn not_regular_file_error(path: &Utf8Path) -> Error {
 pub(crate) fn open_file_checked(path: &Utf8Path, scope: ReadScope<'_>) -> Result<File, Error> {
     let limits = scope.limits;
     let relative = scope.root.resolve(path)?;
-    let parent = scope
-        .root
-        .open_parent(&relative)
-        .map_err(|err| open_parent_error(path, err))?;
+    let parent = scope.root.open_parent(&relative).map_err(|err| {
+        open_error(
+            path,
+            &localization::message(keys::STDLIB_PATH_ACTION_OPEN_DIRECTORY),
+            err,
+        )
+    })?;
     let entry = relative
         .file_name()
         .map_or_else(|| ".".to_owned(), str::to_owned);
@@ -128,7 +131,13 @@ pub(crate) fn open_file_checked(path: &Utf8Path, scope: ReadScope<'_>) -> Result
     windows_reparse::apply_open_flags(&mut options, limits.follow_symlinks);
     let file = parent
         .open_with(Utf8Path::new(&entry), &options)
-        .map_err(|err| open_file_error(path, err))?;
+        .map_err(|err| {
+            open_error(
+                path,
+                &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+                err,
+            )
+        })?;
     let metadata = file.metadata().map_err(|err| {
         io_to_error(
             path,
@@ -150,38 +159,25 @@ pub(crate) fn open_file_checked(path: &Utf8Path, scope: ReadScope<'_>) -> Result
     Ok(file)
 }
 
-/// Translate a parent-directory open failure into its template diagnostic.
+/// Translate an open failure into its template diagnostic.
 ///
 /// A capability escape and an ordinary I/O failure are different events, and
 /// the caller must be able to tell them apart: the escape means the request
 /// left the workspace, while a permission or missing-directory failure means
-/// the workspace itself refused the open.
-fn open_parent_error(path: &Utf8Path, err: io::Error) -> Error {
-    if reading_root::is_capability_escape(&err) {
-        return reading_root::outside_workspace_error(path);
-    }
-    io_to_error(
-        path,
-        &localization::message(keys::STDLIB_PATH_ACTION_OPEN_DIRECTORY),
-        err,
-    )
-}
-
-/// Translate a final-component open failure into its template diagnostic.
+/// the workspace itself refused the open. `action` names the step that failed,
+/// so opening the parent directory and opening the file each keep the wording
+/// that matches what the caller attempted.
 ///
-/// With `follow_symlinks` enabled, an escaping link target is reported as a
-/// workspace escape rather than as the platform's cross-device or symlink
-/// wording. With the default policy the same link is refused by `O_NOFOLLOW`
-/// and keeps that diagnostic, because the caller asked not to follow it.
-fn open_file_error(path: &Utf8Path, err: io::Error) -> Error {
+/// The file open reaches this branch with `follow_symlinks` enabled, where an
+/// escaping link target is reported as a workspace escape rather than as the
+/// platform's cross-device or symlink wording. With the default policy the same
+/// link is refused by `O_NOFOLLOW` and keeps that diagnostic, because the
+/// caller asked not to follow it.
+fn open_error(path: &Utf8Path, action: &LocalizedMessage, err: io::Error) -> Error {
     if reading_root::is_capability_escape(&err) {
         return reading_root::outside_workspace_error(path);
     }
-    io_to_error(
-        path,
-        &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
-        err,
-    )
+    io_to_error(path, action, err)
 }
 
 /// Set `O_NONBLOCK`, and `O_NOFOLLOW` unless the policy follows symlinks.

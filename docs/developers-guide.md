@@ -12113,13 +12113,20 @@ share one open-and-read policy under `src/stdlib/path/`:
 
 - `reading_root/mod.rs` owns resolution and the capability open. `ReadingRoot`
   pairs the configured workspace `Arc<Dir>` with that directory's optional
-  absolute spelling. `resolve` normalizes a request to a path relative to the
+  absolute spelling. `resolve` maps a request to a path relative to the
   capability — accepting an absolute request only when it lies lexically
-  beneath the recorded root — and refuses a `..` path escape with
-  `stdlib.path.contents.outside_workspace`. `open_parent` then opens the
-  resolved parent through the capability, so a link in an intermediate
-  component cannot leave the workspace; `is_capability_escape` recognizes the
-  capability's escape error so that refusal shares the lexical diagnostic.
+  beneath the recorded root and refusing one that begins by climbing above it
+  with `stdlib.path.contents.outside_workspace`. It drops `.` and keeps every
+  other component, `..` included, so the request reaches the capability open
+  with the meaning the filesystem would give it: folding `..` here would
+  silently redirect `alias/../file` and would let `missing/../file` succeed on
+  a platform that fails it. `open_parent` then opens the resolved parent
+  through the capability, so a link in an intermediate component cannot leave
+  the workspace; `is_capability_escape` recognizes the capability's escape
+  error so that refusal shares the lexical diagnostic. Because that parent is
+  the capability a final-component link target is resolved from, a relative
+  target such as `../file` leaves it and is refused even when the target is
+  inside the workspace.
 - `fs_utils.rs` owns what may be opened: `FileReadLimits` carries the per-call
   `max_bytes` and `follow_symlinks` values, `ReadScope` pairs those limits with
   the workspace capability, and `open_file_checked` opens the parent directory

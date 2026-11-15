@@ -2622,10 +2622,12 @@ response limit.
 Every request resolves through the workspace capability rather than the process
 working directory. A relative path is read beneath the configured workspace
 root, and an absolute path is accepted only when it lies beneath that root. A
-request that climbs out with `..`, or that reaches outside through a link in an
-intermediate component, is refused with a diagnostic naming the path and the
-workspace boundary. The refusal never reads the file first, so it cannot
-disclose contents.
+`..` component keeps the meaning the filesystem gives it, so `sub/../file` names
+`sub/file` and `alias/../file` follows whatever directory `alias` names. A
+request that climbs above the root — at its start or after naming a directory —
+or that reaches outside it through a link in an intermediate component is
+refused with a diagnostic naming the path and the workspace boundary. The
+refusal never reads the file first, so it cannot disclose contents.
 
 The reading filters also refuse to follow a symlink as the final path component
 and reject anything that is not a regular file once opened, including FIFOs and
@@ -2640,11 +2642,18 @@ capability that anchors every read in the workspace is unaffected, so a link
 whose target is written as an absolute path is still refused with a diagnostic
 reporting that a path led outside the filesystem — even when the target is in
 fact inside the workspace. Relativity of the *link target*, not containment of
-the resolved path, is what the resolver tests. A template that reads through a
-relative-target link is the supported case; on Windows a junction cannot be
-one, because `mklink` records an absolute target and so is always refused under
-either policy. Templates that deliberately read through a final symlink can
-pass the opt-in to accept it:
+the resolved path, is what that check tests.
+
+A relative-target link is the supported form, but it is resolved from the
+capability opened for the requested file's own parent directory rather than
+from the workspace root. A link such as `../outside/secret` is therefore
+refused when the parent is opened, and so is `sub/link -> ../file` even though
+`file` sits inside the workspace: `..` would leave the `sub` capability the
+read was anchored at. Either name the target directly or place the link where
+its target stays beneath the same parent. On Windows a junction cannot be a
+relative-target link at all, because `mklink` records an absolute target, so a
+junction is always refused under either policy. Templates that deliberately
+read through a final symlink can pass the opt-in to accept it:
 
 <!-- tested-example: guide-file-follow-symlinks-expression -->
 

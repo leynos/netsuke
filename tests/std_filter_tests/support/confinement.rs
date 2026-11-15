@@ -6,7 +6,7 @@
 //! refuses the read.
 
 #[cfg(windows)]
-use super::file_types::is_symlink_privilege_error;
+use super::file_types::{create_junction, is_symlink_privilege_error};
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -22,12 +22,15 @@ use tempfile::tempdir;
 /// ```text
 /// <temp>/
 ///   workspace/
-///     file            (data)
-///     lines.txt       (one\ntwo\nthree\n)
-///     sub/inner.txt   (inner)
+///     file                (data)
+///     lines.txt           (one\ntwo\nthree\n)
+///     sub/file            (linked\nparent)
+///     sub/deep/inner.txt  (inner)
 ///     escape -> ../outside            (Unix only)
-///     alias  -> sub                   (Unix only)
+///     alias  -> sub/deep              (Unix only)
 ///     out    -> ../outside/secret     (Unix only)
+///     sub/upto -> ../file             (Unix only)
+///     jescape -> ../outside           (Windows only, a junction)
 ///   outside/
 ///     secret          (SOLID_SECRET_CONTENT)
 /// ```
@@ -42,6 +45,14 @@ pub(crate) struct ConfinementWorkspace {
     pub(crate) secret: Utf8PathBuf,
     /// The escape links, when this host can create symlinks.
     pub(crate) links: Option<EscapeLinks>,
+    /// An intermediate junction to the outside directory, when one could be
+    /// created. Unlike a symlink it needs no privilege on Windows, so this is
+    /// the intermediate reparse point every Windows host can be tested with.
+    ///
+    /// Only Windows has junctions, and only the Windows case reads this field,
+    /// so it is absent elsewhere rather than dead weight in every test build.
+    #[cfg(windows)]
+    pub(crate) junction: Option<Utf8PathBuf>,
 }
 
 /// Real symlinks that a confined read must not follow out of the
@@ -52,10 +63,17 @@ pub(crate) struct ConfinementWorkspace {
 pub(crate) struct EscapeLinks {
     /// `workspace/escape` -> `../outside`, an intermediate directory link.
     pub(crate) escape: Utf8PathBuf,
-    /// `workspace/alias` -> `sub`, an intermediate link that stays inside.
+    /// `workspace/alias` -> `sub/deep`, an intermediate link that stays
+    /// inside and whose target is deep enough that `alias/..` differs from
+    /// the link's lexical parent.
     pub(crate) alias: Utf8PathBuf,
     /// `workspace/out` -> `../outside/secret`, a final component link.
     pub(crate) out: Utf8PathBuf,
+    /// `workspace/sub/upto` -> `../file`, a final component link whose target
+    /// stays inside the workspace but climbs above the file's own parent
+    /// directory. Only the Unix fixture builds it.
+    #[cfg(unix)]
+    pub(crate) climbing: Utf8PathBuf,
 }
 
 /// Contents of the file outside the workspace.
@@ -111,11 +129,22 @@ pub(crate) fn confinement_workspace() -> Result<ConfinementWorkspace> {
         .write("lines.txt", b"one\ntwo\nthree\n")
         .context("write confinement fixture 'lines.txt'")?;
     handle
-        .create_dir("sub")
-        .context("create confinement fixture directory 'sub'")?;
+        .create_dir_all("sub/deep")
+        .context("create confinement fixture directory 'sub/deep'")?;
     handle
         .write("sub/inner.txt", b"inner")
         .context("write confinement fixture 'sub/inner.txt'")?;
+    handle
+        .write("sub/deep/inner.txt", b"inner")
+        .context("write confinement fixture 'sub/deep/inner.txt'")?;
+    // The alias target is deliberately two levels deep, so `alias/../file`
+    // and a resolver that folds `..` before opening disagree: the filesystem
+    // names `sub/file`, while a lexical fold names the root's own `file`.
+    // Its contents differ from the root file in length, line count, and hash,
+    // so all four reading filters can tell which of the two was read.
+    handle
+        .write("sub/file", b"linked\nparent")
+        .context("write confinement fixture 'sub/file'")?;
 
     let links = create_escape_links(&root, &handle)?;
     Ok(ConfinementWorkspace {
@@ -124,7 +153,27 @@ pub(crate) fn confinement_workspace() -> Result<ConfinementWorkspace> {
         outside_dir,
         secret,
         links,
+        #[cfg(windows)]
+        junction: create_junction_escape(&root, &outside_dir)?,
     })
+}
+
+/// Create an intermediate junction from the workspace to the outside
+/// directory.
+///
+/// Only Windows needs one: a symlink there requires a privilege that most CI
+/// hosts lack, so without a junction the intermediate-link case would be
+/// skipped on the platform whose reparse-point handling differs most. The
+/// junction is named beside the symlink fixture so both can exist at once.
+///
+/// # Errors
+///
+/// Returns the setup error when the junction could not be created for a
+/// reason other than `cmd.exe` being unavailable.
+#[cfg(windows)]
+fn create_junction_escape(root: &Utf8Path, outside: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
+    let link = root.join("jescape");
+    Ok(create_junction(&link, outside)?.map(|()| link))
 }
 
 /// Create the three escape links inside `root`.
@@ -139,11 +188,14 @@ fn create_escape_links(root: &Utf8Path, handle: &Dir) -> Result<Option<EscapeLin
         .symlink("../outside", "escape")
         .context("create escape link 'escape' -> '../outside'")?;
     handle
-        .symlink("sub", "alias")
-        .context("create escape link 'alias' -> 'sub'")?;
+        .symlink("sub/deep", "alias")
+        .context("create escape link 'alias' -> 'sub/deep'")?;
     handle
         .symlink("../outside/secret", "out")
         .context("create escape link 'out' -> '../outside/secret'")?;
+    handle
+        .symlink("../file", "sub/upto")
+        .context("create climbing link 'sub/upto' -> '../file'")?;
     Ok(Some(EscapeLinks::under(root)))
 }
 
@@ -156,7 +208,7 @@ fn create_escape_links(root: &Utf8Path, _handle: &Dir) -> Result<Option<EscapeLi
     let links = EscapeLinks::under(root);
     let attempts = [
         std::os::windows::fs::symlink_dir("../outside", &links.escape),
-        std::os::windows::fs::symlink_dir("sub", &links.alias),
+        std::os::windows::fs::symlink_dir("sub/deep", &links.alias),
         std::os::windows::fs::symlink_file("../outside/secret", &links.out),
     ];
     for attempt in attempts {
@@ -178,12 +230,14 @@ fn create_escape_links(root: &Utf8Path, _handle: &Dir) -> Result<Option<EscapeLi
 }
 
 impl EscapeLinks {
-    /// Name the three links beneath `root`.
+    /// Name the links beneath `root`.
     fn under(root: &Utf8Path) -> Self {
         Self {
             escape: root.join("escape"),
             alias: root.join("alias"),
             out: root.join("out"),
+            #[cfg(unix)]
+            climbing: root.join("sub/upto"),
         }
     }
 }

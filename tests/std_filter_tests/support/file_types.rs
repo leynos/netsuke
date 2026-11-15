@@ -75,8 +75,9 @@ pub(super) fn is_symlink_privilege_error(err: &std::io::Error) -> bool {
 ///
 /// A junction is the directory-shaped reparse point this policy refuses.
 /// Unlike a symlink it needs no privilege and no Developer Mode, so the
-/// fixture is available on every ordinary Windows host; it is built with
-/// `cmd /C mklink /J`, which is the only unprivileged route to one.
+/// fixture is available on every ordinary Windows host; it is built through
+/// [`create_junction`], which uses `cmd /C mklink /J`, the only unprivileged
+/// route to one.
 ///
 /// `Ok(None)` means this host has no `cmd.exe`, so the fixture cannot be
 /// created at all. That is the only environmental unavailability this
@@ -97,9 +98,6 @@ pub(super) fn is_symlink_privilege_error(err: &std::io::Error) -> bool {
 /// created, quoting `mklink`'s own diagnostics.
 #[cfg(windows)]
 pub(crate) fn junction_fixture(root: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
-    use std::os::windows::process::CommandExt as _;
-    use std::process::Command;
-
     /// Name of the junction the fixture creates.
     const LINK: &str = "junc";
     /// Name of the directory the junction points at.
@@ -111,10 +109,29 @@ pub(crate) fn junction_fixture(root: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
         .context("create the junction fixture target directory")?;
     let link = root.join(LINK);
     let target = root.join(TARGET);
+    Ok(create_junction(&link, &target)?.map(|()| link))
+}
+
+/// Point a directory junction at `target`, which may lie outside the
+/// workspace.
+///
+/// Windows resolves an unprivileged junction through `cmd /C mklink /J`, the
+/// only route that needs neither `SeCreateSymbolicLinkPrivilege` nor Developer
+/// Mode. `Ok(None)` means there is no `cmd.exe` to run it with; every other
+/// failure, including a non-zero `mklink` exit, is a setup fault.
+///
+/// # Errors
+///
+/// Returns the setup error when `cmd` is present but the junction was not
+/// created, quoting `mklink`'s own diagnostics.
+#[cfg(windows)]
+pub(crate) fn create_junction(link: &Utf8Path, target: &Utf8Path) -> Result<Option<()>> {
+    use std::os::windows::process::CommandExt as _;
+    use std::process::Command;
+
     ensure!(
         !link.as_str().contains('"') && !target.as_str().contains('"'),
-        "workspace path contains a quote and cannot be passed to cmd: \
-             link {link}, target {target}"
+        "path contains a quote and cannot be passed to cmd: link {link}, target {target}"
     );
 
     // `mklink` is a `cmd` built-in, so it is reachable only through
@@ -135,9 +152,9 @@ pub(crate) fn junction_fixture(root: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     ensure!(
         output.status.success(),
-        "create junction fixture {link} -> {target}: cmd exited with {}: {}",
+        "create junction {link} -> {target}: cmd exited with {}: {}",
         output.status,
         stderr.trim()
     );
-    Ok(Some(link))
+    Ok(Some(()))
 }

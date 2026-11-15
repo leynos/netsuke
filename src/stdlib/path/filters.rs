@@ -79,6 +79,14 @@ struct ReadBudget<'a> {
     root: &'a ReadingRoot,
 }
 
+impl<'a> ReadBudget<'a> {
+    /// Pair the configured ceiling with the capability a call resolves
+    /// through.
+    const fn new(max_bytes: u64, root: &'a ReadingRoot) -> Self {
+        Self { max_bytes, root }
+    }
+}
+
 /// Register the file-inspecting path filters and the `expanduser` filter.
 pub(crate) fn register_filters(
     env: &mut Environment<'_>,
@@ -116,10 +124,7 @@ fn register_reading_filters(
                 &raw,
                 encoding.as_deref(),
                 &kwargs,
-                ReadBudget {
-                    max_bytes: file_max_read_bytes,
-                    root: &contents_root,
-                },
+                ReadBudget::new(file_max_read_bytes, &contents_root),
             )
         },
     );
@@ -130,10 +135,7 @@ fn register_reading_filters(
             read_bounded(
                 read_telemetry::FILTER_LINECOUNT,
                 &kwargs,
-                ReadBudget {
-                    max_bytes: file_max_read_bytes,
-                    root: &linecount_root,
-                },
+                ReadBudget::new(file_max_read_bytes, &linecount_root),
                 |scope| bounded_read::linecount(Utf8Path::new(&raw), scope),
             )
         },
@@ -146,10 +148,7 @@ fn register_reading_filters(
             read_bounded(
                 read_telemetry::FILTER_HASH,
                 &kwargs,
-                ReadBudget {
-                    max_bytes: file_max_read_bytes,
-                    root: &hash_root,
-                },
+                ReadBudget::new(file_max_read_bytes, &hash_root),
                 |scope| hash_utils::compute_hash(Utf8Path::new(&raw), &algorithm, scope),
             )
         },
@@ -166,10 +165,7 @@ fn register_reading_filters(
             read_bounded(
                 read_telemetry::FILTER_DIGEST,
                 &kwargs,
-                ReadBudget {
-                    max_bytes: file_max_read_bytes,
-                    root: &reading_root,
-                },
+                ReadBudget::new(file_max_read_bytes, &reading_root),
                 |scope| {
                     hash_utils::compute_digest(Utf8Path::new(&raw), digest_len, &algorithm, scope)
                 },

@@ -1711,11 +1711,15 @@ Implementation notes:
   working directory. `ReadingRoot` in `src/stdlib/path/reading_root/mod.rs`
   resolves each request first: a relative path is read beneath the workspace
   root, an absolute path is accepted only when it lies lexically beneath that
-  root's recorded spelling, and a request that climbs out with `..` is refused.
-  The subsequent capability open rejects a link in an intermediate component
-  that leaves the workspace. Other filters that touch the file system still use
-  ambient authority, so callers must ensure that templates granted access to
-  the stdlib are trusted.
+  root's recorded spelling, and a request that begins by climbing above the
+  root is refused. Every other `..` is kept, so the capability open gives it
+  the filesystem's own meaning rather than a lexical fold: `alias/../file`
+  resolves against whatever directory `alias` names, and `missing/../file`
+  fails on a platform that resolves `..` after looking the preceding component
+  up. The same open rejects a link in an intermediate component that leaves the
+  workspace. Other filters that touch the file system still use ambient
+  authority, so callers must ensure that templates granted access to the stdlib
+  are trusted.
 - `realpath` canonicalizes the parent directory before joining the resolved
   entry so results are absolute and symlink-free.
 - `contents` and `linecount` currently support UTF-8 input; other encodings are
