@@ -698,6 +698,29 @@ decision D-15.
     unchanged. `check-fmt` is the gate that confirms the prose is well formed,
     and it runs in the next batch.
 
+- [x] (2026-11-15) Read the pre-merge comment again rather than trusting the
+  earlier summary of it, and it named three requests, not two. The third was the
+  `netsuke test` surface, which this entry and the commit before it had not
+  covered. Two more witnesses close the set on `ea787b3a2`:
+  - `tests/assert_cmd_tests/runner_diagnostics.rs` now counts the summary in
+    real stderr, so the end-to-end path is asserted and not just the unit.
+  - `test_surface_load_rejects_an_unsupported_schema_without_recording` is the
+    `TestSurface` counterpart of the query case, making both non-recording
+    paths prove validation as well as the withheld counter.
+  - The mutation probe was re-run with both witnesses present and **both**
+    failed: the unit case on the doubled summary and the CLI case on its count.
+    That is the evidence the row asked for — a test that fails under the
+    plausible incorrect implementation — and it now exists at the executable
+    boundary as well as the unit.
+  - All nine gates passed on the resulting tree: `check-fmt`, `typecheck`,
+    `lint` (both Whitaker packages, coverage 100.0%, Pylint 10.00/10,
+    `actionlint`), `doc-coverage` (98.27%, 6549/6664), `test` (5734 nextest
+    cases passed, 9 skipped, plus doctests), `markdownlint` (0 issues over 233
+    files), `nixie`, `test-documentation-contracts` (15/15), and
+    `test-workflow-contracts` (2330 passed, 3 skipped, plus 30). The gates
+    queued up to 350 deep on `build-limits` compile slots behind other agents
+    while admission stayed `healthy`.
+
 ## Surprises & discoveries
 
 - Observation: Netsuke has no version gate. `NetsukeManifest` declares

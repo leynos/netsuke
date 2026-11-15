@@ -214,6 +214,43 @@ fn test_surface_load_does_not_record_schema_admission() -> AnyResult<()> {
     Ok(())
 }
 
+/// A `netsuke test` load must still refuse an unsupported schema.
+///
+/// The sibling case loads an admitted manifest through the test surface, which
+/// shows only that the counter stays still. Adding this case makes the two
+/// non-recording paths symmetric: each proves the declaration is validated as
+/// well as uncounted, so an implementation that skipped `admit_document`
+/// whenever recording was disabled would fail on both.
+#[test]
+fn test_surface_load_rejects_an_unsupported_schema_without_recording() -> AnyResult<()> {
+    let yaml = command_load_manifest("1.1.0");
+    let surface = TestSurface::new(StdlibConfig::from_current_dir()?);
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let outcome = metrics::with_local_recorder(&recorder, || {
+        from_str_with_options(
+            &yaml,
+            &ManifestName::new("Netsukefile"),
+            ManifestLoadOptions::test(surface),
+        )
+        .map(drop)
+    });
+    let error = outcome.err().context(
+        "a test-surface load must validate the declaration, so an unsupported one must be refused",
+    )?;
+    let message = format!("{error:#}");
+    ensure!(
+        message.contains("netsuke::manifest::schema_version"),
+        "the test surface must refuse the declaration with the gate's own code: {message}"
+    );
+    let counts = admission_counts(&snapshotter.snapshot().into_vec());
+    ensure!(
+        counts.is_empty(),
+        "a refused test-surface load must not record a schema admission: {counts:?}"
+    );
+    Ok(())
+}
+
 /// A discovery query must not emit the admission span or decision event.
 ///
 /// The counter is only half of what recording does; `record_admission` also

@@ -43,5 +43,16 @@ fn missing_manifest_renders_runner_diagnostic_and_help() -> Result<()> {
         flattened.contains("Ensure the manifest exists or pass `--file` with the correct path."),
         "stderr must carry the recovery help: {stderr}"
     );
+    // The duplicate this guards against is the error text printed above the
+    // rendering, so the count is the assertion rather than the presence of any
+    // one line: both copies carry the summary, and a `contains` would pass
+    // with either one removed.
+    ensure!(
+        flattened
+            .matches("Manifest 'Netsukefile' not found")
+            .count()
+            == 1,
+        "stderr must print the summary once, not above the diagnostic: {stderr}"
+    );
     Ok(())
 }
