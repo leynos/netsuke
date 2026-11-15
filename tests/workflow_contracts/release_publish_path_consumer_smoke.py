@@ -16,6 +16,7 @@ the module the release-path contract and the mutation suite import.
 Run via ``make test-workflow-contracts``.
 """
 
+import dataclasses
 import typing as typ
 
 from release_publish_needs import job_names
@@ -25,6 +26,7 @@ from release_publish_path_consumer_shape import (
     CHECKOUT_PREFIX,
     CONSUMER_SMOKE_ACTION_PATH,
     CONSUMER_SMOKE_JOB,
+    CONSUMER_SMOKE_NEEDS,
     CONSUMER_SMOKE_PERMISSIONS,
     LOCAL_SMOKE_ACTION,
     PACKAGE_RECORD_ARTIFACT,
@@ -42,10 +44,34 @@ from release_publish_path_consumer_shape import (
     smoke_job,
     steps_of,
 )
-from release_publish_path_scenarios import CONSUMER_SMOKE_NEEDS
 
 if typ.TYPE_CHECKING:
     from release_publish_path_scenarios import Scenario
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ConsumerSmokeCheck:
+    """Bundle the smoke documents and scenario state checked as one run.
+
+    Attributes
+    ----------
+    release
+        Parsed release workflow, mutated in place by a caller's deep copy.
+    action
+        Parsed consumer-smoke manifest, or ``None`` when it is missing.
+    scenario
+        The release mode, event, and dependency outcomes being resolved.
+    outputs
+        The metadata outputs the guard expression reads.
+    violations
+        The violations collected so far, appended to in place.
+    """
+
+    release: dict[str, object]
+    action: dict[str, object] | None
+    scenario: Scenario
+    outputs: dict[str, str]
+    violations: list[str]
 
 
 def _needs_context(
@@ -85,41 +111,35 @@ def _should_smoke(scenario: Scenario) -> bool:
     )
 
 
-def check_consumer_smoke(
-    release: dict[str, object],
-    action: dict[str, object] | None,
-    scenario: Scenario,
-    outputs: dict[str, str],
-    violations: list[str],
-) -> None:
+def check_consumer_smoke(check: ConsumerSmokeCheck) -> None:
     """Verify the job's shape and its reachability for one scenario."""
-    job = smoke_job(release, violations)
-    check_smoke_needs(job, CONSUMER_SMOKE_NEEDS, violations)
-    check_smoke_privileges(job, violations)
-    check_smoke_checkout(job, violations)
-    check_smoke_artifacts(job, violations)
-    check_smoke_action_inputs(job, violations)
-    check_smoke_action_declared(action, violations)
-    check_smoke_compilation(job, action, violations)
+    job = smoke_job(check.release, check.violations)
+    check_smoke_needs(job, check.violations)
+    check_smoke_privileges(job, check.violations)
+    check_smoke_checkout(job, check.violations)
+    check_smoke_artifacts(job, check.violations)
+    check_smoke_action_inputs(job, check.violations)
+    check_smoke_action_declared(check.action, check.violations)
+    check_smoke_compilation(job, check.action, check.violations)
     contexts: dict[str, object] = {
-        "needs": _needs_context(job, scenario, outputs),
-        "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}},
+        "needs": _needs_context(job, check.scenario, check.outputs),
+        "status": {"cancelled": check.scenario.cancelled},
+        "github": {"event": {"action": check.scenario.event_action}},
     }
     actual = evaluate_field(
         job.get("if", True),
         FieldEvaluation(
             contexts=contexts,
-            violations=violations,
-            label=f"{scenario.name}.consumer-smoke-job.guard",
+            violations=check.violations,
+            label=f"{check.scenario.name}.consumer-smoke-job.guard",
             job_level=True,
         ),
     )
-    expected = _should_smoke(scenario)
+    expected = _should_smoke(check.scenario)
     runs = actual is not MISSING and bool(actual)
     if runs != expected:
-        violations.append(
-            f"{scenario.name}.consumer-smoke-job: resolved to {runs!r}, "
+        check.violations.append(
+            f"{check.scenario.name}.consumer-smoke-job: resolved to {runs!r}, "
             f"expected {expected!r}"
         )
 
@@ -129,12 +149,14 @@ __all__ = [
     "CHECKOUT_PREFIX",
     "CONSUMER_SMOKE_ACTION_PATH",
     "CONSUMER_SMOKE_JOB",
+    "CONSUMER_SMOKE_NEEDS",
     "CONSUMER_SMOKE_PERMISSIONS",
     "LOCAL_SMOKE_ACTION",
     "PACKAGE_RECORD_ARTIFACT",
     "SMOKE_ACTION_INPUTS",
     "SMOKE_ACTION_TARGET",
     "SMOKE_ARTIFACTS",
+    "ConsumerSmokeCheck",
     "action_steps",
     "check_consumer_smoke",
     "check_smoke_action_declared",

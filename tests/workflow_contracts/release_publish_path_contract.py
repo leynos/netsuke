@@ -21,8 +21,10 @@ from release_publish_path_artifacts import (
 )
 from release_publish_path_consumer_smoke import (
     CONSUMER_SMOKE_ACTION_PATH,
+    ConsumerSmokeCheck,
     check_consumer_smoke,
 )
+from release_publish_path_native_smoke import check_native_smoke_job
 from release_publish_path_publication import (
     PublicationCheck,
     UploadPlanCheck,
@@ -50,6 +52,22 @@ from workflow_loading import (
 )
 
 CALLER_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release-dry-run.yml"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ActionManifests:
+    """Name the composite manifests a caller supplies instead of the repository's.
+
+    Attributes
+    ----------
+    publisher
+        Parsed publisher action manifest, or ``None`` to read the repository's.
+    consumer_smoke
+        Parsed consumer-smoke manifest, or ``None`` to read the repository's.
+    """
+
+    publisher: dict[str, object] | None = None
+    consumer_smoke: dict[str, object] | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -132,44 +150,6 @@ def _needs_context(
             dependency["outputs"] = outputs
         needs[name] = dependency
     return needs
-
-
-def _check_smoke_job(
-    release: dict[str, object],
-    scenario: Scenario,
-    outputs: dict[str, str],
-    violations: list[str],
-) -> None:
-    """Check smoke-job reachability for each mode and event."""
-    smoke_job = workflow_job(release, "windows-native-recipe-smoke")
-    context: dict[str, object] = {
-        "needs": {
-            "metadata": {
-                "result": scenario.needs_results["metadata"],
-                "outputs": outputs,
-            }
-        },
-        # A cancelled release scenario cancels after every dependency passed.
-        "status": {"cancelled": False},
-        "github": {"event": {"action": scenario.event_action}},
-    }
-    value = evaluate_field(
-        smoke_job.get("if", True),
-        FieldEvaluation(
-            contexts=context,
-            violations=violations,
-            label=f"{scenario.name}.smoke-job.guard",
-            job_level=True,
-        ),
-    )
-    metadata_succeeded = scenario.needs_results["metadata"] == "success"
-    should_run = metadata_succeeded and (
-        scenario.mode != "dry-run" or scenario.event_action == "ready_for_review"
-    )
-    if value is MISSING or bool(value) != should_run:
-        violations.append(
-            f"{scenario.name}.smoke-job: guard did not resolve to {should_run!r}"
-        )
 
 
 def _check_caller(
@@ -280,7 +260,7 @@ def _check_scenario(check: ScenarioCheck) -> None:
     """Evaluate dependency results, package uploads, and release staging."""
     scenario = check.scenario
     outputs = check.outputs_by_mode[scenario.mode]
-    _check_smoke_job(check.release, scenario, outputs, check.violations)
+    check_native_smoke_job(check.release, scenario, outputs, check.violations)
     check_build_uploads(
         check.release,
         check.build,
@@ -326,11 +306,13 @@ def _check_scenario(check: ScenarioCheck) -> None:
     check_crates_io_publication(publisher_job, publication_check, publisher_contexts)
     check_verify_inventory(check.release, scenario, outputs, check.violations)
     check_consumer_smoke(
-        check.release,
-        check.smoke_action,
-        scenario,
-        outputs,
-        check.violations,
+        ConsumerSmokeCheck(
+            release=check.release,
+            action=check.smoke_action,
+            scenario=scenario,
+            outputs=outputs,
+            violations=check.violations,
+        )
     )
 
 
@@ -355,8 +337,7 @@ def check_release_publish_path(
     release: dict[str, object],
     caller: dict[str, object],
     build: dict[str, object],
-    publisher_action: dict[str, object] | None = None,
-    consumer_smoke_action: dict[str, object] | None = None,
+    manifests: ActionManifests | None = None,
 ) -> list[str]:
     """Return violations in the dry-run and tag-publish reachability contract.
 
@@ -364,18 +345,16 @@ def check_release_publish_path(
     ----------
     release, caller, build : dict[str, object]
         Parsed workflow documents for the release, caller, and build workflows.
-    publisher_action : dict[str, object] | None, optional
-        Parsed publisher action manifest. When ``None``, read it from the
-        repository.
-    consumer_smoke_action : dict[str, object] | None, optional
-        Parsed consumer-smoke action manifest. When ``None``, read it from the
-        repository. A caller supplies one to check a mutated copy.
+    manifests : ActionManifests | None, optional
+        Composite action manifests to check instead of the repository's. A
+        caller supplies them to check mutated copies.
 
     Returns
     -------
     list[str]
         Missing or incorrectly wired release-path invariants.
     """
+    supplied = manifests if manifests is not None else ActionManifests()
     violations: list[str] = []
     _check_caller(release, caller, violations)
     outputs_by_mode = {
@@ -394,10 +373,10 @@ def check_release_publish_path(
     )
     _check_release_needs(release, violations)
     _check_release_step_order(release, violations)
-    _check_publisher_action(release, publisher_action, violations)
+    _check_publisher_action(release, supplied.publisher, violations)
     smoke_action = (
-        consumer_smoke_action
-        if consumer_smoke_action is not None
+        supplied.consumer_smoke
+        if supplied.consumer_smoke is not None
         else action_sources().get(CONSUMER_SMOKE_ACTION_PATH)
     )
     for scenario in SCENARIOS:

@@ -9,6 +9,7 @@ rather than silently passing.
 Run via ``make test-workflow-contracts``.
 """
 
+import enum
 import typing as typ
 
 from release_publish_path_consumer_smoke import CONSUMER_SMOKE_JOB
@@ -17,7 +18,48 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
 #: One parsed workflow or composite-action document, mutated in place.
-Job = dict[str, object]
+type Job = dict[str, object]
+
+
+class ConsumerSmokeMutationIssue(enum.StrEnum):
+    """Classify why a mutation no longer matches the fixture it mutates."""
+
+    MISSING_JOBS = "the release workflow must declare its jobs"
+    MISSING_JOB = f"the release workflow must declare {CONSUMER_SMOKE_JOB}"
+    MALFORMED_STEPS = "the mutated document must declare a list of step mappings"
+    MISSING_CLAUSE = "the smoke guard no longer carries the clause to remove"
+    MISSING_PERMISSIONS = f"{CONSUMER_SMOKE_JOB} must set permissions"
+    MISSING_NEEDS = f"{CONSUMER_SMOKE_JOB} must declare needs"
+    MISSING_CHECKOUT_INPUTS = "the smoke checkout must pass inputs"
+    MISSING_CHECKOUT = f"{CONSUMER_SMOKE_JOB} must check the candidate out"
+    MISSING_DOWNLOAD = f"{CONSUMER_SMOKE_JOB} must download at least one artefact"
+    UNKNOWN_LABEL = "unknown consumer-smoke mutation"
+
+
+class ConsumerSmokeMutationError(AssertionError):
+    """Report a mutation that no longer matches the fixture it mutates.
+
+    Raised explicitly rather than left to an ``assert`` so the precondition
+    survives ``python -O``, where an assertion is dropped and a mutation would
+    silently apply to nothing. The category carries the message and the detail
+    carries whatever the category cannot say, which keeps long explanations out
+    of the ``raise`` sites.
+    """
+
+    def __init__(
+        self, issue: ConsumerSmokeMutationIssue, detail: object | None = None
+    ) -> None:
+        """Record the mutation error category and any stale clause or label."""
+        self.issue = issue
+        self.detail = detail
+        super().__init__(issue, detail)
+
+    def __str__(self) -> str:
+        """Render the mutation error with the detail that makes it diagnosable."""
+        if self.detail is None:
+            return self.issue.value
+        return f"{self.issue.value}: {self.detail}"
+
 
 #: The scenario and contract each mutation must break. ``static`` names a
 #: violation that does not depend on a release scenario; every other label
@@ -84,14 +126,16 @@ def _smoke_job(release: Job) -> Job:
 
     Raises
     ------
-    AssertionError
+    ConsumerSmokeMutationError
         If the copied workflow no longer declares the job, which means the
         fixture moved and the mutation would test nothing.
     """
     jobs = release.get("jobs")
-    assert isinstance(jobs, dict), "the release workflow must declare jobs"
+    if not isinstance(jobs, dict):
+        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_JOBS)
     job = jobs.get(CONSUMER_SMOKE_JOB)
-    assert isinstance(job, dict), f"release workflow must declare {CONSUMER_SMOKE_JOB}"
+    if not isinstance(job, dict):
+        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_JOB)
     return job
 
 
@@ -106,15 +150,17 @@ def _steps(document: Job) -> list[Job]:
 
     Raises
     ------
-    AssertionError
-        If the document declares no steps.
+    ConsumerSmokeMutationError
+        If the document declares no steps, or declares one that is not a
+        mapping.
     """
     runs = document.get("runs")
     holder = runs if isinstance(runs, dict) else document
     declared = holder.get("steps")
-    assert isinstance(declared, list), "the mutated document must declare steps"
-    for step in declared:
-        assert isinstance(step, dict), "every mutated step must be a mapping"
+    if not isinstance(declared, list) or not all(
+        isinstance(step, dict) for step in declared
+    ):
+        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MALFORMED_STEPS)
     # The caller mutates this list in place, so it must be the one the document
     # holds. A filtered copy would accept an append and change nothing.
     return typ.cast("list[Job]", declared)
@@ -130,11 +176,14 @@ def _without(guard: str, clause: str) -> str:
 
     Raises
     ------
-    AssertionError
+    ConsumerSmokeMutationError
         If the clause is absent, which means the guard was rewritten and this
         mutation no longer removes anything.
     """
-    assert clause in guard, f"the smoke guard must contain {clause!r}, got {guard!r}"
+    if clause not in guard:
+        raise ConsumerSmokeMutationError(
+            ConsumerSmokeMutationIssue.MISSING_CLAUSE, (clause, guard)
+        )
     return guard.replace(clause, "", 1)
 
 
@@ -153,11 +202,12 @@ def _permissions(job: Job) -> Job:
 
     Raises
     ------
-    AssertionError
+    ConsumerSmokeMutationError
         If the job declares no permissions to mutate.
     """
     permissions = job.get("permissions")
-    assert isinstance(permissions, dict), f"{CONSUMER_SMOKE_JOB} must set permissions"
+    if not isinstance(permissions, dict):
+        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_PERMISSIONS)
     return permissions
 
 
@@ -167,10 +217,17 @@ def _drop_finalize_need(release: Job, _action: Job) -> None:
     Both halves go together: a dependency deleted from ``needs`` while the
     guard still reads its result is refused by the expression evaluator rather
     than by the dependency contract this mutation targets.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If the job declares no dependency list, so the mutation would change
+        nothing the contract reads.
     """
     job = _smoke_job(release)
     needs = job.get("needs")
-    assert isinstance(needs, list), f"{CONSUMER_SMOKE_JOB} must declare needs"
+    if not isinstance(needs, list):
+        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_NEEDS)
     needs.remove("finalize-github-release")
     _set_guard(job, FINALIZE_CLAUSE)
 
@@ -220,26 +277,40 @@ def _persist_checkout_credentials(release: Job, _action: Job) -> None:
 
     This is the mutation the checkout contract exists for: the token is then
     readable by every later step of a job that is supposed to hold none.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If the job has no checkout step, or its checkout passes no inputs, so
+        the mutation would change nothing the contract reads.
     """
     for step in _steps(_smoke_job(release)):
         if not str(step.get("uses", "")).startswith(CHECKOUT_PREFIX):
             continue
         values = step.get("with")
-        assert isinstance(values, dict), "the smoke checkout must pass inputs"
+        if not isinstance(values, dict):
+            raise ConsumerSmokeMutationError(
+                ConsumerSmokeMutationIssue.MISSING_CHECKOUT_INPUTS
+            )
         values["persist-credentials"] = True
         return
-    message = f"{CONSUMER_SMOKE_JOB} must check the candidate out"
-    raise AssertionError(message)
+    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_CHECKOUT)
 
 
 def _select_pattern_artifact(release: Job, _action: Job) -> None:
-    """Replace one exact artefact download with a wildcard pattern download."""
+    """Replace one exact artefact download with a wildcard pattern download.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If the job downloads no artefact, so the mutation would change nothing
+        the contract reads.
+    """
     for step in _steps(_smoke_job(release)):
         if str(step.get("uses", "")).startswith(DOWNLOAD_PREFIX):
             step["with"] = {"pattern": "release-*", "path": "downloaded"}
             return
-    message = f"{CONSUMER_SMOKE_JOB} must download at least one artefact"
-    raise AssertionError(message)
+    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
 
 
 def _compile_in_job(release: Job, _action: Job) -> None:
@@ -253,7 +324,7 @@ def _compile_in_action(release: Job, action: Job) -> None:
     _steps(action).append(dict(COMPILATION_STEP))
 
 
-_MUTATIONS: dict[str, "cabc.Callable[[Job, Job], None]"] = {
+_MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "drop-consumer-smoke-finalize-prerequisite": _drop_finalize_need,
     "ignore-consumer-smoke-finalize-result": _ignore_finalize_result,
     "remove-consumer-smoke-publish-guard": _remove_publish_guard,
@@ -284,12 +355,15 @@ def mutate_consumer_smoke(label: str, release: Job, action: Job) -> None:
 
     Raises
     ------
-    AssertionError
+    ConsumerSmokeMutationError
         If ``label`` is not registered, or if the fixture it targets has moved
         so far that the mutation would change nothing.
     """
     applier = _MUTATIONS.get(label)
-    assert applier is not None, f"unknown consumer-smoke mutation {label!r}"
+    if applier is None:
+        raise ConsumerSmokeMutationError(
+            ConsumerSmokeMutationIssue.UNKNOWN_LABEL, label
+        )
     applier(release, action)
 
 

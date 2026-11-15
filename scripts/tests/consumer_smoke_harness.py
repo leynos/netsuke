@@ -30,6 +30,8 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
     import pathlib
 
+    from release_consumer_payload import VerdictRecord
+
 VERSION = "1.2.3"
 COMMIT = "0" * 40
 TARGET = "x86_64-unknown-linux-gnu"
@@ -279,22 +281,29 @@ def fake_probe(*, returncode: int = 0, stdout: str = BANNER) -> ProbeRunner:
     return runner
 
 
-def read_verdict(target: Workspace) -> dict[str, object]:
+def read_verdict(target: Workspace) -> VerdictRecord:
     """Read the verdict artefact the last run wrote.
 
     Returns
     -------
-    dict[str, object]
-        The decoded verdict record.
+    VerdictRecord
+        The decoded verdict, carrying its phase table and its overall verdict.
 
     Notes
     -----
-    An artefact that does not hold a JSON object fails the assertion below
-    rather than returning a value the caller would have to re-check.
+    The artefact is JSON, so every member of it arrives as ``object``. Both
+    members are established here, once, so a caller can read
+    ``verdict["phases"][label]`` without re-checking the shape at each site; an
+    artefact missing either fails the assertions below rather than handing back
+    a value the caller would have to re-check.
     """
     decoded = json.loads(target.verdict.read_text(encoding="utf-8"))
     assert isinstance(decoded, dict), "the verdict artefact must be a JSON object"
-    return decoded
+    phases = decoded.get("phases")
+    assert isinstance(phases, dict), "the verdict artefact must record its phases"
+    verdict = decoded.get("verdict")
+    assert isinstance(verdict, str), "the verdict artefact must record a verdict"
+    return {"phases": phases, "verdict": verdict}
 
 
 def read_phase_log(target: Workspace) -> dict[str, dict[str, object]]:

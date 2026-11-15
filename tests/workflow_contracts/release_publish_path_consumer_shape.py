@@ -18,6 +18,7 @@ import re
 import typing as typ
 
 from release_publish_needs import job_names
+from release_publish_path_scenarios import CONSUMER_SMOKE_NEEDS
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -144,9 +145,7 @@ def smoke_job(release: dict[str, object], violations: list[str]) -> dict[str, ob
     return {}
 
 
-def check_smoke_needs(
-    job: dict[str, object], expected: frozenset[str], violations: list[str]
-) -> None:
+def check_smoke_needs(job: dict[str, object], violations: list[str]) -> None:
     """Require exactly the candidate's three stages, with nothing else.
 
     The length comparison catches a repeated name, which set equality alone
@@ -156,7 +155,7 @@ def check_smoke_needs(
     if names is None:
         violations.append(f"{CONSUMER_SMOKE_JOB}.needs: dependencies must be jobs")
         return
-    if set(names) != expected or len(names) != len(expected):
+    if set(names) != CONSUMER_SMOKE_NEEDS or len(names) != len(CONSUMER_SMOKE_NEEDS):
         violations.append(
             f"{CONSUMER_SMOKE_JOB}.needs: expected exactly metadata, package-crate "
             "and finalize-github-release"
@@ -349,6 +348,7 @@ __all__ = [
     "CHECKOUT_PREFIX",
     "CONSUMER_SMOKE_ACTION_PATH",
     "CONSUMER_SMOKE_JOB",
+    "CONSUMER_SMOKE_NEEDS",
     "CONSUMER_SMOKE_PERMISSIONS",
     "LOCAL_SMOKE_ACTION",
     "PACKAGE_RECORD_ARTIFACT",

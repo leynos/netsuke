@@ -27,6 +27,7 @@ from release_publish_path_consumer_smoke import (
 )
 from release_publish_path_contract import (
     CALLER_WORKFLOW_PATH,
+    ActionManifests,
     check_release_publish_path,
 )
 from workflow_loading import (
@@ -80,7 +81,10 @@ def test_release_path_contract_rejects_each_regression(
     mutate_consumer_smoke(label, release, action)
 
     violations = check_release_publish_path(
-        release, fixtures.caller, fixtures.build, consumer_smoke_action=action
+        release,
+        fixtures.caller,
+        fixtures.build,
+        ActionManifests(consumer_smoke=action),
     )
 
     for scenario, contract in CONSUMER_SMOKE_EXPECTED_VIOLATIONS[label]:
@@ -105,6 +109,6 @@ def test_the_compilation_scan_finds_no_build_in_the_shipped_smoke(
 
     check_smoke_compilation(job, fixtures.action, violations)
 
-    assert violations == [], (
+    assert not violations, (
         f"the shipped smoke must not be reported as compiling; got {violations!r}"
     )

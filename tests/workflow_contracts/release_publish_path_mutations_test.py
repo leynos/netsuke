@@ -5,6 +5,7 @@ from action_run_sources import action_sources
 from release_publish_crates_io_contracts import ACTION_PATH
 from release_publish_path_contract import (
     CALLER_WORKFLOW_PATH,
+    ActionManifests,
     check_release_publish_path,
 )
 from release_publish_path_mutations import (
@@ -49,7 +50,7 @@ def test_release_path_contract_rejects_each_regression(
     """Require each mutation's affected scenario or invariant to fail by name."""
     case = mutate_workflows(label, workflows)
     violations = check_release_publish_path(
-        case.release, case.caller, case.build, case.action
+        case.release, case.caller, case.build, ActionManifests(publisher=case.action)
     )
     for scenario, contract in case.expected_violations:
         prefix = f"{contract}:" if scenario == "static" else f"{scenario}.{contract}:"

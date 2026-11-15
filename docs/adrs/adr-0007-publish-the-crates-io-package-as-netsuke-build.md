@@ -421,7 +421,7 @@ downloadable without a credential and this job deliberately holds none.
   publisher built.
 - Every phase is reported, `skipped` included. The job's summary reads each
   action output unconditionally, so an output a refused smoke never wrote would
-  reach it as an empty string and be summarised as `unknown`; reporting a phase
+  reach it as an empty string and be summarized as `unknown`; reporting a phase
   that never ran as `skipped` keeps a planning failure from reading as five
   indeterminate outcomes.
 - What the release ships is `netsuke`, from `netsuke-build`; this job is the

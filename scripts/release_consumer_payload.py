@@ -45,6 +45,20 @@ SMOKE_PHASES = (
 PHASE_OUTCOMES = frozenset({"success", "failure", "skipped"})
 
 
+class VerdictRecord(typ.TypedDict):
+    """Name the two members of a verdict artefact and their shapes.
+
+    A plain ``dict[str, object]`` would describe the artefact honestly but tell
+    a caller nothing, so every test that read ``record["phases"]`` had to
+    re-establish the shape before using it. The record is rendered here and
+    nowhere else, so its shape is known precisely and worth stating: the
+    mapping is fixed at two members, one of which is a label-to-outcome table.
+    """
+
+    phases: dict[str, str]
+    verdict: str
+
+
 class PayloadUnavailableError(ConsumerSmokeError):
     """Report a download the public host did not deliver."""
 
@@ -239,7 +253,7 @@ def require_probe(*, returncode: int, stdout: str, version: str) -> str:
     return banner
 
 
-def verdict_record(phases: cabc.Mapping[str, str]) -> dict[str, object]:
+def verdict_record(phases: cabc.Mapping[str, str]) -> VerdictRecord:
     """Render a bounded verdict record from the phase outcomes observed.
 
     Parameters
@@ -250,7 +264,7 @@ def verdict_record(phases: cabc.Mapping[str, str]) -> dict[str, object]:
 
     Returns
     -------
-    dict[str, object]
+    VerdictRecord
         A mapping with exactly ``phases`` and ``verdict`` members, suitable
         for the telemetry artefact.
 
