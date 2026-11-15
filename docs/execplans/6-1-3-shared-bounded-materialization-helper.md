@@ -786,7 +786,43 @@ conflict in `Decision log`, and escalate.
       the oracle was wrong about the kernel, not the reverse. It now returns
       zero on a zero operand and one on `repeat == 0` before any arithmetic, and
       `the_product_oracle_short_circuits_like_the_kernel` pins both, including
-      the `None` case it must not reach.
+      the `None` case it must not reach. That test's first version asked for
+      `None` from `product(&[usize::MAX], 1)`, which is `u64::MAX` and is
+      representable, so `make test` caught the wrong expectation and the case
+      became the two-operand one that really overflows.
+  - Twelve-gate batch at `2b13a2ff1` (2026-11-15). One gate at a time, in
+    order, with each log under `/tmp/g2-*`. Ten passed: `check-fmt` 2 s;
+    `typecheck` 26 s; `test` 139 s (5,743 nextest tests passed, 9 skipped,
+    plus the doctest passes); `doc-coverage` 108 s (65 pytest cases passed,
+    aggregate 6,552/6,667 = 98.28%); `markdownlint` 31 s (227 files, 0
+    issues); `nixie` 1 s; `test-workflow-contracts` 507 s (2,330 passed, 3
+    skipped, plus 30 CV-005 cases); `test-documentation-contracts` 25 s;
+    `test-rfc-stdlib-coverage` 9 s (282 passed); `kani-ir` 548 s (24 of 24
+    harnesses verified, including all seven resource-bounds harnesses). The
+    two reds were `lint`, which exited 2 at the 18 base-wide
+    `bumpy_road_function` errors recorded as D-21, and `test-kani-mutations`,
+    whose cold `prewarm_kani_mutation_target` reached its calibrated 900 s
+    bound at host load 14–15 with 27 foreign cargo and Kani processes.
+  - `make lint` aborts at `lint-whitaker`, so the three later stages never
+    ran in the batch. They were run separately and all exited 0:
+    `lint-workflow-scripts`, `lint-python` (Ruff, Pylint 10.00/10, the df12
+    house lints, `ambrleaks`), and `github-actions-lint` (yamllint and
+    actionlint over `.github/workflows`, which this branch does change). The
+    coverage the failed target left unscheduled is therefore closed rather
+    than assumed.
+  - The Kani mutation gate was re-run once, after `kani-ir` had warmed the
+    Kani tree, and exited 0: `prewarm_kani_mutation_target` 94.7 s, the
+    negative control 9.6 s, and
+    `compile_guard::every_patched_tree_compiles_under_denied_warnings` 179 s.
+    The earlier red was a capacity timeout, not a defect; nothing in the
+    gate's own bound was changed to make it pass.
+  - The batch before this one was stopped and discarded. `make test` failed
+    on the first version of the oracle test described above, and the repair
+    was written while the remaining gates were still running, which voids the
+    batch: the gates after the edit would have read a tree no commit
+    describes. The three commits were rebuilt with the corrected test, and
+    the whole twelve-gate set was run again from the new head rather than
+    resuming mid-set.
 
 ## Surprises & discoveries
 
