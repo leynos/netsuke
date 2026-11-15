@@ -165,42 +165,26 @@ fn rejects_an_obligation_matched_only_by_a_longer_identifier() -> Result<()> {
     Ok(())
 }
 
-/// The prose cases name the identifier and nothing else.
+/// A register item counts as traced only when a real task row names it.
 ///
-/// A sentence ending in a full stop would not prove these rules, because
-/// `reference_covers` tokenises on whitespace and the stray punctuation leaves
-/// the token unequal to the identifier; the rule would look live while only the
-/// punctuation was doing the work.
+/// Every case is a claim that must not satisfy coverage, and each one satisfies
+/// part of the rule while breaking the rest. The prose cases name the
+/// identifier and nothing else; a sentence ending in a full stop would not
+/// prove them, because `reference_covers` tokenises on whitespace and the stray
+/// punctuation leaves the token unequal to the identifier, so the rule would
+/// look live while only the punctuation was doing the work. The row cases are
+/// the pipe-delimited shapes: the first is a well-formed wildcard on a line
+/// that belongs to no `Task`-headed table, the second is a real task in a row
+/// of the skeleton's own `Task` table whose reference cell is a wildcard with
+/// no area name, and the third is such a row whose first cell names no task at
+/// all. Accepting any of them would let something that traces nothing cover a
+/// register item.
 #[rstest]
-#[case::under_changes("### Changes\n\n", "### Changes\n\nA1/ast::Rule\n\n")]
-#[case::under_the_trace_introduction(
+#[case::prose_under_changes("### Changes\n\n", "### Changes\n\nA1/ast::Rule\n\n")]
+#[case::prose_under_the_trace_introduction(
     "## Trace matrix\n\n",
     "## Trace matrix\n\nA wildcard such as `A1/*` covers the area.\n\n"
 )]
-fn rejects_coverage_claimed_only_by_prose_in_the_trace(
-    #[case] anchor: &str,
-    #[case] prose: &str,
-) -> Result<()> {
-    let inventory = inventory_with_one_register_item().replace(anchor, prose);
-    expect_validation_error(
-        &inventory,
-        SIMPLE_ROADMAP,
-        "neither traced nor listed unchanged",
-    )?;
-    Ok(())
-}
-
-/// A row is evidence only when it both sits in a `Task` table and traces a task.
-///
-/// A pipe-delimited line is easy to mistake for a table row, and a wildcard is
-/// easy to mistake for a reference, so each case satisfies some of the rule and
-/// breaks the rest. The first is a well-formed wildcard on a line that belongs
-/// to no `Task`-headed table; the second is a real task in a row of the
-/// skeleton's own `Task` table, whose reference cell is a wildcard with no area
-/// name; the third is such a row whose first cell names no task at all.
-/// Accepting any of them would let a row that traces nothing cover a register
-/// item, which is the same fail-open the prose cases close by other means.
-#[rstest]
 #[case::row_outside_a_task_table(
     "### Changes\n\n",
     "### Changes\n\n| not-a-task | A1/* | -- | -- |\n\n"
@@ -213,7 +197,7 @@ fn rejects_coverage_claimed_only_by_prose_in_the_trace(
     "| -- | -- | -- | -- |\n\n### Consumes",
     "| -- | -- | -- | -- |\n| nobody | A1/* | -- | -- |\n\n### Consumes"
 )]
-fn rejects_register_coverage_claimed_by_a_malformed_trace_row(
+fn rejects_register_coverage_claimed_by_something_other_than_a_task_row(
     #[case] anchor: &str,
     #[case] replacement: &str,
 ) -> Result<()> {
