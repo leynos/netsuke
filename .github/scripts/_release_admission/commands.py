@@ -64,10 +64,17 @@ DEFAULT_GH_ADAPTER = "gh"
 DEFAULT_GIT_ADAPTER = "git"
 DEFAULT_CLOCK_ADAPTER = "python3"
 
-#: The clock adapter is asked for the monotonic clock through its own ``-c``.
+#: The clock adapter is asked for each clock through its own ``-c``. Durations
+#: are measured on the monotonic clock, which cannot jump; evidence freshness is
+#: a question about calendar time, so it reads the wall clock instead. Both go
+#: through the one documented adapter, so a test can control either.
 CLOCK_ARGUMENTS: typ.Final[tuple[str, ...]] = (
     "-c",
     "import time; print(time.monotonic())",
+)
+WALL_CLOCK_ARGUMENTS: typ.Final[tuple[str, ...]] = (
+    "-c",
+    "import time; print(time.time())",
 )
 
 
@@ -162,25 +169,27 @@ def github_resolve_commit(
     )
 
 
-def github_find_workflow_run(
-    programs: Programs, *, repository: str, revision: str, timeout_seconds: int
+def github_current_workflow_run(
+    programs: Programs, *, repository: str, run_id: str, timeout_seconds: int
 ) -> policy.CommandResult:
-    """Ask the GitHub API for the workflow run covering a revision.
+    """Ask the GitHub API which commit the named workflow run was started on.
 
-    The ``// empty`` filter turns a revision with no matching run into an empty
-    line rather than the literal ``null``, and an empty run identifier is what
-    :func:`policy.classify_evidence` refuses.
+    The run is addressed by the identifier the workflow is executing under, so
+    the answer describes *this* run rather than whichever run happened to be
+    newest for a revision. The ``// empty`` filter turns a body without a
+    ``head_sha`` into an empty line rather than the literal ``null``, and an
+    empty answer is refused by the caller rather than compared as a revision.
 
     Returns
     -------
     policy.CommandResult
-        The outcome and status, plus the run identifier, empty when the
+        The outcome and status, plus the run's head revision, empty when the
         command failed.
     """
     catalogue = programs.catalogue()
-    query = f"repos/{repository}/actions/runs?head_sha={revision}&per_page=1"
+    query = f"repos/{repository}/actions/runs/{run_id}"
     command = cuprum_sh.make(Program(programs.gh), catalogue=catalogue)(
-        "api", query, "--jq", ".workflow_runs[0].id // empty"
+        "api", query, "--jq", ".head_sha // empty"
     )
     return _status_and_output(
         command, program=programs.gh, timeout_seconds=timeout_seconds
@@ -221,7 +230,37 @@ def git_fetch_revision(
 
 
 def read_monotonic_seconds(programs: Programs) -> policy.CommandResult:
-    """Read the clock adapter once, unbounded as the shell read it.
+    """Read the monotonic clock once, unbounded as the shell read it.
+
+    Returns
+    -------
+    policy.CommandResult
+        The outcome and status, plus the reading, empty when the command
+        failed.
+    """
+    return read_clock_seconds(programs, CLOCK_ARGUMENTS)
+
+
+def read_wall_clock_seconds(programs: Programs) -> policy.CommandResult:
+    """Read the wall clock once, through the same adapter and with no bound.
+
+    Returns
+    -------
+    policy.CommandResult
+        The outcome and status, plus the reading, empty when the command
+        failed.
+    """
+    return read_clock_seconds(programs, WALL_CLOCK_ARGUMENTS)
+
+
+def read_clock_seconds(
+    programs: Programs, arguments: cabc.Sequence[str]
+) -> policy.CommandResult:
+    """Read one of the clock adapter's two clocks, with no bound around it.
+
+    The shell read the clock outside any ``timeout``, so a slow adapter was
+    waited for rather than killed; reproducing that keeps a controlled test
+    delay from being reported as a timeout the gate never applied.
 
     Returns
     -------
@@ -230,9 +269,7 @@ def read_monotonic_seconds(programs: Programs) -> policy.CommandResult:
         failed.
     """
     catalogue = programs.catalogue()
-    command = cuprum_sh.make(Program(programs.clock), catalogue=catalogue)(
-        *CLOCK_ARGUMENTS
-    )
+    command = cuprum_sh.make(Program(programs.clock), catalogue=catalogue)(*arguments)
     return _status_and_output(command, program=programs.clock, timeout_seconds=None)
 
 

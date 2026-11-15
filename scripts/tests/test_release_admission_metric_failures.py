@@ -94,6 +94,10 @@ def _assert_malformed_revision_is_a_bounded_mismatch(
     assert outputs["gate-outcome"] == "failure", (
         "malformed revisions must publish a failed gate outcome"
     )
+    assert not outputs["candidate-commit"], (
+        "a revision that is not a full object ID must publish empty, so a value "
+        "carrying a newline cannot forge a second workflow-output line"
+    )
     assert (
         outputs["gate-error-category"]
         == typ.cast("dict[str, str]", gate_labels)["error_category"]
@@ -125,19 +129,16 @@ def _assert_malformed_revision_stops_followup_requests(
 
 
 @pytest.mark.parametrize(
-    ("revision", "mode"),
+    "revision",
     [
-        pytest.param("a" * 40 + "\n", "enforcement", id="sha-newline-enforcement"),
-        pytest.param("\n", "enforcement", id="newline-enforcement"),
-        pytest.param("a" * 40 + "\n", "observation", id="sha-newline-observation"),
-        pytest.param("\n", "observation", id="newline-observation"),
+        pytest.param("a" * 40 + "\n", id="sha-newline"),
+        pytest.param("\n", id="newline"),
     ],
 )
 def test_malformed_revision_fails_as_mismatch_before_followup_requests(
     cmd_mox: CmdMox,
     tmp_path: pathlib.Path,
     revision: str,
-    mode: typ.Literal["enforcement", "observation"],
 ) -> None:
     """Reject newline revisions before fetching or looking up workflow runs.
 
@@ -149,30 +150,33 @@ def test_malformed_revision_fails_as_mismatch_before_followup_requests(
         Isolated output directory for the gate.
     revision
         Malformed SHA text whose trailing newline the API answer loses.
-    mode
-        Whether the gate runs in enforcement or observation mode.
 
     Notes
     -----
     Contract invariants: the raw revision reaches the API unchanged, the
     comparison is against the stripped answer, and the mismatch stops the chain
-    before the fetch and the workflow-run lookup.
+    before the fetch and the workflow-run lookup. The run observes rather than
+    enforces, because an enforcing run names a tag and the resolution then asks
+    about the tag instead of the revision under test.
+
+    The published ``candidate-commit`` is asserted empty as well. That is the
+    boundary where the malformed value could do damage rather than merely be
+    refused: ``GITHUB_OUTPUT`` is read as ``key=value`` lines, so a revision
+    ending in a newline would forge a line if it were published verbatim.
     """
     boundaries = install_boundaries(cmd_mox)
-    enforce = mode == "enforcement"
     run = run_gate(
         cmd_mox,
         tmp_path,
         evidence_state="fresh",
         extra_environment={
             "GITHUB_SHA": revision,
-            "NETSUKE_RELEASE_ADMISSION_ENFORCE": str(enforce).lower(),
+            "NETSUKE_RELEASE_ADMISSION_ENFORCE": "false",
         },
     )
 
-    assert run.result.returncode == (1 if enforce else 0), (
-        "enforcement must reject the malformed revision while observation "
-        "retains diagnostics"
+    assert run.result.returncode == 0, (
+        "observation must retain the malformed revision's diagnostics"
     )
     _assert_malformed_revision_is_a_bounded_mismatch(
         run.metrics, run.traces, run.outputs, revision

@@ -163,6 +163,8 @@ def test_operation_metric_writes_lose_only_their_records(
     assert tuple(run.outputs) == (
         "gate-outcome",
         "gate-error-category",
+        "enforcement",
+        "candidate-commit",
         "metrics-file",
         "trace-file",
     ), "a refused operation write must not cost any workflow output"
@@ -234,6 +236,10 @@ def test_trace_sink_failure_preserves_gate_and_reports_recovery(
     later write must still be attempted. The refused record itself is lost: a
     configured sink replaces the in-process append rather than adding to it, so
     the artefact holds the later records and the final delivery failure.
+
+    The admission here is a successful one, which is what makes the claim
+    sharp: the trace failure belongs to the observability channel and must not
+    reach the admission result the workflow reads.
     """
     adapted = install_adapted(cmd_mox)
     adapted.trace.wraps(fail_nth_call(1, "the trace sink refused\n"))
@@ -250,8 +256,8 @@ def test_trace_sink_failure_preserves_gate_and_reports_recovery(
     assert f"{TRACE_SINK_DIAGNOSTIC}\n" in run.result.stderr, (
         "a refused trace write must report its bounded diagnostic"
     )
-    assert run.outputs["gate-outcome"] == "failure", (
-        "a trace failure must not replace the observed admission result"
+    assert run.outputs["gate-outcome"] == "success", (
+        "a trace failure must not replace the admitted admission result"
     )
     assert run.traces[-1] == TRACE_DELIVERY_FAILURE, (
         "a recovered trace sink must record its fixed delivery failure"

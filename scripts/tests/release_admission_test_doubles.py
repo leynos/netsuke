@@ -47,6 +47,7 @@ makes latest-wins composition the natural form.
 
 import collections.abc as cabc
 import sys
+import time
 import typing as typ
 from pathlib import Path
 
@@ -80,10 +81,15 @@ ADAPTED_METRICS_SINK = "netsuke_release_admission_metrics_sink"
 ADAPTED_OUTPUT_SINK = "netsuke_release_admission_output_sink"
 ADAPTED_TRACE_SINK = "netsuke_release_admission_trace_sink"
 
-#: The clock's argv, as the gate renders it.
+#: The two clock programs' argvs: durations read the monotonic clock and
+#: evidence freshness reads the wall clock, both through the one adapter.
 CLOCK_ARGUMENTS: typ.Final[tuple[str, str]] = (
     "-c",
     "import time; print(time.monotonic())",
+)
+WALL_CLOCK_ARGUMENTS: typ.Final[tuple[str, str]] = (
+    "-c",
+    "import time; print(time.time())",
 )
 
 #: A handler answers one invocation with ``(stdout, stderr, exit_code)``.
@@ -331,9 +337,9 @@ def install_boundaries(cmd_mox: CmdMox) -> Boundaries:
 def reply_to_github(invocation: Invocation) -> tuple[str, str, int]:
     """Answer one admission query as the host's own ``gh`` would.
 
-    A commit lookup echoes the revision the workflow supplied. A run lookup
-    names one run, because the evidence check admits a revision only when a run
-    produced it.
+    A commit lookup echoes the revision the workflow supplied, whichever
+    subject -- revision or tag -- was asked about. A run lookup reports the
+    candidate as that run's head, because only the release's own run admits it.
 
     Returns
     -------
@@ -342,14 +348,14 @@ def reply_to_github(invocation: Invocation) -> tuple[str, str, int]:
 
     Examples
     --------
-    The commit lookup answers the argv ``("api", "repos/o/r/commits/<sha>",
-    "--jq", ".sha")`` with the child's own ``GITHUB_SHA`` and a newline; any
-    other query answers ``1001``.
+    The commit lookup answers ``("api", "repos/o/r/commits/<sha>", "--jq",
+    ".sha")`` with the child's own ``GITHUB_SHA``; the run lookup answers
+    ``.head_sha // empty`` with the candidate revision.
     """
     query = " ".join(invocation.args)
     if "/commits/" in query:
         return f"{invocation.env.get('GITHUB_SHA', '')}\n", "", 0
-    return f"{WORKFLOW_RUN_ID}\n", "", 0
+    return f"{REVISION}\n", "", 0
 
 
 def reply_to_git(invocation: Invocation) -> tuple[str, str, int]:
@@ -365,7 +371,7 @@ def reply_to_git(invocation: Invocation) -> tuple[str, str, int]:
 
 
 def reply_to_clock(invocation: Invocation) -> tuple[str, str, int]:
-    """Answer the monotonic-clock program with a fixed number.
+    """Answer either clock program the gate runs.
 
     Returns
     -------
@@ -374,13 +380,20 @@ def reply_to_clock(invocation: Invocation) -> tuple[str, str, int]:
 
     Notes
     -----
-    The reading is a constant, so a duration is normally zero. A test that
-    needs a measurable duration wraps this handler with one that sleeps, which
-    is what the duration test does.
+    The monotonic reading is a constant, so a duration is normally zero; a test
+    needing one wraps this handler with a sleeping one. The wall clock cannot
+    be a constant: the fixtures are stamped moments before the child runs, and
+    a fixed reading would make every document look a lifetime stale.
     """
-    del invocation
+    if "time.time()" in " ".join(invocation.args):
+        return f"{time.time()}\n", "", 0
     return "1\n", "", 0
 
 
 #: The workflow-run identifier the default GitHub double reports.
 WORKFLOW_RUN_ID: typ.Final[str] = "1001"
+
+#: The release tag a publishing-run fixture names. The harness supplies none by
+#: default, because its default run is the rehearsal form; a case that
+#: enforces admission through :class:`FailureCase` adds this one.
+RELEASE_TAG: typ.Final[str] = "v0.10.0"

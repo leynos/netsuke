@@ -1,13 +1,13 @@
 r"""Verify release-admission metrics stay bounded.
 
 The fixed failure-category matrix pins operation and category pairs to bounded
-labels. The Hypothesis property uses canonical Git object IDs to reach commit
-and workflow-run requests, has the doubled API answer the run query with a
-generated identifier so that value reaches the gate through production, keeps
-generated identifiers out of metric labels, trace fields, and diagnostics, and
-asserts the run's record shape first so that the exclusion cannot hold
-vacuously on an empty artefact. The bound the gate places on its own adapters is
-exercised separately, against a real child that refuses to leave, in
+labels. The Hypothesis property uses canonical Git object IDs and generated
+run identifiers to reach the commit and run requests, has the doubled API
+answer the run query with the candidate so the run is admitted, keeps generated
+identifiers out of metric labels, trace fields, and diagnostics, and asserts
+the run's record shape first so that the exclusion cannot hold vacuously on an
+empty artefact. The bound the gate places on its own adapters is exercised
+separately, against a real child that refuses to leave, in
 :mod:`test_release_admission_process_bounds`.
 
 The property's mechanism -- its strategies, the run it drives, and the claims
@@ -36,15 +36,15 @@ from release_admission_test_boundedness import (
     assert_gate_run_is_valid,
     assert_identifiers_crossed_only_the_environment,
     assert_identifiers_never_reached_the_records,
-    assert_revision_reached_the_boundaries,
+    assert_identifiers_reached_the_boundaries,
     run_under_generated_identifiers,
-    stored_identifier,
 )
 from release_admission_test_cases import FAILURE_CASES
 from release_admission_test_scenarios import FailureCase, install_case
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
     METRICS_VALIDATOR,
+    REVISION,
     assert_failure_trace_sequence,
     expected_gate_labels,
     expected_operation_labels,
@@ -113,14 +113,12 @@ def test_gate_emits_fixed_categories_for_failure_paths(
         "failed operations must retain their bounded category in workflow output"
     )
     assert_failure_trace_sequence(run.traces, case.operation, case.error_category)
-    if case.run_lookup_succeeds:
-        lookup = operation_records(run.metrics, "fetch_workflow_run")[-1]
-        assert lookup["labels"] == expected_operation_labels(
-            CANARY_BY_OPERATION["fetch_workflow_run"],
-            "fetch_workflow_run",
-            "success",
-            "none",
-        ), "an empty run identifier must reach evidence verification"
+    assert run.outputs["enforcement"] == str(case.enforce).lower(), (
+        "the gate must publish the mode it actually ran in"
+    )
+    assert run.outputs["candidate-commit"] == REVISION, (
+        "the gate must publish the candidate it verified against"
+    )
     if case.error_category == "timeout":
         assert operation_duration(run.metrics, case.operation) > 0, (
             "timed-out operations must retain a positive measured duration"
@@ -145,34 +143,26 @@ def test_identifiers_never_become_metric_labels(
     Parameters
     ----------
     revision
-        A canonical 40-character SHA-1 or 64-character SHA-256 object ID.
+        A canonical 40-character SHA-1 object ID, the width the evidence
+        manifest's ``commit`` field states.
     run_id
-        A generated identifier the workflow-run query answers with.
+        A generated identifier the child's ``GITHUB_RUN_ID`` names, so the
+        value reaches the run request through production.
     path, url
         Generated identifiers carried in the child's environment.
 
     Notes
     -----
-    **The workflow-run identifier is generated and returned by the double, so
-    it reaches the gate through production code rather than through an
-    environment variable production ignores.** The gate's
-    :func:`commands.github_find_workflow_run` captures the API's single line,
-    strips every trailing newline, and stores it on the gate result, so the
-    value the exclusion set carries is the value the gate stored. The generated
-    identifier ends in the marker precisely so that strip cannot change it: a
-    value ending in a newline would be stored as a different string from the one
-    searched for, and a leak of the stored value would slip through the
-    exclusion unmatched.
+    **The workflow-run identifier is read from the environment by production
+    and placed in the run request's argument vector**, so it reaches the point
+    where a record could be built around it rather than staying in a variable
+    nothing reads. The doubled API answers the *head* question with the
+    candidate, so the lookup succeeds and the run continues into the evidence
+    operations.
 
-    This is a safety property in the ordinary sense. The stored identifier
-    *does* reach a consumer -- ``gate._dispatch`` passes it as the
-    ``workflow_run_id`` argument of :func:`policy.classify_evidence` -- but
-    ``classify_evidence`` only ever *evaluates* it on a path this run does not
-    reach: for ``fresh`` its disjunction satisfies on the first operand, and
-    every non-fresh state stops earlier still, at ``check_scan_freshness``.
-    Argument delivery and truthiness evaluation are different boundaries, and
-    only the second is unreached here. A future change that copies the stored
-    identifier into telemetry is exactly what this case detects.
+    The generated identifiers each carry the marker at both ends, so they cannot
+    be a substring of any fixed token the gate emits and no normalisation can
+    turn a leaked value into one the search would miss.
 
     ``path`` and ``url`` make the weaker claim and are labelled as such: their
     variable names have no consumer anywhere under ``.github/scripts``, so they
@@ -180,26 +170,16 @@ def test_identifiers_never_become_metric_labels(
     text over the same domain, which the revision (restricted to hex object
     IDs) and the run identifier (one per example) do not.
 
-    The exclusion set carries the run identifier **both as generated and as
-    production stores it**. The generated value's trailing marker makes the two
-    identical, but asserting both makes the exclusion cover the stored value
-    even if the strategy changes: a value ending in a newline is stored
-    normalized, so searching for the raw value alone would let a leak of the
-    stored one pass unmatched. That is the dangerous direction for an exclusion
-    assertion, and it is silent.
-
-    The property exercises the success path through request construction and
-    lookup with canonical Git object IDs, then reports missing evidence because
-    the fixture supplies no evidence provider. Newline-terminated revisions are
-    covered by the failure suite: the gate strips trailing newlines from the
-    resolved SHA before the equality check, so a newline revision mismatches the
-    raw ``GITHUB_SHA`` it was given.
+    The candidate revision deliberately is *not* excused from the record
+    exclusion: the workflow publishes it as ``candidate-commit``, but no metric
+    or trace record may carry it, and no diagnostic may either. That is the
+    distinction this property holds.
     """
-    identifiers: set[str] = {revision, run_id, stored_identifier(run_id)}
+    identifiers: set[str] = {revision, run_id}
     identifiers |= {f"path-{path}", f"url-{url}"}
     run, boundaries = run_under_generated_identifiers(revision, run_id, path, url)
 
     assert_gate_run_is_valid(run)
-    assert_revision_reached_the_boundaries(boundaries, revision)
+    assert_identifiers_reached_the_boundaries(boundaries, revision, run_id)
     assert_identifiers_crossed_only_the_environment(boundaries, path, url)
     assert_identifiers_never_reached_the_records(run, identifiers)

@@ -78,17 +78,13 @@ IDENTIFIER_URL_VARIABLE = "NETSUKE_RELEASE_ADMISSION_SCENARIO_URL"
 #: 6 to 33 characters once both markers are added, and a value outside that range
 #: is not sampled rather than excluded by the marker.
 #:
-#: The marker is written at **both ends** for a second reason. Production strips
-#: every trailing LF from the API's answer before storing it
-#: (``statuses.translate_exit`` applies ``rstrip("\n")``), so a generated
-#: identifier ending in a newline would be stored as a *different* string from
-#: the one the property searches for -- and the difference runs in the dangerous
-#: direction, because a leak of the stored value would not match the raw
-#: identifier and the exclusion would pass. A trailing ``7`` cannot be stripped
-#: by a newline strip, so the identifier that reaches storage is the identifier
-#: the property names. It also rules out the degenerate case of an
-#: all-newline value, which normalizes to the empty string and would make the
-#: searched set contain the empty string, a substring of every label.
+#: The marker is written at **both ends** for a second reason. An identifier
+#: that reached a record only after some normalisation would be searched for in
+#: the wrong form, and the difference runs in the dangerous direction: a leak of
+#: the normalised value would not match the raw one and the exclusion would
+#: pass. Symmetric markers make any such normalisation visible as a mismatch
+#: rather than silent, and they rule out the degenerate all-newline value,
+#: whose normalised form is the empty string, a substring of every label.
 IDENTIFIER_MARKER = "7"
 #: The smallest number of generated characters an identifier carries. Kept above
 #: one so an identifier is never a single marked character, which would still be
@@ -106,54 +102,33 @@ IDENTIFIER_TEXT = st.text(
     max_size=31,
 ).map(lambda value: f"{IDENTIFIER_MARKER}{value}{IDENTIFIER_MARKER}")
 #: Canonical Git object IDs, so a generated revision reaches the commit and
-#: workflow-run queries instead of being refused as malformed first.
-GIT_OBJECT_ID = st.one_of(
-    st.text(alphabet="0123456789abcdef", min_size=40, max_size=40),
-    st.text(alphabet="0123456789abcdef", min_size=64, max_size=64),
-)
+#: workflow-run queries instead of being refused as malformed first. Only the
+#: SHA-1 width is generated: the manifest schema states its ``commit`` as a
+#: 40-hex object ID, so no document could admit a wider one and the property
+#: would be asserting a refusal rather than an admission.
+GIT_OBJECT_ID = st.text(alphabet="0123456789abcdef", min_size=40, max_size=40)
 
-#: The workflow-run request the gate must build around a generated revision,
-#: split so the property names the variable part once.
-RUN_QUERY_PREFIX = f"repos/{GITHUB_REPOSITORY}/actions/runs?head_sha="
-RUN_QUERY_SUFFIX = "&per_page=1"
-RUN_QUERY_FILTER = ".workflow_runs[0].id // empty"
+#: The filter the workflow-run request applies, split out so the property names
+#: the variable part of each request exactly once.
+RUN_QUERY_FILTER = ".head_sha // empty"
 
 
-def stored_identifier(run_id: str) -> str:
-    r"""Return the identifier as production stores it.
+def answer_run_head(revision: str) -> Handler:
+    """Return a handler that reports *revision* as the running run's head.
 
-    ``statuses.translate_exit`` applies ``rstrip("\\n")`` to the API's
-    answer, so the value on the gate result is the generated identifier with
-    every trailing newline removed. The strategy's own trailing marker means
-    this is the identity for every value it generates, but stating the rule here
-    keeps the exclusion set honest if that ever stops being true.
-
-    Returns
-    -------
-    str
-        The generated identifier with its trailing newlines stripped.
-    """
-    return run_id.rstrip("\n")
-
-
-def answer_workflow_run(run_id: str) -> Handler:
-    """Return a handler that names *run_id* for the workflow-run query.
-
-    The generated identifier is returned as the API's single line of output, and
-    production stores that line after stripping every trailing newline.
-    Returning it here is what makes the exclusion claim below a claim about the
-    workflow run the gate stored rather than about an environment variable the
-    gate never looks at.
+    The answer is what makes the run lookup agree with the candidate, so the
+    gate reaches the evidence operations rather than stopping at a candidate
+    mismatch.
 
     Returns
     -------
     Handler
-        An answer for the run query that carries the generated identifier.
+        An answer for the run query that carries the candidate revision.
     """
 
     def answer(_invocation: Invocation) -> tuple[str, str, int]:
-        """Succeed with the generated run identifier."""
-        return f"{run_id}\n", "", 0
+        """Succeed with the candidate as the run's head."""
+        return f"{revision}\n", "", 0
 
     return answer
 
@@ -167,13 +142,17 @@ def run_under_generated_identifiers(
     doubles must be registered before replay, and Hypothesis runs every example
     inside one test function, so one fixture instance cannot serve them all.
 
+    The manifest the harness writes names the *generated* candidate, because it
+    is built from the environment the child actually inherits. That is what
+    leaves this a run about identifiers rather than a run about a mismatch.
+
     Parameters
     ----------
     revision
         The canonical object ID the workflow exports and the queries must carry.
     run_id
-        Generated identifier the workflow-run query must answer with, so the
-        value reaches the gate's own result through the production adapter.
+        Generated identifier the child's ``GITHUB_RUN_ID`` names, so the value
+        reaches the run request through production.
     path, url
         Generated identifiers carried in the child's environment only. Nothing
         in production reads either name; the values exist to be transported.
@@ -191,7 +170,7 @@ def run_under_generated_identifiers(
         boundaries = install_boundaries(cmd_mox)
         boundaries.gh.wraps(
             lambda invocation, handler: (
-                answer_workflow_run(run_id)(invocation)
+                answer_run_head(revision)(invocation)
                 if is_workflow_run_query(invocation)
                 else handler(invocation)
             )
@@ -203,6 +182,7 @@ def run_under_generated_identifiers(
             evidence_state="fresh",
             extra_environment={
                 "GITHUB_SHA": revision,
+                "GITHUB_RUN_ID": run_id,
                 "NETSUKE_RELEASE_ADMISSION_ENFORCE": "false",
                 IDENTIFIER_PATH_VARIABLE: f"path-{path}",
                 IDENTIFIER_URL_VARIABLE: f"url-{url}",
@@ -213,26 +193,30 @@ def run_under_generated_identifiers(
 
 
 def assert_gate_run_is_valid(run: GateRun) -> None:
-    """Assert the run observed the bounded failure under the fixed schema."""
+    """Assert the run admitted the generated candidate under the fixed schema."""
     assert run.result.returncode == 0, run.result.stderr
     METRICS_VALIDATOR.validate_metrics(run.metrics)
     METRICS_VALIDATOR.validate_traces(run.traces)
-    assert run.outputs["gate-error-category"] == "missing_evidence", (
-        "the generated revision must reach the evidence check"
+    assert run.outputs["gate-outcome"] == "success", (
+        "the generated candidate must be admitted by its own manifest"
     )
 
 
-def assert_revision_reached_the_boundaries(
-    boundaries: Boundaries, revision: str
+def assert_identifiers_reached_the_boundaries(
+    boundaries: Boundaries, revision: str, run_id: str
 ) -> None:
-    """Assert both doubled boundaries were asked about the generated revision."""
-    run_query = RUN_QUERY_PREFIX + revision + RUN_QUERY_SUFFIX
+    """Assert both doubled boundaries were asked about the generated identifiers."""
     expected_requests = [
         ["api", f"repos/{GITHUB_REPOSITORY}/commits/{revision}", "--jq", ".sha"],
-        ["api", run_query, "--jq", RUN_QUERY_FILTER],
+        [
+            "api",
+            f"repos/{GITHUB_REPOSITORY}/actions/runs/{run_id}",
+            "--jq",
+            RUN_QUERY_FILTER,
+        ],
     ]
     assert boundaries.gh.calls == expected_requests, (
-        "the exact admission requests must carry the generated revision"
+        "the exact admission requests must carry the generated identifiers"
     )
     assert boundaries.git.calls == [
         ["fetch", "--depth", "1", "--no-tags", "origin", "--", revision]
@@ -268,7 +252,7 @@ def assert_identifiers_never_reached_the_records(
     assert_complete_records(
         run.metrics,
         run.traces,
-        RunShape(OPERATION_SEQUENCE, "failure", "missing_evidence"),
+        RunShape(OPERATION_SEQUENCE, "success", "none"),
     )
     assert_identifiers_excluded_from_records(
         run.metrics, run.traces, identifiers, subject="generated identifiers"

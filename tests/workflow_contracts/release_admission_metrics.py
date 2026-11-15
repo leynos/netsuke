@@ -20,6 +20,8 @@ ERROR_CATEGORIES = frozenset({
     "fetch_error",
     "stale_evidence",
     "missing_evidence",
+    "malformed_evidence",
+    "candidate_mismatch",
     "mismatch",
     "timeout",
     "unknown",

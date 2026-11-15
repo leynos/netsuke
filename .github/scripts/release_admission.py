@@ -10,7 +10,7 @@
 
 The gate runs five operations in a fixed order, classifies each without letting
 a failure message, a path, or an identifier reach the published records, and
-writes a metric file, a trace file, and four workflow outputs. In observation
+writes a metric file, a trace file, and six workflow outputs. In observation
 mode -- the default -- a failed admission is reported and the step still
 succeeds; in enforcement mode it fails the step.
 
@@ -30,10 +30,12 @@ Two differences are intentional, and both are observable only on stderr:
   all, exactly as before. The enforcement mode's own value never decides the
   status, so a refused observation mode still fails the step.
 
-One behaviour is deliberately preserved although it reads as a contradiction:
-``check_scan_freshness`` admits ``fresh``, but ``verify_evidence`` refuses it
-unless the state is *not* fresh and a workflow run identifier is present. The
-freshness check passing is never sufficient for admission. The port's own
+Admission is no longer asserted through an environment variable. The gate reads
+the candidate-bound manifest a producer uploaded, refuses every timestamp
+outside the maximum age, and requires that manifest to name this repository,
+revision, tag and workflow run with both canaries successful. A producer that
+has not yet uploaded one leaves the gate refusing with ``missing_evidence``,
+which is what makes publication fail closed until #598 lands. The port's own
 module docstrings record each remaining difference from the shell, and
 ``scripts/tests/release_admission_test_support.py`` holds the measurements both
 were made from.
@@ -69,7 +71,7 @@ if typ.TYPE_CHECKING:
     # not resolve from a module the loader runs as ``__main__``. It is never
     # executed, so the ``runpy`` load above is unaffected; the only executed
     # import of the package is the one inside :func:`run`.
-    from _release_admission import configuration
+    from _release_admission import configuration, filesystem
 
 
 def run() -> int:
@@ -128,11 +130,11 @@ def run() -> int:
         """
         del repository, revision, output
         try:
-            settings = _start_up()
+            settings, file_system = _start_up()
         except configuration.ConfigurationError as error:
             print(error, file=sys.stderr)
             return CONFIGURATION_FAILURE
-        admission = gate.Gate(settings)
+        admission = gate.Gate(settings, file_system)
         if not admission.should_stop():
             admission.run_operations()
         return admission.finish()
@@ -144,7 +146,7 @@ def run() -> int:
     return typ.cast("int", app())
 
 
-def _start_up() -> configuration.Configuration:
+def _start_up() -> tuple[configuration.Configuration, filesystem.FileSystem]:
     """Resolve the gate's settings, creating its artefacts, in the shell's order.
 
     A required variable that is unset or empty, or an artefact effect the
@@ -154,9 +156,10 @@ def _start_up() -> configuration.Configuration:
 
     Returns
     -------
-    configuration.Configuration
+    tuple[configuration.Configuration, filesystem.FileSystem]
         The resolved settings, with ``output`` filled in from
-        ``GITHUB_OUTPUT``.
+        ``GITHUB_OUTPUT``, and the filesystem the verification will read the
+        evidence through.
 
     Notes
     -----
@@ -174,9 +177,10 @@ def _start_up() -> configuration.Configuration:
     settings = configuration.resolve_configuration(variables, destination)
     file_system = filesystem.production_filesystem()
     configuration.prepare_destination(settings.sinks, file_system)
-    return dataclasses.replace(
+    resolved = dataclasses.replace(
         settings, output=configuration.require_workflow_output(variables)
     )
+    return resolved, file_system
 
 
 if __name__ == "__main__":

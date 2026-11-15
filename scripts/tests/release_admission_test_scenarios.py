@@ -11,24 +11,21 @@ keeps a case readable as a statement about a boundary -- "the commit query
 answers a different revision" -- instead of a restatement of the happy path the
 case is not testing.
 
-The wrappers here are the port of the retired executable fakes. Where a fake
-read a ``NETSUKE_FAKE_*`` environment variable to decide what to do, a wrapper
-decides it in the test process, which removes the environment variable, the
-shell script, and the call log from the picture entirely.
+The wrappers here are the port of the retired executable fakes: where a fake
+read a ``NETSUKE_FAKE_*`` variable to decide what to do, a wrapper decides it
+in the test process, removing the variable, the script and the call log.
 
-A shim cannot be made to ignore ``SIGTERM`` -- it is a fixed script the test
-does not own, so the terminate-and-kill escalation reaches it as an ordinary
-death. The escalation is therefore exercised against the bounded-run helper
+A shim cannot ignore ``SIGTERM`` -- the test does not own it -- so the
+terminate-and-kill escalation is exercised against the bounded-run helper
 directly, with a real child, in
 :mod:`test_release_admission_metric_boundedness`.
 
 Deferred refusals
 -----------------
-Four RFC 0005 refusals have no case in this suite, because neither half of the
-split RFC 0005 places them on is implemented yet. They are recorded, with that
-split and the composition limit that keeps ``verify_evidence`` out of reach,
-in :mod:`release_admission_test_cases`, which owns the RFC 0005 mapping for
-both the cases this suite runs and the refusals it does not.
+Four RFC 0005 refusals have no case here, because neither half of the split
+RFC 0005 places them on is implemented yet. They are recorded, with that split
+and the composition limit that keeps ``verify_evidence`` out of reach, in
+:mod:`release_admission_test_cases`.
 """
 
 import dataclasses
@@ -37,6 +34,7 @@ import time
 import typing as typ
 
 from release_admission_test_doubles import (
+    RELEASE_TAG,
     Boundaries,
     Handler,
     Subprocess,
@@ -64,8 +62,8 @@ def is_commit_query(invocation: Invocation) -> bool:
 
 
 def is_workflow_run_query(invocation: Invocation) -> bool:
-    """Return whether an invocation asks the API for a workflow run."""
-    return any("/actions/runs?" in argument for argument in invocation.args)
+    """Return whether an invocation asks the API about the running workflow run."""
+    return any("/actions/runs/" in argument for argument in invocation.args)
 
 
 def _gated(predicate: cabc.Callable[[Invocation], bool], answer: Handler) -> Wrapper:
@@ -175,12 +173,26 @@ def answer_other_commit(revision: str) -> Wrapper:
     return _gated(is_commit_query, _answering(f"{revision}\n"))
 
 
-def answer_no_workflow_run() -> Wrapper:
-    """Return a wrapper that reports no workflow run for the revision.
+def answer_run_head(revision: str) -> Wrapper:
+    """Return a wrapper that reports *revision* as the running run's head.
 
-    The API filter ``// empty`` prints an empty line rather than ``null`` when a
-    revision has no run, and an empty identifier is what ``classify_evidence``
-    refuses once the freshness check has succeeded.
+    *revision* must differ from the candidate for the gate to classify a
+    candidate mismatch.
+
+    Returns
+    -------
+    Wrapper
+        A wrapper that rewrites the run answer and delegates the rest.
+    """
+    return _gated(is_workflow_run_query, _answering(f"{revision}\n"))
+
+
+def answer_no_run_head() -> Wrapper:
+    """Return a wrapper that reports no head for the running workflow run.
+
+    The API filter ``// empty`` prints an empty line rather than ``null`` for a
+    body without a ``head_sha``, and the gate refuses the empty answer as an
+    API error instead of comparing it with the candidate.
 
     Returns
     -------
@@ -298,16 +310,11 @@ class FailureCase:
         Literal child-environment overrides the case needs.
     enforce
         Whether the subprocess runs in enforcement mode.
-    run_lookup_succeeds
-        Whether the workflow-run lookup itself succeeds. A case that empties
-        the run identifier sets this, because the lookup has to reach the
-        evidence check for the empty identifier to be what refuses it.
 
     Notes
     -----
-    Contract invariants: operation and error category are fixed vocabulary
-    members; every wrapper is composed over the boundary's happy path, and a
-    case that names no wrapper runs the documented defaults unchanged.
+    Operation and error category are fixed vocabulary members, and every
+    wrapper is composed over the boundary's happy path.
     """
 
     evidence_state: str
@@ -316,28 +323,29 @@ class FailureCase:
     adapters: dict[str, Wrapper] = dataclasses.field(default_factory=dict)
     environment: dict[str, str] = dataclasses.field(default_factory=dict)
     enforce: bool = True
-    run_lookup_succeeds: bool = False
 
     def environment_for(self) -> dict[str, str]:
         """Return the child environment this case adds to the harness one.
 
+        An enforcing run must name the tag it admits, so a case that enforces
+        supplies one, which also makes commit resolution ask the API about the
+        tag rather than the revision -- as a real publishing run does.
+
         Returns
         -------
         dict[str, str]
-            The enforcement mode plus every literal override.
+            The enforcement mode, the release tag it implies, and every
+            literal override.
         """
-        return {
+        environment = {
             "NETSUKE_RELEASE_ADMISSION_ENFORCE": str(self.enforce).lower(),
-            **self.environment,
         }
+        if self.enforce:
+            environment["NETSUKE_RELEASE_ADMISSION_TAG"] = RELEASE_TAG
+        return {**environment, **self.environment}
 
     def apply(self, boundaries: Boundaries) -> Boundaries:
         """Compose this case's wrappers over the boundaries it names.
-
-        Parameters
-        ----------
-        boundaries
-            Doubles that already answer their happy paths.
 
         Returns
         -------
@@ -372,8 +380,9 @@ __all__ = (
     "FAILURE_STATUS",
     "MISMATCHED_REVISION",
     "FailureCase",
-    "answer_no_workflow_run",
+    "answer_no_run_head",
     "answer_other_commit",
+    "answer_run_head",
     "delay_commit_query",
     "delay_workflow_run_query",
     "fail_commit_query",

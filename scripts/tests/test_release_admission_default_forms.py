@@ -45,7 +45,7 @@ if typ.TYPE_CHECKING:
 
 pytest_plugins = ("cmd_mox.pytest_plugin",)
 
-EVIDENCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE"
+MAX_AGE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS"
 METRICS_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_METRICS_FILE"
 TRACE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TRACE_FILE"
 ENFORCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
@@ -147,16 +147,17 @@ def test_optional_values_are_read_with_the_colon_default_form(
     -----
     Every optional input other than the enforcement mode was read with the colon
     form, so an empty value substituted the default exactly as an unset one did.
-    Two of them are supplied empty here: the artefact paths, whose default is
-    observable in the workflow outputs the gate publishes, and the evidence
-    state, whose default is observable in the category it reports.
+    Three of them are supplied empty here: the artefact paths, whose default is
+    observable in the workflow outputs the gate publishes, and the maximum
+    evidence age, whose default is observable in the category it reports.
 
-    The evidence state's default is ``missing``, so an empty value must reach
-    the freshness check as a missing-evidence refusal rather than as the
-    ``unknown`` category an unrecognized state produces. Those two categories
-    are the whole difference between "the shell substituted" and "the shell
-    passed the empty string through", and asserting the category rather than
-    only the exit status is what pins it.
+    The maximum age's default is ``86400``, a value the gate accepts, so an
+    empty input must reach the freshness check and refuse the missing manifest
+    rather than being kept as the empty string and refused as an unusable
+    configuration. ``missing_evidence`` and ``unknown`` are the whole difference
+    between "the shell substituted" and "the shell passed the empty string
+    through", and asserting the category rather than only the exit status is
+    what pins it.
     """
     install_boundaries(cmd_mox)
     run = run_gate(
@@ -165,7 +166,7 @@ def test_optional_values_are_read_with_the_colon_default_form(
         extra_environment={
             METRICS_FILE_VARIABLE: "",
             TRACE_FILE_VARIABLE: "",
-            EVIDENCE_VARIABLE: "",
+            MAX_AGE_VARIABLE: "",
         },
     )
 
@@ -178,7 +179,7 @@ def test_optional_values_are_read_with_the_colon_default_form(
     METRICS_VALIDATOR.validate_metrics(run.metrics)
     METRICS_VALIDATOR.validate_traces(run.traces)
     assert run.outputs["gate-error-category"] == "missing_evidence", (
-        "an empty evidence state must take the documented missing default"
+        "an empty maximum age must take the documented bound and run the gate"
     )
 
 

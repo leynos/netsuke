@@ -33,11 +33,13 @@ from pathlib import Path
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
+from release_admission_evidence_fixtures import MISSING, candidate_for, write_evidence
 from release_admission_test_doubles import (
     GITHUB_REPOSITORY,
     PYTHON_PATH,
     REVISION,
     SCRIPT_PATH,
+    WORKFLOW_RUN_ID,
     GateRun,
 )
 
@@ -53,8 +55,6 @@ METRICS_VALIDATOR_PATH = (
 class MetricsValidator(typ.Protocol):
     """Define finite-JSON parsing and fixed-label validation operations.
 
-    Notes
-    -----
     Enforce ordered schemas, bounded vocabularies, and finite JSON values.
     """
 
@@ -142,7 +142,7 @@ def run_gate(
     cmd_mox: CmdMox,
     tmp_path: Path,
     *,
-    evidence_state: str = "missing",
+    evidence_state: str = MISSING,
     extra_environment: cabc.Mapping[str, str | None] | None = None,
 ) -> GateRun:
     """Run the production gate under cmd-mox and collect everything it wrote.
@@ -155,7 +155,9 @@ def run_gate(
     tmp_path
         Isolated directory for inputs and outputs.
     evidence_state
-        Evidence state passed to the admission subprocess.
+        Which evidence manifest to write at the path the child is told to read,
+        named from :mod:`release_admission_evidence_fixtures`. The default
+        writes nothing, which is the state before a producer exists.
     extra_environment
         Optional child-process environment overrides for a test scenario. A
         value of ``None`` removes the variable instead of setting it, which is
@@ -171,11 +173,14 @@ def run_gate(
     Contract invariants: the child receives an isolated environment, the only
     ``gh`` and ``git`` it can reach are the shims, its standard input is closed,
     and every returned record is decoded from a file the gate itself produced.
+    The tag is left unset unless a case supplies it, so the default run is the
+    rehearsal form: the revision resolves and compares with itself.
     """
     paths = _gate_paths(tmp_path)
     environment = _gate_environment(
         cmd_mox, GateInputs(tmp_path, evidence_state, extra_environment, paths)
     )
+    write_evidence(paths["evidence"], evidence_state, candidate_for(environment))
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed test target.
         [str(PYTHON_PATH), str(SCRIPT_PATH)],
         capture_output=True,
@@ -205,12 +210,10 @@ def _read_workflow_outputs(paths: dict[str, Path]) -> dict[str, str]:
     Notes
     -----
     An absent file is a meaningful state, not a fault: the runner creates
-    ``GITHUB_OUTPUT`` before the step, so the gate's first write is an append
-    and a run that stops earlier leaves the file exactly as it found it. In
-    this harness nothing pre-creates it, so such a run leaves nothing to read.
-    The shell behaved the same way -- the gate record and the four output lines
-    sit behind the same ``set -e`` -- and a case that asserts no outputs were
-    written is asserting on this empty mapping.
+    ``GITHUB_OUTPUT`` before the step, so a run that stops earlier leaves it
+    exactly as it found it. In this harness nothing pre-creates it, so such a
+    run leaves nothing to read, and a case asserting no outputs were written
+    asserts on this empty mapping.
     """
     path = paths["output"]
     if not path.exists():
@@ -241,6 +244,7 @@ def _gate_paths(tmp_path: Path) -> dict[str, Path]:
     return {
         "metrics": tmp_path / "release-admission-metrics.jsonl",
         "trace": tmp_path / "release-admission-traces.jsonl",
+        "evidence": tmp_path / "release-admission-evidence.json",
         "output": tmp_path / "github-output",
     }
 
@@ -249,9 +253,9 @@ def _gate_paths(tmp_path: Path) -> dict[str, Path]:
 class GateInputs:
     """Hold the runner-local inputs one gate invocation is configured from.
 
-    These four values travel together -- the directory everything is confined
-    to, the state the fixture supplies, the case's own overrides, and the named
-    output paths -- so they are one value rather than a five-argument call.
+    These four values travel together -- the isolated directory, the evidence
+    state the fixture supplies, the case's own overrides, and the named output
+    paths -- so they are one value rather than a five-argument call.
     """
 
     tmp_path: Path
@@ -267,12 +271,11 @@ def _gate_environment(
     """Build an isolated environment for one real gate invocation.
 
     The PATH is the controller's own: cmd-mox prepends its shim directory when
-    it enters, so the copy made here is what puts the shims ahead of any real
-    ``gh`` or ``git`` the host happens to have. A scenario must never replace
-    that PATH. A shim is a Python script whose shebang resolves ``python3``
-    through the child's own PATH, so a child started without one cannot run the
-    shim at all -- it fails before it can record anything, which reads as an
-    unexplained missing invocation rather than as the configuration error it is.
+    it enters, so this copy puts the shims ahead of any real ``gh`` or ``git``
+    on the host, and a scenario must never replace it. A shim's shebang
+    resolves ``python3`` through the child's PATH, so a child started without
+    one cannot run the shim at all -- which reads as an unexplained missing
+    invocation rather than as the configuration error it is.
 
     Parameters
     ----------
@@ -291,9 +294,8 @@ def _gate_environment(
     -----
     Contract invariants: the child inherits the controller's environment, so
     the shim directory and the IPC socket reach it, and production values are
-    preserved unless a scenario overrides them. An absent shim directory means
-    this helper was called outside a live controller, which is a fault in the
-    test rather than a condition to report.
+    preserved unless overridden. An absent shim directory means this helper
+    ran outside a live controller: a test fault, not a condition to report.
     """
     shim_dir = cmd_mox.environment.shim_dir
     assert shim_dir is not None, "CmdMox must create its command shim directory"
@@ -306,8 +308,9 @@ def _gate_environment(
         **os.environ,
         "GITHUB_OUTPUT": str(paths["output"]),
         "GITHUB_REPOSITORY": GITHUB_REPOSITORY,
+        "GITHUB_RUN_ID": WORKFLOW_RUN_ID,
         "GITHUB_SHA": REVISION,
-        "NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE": inputs.evidence_state,
+        "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE": str(paths["evidence"]),
         "NETSUKE_RELEASE_ADMISSION_METRICS_FILE": str(paths["metrics"]),
         "NETSUKE_RELEASE_ADMISSION_TRACE_FILE": str(paths["trace"]),
         "PATH": os.pathsep.join([str(shim_dir), os.environ["PATH"]]),
@@ -344,13 +347,12 @@ def _read_gate_records(
     Contract invariant: JSON Lines are decoded through the shared validator so
     runtime tests exercise the same schema as workflow-contract tests.
 
-    An absent file is read as no records. Neither artefact exists when a
-    required variable aborts the gate before the two paths are computed, and
-    that state is one the tests assert on deliberately: the shell refused
-    ``GITHUB_REPOSITORY`` and ``GITHUB_SHA`` before any artefact was created.
-    Raising :class:`FileNotFoundError` here would make that run unpresentable
-    rather than assertable, so an absent file reads as an empty record set and
-    the file's existence is a separate, explicit assertion.
+    An absent file reads as no records. Neither artefact exists when a required
+    variable aborts the gate before the two paths are computed, a state the
+    tests assert on deliberately: the shell refused ``GITHUB_REPOSITORY`` and
+    ``GITHUB_SHA`` before any artefact was created. Raising
+    :class:`FileNotFoundError` would make that run unpresentable rather than
+    assertable, so the file's existence is a separate, explicit assertion.
     """
     return (
         _parse_records(paths["metrics"], METRICS_VALIDATOR.parse_metrics),

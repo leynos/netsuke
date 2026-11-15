@@ -11,14 +11,20 @@ asks what it then *does*.
 Two behaviours are reproduced rather than improved, because the runtime tests
 freeze them:
 
-- The bash ``fresh`` contradiction. ``check_scan_freshness`` admits a fresh
-  state, but ``verify_evidence`` refuses it unless the state is *not* fresh and
-  a workflow run identifier is present. A freshness check passing is therefore
-  never sufficient for admission.
+- Evidence is verified, not asserted. ``check_scan_freshness`` reads the
+  manifest and refuses a timestamp outside the window; ``verify_evidence`` then
+  requires that manifest to name this repository, revision, tag and run and to
+  report both required canaries as successful. A freshness check passing is
+  therefore never sufficient for admission.
 - Bash's trailing-newline handling. A command substitution strips trailing
   newlines from a revision, but the value embedded in the next command's
   argument vector keeps them; the comparison between the two is what turns a
   revision ending in a newline into a bounded mismatch.
+
+Evidence arrives through the :class:`~.filesystem.FileSystem` port rather than
+being opened here, so the byte bound and the decoding are observable without a
+real file, and the wall clock arrives through the same adapter the durations
+already use.
 
 Bounding is native. The shell wrapped each command in GNU ``timeout``, which
 reported ``124`` when the command accepted ``SIGTERM`` and ``137`` when it had
@@ -29,11 +35,13 @@ vocabulary as a timeout and the killed variant is not one a bound produces.
 """
 
 import dataclasses
+import math
 import typing as typ
 
-from . import commands, policy, records, telemetry
+from . import commands, evidence, policy, records, telemetry
 
 if typ.TYPE_CHECKING:
+    from . import filesystem
     from .configuration import Configuration
 
 #: The five operations, in order, with the canary each belongs to.
@@ -61,15 +69,23 @@ class OperationResult:
     outcome: policy.Outcome = policy.Outcome.UNKNOWN
     error_category: policy.ErrorCategory = policy.ErrorCategory.UNKNOWN
     duration: str = "0"
-    workflow_run_id: str = ""
 
 
 class Gate:
     """Run the admission once, accumulating the record the shell produced."""
 
-    def __init__(self, configuration: Configuration) -> None:
-        """Bind the resolved configuration and the gate's mutable record."""
+    def __init__(
+        self, configuration: Configuration, file_system: filesystem.FileSystem
+    ) -> None:
+        """Bind the resolved configuration, the filesystem port, and the record.
+
+        The port is a parameter rather than a lookup so that the verification's
+        only filesystem effect can be observed, and so a test can hand in a
+        manifest without arranging a directory tree.
+        """
         self._configuration = configuration
+        self._file_system = file_system
+        self._manifest: evidence.Manifest | None = None
         self._outcome = policy.Outcome.UNKNOWN
         self._error_category = policy.ErrorCategory.UNKNOWN
         self._trace_sink_failed = False
@@ -85,6 +101,8 @@ class Gate:
         ``failure``/``unknown`` and exited ``1`` -- the mode's own value never
         decided the status, so a refused *observation* mode still failed the
         step. :meth:`finish` reads the recorded refusal rather than the mode.
+        The maximum evidence age is checked the same way, so a mistyped bound
+        cannot silently widen the window.
 
         Returns
         -------
@@ -93,9 +111,12 @@ class Gate:
             may run.
         """
         configuration = self._configuration
-        if policy.is_operation_timeout(
-            configuration.timeout_seconds
-        ) and policy.is_admission_enforcement(configuration.enforcement):
+        checks = (
+            policy.is_operation_timeout(configuration.timeout_seconds),
+            policy.is_admission_enforcement(configuration.enforcement),
+            evidence.is_evidence_max_age(configuration.max_evidence_age_seconds),
+        )
+        if all(checks):
             return False
         self._outcome = policy.Outcome.FAILURE
         self._error_category = policy.ErrorCategory.UNKNOWN
@@ -126,7 +147,12 @@ class Gate:
         status = telemetry.record_gate_result(
             configuration.sinks,
             output=configuration.output,
-            record=records.GateRecord(self._outcome, self._error_category),
+            record=records.GateRecord(
+                outcome=self._outcome,
+                error_category=self._error_category,
+                enforcement=policy.enforcement_label(configuration.enforcement),
+                candidate_commit=policy.publishable_revision(configuration.revision),
+            ),
             trace_sink_failed=self._trace_sink_failed,
         )
         if status:
@@ -177,9 +203,30 @@ class Gate:
         return self._result.outcome == policy.Outcome.SUCCESS
 
     def _read_clock(self) -> tuple[str, bool]:
-        """Read the clock adapter once, reporting an unsuccessful exit."""
+        """Read the monotonic clock once, reporting an unsuccessful exit."""
         result = commands.read_monotonic_seconds(self._configuration.programs)
         return result.output, result.outcome != policy.CommandOutcome.SUCCEEDED
+
+    def _read_wall_clock(self) -> tuple[float, bool]:
+        """Read the wall clock once, reporting an exit or reading it cannot use.
+
+        A reading that is not a finite number is refused rather than compared:
+        ``nan`` makes every comparison false, so accepting it would turn a
+        broken adapter into a manifest that is always fresh.
+
+        Returns
+        -------
+        tuple
+            The seconds since the epoch, and whether the reading is unusable.
+        """
+        result = commands.read_wall_clock_seconds(self._configuration.programs)
+        if result.outcome != policy.CommandOutcome.SUCCEEDED:
+            return 0.0, True
+        try:
+            reading = float(result.output)
+        except ValueError:
+            return 0.0, True
+        return (reading, False) if math.isfinite(reading) else (0.0, True)
 
     def _dispatch(self, operation: policy.Operation) -> None:
         """Run the named operation and adopt its policy classification.
@@ -198,29 +245,29 @@ class Gate:
             case policy.Operation.FETCH_WORKFLOW_RUN:
                 self._fetch_workflow_run()
             case policy.Operation.CHECK_SCAN_FRESHNESS:
-                self._apply(
-                    policy.classify_scan_freshness(self._configuration.evidence_state)
-                )
+                self._check_scan_freshness()
             case _:
-                self._apply(
-                    policy.classify_evidence(
-                        self._configuration.evidence_state,
-                        self._result.workflow_run_id,
-                    )
-                )
+                self._verify_evidence()
 
     def _resolve_tag_commit(self) -> None:
-        """Resolve the candidate revision through the API and compare it.
+        """Resolve the candidate through the API and compare it with ``GITHUB_SHA``.
 
-        The comparison itself is a policy decision about two revisions, so it
-        runs only once the command has succeeded; a command that did not is
-        classified by its own outcome and the operation's ``api_error``
-        category.
+        A publishing run names the tag it is about to release, so the API is
+        asked what that tag resolves to and the answer is compared with the
+        candidate: a tag that moved between the workflow's read and this one is
+        a mismatch. A rehearsal names no tag, so the revision is resolved and
+        compared with itself, which keeps the request contract and the
+        self-check without inventing a tag.
+
+        The comparison is a policy decision about two revisions, so it runs only
+        once the command succeeded; anything else is classified by its own
+        outcome and the operation's ``api_error`` category.
         """
+        subject = self._configuration.tag or self._configuration.revision
         result = commands.github_resolve_commit(
             self._configuration.programs,
             repository=self._configuration.repository,
-            revision=self._configuration.revision,
+            revision=subject,
             timeout_seconds=int(self._configuration.timeout_seconds),
         )
         self._apply(
@@ -249,23 +296,95 @@ class Gate:
         )
 
     def _fetch_workflow_run(self) -> None:
-        """Ask the API for the workflow run covering the candidate revision.
+        """Ask the API which commit the run named by ``GITHUB_RUN_ID`` started on.
 
-        The run identifier is adopted even from an unsuccessful command, which
-        is what the shell's command substitution did: a failed request left the
-        variable empty, and an empty identifier is precisely what
-        :func:`policy.classify_evidence` refuses.
+        The answer must be the candidate. An empty answer is the shell's failed
+        command substitution -- an ``api_error`` rather than a revision to
+        compare -- and a different revision means this run is not the release's
+        run, which is a candidate mismatch.
         """
-        result = commands.github_find_workflow_run(
+        result = commands.github_current_workflow_run(
             self._configuration.programs,
             repository=self._configuration.repository,
-            revision=self._configuration.revision,
+            run_id=self._configuration.run_id,
             timeout_seconds=int(self._configuration.timeout_seconds),
         )
-        self._result.workflow_run_id = result.output
+        if result.outcome != policy.CommandOutcome.SUCCEEDED:
+            self._apply(
+                policy.classify_command_result(result, policy.ErrorCategory.API_ERROR)
+            )
+            return
+        if not result.output:
+            self._refuse(policy.ErrorCategory.API_ERROR)
+            return
         self._apply(
-            policy.classify_command_result(result, policy.ErrorCategory.API_ERROR)
+            policy.classify_run_head(result.output, self._configuration.revision)
         )
+
+    def _check_scan_freshness(self) -> None:
+        """Read the evidence manifest and refuse every unbounded timestamp.
+
+        The three ways the document can fail to arrive are told apart because an
+        operator fixes them differently: nothing at the path is
+        ``missing_evidence``, a file the operating system will not read or that
+        exceeds the byte bound is ``malformed_evidence``, and a document that
+        parsed but lies outside the window is ``stale_evidence``. A parse
+        refusal keeps the category the parser chose, so one function decides
+        what a malformed document is.
+        """
+        configured = self._configuration.evidence_file
+        try:
+            raw = self._file_system.read_bytes(configured, evidence.MAX_EVIDENCE_BYTES)
+        except FileNotFoundError:
+            self._refuse(policy.ErrorCategory.MISSING_EVIDENCE)
+            return
+        except OSError:
+            # Includes `filesystem.EvidenceTooLargeError`: the document exists,
+            # but cannot be read as the manifest.
+            self._refuse(policy.ErrorCategory.MALFORMED_EVIDENCE)
+            return
+        parsed = evidence.parse_manifest(raw)
+        if parsed.manifest is None:
+            self._refuse(parsed.error_category)
+            return
+        self._manifest = parsed.manifest
+        now, failed = self._read_wall_clock()
+        if failed:
+            self._refuse(policy.ErrorCategory.UNKNOWN)
+            return
+        self._apply(
+            evidence.classify_freshness(
+                parsed.manifest,
+                now=now,
+                max_age_seconds=int(self._configuration.max_evidence_age_seconds),
+            )
+        )
+
+    def _verify_evidence(self) -> None:
+        """Require the manifest the freshness check read to admit the candidate.
+
+        A gate that reached this operation has already refused every absent,
+        unreadable, and stale document, so the manifest is always present while
+        operations stop at the first failure. The guard reports
+        ``missing_evidence`` rather than assuming: a future reordering that
+        skipped the read would then fail closed instead of admitting on no
+        document at all.
+        """
+        if self._manifest is None:
+            self._refuse(policy.ErrorCategory.MISSING_EVIDENCE)
+            return
+        configuration = self._configuration
+        candidate = evidence.Candidate(
+            repository=configuration.repository,
+            commit=configuration.revision,
+            tag=configuration.tag,
+            run_id=configuration.run_id,
+        )
+        self._apply(evidence.verify(self._manifest, candidate))
+
+    def _refuse(self, error_category: policy.ErrorCategory) -> None:
+        """Record the operation in progress as failed, for a bounded category."""
+        self._apply(policy.Classification(policy.Outcome.FAILURE, error_category))
 
     def _apply(self, result: policy.Classification) -> None:
         """Adopt a policy classification for the operation in progress."""

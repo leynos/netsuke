@@ -11,6 +11,10 @@ reads every documented default into one
 :func:`~_release_admission.configuration.require_workflow_output` reads the one
 variable the shell left until after both artefacts existed.
 
+Where the artefacts go, and the spelling each is named by, is
+:mod:`test_release_admission_destination_resolution`'s subject; the cases here
+start from a destination and vary only the settings.
+
 Every case builds its own mapping in this process: resolution cannot consult
 ``os.environ``, so the ambient environment cannot make a case pass, and the
 in-process boundary is what lets the absence of a filesystem effect be
@@ -34,7 +38,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".github" / "scripts"))
-from _release_admission import commands, configuration, policy, telemetry
+from _release_admission import commands, configuration, evidence, policy, telemetry
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -42,7 +46,10 @@ if typ.TYPE_CHECKING:
 REPOSITORY_VARIABLE = "GITHUB_REPOSITORY"
 REVISION_VARIABLE = "GITHUB_SHA"
 OUTPUT_VARIABLE = "GITHUB_OUTPUT"
-EVIDENCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE"
+RUN_ID_VARIABLE = "GITHUB_RUN_ID"
+TAG_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TAG"
+EVIDENCE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE"
+MAX_AGE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS"
 ENFORCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
 TIMEOUT_VARIABLE = "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS"
 METRICS_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_METRICS_FILE"
@@ -51,27 +58,17 @@ TEMPORARY_DIRECTORY_VARIABLE = "RUNNER_TEMP"
 
 REPOSITORY = "leynos/netsuke"
 REVISION = "0123456789abcdef0123456789abcdef01234567"
+RUN_ID = "1001"
 
 #: The temporary directory every case gives the gate, so that no case can
 #: observe the ambient ``RUNNER_TEMP`` or reach the ``/tmp`` fallback.
 TEMPORARY_DIRECTORY = "/nonexistent/runner-temp"
 
-#: A spelling whose two derivations genuinely disagree: coreutils ``dirname(1)``
-#: answers ``reports`` for it, while :attr:`pathlib.Path.parent` answers ``.``.
-#: The shell passed the spelling on unchanged and computed the ``mkdir`` operand
-#: as ``$(dirname "$file")``, so both halves are pinned by one case. The
-#: divergence is not cosmetic: making ``.`` instead of ``reports`` is a no-op,
-#: so the truncation would fail ``No such file or directory`` where the shell
-#: had created ``reports`` and failed ``Is a directory``.
-DIVERGENT_SPELLING = "reports/."
-
-#: The parent coreutils ``dirname(1)`` names for that spelling.
-DIVERGENT_PARENT = "reports"
-
 #: The variables every case begins from, so each case states only its subject.
 BASELINE_ENVIRONMENT = {
     REPOSITORY_VARIABLE: REPOSITORY,
     REVISION_VARIABLE: REVISION,
+    RUN_ID_VARIABLE: RUN_ID,
     TEMPORARY_DIRECTORY_VARIABLE: TEMPORARY_DIRECTORY,
 }
 
@@ -90,84 +87,12 @@ def resolve(
     return destination, configuration.resolve_configuration(variables, destination)
 
 
-def test_default_artefact_paths_are_derived_from_the_temporary_directory() -> None:
-    """Verify both default paths hang off ``RUNNER_TEMP``.
-
-    Notes
-    -----
-    ``RUNNER_TEMP`` is read with the colon form, so an empty value must reach
-    the default exactly as an unset one does. The empty arm is the reason: a
-    resolver reading the no-colon form would build a path from the empty string
-    and pass the unset arm alone.
-    """
-    variables = dict(BASELINE_ENVIRONMENT)
-    del variables[TEMPORARY_DIRECTORY_VARIABLE]
-    fallback = configuration.DEFAULT_TEMPORARY_DIRECTORY
-    expected = (
-        f"{fallback}/{configuration.METRICS_FILE_NAME}",
-        f"{fallback}/{configuration.TRACE_FILE_NAME}",
-    )
-
-    unset = configuration.resolve_destination(variables)
-    empty = configuration.resolve_destination({
-        **BASELINE_ENVIRONMENT,
-        TEMPORARY_DIRECTORY_VARIABLE: "",
-    })
-
-    assert (unset.metrics_file.configured, unset.trace_file.configured) == expected, (
-        "an unset RUNNER_TEMP must name both default artefacts under the fallback"
-    )
-    assert empty == unset, "an empty RUNNER_TEMP must fall back as an unset one does"
-
-
-@pytest.mark.parametrize(
-    "variable",
-    [
-        pytest.param(METRICS_FILE_VARIABLE, id="metrics"),
-        pytest.param(TRACE_FILE_VARIABLE, id="trace"),
-    ],
-)
-def test_configured_spelling_is_kept_while_its_parent_is_derived(variable: str) -> None:
-    """Verify a configured path is kept verbatim with its parent derived.
-
-    Notes
-    -----
-    The two halves are one contract, not two claims: the configured string
-    reaches every observable boundary unchanged, while the *parent* is what
-    ``dirname(1)`` would have named. For this spelling the parent differs from
-    the configured path's normalized :attr:`~pathlib.Path.parent`, so a resolver
-    computing either half from a :class:`~pathlib.Path` fails here rather than at
-    some later refusal.
-    """
-    destination = configuration.resolve_destination({
-        **BASELINE_ENVIRONMENT,
-        variable: DIVERGENT_SPELLING,
-    })
-    configured = (
-        destination.metrics_file
-        if variable == METRICS_FILE_VARIABLE
-        else destination.trace_file
-    )
-
-    assert configured.configured == DIVERGENT_SPELLING, (
-        "resolution must keep the operator's own spelling rather than normalize it"
-    )
-    assert str(Path(configured.configured)) != configured.configured, (
-        "this case only proves the spelling was kept if Path would have changed it"
-    )
-    assert configured.directory == Path(DIVERGENT_PARENT), (
-        "the parent must be the one dirname(1) named for the configured string"
-    )
-    assert configured.directory != Path(configured.configured).parent, (
-        "the parent must not be the configured path's own Path.parent"
-    )
-
-
 @pytest.mark.parametrize(
     ("variable", "diagnostic"),
     [
         pytest.param(REPOSITORY_VARIABLE, configuration.REPOSITORY_DIAGNOSTIC),
         pytest.param(REVISION_VARIABLE, configuration.REVISION_DIAGNOSTIC),
+        pytest.param(RUN_ID_VARIABLE, configuration.RUN_ID_DIAGNOSTIC),
     ],
 )
 @pytest.mark.parametrize("exported", ["", None], ids=["empty", "unset"])
@@ -217,9 +142,16 @@ def test_documented_defaults_are_read_into_one_configuration() -> None:
     assert not settings.output, (
         "GITHUB_OUTPUT must stay unresolved until the artefacts exist"
     )
-    assert settings.evidence_state == policy.EvidenceState.MISSING, (
-        "an unset evidence state must resolve to the gate's own missing label"
+    assert settings.run_id == RUN_ID, "GITHUB_RUN_ID must reach the settings unchanged"
+    assert not settings.tag, (
+        "an unset tag must stay empty, which is what makes a rehearsal reachable"
     )
+    assert not settings.evidence_file, (
+        "an unset evidence file must stay empty, as a rehearsal names no document"
+    )
+    assert settings.max_evidence_age_seconds == str(
+        evidence.DEFAULT_EVIDENCE_MAX_AGE_SECONDS
+    ), "an unset maximum age must resolve to the gate's own default, as a string"
     assert settings.timeout_seconds == str(policy.DEFAULT_OPERATION_TIMEOUT_SECONDS), (
         "an unset timeout must resolve to the gate's own default, as a string"
     )
@@ -238,15 +170,27 @@ def test_a_configured_value_is_read_in_place_of_every_default() -> None:
     """
     _, settings = resolve({
         **BASELINE_ENVIRONMENT,
-        EVIDENCE_VARIABLE: "fresh",
+        RUN_ID_VARIABLE: "4242",
+        TAG_VARIABLE: "v0.10.0",
+        EVIDENCE_FILE_VARIABLE: "/configured/evidence.json",
+        MAX_AGE_VARIABLE: "3600",
         TIMEOUT_VARIABLE: "17",
         ENFORCE_VARIABLE: "true",
         METRICS_FILE_VARIABLE: "/configured/metrics.jsonl",
         TRACE_FILE_VARIABLE: "/configured/traces.jsonl",
     })
 
-    assert settings.evidence_state == "fresh", (
-        "a configured evidence state must be read rather than defaulted"
+    assert settings.run_id == "4242", (
+        "a configured run identifier must be read rather than defaulted"
+    )
+    assert settings.tag == "v0.10.0", (
+        "a configured tag must be read rather than defaulted"
+    )
+    assert settings.evidence_file == "/configured/evidence.json", (
+        "a configured evidence file must be read rather than defaulted"
+    )
+    assert settings.max_evidence_age_seconds == "3600", (
+        "a configured maximum age must be read rather than defaulted"
     )
     assert settings.timeout_seconds == "17", (
         "a configured timeout must be read rather than defaulted"
@@ -285,6 +229,45 @@ def test_enforcement_keeps_an_exported_empty_value_where_a_path_defaults_it() ->
     assert settings.sinks.metrics_file == (
         f"{TEMPORARY_DIRECTORY}/{configuration.METRICS_FILE_NAME}"
     ), "the colon form must substitute the default for an empty path"
+
+
+@pytest.mark.parametrize(
+    ("variable", "diagnostic"),
+    [
+        pytest.param(TAG_VARIABLE, evidence.TAG_DIAGNOSTIC, id="tag"),
+        pytest.param(
+            EVIDENCE_FILE_VARIABLE, evidence.EVIDENCE_FILE_DIAGNOSTIC, id="evidence"
+        ),
+    ],
+)
+def test_enforcing_without_its_inputs_is_refused_before_anything_runs(
+    variable: str, diagnostic: str
+) -> None:
+    """Verify an enforcing run must name the tag and the document it admits.
+
+    Notes
+    -----
+    Publication trusts an enforcing run's success, so an enforcing run that
+    named no tag would admit whatever the manifest said about a tag nobody
+    published, and one that named no document would have nothing to verify.
+    Both refusals happen in resolution, before any artefact is created, so a
+    misconfigured publishing run leaves no records to misread as an admission.
+    """
+    destination = configuration.resolve_destination(BASELINE_ENVIRONMENT)
+    variables = {
+        **BASELINE_ENVIRONMENT,
+        ENFORCE_VARIABLE: policy.ADMISSION_ENFORCEMENT_MODE,
+        TAG_VARIABLE: "v0.10.0",
+        EVIDENCE_FILE_VARIABLE: "/configured/evidence.json",
+    }
+    del variables[variable]
+
+    with pytest.raises(configuration.ConfigurationError) as refusal:
+        configuration.resolve_configuration(variables, destination)
+
+    assert str(refusal.value) == diagnostic, (
+        "the refusal must name the variable the enforcing run failed to supply"
+    )
 
 
 def test_adapter_names_and_sinks_are_resolved_for_the_rest_of_the_run() -> None:

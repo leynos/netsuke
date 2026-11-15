@@ -51,10 +51,15 @@ TRACE_DIAGNOSTIC = "release-admission trace values are outside the fixed vocabul
 #: The diagnostic printed when a trace record could not be delivered.
 TRACE_SINK_DIAGNOSTIC = "release-admission trace sink failed"
 
-#: The four output keys, in the order the workflow reads them.
+#: The output keys, in the order the workflow reads them. ``enforcement`` and
+#: ``candidate-commit`` are what let the publication job refuse a report-only or
+#: differently-candidate gate structurally rather than by trusting the outcome
+#: alone.
 OUTPUT_KEYS: typ.Final[tuple[str, ...]] = (
     "gate-outcome",
     "gate-error-category",
+    "enforcement",
+    "candidate-commit",
     "metrics-file",
     "trace-file",
 )
@@ -246,6 +251,8 @@ def record_gate_result(
     for key, value in (
         ("gate-outcome", record.outcome),
         ("gate-error-category", record.error_category),
+        ("enforcement", record.enforcement),
+        ("candidate-commit", record.candidate_commit),
         ("metrics-file", sinks.metrics_file),
         ("trace-file", sinks.trace_file),
     ):
