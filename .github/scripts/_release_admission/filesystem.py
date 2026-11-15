@@ -26,11 +26,17 @@ file, because the shell asked coreutils ``dirname(1)`` for that operand;
 regular file and a directory.
 """
 
+import os
+import stat
 import typing as typ
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
     import pathlib
+
+#: The flag that keeps opening a FIFO from waiting for its writer. Windows has
+#: no FIFOs to wait for, so the flag's absence there is not a degradation.
+_NON_BLOCKING: typ.Final[int] = getattr(os, "O_NONBLOCK", 0)
 
 
 class EvidenceTooLargeError(OSError):
@@ -39,6 +45,20 @@ class EvidenceTooLargeError(OSError):
     def __init__(self, configured: str, limit: int) -> None:
         """Describe the document that exceeded the caller's byte bound."""
         super().__init__(f"{configured} is larger than the {limit}-byte evidence bound")
+
+
+class NotRegularFileError(OSError):
+    """Raised when a path the gate must read is not a regular file.
+
+    A name can exist and still not be a document: a FIFO, a device, or a
+    directory. Opening a FIFO without a writer waits, and a device can block
+    inside the read, so neither is bounded by a byte count. Only a regular file
+    is, and everything else is refused before a single byte is read.
+    """
+
+    def __init__(self, configured: str) -> None:
+        """Describe the path that names something other than a regular file."""
+        super().__init__(f"{configured} is not a regular file")
 
 
 class FileSystem(typ.Protocol):
@@ -86,7 +106,14 @@ def read_bytes(configured: str, limit: int, /) -> bytes:
     the read. Reading one byte past the bound is what distinguishes a document
     of exactly *limit* bytes from a larger one without asking twice.
 
-    An absent file propagates the :class:`FileNotFoundError` ``open`` raised,
+    The path is opened without blocking and the opened handle is inspected
+    before any byte is read. A name that exists but is not a regular file --
+    a FIFO with no writer, a device, a directory -- would otherwise wait inside
+    the open or the read, where no byte bound applies and the gate could neither
+    refuse nor finish. Inspecting the handle rather than the path is what makes
+    the refusal about the object actually opened.
+
+    An absent file propagates the :class:`FileNotFoundError` the open raised,
     which the caller tells apart from a file that exists but cannot be read.
 
     Parameters
@@ -105,13 +132,42 @@ def read_bytes(configured: str, limit: int, /) -> bytes:
     ------
     EvidenceTooLargeError
         If the file holds more than *limit* bytes.
+    NotRegularFileError
+        If *configured* names something other than a regular file.
     """
-    # ruff: ignore[builtin-open] - the configured string is the operand.
-    with open(configured, "rb") as handle:
-        excerpt = handle.read(limit + 1)
+    descriptor = os.open(configured, os.O_RDONLY | _NON_BLOCKING)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise NotRegularFileError(configured)
+        excerpt = _read_bounded(descriptor, limit)
+    finally:
+        os.close(descriptor)
     if len(excerpt) > limit:
         raise EvidenceTooLargeError(configured, limit)
     return excerpt
+
+
+def _read_bounded(descriptor: int, limit: int) -> bytes:
+    """Read at most *limit* + 1 bytes from an open regular file.
+
+    A short read is not the end of the file: ``read`` may return fewer bytes
+    than asked for, so the loop asks again until the bound is reached or the
+    file ends.
+
+    Returns
+    -------
+    bytes
+        The bytes read, at most *limit* + 1 of them.
+    """
+    chunks: list[bytes] = []
+    remaining = limit + 1
+    while remaining > 0:
+        chunk = os.read(descriptor, remaining)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
 
 
 def production_filesystem() -> FileSystem:

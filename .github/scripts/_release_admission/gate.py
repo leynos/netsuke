@@ -339,8 +339,9 @@ class Gate:
             self._refuse(policy.ErrorCategory.MISSING_EVIDENCE)
             return
         except OSError:
-            # Includes `filesystem.EvidenceTooLargeError`: the document exists,
-            # but cannot be read as the manifest.
+            # Includes `filesystem.EvidenceTooLargeError` and
+            # `filesystem.NotRegularFileError`: something is at the path, but it
+            # cannot be read as the manifest.
             self._refuse(policy.ErrorCategory.MALFORMED_EVIDENCE)
             return
         parsed = evidence.parse_manifest(raw)
