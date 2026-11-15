@@ -128,6 +128,15 @@ rustup toolchain install nightly-2026-06-25
 RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build --version 0.1.0-beta1 --locked
 ```
 
+PowerShell cannot use that `RUSTFLAGS=...` prefix, so set the variable in the
+environment before running `cargo`:
+
+```powershell
+rustup toolchain install nightly-2026-06-25
+$env:RUSTFLAGS = "-Zpolonius=next"
+cargo +nightly-2026-06-25 install netsuke-build --version 0.1.0-beta1 --locked
+```
+
 `--version 0.1.0-beta1` selects the beta1 crate. `--locked` uses the
 `Cargo.lock` shipped in the published crate. `nightly-2026-06-25` is the
 compiler contract recorded for beta1, and `-Zpolonius=next` is required because

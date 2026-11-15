@@ -93,6 +93,23 @@ fn beta1_installation_notice_pins_version_toolchain_and_polonius() -> Result<()>
             "toolchain, version, and lockfile on one line"
         )
     );
+    // PowerShell cannot set a command-scoped variable ahead of the command, so
+    // its form must assign `RUSTFLAGS` and then run the same pinned install.
+    // Compare the whole block: the POSIX command above already names the same
+    // toolchain, so a fragment check here would pass without the PowerShell
+    // form existing at all.
+    let powershell_install = concat!(
+        "rustup toolchain install nightly-2026-06-25\n",
+        "$env:RUSTFLAGS = \"-Zpolonius=next\"\n",
+        "cargo +nightly-2026-06-25 install netsuke-build --version 0.1.0-beta1 --locked\n",
+    );
+    ensure!(
+        guide.contains(powershell_install),
+        concat!(
+            "the PowerShell beta1 form must set RUSTFLAGS, install the ",
+            "dated nightly, and pin the version and lockfile"
+        )
+    );
     ensure!(
         guide.contains("rustup toolchain install nightly-2026-06-25"),
         "the beta1 installation notice must install its dated nightly"
