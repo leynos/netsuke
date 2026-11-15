@@ -20,8 +20,6 @@ reported. That keeps the decision reviewable and testable without a filesystem
 or a child process.
 """
 
-from __future__ import annotations
-
 import datetime as dt  # ruff: ignore[typing-only-standard-library-import] - examples.
 import typing as typ
 

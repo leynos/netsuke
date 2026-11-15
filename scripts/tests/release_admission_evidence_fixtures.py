@@ -20,8 +20,6 @@ drop it from the fixture too, and the case that omits it would still pass. The
 schema is therefore written out independently, here, and compared by the gate.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 import json
 import typing as typ

@@ -24,8 +24,6 @@ rejected every name it had not been taught would make each one a breaking
 change.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import datetime as dt
 import json
@@ -234,11 +232,13 @@ def _identifier(value: object) -> str | None:
     str | None
         The identifier as text, or ``None`` when the value names no run.
     """
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int) and value > 0:
-        return str(value)
-    return _text(value)
+    match value:
+        case bool():
+            return None
+        case int() as number if number > 0:
+            return str(number)
+        case _:
+            return _text(value)
 
 
 def _timestamp(value: object) -> dt.datetime | None:

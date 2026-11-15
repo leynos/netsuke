@@ -26,8 +26,7 @@ MODE_OUTPUTS = {
 PACKAGE_UPLOAD = {"dry-run": True, "publish": True, "neither": False}
 REQUIRED_DRY_RUN_EVENTS = {"opened", "synchronize", "reopened", "ready_for_review"}
 #: The commit every scenario releases. ``github.sha`` reports it and the gate
-#: publishes it as ``candidate_commit``, so publication's equality holds only
-#: where the scenario admits its own candidate.
+#: publishes it as ``candidate_commit``, so only an admitted candidate matches.
 GITHUB_SHA = "a" * 40
 #: Every prerequisite a publishing job waits on. Both publishers wait on the
 #: same set by design -- a difference would let one lane publish bytes the
@@ -66,9 +65,8 @@ STAGING_NEEDS = {
 STAGING_FORBIDDEN_NEEDS = {"package-crate", "release-admission-canaries"}
 PUBLISHER_NEEDS = {"publish-crates-io", "publish-release"}
 #: Verification holds write scope, so it carries publication's gate: packaging,
-#: enforcement, and both publishers, because it verifies what they produced.
-#: A failed, skipped, or report-only prerequisite leaves it unverified rather
-#: than verifying a release that was never admitted.
+#: enforcement, and both publishers, because it verifies what they produced. A
+#: failed, skipped, or report-only prerequisite leaves it unverified.
 VERIFY_NEEDS = {
     "metadata",
     "package-crate",
@@ -134,10 +132,11 @@ def needs_context(
         dependency: dict[str, object] = {
             "result": scenario.needs_results.get(name, "skipped")
         }
-        if name == "metadata":
-            dependency["outputs"] = dict(metadata_outputs)
-        elif name == "release-admission-canaries":
-            dependency["outputs"] = admission_outputs(scenario)
+        match name:
+            case "metadata":
+                dependency["outputs"] = dict(metadata_outputs)
+            case "release-admission-canaries":
+                dependency["outputs"] = admission_outputs(scenario)
         needs[name] = dependency
     return needs
 
