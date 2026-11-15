@@ -9342,13 +9342,18 @@ modules under `tests/cli_tests/`:
   invariant and scalar merge ordering (defaults → file → environment → CLI).
 - `config_discovery_scopes/user_precedence.rs` pins user-before-system
   discovery for every `XDG_CONFIG_HOME` state that leaves the home fallbacks
-  unreachable, and checks that a broken user file stops discovery instead of
-  falling back to a system file. Unit tests in
-  `src/cli/discovery/layers/tests/user_scope.rs` cover the same ordering
-  through the injected environment seam, and
-  `config_discovery_env_provenance.rs` plus `fetch_policy_trust/merge_tests.rs`
-  assert that a home-dotfile operator grant and fetch policy outrank a system
-  file.
+  unreachable, and checks that a broken user file, including a dangling
+  symbolic link, stops discovery instead of falling back to a system file. Unit
+  tests in `src/cli/discovery/layers/tests/user_scope.rs` cover the same
+  ordering through the injected environment seam, including the `APPDATA` and
+  `LOCALAPPDATA` branches and the empty-value filter.
+  `src/cli/discovery/layers/tests/user_scope_properties.rs` adds two properties
+  over that seam: candidate derivation over every set, empty, and unset
+  combination of the five user variables, and selection over generated
+  file-presence masks, which asserts that the first existing candidate wins and
+  that an unloadable one fails discovery. `config_discovery_env_provenance.rs`
+  plus `fetch_policy_trust/merge_tests.rs` assert that a home-dotfile operator
+  grant and fetch policy outrank a system file.
 
 These tests drive a re-executed worker process through
 `tests/cli_tests/merge_probe.rs`. `merge_probe` builds an isolated environment
@@ -12125,8 +12130,19 @@ without changing behaviour.
 `compose_layers()`. An absent candidate is skipped, a load error is returned
 immediately, and the first successful chain becomes the base layers. Only when
 no user candidate exists does `compose_layers()` run, which is what still
-reaches system scope and the project roots. Authority assignment is unchanged:
-a base chain whose last layer is the project file stays project-scoped, so a
+reaches system scope and the project roots.
+
+The dependency's own probe resolves a candidate inside a capability on its
+parent directory. A link whose target lies inside that directory and does not
+resolve is reported as `Ok(None)` — the same answer it gives for a file that is
+not there — while a link that escapes the directory is refused outright and
+never reaches that answer. Treating `Ok(None)` as absence would therefore skip
+a dangling link and continue to the system scope, so `load_user_candidate`
+probes a candidate that did not load with `symlink_metadata`. A genuinely
+absent path stays `NotFound` and is skipped, a link whose target exists never
+reaches the probe because the chain loads, and a path that still exists without
+having loaded fails discovery. Authority assignment is unchanged: a base chain
+whose last layer is the project file stays project-scoped, so a
 `$HOME/.netsuke.toml` that is also the project configuration keeps its existing
 project quarantine instead of gaining operator authority. Reading the user
 scope first changes which candidates are considered, not how a loaded file is
@@ -12136,9 +12152,10 @@ Re-check the user-path derivation on every `ortho_config` upgrade. The
 dependency's flat candidate order still places system scope before the home
 fallbacks, and Netsuke's aggregation of `compose_layers()` still drops an
 optional candidate's load error when a later candidate succeeds; the user pass
-is what bounds both behaviours. The regression matrix is Unix-only because it
-injects the XDG variables; Windows discovers user configuration through
-`APPDATA`/`LOCALAPPDATA`.
+is what bounds both behaviours. The child-process regression matrix is
+Unix-only because it injects the XDG variables, so the `APPDATA` and
+`LOCALAPPDATA` branches are pinned by unit cases instead: they set the
+variables in the injected `TestEnv` and run on every platform.
 
 `explicit_config_path_with_env` is the crate-internal seam for explicit
 config-file selection. It evaluates the precedence chain in this order:
