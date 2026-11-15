@@ -571,6 +571,34 @@ conflict in `Decision log`, and escalate.
     counts that show where they stop. Because each `make lint` failure masks
     the stages behind it, those two batches were the first to run Clippy at
     all, and `lint-python` and `github-actions-lint` had still never executed.
+  - Confirming gates after the repair (2026-11-15). The whole twelve-gate set
+    ran again, one gate at a time, against `29dc6df5a`, and all twelve exited 0
+    in 34 m 45 s. `check-fmt` 2 s (`cargo fmt` clean; Ruff left 548 Python
+    files formatted; `mdtablefix` left 227 Markdown files unchanged); `lint`
+    162 s — the batch in which every stage of that target finally executed, so
+    `lint-python` (Pylint and the df12 house lints at 10.00/10, plus
+    `ambrleaks`) and `github-actions-lint` passed here for the first time;
+    `typecheck` 22 s; `test` 116 s (5742 nextest tests passed, 9 skipped across
+    132 binaries; 217 doctests passed, 63 ignored, 0 failed); `doc-coverage`
+    47 s (6552 of 6667 items, 98.28%, against the 80% bar, and 65 script
+    tests); `markdownlint` 35 s (227 files, 0 issues, spelling gate included,
+    `typos.toml` regenerated identical); `nixie` 2 s;
+    `test-workflow-contracts` 567 s (2330 passed, 3 skipped; 30 script tests);
+    `test-documentation-contracts` 1 s (15 passed, 50 skipped);
+    `test-rfc-stdlib-coverage` 1 s (282 passed, 0 skipped); `kani-ir` 519 s,
+    reporting `Complete - 24 successfully verified harnesses, 0 failures, 24
+    total`, which includes all seven
+    `stdlib::resource_bounds::verification::*` harnesses; and
+    `test-kani-mutations` 398 s, whose prewarm and negative check passed in
+    about 15 s each and whose compile guard covered every one of the 37 tracked
+    patches in 351 s. No gate was retried. The builds ran without the managed
+    sccache server, which the host instructions record as an uncached run
+    rather than a failure. The commit carrying this paragraph changes prose
+    only, so those passes stand for the tree they ran against;
+    `make test-package-verify` does not apply, because no include list,
+    `build.rs`, or `build_l10n_audit/` file changed. Logs are the
+    `/tmp/<gate>-netsuke-6-1-3-shared-bounded-materialization-helper.out` files
+    named in `Concrete steps`.
 
 ## Surprises & discoveries
 
