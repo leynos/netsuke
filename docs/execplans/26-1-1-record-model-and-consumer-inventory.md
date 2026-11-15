@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 48. See `Revision note` at the foot of this document. This plan was
+Revision 49. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -749,6 +749,12 @@ pre-rebase history if an old hash must be inspected.
   reference coverage through one `task_table_rows` selection, so the two can no
   longer disagree about which rows are evidence. Each of the four rules now
   fails against a probe that reverts it.
+- [x] (2026-11-15) Cleared the hosted CodeScene duplication finding on
+  `fail_open_tests.rs` (D-34) by merging the prose table and the malformed-row
+  table into one, after reproducing the 9.38 locally with
+  `cs delta origin/main`. Re-ran the eleven gates on `66b6cfa81`: all green.
+  The commit touches `tests/`, so the post-pin list advanced an eighth time to
+  69 identifiers and a 50/19 split.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1004,6 +1010,24 @@ pre-rebase history if an old hash must be inspected.
   live. The fix touches `tests/`, so the post-pin list is now stale again and
   will be regenerated before the next batch. Date/Author: 2026-11-15,
   implementation agent, after the hosted fourth round.
+- Decision D-34 (2026-11-15): merged the two fail-open tables after the hosted
+  CodeScene check failed the round-4 candidate for Code Duplication at 9.38 in
+  `fail_open_tests.rs`, naming
+  `rejects_coverage_claimed_only_by_prose_in_the_trace` and
+  `rejects_register_coverage_claimed_by_a_malformed_trace_row`. The local
+  engine agreed before any edit — `cs delta origin/main 2717365d4` reported the
+  same pair at 9.38 — so this was not a hosted-only artefact. The two tables
+  were the same assertion with different inputs, which is what the rule they
+  test actually is, so they became one five-case table,
+  `rejects_register_coverage_claimed_by_something_other_than_a_task_row`, with
+  the case explanations moved into its doc comment. `cs delta` then reported no
+  issues in the changed lines, the contract suite stayed at 60 passing cases,
+  and the eleven gates were green again on `66b6cfa81`. This is the third
+  CodeScene duplication finding in a row to land on a new test file, which
+  matches the pattern recorded in earlier rounds: a table split across two
+  functions is duplication to this detector even when the split is deliberate.
+  Date/Author: 2026-11-15, implementation agent, after the hosted CodeScene
+  re-review.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
   the pin" list for in-scope paths at merge time. Rationale: the roadmap
@@ -2426,6 +2450,13 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   has not re-measured, which is the lesson D-31 through D-33 now carry four
   times over.
 
+- Revision 49 (2026-11-15): cleared the hosted CodeScene Code Duplication
+  finding on `fail_open_tests.rs` (D-34) by merging the two fail-open tables,
+  and regenerated the post-pin list an eighth time to 69 identifiers, 50 `main`
+  and 19 branch. The diff is still 22 files. The contract suite is unchanged at
+  60 cases; only the table's shape moved.
+
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
 [roadmap]: ../roadmap-hexagonal-hardening.md
+
