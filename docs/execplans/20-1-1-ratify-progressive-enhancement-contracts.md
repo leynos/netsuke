@@ -648,6 +648,55 @@ decision D-15.
   report was omitted to fit the comment limit. That is a service-side publish
   failure rather than a finding, so one diagnosed retry is queued instead of
   being treated as review coverage.
+- [x] (2026-11-15) Closed the `Testing (Overall)` pre-merge row. CodeRabbit
+  made four sub-claims; two were refuted against the current source and two
+  were real gaps, so only the real ones were repaired.
+  - Refuted: that the fingerprint at `tests/terminal_rendering/diagnostic.rs`
+    `:176` is unasserted. It is asserted, and by the test that owns it.
+  - Refuted: that `tests/manifest_load_options/corpus_fidelity.rs:250` leaves
+    a case uncovered. Its parameterized table already supplies that case.
+  - Repaired: `repeats_the_message` had no witness. Every existing case wraps
+    its error in an `anyhow` context, so the selected diagnostic and the error
+    text always differ and the branch never fires for them. Adding
+    `bare_runner_failures_print_their_message_once` supplies the production
+    shape — `handle_runner_error` passes a bare [`runner::RunnerError`] through
+    — and counts the summary, because "the report omits the context line" is
+    vacuously true when there is no context line to omit. The test was shown to
+    discriminate: with the branch deleted it fails on the doubled message, and
+    the revert was verified byte-clean by `git diff --quiet` on the production
+    module.
+  - Repaired: `manifest_query_does_not_record_schema_admission` loads an
+    *admitted* manifest, so it cannot tell "validated but not counted" from
+    "never validated".
+    `manifest_query_rejects_an_unsupported_schema_without_recording` supplies
+    the manifest the gate refuses and asserts both that the load fails with
+    `netsuke::manifest::schema_version` and that the counter stays empty.
+  - `flatten_localized_text` moved into the parent test module as
+    `pub(super)` so both sibling modules share it. The move first put the new
+    test in `tests/mod.rs`, which grew it to 437 lines and so past the
+    `module_max_lines` cap; the test moved to `runner_diagnostics.rs`, where it
+    belongs, and both files are now under the ceiling (390 and 159).
+  - Nine gates passed on the resulting tree under base `fa06bdb21`:
+    `check-fmt` (a real rustfmt fault in the two new assertions, fixed by
+    `make fmt` and re-checked clean), `typecheck`, `lint` (Rustdoc, Clippy,
+    both Whitaker packages, coverage 100.0%, Ruff, Pylint 10.00/10, the df12
+    house lints, `ambrleaks`, `yamllint`, `actionlint`), `doc-coverage`
+    (98.27%, 6549/6664, threshold 80), `test` (5733 nextest cases passed, 9
+    skipped, plus doctests), `markdownlint` (spelling prerequisite clean and
+    0 issues over 233 files), `nixie`, `test-documentation-contracts` (15/15),
+    and `test-workflow-contracts` (2330 passed, 3 skipped, plus 30). `lint`
+    ran uncached — the managed sccache server was not serving compilations for
+    that pass — and every Rust gate queued on `build-limits` compile slots
+    behind other agents on the host; admission stayed `healthy` throughout.
+  - The gate logs are `/tmp/{check-fmt,typecheck,lint3,doc-coverage,test,
+    markdownlint,nixie,test-documentation-contracts,test-workflow-contracts}-`
+    `20-1-1-ratify-progressive-enhancement-contracts.out`. Each gate ran once
+    against this tree, sequentially. The rows above this paragraph were
+    written before the batch; this paragraph and the log-name list are the one
+    edit made after it, and they touch only this Markdown file, so the Rust,
+    YAML, Python, catalogue, and contract inputs those gates read are
+    unchanged. `check-fmt` is the gate that confirms the prose is well formed,
+    and it runs in the next batch.
 
 ## Surprises & discoveries
 

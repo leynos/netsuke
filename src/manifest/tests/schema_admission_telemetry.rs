@@ -105,6 +105,38 @@ fn manifest_query_does_not_record_schema_admission() -> AnyResult<()> {
     Ok(())
 }
 
+/// A discovery query must still refuse an unsupported schema.
+///
+/// The sibling case loads an admitted manifest, which proves only that the
+/// counter stays still. That assertion passes just as well if the query never
+/// reaches the gate at all, so it cannot distinguish "validated but not
+/// counted" from "not validated". This case supplies the manifest the gate
+/// refuses: the load must fail, and the counter must still not move, because a
+/// refusal of a query is not an admission of a user's manifest.
+#[test]
+fn manifest_query_rejects_an_unsupported_schema_without_recording() -> AnyResult<()> {
+    let (_temp, path) = workspace_with("1.1.0")?;
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let outcome = metrics::with_local_recorder(&recorder, || {
+        from_path_for_manifest_query(&path, None).map(drop)
+    });
+    let error = outcome
+        .err()
+        .context("a query must validate the declaration, so an unsupported one must be refused")?;
+    let message = format!("{error:#}");
+    ensure!(
+        message.contains("netsuke::manifest::schema_version"),
+        "the query must refuse the declaration with the gate's own code: {message}"
+    );
+    let counts = admission_counts(&snapshotter.snapshot().into_vec());
+    ensure!(
+        counts.is_empty(),
+        "a refused query must not record a schema admission: {counts:?}"
+    );
+    Ok(())
+}
+
 /// Write a command-load manifest declaring `version` as its schema.
 fn command_load_manifest(version: &str) -> String {
     format!(

@@ -12,6 +12,22 @@ use tracing_subscriber::filter::LevelFilter;
 
 mod runner_diagnostics;
 
+/// Remove bidi isolates and terminal wrapping from localized output.
+///
+/// Shared by the sibling test modules so a rendered report can be compared as
+/// plain prose. Localized text is wrapped in isolate marks that defeat a
+/// substring assertion, and a narrow terminal inserts line breaks mid-sentence.
+pub(super) fn flatten_localized_text(rendered: &str) -> String {
+    let without_bidi_isolates = rendered
+        .chars()
+        .filter(|character| !matches!(*character, '\u{2068}' | '\u{2069}'))
+        .collect::<String>();
+    without_bidi_isolates
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Build the circular-dependency error the runner reports, keeping the target
 /// name private so its absence from tracing output is meaningful.
 fn cycle_error(private_target: &str) -> anyhow::Error {

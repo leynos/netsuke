@@ -4,18 +4,6 @@ use super::*;
 use rstest::rstest;
 use test_support::{EnLocalizer, en_localizer};
 
-/// Remove bidi isolates and terminal wrapping from localized output.
-fn flatten_localized_text(rendered: &str) -> String {
-    let without_bidi_isolates = rendered
-        .chars()
-        .filter(|character| !matches!(*character, '\u{2068}' | '\u{2069}'))
-        .collect::<String>();
-    without_bidi_isolates
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 /// Build the runner's own missing-manifest failure with the runner context.
 fn runner_failure() -> anyhow::Error {
     let error = runner::RunnerError::ManifestNotFound {
@@ -80,6 +68,58 @@ fn contained_reports_render_their_diagnostic() -> Result<()> {
     ensure!(
         rendered.contains("declare the supported schema version"),
         "the rendered diagnostic must carry the report's help text: {rendered}"
+    );
+    Ok(())
+}
+
+/// A bare runner failure must print its message once, not twice.
+///
+/// This is the production shape. `handle_runner_error` passes the
+/// [`runner::RunnerError`] through without adding a context layer, so the
+/// selected diagnostic and the error text are the same sentence, and printing
+/// both would repeat it. It lives here rather than beside the manifest cases
+/// because it is a runner-diagnostic assertion, and it shares this module's
+/// [`flatten_localized_text`](super::flatten_localized_text).
+///
+/// The assertion is a count, because "the report omits the context line" is
+/// vacuously true here: there is no context line to omit, so only counting
+/// separates the intended report from the duplicated one. `miette` draws the
+/// code first and the message beneath it, so the code preceding the message is
+/// also asserted — that ordering is what a `"{err}\n{rendered}"` report breaks.
+///
+/// Deleting the [`repeats_the_message`] branch leaves every other test in this
+/// module passing: they all wrap their error in a context, so their two strings
+/// differ and the branch never fires for them.
+#[test]
+fn bare_runner_failures_print_their_message_once() -> Result<()> {
+    let error = anyhow::Error::new(runner::RunnerError::ManifestNotFound {
+        manifest_name: String::from("Netsukefile"),
+        directory: String::from("the current directory"),
+        path: std::path::PathBuf::from("/workspace/Netsukefile"),
+        message: localization::message(keys::RUNNER_MANIFEST_NOT_FOUND)
+            .with_arg("manifest_name", "Netsukefile")
+            .with_arg("directory", "the current directory"),
+        help: localization::message(keys::RUNNER_MANIFEST_NOT_FOUND_HELP),
+    });
+    let report = failure_report(&error, &theme_for(presentation_style(false, true)))
+        .context("a bare runner failure should report")?;
+    let flattened = flatten_localized_text(&report);
+    ensure!(
+        flattened
+            .matches("Manifest 'Netsukefile' not found")
+            .count()
+            == 1,
+        "a bare runner failure must print its message exactly once: {flattened}"
+    );
+    let code = flattened
+        .find("netsuke::runner::manifest_not_found")
+        .context("the report must carry the runner variant's stable code")?;
+    let summary = flattened
+        .find("Manifest 'Netsukefile' not found")
+        .context("the report must carry the localized summary")?;
+    ensure!(
+        code < summary,
+        "the code must precede the summary rather than a duplicate line: {flattened}"
     );
     Ok(())
 }
