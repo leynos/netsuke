@@ -11643,15 +11643,16 @@ resolve is reported as `Ok(None)` — the same answer it gives for a file that i
 not there — while a link that escapes the directory is refused outright and
 never reaches that answer. Treating `Ok(None)` as absence would therefore skip
 a dangling link and continue to the system scope, so `load_user_candidate`
-probes a candidate that did not load with `symlink_metadata`. A genuinely
-absent path stays `NotFound` and is skipped, a link whose target exists never
-reaches the probe because the chain loads, and a path that still exists without
-having loaded fails discovery. Authority assignment is unchanged: a base chain
-whose last layer is the project file stays project-scoped, so a
-`$HOME/.netsuke.toml` that is also the project configuration keeps its existing
-project quarantine instead of gaining operator authority. Reading the user
-scope first changes which candidates are considered, not how a loaded file is
-trusted.
+probes a candidate that did not load with `candidate_entry_metadata`, which
+opens the candidate's parent directory through `cap_std` and stats the entry
+without following it. A genuinely absent path stays `NotFound` and is skipped,
+a link whose target exists never reaches the probe because the chain loads, and
+a path that still exists without having loaded fails discovery. Authority
+assignment is unchanged: a base chain whose last layer is the project file
+stays project-scoped, so a `$HOME/.netsuke.toml` that is also the project
+configuration keeps its existing project quarantine instead of gaining operator
+authority. Reading the user scope first changes which candidates are
+considered, not how a loaded file is trusted.
 
 Re-check the user-path derivation on every `ortho_config` upgrade. The
 dependency's flat candidate order still places system scope before the home
