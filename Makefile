@@ -371,11 +371,13 @@ test-workflow-contracts: ## Validate the CV-005 contracts and the GitHub Actions
 	PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with 'pytest>=8' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
 		--with 'cyclopts>=4.25.3,<5' --with 'cuprum>=0.1.0,<0.2.0' \
-		pytest scripts/tests/test_ensure_draft_release.py \
+		pytest scripts/tests/test_authorize_release_writes.py \
+			scripts/tests/test_ensure_draft_release.py \
 			scripts/tests/test_install_orthohelp.py \
 			scripts/tests/test_report_glibc_floor.py \
 			scripts/tests/test_resolve_wix_extension_version.py \
-			scripts/ensure_draft_release.py scripts/install_orthohelp.py \
+			scripts/authorize_release_writes.py scripts/ensure_draft_release.py \
+			scripts/install_orthohelp.py \
 			scripts/report_glibc_floor.py scripts/resolve_wix_extension_version.py \
 			scripts/hoist_binstall_archives.py \
 			scripts/hoist_binstall_discovery.py -q --doctest-modules
