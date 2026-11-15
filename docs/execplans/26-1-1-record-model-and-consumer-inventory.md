@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 54. See `Revision note` at the foot of this document. This plan was
+Revision 55. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -336,11 +336,11 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 - Scope: stop and escalate if the change touches more than ten files, or any
   file outside `docs/` other than the inventory contract test, its private
   parser modules under `tests/hexagonal_inventory_contract/`, the exact-path
-  CodeScene exemptions those parsers need, and (only if the spelling gate
-  requires it) `typos.local.toml` and its generated `typos.toml`. The measured
-  range `origin/main...HEAD` is twenty-two files, so this tolerance fired
-  during the task; the expansion is recorded in D-14, D-28, and D-30 rather
-  than applied silently.
+  CodeScene exemptions those parsers need, both `dylint.toml` policy files, and
+  (only if the spelling gate requires it) `typos.local.toml` and its generated
+  `typos.toml`. The measured range `origin/main...HEAD` is twenty-six files, so
+  this tolerance fired during the task; the expansion is recorded in D-14,
+  D-28, D-30, and D-41 rather than applied silently.
 - Drift: if the pin differs from `ebcedaef` and any commit between them
   touches `src/`, `build.rs`, `tests/`, `test_support/`, or `benches/`, re-run
   every sweep; do not patch this plan's planning-time observations. If
@@ -513,7 +513,7 @@ pre-rebase history if an old hash must be inspected.
   sweeps are reconciled in the 1,748-row register; EV-ORACLE, EV-SWEEP,
   EV-REVERSE, EV-SEEDED, EV-CONTRACT, and the final gates passed.
 - [x] (2026-10-25) EP-M3 complete: landed work, H1-H4, numbered observations,
-  CO-1 to CO-15, and all 25 dependent-task trace rows are recorded. The real
+  CO-1 to CO-16, and all 25 dependent-task trace rows are recorded. The real
   inventory contract passed against this complete document.
 - [x] (2026-10-25) EV-GATES passed sequentially on the completed candidate:
   `make check-fmt`, `make typecheck`, `make lint`, `make doc-coverage`,
@@ -796,6 +796,17 @@ pre-rebase history if an old hash must be inspected.
   cases cover the refusals; the contract target runs 73 cases, up from 70. The
   commit touches `tests/`, so the post-pin list advances a twelfth time to 73
   identifiers with a 50/23 split.
+- [x] (2026-11-15) Dispositioned the hosted completeness assessment's three
+  remaining findings (D-40). The diagnostic inventory now carries a per-variant
+  site census: 40 production construction sites over the four error enums,
+  including two variants whose construction is worth naming — a `Format` built
+  only by `impl From<fmt::Error>`, and an `UnsafeNinjaPath` with no production
+  construction site at all. The register metadata is corrected:
+  `ActionHasher::hash` is a digest read and its row is now a consumer, and the
+  two identifiers that spelled `ir.from_manifest` now spell
+  `ir::from_manifest`. The clock seam gains its own obligation, `CO-16`,
+  because the citation it carried (`CO-10`) names Kani harness synchronization
+  and had been wrong since the seam landed.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -977,7 +988,9 @@ pre-rebase history if an old hash must be inspected.
   confirming it failed; the prose case needed a fixture of a bare identifier
   rather than a sentence, because a trailing full stop is rejected by
   `reference_covers` for the wrong reason and made a dead rule look live.
-  Date/Author: 2026-11-14, implementation agent.
+  Date/Author: 2026-11-14, implementation agent. The file count moved again
+  after D-35 to D-41: D-41 records the current twenty-six files and the reasons
+  the last four are forced.
 - Decision D-31 (2026-11-15): regenerated the post-pin commit list a fifth
   time, from 62 identifiers to 64. The two commits D-30 and D-29 authored,
   `10e649d47` and `07dcaeca7`, both touch `tests/`, so the list went stale as
@@ -1189,6 +1202,54 @@ pre-rebase history if an old hash must be inspected.
   The config change is the whole fix and touches no `src/` file. Date/Author:
   2026-11-15, implementation agent, after the post-turn gate surfaced the 0.3.0
   regression.
+- Decision D-40 (2026-11-15): dispositioned the hosted completeness
+  assessment `EP46-810-a67126a6b`'s remaining three findings on head
+  `a67126a6b`, plan revision 47. All three were real; two were exactly the
+  defect the assessment named, and the third was a wrong citation that had
+  survived since the seam landed.
+  - *The diagnostic inventory* (D-8's requirement). Added
+    `#### A6 per-variant diagnostic records`, one `ID`-headed row per variant
+    of each of the four error enums, carrying a site count, the files, and a
+    per-shape citation where the construction shapes differ. The census is a
+    module-declaration walk from `src/lib.rs` and `src/main.rs` that stops at
+    every declaration carrying a contiguous `#[cfg(test)]` or `#[cfg(kani)]`
+    attribute and honours `#[path]`; a pattern arm, a `matches!` test, a
+    destructuring `let`, and a `///` doc link name a variant without building
+    it and are not counted. Result: 40 construction sites, `IrGenError` 9 over
+    4 files, `NinjaGenError` 19 over 7, `ManifestError` 4 over 2,
+    `RunnerError` 8 over 5. Two variants are worth naming. `Format` is built
+    only by `impl From<fmt::Error>` at `src/ninja_gen/error.rs:143`, so every
+    `?` on a `fmt` write reaches it indirectly; and `UnsafeNinjaPath` has **no**
+    production construction site at all — its only production mention is the
+    classifier arm at `src/runner/dyndep/generation_telemetry.rs:83`, and it is
+    reachable only through external construction (OBS-14). A first attempt made
+    the section a plain `Variant`-headed table, which the contract refuses:
+    `validate_register` reports any register table whose header is not `ID`.
+    The shipped table is therefore `ID`-headed with `A6/<Enum>::<Variant>`
+    identifiers, which also gives consumers something stable to cite.
+  - *The register metadata*. `A2/ActionHasher@…::register_action` was
+    `#constructor`, but the line it cites —
+    `src/ir/from_manifest/support/mod.rs:61` — is `ActionHasher::hash(&action)`,
+    a digest read that wraps its own failure. `ActionHasher` is a unit struct
+    declared at `src/hasher.rs:37`, so no expression can construct one, and the
+    row is now `#consumer`. The two identifiers that spelled the module path
+    with a dot are corrected to `ir::from_manifest` and to the
+    `ITEM@external-api#api-reachable` shape every other external-api row uses.
+  - *The clock obligation*. The landed-work entry for `#696` cited `CO-10`,
+    which is "Synchronize Kani harnesses across the pinned `cfg(kani)` files"
+    and has nothing to do with clocks. No existing obligation covered the seam,
+    so the fix is a new one rather than a different citation: `CO-16` states
+    that timed production paths take their clock as a parameter, that only the
+    composition roots bind the real clock, and that tests substitute
+    `monotony::test_util::FixedMonotonicClock`. Its `Tasks:` clause binds
+    27.2.1, 27.2.2, and 27.2.3, and each of those trace rows now names it, which
+    `validate_obligation_tasks` checks. The wider claim was measured, not
+    assumed: `MonotonicClock` appears as a parameter in seven production
+    modules, and `StdMonotonicClock` is bound at exactly two composition
+    roots, `src/runner/mod.rs:155` and `src/runner/process/mod.rs:155`.
+  - The assessment also showed the scope figures stale, which D-41 restates.
+  Date/Author: 2026-11-15, implementation agent, after the hosted completeness
+  assessment.
 - Decision D-39 (2026-11-15): closed CodeRabbit's fifth round, five findings on
   the obligation binding check. All five were real, and all five were the class
   of defect the check exists to refuse — a reader that accepts a shape it
@@ -1258,16 +1319,17 @@ pre-rebase history if an old hash must be inspected.
   until the task is complete): accept the measured sixteen-file scope and
   restate the Scope tolerance accordingly. The plan allowed ten files and one
   Rust path; the branch carries eight Markdown files, the integration test,
-  four private modules split from it to stay under the 400-line cap, and three
-  rule files. D-28 restates the figure after the module split doubled that
-  module count. Each addition is forced by a repository rule rather than by new
-  scope: `mdtablefix` and the 400-line cap force the module split, `cs delta`
-  forces the exact-path exemptions for test-only parsers, and the spelling gate
-  regenerates `typos.toml` from `typos.local.toml`. No production source,
-  manifest, workflow, or existing test is touched, and the inventory and its
-  reader remain the only deliverable. CodeRabbit raised the exceeded tolerance
-  as a major finding; this entry and the restated tolerance are its
-  disposition. Date/Author: 2026-11-05, implementation agent.
+  four private modules split from it to stay under the 400-line cap (twelve at
+  the current head, as D-41 records), and three rule files. D-28 restates the
+  figure after the module split doubled that module count. Each addition is
+  forced by a repository rule rather than by new scope: `mdtablefix` and the
+  400-line cap force the module split, `cs delta` forces the exact-path
+  exemptions for test-only parsers, and the spelling gate regenerates
+  `typos.toml` from `typos.local.toml`. No production source, manifest,
+  workflow, or existing test is touched, and the inventory and its reader
+  remain the only deliverable. CodeRabbit raised the exceeded tolerance as a
+  major finding; this entry and the restated tolerance are its disposition.
+  Date/Author: 2026-11-05, implementation agent.
 - Decision D-7: the compiler is the primary site oracle; a text sweep covers
   only what the build does not compile. Rationale: marking each inventoried
   field, variant, and inherent function `#[deprecated]` in a disposable export
@@ -1288,7 +1350,10 @@ pre-rebase history if an old hash must be inspected.
   a site count and files, and per-site citations only where construction shapes
   differ. Rationale: positional identifiers break on refresh; per-site A6 rows
   would roughly double the register without adding decision value. Date/Author:
-  2026-09-27, planning agent, after review.
+  2026-09-27, planning agent, after review. The per-variant records ship as an
+  `ID`-headed table under `#### A6 per-variant diagnostic records`, using
+  `A6/<Enum>::<Variant>` identifiers, because the contract refuses a register
+  table whose header is not `ID`.
 - Decision D-9: the rule that later ExecPlans cite register identifiers lives
   in the inventory's "Consuming this inventory" section, not in
   `docs/developers-guide.md`, which gains only a "Test suite map" entry for the
@@ -1570,6 +1635,25 @@ pre-rebase history if an old hash must be inspected.
     `property_tests.rs` module, taking the count to twenty-two.
   Date/Author: 2026-11-14, implementing agent, after the PR was found
   conflicted against its target.
+- Decision D-41 (2026-11-15): restated the scope measurement at
+  twenty-six files and the contract module at eleven files, and recorded why
+  each addition is forced rather than new scope. The figure was still
+  twenty-two because the two D-29/D-30 commits and the four D-35 to D-39
+  commits all landed after D-28 measured it, and a rebase that preserves
+  content does not re-open a measurement.
+  `git diff --name-only 750f56a22 HEAD` — the same command and the same base
+  D-28 used — now returns
+  26. Four files are new: `tests/hexagonal_inventory_contract/obligations.rs`
+  and `obligation_tests.rs` from D-36, which had to be a contract rule rather
+  than a prose fix, and `dylint.toml` with `test_support/dylint.toml` from
+  D-38, where an upstream lint regression is answered by a documented policy
+  entry in both files the suite pass loads. The contract module therefore holds
+  twelve private files under its crate root, not four: D-14, D-19, D-28, and
+  D-30 each added a forced split, and the spelling gate's generated
+  `typos.toml` plus `typos.local.toml` were already inside the tolerance. No
+  new kind of path appears, and no production source, manifest, or workflow is
+  touched. Date/Author: 2026-11-15, implementation agent, after the hosted
+  completeness assessment reported the figure stale.
 
 ## Outcomes & retrospective
 
@@ -1845,7 +1929,7 @@ Create `docs/hexagonal-hardening-inventory.md` with these sections, in order:
 6. **Findings.** The remaining parts of H1 to H4 as observed facts with
    citations, and numbered observations `OBS-n`, each labelled *observed* with
    an owning task. Seed from `Artefacts and notes`; re-verify each at the pin.
-7. **Compatibility obligations.** `CO-1` to `CO-15` as listed under
+7. **Compatibility obligations.** `CO-1` to `CO-16` as listed under
    `Artefacts and notes`, each with its evidence (existing tests, snapshots,
    ADRs) and the tasks it binds.
 8. **Trace matrix.** Two tables. "Changes": one row per task that changes an
@@ -2345,6 +2429,9 @@ Seed obligations (`CO-n`):
   duplicate rejection, and no per-output cloning.
 - CO-15: ADR-0045 command isolation: isolated command-list entries render and
   validate separately from shared ones, on every interpreter.
+- CO-16: `#696` monotonic-clock seam: timed production paths take their clock
+  as a parameter, only composition roots bind the real clock, and tests
+  substitute `monotony::test_util::FixedMonotonicClock`.
 
 ## Interfaces and dependencies
 
@@ -2699,6 +2786,19 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   passed an equality check as well as the one-directional one. The contract
   target runs 73 cases, up from 70, and the post-pin list advances a twelfth
   time to 73 identifiers, 50 `main` and 23 branch.
+
+- Revision 55 (2026-11-15): closed the hosted completeness assessment's three
+  remaining findings (D-40) and restated the scope measurement (D-41). The
+  diagnostic inventory gains a per-variant census of 40 production construction
+  sites across the four error enums; the register's `ActionHasher::hash` row
+  becomes a consumer, because the cited line reads a digest rather than
+  building one; two identifiers lose a dot in `ir.from_manifest`; and the clock
+  seam gains `CO-16`, because the obligation it cited describes Kani harness
+  synchronization. The scope figures move from twenty-two files and four
+  private modules to twenty-six and twelve, both re-measured rather than
+  reasoned about. The diff is 26 files; no `src/` file is touched. This
+  candidate needs its own eleven-gate run: the plan and the inventory are both
+  read live by the contract test, so neither is a docs-only delta.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
