@@ -254,113 +254,115 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-15 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 50 in the current `main` target and
-twenty on this branch, one of them adding this inventory's contract test and
-the rest refactoring or tightening that contract. Regenerate the list with
+twenty-one on this branch, one of them adding this inventory's contract test
+and the rest refactoring, tightening, or repairing the health of that contract.
+Regenerate the list with
 `git log 8a961000..HEAD --format=%h -- src build.rs tests test_support benches`;
 it goes stale whenever a commit touches one of those paths, so treat the
 enumeration below, not a remembered count, as the claim. This list is re-sweep
 context for later consumers; it does not move the inventory pin.
 
-- `cc6854a5a` Require a task row to name every obligation that binds it
-- `66b6cfa81` Merge the two fail-open tables into one
-- `70a958d2d` Drop the probe's persisted proptest seed
-- `ea92f38af` Close the fourth review round's contract holes
-- `20ad3535c` Order the contract test's fixture imports
-- `b8cedf778` Replace the register scan's locals with a stateful type
+- `018b81b43` Reject quoted PowerShell script placeholders to prevent path
+  command injection (#846) (#924)
+- `01c7190e1` Reconcile release help with the runtime parser (#1044)
 - `07dcaeca7` Satisfy the lints the new parsers trip
-- `10e649d47` Close the trace matrix's remaining prose fail-opens
-- `9342e9361` Split the inventory contract into feature modules
-- `218fb8114` Stop trace harvesters absorbing subheading prose
-- `354213289` Name the roadmap closure count and report the observed value
-- `f7cdf08d9` Drop the doc comment from the real-inventory test
-- `614e44755` Honour the Unchanged coverage source and split the test module
-- `e6907e1dd` Restrict obligation coverage to the trace tables
-- `3fa2d6fbe` Require the real inventory to populate its iterated sections
-- `ae6fa1a1a` Tighten inventory contract checks against silent passes
-- `c1752e96f` Stop dependency continuations at unindented lines
-- `bbfe605bd` Replace heading wrappers with a level-typed parser
-- `d3b3ca4f1` Refactor inventory contract validation
-- `e8dcb942d` Add the pinned inventory contract (26.1.1)
-- `750f56a22` Add digest-aware GitHub release finalization (#1068) (#1120)
-- `7b66c43b3` Add downloaded release inventory verification (#1067) (#1115)
-- `10fa3ce13` Parse heredoc delimiters on POSIX word boundaries (#998) (#1081)
-- `31eab481e` Remove catch_unwind and poisoned-lock tests that only probe the
-  compiler (#1134)
-- `a14a8475b` Reject commas in Jinja glob filenames (#1017) (#1130)
-- `72ff54fa6` Implement candidate-bound declared-asset upload (#1066) (#1111)
-- `8b38ac377` Allow actions to opt into Ninja's console pool for streamed
-  output (22.1.2, 22.2.1) (#946)
-- `e4ef7c511` Add terminal rendering regression tests (3.12.3) (#809)
-- `974428fef` Use POSIX token boundaries when detecting shell comments (#971)
-  (#1058)
-- `392a77144` Adopt latest documentation style guide (#1125)
-- `b87baf96c` Install Kani in CI through the shared install-prover-tools action
-  (#1126)
-- `25da87df9` Repin install-whitaker to the 0.2.12 revision (#1123)
-- `5fcca57d7` Adopt shared prover downloads and variadic proof execution (#1063)
-- `b19386767` Evaluate typed records for release policy boundaries (9.1.1.)
-  (#964) (#1052)
-- `7c3c344aa` Move toolchain to nightly-2026-11-06 and apply machine lint fix
-  (#1114)
-- `921320086` Derive NETSUKE_RUST_TOOLCHAIN from rust-toolchain.toml in CI
-  (DF12-102) (#1112)
-- `6ff836603` Fetch once and keep the nested cargo reads offline (DF12-115)
-  (#1113)
-- `905e03dd3` Scan .github/package-validation with interrogate (DF12-104)
-  (#1110)
-- `c876cb79e` Bind Windows recipe interpreters to trusted absolute executable
-  paths (#980) (#1082)
-- `bb0bbc683` Add the offline candidate boundary and publication resume for
-  crates.io (#1065) (#1083)
-- `6f650cd58` Isolate the Whitaker route from the development flags (BD-008)
-  (#1109)
-- `9602e5ffb` Bound the direct rustc spawns in tests with a deadline (#1107)
+- `08d0a918d` Add Proptest coverage for deterministic Ninja emission (4.3.1)
+  (#700)
+- `0a28fee38` Prevent lost manifest structure telemetry events (#927) (#943)
+- `0a3104d44` Publish `netsuke-build` through crates.io Trusted Publishing
+  (#903)
+- `0a7a0d58d` Place Dependabot pull requests on hosted runners for the
+  default-features lane (#949)
 - `0f41b0197` Account for active backslashes before POSIX path placeholders
   (#984) (#1075)
-- `e2b9fa518` Do not restate the documented nightly date in the installation
-  test (#1108)
-- `83dcb492d` Preserve literal Unix backslashes in glob result paths (#990)
-  (#1076)
-- `c82189bf4` Install the built .deb and .rpm before publishing them (#799)
-  (#1047)
-- `ce15e026d` Implement crates.io Trusted Publishing and registry byte
-  verification (#1064) (#1077)
-- `a74320e86` Preserve script bytes through the printf transport (#967) (#1049)
-- `01c7190e1` Reconcile release help with the runtime parser (#1044)
-- `a6009675e` Document which dependency kinds participate in cycle detection
-  (4.4.2) (#806)
+- `10e649d47` Close the trace matrix's remaining prose fail-opens
+- `10fa3ce13` Parse heredoc delimiters on POSIX word boundaries (#998) (#1081)
+- `1abfd22d3` Name the failing action in command-list failure diagnostics
+  (#945) (#954)
+- `20ad3535c` Order the contract test's fixture imports
+- `218fb8114` Stop trace harvesters absorbing subheading prose
+- `25da87df9` Repin install-whitaker to the 0.2.12 revision (#1123)
+- `2da4eb673` Restore the man page SYNOPSIS fallback suppressed by ortho_config
+  0.10.0 (#959) (#1043)
+- `31eab481e` Remove catch_unwind and poisoned-lock tests that only probe the
+  compiler (#1134)
+- `354213289` Name the roadmap closure count and report the observed value
+- `392a77144` Adopt latest documentation style guide (#1125)
+- `3fa2d6fbe` Require the real inventory to populate its iterated sections
+- `49f8fb3d6` Plan: Record CI test-speed evidence and adoption gates (#894)
+  (#918)
+- `596cf74c2` Place Dependabot pull requests on GitHub-hosted runners (#932)
+- `5c2e5734f` Localize clap TooManyValues errors (#957) (#965)
 - `5ee56f7ec` Introduce the options-carrying manifest loader entry point
   (7.1.2) (#807)
 - `5f0a4d123` Declare cli value_name so generated help stops showing
   UTF8PATHBUF and USIZE placeholders (#958)
-- `da06ffb11` Attach clap error context so value validation renders (#961)
-  (#1045)
-- `2da4eb673` Restore the man page SYNOPSIS fallback suppressed by ortho_config
-  0.10.0 (#959) (#1043)
-- `5c2e5734f` Localize clap TooManyValues errors (#957) (#965)
-- `08d0a918d` Add Proptest coverage for deterministic Ninja emission (4.3.1)
-  (#700)
-- `0a3104d44` Publish `netsuke-build` through crates.io Trusted Publishing
-  (#903)
+- `5fcca57d7` Adopt shared prover downloads and variadic proof execution (#1063)
+- `614e44755` Honour the Unchanged coverage source and split the test module
+- `66b6cfa81` Merge the two fail-open tables into one
+- `6f650cd58` Isolate the Whitaker route from the development flags (BD-008)
+  (#1109)
+- `6ff836603` Fetch once and keep the nested cargo reads offline (DF12-115)
+  (#1113)
+- `70a958d2d` Drop the probe's persisted proptest seed
+- `72ff54fa6` Implement candidate-bound declared-asset upload (#1066) (#1111)
+- `750f56a22` Add digest-aware GitHub release finalization (#1068) (#1120)
 - `7929a3fc2` Repin install-whitaker to 5a99aed7 (whitaker-installer 0.2.11)
   (#1042)
-- `e52d3ef49` Show readable inline-recipe progress (3.14.11) (#944) (#956)
-- `1abfd22d3` Name the failing action in command-list failure diagnostics
-  (#945) (#954)
+- `7b66c43b3` Add downloaded release inventory verification (#1067) (#1115)
+- `7c3c344aa` Move toolchain to nightly-2026-11-06 and apply machine lint fix
+  (#1114)
+- `83dcb492d` Preserve literal Unix backslashes in glob result paths (#990)
+  (#1076)
+- `88f20d588` Keep compile-time contracts out of timed tests (#942)
+- `8b38ac377` Allow actions to opt into Ninja's console pool for streamed
+  output (22.1.2, 22.2.1) (#946)
+- `905e03dd3` Scan .github/package-validation with interrogate (DF12-104)
+  (#1110)
+- `921320086` Derive NETSUKE_RUST_TOOLCHAIN from rust-toolchain.toml in CI
+  (DF12-102) (#1112)
+- `9342e9361` Split the inventory contract into feature modules
+- `9602e5ffb` Bound the direct rustc spawns in tests with a deadline (#1107)
+- `974428fef` Use POSIX token boundaries when detecting shell comments (#971)
+  (#1058)
 - `9edf13cdc` Migrate from ortho_config v0.9.0 to v0.10.0 (#951) (#953)
-- `49f8fb3d6` Plan: Record CI test-speed evidence and adoption gates (#894)
-  (#918)
-- `0a28fee38` Prevent lost manifest structure telemetry events (#927) (#943)
+- `a14a8475b` Reject commas in Jinja glob filenames (#1017) (#1130)
+- `a253fba3f` Flatten the obligation parser to clear the CodeScene findings
+- `a6009675e` Document which dependency kinds participate in cycle detection
+  (4.4.2) (#806)
+- `a74320e86` Preserve script bytes through the printf transport (#967) (#1049)
+- `ac826aa97` Disable incremental compilation and dev debug data (#948)
+- `ae6fa1a1a` Tighten inventory contract checks against silent passes
+- `b19386767` Evaluate typed records for release policy boundaries (9.1.1.)
+  (#964) (#1052)
+- `b87baf96c` Install Kani in CI through the shared install-prover-tools action
+  (#1126)
+- `b8cedf778` Replace the register scan's locals with a stateful type
+- `bb0bbc683` Add the offline candidate boundary and publication resume for
+  crates.io (#1065) (#1083)
+- `bbfe605bd` Replace heading wrappers with a level-typed parser
+- `c1752e96f` Stop dependency continuations at unindented lines
+- `c82189bf4` Install the built .deb and .rpm before publishing them (#799)
+  (#1047)
+- `c876cb79e` Bind Windows recipe interpreters to trusted absolute executable
+  paths (#980) (#1082)
+- `cc6854a5a` Require a task row to name every obligation that binds it
+- `ce15e026d` Implement crates.io Trusted Publishing and registry byte
+  verification (#1064) (#1077)
+- `d3b3ca4f1` Refactor inventory contract validation
+- `da06ffb11` Attach clap error context so value validation renders (#961)
+  (#1045)
 - `de81d5c34` Move ci.yml's inline shell into Cyclopts scripts under scripts/ci
   (#708)
-- `88f20d588` Keep compile-time contracts out of timed tests (#942)
-- `0a7a0d58d` Place Dependabot pull requests on hosted runners for the
-  default-features lane (#949)
-- `ac826aa97` Disable incremental compilation and dev debug data (#948)
+- `e2b9fa518` Do not restate the documented nightly date in the installation
+  test (#1108)
+- `e4ef7c511` Add terminal rendering regression tests (3.12.3) (#809)
+- `e52d3ef49` Show readable inline-recipe progress (3.14.11) (#944) (#956)
+- `e6907e1dd` Restrict obligation coverage to the trace tables
+- `e8dcb942d` Add the pinned inventory contract (26.1.1)
+- `ea92f38af` Close the fourth review round's contract holes
+- `f7cdf08d9` Drop the doc comment from the real-inventory test
 - `f8df5d808` Bump the toolchain to nightly-2026-10-22 (#947)
-- `018b81b43` Reject quoted PowerShell script placeholders to prevent path
-  command injection (#846) (#924)
-- `596cf74c2` Place Dependabot pull requests on GitHub-hosted runners (#932)
 
 Three corrected text sweeps cover compiler blind spots. The Rust source list
 contains 936 files across `src/`, `build.rs`, `tests/`, `test_support/`,

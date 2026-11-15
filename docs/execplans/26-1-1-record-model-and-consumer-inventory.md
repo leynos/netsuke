@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 50. See `Revision note` at the foot of this document. This plan was
+Revision 51. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -763,6 +763,12 @@ pre-rebase history if an old hash must be inspected.
   pair was missing. Three liveness probes each failed exactly their own cases.
   The target now runs 70 cases, up from 60. This commit touches `tests/`, so
   the post-pin list advances a ninth time.
+- [x] (2026-11-15) Cleared both hosted CodeScene findings on the two new files
+  (D-37), reproducing each with `cs delta origin/main HEAD` before editing and
+  confirming with a re-run that reads "no issues found in checked changes".
+  Every CodeScene issue raised against this branch is now resolved. This commit
+  touches `tests/`, so the post-pin list advances a tenth time to 71
+  identifiers with a 50/21 split.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1055,6 +1061,48 @@ pre-rebase history if an old hash must be inspected.
   to `26.2.2` is consistent with the register, which annotates every `A4/` row
   with `CO-2, CO-4, CO-7, CO-15`. Date/Author: 2026-11-15, implementation
   agent, after the hosted completeness assessment.
+- Decision D-36 (2026-11-15): closed the task-to-obligation gap as a contract
+  rule, `validate_obligation_tasks` in
+  `tests/hexagonal_inventory_contract/obligations.rs`, rather than by
+  hand-fixing six rows. D-35 corrected the data; the reason those omissions
+  survived every earlier round is that `validate_obligations` asks only whether
+  an obligation appears *somewhere* in the trace matrix, never whether the task
+  its own clause binds actually names it. Correcting data leaves that shape
+  free to recur at the next edit, so the rule now reads each obligation's
+  `Tasks:` clause and requires that task's row to name it. Three vacuities are
+  closed alongside: an obligation with no `Tasks:` clause, a clause naming no
+  task, and an obligation identifier appearing anywhere but a row's final
+  obligations cell. The last of these matters because reading the whole row
+  would let an identifier parked in the register column satisfy a binding the
+  obligations cell never names; `row_obligations` therefore reads only the
+  final cell. The rule is deliberately one-directional, for the reason D-35
+  gives: a row may name obligations whose clause does not bind it, so set
+  equality is the wrong test. Each rule was proved live by reverting it —
+  disabling the row comparison failed exactly the three row-based rejections,
+  making the clause optional failed only the missing-clause case, and letting
+  an unindented line continue the final bullet failed only the prose-absorption
+  case. The contract target runs 70 cases, up from 60. Date/Author: 2026-11-15,
+  implementation agent, after the hosted completeness assessment.
+- Decision D-37 (2026-11-15): cleared the two hosted CodeScene findings on the
+  files D-36 introduced. `obligations.rs` failed `Bumpy Road Ahead` at 9.84 on
+  `obligation_entries`, which had two blocks of nested conditional logic at
+  depth two; `obligation_tests.rs` failed Code Duplication at 9.39 on
+  `accepts_a_row_naming_an_obligation_whose_clause_does_not_bind_it` and
+  `ignores_a_task_named_in_prose_after_the_obligation_list`. Both were
+  reproduced locally with `cs delta origin/main HEAD` before any edit, so the
+  local engine and the hosted check agreed and neither was a hosted-only
+  artefact. The parser's open entry is now carried as a plain `Option` and
+  closed by `closed_entry`, which cannot fail, so no branch contains another
+  while the boundary rule is unchanged: a bullet opens an entry, an indented
+  line extends it, and any other line closes it. The prose-absorption guard
+  remains exercised by the case CodeScene named. The two duplicated acceptance
+  bodies became one `accepts` helper, the same remedy D-34 applied to
+  `fail_open_tests.rs` rather than a suppression, which keeps this the fourth
+  CodeScene duplication finding in a row to land on a new test file. A re-run
+  reports no issues in the checked changes, so no CodeScene finding is
+  outstanding against this branch; the contract target stays at 70 cases and
+  Clippy with `-D warnings` is clean. Date/Author: 2026-11-15, implementation
+  agent, after the hosted CodeScene re-review.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
   the pin" list for in-scope paths at merge time. Rationale: the roadmap
@@ -2491,6 +2539,15 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   trace matrix, which is why these omissions survived every earlier round. The
   contract target runs 70 cases, up from 60, and the post-pin list regenerates
   to 70 identifiers.
+
+- Revision 51 (2026-11-15): cleared the two hosted CodeScene findings on the
+  files revision 50 introduced (D-37). `obligation_entries` lost the nested
+  conditional that made it a bumpy road, and the obligation cases gained a
+  shared `accepts` helper in place of two duplicated bodies. Both were first
+  reproduced locally, and the re-run reports no issues in the checked changes,
+  so no CodeScene finding is outstanding against this branch. The contract
+  target stays at 70 cases and the post-pin list regenerates to 71 identifiers,
+  50 `main` and 21 branch.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
