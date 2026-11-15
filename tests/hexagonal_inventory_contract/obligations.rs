@@ -27,7 +27,7 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result, bail, ensure};
 use regex::Regex;
 
-use super::markdown::{regex_values, task_ids};
+use super::markdown::{bullet_entries, regex_values, task_ids};
 use super::trace::trace_task_obligations;
 
 /// The identifier form the compatibility obligations and trace matrix share.
@@ -118,41 +118,11 @@ pub(super) fn validate_obligation_tasks(obligations: &str, trace: &str) -> Resul
 /// follows the list would be appended to the final obligation and could donate
 /// task identifiers that the obligation never bound.
 ///
-/// Each bullet is pushed the moment it opens, and a continuation is appended to
-/// the last entry only while a bullet is open. Keeping the open/closed fact in
-/// `is_open` means the append never has to ask whether an entry exists.
+/// The collector is `markdown::bullet_entries`, shared with the landed-work
+/// rule so the two cannot drift on where an entry ends. Only the predicate
+/// differs, and it differs for the reason `is_obligation_start` gives.
 fn obligation_entries(obligations: &str) -> Vec<String> {
-    let mut entries = Vec::new();
-    let mut open = None::<String>;
-    for line in obligations.lines() {
-        if is_obligation_start(line) {
-            closed_entry(open.take(), &mut entries);
-            open = Some(line.trim_start().to_owned());
-        } else if is_continuation(line) {
-            extend_open(&mut open, line);
-        } else {
-            closed_entry(open.take(), &mut entries);
-        }
-    }
-    closed_entry(open.take(), &mut entries);
-    entries
-}
-
-/// Append an indented continuation line to the entry it belongs to.
-///
-/// A continuation with no open entry belongs to no obligation — it is the
-/// pre-list prose, an indented block under some earlier heading — and must be
-/// dropped rather than started as an entry, or it would be read as one.
-fn extend_open(open: &mut Option<String>, line: &str) {
-    if let Some(text) = open.as_mut() {
-        text.push('\n');
-        text.push_str(line.trim());
-    }
-}
-
-/// Push a completed obligation entry onto the result list.
-fn closed_entry(entry: Option<String>, entries: &mut Vec<String>) {
-    entries.extend(entry);
+    bullet_entries(obligations, is_obligation_start)
 }
 
 /// Report whether a line opens a compatibility-obligation bullet.
@@ -170,11 +140,6 @@ fn is_obligation_start(line: &str) -> bool {
     line.trim_start()
         .strip_prefix("- ")
         .is_some_and(|bullet| OBLIGATION_IDENTIFIER.is_match(bullet))
-}
-
-/// Report whether a line continues the bullet above it.
-fn is_continuation(line: &str) -> bool {
-    line.starts_with(' ') || line.starts_with('\t')
 }
 
 /// Read one obligation's identifier and the tasks its `Tasks:` clause binds.

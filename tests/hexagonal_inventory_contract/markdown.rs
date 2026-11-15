@@ -278,19 +278,45 @@ pub(super) fn bullet_entries(text: &str, opens: impl Fn(&str) -> bool) -> Vec<St
     let mut open = None::<String>;
     for line in text.lines() {
         if opens(line) {
-            entries.extend(open.take());
+            close_entry(&mut open, &mut entries);
             open = Some(line.trim_start().to_owned());
-        } else if line.starts_with(' ') || line.starts_with('\t') {
-            if let Some(entry) = open.as_mut() {
-                entry.push('\n');
-                entry.push_str(line.trim());
-            }
+        } else if is_list_continuation(line) {
+            extend_entry(&mut open, line);
         } else {
-            entries.extend(open.take());
+            close_entry(&mut open, &mut entries);
         }
     }
-    entries.extend(open);
+    close_entry(&mut open, &mut entries);
     entries
+}
+
+/// Report whether a line is indented far enough to continue the bullet above.
+///
+/// Only leading whitespace qualifies. Deciding this here rather than inline
+/// gives the caller one branch per line, which is what keeps the collector's
+/// nesting shallow enough to read at a glance.
+fn is_list_continuation(line: &str) -> bool {
+    line.starts_with(' ') || line.starts_with('\t')
+}
+
+/// Append an indented continuation line to the entry it belongs to.
+///
+/// A continuation with no open entry belongs to no bullet — it is prose before
+/// the list, or an indented block under an earlier heading — and must be
+/// dropped rather than started as an entry, or it would be read as one.
+fn extend_entry(open: &mut Option<String>, line: &str) {
+    if let Some(entry) = open.as_mut() {
+        entry.push('\n');
+        entry.push_str(line.trim());
+    }
+}
+
+/// Move the open entry, if any, into the result list and clear it.
+///
+/// Taking the value rather than copying it means an entry is pushed exactly
+/// once however many times a boundary is met.
+fn close_entry(open: &mut Option<String>, entries: &mut Vec<String>) {
+    entries.extend(open.take());
 }
 
 /// Collect finding bullets whose ownership must be recorded.
