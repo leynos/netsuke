@@ -8150,7 +8150,11 @@ Netsuke uses a mixed strategy:
   number and a commit. It reads one bullet at a time, so a neighbour's commit
   cannot cover an omission — the shape that let twelve entries name no commit
   at all. It checks presence only, because which commit is the right one is a
-  provenance question one document cannot settle.
+  provenance question one document cannot settle. Both per-bullet rules share
+  `markdown::bullet_entries`, differing only in the predicate that decides
+  where an entry opens. Do not give either its own copy of the collector: the
+  two would then be free to disagree about where an entry ends, and knowing
+  that a fact belongs to one entry rather than the section is the whole point.
 - Behavioural tests use Gherkin feature files in `tests/features/` and
   `tests/features_unix/`.
 - Behavioural step definitions and fixtures live in `tests/bdd/`.
