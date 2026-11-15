@@ -5,7 +5,8 @@ a dependency, drop one result or output check, hard-code the enforcement mode
 in either direction, smuggle an ``always()`` onto the publication guard, disjoin
 the guard from an always-true clause, add a publisher whose scopes arrive as a
 ``write-all`` shorthand or through the workflow level, let the rehearsal adopt
-the gate, or let publication adopt the rehearsal. The expected diagnostics name
+the gate, let publication adopt the rehearsal, or grant the rehearsal a write
+scope the publisher model does not name. The expected diagnostics name
 the scenario or the structural rule that must notice, so the mutation test
 shows each assertion fires rather than merely passing.
 
@@ -89,6 +90,7 @@ GATE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
         ("static", "write-authority.publish-notes.needs"),
         ("static", "write-authority.publish-notes.guard"),
     ),
+    "grant-rehearsal-unmodelled-write": (("static", "release.permissions"),),
 }
 
 
@@ -183,6 +185,16 @@ def _inherited_write_publisher(release: dict[str, object]) -> None:
     _add_job(release, INHERITING_JOB, {"runs-on": "ubuntu-latest"})
 
 
+def _grant_unmodelled_write(release: dict[str, object]) -> None:
+    """Grant a job that must stay reachable a write scope outside the model.
+
+    ``actions`` cannot publish a release, so the publisher model does not name
+    it; the read-only rule is about what the job may write at all, so this must
+    be reported rather than read as no write.
+    """
+    workflow_job(release, STAGING_JOB)["permissions"] = {"actions": "write"}
+
+
 #: Each labelled clause removal, with the job whose guard loses it.
 CLAUSE_REMOVALS: dict[str, tuple[str, str]] = {
     "remove-publication-package-result-check": (
@@ -236,6 +248,7 @@ GATE_MUTATIONS: dict[str, cabc.Callable[[dict[str, object]], None]] = {
     "disjunctive-publication-guard": _disjunctive_publication_guard,
     "write-all-publisher": _write_all_publisher,
     "inherited-write-publisher": _inherited_write_publisher,
+    "grant-rehearsal-unmodelled-write": _grant_unmodelled_write,
     **{
         label: (lambda release, name=label: _drop_clause_for(name, release))
         for label in CLAUSE_REMOVALS

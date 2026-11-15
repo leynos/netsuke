@@ -15,8 +15,9 @@ because the repository default can grant write.
 
 It also holds the two shapes the gate cannot protect on its own. The jobs that
 must stay reachable whatever admission decides -- the gate, packaging and the
-rehearsal -- may hold no write scope, and the caller workflow must pass the
-rehearsal flag without a publish request or inherited secrets.
+rehearsal -- may hold no write scope of any kind, not merely none of the three
+the publisher model names, and the caller workflow must pass the rehearsal flag
+without a publish request or inherited secrets.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -150,6 +151,12 @@ def check_publication_gate(
 def check_read_only_jobs(release: dict[str, object], violations: list[str]) -> None:
     """Require the gate, packaging and the rehearsal to hold no write scope.
 
+    Every scope the job declares is inspected, not only the three the publisher
+    model names. Those three are what a job needs to change a release; the rule
+    here is stronger, because a job that must stay reachable may write nothing
+    at all, and a scope outside the model -- ``actions``, say -- is still a
+    permission the job did not need.
+
     Parameters
     ----------
     release
@@ -166,7 +173,7 @@ def check_read_only_jobs(release: dict[str, object], violations: list[str]) -> N
             )
             continue
         granted = sorted(
-            scope for scope in WRITE_SCOPES if permissions.get(scope) == "write"
+            scope for scope, level in permissions.items() if level == "write"
         )
         if granted:
             violations.append(
