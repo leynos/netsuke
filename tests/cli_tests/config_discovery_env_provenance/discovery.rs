@@ -50,6 +50,30 @@ impl NullLiteral {
     }
 }
 
+/// Name where a malformed project blocklist is written.
+#[derive(Clone, Copy)]
+enum BlocklistSource {
+    /// The primary project file itself.
+    PrimaryFile,
+    /// An ancestor the project file reaches through `extends`.
+    ExtendsAncestor,
+}
+
+impl BlocklistSource {
+    /// Write `env_block_var = <literal>` into this source's file.
+    fn write(self, sandbox: &ConfigSandbox, literal: NullLiteral) -> Result<()> {
+        let config = format!("env_block_var = {}\n", literal.toml());
+        match self {
+            Self::PrimaryFile => {
+                write_config(sandbox.project_path().join(".netsuke.toml"), &config)
+            }
+            Self::ExtendsAncestor => {
+                write_extends_chain(sandbox.project_path(), ChainRoot::Project, &config)
+            }
+        }
+    }
+}
+
 /// Write a configuration root whose primary file extends `ancestor`.
 fn write_extends(root: &Path, chain: ChainRoot, ancestor: &Path) -> Result<()> {
     write_config(root.join(chain.file_name()), &extends(ancestor)?)
@@ -155,15 +179,24 @@ fn shared_xdg_and_project_ancestor_keep_operator_grant_and_project_block() -> Re
     assert_env_name_blocked(&cli, "SAFE")
 }
 
-/// Keep an inherited project block authoritative over a CLI allow.
-#[test]
-fn inherited_project_block_overrides_operator_allow() -> Result<()> {
+/// Keep a block authoritative over an allow from either chain.
+///
+/// A block that arrives through the discovered project chain must override a
+/// command-line allow, and an operator-chain block must override both its own
+/// allow and the command-line one.
+#[rstest]
+#[case::project_chain_block(ChainRoot::Project, "env_block_var = [\"CI_TOKEN\"]\n")]
+#[case::operator_chain_allow_and_block(
+    ChainRoot::User,
+    "env_allow_var = [\"CI_TOKEN\"]\nenv_block_var = [\"CI_TOKEN\"]\n"
+)]
+fn block_overrides_allow(#[case] chain: ChainRoot, #[case] config: &str) -> Result<()> {
     let sandbox = ConfigSandbox::new()?;
-    write_extends_chain(
-        sandbox.project_path(),
-        ChainRoot::Project,
-        "env_block_var = [\"CI_TOKEN\"]\n",
-    )?;
+    let root = match chain {
+        ChainRoot::Project => sandbox.project_path().to_path_buf(),
+        ChainRoot::User => sandbox.user_config_dir(),
+    };
+    write_extends_chain(&root, chain, config)?;
     let cli = sandbox.merge_auto(&["--env-allow-var", "CI_TOKEN"])?;
 
     assert_env_name_blocked(&cli, "CI_TOKEN")
@@ -171,38 +204,29 @@ fn inherited_project_block_overrides_operator_allow() -> Result<()> {
 
 /// Reject a non-finite project environment blocklist instead of letting the
 /// JSON conversion turn it into a `null` that resets the blocklist.
+///
+/// The ancestor cases reach the policy boundary as project-chain occurrences,
+/// which follow project authority even though their physical path is not the
+/// selected project file.
 #[rstest]
-#[case::nan(NullLiteral::Nan)]
-#[case::infinity(NullLiteral::Infinity)]
-#[case::negative_infinity(NullLiteral::NegativeInfinity)]
-#[case::array_containing_nan(NullLiteral::ArrayContainingNan)]
-fn non_finite_project_env_block_var_is_rejected(#[case] literal: NullLiteral) -> Result<()> {
-    let sandbox = ConfigSandbox::new()?;
-    write_config(
-        sandbox.project_path().join(".netsuke.toml"),
-        &format!("env_block_var = {}\n", literal.toml()),
-    )?;
-    let merged = sandbox.merge_auto(&["--env-block-var", "SAFE"]);
-
-    assert_project_env_blocklist_rejected(merged, literal, |cli| {
-        cli.env_access_policy().evaluate("SAFE").is_err()
-    })
-}
-
-/// Reject a non-finite blocklist inherited through the project `extends`
-/// chain, which reaches the policy boundary as an ancestor occurrence.
-#[rstest]
-#[case::nan(NullLiteral::Nan)]
-#[case::array_containing_nan(NullLiteral::ArrayContainingNan)]
-fn non_finite_inherited_project_env_block_var_is_rejected(
+#[case::primary_file_nan(BlocklistSource::PrimaryFile, NullLiteral::Nan)]
+#[case::primary_file_infinity(BlocklistSource::PrimaryFile, NullLiteral::Infinity)]
+#[case::primary_file_negative_infinity(BlocklistSource::PrimaryFile, NullLiteral::NegativeInfinity)]
+#[case::primary_file_array_containing_nan(
+    BlocklistSource::PrimaryFile,
+    NullLiteral::ArrayContainingNan
+)]
+#[case::extends_ancestor_nan(BlocklistSource::ExtendsAncestor, NullLiteral::Nan)]
+#[case::extends_ancestor_array_containing_nan(
+    BlocklistSource::ExtendsAncestor,
+    NullLiteral::ArrayContainingNan
+)]
+fn non_finite_project_env_block_var_is_rejected(
+    #[case] source: BlocklistSource,
     #[case] literal: NullLiteral,
 ) -> Result<()> {
     let sandbox = ConfigSandbox::new()?;
-    write_extends_chain(
-        sandbox.project_path(),
-        ChainRoot::Project,
-        &format!("env_block_var = {}\n", literal.toml()),
-    )?;
+    source.write(&sandbox, literal)?;
     let merged = sandbox.merge_auto(&["--env-block-var", "SAFE"]);
 
     assert_project_env_blocklist_rejected(merged, literal, |cli| {
