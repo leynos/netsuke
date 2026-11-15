@@ -1,7 +1,7 @@
 //! Existing operator and primary-project fetch-policy merge regressions.
 
 use super::*;
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 use rstest::rstest;
 use std::ffi::OsString;
 
@@ -224,48 +224,6 @@ trust_project_fetch_policy = true
         "trusted project request should permit the selected policy"
     );
     Ok(())
-}
-
-/// Assert a malformed project fetch blocklist fails loading with the
-/// field-specific validation error.
-///
-/// `is_block_effective` describes the earlier block entry. When the merge
-/// succeeds, the message reports whether that entry survived, which names the
-/// affected operation this regression guards: before the fix a project `nan`
-/// reset the accumulated blocklist and silently cleared the entry.
-fn assert_project_fetch_block_rejected(
-    merged: Result<Cli>,
-    literal: &str,
-    is_block_effective: impl Fn(&Cli) -> bool,
-) -> Result<()> {
-    match merged {
-        Err(error) => {
-            let chain = format!("{error:#}");
-            ensure!(
-                chain.contains("Validation failed for 'fetch_block_host'"),
-                "a non-finite {literal} project blocklist should fail with the \
-                 fetch_block_host validation error: {chain}"
-            );
-            Ok(())
-        }
-        Ok(cli) => bail!(
-            "a non-finite {literal} project blocklist must stop loading; instead \
-             the merge succeeded and the earlier block entry was {}",
-            if is_block_effective(&cli) {
-                "kept"
-            } else {
-                "cleared"
-            }
-        ),
-    }
-}
-
-/// Describe whether a URL is still rejected by an effective host block.
-fn is_host_blocked(cli: &Cli, url: &Url) -> bool {
-    matches!(
-        rejection(cli, url),
-        Ok(NetworkPolicyViolation::HostBlocked { .. })
-    )
 }
 
 /// Reject a non-finite project fetch blocklist instead of letting the JSON
