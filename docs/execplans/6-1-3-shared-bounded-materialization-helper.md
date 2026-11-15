@@ -479,9 +479,9 @@ conflict in `Decision log`, and escalate.
     section follows "Canonical value identity for template helpers" and states
     the public surface, the seven-point re-use policy, the depth definition,
     the `serde_json` difference, the canonical-value follow-up candidate, and
-    the Polonius classification note. The Kani harness table gains the four
-    corrected rows and the measured-cost paragraph, and the Verus policy
-    paragraph lists the third accepted kernel.
+    the Polonius classification note. The Kani harness table gains the seven
+    resource-bounds rows, the correspondence paragraphs, and the measured-cost
+    paragraph, and the Verus policy paragraph lists the third accepted kernel.
   - Formal-verification document (2026-11-09).
     `docs/formal-verification-methods-in-netsuke.md` records the
     resource-bounds kernel under "Optional Verus proof kernel" and "Current
@@ -599,6 +599,26 @@ conflict in `Decision log`, and escalate.
     `build.rs`, or `build_l10n_audit/` file changed. Logs are the
     `/tmp/<gate>-netsuke-6-1-3-shared-bounded-materialization-helper.out` files
     named in `Concrete steps`.
+  - Documentation regression and rebase onto `main` (2026-11-15). The target
+    branch advanced to `e28f26ae2`, which turned the pull request
+    `CONFLICTING`, and the conflict exposed a defect no gate could see: the
+    commit that added the Verus proof carried an out-of-date copy of
+    `docs/developers-guide.md`, so it removed 2,968 lines of unrelated
+    documentation while adding the resource-bounds material. The rebase stopped
+    on that commit with the removal as a content conflict. The file was rebuilt
+    from `main` and only the five resource-bounds edits re-applied — the Kani
+    mutation `exclude-globs` entry, the `make kani-ir` alias description, the
+    harness table's stdlib rows and caption, the Verus policy paragraph's third
+    accepted kernel, and the "Resource bounds for template helpers" section —
+    so the diff against `main` is 141 added and 28 removed lines: those sites
+    plus the table re-padding the formatter applies. The rebase resolved that
+    one commit to `main`'s copy, and a follow-up commit restores the edits; no
+    other file conflicted, and
+    `docs/formal-verification-methods-in-netsuke.md` merged with both `main`'s
+    Verus-in-CI sentence and this branch's three-proof text. Every earlier gate
+    batch, including the twelve-gate runs at `29dc6df5a` and `b5d98b783`,
+    predates this rebase and no longer describes the candidate; a fresh
+    twelve-gate batch is required at the restored head.
 
 ## Surprises & discoveries
 
@@ -740,6 +760,20 @@ conflict in `Decision log`, and escalate.
   repaired version differs from `main` only by this task's intended additions;
   the lesson is that a clean `git status` and a successful rebase say nothing
   about whether the resolved tree compiles.
+- Observation: a documentation file can be replaced wholesale by a stale copy
+  without any gate noticing. Evidence: the commit that added the Verus proof
+  took `docs/developers-guide.md` from 13,765 lines to 11,396 (599 added, 2,968
+  removed), and its text described the pre-`recipe_shell/` layout, a
+  `src/main.rs` tracing initializer the file had since split out, and a
+  `register_disabled_query_helpers` seam the guide had replaced with the
+  `SURFACE` inventory. Every gate passed on that tree, because the stale file
+  is internally consistent, correctly formatted, and spells correctly; only the
+  rebase onto `main` surfaced it, as a conflict in a file the branch had no
+  business rewriting. Impact: a documentation regression has no local detector,
+  so a rebase conflict in a documentation file is a signal to diff against
+  `main` before resolving, and the repair is to rebuild the file from `main`
+  and re-apply the intended edits rather than to accept either side of the
+  conflict.
 
 ## Decision log
 
@@ -913,6 +947,18 @@ conflict in `Decision log`, and escalate.
   The cost is explicit: the harnesses check correspondence on a stated domain,
   not universally, and the module comment and the developers' guide say so.
   Date/Author: 2026-11-09.
+- D-20. Decision: when a rebase conflict shows that a branch replaced a
+  documentation file with a stale copy, rebuild that file from the target
+  branch and re-apply only the intended edits, rather than resolving the
+  conflict hunk by hunk or accepting either side. Rationale: the conflict's
+  shape — thousands of unrelated deletions against a handful of additions — is
+  not a merge disagreement to adjudicate but a lost update to undo, and a
+  hunk-by-hunk resolution has no way to tell an intended deletion from
+  collateral loss. The rebuild is verifiable: the resulting diff against the
+  target branch contains only the named edits. During the rebase itself the
+  offending commit resolves to the target branch's copy, and the re-applied
+  edits land in their own commit, so no other file's history is rewritten.
+  Date/Author: 2026-11-15.
 
 ## Outcomes & retrospective
 
