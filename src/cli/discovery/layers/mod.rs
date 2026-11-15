@@ -12,10 +12,11 @@
 #[cfg(test)]
 use ortho_config::MapEnv;
 use ortho_config::{
-    ConfigDiscovery, EnvSource, FileLayerChain, MergeLayer, OrthoResult, SharedEnvSource,
-    load_config_file_as_chain,
+    ConfigDiscovery, EnvSource, FileLayerChain, MergeLayer, OrthoError, OrthoResult,
+    SharedEnvSource, load_config_file_as_chain,
 };
 use std::borrow::Cow;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -150,6 +151,7 @@ fn first_automatic_chain(
         .map_or_else(|| Ok((Vec::new(), true)), Err)
 }
 
+
 /// Flatten a file layer chain into owned merge layers.
 fn chain_layers(chain: FileLayerChain) -> Vec<MergeLayer<'static>> {
     chain
@@ -257,12 +259,59 @@ fn user_scope_base_layers(
 ) -> OrthoResult<Option<Vec<MergeLayer<'static>>>> {
     user_scope_candidates(env_source)
         .into_iter()
-        .find_map(|candidate| match load_config_file_as_chain(&candidate) {
+        .find_map(|candidate| match load_user_candidate(&candidate) {
             Ok(Some(chain)) => Some(Ok(chain_layers(chain))),
             Ok(None) => None,
             Err(error) => Some(Err(error)),
         })
         .transpose()
+}
+
+/// Load one user-scope candidate, distinguishing absence from a broken link.
+///
+/// `OrthoConfig` resolves a candidate through a capability on its parent
+/// directory, so a symbolic link whose target does not resolve is reported
+/// exactly as a file that is not installed. The loader alone therefore cannot
+/// tell an uninstalled configuration from a broken one. Probing the entry
+/// itself separates them: an entry that is not there is skipped, while one that
+/// is there but yielded nothing is rejected, so a dangling
+/// `$HOME/.netsuke.toml` cannot hand policy authority back to system scope.
+///
+/// # Errors
+///
+/// Returns the loader error when the candidate exists but cannot be read,
+/// parsed, or resolved through its `extends` chain, and an error naming the
+/// candidate when the loader reported it as absent although the entry exists.
+fn load_user_candidate(path: &Path) -> OrthoResult<Option<FileLayerChain>> {
+    if let Some(chain) = load_config_file_as_chain(path)? {
+        return Ok(Some(chain));
+    }
+    match path.symlink_metadata() {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(unloadable_candidate(
+            path,
+            "symbolic link target is missing",
+        )),
+        Ok(_) => Err(unloadable_candidate(
+            path,
+            "present entry yielded no configuration layer",
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(Arc::new(OrthoError::File {
+            path: path.to_path_buf(),
+            source: Box::new(error),
+        })),
+    }
+}
+
+/// Build the error for a candidate that exists but cannot supply configuration.
+fn unloadable_candidate(path: &Path, reason: &str) -> Arc<OrthoError> {
+    Arc::new(OrthoError::File {
+        path: path.to_path_buf(),
+        source: Box::new(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            reason.to_owned(),
+        )),
+    })
 }
 
 /// Load project layers and preserve authority when operator and project paths overlap.
