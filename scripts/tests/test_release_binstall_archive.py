@@ -2,7 +2,9 @@
 
 Archives are built in memory and written to a temporary directory, and the
 probe is driven through an injected runner, so no test here reaches the
-network or executes a downloaded file.
+network or executes a downloaded file. One case launches a shell script the
+test itself writes, because decoding of a child's streams belongs to
+``subprocess`` and an injected runner cannot reproduce it.
 
 Three adapters share the work: :mod:`release_binstall_archive` reads and
 verifies the bytes, :mod:`release_binstall_extract` writes the binary out, and
@@ -14,6 +16,7 @@ Run via ``make test-release-publication``.
 
 import io
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the seam under test.
+import sys
 import tarfile
 import typing as typ
 
@@ -361,4 +364,42 @@ def test_probe_version_reports_a_launch_failure(tmp_path: pathlib.Path) -> None:
         raise FileNotFoundError(command[0])
 
     with pytest.raises(probe.ProbeLaunchError):
+        probe.probe_version(tmp_path / "netsuke", runner=runner)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="needs a POSIX shell script")
+def test_probe_version_ignores_a_non_utf8_diagnostic(tmp_path: pathlib.Path) -> None:
+    """Accept a correct banner whatever the child writes to standard error.
+
+    The child is a script this test writes, not a downloaded file. It is
+    launched for real because the defect is in ``subprocess``: text-mode
+    capture decodes both streams, so one stray byte on standard error would
+    otherwise refuse a run whose banner is exactly right.
+    """
+    binary = tmp_path / policy.BINARY_NAME
+    _ = binary.write_text(
+        "#!/bin/sh\nprintf 'netsuke 1.2.3\\n'\nprintf '\\377' >&2\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+
+    result = probe.probe_version(binary)
+
+    assert result.stdout == "netsuke 1.2.3\n", (
+        "a diagnostic on standard error must not decide the banner's verdict"
+    )
+
+
+def test_probe_version_reports_output_that_is_not_utf8(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Translate undecodable standard output into its own refusal."""
+
+    def runner(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        """Fail the way text-mode capture does on undecodable bytes."""
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    with pytest.raises(probe.ProbeOutputError):
         probe.probe_version(tmp_path / "netsuke", runner=runner)

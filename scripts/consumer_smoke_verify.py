@@ -69,7 +69,11 @@ _REFUSAL_TYPES = (
 #: reached only by a ledger that could not write its own record.
 _REFUSALS: tuple[tuple[tuple[type[Exception], ...], int, str], ...] = (
     (
-        (probe_adapter.ProbeLaunchError, probe_adapter.ProbeTimeoutError),
+        (
+            probe_adapter.ProbeLaunchError,
+            probe_adapter.ProbeTimeoutError,
+            probe_adapter.ProbeOutputError,
+        ),
         EXIT_PROBE_REJECTED,
         "executable rejected",
     ),

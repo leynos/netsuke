@@ -12,6 +12,10 @@ token, but the binary came from a public URL and has no business reading any
 credential the runner happens to export. The runner is injected so a test can
 observe the launch without executing a downloaded file.
 
+Standard error is discarded rather than captured. Only the banner decides
+acceptance, and decoding a stray byte on standard error would let a diagnostic
+the smoke never reads turn a correct banner into a failed run.
+
 Run through ``scripts/consumer_smoke_cli.py``; behavioural coverage lives in
 ``scripts/tests/test_release_binstall_archive.py``.
 """
@@ -44,6 +48,16 @@ class ProbeLaunchError(ArchiveRefusedError):
 
 class ProbeTimeoutError(ArchiveRefusedError):
     """Report a shipped binary that did not answer within the time budget."""
+
+
+class ProbeOutputError(ArchiveRefusedError):
+    """Report standard output that is not UTF-8 text.
+
+    The banner comparison needs text, and a replaced or ignored byte would
+    hide the fact that the binary wrote something this smoke cannot read. The
+    refusal names that fact instead of presenting a mangled banner as if the
+    binary had printed it.
+    """
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -79,6 +93,8 @@ def probe_version(
         If the probe exceeds :data:`PROBE_TIMEOUT_SECONDS`.
     ProbeLaunchError
         If the binary could not be started.
+    ProbeOutputError
+        If standard output is not UTF-8 text, so no banner can be read from it.
 
     Notes
     -----
@@ -99,7 +115,11 @@ def probe_version(
         completed = launch(
             [str(binary), "--version"],
             check=False,
-            capture_output=True,
+            # Standard error goes nowhere rather than into a decoded pipe: a
+            # child that writes a non-UTF-8 diagnostic would otherwise fail the
+            # launch before the banner that decides acceptance is ever read.
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             text=True,
             timeout=PROBE_TIMEOUT_SECONDS,
             env=PROBE_ENVIRONMENT,
@@ -110,6 +130,9 @@ def probe_version(
             f"{PROBE_TIMEOUT_SECONDS}s and was killed"
         )
         raise ProbeTimeoutError(msg) from error
+    except UnicodeDecodeError as error:
+        msg = "the shipped binary wrote bytes that are not UTF-8 to standard output"
+        raise ProbeOutputError(msg) from error
     except OSError as error:
         msg = f"the shipped binary could not be launched: {error}"
         raise ProbeLaunchError(msg) from error
