@@ -48,9 +48,9 @@ fn unknown_field_is_rejected_by_name() {
     let (key, message) = single_diagnostic(&declaring(&json!([entry])));
 
     assert_eq!(key, "shells[0].executabl");
-    assert!(
-        message.contains("is not a field of a shell definition"),
-        "unexpected message: {message}"
+    assert_eq!(
+        message,
+        "is not a field of a shell definition; expected name, executable, and args"
     );
 }
 

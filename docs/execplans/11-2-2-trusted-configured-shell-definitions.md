@@ -560,6 +560,18 @@ explicit and exercise the actual adapters in tests.
     commits replayed without a conflict, the driver was bypassed because Weave
     is selected only by ambient global attributes here, and no file content
     changed apart from what `main` brought in.
+  - [x] 2026-11-15: Close the assertion gap CodeRabbit left open at
+    `c1142b602`. The unknown-field rule is now asserted in full, including
+    "expected name, executable, and args", in the unit test and in both startup
+    cases, and the three wrong-typed startup cases plant a distinctive value —
+    `987654321`, `rejected-executable`, `rejected-args-vector` — and assert
+    that neither it nor serde's `invalid type` wording reaches stderr. Mutation
+    evidence, with a green baseline and byte-identical restores: removing the
+    expected-fields clause fails `unknown_field_is_rejected_by_name` and startup
+    cases 01 and 02; removing the text-field shape guard fails
+    `wrong_typed_name_is_rejected_without_echoing_it` and cases 08 and 09;
+    removing the `args` list guard fails
+    `wrong_typed_arguments_are_rejected_without_echoing_them` and case 10.
 
 ## Surprises & discoveries
 
@@ -1013,6 +1025,13 @@ first failure can hide a whole class of such tests behind one earlier red one.
   harness closure still reaches `shell_definitions.rs`, and the new file is
   `#[cfg(test)]`-only, which `cargo kani` never compiles, so no scope entry is
   owed for it.
+- 2026-11-15: Plant a distinctive rejected value instead of relying on the
+  absence of serde's `invalid type` wording alone. That wording catches a check
+  that lets serde report the fault, but not one that reports serde's message
+  verbatim: serde quoting the value would then satisfy the wording assertion
+  while breaking redaction. The startup cases now carry both expectations in one
+  `Echo` record, so a case declares the value it planted and the wording it
+  excludes, and a reader can see what the assertion is protecting.
 
 ## Outcomes & retrospective
 
