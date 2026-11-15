@@ -191,9 +191,7 @@ def check_smoke_checkout(job: dict[str, object], violations: list[str]) -> None:
     _require_checkout_values(values, violations)
 
 
-def _require_checkout_values(
-    values: dict[str, object], violations: list[str]
-) -> None:
+def _require_checkout_values(values: dict[str, object], violations: list[str]) -> None:
     """Require the checkout's inputs to drop the token and pin the candidate."""
     # `is not False` rather than a falsy test: an omitted key, the string
     # "false", and a `true` all leave a credential, and only a YAML boolean
@@ -217,9 +215,7 @@ def check_smoke_artifacts(job: dict[str, object], violations: list[str]) -> None
             _require_named_artifact(step, violations)
 
 
-def _require_named_artifact(
-    step: dict[str, object], violations: list[str]
-) -> None:
+def _require_named_artifact(step: dict[str, object], violations: list[str]) -> None:
     """Require one artefact download to name its artefact and no pattern."""
     values = step.get("with")
     if not isinstance(values, dict):
