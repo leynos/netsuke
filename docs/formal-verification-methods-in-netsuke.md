@@ -219,15 +219,16 @@ carried by the independent quadratic oracle in
 The fourth is the resource-bounds arithmetic behind
 `src/stdlib/resource_bounds/kernel.rs`, proved in
 `verus/resource_bounds/main.rs` across seven files under one crate root. It
-establishes the checked product's zero and repeat cases and its power-of-base
-form, the binomial kernel's symmetry, absorption, step, and monotonicity lemmas
-together with the caps that keep its intermediate `u128` arithmetic safe, the
-falling factorial's monotonicity and iteration cap, and the admission and
-running-total rules that keep a count or a stream total inside its ceiling. The
-proof is a transcription of the production algorithm into abstract
-specifications, so the production functions themselves are outside it; seven
-Kani harnesses in `src/stdlib/resource_bounds/verification.rs` drive those
-production kernels instead, and each has a committed mutation patch under
+establishes the checked product's zero-operand, zero-exponent, and repeat cases
+and its power-of-base form, the binomial kernel's symmetry, absorption, step,
+and monotonicity lemmas together with the caps that keep its intermediate
+`u128` arithmetic safe, the falling factorial's monotonicity and iteration cap,
+and the admission and running-total rules that keep a count or a stream total
+inside its ceiling. The proof is a transcription of the production algorithm
+into abstract specifications, so the production functions themselves are
+outside it; seven Kani harnesses in
+`src/stdlib/resource_bounds/verification.rs` drive those production kernels
+instead, and each has a committed mutation patch under
 `docs/verification/mutations/`.
 
 Production `HashMap` structures, MiniJinja values, filesystem helpers, and

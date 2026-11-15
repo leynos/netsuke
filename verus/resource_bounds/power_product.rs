@@ -15,7 +15,6 @@ verus! {
 
 /// Raise `base` to `repeat`, refusing a result above `u64::MAX`.
 fn checked_power(base: u64, repeat: u64) -> (result: Option<u64>)
-    requires repeat >= 1,
     ensures
         match result {
             Option::Some(v) => v as int == spec_power(base as int, repeat as int)
@@ -23,6 +22,15 @@ fn checked_power(base: u64, repeat: u64) -> (result: Option<u64>)
             Option::None => spec_power(base as int, repeat as int) > max_u64(),
         },
 {
+    // A zero exponent is the empty product, whichever base is supplied. The
+    // kernel answers before it looks at the base, so the model must too.
+    if repeat == 0 {
+        proof {
+            lemma_pow_zero(base as int);
+        }
+        return Option::Some(1);
+    }
+    assert(repeat >= 1);
     if base <= 1 {
         proof {
             if base == 0 {
@@ -101,13 +109,23 @@ fn checked_power(base: u64, repeat: u64) -> (result: Option<u64>)
 
 /// Return the exact tuple count of a `product` request, or `None` on overflow.
 fn checked_product(lengths: &Vec<usize>, repeat: u64) -> (result: Option<u64>)
-    requires repeat >= 1,
     ensures
         match result {
             Option::Some(v) => v as int == spec_product(lengths@, repeat as int),
             Option::None => spec_product(lengths@, repeat as int) > max_u64(),
         },
 {
+    // One empty tuple, whatever the operands are: the kernel returns before it
+    // scans for a zero length, so a zero operand cannot absorb this case.
+    if repeat == 0 {
+        proof {
+            assert(spec_product(lengths@, 0)
+                == spec_power(spec_lens_total(lengths@), 0));
+            lemma_pow_zero(spec_lens_total(lengths@));
+        }
+        return Option::Some(1);
+    }
+    assert(repeat >= 1);
     let mut index: usize = 0;
     let mut has_zero = false;
     while index < lengths.len()
