@@ -1,10 +1,10 @@
 """Mutate the consumer smoke to prove the release-path contract rejects it.
 
-Each entry names one plausible regression in the smoke's privilege, wiring, or
-reachability, applies it to a deep copy, and states the scenario and contract
-that must report it. A mutation whose expectation no longer matches a real
-violation is a contract that has stopped guarding anything, so the suite fails
-rather than silently passing.
+Each applier names one plausible regression in the smoke's privilege, wiring,
+or reachability and applies it to a deep copy. What each regression must break
+is stated in ``release_publish_path_consumer_expectations`` and re-exported
+here, so the registry and its claims are read together while the claims stay
+reviewable on their own.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -12,7 +12,11 @@ Run via ``make test-workflow-contracts``.
 import enum
 import typing as typ
 
-from release_publish_path_consumer_smoke import CONSUMER_SMOKE_JOB
+from release_publish_path_consumer_expectations import (
+    CONSUMER_SMOKE_EXPECTED_VIOLATIONS,
+    MUTATION_LABELS,
+)
+from release_publish_path_consumer_smoke import CONSUMER_SMOKE_JOB, LOCAL_SMOKE_ACTION
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -33,6 +37,8 @@ class ConsumerSmokeMutationIssue(enum.StrEnum):
     MISSING_CHECKOUT_INPUTS = "the smoke checkout must pass inputs"
     MISSING_CHECKOUT = f"{CONSUMER_SMOKE_JOB} must check the candidate out"
     MISSING_DOWNLOAD = f"{CONSUMER_SMOKE_JOB} must download at least one artefact"
+    MISSING_ACTION_STEP = f"{CONSUMER_SMOKE_JOB} must call {LOCAL_SMOKE_ACTION}"
+    MALFORMED_ENVIRONMENT = "the mutated step must carry an environment mapping"
     UNKNOWN_LABEL = "unknown consumer-smoke mutation"
 
 
@@ -60,48 +66,6 @@ class ConsumerSmokeMutationError(AssertionError):
             return self.issue.value
         return f"{self.issue.value}: {self.detail}"
 
-
-#: The scenario and contract each mutation must break. ``static`` names a
-#: violation that does not depend on a release scenario; every other label
-#: names the scenario whose guard must resolve to the wrong result.
-CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
-    "drop-consumer-smoke-finalize-prerequisite": (
-        ("static", f"{CONSUMER_SMOKE_JOB}.needs"),
-    ),
-    "ignore-consumer-smoke-finalize-result": (
-        ("finalize-failure", f"{CONSUMER_SMOKE_JOB}-job"),
-    ),
-    "remove-consumer-smoke-publish-guard": (
-        ("neither-mode", f"{CONSUMER_SMOKE_JOB}-job"),
-    ),
-    "remove-consumer-smoke-cancelled-guard": (
-        ("cancelled-publishing", f"{CONSUMER_SMOKE_JOB}-job"),
-    ),
-    "remove-consumer-smoke-permissions": (
-        ("static", f"{CONSUMER_SMOKE_JOB}.permissions"),
-    ),
-    "grant-consumer-smoke-contents-write": (
-        ("static", f"{CONSUMER_SMOKE_JOB}.permissions"),
-    ),
-    "add-consumer-smoke-id-token": (("static", f"{CONSUMER_SMOKE_JOB}.permissions"),),
-    "add-consumer-smoke-environment": (
-        ("static", f"{CONSUMER_SMOKE_JOB}.environment"),
-    ),
-    "add-consumer-smoke-token-environment": (
-        ("static", f"{CONSUMER_SMOKE_JOB}.token"),
-    ),
-    "persist-consumer-smoke-checkout-credentials": (
-        ("static", f"{CONSUMER_SMOKE_JOB}.checkout"),
-    ),
-    "select-consumer-smoke-pattern-artifact": (
-        ("static", f"{CONSUMER_SMOKE_JOB}.artifacts"),
-    ),
-    "compile-in-consumer-smoke-job": (("static", f"{CONSUMER_SMOKE_JOB}.compilation"),),
-    "compile-in-consumer-smoke-action": (
-        ("static", f"{CONSUMER_SMOKE_JOB}.compilation"),
-    ),
-}
-MUTATION_LABELS = tuple(CONSUMER_SMOKE_EXPECTED_VIOLATIONS)
 
 #: The guard clauses, each with the operator that joins it to the previous
 #: clause, so removing one leaves an expression the evaluator can still parse.
@@ -272,6 +236,55 @@ def _add_token_environment(release: Job, _action: Job) -> None:
     _smoke_job(release)["env"] = {"GH_TOKEN": "${{ github.token }}"}
 
 
+def _add_action_token_environment(_release: Job, action: Job) -> None:
+    """Give one of the action's own steps a GitHub token.
+
+    The job's environment stays clean, so only a scan of the action can see
+    this; that separation is what the mutation exists to prove.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If no action step carries a command to attach the environment to, or
+        the step it does carry has no environment mapping.
+    """
+    for step in _steps(action):
+        if "run" not in step:
+            continue
+        env = step.setdefault("env", {})
+        if not isinstance(env, dict):
+            raise ConsumerSmokeMutationError(
+                ConsumerSmokeMutationIssue.MALFORMED_ENVIRONMENT
+            )
+        # `update` with a mapping, as the verify-inventory mutations write
+        # theirs: the value is a workflow expression this fixture plants, not a
+        # secret, and the mapping form keeps the bandit rule that flags a
+        # credential-named assignment from reading it as one.
+        env.update({"GITHUB_TOKEN": "${{ github.token }}"})
+        return
+    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
+
+
+def _guard_invocation(release: Job, _action: Job) -> None:
+    """Stop the job's one smoke invocation from running.
+
+    Nothing else changes: the dependency list, the job guard, and the inputs
+    all still read as correct while the step that exercises the release never
+    runs.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If the job no longer invokes the action, so the mutation would change
+        nothing the contract reads.
+    """
+    for step in _steps(_smoke_job(release)):
+        if str(step.get("uses", "")) == LOCAL_SMOKE_ACTION:
+            step["if"] = "false"
+            return
+    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
+
+
 def _persist_checkout_credentials(release: Job, _action: Job) -> None:
     """Leave the workflow token in the job's git configuration.
 
@@ -334,6 +347,8 @@ _MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "add-consumer-smoke-id-token": _add_id_token,
     "add-consumer-smoke-environment": _add_environment,
     "add-consumer-smoke-token-environment": _add_token_environment,
+    "add-consumer-smoke-action-token-environment": _add_action_token_environment,
+    "add-consumer-smoke-invocation-guard": _guard_invocation,
     "persist-consumer-smoke-checkout-credentials": _persist_checkout_credentials,
     "select-consumer-smoke-pattern-artifact": _select_pattern_artifact,
     "compile-in-consumer-smoke-job": _compile_in_job,

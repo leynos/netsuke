@@ -8,20 +8,19 @@ toolchain — as about the download it performs. Each property here is asserted
 against the checked-in workflow and action, so a later edit that reaches for a
 credential or a compiler fails a contract instead of quietly passing.
 
-The scenario-level composition and the reachability oracle live in
-``release_publish_path_consumer_smoke``, which re-exports everything below.
+The credential scans read the job and the action together and live in
+``release_publish_path_consumer_credentials``, because a token can be defined in
+either document. The scenario-level composition and the reachability oracle
+live in ``release_publish_path_consumer_smoke``, which re-exports everything
+these modules define.
 
 Run via ``make test-workflow-contracts``.
 """
 
 import re
-import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_scenarios import CONSUMER_SMOKE_NEEDS
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
 
 CONSUMER_SMOKE_JOB = "consumer-smoke"
 #: The action the job must call, and the manifest that action must be.
@@ -162,44 +161,6 @@ def check_smoke_needs(job: dict[str, object], violations: list[str]) -> None:
         )
 
 
-def check_smoke_privileges(job: dict[str, object], violations: list[str]) -> None:
-    """Require read-only contents and no token, environment, or OIDC grant."""
-    if job.get("permissions") != CONSUMER_SMOKE_PERMISSIONS:
-        violations.append(
-            f"{CONSUMER_SMOKE_JOB}.permissions: expected contents: read and "
-            "nothing else"
-        )
-    if "environment" in job:
-        violations.append(
-            f"{CONSUMER_SMOKE_JOB}.environment: the smoke must not require an "
-            "environment's secrets or protection rules"
-        )
-    for label, scope in _environments(job):
-        leaked = sorted(
-            name
-            for name, value in scope.items()
-            if str(name).upper() in TOKEN_NAMES or TOKEN_EXPRESSION.search(str(value))
-        )
-        if leaked:
-            violations.append(
-                f"{CONSUMER_SMOKE_JOB}.token: {label} must not define a "
-                f"credential, got {leaked}"
-            )
-
-
-def _environments(
-    job: dict[str, object],
-) -> cabc.Iterator[tuple[str, dict[str, object]]]:
-    """Yield the job-level and per-step environment mappings that exist."""
-    job_env = job.get("env")
-    if isinstance(job_env, dict):
-        yield "the job environment", job_env
-    for index, step in enumerate(steps_of(job)):
-        step_env = step.get("env")
-        if isinstance(step_env, dict):
-            yield f"step {step.get('name', index)}", step_env
-
-
 def check_smoke_checkout(job: dict[str, object], violations: list[str]) -> None:
     """Require the candidate checkout to keep no credential in the job.
 
@@ -266,7 +227,14 @@ def check_smoke_artifacts(job: dict[str, object], violations: list[str]) -> None
 
 
 def check_smoke_action_inputs(job: dict[str, object], violations: list[str]) -> None:
-    """Require the one local-action invocation and the exact values it passes."""
+    """Require the one local-action invocation, its inputs, and no step condition.
+
+    A step-level ``if`` is refused because it can stop the smoke without
+    touching anything else: the job guard, the dependency list, and the inputs
+    would all still read as correct while the one step that exercises the
+    release never ran. The job's own guard is the only condition allowed to
+    decide whether the smoke runs.
+    """
     invocations = [
         step
         for step in steps_of(job)
@@ -278,7 +246,13 @@ def check_smoke_action_inputs(job: dict[str, object], violations: list[str]) -> 
             f"{LOCAL_SMOKE_ACTION} step, found {len(invocations)}"
         )
         return
-    values = invocations[0].get("with")
+    step = invocations[0]
+    if "if" in step:
+        violations.append(
+            f"{CONSUMER_SMOKE_JOB}.action: the smoke invocation must run "
+            f"whenever the job does, got if: {step['if']!r}"
+        )
+    values = step.get("with")
     if values != SMOKE_ACTION_INPUTS:
         violations.append(
             f"{CONSUMER_SMOKE_JOB}.action: inputs must be exactly "
@@ -362,7 +336,6 @@ __all__ = [
     "check_smoke_checkout",
     "check_smoke_compilation",
     "check_smoke_needs",
-    "check_smoke_privileges",
     "smoke_job",
     "steps_of",
 ]
