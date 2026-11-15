@@ -1,0 +1,59 @@
+name: Proofs
+
+# The Verus proof under `verus/` (the canonical-value proof). Proof code that no
+# job runs is a comment, so this workflow runs it: on a pull request or push to
+# `main` that touches what it verifies or how it is run, and weekly. Verus was
+# once an optional maintainer tool with no CI job; the estate prover-tooling
+# rule (PT-006) now requires CI to run the proofs a repository holds.
+#
+# Verus and Z3 are installed only through the shared install-prover-tools
+# action, which reads the release from tools/verus/VERSION. `make verus` then
+# runs the proof through the pinned rust-prover-tools.
+
+'on':
+  pull_request:
+    paths:
+      - 'verus/**'
+      - 'tools/verus/**'
+      - 'Makefile'
+      - '.github/workflows/proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'verus/**'
+      - 'tools/verus/**'
+      - 'Makefile'
+      - '.github/workflows/proofs.yml'
+  schedule:
+    - cron: '17 5 * * 3' # Weekly, Wednesday 05:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verus:
+    name: Verus
+    # GitHub-hosted: the job needs no compiler cache and compute there is free.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - name: Install Verus and Z3
+        id: prover
+        uses: leynos/shared-actions/.github/actions/install-prover-tools@88ac795de687eda016db24983f87a25d6db49fdb
+        with:
+          tools: verus
+          runner-image: ubuntu2404
+      - name: Run the Verus proof
+        env:
+          VERUS_Z3_PATH: ${{ steps.prover.outputs.z3-path }}
+        run: make verus
