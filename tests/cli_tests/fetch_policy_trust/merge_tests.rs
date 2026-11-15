@@ -1,7 +1,7 @@
 //! Existing operator and primary-project fetch-policy merge regressions.
 
 use super::*;
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 use rstest::rstest;
 use std::ffi::OsString;
 
@@ -226,6 +226,48 @@ trust_project_fetch_policy = true
     Ok(())
 }
 
+/// Assert a malformed project fetch blocklist fails loading with the
+/// field-specific validation error.
+///
+/// `is_block_effective` describes the earlier block entry. When the merge
+/// succeeds, the message reports whether that entry survived, which names the
+/// affected operation this regression guards: before the fix a project `nan`
+/// reset the accumulated blocklist and silently cleared the entry.
+fn assert_project_fetch_block_rejected(
+    merged: Result<Cli>,
+    literal: &str,
+    is_block_effective: impl Fn(&Cli) -> bool,
+) -> Result<()> {
+    match merged {
+        Err(error) => {
+            let chain = format!("{error:#}");
+            ensure!(
+                chain.contains("Validation failed for 'fetch_block_host'"),
+                "a non-finite {literal} project blocklist should fail with the \
+                 fetch_block_host validation error: {chain}"
+            );
+            Ok(())
+        }
+        Ok(cli) => bail!(
+            "a non-finite {literal} project blocklist must stop loading; instead \
+             the merge succeeded and the earlier block entry was {}",
+            if is_block_effective(&cli) {
+                "kept"
+            } else {
+                "cleared"
+            }
+        ),
+    }
+}
+
+/// Describe whether a URL is still rejected by an effective host block.
+fn is_host_blocked(cli: &Cli, url: &Url) -> bool {
+    matches!(
+        rejection(cli, url),
+        Ok(NetworkPolicyViolation::HostBlocked { .. })
+    )
+}
+
 /// Reject a non-finite project fetch blocklist instead of letting the JSON
 /// conversion turn it into a `null` that clears the operator's deny entries.
 ///
@@ -239,6 +281,7 @@ trust_project_fetch_policy = true
 #[case::array_containing_nan("[nan]")]
 fn non_finite_project_fetch_block_host_is_rejected(#[case] literal: &str) -> Result<()> {
     let project_config = format!("fetch_block_host = {literal}\n");
+    let operator_url = url("https://operator-blocked.example")?;
     let merged = merge_fetch_policy(
         &FetchPolicyFileLayers {
             project: Some(&project_config),
@@ -248,11 +291,36 @@ fn non_finite_project_fetch_block_host_is_rejected(#[case] literal: &str) -> Res
         &["netsuke", "--fetch-block-host", "operator-blocked.example"],
     );
 
-    ensure!(
-        merged.is_err(),
-        "a non-finite {literal} project blocklist must stop loading"
+    assert_project_fetch_block_rejected(merged, literal, |cli| is_host_blocked(cli, &operator_url))
+}
+
+/// Reject a non-finite project blocklist before it clears an earlier
+/// operator-file block entry.
+///
+/// The other rejection cases place their block on the command line, which
+/// merges after the project files. This one places it in the system-scope
+/// operator file, so before the fix the project value reset the accumulated
+/// blocklist and the operator entry stopped blocking.
+#[rstest]
+#[case::nan("nan")]
+#[case::infinity("inf")]
+#[case::negative_infinity("-inf")]
+fn non_finite_project_blocklist_does_not_clear_operator_file_block(
+    #[case] literal: &str,
+) -> Result<()> {
+    let project_config = format!("fetch_block_host = {literal}\n");
+    let operator_url = url("https://operator-file-blocked.example")?;
+    let merged = merge_fetch_policy(
+        &FetchPolicyFileLayers {
+            system: Some("fetch_block_host = [\"operator-file-blocked.example\"]\n"),
+            project: Some(&project_config),
+            ..FetchPolicyFileLayers::default()
+        },
+        &[],
+        &["netsuke"],
     );
-    Ok(())
+
+    assert_project_fetch_block_rejected(merged, literal, |cli| is_host_blocked(cli, &operator_url))
 }
 
 /// Keep the operator block effective when the project adds an empty blocklist
