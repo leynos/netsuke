@@ -64,14 +64,26 @@ fn accepts_a_row_that_names_every_obligation_its_clause_binds() -> Result<()> {
 /// The binding is one-directional on purpose: `28.1.2` maps every obligation,
 /// and `27.1.1` names `CO-13` without appearing on `CO-13`'s task list.
 /// Equality would reject both.
+///
+/// `CO-13` binds `26.1.1`, and `CO-1` binds `26.1.2`, so neither clause binds
+/// `28.1.2` — the row under test — while both are satisfied by their own task's
+/// row. A single task bound by both obligations would make this fixture an
+/// equality check in disguise: it would pass whether the rule were one-way or
+/// two-way, and so would protect nothing.
 #[test]
 fn accepts_a_row_naming_an_obligation_whose_clause_does_not_bind_it() -> Result<()> {
     let obligations = concat!(
         "## Compatibility obligations\n\n",
         "- CO-1: Preserve one. Tasks: 26.1.2.\n",
-        "- CO-13: Promise no source compatibility. Tasks: 26.1.2.\n",
+        "- CO-13: Promise no source compatibility. Tasks: 26.1.1.\n",
     );
-    accepts(obligations, "| 26.1.2 | -- | -- | CO-1, CO-13 |")
+    accepts(
+        obligations,
+        &rows(&[
+            "| 26.1.1 | -- | -- | CO-13 |",
+            "| 26.1.2 | -- | -- | CO-1, CO-13 |",
+        ]),
+    )
 }
 
 /// The obligated task's row omits the obligation another row names.
@@ -137,13 +149,61 @@ fn ignores_a_task_named_in_prose_after_the_obligation_list() -> Result<()> {
 
 /// An obligation identifier outside the obligations column is not evidence.
 ///
-/// `row_obligations` reads only the final cell. Reading the whole row would let
-/// a `CO-1` parked in the register column satisfy the binding, and here it does
-/// satisfy `validate_obligations`, which reads the row as text.
+/// `row_obligations` reads only the `Obligations` column. Reading the whole row
+/// would let a `CO-1` parked in the register column satisfy the binding, and
+/// here it does satisfy `validate_obligations`, which reads the row as text.
 #[test]
 fn rejects_an_obligation_named_outside_the_obligations_column() -> Result<()> {
     let inventory = inventory_with_rows(ONE_BINDING, "| 26.1.2 | CO-1 | -- | -- |");
     expect_validation_error(&inventory, SIMPLE_ROADMAP, "should name obligation CO-1")?;
+    Ok(())
+}
+
+/// A short row must be refused, not read one column to the left.
+///
+/// `| 26.1.2 | CO-1 |` puts `CO-1` in `Register items` and leaves `Obligations`
+/// absent. Taking the last supplied cell as the obligations column would treat
+/// the register value as the obligation and pass a row that names nothing.
+#[test]
+fn rejects_a_row_that_omits_its_trailing_columns() -> Result<()> {
+    let inventory = inventory_with_rows(ONE_BINDING, "| 26.1.2 | CO-1 |");
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "should carry 4 cells")?;
+    Ok(())
+}
+
+/// A decorated label is refused rather than silently skipped.
+///
+/// `- `CO-1`: Preserve one. Tasks: 26.1.2.` still satisfies the global
+/// obligation check, which reads the section as text, so a binding check that
+/// skipped the entry would let a bound task omit the obligation. The row here
+/// names `CO-1` from another task, which is the reference that makes the
+/// omission invisible to every other rule.
+#[test]
+fn rejects_an_obligation_labelled_in_backticks() -> Result<()> {
+    let obligations = "## Compatibility obligations\n\n- `CO-1`: Preserve one. Tasks: 26.1.2.\n";
+    let inventory = inventory_with_rows(obligations, ELSEWHERE);
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "bare `CO-<number>:` label")?;
+    Ok(())
+}
+
+/// The declared identifier is the bullet's label, not a cross-reference.
+///
+/// `- CO-2: Preserve CO-1 too. Tasks: 26.1.2.` binds 26.1.2 to `CO-2`. Reading
+/// the lowest identifier anywhere in the entry would check `CO-1` instead, and
+/// a row naming only `CO-1` would then pass while `CO-2`'s binding went
+/// unverified. `26.1.1`'s row traces both obligations, so the global
+/// obligation check is satisfied and only the binding can reject.
+#[test]
+fn rejects_a_row_naming_only_the_entrys_cross_reference() -> Result<()> {
+    let obligations = "## Compatibility obligations\n\n- CO-2: Preserve CO-1 too. Tasks: 26.1.2.\n";
+    let inventory = inventory_with_rows(
+        obligations,
+        &rows(&[
+            "| 26.1.1 | -- | -- | CO-1, CO-2 |",
+            "| 26.1.2 | -- | -- | CO-1 |",
+        ]),
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "should name obligation CO-2")?;
     Ok(())
 }
 

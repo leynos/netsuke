@@ -9,6 +9,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use anyhow::Result;
+
 use super::markdown::{first_cell, harvest_body, is_table_separator, task_ids};
 use super::obligations::row_obligations;
 use super::register::is_well_formed_register_id;
@@ -72,11 +74,16 @@ fn is_task_row(in_task_table: bool, cell: &str) -> bool {
 /// another. A task appearing in both `Changes` and `Consumes` keeps the union:
 /// the two tables describe one task's change and consumption duties, and
 /// dropping either would report a bound obligation as missing.
-pub(super) fn trace_task_obligations(trace: &str) -> BTreeMap<String, BTreeSet<String>> {
+///
+/// # Errors
+///
+/// Returns an error when any selected row is not the width its header declares,
+/// because a malformed row cannot be read as evidence for the binding.
+pub(super) fn trace_task_obligations(trace: &str) -> Result<BTreeMap<String, BTreeSet<String>>> {
     let mut by_task = BTreeMap::<String, BTreeSet<String>>::new();
     let rows = trace_subsections(trace).flat_map(task_table_rows);
     for row in rows {
-        let obligations = row_obligations(row);
+        let obligations = row_obligations(row)?;
         for task in task_ids(first_cell(row).unwrap_or_default()) {
             by_task
                 .entry(task)
@@ -84,7 +91,7 @@ pub(super) fn trace_task_obligations(trace: &str) -> BTreeMap<String, BTreeSet<S
                 .extend(obligations.iter().cloned());
         }
     }
-    by_task
+    Ok(by_task)
 }
 
 /// Collect excluded tasks and the reason text following each identifier.

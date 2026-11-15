@@ -8111,24 +8111,37 @@ Netsuke uses a mixed strategy:
   obligation's own `Tasks:` clause and requires that task's row to name it. The
   one-directional rule is deliberate — a row may name obligations whose clause
   does not bind that task, as `28.1.2` does for every obligation — so do not
-  "tighten" it to set equality. Only a row's final, obligations cell is read;
-  an identifier in the register or findings column is not evidence.
+  "tighten" it to set equality. Both readers refuse a shape they cannot read
+  rather than taking the nearest interpretation, because each fallback is a
+  fail-open. A row's Obligations column is read only when the row is the width
+  its header declares; an identifier in the register or findings column is not
+  evidence, and neither is one in a short row whose trailing cells are missing,
+  since its last supplied cell is not the obligations column. An obligation's
+  identifier is its bullet label, matched by `OBLIGATION_LABEL` at the start of
+  the bullet, not the lowest `CO-` identifier anywhere in the entry: the entry
+  `- CO-2: Preserve CO-1 too.` declares `CO-2`. A label in a form the pattern
+  does not match, such as a backticked `` `CO-1` ``, is reported as an error
+  rather than skipped, because a skipped entry binds nothing while
+  `validate_obligations` still counts it as traced.
 - The contract's modules are split by feature rather than by layer, forced by
   the 400-line file cap: `markdown.rs` (parsers), `trace.rs` (the trace
   matrix's four harvesters), `register.rs` (identifier grammar), `roadmap.rs`
   (task and dependency parsing), `validation.rs` (the cross-document checks),
   `obligations.rs` (the obligation-to-task binding), `fixtures.rs` (shared
-  skeletons), and the four `cfg(test)` case modules `parser_tests.rs`,
-  `tests.rs`, `fail_open_tests.rs`, and `obligation_tests.rs`. Each trace
-  subsection admits exactly one shape of claim — a table row for `Changes` and
-  `Consumes`, a reason-bearing bullet for `Excluded`, an identifier bullet for
-  `Unchanged` — and every harvester drops the prose around it.
-  `fail_open_tests.rs` holds the regression guards for prose-claimed coverage;
-  each fails against the parser rule it protects, so add a case there rather
-  than to `tests.rs` when closing a new fail-open. `obligation_tests.rs` holds
-  the same kind of guard for the binding rule, and each of its rejection cases
-  traces the obligation from a row other than the one under test, so the older
-  coverage check cannot be what fails.
+  skeletons), and the four case modules `parser_tests.rs`, `tests.rs`,
+  `property_tests.rs`, and `obligation_tests.rs`. Gating is not uniform across
+  them. `property_tests.rs` declares `#[cfg(test)]`; `fail_open_tests.rs` does
+  not, because it is compiled into the test binary by its `#[path]` declaration
+  and its guards never reach a non-test build. Each trace subsection admits
+  exactly one shape of claim — a table row for `Changes` and `Consumes`, a
+  reason-bearing bullet for `Excluded`, an identifier bullet for `Unchanged` —
+  and every harvester drops the prose around it. `fail_open_tests.rs` holds the
+  regression guards for prose-claimed coverage; each fails against the parser
+  rule it protects, so add a case there rather than to `tests.rs` when closing
+  a new fail-open. `obligation_tests.rs` holds the same kind of guard for the
+  binding rule, and each of its rejection cases traces the obligation from a
+  row other than the one under test, so the older coverage check cannot be what
+  fails.
 - Behavioural tests use Gherkin feature files in `tests/features/` and
   `tests/features_unix/`.
 - Behavioural step definitions and fixtures live in `tests/bdd/`.
