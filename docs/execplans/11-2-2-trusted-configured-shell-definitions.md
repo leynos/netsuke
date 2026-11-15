@@ -512,6 +512,14 @@ explicit and exercise the actual adapters in tests.
     "Unreleased / Added". `make check-fmt`, `make lint`, `make typecheck`,
     `make markdownlint`, `make nixie`, `make test-documentation-contracts`,
     and `make test` all pass against the repair.
+  - [x] 2026-11-15: Repair the three findings from the first completed hosted
+    review, which had been rate limited for the previous heads. The review
+    asked for the proof claim in the developers' guide and repository layout to
+    name the Verus model and label the oracle as bounded test evidence, for
+    this plan's RFC 0011 link to use the real `rfc-0011-…` filename, and for
+    the declaring-file assertion to require the directory only when it falls
+    inside the preview's quoting budget. All three were verified against the
+    current tree and repaired.
 
 ## Surprises & discoveries
 
@@ -891,6 +899,22 @@ first failure can hide a whole class of such tests behind one earlier red one.
   migration notes. The Optional row, the beta5 section, and the checklist item
   state the same rule in the three places the guide already uses for a
   voluntary change, and the CHANGELOG entry keeps the feature discoverable.
+- 2026-11-15: State the Verus proof's scope as the model walk and the oracle as
+  bounded evidence. `verus/configured_shells/main.rs` proves `walk` against the
+  pairwise specification; it does not verify the production traversal or the
+  production `HashMap` seen-set, and an oracle over generated sequences is test
+  evidence, not a proof of correspondence. The earlier wording claimed the
+  production function and said the oracle "closed" the gap, which overstated
+  what the artefacts establish and would have invited a reviewer to trust a
+  guarantee the proof does not carry. Naming the model and the evidence class
+  keeps the claim checkable against the files.
+- 2026-11-15: Bound the declaring-file assertion by the preview budget. The
+  diagnostic quotes at most 64 characters of the canonical path, so a deep
+  temporary root — on Windows especially — can push the configuration directory
+  outside the preview while the diagnostic is still correct. The test now
+  requires the directory only when the canonical path reaches it within that
+  budget, and the budget is a named constant beside the assertion that mirrors
+  `src/cli/config/shells/preview.rs`.
 
 ## Outcomes & retrospective
 
@@ -904,12 +928,12 @@ both colliding positions named. Diagnostics stay bounded: a rejection names the
 configuration key but never echoes an argument vector, an offending value in
 full, or an ambient environment value.
 
-The evidence is a Verus refinement proof over the composition rule, an
-independent quadratic Rust oracle that ties the proof to the runtime, four
-`rstest-bdd` scenarios, and an `assert_cmd` startup suite that drives the real
-binary. The full gate set passed at the rebased candidate `205873fc5`, and the
-milestone CLI review over `1139f31df..f03faf7b0` covered all 24 changed files
-and left no valid concern unresolved.
+The evidence is a Verus proof over the composition rule's model walk, an
+independent quadratic Rust oracle that exercises the production function over
+generated sequences, four `rstest-bdd` scenarios, and an `assert_cmd` startup
+suite that drives the real binary. The full gate set passed at the rebased
+candidate `205873fc5`, and the milestone CLI review over `1139f31df..f03faf7b0`
+covered all 24 changed files and left no valid concern unresolved.
 
 Two lessons are worth carrying forward. First, a gate batch binds to a
 candidate, not to a branch: the rebase onto `ce15e026` invalidated every
@@ -977,8 +1001,8 @@ commit identifies its revision.
   of scope; the wider issue is #593, which this task does not close.
 - [ADR-019](../adrs/adr-0019-select-allow-listed-structured-command-shells.md),
   including all addenda, and
-  [RFC 0011](../rfcs/0011-allow-listed-structured-command-shells.md) sections 5
-  and 11: contracts C1–C5 below.
+  [RFC 0011](../rfcs/rfc-0011-allow-listed-structured-command-shells.md)
+  sections 5 and 11: contracts C1–C5 below.
 - [RFC 0001](../rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md),
   shell mode and execution boundaries: preserve existing command behaviour
   throughout.

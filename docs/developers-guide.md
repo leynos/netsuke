@@ -11524,17 +11524,17 @@ the JSON preference is read, so a malformed declaration still lets a later
 `json = true` select JSON diagnostics. The environment layer rejects the key
 outright rather than stripping it.
 
-Proof scope: `verus/configured_shells/main.rs` proves that the production
-traversal accepts exactly the pairwise specification — no reserved name and no
-two positions equal — at every sequence length. The model abstracts a name as
-its UTF-8 bytes and models "already seen" as membership in the accepted prefix,
-so it does not prove the production `HashMap` seen-set's internals.
-Proof/runtime correspondence is closed by
-`src/cli/config/shells/tests/oracle.rs`, an independent quadratic Rust oracle
-that checks `validate_composition` against the same pairwise statement over
-generated sequences of validated names. The proof carries non-vacuity
-witnesses: the empty registry, two distinct names, a reserved name, and a
-duplicate in the last position.
+Proof scope: `verus/configured_shells/main.rs` proves that its model walk,
+`walk`, accepts exactly the pairwise specification — no reserved name and no
+two positions equal — at every sequence length. The proof does not cover the
+production traversal or the internals of the production `HashMap` seen-set: the
+model abstracts a name as its UTF-8 bytes and models "already seen" as
+membership in the accepted prefix. Production correspondence is bounded test
+evidence rather than proof: `src/cli/config/shells/tests/oracle.rs`, an
+independent quadratic Rust oracle, checks `validate_composition` against the
+same pairwise statement over generated sequences of validated names. The proof
+carries non-vacuity witnesses: the empty registry, two distinct names, a
+reserved name, and a duplicate in the last position.
 
 Test commands:
 

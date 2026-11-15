@@ -19,6 +19,12 @@ const AMBIENT_MARKER: &str = "ambient-marker-value-that-must-not-be-printed";
 /// Text a diagnostic prints immediately before quoting the declaring file.
 const DECLARED_IN: &str = "declared in \"";
 
+/// Mirror the quoting budget of `src/cli/config/shells/preview.rs`.
+///
+/// A declaring path longer than this is quoted only as a prefix, so the
+/// directory holding the file may legitimately fall outside the preview.
+const DIAGNOSTIC_BUDGET: usize = 64;
+
 #[rstest]
 #[case::non_string_argument(
     "[[shells]]\nname = \"dash\"\nexecutable = \"dash\"\nargs = [\"super-secret-token\", 42]\n",
@@ -80,8 +86,9 @@ fn diagnostics_are_bounded_and_never_echo_argument_vectors(
 /// escaping and length bound as any other rejected text, and discovery reports
 /// the canonical spelling of a path rather than the one the harness happened to
 /// create, so the assertion compares against both: the quoted preview must be a
-/// faithful escaped prefix of the canonical path, and it must reach far enough
-/// to name the directory holding the file.
+/// faithful escaped prefix of the canonical path, and, when the directory
+/// holding the file lies inside the quoting budget, it must also name that
+/// directory.
 #[test]
 fn a_rejection_names_the_declaring_file() -> Result<()> {
     let startup = Startup::new()?;
@@ -105,8 +112,16 @@ fn a_rejection_names_the_declaring_file() -> Result<()> {
         .and_then(Path::file_name)
         .and_then(|name| name.to_str())
         .context("the operator configuration should sit in a named directory")?;
+    // The preview quotes only the first `DIAGNOSTIC_BUDGET` characters of the
+    // path, so a long temporary root legitimately hides the directory name.
+    let within_budget = canonical
+        .to_string_lossy()
+        .chars()
+        .take(DIAGNOSTIC_BUDGET)
+        .collect::<String>()
+        .contains(directory);
     ensure!(
-        prefix.contains(directory),
+        !within_budget || prefix.contains(directory),
         "diagnostic should reach the configuration directory {directory:?}, got: {shown:?}"
     );
     Ok(())

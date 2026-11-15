@@ -208,9 +208,10 @@ output and some leaf files so the long-lived structure remains visible.
   used to verify the downloaded release artefacts.
 - `verus/`: Verus refinement proofs, one self-contained program per proof. A
   proof states a specification over the same sequence the production code walks
-  and proves the walk agrees with it; a repository Rust oracle closes the
-  remaining gap to the real function. `configured_shells/` proves the trusted
-  shell-composition rule and `canonical_value/` the action-hash canonicalizer.
+  and proves its own model walk agrees with it; a repository Rust oracle tests
+  the production function over bounded generated inputs. `configured_shells/`
+  proves the trusted shell-composition rule and `canonical_value/` the
+  action-hash canonicalizer.
 
 ## Internal support module ownership
 
