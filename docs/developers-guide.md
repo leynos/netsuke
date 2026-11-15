@@ -8870,16 +8870,18 @@ modules under `tests/cli_tests/`:
   discovery for every `XDG_CONFIG_HOME` state that leaves the home fallbacks
   unreachable, and checks that a broken user file, including a dangling
   symbolic link, stops discovery instead of falling back to a system file. Unit
-  tests in `src/cli/discovery/layers/tests/user_scope.rs` cover the same
+  tests in `src/cli/discovery/layers/tests/user_scope/mod.rs` cover the same
   ordering through the injected environment seam, including the `APPDATA` and
   `LOCALAPPDATA` branches and the filter for empty or relative base values.
-  `src/cli/discovery/layers/tests/user_scope_properties.rs` adds two properties
+  `src/cli/discovery/layers/tests/user_scope/properties.rs` adds two properties
   over that seam: candidate derivation over every set, empty, relative, and
   unset combination of the five user variables, and selection over generated
   file-presence masks, which asserts that the first existing candidate wins and
-  that an unloadable one fails discovery. `config_discovery_env_provenance.rs`
-  plus `fetch_policy_trust/merge_tests.rs` assert that a home-dotfile operator
-  grant and fetch policy outrank a system file.
+  that an unloadable one fails discovery. The two files form a directory module
+  so the shared `user_scope` prefix groups them, as the module-layout contract
+  requires. `config_discovery_env_provenance.rs` plus
+  `fetch_policy_trust/merge_tests.rs` assert that a home-dotfile operator grant
+  and fetch policy outrank a system file.
 
 These tests drive a re-executed worker process through
 `tests/cli_tests/merge_probe.rs`. `merge_probe` builds an isolated environment
