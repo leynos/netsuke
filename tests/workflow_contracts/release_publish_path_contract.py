@@ -28,12 +28,15 @@ from release_publish_path_publication import (
     step_runs,
 )
 from release_publish_path_scenarios import (
+    GITHUB_SHA,
     MODE_OUTPUTS,
     PACKAGE_UPLOAD,
     REQUIRED_DRY_RUN_EVENTS,
-    REQUIRED_NEEDS,
     SCENARIOS,
+    STAGING_FORBIDDEN_NEEDS,
+    STAGING_NEEDS,
     Scenario,
+    needs_context,
 )
 from release_publish_path_verification import check_verify_inventory
 from workflow_loading import (
@@ -114,19 +117,13 @@ def _metadata_outputs(
     return outputs
 
 
-def _needs_context(
+def _stage_needs(
     release_job: dict[str, object], scenario: Scenario, outputs: dict[str, str]
 ) -> dict[str, object]:
-    """Build declared needs, defaulting unknown prerequisites to skipped."""
-    needs: dict[str, object] = {}
-    for name in job_names(release_job.get("needs", [])) or []:
-        dependency: dict[str, object] = {
-            "result": scenario.needs_results.get(name, "skipped")
-        }
-        if name == "metadata":
-            dependency["outputs"] = outputs
-        needs[name] = dependency
-    return needs
+    """Build the declared needs context for one staging or publishing job."""
+    return needs_context(
+        job_names(release_job.get("needs", [])) or [], scenario, outputs
+    )
 
 
 def _check_smoke_job(
@@ -245,12 +242,19 @@ def _check_release_staging(
 
 
 def _check_release_needs(release: dict[str, object], violations: list[str]) -> None:
-    """Require release staging to depend on every build and Windows smoke."""
+    """Require staging to depend on the builds, and on nothing that can refuse.
+
+    A dependency on packaging or admission would make a dry run unreachable
+    whenever either fails, which is the read-only lane's whole purpose.
+    """
     needs = job_names(workflow_job(release, "release").get("needs", [])) or []
     declared_needs = set(needs)
-    missing_needs = REQUIRED_NEEDS - declared_needs
+    missing_needs = STAGING_NEEDS - declared_needs
     if missing_needs:
         violations.append(f"release.needs: missing {sorted(missing_needs)!r}")
+    gated_needs = STAGING_FORBIDDEN_NEEDS & declared_needs
+    if gated_needs:
+        violations.append(f"release.needs: must not depend on {sorted(gated_needs)!r}")
 
 
 def _check_release_step_order(
@@ -284,9 +288,9 @@ def _check_scenario(check: ScenarioCheck) -> None:
     )
     release_job = workflow_job(check.release, "release")
     contexts: dict[str, object] = {
-        "needs": _needs_context(release_job, scenario, outputs),
+        "needs": _stage_needs(release_job, scenario, outputs),
         "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}},
+        "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
     }
     actual_release = evaluate_field(
         release_job.get("if", True),
@@ -314,9 +318,9 @@ def _check_scenario(check: ScenarioCheck) -> None:
     check_publication_path(publication_check)
     publisher_job = workflow_job(check.release, "publish-crates-io")
     publisher_contexts: dict[str, object] = {
-        "needs": _needs_context(publisher_job, scenario, outputs),
+        "needs": _stage_needs(publisher_job, scenario, outputs),
         "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}},
+        "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
     }
     check_crates_io_publication(publisher_job, publication_check, publisher_contexts)
     check_verify_inventory(check.release, scenario, outputs, check.violations)

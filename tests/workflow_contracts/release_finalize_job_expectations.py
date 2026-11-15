@@ -27,6 +27,9 @@ from workflow_loading import require_mapping
 EXPECTED_JOB_GUARD = " && ".join((
     "!cancelled()",
     *(f"needs.{name}.result == 'success'" for name in EXPECTED_NEEDS),
+    "needs.release-admission-canaries.outputs.enforcement == 'true'",
+    "needs.release-admission-canaries.outputs.gate_outcome == 'success'",
+    "needs.release-admission-canaries.outputs.candidate_commit == github.sha",
     "needs.metadata.outputs.should_publish == 'true'",
 ))
 

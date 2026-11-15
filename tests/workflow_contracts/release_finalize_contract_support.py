@@ -34,6 +34,7 @@ PUBLISH_JOB = "publish-release"
 VERIFY_JOB = "verify-release-inventory"
 CRATES_JOB = "publish-crates-io"
 PACKAGE_JOB = "package-crate"
+ADMISSION_JOB = "release-admission-canaries"
 #: The publisher's output naming the artefact it retained. A "Re-run failed
 #: jobs" reuses a successful publisher without running it again, so this job's
 #: own attempt number would name an artefact nothing uploaded.
@@ -165,13 +166,16 @@ EXPECTED_JOB_INPUTS = {
     "work-directory": "${{ runner.temp }}/release-finalize",
     "github-token": "${{ github.token }}",
 }
-#: Every producer whose success the finalization's evidence rests on.
+#: Every producer whose success the finalization's evidence rests on. The
+#: admission gate joins them because finalization is the last write: a release
+#: whose gate observed rather than enforced must not be un-drafted either.
 EXPECTED_NEEDS = (
     "metadata",
     PACKAGE_JOB,
     CRATES_JOB,
     PUBLISH_JOB,
     VERIFY_JOB,
+    ADMISSION_JOB,
 )
 EXPECTED_PERMISSIONS = {"contents": "write"}
 

@@ -15,8 +15,12 @@ ADMISSION_PERMISSIONS = {"actions": "read", "contents": "read"}
 ADMISSION_TIMEOUT_MINUTES = 15
 #: The action that provisions the interpreter the admission timings run under.
 ADMISSION_PYTHON_ACTION = "astral-sh/setup-uv"
+#: The action that retrieves the evidence a producer uploaded for this run.
+ADMISSION_ARTIFACT_ACTION = "actions/download-artifact"
 #: The action that retains the admission metrics and traces as artefacts.
 ARTIFACT_UPLOAD_ACTION = "actions/upload-artifact"
+EVIDENCE_ARTIFACT = "release-admission-evidence"
+EVIDENCE_DIRECTORY = "${{ runner.temp }}/release-admission-evidence"
 METRICS_FILE_ENV = {
     "NETSUKE_RELEASE_ADMISSION_METRICS_FILE": (
         "${{ runner.temp }}/release-admission-metrics.jsonl"
@@ -27,11 +31,24 @@ TRACE_FILE_ENV = {
         "${{ runner.temp }}/release-admission-traces.jsonl"
     ),
 }
+#: Enforcement is the release mode, not a separate setting: a publishing run
+#: must fail closed and a rehearsal must keep observing.
 ADMISSION_ENVIRONMENT = {
     "GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
-    "NETSUKE_RELEASE_ADMISSION_ENFORCE": "false",
+    "NETSUKE_RELEASE_ADMISSION_ENFORCE": (
+        "${{ needs.metadata.outputs.should_publish == 'true' }}"
+    ),
+    "NETSUKE_RELEASE_ADMISSION_TAG": "${{ needs.metadata.outputs.release_tag }}",
+    "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE": f"{EVIDENCE_DIRECTORY}/evidence.json",
     **METRICS_FILE_ENV,
     **TRACE_FILE_ENV,
+}
+#: The mode, outcome and candidate every write-authority job compares before it
+#: writes.
+ADMISSION_OUTPUTS = {
+    "gate_outcome": "${{ steps.release_admission.outputs.gate-outcome }}",
+    "enforcement": "${{ steps.release_admission.outputs.enforcement }}",
+    "candidate_commit": "${{ steps.release_admission.outputs.candidate-commit }}",
 }
 METRICS_ARTIFACT = {
     "name": "release-admission-metrics",
@@ -74,29 +91,34 @@ RETIRED_ADMISSION_SCRIPTS = (
 
 
 def test_release_admission_metrics_retain_read_only_delivery() -> None:
-    """Verify the scaffold retains bounded metrics on every non-dry-run outcome.
+    """Verify the gate keeps bounded diagnostics while failing closed.
 
     Notes
     -----
-    The scaffold remains read-only and non-blocking until a real evidence
-    producer exists. Its summary always runs, and its artifact upload preserves
-    failure diagnostics while respecting the reusable dry-run contract.
+    The job holds read-only permissions and publishes its mode, outcome and
+    candidate as outputs. Its summary always runs, and its artifact uploads
+    preserve failure diagnostics while respecting the reusable dry-run
+    contract.
 
     Notes
     -----
-    The contract covers read-only permissions, observation-mode publication
-    independence, and metric and trace retention on applicable outcomes.
+    The contract covers read-only permissions, evidence retrieval, the derived
+    enforcement value, the rehearsal job's independence, and metric and trace
+    retention on applicable outcomes.
     """
     (
         admission,
         release,
         python_step,
+        evidence_step,
         admission_step,
         summary_step,
         upload_step,
         trace_upload,
     ) = _workflow_parts()
-    _assert_admission_job_contract(admission, python_step, admission_step)
+    _assert_admission_job_contract(
+        admission, python_step, evidence_step, admission_step
+    )
     _assert_metrics_delivery_contract(summary_step, upload_step, trace_upload)
     _assert_release_scaffold_boundary(release)
 
@@ -128,10 +150,16 @@ def _workflow_parts() -> tuple[dict[str, object], ...]:
     ) < step_index_by_key(steps, "name", "Require release-admission evidence"), (
         "the admission job must install Python before collecting durations"
     )
+    assert step_index_by_key(
+        steps, "name", "Download the release-admission evidence"
+    ) < step_index_by_key(steps, "name", "Require release-admission evidence"), (
+        "the gate must retrieve the evidence before it reads it"
+    )
     return (
         workflow_job(workflow, "release-admission-canaries"),
         workflow_job(workflow, "release"),
         _step_named(steps, "Install Python for admission timings"),
+        _step_named(steps, "Download the release-admission evidence"),
         _step_named(steps, "Require release-admission evidence"),
         _step_named(steps, "Summarise release-admission metrics"),
         _step_named(steps, "Upload release-admission metrics"),
@@ -161,9 +189,10 @@ def _step_named(steps: list[dict[str, object]], name: str) -> dict[str, object]:
 def _assert_admission_job_contract(
     admission: dict[str, object],
     python_step: dict[str, object],
+    evidence_step: dict[str, object],
     admission_step: dict[str, object],
 ) -> None:
-    """Assert the admission job retains its read-only non-blocking boundary.
+    """Assert the admission job retains its read-only, candidate-bound contract.
 
     Parameters
     ----------
@@ -171,6 +200,8 @@ def _assert_admission_job_contract(
         Parsed release-admission job mapping.
     python_step
         Python setup step used for monotonic duration collection.
+    evidence_step
+        Step that retrieves the producer's evidence artefact.
     admission_step
         Gate execution step whose environment and command are inspected.
 
@@ -180,6 +211,22 @@ def _assert_admission_job_contract(
     )
     assert permissions == ADMISSION_PERMISSIONS, (
         "admission must retain read-only permissions"
+    )
+    assert admission.get("outputs") == ADMISSION_OUTPUTS, (
+        "admission must expose its mode, outcome and candidate to every writer"
+    )
+    require_external_action_sha(
+        evidence_step.get("uses"),
+        ADMISSION_ARTIFACT_ACTION,
+        "the admission job's evidence retrieval",
+    )
+    assert evidence_step.get("with") == {
+        "name": EVIDENCE_ARTIFACT,
+        "path": EVIDENCE_DIRECTORY,
+    }, "the gate must read the evidence uploaded for this run and no other"
+    assert evidence_step.get("continue-on-error") is True, (
+        "absent evidence must reach the verifier as missing evidence rather "
+        "than as a download failure the gate cannot classify"
     )
     assert admission.get("timeout-minutes") == ADMISSION_TIMEOUT_MINUTES, (
         "admission must bound its overall runtime"
@@ -291,23 +338,25 @@ def _assert_metrics_delivery_contract(
 
 
 def _assert_release_scaffold_boundary(release: dict[str, object]) -> None:
-    """Assert publication defers enforcement until evidence production exists.
+    """Assert the read-only rehearsal lane stays independent of the gate.
 
     Parameters
     ----------
     release
-        Parsed release publication job mapping.
+        Parsed *staging* job mapping, not the publication job.
 
     Notes
     -----
-    The admission job remains independently observable until a producer-backed
-    evidence workflow enables enforcement.
+    A rehearsal must remain reachable when packaging or admission fails, so the
+    staging job neither depends on the gate nor tests its outputs. The gate's
+    own enforcement is what keeps that safe: a rehearsal observes, and the
+    write-authority jobs -- never this one -- require enforcement.
     """
     release_needs = release.get("needs")
     assert isinstance(release_needs, list), "release dependencies must be a list"
     assert "release-admission-canaries" not in release_needs, (
-        "publication must not depend on a scaffold without an evidence producer"
+        "the rehearsal lane must stay reachable when admission fails"
     )
     assert "release-admission-canaries" not in str(release.get("if")), (
-        "publication must defer evidence gating until the producer is available"
+        "the rehearsal lane must not be gated on admission evidence"
     )

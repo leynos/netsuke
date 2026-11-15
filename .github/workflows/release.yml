@@ -404,6 +404,13 @@ jobs:
     permissions:
       actions: read
       contents: read
+    # Every write-authority job compares these outputs with what it needs, so
+    # an admission that observed rather than enforced, failed its gate, or
+    # admitted another candidate cannot be read as permission to publish.
+    outputs:
+      gate_outcome: ${{ steps.release_admission.outputs.gate-outcome }}
+      enforcement: ${{ steps.release_admission.outputs.enforcement }}
+      candidate_commit: ${{ steps.release_admission.outputs.candidate-commit }}
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -415,12 +422,32 @@ jobs:
         with:
           python-version: '3.14'
           enable-cache: false
+      # No producer uploads this artefact yet (#598 adds the downstream
+      # canaries and #1065 the release pipeline). Failing here would report a
+      # missing producer rather than a refused admission, so absence is
+      # tolerated: the verifier then records `missing_evidence`, and an
+      # enforcing run fails closed on that category.
+      - name: Download the release-admission evidence
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1
+        continue-on-error: true
+        with:
+          name: release-admission-evidence
+          path: ${{ runner.temp }}/release-admission-evidence
       - id: release_admission
         name: Require release-admission evidence
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NETSUKE_RELEASE_ADMISSION_ENFORCE: 'false'
+          # Enforcement is derived from the release mode rather than configured
+          # beside it: a publishing run must fail closed, and a rehearsal must
+          # keep observing so the read-only lane stays reachable.
+          NETSUKE_RELEASE_ADMISSION_ENFORCE: >-
+            ${{ needs.metadata.outputs.should_publish == 'true' }}
+          NETSUKE_RELEASE_ADMISSION_TAG: ${{ needs.metadata.outputs.release_tag }}
+          NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE: >-
+            ${{ runner.temp }}/release-admission-evidence/evidence.json
           NETSUKE_RELEASE_ADMISSION_METRICS_FILE: >-
             ${{ runner.temp }}/release-admission-metrics.jsonl
           NETSUKE_RELEASE_ADMISSION_TRACE_FILE: >-
@@ -587,6 +614,10 @@ jobs:
           path: ${{ runner.temp }}/release-operation-observability.jsonl
 
   publish-crates-io:
+    # Publishing to the registry cannot be undone, so it waits on the packaged
+    # crate and on an enforcing, candidate-matching admission exactly as the
+    # GitHub release publisher does. A rehearsal never reaches it, because
+    # `should_publish` must be true.
     if: >-
       !cancelled() &&
       needs.metadata.result == 'success' &&
@@ -596,6 +627,9 @@ jobs:
       needs.build-macos.result == 'success' &&
       needs.windows-native-recipe-smoke.result == 'success' &&
       needs.release-admission-canaries.result == 'success' &&
+      needs.release-admission-canaries.outputs.enforcement == 'true' &&
+      needs.release-admission-canaries.outputs.gate_outcome == 'success' &&
+      needs.release-admission-canaries.outputs.candidate_commit == github.sha &&
       needs.metadata.outputs.should_publish == 'true'
     needs:
       - metadata
@@ -804,13 +838,24 @@ jobs:
           python3 scripts/release_operation_observability.py
 
   publish-release:
+    # Publication writes the release, so it waits for the packaged crate and
+    # for an enforcing, candidate-matching admission. The three output checks
+    # are what make the admission dependency structural rather than nominal:
+    # a job that reported observation, refused its gate, or admitted another
+    # commit leaves one of them false, and no `always()` appears here to
+    # override the result.
     if: >-
       !cancelled() &&
       needs.metadata.result == 'success' &&
+      needs.package-crate.result == 'success' &&
       needs.build-linux.result == 'success' &&
       needs.build-windows.result == 'success' &&
       needs.build-macos.result == 'success' &&
       needs.windows-native-recipe-smoke.result == 'success' &&
+      needs.release-admission-canaries.result == 'success' &&
+      needs.release-admission-canaries.outputs.enforcement == 'true' &&
+      needs.release-admission-canaries.outputs.gate_outcome == 'success' &&
+      needs.release-admission-canaries.outputs.candidate_commit == github.sha &&
       needs.metadata.outputs.should_publish == 'true'
     # Publication writes the release. The verifier holds this scope too, but
     # only to read a draft release's listing.
@@ -818,10 +863,12 @@ jobs:
       contents: write
     needs:
       - metadata
+      - package-crate
       - build-linux
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
+      - release-admission-canaries
     # The retained record's name is attempt-scoped, and this output is how
     # verification learns it. A "Re-run failed jobs" reuses this job's
     # successful result instead of running it again, so the verifier must read
@@ -974,8 +1021,10 @@ jobs:
 
   verify-release-inventory:
     # Verifies what both publishers produced, so it runs only once each has
-    # succeeded. The rehearsal job `release` is deliberately absent: a dry run
-    # never publishes a release, so there is no draft inventory to verify.
+    # succeeded. It carries the publication gate as well: an inventory checked
+    # against a release that was never admitted would attest the wrong bytes.
+    # The rehearsal job `release` is deliberately absent: a dry run never
+    # publishes a release, so there is no draft inventory to verify.
     # Every dependency result is named explicitly because `!cancelled()` is a
     # status function, and a status function suppresses the implicit success
     # check GitHub would otherwise apply. Omitting one would let the job run
@@ -984,11 +1033,18 @@ jobs:
     if: >-
       !cancelled() &&
       needs.metadata.result == 'success' &&
+      needs.package-crate.result == 'success' &&
       needs.publish-crates-io.result == 'success' &&
       needs.publish-release.result == 'success' &&
+      needs.release-admission-canaries.result == 'success' &&
+      needs.release-admission-canaries.outputs.enforcement == 'true' &&
+      needs.release-admission-canaries.outputs.gate_outcome == 'success' &&
+      needs.release-admission-canaries.outputs.candidate_commit == github.sha &&
       needs.metadata.outputs.should_publish == 'true'
     needs:
       - metadata
+      - package-crate
+      - release-admission-canaries
       - publish-crates-io
       - publish-release
     runs-on: ubuntu-latest
@@ -1090,9 +1146,10 @@ jobs:
   finalize-github-release:
     # Un-drafting is irreversible: a public release cannot be made a draft
     # again. This job therefore runs only once the registry publication, the
-    # draft upload, and the inventory verification have each succeeded, and it
-    # reconciles the draft against the *build's* digest record rather than the
-    # verifier's output. Every dependency result is named explicitly because
+    # draft upload, the inventory verification and an enforcing,
+    # candidate-matching admission have each succeeded, and it reconciles the
+    # draft against the *build's* digest record rather than the verifier's
+    # output. Every dependency result is named explicitly because
     # `!cancelled()` is a status function, and a status function suppresses the
     # implicit success check GitHub would otherwise apply. The rehearsal job
     # `release` is deliberately absent: a dry run never creates a draft.
@@ -1103,10 +1160,15 @@ jobs:
       needs.publish-crates-io.result == 'success' &&
       needs.publish-release.result == 'success' &&
       needs.verify-release-inventory.result == 'success' &&
+      needs.release-admission-canaries.result == 'success' &&
+      needs.release-admission-canaries.outputs.enforcement == 'true' &&
+      needs.release-admission-canaries.outputs.gate_outcome == 'success' &&
+      needs.release-admission-canaries.outputs.candidate_commit == github.sha &&
       needs.metadata.outputs.should_publish == 'true'
     needs:
       - metadata
       - package-crate
+      - release-admission-canaries
       - publish-crates-io
       - publish-release
       - verify-release-inventory
