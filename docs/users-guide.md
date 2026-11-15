@@ -2622,12 +2622,14 @@ response limit.
 Every request resolves through the workspace capability rather than the process
 working directory. A relative path is read beneath the configured workspace
 root, and an absolute path is accepted only when it lies beneath that root. A
-`..` component keeps the meaning the filesystem gives it, so `sub/../file` names
-`sub/file` and `alias/../file` follows whatever directory `alias` names. A
-request that climbs above the root — at its start or after naming a directory —
-or that reaches outside it through a link in an intermediate component is
-refused with a diagnostic naming the path and the workspace boundary. The
-refusal never reads the file first, so it cannot disclose contents.
+`..` component keeps the meaning the filesystem gives it: `sub/../file` reads
+the root's `file`, because `..` steps back out of the ordinary directory `sub`,
+while `alias/../file` reads `file` beside whatever directory the link `alias`
+points at. A request that climbs above the root — at its start or after naming
+a directory — or that reaches outside it through a link in an intermediate
+component is refused with a diagnostic naming the path and the workspace
+boundary. The refusal never reads the file first, so it cannot disclose
+contents.
 
 The reading filters also refuse to follow a symlink as the final path component
 and reject anything that is not a regular file once opened, including FIFOs and
