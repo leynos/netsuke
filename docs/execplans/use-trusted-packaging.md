@@ -4494,6 +4494,94 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   suite's own replacement, not to the suite's policy, so there is no tool drift
   to report and nothing for the operator to recover.
 
+  **Superseded by the third review round.** The claim above is false. The
+  passing run at 08:3x used the *old* install; at 09:36:17 another process on
+  this host replaced `~/.local/bin/whitaker`, `whitaker-ls`,
+  `~/.local/share/dylint/lib/nightly-2026-05-28/release/libwhitaker_suite@nightly-2026-05-28.so`,
+  and `~/.local/share/whitaker-bootstrap/bootstrap.json` together, and the
+  reinstalled suite reports the same eighteen findings again on the same
+  sources. See the third-round entry below for the timestamps and the evidence.
+
+- [x] (2026-11-15) Answered the third CodeRabbit review of #1070: the evidence
+  read refuses what is not a document, the run-head double follows the child's
+  revision, and the read-only rule inspects every scope.
+
+  **Findings and dispositions.** The review raised three items, one major and
+  two minor, all confirmed against the code.
+
+  *Blocking read.* `filesystem.read_bytes` opened the configured evidence path
+  with `open(..., "rb")`, which waits for a writer when the path names a FIFO
+  with none, and the gate calls it synchronously without the external-command
+  timeout. Admission could therefore neither refuse nor finish, and the byte
+  bound never applied because no byte was ever read. The read now opens with
+  `O_NONBLOCK`, inspects the opened handle with `fstat`, refuses anything that
+  is not a regular file as `NotRegularFileError` before reading, and then reads
+  at most `limit + 1` bytes through a loop that tolerates a short read. The
+  refusal is an `OSError`, so `_check_scan_freshness` keeps classifying it as
+  `malformed_evidence` beside the oversized-document arm, whose comment now
+  names both. A control probe on one writer-less FIFO shows the pre-fix
+  `open()` still blocked after a second while `read_bytes` refused in the same
+  run, and `NotRegularFileError` reached 100% doc coverage.
+
+  *Run-head double.* `reply_to_github` answered a run lookup with the module's
+  fixed `REVISION` rather than the child's `GITHUB_SHA`, so a case that set its
+  own revision was refused as a candidate mismatch and its scenario never ran.
+  Both lookups now answer from `GITHUB_SHA`, as the commit lookup already did.
+  The bespoke `answer_run_head` override in
+  `release_admission_test_boundedness` existed only to repair that answer, so
+  it and its imports are gone and the identifier property now exercises the
+  shared double. The fix is load-bearing through that property: restoring the
+  fixed answer fails `test_identifiers_never_become_metric_labels` with "the
+  generated candidate must be admitted by its own manifest" (1 failed, 22
+  passed, 334.61 s), while the fixed double passes all 23 in 41.68 s.
+
+  *Read-only scopes.* `check_read_only_jobs` filtered the three scopes the
+  publisher model names, so a job that must stay reachable could hold any other
+  write scope -- `jobs.release.permissions: {actions: write}`, for instance --
+  and pass. Every declared entry is inspected now. The new mutation
+  `grant-rehearsal-unmodelled-write` requires a `release.permissions:` finding;
+  against the pre-fix filter it reports `got []`, and with the fix the case
+  passes.
+
+  **Test coverage and lint corrections.** A new module,
+  `test_release_admission_evidence_reading`, pins the inclusive byte bound, the
+  propagation of an absent path, the refusal of a directory, and the refusal of
+  a writer-less FIFO under a five-second daemon-thread deadline, skipping the
+  FIFO case where `mkfifo` is unavailable so a regression fails an assertion
+  rather than hanging the suite. The module is in the Makefile target and in
+  the workflow contract's pinned list, which is now seventeen modules. Ruff
+  required `Returns` sections on the two new readers and a trailing newline;
+  `make lint-python` then reached 10.00/10.
+
+  **Gates.** On this tree, eight of the nine commit gates pass: `check-fmt`,
+  `typecheck`, `doc-coverage`, `test`, `test-workflow-contracts`,
+  `test-release-admission`, `markdownlint`, and `nixie`. `make lint` fails at
+  `lint-whitaker` alone, with eighteen `bumpy_road_function` findings across
+  seventeen files under `src/`; the branch changes no Rust at all
+  (`git diff --name-only 5c707ef3…HEAD -- src/ test_support/
+  build_l10n_audit/ Cargo.toml Cargo.lock .cargo/ dylint.toml`
+  is empty), so the findings are a condition of the host tool rather than of
+  this diff. The other stages `make lint` composes all pass: `lint-clippy`
+  inside the failed run, then `make lint-python`, `make lint-workflow-scripts`,
+  and `make github-actions-lint` separately.
+
+  **Host-tool change, reported not worked around.** The failing suite is not
+  the one that passed at 08:3x. Four files carry the identical timestamp
+  `2026-11-15 09:36:17`, written by a process outside this session:
+  `~/.local/bin/whitaker`, `~/.local/bin/whitaker-ls`,
+  `~/.local/share/dylint/lib/nightly-2026-05-28/release/libwhitaker_suite@nightly-2026-05-28.so`,
+  and `~/.local/share/whitaker-bootstrap/bootstrap.json` (snapshot
+  `e4608a25c2e2`, dylint 6.3.0). The installed library is byte-identical to the
+  06:09 tip copy, so the behaviour change is the wrapper and bootstrap beside
+  it, not the library's content. The restored findings diagnose
+  `src/stdlib/time/mod.rs::add_component` and sixteen siblings against the
+  suite's documented default threshold of 2.5, which
+  `docs/whitaker-users-guide.md` states was lowered from 3.0 to detect this
+  pattern. Raising the threshold in `dylint.toml` would silence real findings
+  for the whole repository, and rewriting seventeen untouched functions is not
+  this issue's change, so the condition is reported to the operator instead. No
+  Lody, build-limits, or Whitaker process was signalled or reconfigured.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
