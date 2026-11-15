@@ -48,10 +48,15 @@ fn rows(rows: &[&str]) -> String {
     rows.join("\n")
 }
 
+/// Assert that an inventory carrying `obligations` and one row is accepted.
+fn accepts(obligations: &str, row: &str) -> Result<()> {
+    let inventory = inventory_with_rows(obligations, row);
+    validate_inventory(&inventory, SIMPLE_ROADMAP)
+}
+
 #[test]
 fn accepts_a_row_that_names_every_obligation_its_clause_binds() -> Result<()> {
-    let inventory = inventory_with_rows(ONE_BINDING, "| 26.1.2 | -- | -- | CO-1 |");
-    validate_inventory(&inventory, SIMPLE_ROADMAP)
+    accepts(ONE_BINDING, "| 26.1.2 | -- | -- | CO-1 |")
 }
 
 /// A row may name obligations whose own clause does not bind that task.
@@ -66,8 +71,7 @@ fn accepts_a_row_naming_an_obligation_whose_clause_does_not_bind_it() -> Result<
         "- CO-1: Preserve one. Tasks: 26.1.2.\n",
         "- CO-13: Promise no source compatibility. Tasks: 26.1.2.\n",
     );
-    let inventory = inventory_with_rows(obligations, "| 26.1.2 | -- | -- | CO-1, CO-13 |");
-    validate_inventory(&inventory, SIMPLE_ROADMAP)
+    accepts(obligations, "| 26.1.2 | -- | -- | CO-1, CO-13 |")
 }
 
 /// The obligated task's row omits the obligation another row names.
@@ -128,8 +132,7 @@ fn ignores_a_task_named_in_prose_after_the_obligation_list() -> Result<()> {
         "\n",
         "Further prose names 26.1.3, which no clause binds.\n",
     );
-    let inventory = inventory_with_rows(obligations, "| 26.1.2 | -- | -- | CO-1 |");
-    validate_inventory(&inventory, SIMPLE_ROADMAP)
+    accepts(obligations, "| 26.1.2 | -- | -- | CO-1 |")
 }
 
 /// An obligation identifier outside the obligations column is not evidence.
