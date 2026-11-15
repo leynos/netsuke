@@ -18,7 +18,7 @@ Member safety itself is decided in
 policy has not accepted, and it writes no member but the binary.
 
 Run through ``scripts/consumer_smoke_cli.py``; behavioural coverage lives in
-``scripts/tests/test_release_binstall_archive.py``.
+``scripts/tests/test_release_binstall_extract.py``.
 """
 
 import contextlib
@@ -251,10 +251,42 @@ def _copy_member(
     Raises
     ------
     ExtractionError
-        If the member has no readable data or carries more bytes than its
-        header declares.
+        If the member has no readable data or carries more or fewer bytes than
+        its header declares.
+
+    Notes
+    -----
+    Damaged compressed data surfaces as :class:`ArchiveCorruptError` from the
+    steps that read it, before or during the copy.
+    """
+    source = _member_source(archive, entry, layout)
+    written = _stream_member(source, descriptor, layout)
+    if written != layout.binary_size:
+        msg = (
+            f"wrote {written} bytes for {layout.binary_name!r}, but the header "
+            f"declares {layout.binary_size}"
+        )
+        raise ExtractionError(msg)
+
+
+def _member_source(
+    archive: tarfile.TarFile,
+    entry: tarfile.TarInfo,
+    layout: policy.ArchiveLayout,
+) -> typ.BinaryIO:
+    """Return the member's data stream, or refuse one that carries none.
+
+    Returns
+    -------
+    typing.BinaryIO
+        The stream the member's bytes are read from.
+
+    Raises
+    ------
+    ExtractionError
+        If the member has no readable data.
     ArchiveCorruptError
-        If the compressed data fails part-way through.
+        If the archive's data could not be read at all.
     """
     try:
         source = archive.extractfile(entry)
@@ -264,6 +296,27 @@ def _copy_member(
     if source is None:
         msg = f"the archive member {layout.binary_name!r} carries no data"
         raise ExtractionError(msg)
+    return source
+
+
+def _stream_member(
+    source: typ.BinaryIO, descriptor: int, layout: policy.ArchiveLayout
+) -> int:
+    """Copy the member's bytes into ``descriptor``, refusing an overrun.
+
+    Returns
+    -------
+    int
+        The number of bytes written, which the caller compares with the
+        declared size.
+
+    Raises
+    ------
+    ExtractionError
+        If the member carries more bytes than its header declares.
+    ArchiveCorruptError
+        If the compressed data fails part-way through.
+    """
     written = 0
     with source, os.fdopen(descriptor, "wb") as sink:
         try:
@@ -279,9 +332,4 @@ def _copy_member(
         except CORRUPT_STREAM as error:
             msg = f"the archive's data failed part-way through: {error}"
             raise ArchiveCorruptError(msg) from error
-    if written != layout.binary_size:
-        msg = (
-            f"wrote {written} bytes for {layout.binary_name!r}, but the header "
-            f"declares {layout.binary_size}"
-        )
-        raise ExtractionError(msg)
+    return written
