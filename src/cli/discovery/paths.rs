@@ -1,5 +1,7 @@
 //! Path comparison helpers and candidate derivation for configuration discovery.
 
+use cap_std::ambient_authority;
+use cap_std::fs::{Dir, Metadata};
 use ortho_config::EnvSource;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -158,6 +160,36 @@ pub(super) fn normalized_path_key(
     path: &str,
 ) -> io::Result<PathBuf> {
     normalizer.normalize(Path::new(path))
+}
+
+/// Inspect a candidate entry without following a link at its final component.
+///
+/// The probe holds only the candidate's parent directory, so it reads no more
+/// authority than the discovery loader that reports an unresolvable candidate as
+/// absent. A missing entry, or a missing parent directory, reports absence.
+///
+/// # Errors
+///
+/// Returns an I/O error when the parent directory cannot be opened or the entry
+/// cannot be inspected.
+pub(super) fn candidate_entry_metadata(path: &Path) -> io::Result<Option<Metadata>> {
+    let Some(name) = path.file_name() else {
+        return Ok(None);
+    };
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let dir = match Dir::open_ambient_dir(parent, ambient_authority()) {
+        Ok(dir) => dir,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    match dir.symlink_metadata(name) {
+        Ok(metadata) => Ok(Some(metadata)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 /// A normalizer that always fails, so the failure branch is deterministic.

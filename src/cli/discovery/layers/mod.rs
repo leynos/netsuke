@@ -23,7 +23,9 @@ use std::sync::Arc;
 use super::diagnostics::{
     BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
 };
-use super::paths::{PathNormalizer, project_scope_file, user_scope_candidates};
+use super::paths::{
+    PathNormalizer, candidate_entry_metadata, project_scope_file, user_scope_candidates,
+};
 use super::project_policy::scope_project_chain;
 pub(super) use super::project_policy::{
     ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
@@ -151,7 +153,6 @@ fn first_automatic_chain(
         .map_or_else(|| Ok((Vec::new(), true)), Err)
 }
 
-
 /// Flatten a file layer chain into owned merge layers.
 fn chain_layers(chain: FileLayerChain) -> Vec<MergeLayer<'static>> {
     chain
@@ -270,12 +271,9 @@ fn user_scope_base_layers(
 /// Load one user-scope candidate, distinguishing absence from a broken link.
 ///
 /// `OrthoConfig` resolves a candidate through a capability on its parent
-/// directory, so a symbolic link whose target does not resolve is reported
-/// exactly as a file that is not installed. The loader alone therefore cannot
-/// tell an uninstalled configuration from a broken one. Probing the entry
-/// itself separates them: an entry that is not there is skipped, while one that
-/// is there but yielded nothing is rejected, so a dangling
-/// `$HOME/.netsuke.toml` cannot hand policy authority back to system scope.
+/// directory, so a link whose target does not resolve is reported exactly as a
+/// file that is not installed. Probing the entry separates the two, so a
+/// dangling `$HOME/.netsuke.toml` cannot hand policy back to system scope.
 ///
 /// # Errors
 ///
@@ -286,16 +284,13 @@ fn load_user_candidate(path: &Path) -> OrthoResult<Option<FileLayerChain>> {
     if let Some(chain) = load_config_file_as_chain(path)? {
         return Ok(Some(chain));
     }
-    match path.symlink_metadata() {
-        Ok(metadata) if metadata.file_type().is_symlink() => Err(unloadable_candidate(
+    match candidate_entry_metadata(path) {
+        Ok(Some(metadata)) if metadata.file_type().is_symlink() => Err(unloadable_candidate(
             path,
             "symbolic link target is missing",
         )),
-        Ok(_) => Err(unloadable_candidate(
-            path,
-            "present entry yielded no configuration layer",
-        )),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Ok(Some(_)) => Err(unloadable_candidate(path, "present entry yielded no layer")),
+        Ok(None) => Ok(None),
         Err(error) => Err(Arc::new(OrthoError::File {
             path: path.to_path_buf(),
             source: Box::new(error),
@@ -458,5 +453,6 @@ mod selector_tests;
 
 #[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
 // weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
 // weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
