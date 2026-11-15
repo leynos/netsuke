@@ -216,7 +216,9 @@ def test_extract_binary_writes_only_the_root_binary(
     destination = tmp_path / "out"
     destination.mkdir()
 
-    binary = extract.extract_binary(archive, layout, destination)
+    binary = extract.extract_binary(
+        archive, layout, destination, expected_sha256=_digest(archive)
+    )
 
     assert binary.read_bytes() == BINARY_BYTES, (
         "the extracted bytes must be the member's bytes"
@@ -242,7 +244,9 @@ def test_extract_binary_refuses_a_destination_holding_a_symlink(
     (destination / policy.BINARY_NAME).symlink_to(elsewhere)
 
     with pytest.raises(adapter.ExtractionError):
-        extract.extract_binary(archive, layout, destination)
+        extract.extract_binary(
+            archive, layout, destination, expected_sha256=_digest(archive)
+        )
 
     assert elsewhere.read_bytes() == b"untouched", (
         "a planted symlink must not redirect the write"
@@ -255,7 +259,9 @@ def test_extract_binary_refuses_a_missing_destination(tmp_path: pathlib.Path) ->
     layout = adapter.scan_archive(archive, expected_sha256=_digest(archive))
 
     with pytest.raises(adapter.ExtractionError):
-        extract.extract_binary(archive, layout, tmp_path / "absent")
+        extract.extract_binary(
+            archive, layout, tmp_path / "absent", expected_sha256=_digest(archive)
+        )
 
 
 def test_extract_binary_refuses_a_layout_from_other_bytes(
@@ -273,7 +279,41 @@ def test_extract_binary_refuses_a_layout_from_other_bytes(
     destination.mkdir()
 
     with pytest.raises(adapter.ExtractionError):
-        extract.extract_binary(archive, stale, destination)
+        extract.extract_binary(
+            archive, stale, destination, expected_sha256=_digest(archive)
+        )
+
+    assert not list(destination.iterdir()), (
+        "a refused extraction must leave the directory empty"
+    )
+
+
+def test_extract_binary_refuses_a_replacement_that_keeps_the_layout(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a replacement archive whose members still match the scan.
+
+    ``ArchiveLayout`` records the binary's name, its declared size and the
+    member count, not the content, so a replacement of equal size passes the
+    re-scan. The trusted digest is what separates the two archives, and this
+    test changes only the bytes: the file is replaced, the layout is not.
+    """
+    archive = _tarball(tmp_path / "archive.tar.gz")
+    trusted = _digest(archive)
+    layout = adapter.scan_archive(archive, expected_sha256=trusted)
+    replacement = _tarball(
+        tmp_path / "replacement.tar.gz", binary=b"netsuke binary payloaD"
+    )
+    _ = replacement.replace(archive)
+
+    assert adapter.scan_archive(archive, expected_sha256=_digest(archive)) == layout, (
+        "the fixture must be one the layout re-scan accepts, or it proves nothing"
+    )
+    destination = tmp_path / "out"
+    destination.mkdir()
+
+    with pytest.raises(adapter.ExtractionError):
+        extract.extract_binary(archive, layout, destination, expected_sha256=trusted)
 
     assert not list(destination.iterdir()), (
         "a refused extraction must leave the directory empty"
@@ -303,7 +343,9 @@ def test_extract_binary_removes_a_partial_file_when_the_copy_fails(
     monkeypatch.setattr(extract, "_copy_member", explode)
 
     with pytest.raises(adapter.ArchiveCorruptError):
-        extract.extract_binary(archive, layout, destination)
+        extract.extract_binary(
+            archive, layout, destination, expected_sha256=_digest(archive)
+        )
 
     assert not list(destination.iterdir()), (
         "a failed extraction must not leave a partial binary behind"

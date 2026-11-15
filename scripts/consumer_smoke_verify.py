@@ -131,12 +131,17 @@ class Extraction:
         The verified archive.
     layout
         The layout the verification scan accepted.
+    sha256
+        The trusted digest the archive was verified against, which extraction
+        re-checks so a replacement archive matching the layout is still
+        refused.
     destination
         The caller-created, empty directory the binary is written into.
     """
 
     archive: pathlib.Path
     layout: archive_policy.ArchiveLayout
+    sha256: str
     destination: pathlib.Path
 
 
@@ -204,11 +209,15 @@ def probe(
 
     Extraction and launch failures are raised by
     :func:`release_binstall_extract.extract_binary` and
-    :func:`release_binstall_probe.probe_version`, and an archive that changed
-    since the scan by the re-scan inside the extractor.
+    :func:`release_binstall_probe.probe_version`. The extractor checks the
+    archive's digest before it writes, so an archive replaced since the scan
+    is refused even when its members still match the scanned layout.
     """
     binary = extract_adapter.extract_binary(
-        extraction.archive, extraction.layout, extraction.destination
+        extraction.archive,
+        extraction.layout,
+        extraction.destination,
+        expected_sha256=extraction.sha256,
     )
     result = probe_adapter.probe_version(binary, runner=runner)
     _ = payload.require_probe(
@@ -293,6 +302,7 @@ def _run_phases(
             extraction=Extraction(
                 archive=archive.path,
                 layout=layout,
+                sha256=plan.archive_sha256,
                 destination=arguments.extract_dir,
             ),
             runner=runner,
