@@ -208,6 +208,7 @@ impl Case {
     }
 
     /// Require discovery to fail with an error naming `expected_fragment`.
+    #[cfg(unix)]
     fn assert_discovery_error(&self, env: &TestEnv, expected_fragment: &str) -> Result<()> {
         let (paths, error) = self.discover(env);
         ensure!(
@@ -273,23 +274,31 @@ fn windows_user_roots_outrank_system_scope(
     case.assert_single_layer(&case.scoped_environment(environment), &expected_path)
 }
 
-/// An empty base value is ignored, so no candidate is relative to the working
-/// directory.
+/// An empty or relative base value is ignored, so no candidate is relative to
+/// the working directory.
 ///
 /// A relative candidate would load configuration from wherever the tool
-/// happened to run rather than from a user location. The surviving
-/// `USERPROFILE` base keeps the list non-empty, so removing the filter shows up
-/// as a relative candidate or a candidate outside the home directory.
+/// happened to run rather than from a user location, and its grants would be
+/// merged with operator authority. The surviving `USERPROFILE` base keeps the
+/// list non-empty, so removing the filter shows up as a relative candidate or a
+/// candidate outside the home directory.
 #[rstest]
-#[case::xdg_config_home("XDG_CONFIG_HOME")]
-#[case::appdata("APPDATA")]
-#[case::localappdata("LOCALAPPDATA")]
-#[case::home("HOME")]
-fn empty_base_value_is_ignored(#[case] empty_variable: &'static str) -> Result<()> {
+#[case::xdg_config_home_empty("XDG_CONFIG_HOME", "")]
+#[case::xdg_config_home_relative("XDG_CONFIG_HOME", "relative-base")]
+#[case::appdata_empty("APPDATA", "")]
+#[case::appdata_relative("APPDATA", "relative-base")]
+#[case::localappdata_empty("LOCALAPPDATA", "")]
+#[case::localappdata_relative("LOCALAPPDATA", "relative-base")]
+#[case::home_empty("HOME", "")]
+#[case::home_relative("HOME", "relative-base")]
+fn unusable_base_value_is_ignored(
+    #[case] variable: &'static str,
+    #[case] value: &'static str,
+) -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let home = temp.path().join("home");
     let environment = TestEnv::default()
-        .with_var(empty_variable, "")
+        .with_var(variable, value)
         .with_var("USERPROFILE", home.as_os_str());
 
     let candidates = user_scope_candidates(discovery_env_source(&environment).as_ref());

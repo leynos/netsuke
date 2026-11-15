@@ -1015,6 +1015,12 @@ falls back to a system file. That covers malformed TOML, an `extends` parent
 that does not exist, and a symbolic link whose target is missing. The reported
 error names the user file, so the remedy is to repair or remove it.
 
+A user location variable that is empty or names a relative path is ignored
+rather than resolved against the working directory. Netsuke only reads a base
+directory from an absolute value, so a misconfigured `XDG_CONFIG_HOME`,
+`APPDATA`, `LOCALAPPDATA`, `HOME`, or `USERPROFILE` cannot make the
+configuration that applies depend on the directory the tool was run from.
+
 See [Configure Netsuke](users-guide.md#configure-netsuke) for the full order.
 
 ## Review the project fetch-policy boundary

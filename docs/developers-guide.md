@@ -8872,10 +8872,10 @@ modules under `tests/cli_tests/`:
   symbolic link, stops discovery instead of falling back to a system file. Unit
   tests in `src/cli/discovery/layers/tests/user_scope.rs` cover the same
   ordering through the injected environment seam, including the `APPDATA` and
-  `LOCALAPPDATA` branches and the empty-value filter.
+  `LOCALAPPDATA` branches and the filter for empty or relative base values.
   `src/cli/discovery/layers/tests/user_scope_properties.rs` adds two properties
-  over that seam: candidate derivation over every set, empty, and unset
-  combination of the five user variables, and selection over generated
+  over that seam: candidate derivation over every set, empty, relative, and
+  unset combination of the five user variables, and selection over generated
   file-presence masks, which asserts that the first existing candidate wins and
   that an unloadable one fails discovery. `config_discovery_env_provenance.rs`
   plus `fetch_policy_trust/merge_tests.rs` assert that a home-dotfile operator
@@ -11625,11 +11625,12 @@ preference order from the injected `SharedEnvSource`:
 `$XDG_CONFIG_HOME/netsuke/config.toml`, `$XDG_CONFIG_HOME/.netsuke.toml`,
 `%APPDATA%` and `%LOCALAPPDATA%` equivalents, then
 `$HOME/.config/netsuke/config.toml`, `$HOME/.config/.netsuke.toml`, and
-`$HOME/.netsuke.toml`. Empty values count as unset, and `HOME` outranks
-`USERPROFILE`. The pass never reads `XDG_CONFIG_DIRS` or project roots, and it
-does not consult `EnvSource::home_fallback`: Netsuke always supplies a
-`MapEnv`, whose fallback is `None`, so mirroring it would add an ambient lookup
-without changing behaviour.
+`$HOME/.netsuke.toml`. A value that is empty or not root-anchored counts as
+unset, so no candidate can resolve against the working directory, and `HOME`
+outranks `USERPROFILE`. The pass never reads `XDG_CONFIG_DIRS` or project
+roots, and it does not consult `EnvSource::home_fallback`: Netsuke always
+supplies a `MapEnv`, whose fallback is `None`, so mirroring it would add an
+ambient lookup without changing behaviour.
 
 `src/cli/discovery/layers/mod.rs` loads those candidates before calling
 `compose_layers()`. An absent candidate is skipped, a load error is returned

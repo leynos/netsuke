@@ -42,15 +42,19 @@ enum BaseChoice {
     Unset,
     /// The variable is present but empty, which discovery treats as unset.
     Empty,
+    /// The variable names a path relative to the working directory, which
+    /// discovery also treats as unset.
+    Relative,
     /// The variable names its own base directory.
     Set,
 }
 
-/// Generate one base choice, giving all three states equal weight.
+/// Generate one base choice, giving all four states equal weight.
 fn base_choice() -> impl Strategy<Value = BaseChoice> {
     prop_oneof![
         Just(BaseChoice::Unset),
         Just(BaseChoice::Empty),
+        Just(BaseChoice::Relative),
         Just(BaseChoice::Set),
     ]
 }
@@ -61,6 +65,9 @@ fn insert_base(environment: &mut MapEnv, key: &str, choice: BaseChoice, base: &P
         BaseChoice::Unset => {}
         BaseChoice::Empty => {
             environment.insert(key, OsString::new());
+        }
+        BaseChoice::Relative => {
+            environment.insert(key, OsString::from("relative-base"));
         }
         BaseChoice::Set => {
             environment.insert(key, base.as_os_str());
@@ -155,11 +162,11 @@ proptest! {
                     );
                     present_bases.push(base.clone());
                 }
-                BaseChoice::Empty | BaseChoice::Unset => {
+                BaseChoice::Empty | BaseChoice::Relative | BaseChoice::Unset => {
                     let files = files_under(&candidates, base);
                     prop_assert!(
                         files.is_empty(),
-                        "an empty or unset base contributes nothing, got {:?}",
+                        "an empty, relative, or unset base contributes nothing, got {:?}",
                         files
                     );
                 }

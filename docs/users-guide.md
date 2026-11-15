@@ -1913,19 +1913,23 @@ Configuration precedence, from lowest to highest, is:
 System and user configuration are discovered from platform conventions rather
 than merged as two separately named Netsuke layers. Netsuke checks every user
 location before any system location, so a user file always outranks a system
-file. On Unix, the user locations are checked in this order:
+file. The user locations are checked in this order on every platform:
 
 1. `$XDG_CONFIG_HOME/netsuke/config.toml`
 2. `$XDG_CONFIG_HOME/.netsuke.toml`
-3. `$HOME/.config/netsuke/config.toml`
-4. `$HOME/.config/.netsuke.toml`
-5. `$HOME/.netsuke.toml`
+3. `%APPDATA%\netsuke\config.toml`
+4. `%APPDATA%\.netsuke.toml`
+5. `%LOCALAPPDATA%\netsuke\config.toml`
+6. `%LOCALAPPDATA%\.netsuke.toml`
+7. `$HOME/.config/netsuke/config.toml`
+8. `$HOME/.config/.netsuke.toml`
+9. `$HOME/.netsuke.toml`
 
-`HOME` supplies the home directory when it is set and non-empty; otherwise
-`USERPROFILE` does. An empty `XDG_CONFIG_HOME` counts as unset. On Windows the
-user locations are `%APPDATA%\netsuke\config.toml`, `%APPDATA%\.netsuke.toml`,
-`%LOCALAPPDATA%\netsuke\config.toml`, and `%LOCALAPPDATA%\.netsuke.toml`,
-followed by the same home locations.
+An undefined variable is skipped, as is one whose value is empty or not an
+absolute path, because a relative base would resolve against the working
+directory and load a file from wherever the tool happened to be run. `HOME`
+supplies the home directory when it is set to an absolute path; otherwise
+`USERPROFILE` does.
 
 System configuration is consulted only when no user file exists. On Unix that
 means each directory in `$XDG_CONFIG_DIRS`, defaulting to `/etc/xdg`, looking
