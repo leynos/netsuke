@@ -312,6 +312,8 @@ mod project_chain_tests;
 
 mod user_scope;
 
+mod user_scope_properties;
+
 /// Canonicalization failure falls back to literal comparison without failing
 /// discovery.
 #[test]

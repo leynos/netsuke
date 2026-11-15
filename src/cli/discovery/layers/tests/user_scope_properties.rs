@@ -1,0 +1,284 @@
+//! Property tests for user-scope candidate derivation and selection.
+//!
+//! The fixed cases in [`super::user_scope`] pin the named contract scenarios.
+//! These properties extend them over the environment states a table can only
+//! sample: which user bases are set, empty, or unset, and which candidate files
+//! exist or fail to load.
+
+use super::super::super::discovery_env_source;
+use super::super::super::paths::user_scope_candidates;
+use super::TestEnv;
+use super::user_scope::{Case, canonical, write_config};
+use ortho_config::MapEnv;
+use proptest::prelude::*;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+
+/// The user base variables consulted before the home fallbacks, in preference
+/// order, paired with the directory each generated case gives that base.
+const BASE_ORDER: [(&str, &str); 3] = [
+    ("XDG_CONFIG_HOME", "xdg-config-home"),
+    ("APPDATA", "appdata"),
+    ("LOCALAPPDATA", "localappdata"),
+];
+
+/// Relative paths a base directory contributes, nested file first.
+const BASE_FILES: [&str; 2] = ["netsuke/config.toml", ".netsuke.toml"];
+
+/// Relative paths the home directory contributes, in preference order.
+const HOME_FILES: [&str; 3] = [
+    ".config/netsuke/config.toml",
+    ".config/.netsuke.toml",
+    ".netsuke.toml",
+];
+
+/// Content that cannot be parsed, so its candidate cannot load.
+const MALFORMED: &str = "emoji = \"always\n";
+
+/// How one user base variable is set for a generated case.
+#[derive(Clone, Copy, Debug)]
+enum BaseChoice {
+    /// The variable is absent from the environment.
+    Unset,
+    /// The variable is present but empty, which discovery treats as unset.
+    Empty,
+    /// The variable names its own base directory.
+    Set,
+}
+
+/// Generate one base choice, giving all three states equal weight.
+fn base_choice() -> impl Strategy<Value = BaseChoice> {
+    prop_oneof![
+        Just(BaseChoice::Unset),
+        Just(BaseChoice::Empty),
+        Just(BaseChoice::Set),
+    ]
+}
+
+/// Write `choice` for `key` into `environment`, resolving `Set` beneath `base`.
+fn insert_base(environment: &mut MapEnv, key: &str, choice: BaseChoice, base: &Path) {
+    match choice {
+        BaseChoice::Unset => {}
+        BaseChoice::Empty => {
+            environment.insert(key, OsString::new());
+        }
+        BaseChoice::Set => {
+            environment.insert(key, base.as_os_str().to_os_string());
+        }
+    }
+}
+
+/// Return the candidate paths beneath `base`, relative to it.
+fn files_under(candidates: &[PathBuf], base: &Path) -> Vec<PathBuf> {
+    candidates
+        .iter()
+        .filter_map(|candidate| candidate.strip_prefix(base).ok())
+        .map(Path::to_path_buf)
+        .collect()
+}
+
+/// Render `files` as owned paths for comparison with a discovered list.
+fn expected_files(files: &[&str]) -> Vec<PathBuf> {
+    files.iter().map(PathBuf::from).collect()
+}
+
+/// Return the first and last candidate index beneath `base`.
+fn span_under(candidates: &[PathBuf], base: &Path) -> Option<(usize, usize)> {
+    let indices = candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, candidate)| candidate.starts_with(base))
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    indices
+        .first()
+        .zip(indices.last())
+        .map(|(first, last)| (*first, *last))
+}
+
+proptest! {
+    /// Every candidate is absolute and belongs to a user base, no candidate
+    /// comes from the system scope, the bases keep their documented order, and
+    /// each base offers its nested file before its dotfile.
+    #[test]
+    fn user_candidates_stay_inside_user_bases_in_order(
+        xdg_config_home in base_choice(),
+        appdata in base_choice(),
+        localappdata in base_choice(),
+        home in base_choice(),
+        userprofile in base_choice(),
+    ) {
+        let temp = tempfile::tempdir().expect("create temp dir");
+        let root = temp.path();
+        let mut environment = MapEnv::new();
+        let mut ordered_bases = Vec::new();
+        for ((key, directory), choice) in BASE_ORDER.iter().zip([
+            xdg_config_home,
+            appdata,
+            localappdata,
+        ]) {
+            let base = root.join(directory);
+            insert_base(&mut environment, key, choice, &base);
+            ordered_bases.push((base, choice));
+        }
+        let home_base = root.join("home");
+        let profile_base = root.join("profile");
+        insert_base(&mut environment, "HOME", home, &home_base);
+        insert_base(&mut environment, "USERPROFILE", userprofile, &profile_base);
+        let system = root.join("system");
+        environment.insert("XDG_CONFIG_DIRS", system.as_os_str().to_os_string());
+
+        let candidates = user_scope_candidates(&environment);
+
+        for candidate in &candidates {
+            prop_assert!(
+                candidate.is_absolute(),
+                "a candidate must not resolve against the working directory: {:?}",
+                candidate
+            );
+            prop_assert!(
+                !candidate.starts_with(&system),
+                "a candidate must not come from the system scope: {:?}",
+                candidate
+            );
+        }
+
+        let mut present_bases = Vec::new();
+        for (base, choice) in &ordered_bases {
+            match choice {
+                BaseChoice::Set => {
+                    let files = files_under(&candidates, base);
+                    prop_assert_eq!(
+                        &files,
+                        &expected_files(&BASE_FILES),
+                        "a set base contributes its nested file before its dotfile"
+                    );
+                    present_bases.push(base.clone());
+                }
+                BaseChoice::Empty | BaseChoice::Unset => {
+                    let files = files_under(&candidates, base);
+                    prop_assert!(
+                        files.is_empty(),
+                        "an empty or unset base contributes nothing, got {:?}",
+                        files
+                    );
+                }
+            }
+        }
+
+        let resolved_home = match (home, userprofile) {
+            (BaseChoice::Set, _) => Some(home_base),
+            (_, BaseChoice::Set) => Some(profile_base),
+            _ => None,
+        };
+        match &resolved_home {
+            Some(base) => {
+                prop_assert_eq!(
+                    &files_under(&candidates, base),
+                    &expected_files(&HOME_FILES),
+                    "the home directory contributes its documented files in order"
+                );
+                present_bases.push(base.clone());
+            }
+            // With no resolved home the only candidates are the base ones, and
+            // the count below rejects any candidate no base accounts for.
+            None => {}
+        }
+
+        let accounted: usize = present_bases
+            .iter()
+            .map(|base| files_under(&candidates, base).len())
+            .sum();
+        prop_assert_eq!(
+            candidates.len(),
+            accounted,
+            "every candidate belongs to exactly one user base: {:?}",
+            candidates
+        );
+
+        for pair in present_bases.windows(2) {
+            prop_assert!(
+                matches!(
+                    (span_under(&candidates, &pair[0]), span_under(&candidates, &pair[1])),
+                    (Some((_, end)), Some((start, _))) if end < start
+                ),
+                "each base must finish before the next begins: {:?}",
+                candidates
+            );
+        }
+    }
+
+    /// Discovery loads exactly the first existing user candidate, ignores every
+    /// later one, and fails closed when that candidate cannot be loaded.
+    #[test]
+    fn discovery_selects_the_first_existing_user_candidate(
+        presence in proptest::array::uniform9(any::<bool>()),
+        corrupt_first in any::<bool>(),
+    ) {
+        let case = Case::new().expect("build user-scope case");
+        let mut environment = TestEnv::default().with_var("HOME", case.home().as_os_str());
+        for (key, directory) in BASE_ORDER {
+            let base = case.base(directory).expect("create user base");
+            environment = environment.with_var(key, base.into_os_string());
+        }
+
+        let candidates = user_scope_candidates(discovery_env_source(&environment).as_ref());
+        prop_assert!(
+            candidates.len() >= presence.len(),
+            "four set bases should yield at least {} candidates: {:?}",
+            presence.len(),
+            candidates
+        );
+        let mut present = Vec::new();
+        for (candidate, is_present) in candidates.iter().zip(presence.iter()) {
+            if *is_present {
+                write_config(candidate, "jobs = 4\n").expect("write user candidate");
+                present.push(candidate.clone());
+            }
+        }
+
+        let first_present = present.first();
+        if let (true, Some(first)) = (corrupt_first, first_present) {
+            write_config(first, MALFORMED).expect("corrupt the first candidate");
+        }
+        let environment = case.scoped_environment(environment);
+        let (paths, error) = case.discover(&environment);
+
+        match (first_present, corrupt_first) {
+            (Some(_), true) => {
+                prop_assert!(
+                    error.is_some(),
+                    "a candidate that exists but cannot load must fail discovery: {:?}",
+                    paths
+                );
+                prop_assert!(
+                    paths.is_empty(),
+                    "a failed user pass must not fall through to another layer: {:?}",
+                    paths
+                );
+            }
+            (Some(first), false) => {
+                prop_assert!(
+                    error.is_none(),
+                    "discovery should succeed: {:?}",
+                    error
+                );
+                prop_assert_eq!(
+                    &paths,
+                    &vec![canonical(first).expect("canonicalise the expected layer")]
+                );
+            }
+            (None, _) => {
+                prop_assert!(
+                    error.is_none(),
+                    "absent user candidates must not fail discovery: {:?}",
+                    error
+                );
+                prop_assert_eq!(
+                    &paths,
+                    &vec![canonical(&case.system_config()).expect("canonicalise system layer")]
+                );
+            }
+        }
+    }
+}
