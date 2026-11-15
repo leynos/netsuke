@@ -106,10 +106,9 @@ def test_verify_sidecar_accepts_a_matching_checksum(tmp_path: pathlib.Path) -> N
     [
         "",
         "not a checksum\n",
-        "ab" * 32 + "  another-asset.tar.gz\n",
         "cd" * 32 + "  archive.tar.gz\n",
     ],
-    ids=["empty", "malformed", "other-name", "other-digest"],
+    ids=["empty", "malformed", "other-digest"],
 )
 def test_verify_sidecar_refuses_a_sidecar_that_does_not_describe_the_archive(
     tmp_path: pathlib.Path, text: str
@@ -118,6 +117,25 @@ def test_verify_sidecar_refuses_a_sidecar_that_does_not_describe_the_archive(
     archive = tarball(tmp_path / "archive.tar.gz")
     sidecar = tmp_path / SIDECAR_NAME
     _ = sidecar.write_text(text, encoding="utf-8")
+
+    with pytest.raises(adapter.SidecarVerificationError):
+        adapter.verify_sidecar(archive, sidecar)
+
+
+def test_verify_sidecar_refuses_a_sidecar_naming_another_asset(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a sidecar whose checksum is right but which names another asset.
+
+    The digest here is the archive's own, so only the asset name can produce
+    the refusal; a case that also changed the digest would stay green if the
+    name check were deleted, because the digest check would raise instead.
+    """
+    archive = tarball(tmp_path / "archive.tar.gz")
+    sidecar = tmp_path / SIDECAR_NAME
+    _ = sidecar.write_text(
+        f"{digest_of(archive)}  another-asset.tar.gz\n", encoding="utf-8"
+    )
 
     with pytest.raises(adapter.SidecarVerificationError):
         adapter.verify_sidecar(archive, sidecar)
