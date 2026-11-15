@@ -254,8 +254,9 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-15 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 50 in the current `main` target and
-twenty-one on this branch, one of them adding this inventory's contract test
-and the rest refactoring, tightening, or repairing the health of that contract.
+twenty-two on this branch, one of them adding this inventory's contract test,
+one raising the Whitaker span floor that the `test_support` crate shares, and
+the rest refactoring, tightening, or repairing the health of that contract.
 Regenerate the list with
 `git log 8a961000..HEAD --format=%h -- src build.rs tests test_support benches`;
 it goes stale whenever a commit touches one of those paths, so treat the
@@ -346,6 +347,7 @@ context for later consumers; it does not move the inventory pin.
   (#1047)
 - `c876cb79e` Bind Windows recipe interpreters to trusted absolute executable
   paths (#980) (#1082)
+- `c95dc58a2` Raise bumpy_road_function's span floor above the widest artefact
 - `cc6854a5a` Require a task row to name every obligation that binds it
 - `ce15e026d` Implement crates.io Trusted Publishing and registry byte
   verification (#1064) (#1077)

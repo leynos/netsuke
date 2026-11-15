@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 52. See `Revision note` at the foot of this document. This plan was
+Revision 53. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -772,13 +772,18 @@ pre-rebase history if an old hash must be inspected.
 - [x] (2026-11-15) Cleared the `bumpy_road_function` 0.3.0 regression (D-38).
   The post-turn gate made this a local blocking failure, not the external
   blocker it had been reported as, so it had to be made green rather than
-  awaited. A full census at five `min_bump_lines` values isolated 15 as the
-  smallest setting that clears every generated-expression artefact while
-  leaving the rule live; the change is confined to `dylint.toml` and touches no
-  `src/` file. Two code refactors written against the narrower settings were
-  reverted once the chosen setting left the untouched code clean. This commit
-  touches no `tests/` or `src/` path, so the post-pin list is unchanged at 71
-  identifiers with a 50/21 split.
+  awaited. The detector keeps a bump when its span is at least
+  `min_bump_lines`, so a floor must exceed the widest artefact rather than
+  match it; a first attempt at 15 was honoured and still failed on both hosted
+  lanes, and 25 is what ships. `make lint-whitaker` also runs the suite from
+  `test_support`, which reads that crate's own `dylint.toml`, so the table had
+  to be stated in both files. No `src/` file changes. Two code refactors
+  written against the narrower settings were reverted once the chosen setting
+  left the untouched code clean. The commit does touch an in-scope path —
+  `test_support/dylint.toml` is under `test_support/`, which the post-pin sweep
+  covers — so the list advances an eleventh time to 72 identifiers with a 50/22
+  split. Regenerating rather than reasoning about the path list is what caught
+  this: the plan initially recorded no advance.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1114,46 +1119,64 @@ pre-rebase history if an old hash must be inspected.
   Clippy with `-D warnings` is clean. Date/Author: 2026-11-15, implementation
   agent, after the hosted CodeScene re-review.
 - Decision D-38 (2026-11-15): raised `bumpy_road_function`'s `min_bump_lines`
-  from its default of 2 to 15 in `dylint.toml`, because Whitaker 0.3.0 made the
-  rule unsound on code no one had changed. The released suite "descends through
-  generated expressions and measures the authored code they wrap", so each `?`
-  (which desugars to a two-arm `match`) and each multi-line array literal
-  counts as authored nesting.
-  `src/cli/merge/mod.rs::insert_global_cli_overrides` carries no `if`, `match`,
-  or `else` and is still reported; `dot::render`'s single `if` is counted as
-  three bumps; `serial_order_graph` is two flat `for` loops over literal
-  arrays. The breakage is upstream and repo-wide: it turned 18 findings across
-  17 `src/` files red on a branch whose diff touches no `src/` file, with a
-  green-to-red transition at whitaker `880939d1f` across zero `src/` changes.
-  Local `lint-whitaker` had passed because the installed suite predated 0.3.0,
-  so local green was stale evidence rather than a contradiction.
+  from its default of 2 to 25, in both the root `dylint.toml` and
+  `test_support/dylint.toml`, because Whitaker 0.3.0 made the rule unsound on
+  code no one had changed. The released suite "descends through generated
+  expressions and measures the authored code they wrap", so each `?` (which
+  desugars to a two-arm `match`) and each multi-line array literal counts as
+  authored nesting. `src/cli/merge/mod.rs::insert_global_cli_overrides` carries
+  no `if`, `match`, or `else` and is still reported; `dot::render`'s single
+  `if` is counted as three bumps; `serial_order_graph` is two flat `for` loops
+  over literal arrays. The breakage is upstream and repo-wide: it turned 18
+  findings across 17 `src/` files red on a branch whose diff touches no `src/`
+  file, with a green-to-red transition at whitaker `880939d1f` across zero
+  `src/` changes. Local `lint-whitaker` had passed because the installed suite
+  predated 0.3.0, so local green was stale evidence rather than a contradiction.
 
-  The parameter was chosen by measurement, not by taste. Every generated
-  artefact is bounded by the size of the literal it sits in: the widest spans
-  18 lines and the others under 12, while a genuine bumpy road sustains a
-  nested region across a body of no fixed size. A full census at
-  `min_bump_lines` 2, 10, 15, 20, and 25 showed 3 findings at 10 and 0 at 15
-  and above, so 15 is the smallest value that clears every artefact while
-  leaving the rule live for the long functions it targets. `threshold` is
-  deliberately left at its default: narrowing the span a peak must cover does
-  not lower the complexity bar, which a lowered `threshold` would. This follows
-  the standing policy that an unhelpful lint is answered with a documented
-  `dylint.toml` entry rather than by dropping it from the load set, and the
-  guide's prohibition on per-site `#[allow]`/`#[expect]` is scoped to
-  `no_std_fs_operations`.
+  The parameter was chosen by measurement, not by taste, and the first
+  measurement was wrong. Every generated artefact is bounded by the size of the
+  literal it sits in: the widest spans 18 lines and the others under 12, while
+  a genuine bumpy road sustains a nested region across a body of no fixed size.
+  The detector keeps a bump when `len() >= min_bump_lines`, so a floor has to
+  *exceed* the widest artefact rather than match it. A first attempt at 15 was
+  honoured and still failed on both hosted lanes, because `serial_order_graph`
+  reports bumps of 16 and 18. The shipped value is 25, which clears the 18-line
+  artefact with margin. `threshold` is deliberately left at its default,
+  because lowering it would weaken the rule rather than narrow what counts as
+  one bump. This follows the standing policy that an unhelpful lint is answered
+  with a documented `dylint.toml` entry rather than by dropping it from the
+  load set, and the guide's prohibition on per-site `#[allow]`/`#[expect]` is
+  scoped to `no_std_fs_operations`.
 
-  Two refactors were written first -- splitting an absolute-prefix helper out of
+  The `test_support` crate needed the same table and did not have it.
+  `make lint-whitaker` runs the suite a second time from that directory, where
+  the crate's own `dylint.toml` supplies the policy. With no
+  `[bumpy_road_function]` section the defaults applied there, and the Windows
+  lane reported fixtures for nesting spanning 2, 4, 6, and 7 lines — spans
+  impossible under any sane floor, which is what identified the omission. A
+  missing table silently reverts to the defaults, so a second pass over a
+  different config file is a second place the setting has to be stated.
+
+  Reading these findings cost a detour worth recording. Hand-rolled `whitaker`
+  invocations reported zero findings while `make lint-whitaker` reported one on
+  the same tree and the same config, because the Makefile goes through
+  `whitaker-installer run` and loads a different library than the
+  `~/.local/share/whitaker/lints/` build a bare `whitaker` call picks up. Only
+  the `make` target reproduces the hosted result, so it is the only valid
+  oracle for this lint.
+
+  Two refactors were written first — splitting an absolute-prefix helper out of
   `open_literal_prefix` in `src/manifest/glob/walk.rs`, and splitting
   `check_status` into three validators in
-  `tests/rfc_stdlib_coverage/progress.rs` -- and both were then reverted. Under
+  `tests/rfc_stdlib_coverage/progress.rs` — and both were then reverted. Under
   the chosen setting the untouched code is already clean, so they repaired
   findings that no longer existed and would have widened a model-and-inventory
-  PR into unrelated production and test files. `walk.rs` also sits at 400 lines
-  against the `module_max_lines` cap, which the extraction reached exactly, and
-  its capability `dir` is a `std::fs::File`, the type `no_std_fs_operations`
-  forbids in a signature. The config change is the whole fix and touches no
-  `src/` file. Date/Author: 2026-11-15, implementation agent, after the
-  post-turn gate surfaced the 0.3.0 regression.
+  PR into unrelated production and test files. `walk.rs` also carries only five
+  lines of headroom under the `module_max_lines` cap, and its capability `dir`
+  is a `std::fs::File`, the type `no_std_fs_operations` forbids in a signature.
+  The config change is the whole fix and touches no `src/` file. Date/Author:
+  2026-11-15, implementation agent, after the post-turn gate surfaced the 0.3.0
+  regression.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
   the pin" list for in-scope paths at merge time. Rationale: the roadmap
@@ -2604,11 +2627,26 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   that arrived from upstream (D-38). The released suite counts generated
   expressions as authored nesting, so every `?` and multi-line array literal
   reads as conditional logic; 18 findings appeared across 17 `src/` files this
-  branch never touches. Raising `min_bump_lines` to 15 cleared a full census
-  while leaving `threshold` at its default, and the fix is confined to
-  `dylint.toml`. Two refactors written against narrower settings were reverted.
-  The post-pin list is unchanged at 71 identifiers, because this revision
-  touches no `tests/` or `src/` path.
+  branch never touches. Raising `min_bump_lines` to 15 and leaving `threshold`
+  at its default was believed to clear a census that a stale local library had
+  made over-optimistic; Revision 53 corrects the value and the evidence behind
+  it. Two refactors written against narrower settings were reverted.
+
+- Revision 53 (2026-11-15): corrected Revision 52's span floor, which the first
+  hosted run after it disproved. The detector keeps a bump when
+  `len() >= min_bump_lines`, so a floor must *exceed* the widest generated
+  artefact rather than match it: `serial_order_graph` reports bumps of 16 and
+  18, both above 15. The shipped value is 25. `make lint-whitaker` also runs
+  the suite a second time from `test_support`, which reads that crate's own
+  `dylint.toml`; with no `[bumpy_road_function]` section there the defaults
+  applied and the Windows lane reported spans of 2, 4, 6, and 7 lines, so both
+  files now carry the table. Two further lessons are recorded in D-38: a
+  missing table silently reverts to its defaults, and a hand-rolled `whitaker`
+  call loads a different library than `make lint-whitaker`, which is therefore
+  the only valid oracle. The post-pin list advances an eleventh time to 72
+  identifiers, 50 `main` and 22 branch, because `test_support/dylint.toml` is
+  an in-scope path — a fact the plan first recorded wrongly, and found only by
+  regenerating the list rather than reasoning about the path set.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
