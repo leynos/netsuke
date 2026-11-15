@@ -24,7 +24,7 @@ Run via ``make test-workflow-contracts``.
 import re
 
 from release_publish_needs import job_names
-from release_publish_path_scenarios import CONSUMER_SMOKE_NEEDS
+from release_publish_path_scenario_model import CONSUMER_SMOKE_NEEDS
 
 CONSUMER_SMOKE_JOB = "consumer-smoke"
 #: The action the job must call, and the manifest that action must be.

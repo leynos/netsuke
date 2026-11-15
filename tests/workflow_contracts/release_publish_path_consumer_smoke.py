@@ -53,7 +53,7 @@ from release_publish_path_consumer_shape import (
 )
 
 if typ.TYPE_CHECKING:
-    from release_publish_path_scenarios import Scenario
+    from release_publish_path_scenario_model import Scenario
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -107,9 +107,19 @@ def _needs_context(
 
 
 def _should_smoke(scenario: Scenario) -> bool:
-    """Compute the independent reachability oracle for the consumer smoke."""
+    """Compute the independent reachability oracle for the consumer smoke.
+
+    The oracle reads the authority the policy granted, not the resolver's
+    nominal mode: a publish-shaped invocation that the policy narrows to a dry
+    run stages a draft release the smoke cannot download without a token.
+
+    Returns
+    -------
+    bool
+        Whether the smoke must run for this scenario.
+    """
     return (
-        scenario.mode == "publish"
+        scenario.authorization.should_publish
         and not scenario.cancelled
         and all(
             scenario.needs_results.get(name) == "success"

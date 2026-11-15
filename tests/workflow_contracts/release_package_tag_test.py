@@ -107,7 +107,13 @@ def test_the_packaging_step_receives_the_rehearsal_mode() -> None:
 
 
 def test_publishing_requires_a_validated_release_tag() -> None:
-    """Reject non-tag reusable-workflow calls before exposing a publish tag."""
+    """Reject non-tag reusable-workflow calls before exposing a publish tag.
+
+    The gate follows the workflow's own authorization decision rather than the
+    release-mode resolver: the pinned resolver answers ``should-publish: true``
+    for every push before it consults the reusable ``publish`` input, so reading
+    it here would validate a ref for a caller that refused publication.
+    """
     workflow = load_workflow(RELEASE_WORKFLOW_PATH)
     metadata = workflow_job(workflow, "metadata")
     outputs = require_mapping(metadata.get("outputs"), "metadata outputs")
@@ -122,8 +128,8 @@ def test_publishing_requires_a_validated_release_tag() -> None:
         "the output reference and validation step identity must stay aligned"
     )
     assert validation.get("if") == (
-        "steps.release_modes.outputs['should-publish'] == 'true'"
-    ), "only publishing runs need a release ref"
+        "steps.release_authorization.outputs['should-publish'] == 'true'"
+    ), "only authorized publishing runs need a release ref"
     assert environment.get("RELEASE_REF") == "${{ github.ref }}", (
         "the check must inspect the full ref, not a reusable-workflow input"
     )

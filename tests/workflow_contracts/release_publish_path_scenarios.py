@@ -1,108 +1,23 @@
-"""Model the finite release modes and dependency outcomes in workflow tests."""
+"""Enumerate every release invocation the publish-path contract evaluates.
 
-import dataclasses
-import typing as typ
+The value objects, the release-mode constants, and the resolver the policy reads
+live in ``release_publish_path_scenario_model``, so this module holds only the
+table: one row per invocation shape and dependency outcome the workflow must
+handle.
+"""
 
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
-MODE_OUTPUTS = {
-    "dry-run": {
-        "should-publish": "false",
-        "dry-run": "true",
-        "should-upload-workflow-artifacts": "false",
-    },
-    "publish": {
-        "should-publish": "true",
-        "dry-run": "false",
-        "should-upload-workflow-artifacts": "true",
-    },
-    "neither": {
-        "should-publish": "false",
-        "dry-run": "false",
-        "should-upload-workflow-artifacts": "false",
-    },
-}
-PACKAGE_UPLOAD = {"dry-run": True, "publish": True, "neither": False}
-REQUIRED_DRY_RUN_EVENTS = {"opened", "synchronize", "reopened", "ready_for_review"}
-REQUIRED_NEEDS = {
-    "metadata",
-    "build-linux",
-    "build-windows",
-    "build-macos",
-    "windows-native-recipe-smoke",
-}
-CRATES_IO_NEEDS = {
-    "metadata",
-    "package-crate",
-    "build-linux",
-    "build-windows",
-    "build-macos",
-    "windows-native-recipe-smoke",
-    "release-admission-canaries",
-}
-PUBLISHER_NEEDS = {"publish-crates-io", "publish-release"}
-#: The verification job depends on both publishers and on nothing else, so a
-#: failed or skipped publisher leaves the inventory unverified rather than
-#: verified against a release that was never completed.
-VERIFY_NEEDS = {"metadata", *PUBLISHER_NEEDS}
-#: The consumer smoke depends on the candidate's three stages and on nothing
-#: else. Finalization is one of them because an archive attached to a draft
-#: release needs a token to download, and the smoke deliberately holds none.
-CONSUMER_SMOKE_NEEDS = {"metadata", "package-crate", "finalize-github-release"}
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class Scenario:
-    """Describe the external release mode and dependency outcomes for one run."""
-
-    name: str
-    mode: str
-    event_action: str
-    needs_results: cabc.Mapping[str, str]
-    cancelled: bool
-    release_runs: bool
-
-
-def _needs_results(
-    *,
-    smoke: str = "success",
-    outcomes: cabc.Mapping[str, str] | None = None,
-) -> dict[str, str]:
-    """Build a complete needs-result map from the selected outcomes.
-
-    Every dependency defaults to success, so a scenario names only the ones it
-    changes. ``outcomes`` is applied last and therefore wins over ``smoke``,
-    which keeps the smoke shortcut from silently overriding an explicit
-    outcome for the same job.
-
-    Returns
-    -------
-    dict[str, str]
-        One result per dependency named by the release scenarios.
-
-    Raises
-    ------
-    ValueError
-        If ``outcomes`` names a job the release scenarios do not model. Its
-        result would otherwise land beside the dependency the scenario meant to
-        change, leaving every real dependency at success and the scenario green
-        while testing nothing.
-    """
-    results = dict.fromkeys(
-        CRATES_IO_NEEDS | PUBLISHER_NEEDS | CONSUMER_SMOKE_NEEDS, "success"
-    )
-    results["windows-native-recipe-smoke"] = smoke
-    if outcomes is not None:
-        # A mistyped job name would otherwise add a result no job declares and
-        # leave the intended one at its default, so the scenario would assert
-        # the opposite of what its name says.
-        unknown = sorted(outcomes.keys() - results.keys())
-        if unknown:
-            msg = f"scenario names unknown dependenc(ies) {unknown}"
-            raise ValueError(msg)
-        results.update(outcomes)
-    return results
+from release_publish_path_scenario_model import (
+    BRANCH_REF,
+    CALLER_WORKFLOW_REF,
+    CRATES_IO_NEEDS,
+    DIRECT_WORKFLOW_REF,
+    PUBLISHING_DRY_RUN,
+    PULL_REF,
+    TAG_REF,
+    Invocation,
+    Scenario,
+    needs_results,
+)
 
 
 def _prerequisite_scenarios(outcome: str) -> tuple[Scenario, ...]:
@@ -112,11 +27,24 @@ def _prerequisite_scenarios(outcome: str) -> tuple[Scenario, ...]:
             f"publish-{need}-{outcome}",
             "publish",
             "",
-            _needs_results(outcomes={need: outcome}),
+            needs_results(outcomes={need: outcome}),
             cancelled=False,
             release_runs=False,
         )
         for need in sorted(CRATES_IO_NEEDS)
+    )
+
+
+def _reusable_push(name: str, invocation: Invocation) -> Scenario:
+    """Create a reusable invocation that inherited a push trigger."""
+    return Scenario(
+        name,
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=False,
+        invocation=invocation,
     )
 
 
@@ -125,7 +53,7 @@ SCENARIOS = (
         "opened",
         "dry-run",
         "opened",
-        _needs_results(smoke="skipped"),
+        needs_results(smoke="skipped"),
         cancelled=False,
         release_runs=True,
     ),
@@ -133,7 +61,7 @@ SCENARIOS = (
         "synchronize",
         "dry-run",
         "synchronize",
-        _needs_results(smoke="skipped"),
+        needs_results(smoke="skipped"),
         cancelled=False,
         release_runs=True,
     ),
@@ -141,7 +69,7 @@ SCENARIOS = (
         "reopened",
         "dry-run",
         "reopened",
-        _needs_results(smoke="skipped"),
+        needs_results(smoke="skipped"),
         cancelled=False,
         release_runs=True,
     ),
@@ -149,7 +77,7 @@ SCENARIOS = (
         "ready-for-review",
         "dry-run",
         "ready_for_review",
-        _needs_results(),
+        needs_results(),
         cancelled=False,
         release_runs=True,
     ),
@@ -159,7 +87,7 @@ SCENARIOS = (
         "dry-run-publishers-skipped",
         "dry-run",
         "opened",
-        _needs_results(
+        needs_results(
             smoke="skipped",
             outcomes={"publish-crates-io": "skipped", "publish-release": "skipped"},
         ),
@@ -170,7 +98,7 @@ SCENARIOS = (
         "dry-run-failed-build",
         "dry-run",
         "opened",
-        _needs_results(smoke="skipped", outcomes={"build-linux": "failure"}),
+        needs_results(smoke="skipped", outcomes={"build-linux": "failure"}),
         cancelled=False,
         release_runs=False,
     ),
@@ -178,7 +106,7 @@ SCENARIOS = (
         "tag-publish",
         "publish",
         "",
-        _needs_results(),
+        needs_results(),
         cancelled=False,
         release_runs=False,
     ),
@@ -186,7 +114,7 @@ SCENARIOS = (
         "tag-publish-skipped-smoke",
         "publish",
         "",
-        _needs_results(smoke="skipped"),
+        needs_results(smoke="skipped"),
         cancelled=False,
         release_runs=False,
     ),
@@ -194,7 +122,7 @@ SCENARIOS = (
         "tag-publish-failed-smoke",
         "publish",
         "",
-        _needs_results(smoke="failure"),
+        needs_results(smoke="failure"),
         cancelled=False,
         release_runs=False,
     ),
@@ -202,15 +130,69 @@ SCENARIOS = (
         "tag-publish-failed-build",
         "publish",
         "",
-        _needs_results(outcomes={"build-linux": "failure"}),
+        needs_results(outcomes={"build-linux": "failure"}),
         cancelled=False,
         release_runs=False,
+    ),
+    _reusable_push(
+        "reusable-push-publish-false",
+        Invocation("false", "false", "push", TAG_REF, CALLER_WORKFLOW_REF),
+    ),
+    _reusable_push(
+        "reusable-push-omitted-inputs",
+        Invocation("", "", "push", TAG_REF, CALLER_WORKFLOW_REF),
+    ),
+    _reusable_push(
+        "reusable-push-publish-true",
+        Invocation("true", "false", "push", TAG_REF, CALLER_WORKFLOW_REF),
+    ),
+    Scenario(
+        "reusable-push-dry-run-overrides-publish",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=True,
+        invocation=Invocation("true", "true", "push", TAG_REF, CALLER_WORKFLOW_REF),
+    ),
+    _reusable_push(
+        "reusable-branch-push-publish-true",
+        Invocation("true", "false", "push", BRANCH_REF, CALLER_WORKFLOW_REF),
+    ),
+    Scenario(
+        "direct-trigger-dry-run-input",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=True,
+        invocation=Invocation("", "true", "push", TAG_REF, DIRECT_WORKFLOW_REF),
+    ),
+    Scenario(
+        "pull-request-publish-true",
+        "dry-run",
+        "opened",
+        needs_results(),
+        cancelled=False,
+        release_runs=True,
+        invocation=Invocation(
+            "true", "false", "pull_request", PULL_REF, CALLER_WORKFLOW_REF
+        ),
+    ),
+    Scenario(
+        "direct-push-resolver-dry-run",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=True,
+        resolver=PUBLISHING_DRY_RUN,
     ),
     Scenario(
         "publish-crates-io-failure",
         "publish",
         "",
-        _needs_results(outcomes={"publish-crates-io": "failure"}),
+        needs_results(outcomes={"publish-crates-io": "failure"}),
         cancelled=False,
         release_runs=False,
     ),
@@ -218,7 +200,7 @@ SCENARIOS = (
         "publish-crates-io-skipped",
         "publish",
         "",
-        _needs_results(outcomes={"publish-crates-io": "skipped"}),
+        needs_results(outcomes={"publish-crates-io": "skipped"}),
         cancelled=False,
         release_runs=False,
     ),
@@ -226,7 +208,7 @@ SCENARIOS = (
         "publish-release-failure",
         "publish",
         "",
-        _needs_results(outcomes={"publish-release": "failure"}),
+        needs_results(outcomes={"publish-release": "failure"}),
         cancelled=False,
         release_runs=False,
     ),
@@ -234,7 +216,7 @@ SCENARIOS = (
         "publish-release-skipped",
         "publish",
         "",
-        _needs_results(outcomes={"publish-release": "skipped"}),
+        needs_results(outcomes={"publish-release": "skipped"}),
         cancelled=False,
         release_runs=False,
     ),
@@ -247,7 +229,7 @@ SCENARIOS = (
         "finalize-failure",
         "publish",
         "",
-        _needs_results(outcomes={"finalize-github-release": "failure"}),
+        needs_results(outcomes={"finalize-github-release": "failure"}),
         cancelled=False,
         release_runs=False,
     ),
@@ -255,7 +237,7 @@ SCENARIOS = (
         "finalize-skipped",
         "publish",
         "",
-        _needs_results(outcomes={"finalize-github-release": "skipped"}),
+        needs_results(outcomes={"finalize-github-release": "skipped"}),
         cancelled=False,
         release_runs=False,
     ),
@@ -263,7 +245,7 @@ SCENARIOS = (
         "neither-mode",
         "neither",
         "",
-        _needs_results(),
+        needs_results(),
         cancelled=False,
         release_runs=False,
     ),
@@ -271,7 +253,7 @@ SCENARIOS = (
         "cancelled-ready-for-review",
         "dry-run",
         "ready_for_review",
-        _needs_results(),
+        needs_results(),
         cancelled=True,
         release_runs=False,
     ),
@@ -279,7 +261,7 @@ SCENARIOS = (
         "cancelled-publishing",
         "publish",
         "",
-        _needs_results(),
+        needs_results(),
         cancelled=True,
         release_runs=False,
     ),

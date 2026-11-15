@@ -1,0 +1,260 @@
+"""Prove the release workflow decides writes from the caller's own policy.
+
+``publish-release`` holds ``contents: write``. The pinned
+``determine-release-modes`` action answers ``should-publish: true`` for every
+``push`` before it consults the reusable ``publish`` input, so the workflow's
+own authorization step must sit between the resolver and every consumer of its
+answer. These checks pin that wiring: the step's raw inputs, its position, the
+gates it feeds, and the job-level dry-run veto.
+"""
+
+import authorize_release_writes as policy
+from release_publish_needs import job_names
+from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
+from workflow_loading import (
+    job_steps,
+    require_mapping,
+    step_index_by_key,
+    workflow_job,
+)
+
+AUTHORIZATION_STEP = "release_authorization"
+RESOLVER_STEP = "release_modes"
+AUTHORIZATION_SCRIPT = "scripts/authorize_release_writes.py"
+_UV_PREFIX = "uv run --no-project --python 3.14"
+#: The raw inputs the policy decides over. Each is passed through ``env`` so no
+#: caller-controlled value is interpolated into the script text.
+EXPECTED_INPUTS = {
+    "INPUT_PUBLISH": "${{ inputs.publish }}",
+    "INPUT_DRY_RUN": "${{ inputs.dry-run }}",
+    "INPUT_EVENT_NAME": "${{ github.event_name }}",
+    "INPUT_REF": "${{ github.ref }}",
+    "INPUT_WORKFLOW_REF": "${{ github.workflow_ref }}",
+    "INPUT_REPOSITORY": "${{ github.repository }}",
+    "INPUT_RESOLVER_SHOULD_PUBLISH": (
+        "${{ steps.release_modes.outputs['should-publish'] }}"
+    ),
+    "INPUT_RESOLVER_DRY_RUN": "${{ steps.release_modes.outputs['dry-run'] }}",
+    "INPUT_RESOLVER_SHOULD_UPLOAD_WORKFLOW_ARTIFACTS": (
+        "${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}"
+    ),
+}
+#: A reusable push caller that asked for no publication. The resolver selects
+#: publication anyway, so this is exactly the reported vulnerability: every gate
+#: downstream of the resolver must close.
+_DENIED_BUT_SELECTED = policy.ReleaseContext(
+    publish="false",
+    dry_run="false",
+    event_name="push",
+    ref="refs/tags/v1.2.3",
+    workflow_ref=(
+        "leynos/netsuke/.github/workflows/release-dry-run.yml@refs/heads/main"
+    ),
+    repository="leynos/netsuke",
+    resolver_should_publish="true",
+    resolver_dry_run="false",
+    resolver_should_upload_workflow_artifacts="true",
+)
+
+
+def _authorization_step(
+    release: dict[str, object], violations: list[str]
+) -> dict[str, object] | None:
+    """Return the metadata job's authorization step, or report it missing."""
+    try:
+        index = step_index_by_key(
+            job_steps(release, "metadata"), "id", AUTHORIZATION_STEP
+        )
+    except AssertionError as error:
+        violations.append(f"authorization.step: {error}")
+        return None
+    return job_steps(release, "metadata")[index]
+
+
+def _check_run(step: dict[str, object], violations: list[str]) -> None:
+    """Require the step to run the policy script without interpolation."""
+    run = step.get("run")
+    if not isinstance(run, str) or AUTHORIZATION_SCRIPT not in run:
+        violations.append(f"authorization.run: step must run {AUTHORIZATION_SCRIPT}")
+        return
+    if not run.lstrip().startswith(_UV_PREFIX):
+        violations.append(
+            f"authorization.run: step must start with {_UV_PREFIX!r} so the "
+            "script runs on the pinned Python baseline"
+        )
+    if "${{" in run:
+        violations.append(
+            "authorization.run: untrusted values must arrive through env, "
+            "never interpolated into the script text"
+        )
+
+
+def _check_env(step: dict[str, object], violations: list[str]) -> None:
+    """Require every policy input to arrive from the expected context."""
+    env = require_mapping(step.get("env"), "authorization.env")
+    for name, expected in EXPECTED_INPUTS.items():
+        if name not in env:
+            violations.append(f"authorization.env.{name}: input is missing")
+            continue
+        if env[name] != expected:
+            violations.append(
+                f"authorization.env.{name}: resolved to {env[name]!r}, "
+                f"expected {expected!r}"
+            )
+    unexpected = sorted(
+        str(name)
+        for name in env
+        if str(name).startswith("INPUT_") and name not in EXPECTED_INPUTS
+    )
+    if unexpected:
+        violations.append(f"authorization.env: unexpected policy inputs {unexpected!r}")
+
+
+def _gate_context() -> dict[str, object]:
+    """Build the step outputs of a denied run the resolver wanted to publish.
+
+    Returns
+    -------
+    dict[str, object]
+        Expression contexts for the metadata job, which declares no
+        dependencies, so the implicit job-level success check is vacuous.
+    """
+    decision = policy.authorize_release_writes(_DENIED_BUT_SELECTED)
+    return {
+        "needs": {},
+        "steps": {
+            RESOLVER_STEP: {"outputs": dict(_resolver_outputs())},
+            AUTHORIZATION_STEP: {"outputs": policy.render_outputs(decision)},
+        },
+    }
+
+
+def _resolver_outputs() -> dict[str, str]:
+    """Return the resolver's answer for the denied run's push trigger."""
+    return {
+        "should-publish": _DENIED_BUT_SELECTED.resolver_should_publish,
+        "dry-run": _DENIED_BUT_SELECTED.resolver_dry_run,
+        "should-upload-workflow-artifacts": (
+            _DENIED_BUT_SELECTED.resolver_should_upload_workflow_artifacts
+        ),
+    }
+
+
+def _check_step_order(release: dict[str, object], violations: list[str]) -> None:
+    """Require the decision to sit after the resolver and before its gates."""
+    steps = job_steps(release, "metadata")
+    try:
+        order = tuple(
+            step_index_by_key(steps, "id", step_id)
+            for step_id in (
+                RESOLVER_STEP,
+                AUTHORIZATION_STEP,
+                "validate_publish_ref",
+                "ensure_version",
+            )
+        )
+    except AssertionError as error:
+        violations.append(f"authorization.order: {error}")
+        return
+    if tuple(sorted(order)) != order:
+        violations.append(
+            "authorization.order: the decision must follow the resolver and "
+            "precede the publishing gates"
+        )
+
+
+def _check_gates(release: dict[str, object], violations: list[str]) -> None:
+    """Require the publishing gates to close on a denied-but-selected run."""
+    steps = job_steps(release, "metadata")
+    context = _gate_context()
+    try:
+        validate = steps[step_index_by_key(steps, "id", "validate_publish_ref")]
+        version = steps[step_index_by_key(steps, "id", "ensure_version")]
+    except AssertionError as error:
+        violations.append(f"authorization.gates: {error}")
+        return
+    gate = evaluate_field(
+        validate.get("if", True),
+        FieldEvaluation(
+            contexts=context,
+            violations=violations,
+            label="authorization.validate-ref-gate",
+            job_level=True,
+        ),
+    )
+    if gate is MISSING or bool(gate):
+        violations.append(
+            "authorization.validate-ref-gate: the ref gate stayed open for a "
+            "denied reusable push"
+        )
+    with_values = require_mapping(version.get("with"), "ensure_version.with")
+    check_tag = evaluate_field(
+        with_values.get("check-tag", MISSING),
+        FieldEvaluation(
+            contexts=context,
+            violations=violations,
+            label="authorization.version-tag-gate",
+        ),
+    )
+    if check_tag is MISSING or check_tag is True:
+        violations.append(
+            "authorization.version-tag-gate: version checking stayed enabled for "
+            "a denied reusable push"
+        )
+
+
+def _check_publish_job_veto(release: dict[str, object], violations: list[str]) -> None:
+    """Require the write job to name the dry-run output in its guard.
+
+    The policy never emits ``should_publish: true`` with ``dry_run: true``, so
+    the veto cannot be proved load-bearing by evaluation alone. Requiring the
+    guard to name the output keeps the defence in depth that the requested
+    change adds, and the behavioural check that follows proves the guard closes
+    for a dry-run run whose dependencies all succeeded.
+    """
+    job = workflow_job(release, "publish-release")
+    guard = job.get("if", True)
+    if "needs.metadata.outputs.dry_run" not in str(guard):
+        violations.append(
+            "publish-release.dry-run-veto: the write job guard must name "
+            "needs.metadata.outputs.dry_run"
+        )
+    outputs = {
+        "should_publish": "false",
+        "dry_run": "true",
+        "should_upload_workflow_artifacts": "false",
+        "should_upload_package_artifacts": "false",
+    }
+    needs: dict[str, object] = {}
+    for name in job_names(job.get("needs", [])) or []:
+        dependency: dict[str, object] = {"result": "success"}
+        if name == "metadata":
+            dependency["outputs"] = outputs
+        needs[name] = dependency
+    value = evaluate_field(
+        guard,
+        FieldEvaluation(
+            contexts={"needs": needs, "status": {"cancelled": False}},
+            violations=violations,
+            label="publish-release.dry-run-veto",
+            job_level=True,
+        ),
+    )
+    if value is MISSING or bool(value):
+        violations.append(
+            "publish-release.dry-run-veto: the write job must not run while the "
+            "release is in dry-run mode"
+        )
+
+
+def check_authorization_wiring(
+    release: dict[str, object], violations: list[str]
+) -> None:
+    """Check the authorization step, the gates it feeds, and the job veto."""
+    step = _authorization_step(release, violations)
+    if step is not None:
+        _check_run(step, violations)
+        _check_env(step, violations)
+        _check_step_order(release, violations)
+        _check_gates(release, violations)
+    _check_publish_job_veto(release, violations)

@@ -3318,7 +3318,7 @@ the separate GitHub release writer after their prerequisites succeed.
 | `package-crate`               | `metadata`                                                  | `contents: read`                    | always                         |
 | `publish-crates-io`           | all six validation jobs and `package-crate`                 | `contents: read`, `id-token: write` | `should_publish == 'true'`     |
 | `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: read`                    | `dry_run == 'true'`            |
-| `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | `should_publish == 'true'`     |
+| `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | published, not dry run         |
 | `verify-release-inventory`    | `metadata`, `publish-crates-io`, `publish-release`          | `contents: write`                   | both publishers succeeded      |
 | `finalize-github-release`     | `metadata`, `package-crate`, both publishers, the verifier  | `contents: write`                   | every prerequisite succeeded   |
 | `consumer-smoke`              | `metadata`, `package-crate`, `finalize-github-release`      | `contents: read`                    | every prerequisite succeeded   |
@@ -3345,8 +3345,17 @@ authority over the release it is checking.
 
 `release` and `publish-release` carry the same five-job dependency list and
 mutually exclusive guards, so a run is a rehearsal or a publication and never
-both. The guards are derived from `determine-release-modes`, which also supplies
-`should_publish` to the artefact upload so the upload stage and the jobs agree
+both. The guards are derived from the workflow's own authorization decision in
+`scripts/authorize_release_writes.py`, which reads the reusable `publish` and
+`dry-run` inputs, the trigger, `github.workflow_ref`, and the pinned
+`determine-release-modes` answers. The resolver alone is necessary but not
+sufficient: it reports `should-publish: true` for every push before it consults
+`publish`, so a reusable caller that inherited a push trigger would otherwise
+reach the write path having asked for no publication. A raw `dry-run: true` is
+an unconditional veto, a reusable invocation needs an explicit `publish: true`,
+the ref must be a `v*.*.*` tag, and only a direct tag push of `release.yml`
+itself may publish on the resolver's word alone. The same decision supplies
+`should_publish` to the artefact upload, so the upload stage and the jobs agree
 about the mode. The registry job has seven prerequisites: `metadata`,
 `package-crate`, all three platform builds, `windows-native-recipe-smoke`, and
 `release-admission-canaries`. Its job-level condition requires every

@@ -72,7 +72,7 @@ from workflow_loading import (
 )
 
 if typ.TYPE_CHECKING:
-    from release_publish_path_scenarios import Scenario
+    from release_publish_path_scenario_model import Scenario
 
 #: The metadata outputs a publishing run declares. Only ``should_publish``
 #: reaches the verification guard, but the context is filled as a real run's

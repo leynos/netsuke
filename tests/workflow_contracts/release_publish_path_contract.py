@@ -19,10 +19,15 @@ from release_publish_path_artifacts import (
     check_download_pattern,
     evaluate_field,
 )
+from release_publish_path_authorization import check_authorization_wiring
 from release_publish_path_consumer_smoke import (
     CONSUMER_SMOKE_ACTION_PATH,
     ConsumerSmokeCheck,
     check_consumer_smoke,
+)
+from release_publish_path_metadata_outputs import (
+    metadata_outputs,
+    resolved_repo_name,
 )
 from release_publish_path_native_smoke import check_native_smoke_job
 from release_publish_path_publication import (
@@ -33,14 +38,12 @@ from release_publish_path_publication import (
     check_upload_plan,
     step_runs,
 )
-from release_publish_path_scenarios import (
-    MODE_OUTPUTS,
-    PACKAGE_UPLOAD,
+from release_publish_path_scenario_model import (
     REQUIRED_DRY_RUN_EVENTS,
     REQUIRED_NEEDS,
-    SCENARIOS,
     Scenario,
 )
+from release_publish_path_scenarios import SCENARIOS
 from release_publish_path_verification import check_verify_inventory
 from workflow_loading import (
     REPO_ROOT,
@@ -76,7 +79,7 @@ class ScenarioCheck:
 
     release: dict[str, object]
     build: dict[str, object]
-    outputs_by_mode: dict[str, dict[str, str]]
+    outputs: dict[str, str]
     scenario: Scenario
     violations: list[str]
     smoke_action: dict[str, object] | None = None
@@ -89,52 +92,6 @@ def _workflow_call_inputs(workflow: dict[str, object]) -> dict[str, object]:
     )
     call = require_mapping(triggers.get("workflow_call"), "workflow_call")
     return require_mapping(call.get("inputs"), "workflow_call.inputs")
-
-
-def _metadata_outputs(
-    release: dict[str, object], mode: str, violations: list[str]
-) -> dict[str, str]:
-    """Resolve the release-mode outputs declared by the metadata job."""
-    declarations = require_mapping(
-        workflow_job(release, "metadata").get("outputs"), "metadata.outputs"
-    )
-    steps = {
-        "release_modes": {"outputs": MODE_OUTPUTS[mode]},
-        "repo_name": {"outputs": {"value": REPO_ROOT.name}},
-    }
-    contexts: dict[str, object] = {"steps": steps}
-    outputs: dict[str, str] = {}
-    expected = {
-        "should_publish": MODE_OUTPUTS[mode]["should-publish"],
-        "dry_run": MODE_OUTPUTS[mode]["dry-run"],
-        "should_upload_workflow_artifacts": MODE_OUTPUTS[mode][
-            "should-upload-workflow-artifacts"
-        ],
-        "should_upload_package_artifacts": str(PACKAGE_UPLOAD[mode]).lower(),
-        "repo_name": REPO_ROOT.name,
-    }
-    for name, expected_value in expected.items():
-        expression = declarations.get(name, MISSING)
-        label = f"metadata.{name}"
-        if expression is MISSING:
-            violations.append(f"{label}: output is missing")
-            continue
-        value = evaluate_field(
-            expression,
-            FieldEvaluation(contexts=contexts, violations=violations, label=label),
-        )
-        if value is MISSING:
-            continue
-        rendered = str(value).lower() if isinstance(value, bool) else value
-        if not isinstance(rendered, str):
-            violations.append(f"{label}: output did not resolve to a string or boolean")
-            continue
-        outputs[name] = rendered
-        if rendered != expected_value:
-            violations.append(
-                f"{label}: resolved to {rendered!r}, expected {expected_value!r}"
-            )
-    return outputs
 
 
 def _needs_context(
@@ -179,7 +136,9 @@ def _check_caller_events(caller: dict[str, object], violations: list[str]) -> No
     raw_types = require_list(pull_request.get("types"), "caller pull_request.types")
     event_types = {str(event) for event in raw_types}
     scenario_events = {
-        scenario.event_action for scenario in SCENARIOS if scenario.mode == "dry-run"
+        scenario.event_action
+        for scenario in SCENARIOS
+        if scenario.arrival.event_name == "pull_request"
     }
     expected_events = REQUIRED_DRY_RUN_EVENTS
     if event_types != expected_events or scenario_events != expected_events:
@@ -259,12 +218,16 @@ def _check_release_step_order(
 def _check_scenario(check: ScenarioCheck) -> None:
     """Evaluate dependency results, package uploads, and release staging."""
     scenario = check.scenario
-    outputs = check.outputs_by_mode[scenario.mode]
+    outputs = check.outputs
     check_native_smoke_job(check.release, scenario, outputs, check.violations)
     check_build_uploads(
         check.release,
         check.build,
-        PackageUploadScenario(scenario.name, outputs, PACKAGE_UPLOAD[scenario.mode]),
+        PackageUploadScenario(
+            scenario.name,
+            outputs,
+            outputs.get("should_upload_package_artifacts") == "true",
+        ),
         check.violations,
     )
     release_job = workflow_job(check.release, "release")
@@ -357,20 +320,10 @@ def check_release_publish_path(
     supplied = manifests if manifests is not None else ActionManifests()
     violations: list[str] = []
     _check_caller(release, caller, violations)
-    outputs_by_mode = {
-        mode: _metadata_outputs(release, mode, violations) for mode in MODE_OUTPUTS
-    }
-    check_artifact_names(
-        release,
-        build,
-        outputs_by_mode["dry-run"].get("repo_name", REPO_ROOT.name),
-        violations,
-    )
-    check_download_pattern(
-        release,
-        outputs_by_mode["dry-run"].get("repo_name", REPO_ROOT.name),
-        violations,
-    )
+    check_authorization_wiring(release, violations)
+    repo_name = resolved_repo_name(release, violations)
+    check_artifact_names(release, build, repo_name, violations)
+    check_download_pattern(release, repo_name, violations)
     _check_release_needs(release, violations)
     _check_release_step_order(release, violations)
     _check_publisher_action(release, supplied.publisher, violations)
@@ -384,7 +337,7 @@ def check_release_publish_path(
             ScenarioCheck(
                 release=release,
                 build=build,
-                outputs_by_mode=outputs_by_mode,
+                outputs=metadata_outputs(release, scenario, violations),
                 scenario=scenario,
                 violations=violations,
                 smoke_action=smoke_action,
