@@ -292,7 +292,7 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 - Change no production Rust source, build script, Cargo manifest,
   `Cargo.lock`, Makefile, workflow, Fluent catalogue, or existing test or
   snapshot. The Rust added is the integration test
-  `tests/hexagonal_inventory_contract_tests.rs` and its four private modules
+  `tests/hexagonal_inventory_contract_tests.rs` and its ten private modules
   under `tests/hexagonal_inventory_contract/`, which read Markdown only. Those
   modules are a split of the single test file forced by the 400-line file cap:
   together they add no reader beyond the declared one.
