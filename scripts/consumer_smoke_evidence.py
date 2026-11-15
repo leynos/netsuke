@@ -117,6 +117,36 @@ def package_record(
     A record that cannot be read fails as an :class:`OSError`.
     """
     envelope = read_json(source)
+    recorded, crate, digest = _record_fields(source, envelope)
+    try:
+        identity = release_identity_record.identity_from_mapping(recorded)
+        validated = release_digest_record.DigestRecord.from_mapping({crate: digest})
+    except (
+        release_candidate.IdentityError,
+        release_digest_record.DigestRecordError,
+    ) as error:
+        msg = f"{source} is not a usable package record: {error}"
+        raise EvidenceRejectedError(msg) from error
+    return identity, crate, validated.as_mapping()[crate]
+
+
+def _record_fields(
+    source: pathlib.Path, envelope: object
+) -> tuple[dict[str, object], str, str]:
+    """Return the identity mapping, crate name, and digest a record declares.
+
+    Returns
+    -------
+    tuple[dict[str, object], str, str]
+        The raw identity mapping, the crate's file name, and its digest as the
+        record spelled it, all still to be validated.
+
+    Raises
+    ------
+    EvidenceRejectedError
+        If the record is not a JSON object, or does not name a release
+        identity and both a crate archive and its digest.
+    """
     if not isinstance(envelope, dict):
         msg = f"{source} does not hold a JSON object"
         raise EvidenceRejectedError(msg)
@@ -129,16 +159,7 @@ def package_record(
     if not isinstance(crate, str) or not isinstance(digest, str):
         msg = f"{source} does not name both a crate archive and its digest"
         raise EvidenceRejectedError(msg)
-    try:
-        identity = release_identity_record.identity_from_mapping(recorded)
-        validated = release_digest_record.DigestRecord.from_mapping({crate: digest})
-    except (
-        release_candidate.IdentityError,
-        release_digest_record.DigestRecordError,
-    ) as error:
-        msg = f"{source} is not a usable package record: {error}"
-        raise EvidenceRejectedError(msg) from error
-    return identity, crate, validated.as_mapping()[crate]
+    return recorded, crate, digest
 
 
 def declared_archives(
