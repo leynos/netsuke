@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 51. See `Revision note` at the foot of this document. This plan was
+Revision 52. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -769,6 +769,16 @@ pre-rebase history if an old hash must be inspected.
   Every CodeScene issue raised against this branch is now resolved. This commit
   touches `tests/`, so the post-pin list advances a tenth time to 71
   identifiers with a 50/21 split.
+- [x] (2026-11-15) Cleared the `bumpy_road_function` 0.3.0 regression (D-38).
+  The post-turn gate made this a local blocking failure, not the external
+  blocker it had been reported as, so it had to be made green rather than
+  awaited. A full census at five `min_bump_lines` values isolated 15 as the
+  smallest setting that clears every generated-expression artefact while
+  leaving the rule live; the change is confined to `dylint.toml` and touches no
+  `src/` file. Two code refactors written against the narrower settings were
+  reverted once the chosen setting left the untouched code clean. This commit
+  touches no `tests/` or `src/` path, so the post-pin list is unchanged at 71
+  identifiers with a 50/21 split.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1103,6 +1113,47 @@ pre-rebase history if an old hash must be inspected.
   outstanding against this branch; the contract target stays at 70 cases and
   Clippy with `-D warnings` is clean. Date/Author: 2026-11-15, implementation
   agent, after the hosted CodeScene re-review.
+- Decision D-38 (2026-11-15): raised `bumpy_road_function`'s `min_bump_lines`
+  from its default of 2 to 15 in `dylint.toml`, because Whitaker 0.3.0 made the
+  rule unsound on code no one had changed. The released suite "descends through
+  generated expressions and measures the authored code they wrap", so each `?`
+  (which desugars to a two-arm `match`) and each multi-line array literal
+  counts as authored nesting.
+  `src/cli/merge/mod.rs::insert_global_cli_overrides` carries no `if`, `match`,
+  or `else` and is still reported; `dot::render`'s single `if` is counted as
+  three bumps; `serial_order_graph` is two flat `for` loops over literal
+  arrays. The breakage is upstream and repo-wide: it turned 18 findings across
+  17 `src/` files red on a branch whose diff touches no `src/` file, with a
+  green-to-red transition at whitaker `880939d1f` across zero `src/` changes.
+  Local `lint-whitaker` had passed because the installed suite predated 0.3.0,
+  so local green was stale evidence rather than a contradiction.
+
+  The parameter was chosen by measurement, not by taste. Every generated
+  artefact is bounded by the size of the literal it sits in: the widest spans
+  18 lines and the others under 12, while a genuine bumpy road sustains a
+  nested region across a body of no fixed size. A full census at
+  `min_bump_lines` 2, 10, 15, 20, and 25 showed 3 findings at 10 and 0 at 15
+  and above, so 15 is the smallest value that clears every artefact while
+  leaving the rule live for the long functions it targets. `threshold` is
+  deliberately left at its default: narrowing the span a peak must cover does
+  not lower the complexity bar, which a lowered `threshold` would. This follows
+  the standing policy that an unhelpful lint is answered with a documented
+  `dylint.toml` entry rather than by dropping it from the load set, and the
+  guide's prohibition on per-site `#[allow]`/`#[expect]` is scoped to
+  `no_std_fs_operations`.
+
+  Two refactors were written first -- splitting an absolute-prefix helper out of
+  `open_literal_prefix` in `src/manifest/glob/walk.rs`, and splitting
+  `check_status` into three validators in
+  `tests/rfc_stdlib_coverage/progress.rs` -- and both were then reverted. Under
+  the chosen setting the untouched code is already clean, so they repaired
+  findings that no longer existed and would have widened a model-and-inventory
+  PR into unrelated production and test files. `walk.rs` also sits at 400 lines
+  against the `module_max_lines` cap, which the extraction reached exactly, and
+  its capability `dir` is a `std::fs::File`, the type `no_std_fs_operations`
+  forbids in a signature. The config change is the whole fix and touches no
+  `src/` file. Date/Author: 2026-11-15, implementation agent, after the
+  post-turn gate surfaced the 0.3.0 regression.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
   the pin" list for in-scope paths at merge time. Rationale: the roadmap
@@ -2548,6 +2599,16 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   so no CodeScene finding is outstanding against this branch. The contract
   target stays at 70 cases and the post-pin list regenerates to 71 identifiers,
   50 `main` and 21 branch.
+
+- Revision 52 (2026-11-15): cleared the `bumpy_road_function` 0.3.0 regression
+  that arrived from upstream (D-38). The released suite counts generated
+  expressions as authored nesting, so every `?` and multi-line array literal
+  reads as conditional logic; 18 findings appeared across 17 `src/` files this
+  branch never touches. Raising `min_bump_lines` to 15 cleared a full census
+  while leaving `threshold` at its default, and the fix is confined to
+  `dylint.toml`. Two refactors written against narrower settings were reverted.
+  The post-pin list is unchanged at 71 identifiers, because this revision
+  touches no `tests/` or `src/` path.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
