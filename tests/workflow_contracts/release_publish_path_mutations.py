@@ -2,11 +2,11 @@
 
 import copy
 import dataclasses
-import enum
-import re
 import typing as typ
 
 from action_run_sources import action_steps
+from release_mutation_support import MutationError, MutationIssue, replace_once
+from release_publication_gate_mutations import GATE_MUTATIONS, GATE_VIOLATIONS
 from release_publish_crates_io_contracts import ACTION_PATH
 from release_publish_path_artifacts import BUILD_JOBS
 from workflow_loading import (
@@ -21,7 +21,7 @@ from workflow_loading import (
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
-EXPECTED_VIOLATIONS = {
+_CORE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "publish-only-job-guard": tuple(
         (scenario, "release-job")
         for scenario in ("opened", "synchronize", "reopened", "ready-for-review")
@@ -53,6 +53,13 @@ EXPECTED_VIOLATIONS = {
     "authenticate-without-publish-guard": (("static", "publish-crates-io.auth-guard"),),
     "rebuild-crate-before-upload": (("static", "publish-crates-io.action.rebuild"),),
 }
+#: The reachability mutations above and the gate mutations beside them form one
+#: corpus: each label states a regression, and each entry the diagnostics that
+#: prove it was noticed.
+EXPECTED_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
+    **_CORE_VIOLATIONS,
+    **GATE_VIOLATIONS,
+}
 MUTATION_LABELS = tuple(EXPECTED_VIOLATIONS)
 
 
@@ -76,38 +83,6 @@ class WorkflowInputs:
     caller: dict[str, object]
     build: dict[str, object]
     action: dict[str, object]
-
-
-class MutationIssue(enum.StrEnum):
-    """Classify a stale mutation definition or unknown mutation label."""
-
-    PATTERN_MISMATCH = "mutation pattern did not match exactly once"
-    UNKNOWN_LABEL = "unknown release-path mutation"
-    MISSING_CALLER_EVENT = "caller pull_request.types must include synchronize"
-
-
-class MutationError(AssertionError):
-    """Describe a mutation helper that no longer matches its test fixture."""
-
-    def __init__(self, issue: MutationIssue, detail: object | None = None) -> None:
-        """Record the mutation error category and optional detail."""
-        self.issue = issue
-        self.detail = detail
-        super().__init__(issue, detail)
-
-    def __str__(self) -> str:
-        """Render the mutation error with any stale pattern or label."""
-        if self.detail is None:
-            return self.issue.value
-        return f"{self.issue.value}: {self.detail}"
-
-
-def _replace_once(value: str, pattern: str, replacement: str) -> str:
-    """Replace one required expression shape, refusing stale mutation rules."""
-    mutated, count = re.subn(pattern, replacement, value, count=1)
-    if count != 1:
-        raise MutationError(MutationIssue.PATTERN_MISMATCH, (pattern, count))
-    return mutated
 
 
 def _release_steps(release: dict[str, object]) -> list[dict[str, object]]:
@@ -155,7 +130,7 @@ def _mutate_draft_guard(release: dict[str, object]) -> None:
 def _mutate_cancelled_guard(release: dict[str, object]) -> None:
     """Remove the explicit cancellation check from the release job."""
     job = workflow_job(release, "release")
-    job["if"] = _replace_once(str(job.get("if", "")), r"!cancelled\(\)\s*&&\s*", "")
+    job["if"] = replace_once(str(job.get("if", "")), r"!cancelled\(\)\s*&&\s*", "")
 
 
 def _mutate_smoke_tolerance(release: dict[str, object], *, allow_publish: bool) -> None:
@@ -175,7 +150,7 @@ def _mutate_smoke_tolerance(release: dict[str, object], *, allow_publish: bool) 
             r"needs\.windows-native-recipe-smoke\.result == 'skipped'"
         )
         replacement = "needs.windows-native-recipe-smoke.result == 'success'"
-    job["if"] = _replace_once(guard, pattern, replacement)
+    job["if"] = replace_once(guard, pattern, replacement)
 
 
 def _mutate_package_upload_source(release: dict[str, object]) -> None:
@@ -221,6 +196,8 @@ def mutate_workflows(
         applier(mutant_release, mutant_caller)
     elif label in _CRATES_IO_MUTATIONS:
         _CRATES_IO_MUTATIONS[label](mutant_release, mutant_action)
+    elif label in GATE_MUTATIONS:
+        GATE_MUTATIONS[label](mutant_release)
     else:
         raise MutationError(MutationIssue.UNKNOWN_LABEL, label)
     return MutationCase(

@@ -3,6 +3,7 @@
 import dataclasses
 
 from action_run_sources import action_sources
+from release_admission_gate_contract import check_admission_enforcement
 from release_publish_crates_io_contracts import (
     ACTION_PATH as CRATES_IO_ACTION_PATH,
 )
@@ -39,6 +40,7 @@ from release_publish_path_scenarios import (
     needs_context,
 )
 from release_publish_path_verification import check_verify_inventory
+from release_write_authority_contract import check_publication_gate
 from workflow_loading import (
     REPO_ROOT,
     job_steps,
@@ -171,11 +173,6 @@ def _check_caller(
     _check_caller_events(caller, violations)
 
     caller_job = workflow_job(caller, "release")
-    caller_inputs = require_mapping(caller_job.get("with"), "caller release.with")
-    if caller_inputs.get("dry-run") is not True:
-        violations.append("caller.dry-run: release-dry-run must pass true")
-    if "publish" in caller_inputs:
-        violations.append("caller.publish: dry-run caller must omit publish")
     publish = _workflow_call_inputs(release).get("publish")
     publish_input = require_mapping(publish, "release publish input")
     if publish_input.get("default") is not False:
@@ -280,6 +277,7 @@ def _check_scenario(check: ScenarioCheck) -> None:
     scenario = check.scenario
     outputs = check.outputs_by_mode[scenario.mode]
     _check_smoke_job(check.release, scenario, outputs, check.violations)
+    check_admission_enforcement(check.release, scenario, outputs, check.violations)
     check_build_uploads(
         check.release,
         check.build,
@@ -366,6 +364,7 @@ def check_release_publish_path(
     """
     violations: list[str] = []
     _check_caller(release, caller, violations)
+    check_publication_gate(release, caller, violations)
     outputs_by_mode = {
         mode: _metadata_outputs(release, mode, violations) for mode in MODE_OUTPUTS
     }
