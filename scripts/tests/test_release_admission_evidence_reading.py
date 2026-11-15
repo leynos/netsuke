@@ -64,10 +64,68 @@ def test_the_byte_bound_admits_exactly_the_bound_and_refuses_one_more(
         filesystem.read_bytes(str(target), 4)
 
 
+def test_the_byte_bound_applies_to_the_bytes_read_not_the_size_reported(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Refuse a document that supplies more bytes than the size it reports.
+
+    Notes
+    -----
+    The file on disk is shorter than the bound, so a reader that compared the
+    size the filesystem reports -- before or instead of reading -- would admit
+    it. The bound that matters is the one on the bytes handed back, because the
+    reported size can be stale or wrong by the time the read happens, and the
+    stub below is that divergence made deterministic without a filesystem race.
+    """
+    limit = 8
+    target = tmp_path / "evidence.json"
+    target.write_bytes(b"x" * 4)
+    monkeypatch.setattr(filesystem, "os", OversizedReads(oversize=b"y" * (limit + 1)))
+
+    with pytest.raises(filesystem.EvidenceTooLargeError):
+        filesystem.read_bytes(str(target), limit)
+
+
 def test_an_absent_document_propagates_the_absence(tmp_path: pathlib.Path) -> None:
     """Let the caller tell an absent document from one that cannot be read."""
     with pytest.raises(FileNotFoundError):
         filesystem.read_bytes(str(tmp_path / "absent.json"), 64)
+
+
+@dataclasses.dataclass(slots=True)
+class OversizedReads:
+    """Answer the first read with more bytes than the opened file holds.
+
+    The stand-in exposes everything else :mod:`os` does, because the reader
+    under test opens the path and inspects the handle before it reads: only
+    ``read`` needs to diverge. It is scoped to the ``filesystem`` module's own
+    ``os`` binding, so no other reader in the suite sees it.
+    """
+
+    oversize: bytes
+    is_served: bool = False
+
+    def __getattr__(self, name: str) -> object:
+        """Answer any other ``os`` attribute with the real module's."""
+        return getattr(os, name)
+
+    def read(self, descriptor: int, count: int) -> bytes:
+        """Return the oversized chunk once, then report the file as ended.
+
+        *count* is deliberately ignored: a read that honoured it could never
+        demonstrate a document supplying more bytes than its size, which is the
+        divergence this stub exists to produce.
+
+        Returns
+        -------
+        bytes
+            The oversized chunk on the first call, and emptiness afterwards.
+        """
+        if self.is_served:
+            return b""
+        self.is_served = True
+        return self.oversize
 
 
 def test_a_directory_is_refused_as_not_a_document(tmp_path: pathlib.Path) -> None:
