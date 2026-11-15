@@ -1,10 +1,11 @@
 //! Kani harnesses for the bounded resource-bound kernels.
 //!
 //! The Verus proof in `verus/resource_bounds/` reasons about a transcription of
-//! these kernels. These harnesses close the remaining gap by driving the
+//! these kernels. These harnesses narrow the remaining gap by driving the
 //! compiled production functions within stated bounds: no input in range may
 //! panic, and the values they return must agree with an independent `u128`
-//! oracle or with the admission contract the callers rely on.
+//! oracle or with the admission contract the callers rely on. They narrow it
+//! rather than close it, because a harness reaches only its stated bounds.
 //!
 //! Each harness states the bound that makes it decidable. The solver cannot
 //! discharge a symbolic `u64` product or quotient in reasonable time — a first
@@ -84,8 +85,9 @@ fn product_kernel_respects_zero_and_repeat() {
 ///
 /// The quotient is checked where both the numerator and the divisor are small
 /// enough for the solver to bit-blast; two concrete witnesses then carry the
-/// representable and unrepresentable ends of the `u64` range, which the small
-/// symbolic domain cannot reach.
+/// two ends of the `u64` range that the small symbolic domain cannot reach —
+/// one whose intermediate step exceeds `u64::MAX` although its coefficient
+/// still fits, and one whose coefficient does not fit at all.
 #[kani::proof]
 #[kani::solver(kissat)]
 #[kani::unwind(3)]
@@ -329,21 +331,27 @@ fn running_total_never_admits_past_its_limit() {
     }
 
     // The symbolic domain cannot wrap a `u64`, so the checked-add boundary is
-    // pinned with concrete amounts: one that lands exactly on `u64::MAX` and
-    // one whose sum would wrap. Without these the harness would pass for an
-    // implementation that used a wrapping add, because no reachable sum here
-    // exceeds eight.
+    // pinned with concrete amounts: two that land the total exactly on
+    // `u64::MAX`, and one whose sum would wrap. Without these the harness
+    // would pass for an implementation that used a wrapping add, because no
+    // reachable sum here exceeds eight. Landing on the maximum is what makes
+    // the boundary exact: an implementation that refused it would fail the
+    // second assertion rather than merely refusing one step later.
     let mut boundary = RunningTotal::with_ceiling(StreamKind::MatchCount, u64::MAX);
     kani::assert(
         boundary.admit(u64::MAX - 1).is_ok(),
+        "a total below u64::MAX is admitted",
+    );
+    kani::assert(
+        boundary.admit(1).is_ok(),
         "a total that lands exactly on u64::MAX is admitted",
     );
     kani::assert(
-        boundary.admit(u64::MAX - 1).is_err(),
+        boundary.admit(1).is_err(),
         "a sum that would wrap u64 is refused",
     );
     kani::assert(
-        boundary.admitted() == u64::MAX - 1,
+        boundary.admitted() == u64::MAX,
         "a refused wrapping amount leaves the total unchanged",
     );
 
