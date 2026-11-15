@@ -625,6 +625,29 @@ decision D-15.
   review: its check run on `451ff223d` reads `Review paused` with every step
   skipped, which is the auto-pause after sustained commit volume rather than a
   completed review, so a resume request is queued.
+- [x] (2026-11-15) Addressed both failing CodeRabbit pre-merge rows on
+  `eaf50db46`. `Testing (Compile-Time / Ui)` held that the schema-version
+  snapshot stored fixture values as contract — the declared release, the
+  supported release, and the manifest name — with the supported release the
+  sharp end, because `SupportedSchema::max_minor` is the reader's policy and
+  the row would fail for the wrong reason as soon as the ceiling advanced.
+  `schema_admission_diagnostic_snapshot_settings` now filters each substituted
+  Fluent argument individually, consumes the U+2068/U+2069 directional isolates
+  Fluent wraps around an argument, and keeps a distinct placeholder per clause
+  so a swapped pair would still show; a parameterized case over two version
+  pairs proves the filters are live rather than silently inert. The
+  `Developer Documentation` row held that the plan contradicted itself, with
+  the header at `Status: IN PROGRESS` while the body, `Outcomes` section, and
+  roadmap all recorded the 2026-11-09 acceptance; the header now reads
+  `COMPLETE`, and the three passages that treated delivery as gating the plan
+  say so plainly. Nine gates passed on `eaf50db46` with the content hash bound
+  `6c62d16c…6c62d16c`, and the exact-head hosted run reported 19 passing and 8
+  skipped checks with none pending or failing. The resumed CodeRabbit review
+  then reported `Review failed`: every step `Completed`, nothing published, no
+  inline findings, no rate-limit notice, and its own comment says the detailed
+  report was omitted to fit the comment limit. That is a service-side publish
+  failure rather than a finding, so one diagnosed retry is queued instead of
+  being treated as review coverage.
 
 ## Surprises & discoveries
 
