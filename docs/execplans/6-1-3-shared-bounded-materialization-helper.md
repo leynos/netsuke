@@ -823,6 +823,27 @@ conflict in `Decision log`, and escalate.
     describes. The three commits were rebuilt with the corrected test, and
     the whole twelve-gate set was run again from the new head rather than
     resuming mid-set.
+  - CodeScene repair at `03b5ca08c` (2026-11-15). The hosted
+    `CodeScene Code Health Review (main)` check failed with two advisory
+    `Code Duplication` findings on files this branch added:
+    `tests/properties.rs` at 9.09 and `tests/collectors.rs` at 9.39. Both were
+    repeated per-case structure rather than repeated logic. `collectors.rs`
+    wrote the same ceiling boundary twice, once for each collector; the
+    boundary is now one assertion body parameterized by a `Collector` enum
+    whose two variants supply the item type, and the seven cases stay as named
+    tests delegating to it. `properties.rs` had three law bodies and three
+    tripwire bodies differing only in the oracle they compare against; the
+    generated value now carries the request shape and answers
+    `cardinality`, `ceiling`, and `expected` itself, so one law body and one
+    tripwire body serve all four batteries, each still running its own
+    strategy with its own case count. The strategies and request shapes moved
+    to a new `tests/generated.rs`, which also keeps `properties.rs` at 241
+    lines and every module under the 400-line limit.
+  - The repair is a test-source change with no production effect, and no
+    local gate reads for duplication, so `cs delta` is the only local check
+    that can see the finding: it reports both files moving to code health
+    10.00 and no issue on the new module. The twelve-gate set is re-run at
+    the new head rather than reused, because the delta changes compiled code.
 
 ## Surprises & discoveries
 
@@ -1025,6 +1046,13 @@ conflict in `Decision log`, and escalate.
   disagreement is a question about both sides; the oracle was corrected to
   short-circuit in the kernel's order, and a dedicated test now pins the order
   the two share.
+- Observation: no local gate reads for code duplication, so a new test battery
+  can be locally green and still fail the hosted CodeScene check. Evidence: both
+  `properties.rs` and `collectors.rs` passed `check-fmt`, `lint`, `typecheck`,
+  and `test` on the bytes the hosted check rejected with two advisory
+  `Code Duplication` findings. Impact: `cs delta <base> <head>` is the only
+  local oracle for that gate, and a battery built from near-identical cases
+  should be run under it before publication rather than after.
 
 ## Decision log
 

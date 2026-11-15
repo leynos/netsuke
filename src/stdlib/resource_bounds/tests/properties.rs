@@ -2,7 +2,8 @@
 //!
 //! The cases here derive their inputs from a strategy, so one case checks a law
 //! over a whole class of requests. The oracles they compare against live in the
-//! sibling `oracle` battery and share no code with the kernels.
+//! sibling `oracle` battery and share no code with the kernels; the strategies
+//! and the generated request shapes live in the sibling `generated` battery.
 //!
 //! The laws and the coverage tripwires are separate runs on purpose. A law is
 //! worth checking against fresh inputs, so the law runners keep `proptest`'s
@@ -14,6 +15,9 @@
 //! Every law also repeats its call and compares the two answers. The kernels
 //! read no ambient state, so a difference between two calls with the same
 //! arguments would mean the function is not a function of its arguments.
+//!
+//! Each battery runs its own strategy with its own case count, so no battery's
+//! class coverage can be masked by another battery's.
 
 use std::cell::Cell;
 
@@ -21,8 +25,7 @@ use anyhow::{Result, anyhow, ensure};
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed, TestRunner};
 
-use super::oracle;
-use super::*;
+use super::generated::Battery;
 
 /// Cases each law battery runs.
 ///
@@ -146,108 +149,61 @@ fn coverage_runner() -> TestRunner {
     })
 }
 
-/// Generate one operand length: zero, one, or a power of two up to `2^20`.
-///
-/// Zero and one are common because they are the two lengths that decide the
-/// product before any multiplication runs, which is exactly the branch the
-/// witnesses pin and the property must reach independently.
-fn operand_length() -> impl Strategy<Value = usize> {
-    prop_oneof![
-        1 => Just(0_usize),
-        1 => Just(1_usize),
-        8 => (0_u32..=20).prop_map(|exponent| 1_usize << exponent),
-    ]
+/// Run the law that a battery's kernel equals its oracle, twice per case.
+fn check_law(battery: Battery) -> Result<()> {
+    let mut runner = law_runner();
+    runner
+        .run(&battery.strategy(), |request| {
+            let admitted = request.cardinality();
+            prop_assert_eq!(
+                admitted,
+                request.expected(),
+                "{} kernel must equal its oracle",
+                battery.label()
+            );
+            prop_assert_eq!(
+                request.cardinality(),
+                admitted,
+                "a repeated call must answer the same"
+            );
+            Ok(())
+        })
+        .map_err(|error| anyhow!("{error}"))?;
+    Ok(())
 }
 
-/// Generate up to six operand lengths for a product request.
-fn product_request() -> impl Strategy<Value = (Vec<usize>, u64)> {
-    (
-        prop::collection::vec(operand_length(), 0..=6),
-        prop_oneof![1 => Just(0_u64), 1 => Just(1_u64), 6 => 2_u64..=8],
-    )
-}
-
-/// Generate a combination whose `n` is at most 130.
+/// Run the tripwire that a battery's strategy reaches every class.
 ///
-/// One case in eight asks for more items than exist. That is the only way a
-/// binomial cardinality is zero, so a strategy confined to `r <= n` would make
-/// the `Zero` class unreachable by construction and fail its coverage tripwire
-/// against a correct kernel.
-fn combination_request() -> impl Strategy<Value = (usize, u64)> {
-    (0_usize..=130).prop_flat_map(|length| {
-        let width = oracle::width_of(length);
-        prop_oneof![
-            7 => 0_u64..=width,
-            1 => Just(width.saturating_add(1)),
-        ]
-        .prop_map(move |r| (length, r))
-    })
-}
-
-/// Generate a permutation whose `n` is at most 40.
-///
-/// As with [`combination_request`], one case in eight overshoots `n` so the
-/// `Zero` class is reachable.
-fn permutation_request() -> impl Strategy<Value = (usize, u64)> {
-    (0_usize..=40).prop_flat_map(|length| {
-        let width = oracle::width_of(length);
-        prop_oneof![
-            7 => 0_u64..=width,
-            1 => Just(width.saturating_add(1)),
-        ]
-        .prop_map(move |r| (length, r))
-    })
+/// The kernel is re-checked as the classes are counted, because coverage of a
+/// strategy is only meaningful while the answers it produces are correct.
+fn check_classes(battery: Battery) -> Result<()> {
+    let mut runner = coverage_runner();
+    let counts = ClassCounts::default();
+    runner
+        .run(&battery.strategy(), |request| {
+            let expected = request.expected();
+            counts.record(Class::of(expected, request.ceiling()));
+            prop_assert_eq!(
+                request.cardinality(),
+                expected,
+                "coverage is only coverage of a correct kernel"
+            );
+            Ok(())
+        })
+        .map_err(|error| anyhow!("{error}"))?;
+    counts.ensure_all_reached(battery.label())
 }
 
 /// Property: the product kernel equals the checked `u128` oracle.
 #[test]
 fn product_cardinality_matches_the_oracle() -> Result<()> {
-    let mut runner = law_runner();
-    runner
-        .run(&product_request(), |(lengths, repeat)| {
-            let request = CardinalityRequest::Product {
-                lengths: &lengths,
-                repeat,
-            };
-            let admitted = request.cardinality();
-            prop_assert_eq!(
-                admitted,
-                oracle::product(&lengths, repeat),
-                "the kernel must equal the oracle"
-            );
-            prop_assert_eq!(
-                request.cardinality(),
-                admitted,
-                "a repeated call must answer the same"
-            );
-            Ok(())
-        })
-        .map_err(|error| anyhow!("{error}"))?;
-    Ok(())
+    check_law(Battery::Product)
 }
 
 /// Property: the binomial kernel equals the Pascal-triangle oracle.
 #[test]
 fn combination_cardinality_matches_the_oracle() -> Result<()> {
-    let mut runner = law_runner();
-    runner
-        .run(&combination_request(), |(length, r)| {
-            let request = CardinalityRequest::Combinations { length, r };
-            let admitted = request.cardinality();
-            prop_assert_eq!(
-                admitted,
-                oracle::binomial(oracle::width_of(length), r),
-                "the kernel must equal the oracle"
-            );
-            prop_assert_eq!(
-                request.cardinality(),
-                admitted,
-                "a repeated call must answer the same"
-            );
-            Ok(())
-        })
-        .map_err(|error| anyhow!("{error}"))?;
-    Ok(())
+    check_law(Battery::Combination)
 }
 
 /// Property: for `r` up to two, the binomial kernel equals the closed form.
@@ -257,105 +213,29 @@ fn combination_cardinality_matches_the_oracle() -> Result<()> {
 /// the range, so it is the case a `u64`-step fault fails.
 #[test]
 fn combination_cardinality_matches_the_closed_form_for_small_r() -> Result<()> {
-    let mut runner = law_runner();
-    runner
-        .run(&(any::<usize>(), 0_u64..=2), |(length, r)| {
-            let request = CardinalityRequest::Combinations { length, r };
-            prop_assert_eq!(
-                request.cardinality(),
-                oracle::binomial_up_to_two(oracle::width_of(length), r),
-                "the kernel must equal the closed form"
-            );
-            Ok(())
-        })
-        .map_err(|error| anyhow!("{error}"))?;
-    Ok(())
+    check_law(Battery::ClosedForm)
 }
 
 /// Property: the falling-factorial kernel equals the checked `u128` oracle.
 #[test]
 fn permutation_cardinality_matches_the_oracle() -> Result<()> {
-    let mut runner = law_runner();
-    runner
-        .run(&permutation_request(), |(length, r)| {
-            let request = CardinalityRequest::Permutations { length, r };
-            let admitted = request.cardinality();
-            prop_assert_eq!(
-                admitted,
-                oracle::permutations(oracle::width_of(length), r),
-                "the kernel must equal the oracle"
-            );
-            prop_assert_eq!(
-                request.cardinality(),
-                admitted,
-                "a repeated call must answer the same"
-            );
-            Ok(())
-        })
-        .map_err(|error| anyhow!("{error}"))?;
-    Ok(())
+    check_law(Battery::Permutation)
 }
 
 /// Tripwire: the product strategy reaches every class.
 #[test]
 fn product_strategy_reaches_every_class() -> Result<()> {
-    let mut runner = coverage_runner();
-    let counts = ClassCounts::default();
-    runner
-        .run(&product_request(), |(lengths, repeat)| {
-            let expected = oracle::product(&lengths, repeat);
-            counts.record(Class::of(expected, OUTPUT_TUPLE_CEILING));
-            prop_assert_eq!(
-                CardinalityRequest::Product {
-                    lengths: &lengths,
-                    repeat
-                }
-                .cardinality(),
-                expected,
-                "coverage is only coverage of a correct kernel"
-            );
-            Ok(())
-        })
-        .map_err(|error| anyhow!("{error}"))?;
-    counts.ensure_all_reached("the product strategy")
+    check_classes(Battery::Product)
 }
 
 /// Tripwire: the combination strategy reaches every class.
 #[test]
 fn combination_strategy_reaches_every_class() -> Result<()> {
-    let mut runner = coverage_runner();
-    let counts = ClassCounts::default();
-    runner
-        .run(&combination_request(), |(length, r)| {
-            let expected = oracle::binomial(oracle::width_of(length), r);
-            counts.record(Class::of(expected, OUTPUT_TUPLE_CEILING));
-            prop_assert_eq!(
-                CardinalityRequest::Combinations { length, r }.cardinality(),
-                expected,
-                "coverage is only coverage of a correct kernel"
-            );
-            Ok(())
-        })
-        .map_err(|error| anyhow!("{error}"))?;
-    counts.ensure_all_reached("the combination strategy")
+    check_classes(Battery::Combination)
 }
 
 /// Tripwire: the permutation strategy reaches every class.
 #[test]
 fn permutation_strategy_reaches_every_class() -> Result<()> {
-    let mut runner = coverage_runner();
-    let counts = ClassCounts::default();
-    runner
-        .run(&permutation_request(), |(length, r)| {
-            let expected = oracle::permutations(oracle::width_of(length), r);
-            counts.record(Class::of(expected, PERMUTATION_TUPLE_CEILING));
-            prop_assert_eq!(
-                CardinalityRequest::Permutations { length, r }.cardinality(),
-                expected,
-                "coverage is only coverage of a correct kernel"
-            );
-            Ok(())
-        })
-        .map_err(|error| anyhow!("{error}"))?;
-    counts.ensure_all_reached("the permutation strategy")
+    check_classes(Battery::Permutation)
 }
