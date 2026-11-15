@@ -7,6 +7,11 @@
 //! failure paths a fallible collector has: a per-item error must end the
 //! collection immediately, while the ceiling refusal must arrive one item past
 //! the ceiling, from the collector's own check.
+//!
+//! The two boundary cases are written once and parameterised by [`Collector`],
+//! because the infallible and fallible collectors promise the same ceiling
+//! behaviour. Only the item type differs, so a case that does not depend on
+//! failure is the same case for both.
 
 use googletest::prelude::*;
 
@@ -27,12 +32,62 @@ impl From<StreamLimitExceeded> for CeilingRefusal {
     }
 }
 
-/// An unbounded match stream is refused one item past the ceiling.
-#[test]
-fn match_collection_stops_one_item_past_the_ceiling() {
-    let mut stream = CountingStream::new(std::iter::repeat(1_u64));
-    let refused =
-        collect_matches(stream.by_ref()).expect_err("an unbounded stream exceeds the ceiling");
+/// Which collector a shared boundary case drives.
+///
+/// The fallible variant uses [`StreamLimitExceeded`] as its error type so both
+/// variants answer `Result<Vec<u64>, StreamLimitExceeded>`, which is what lets
+/// one set of assertions cover the two ceilings.
+#[derive(Clone, Copy, Debug)]
+enum Collector {
+    /// `collect_matches`, over items that cannot fail.
+    Total,
+    /// `try_collect_matches`, over items that may be an error.
+    Fallible,
+}
+
+impl Collector {
+    /// Pull from an endless stream of ones until the collector stops.
+    ///
+    /// The answer is paired with the pull count, so a case can assert on where
+    /// the collector stopped rather than inferring it from what it kept.
+    fn stop_on_endless_ones(self) -> (Result<Vec<u64>, StreamLimitExceeded>, usize) {
+        match self {
+            Self::Total => {
+                let mut stream = CountingStream::new(std::iter::repeat(1_u64));
+                (collect_matches(stream.by_ref()), stream.pulls())
+            }
+            Self::Fallible => {
+                let mut stream =
+                    CountingStream::new(std::iter::repeat(Ok::<u64, StreamLimitExceeded>(1)));
+                (try_collect_matches(stream.by_ref()), stream.pulls())
+            }
+        }
+    }
+
+    /// Pull exactly the ceiling's worth of items, returning what was kept.
+    fn collect_exactly_the_ceiling(self) -> Vec<u64> {
+        match self {
+            Self::Total => {
+                let mut stream = CountingStream::new(0..MATCH_COUNT_CEILING);
+                collect_matches(stream.by_ref()).expect("exactly the ceiling is admitted")
+            }
+            Self::Fallible => {
+                let mut stream = CountingStream::new(
+                    (0..MATCH_COUNT_CEILING).map(Ok::<u64, StreamLimitExceeded>),
+                );
+                try_collect_matches(stream.by_ref()).expect("exactly the ceiling is admitted")
+            }
+        }
+    }
+}
+
+/// Assert that an endless stream is refused after one pull past the ceiling.
+///
+/// The refusal is matched as a value rather than by variant, so a collector
+/// that reported the wrong stream kind or ceiling would fail here too.
+fn assert_stops_one_item_past_the_ceiling(collector: Collector) {
+    let (outcome, pulls) = collector.stop_on_endless_ones();
+    let refused = outcome.expect_err("an unbounded stream exceeds the ceiling");
     assert_that!(
         refused,
         eq(StreamLimitExceeded {
@@ -41,17 +96,14 @@ fn match_collection_stops_one_item_past_the_ceiling() {
         })
     );
     assert_eq!(
-        stream.pulls(),
-        100_001,
+        pulls, 100_001,
         "the collector must stop after one item past the ceiling"
     );
 }
 
-/// A stream holding exactly the ceiling is collected whole.
-#[test]
-fn match_collection_accepts_exactly_the_ceiling() {
-    let mut stream = CountingStream::new(0..MATCH_COUNT_CEILING);
-    let collected = collect_matches(stream.by_ref()).expect("exactly the ceiling is admitted");
+/// Assert that a stream holding exactly the ceiling is collected whole.
+fn assert_accepts_exactly_the_ceiling(collector: Collector) {
+    let collected = collector.collect_exactly_the_ceiling();
     assert_eq!(
         collected.len(),
         usize::try_from(MATCH_COUNT_CEILING).expect("the ceiling fits a usize"),
@@ -62,6 +114,18 @@ fn match_collection_accepts_exactly_the_ceiling() {
         Some(MATCH_COUNT_CEILING - 1),
         "the last item must be the one before the ceiling"
     );
+}
+
+/// An unbounded match stream is refused one item past the ceiling.
+#[test]
+fn match_collection_stops_one_item_past_the_ceiling() {
+    assert_stops_one_item_past_the_ceiling(Collector::Total);
+}
+
+/// A stream holding exactly the ceiling is collected whole.
+#[test]
+fn match_collection_accepts_exactly_the_ceiling() {
+    assert_accepts_exactly_the_ceiling(Collector::Total);
 }
 
 /// A per-item failure is returned unchanged, and nothing after it is pulled.
@@ -100,39 +164,13 @@ fn try_collect_matches_stops_at_the_first_item_error() {
 /// stay green there and pull the whole stream here.
 #[test]
 fn try_collect_matches_stops_one_item_past_the_ceiling() {
-    let mut stream = CountingStream::new(std::iter::repeat(Ok::<u64, StreamLimitExceeded>(1)));
-    let refused =
-        try_collect_matches(stream.by_ref()).expect_err("an unbounded stream exceeds the ceiling");
-    assert_that!(
-        refused,
-        eq(StreamLimitExceeded {
-            kind: StreamKind::MatchCount,
-            ceiling: MATCH_COUNT_CEILING,
-        })
-    );
-    assert_eq!(
-        stream.pulls(),
-        100_001,
-        "the collector must stop after one item past the ceiling"
-    );
+    assert_stops_one_item_past_the_ceiling(Collector::Fallible);
 }
 
 /// A fallible stream holding exactly the ceiling is collected whole.
 #[test]
 fn try_collect_matches_accepts_exactly_the_ceiling() {
-    let mut stream =
-        CountingStream::new((0..MATCH_COUNT_CEILING).map(Ok::<u64, StreamLimitExceeded>));
-    let collected = try_collect_matches(stream.by_ref()).expect("exactly the ceiling is admitted");
-    assert_eq!(
-        collected.len(),
-        usize::try_from(MATCH_COUNT_CEILING).expect("the ceiling fits a usize"),
-        "every item up to the ceiling must be retained"
-    );
-    assert_eq!(
-        collected.last().copied(),
-        Some(MATCH_COUNT_CEILING - 1),
-        "the last item must be the one before the ceiling"
-    );
+    assert_accepts_exactly_the_ceiling(Collector::Fallible);
 }
 
 /// The ceiling refusal reaches the caller as its own error type.

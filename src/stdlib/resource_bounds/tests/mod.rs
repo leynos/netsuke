@@ -16,8 +16,10 @@
 //! `limits` owns depth, input-length, and running-total boundaries;
 //! `collectors` owns the two match collectors and the pull counts that show
 //! where they stop; `diagnostics` owns the snapshots that pin each refusal's
-//! rendered message. The fixture below lives here rather than beside its first
-//! caller so that a battery cannot quietly drift onto a private copy of it.
+//! rendered message; `generated` owns the request shapes and strategies the
+//! property batteries draw from. The fixture below lives here rather than
+//! beside its first caller so that a battery cannot quietly drift onto a
+//! private copy of it.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -28,6 +30,7 @@ mod admission;
 mod cardinality;
 mod collectors;
 mod diagnostics;
+mod generated;
 mod limits;
 mod oracle;
 mod properties;
