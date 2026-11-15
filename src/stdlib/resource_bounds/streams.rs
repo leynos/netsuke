@@ -174,6 +174,17 @@ impl RunningTotal {
     }
 
     /// Return the total admitted so far.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::stdlib::{RunningTotal, StreamKind};
+    ///
+    /// let mut total = RunningTotal::new(StreamKind::MatchCount);
+    /// total.admit_one().expect("the first match is within the ceiling");
+    /// total.admit(41).expect("forty-one more matches stay within the ceiling");
+    /// assert_eq!(total.admitted(), 42);
+    /// ```
     #[must_use]
     pub const fn admitted(&self) -> u64 {
         self.admitted
