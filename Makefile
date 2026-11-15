@@ -534,6 +534,10 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_upload_boundaries.py \
 		scripts/tests/test_release_upload_timing.py \
 		scripts/tests/test_release_upload_trace.py \
+		scripts/tests/test_release_consumer_smoke.py \
+		scripts/tests/test_release_consumer_archive_policy.py \
+		scripts/tests/test_release_binstall_archive.py \
+		scripts/tests/test_consumer_smoke_cli.py \
 		scripts/crates_io_candidate_cli.py \
 		scripts/crates_io_candidate_archive.py \
 		scripts/crates_io_candidate_errors.py \
@@ -606,6 +610,16 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/upload_declared_assets_cli.py \
 		scripts/upload_declared_assets_refusals.py \
 		scripts/ensure_draft_release.py \
+		scripts/release_consumer_smoke.py \
+		scripts/release_consumer_archive_policy.py \
+		scripts/release_binstall_archive.py \
+		scripts/release_consumer_payload.py \
+		scripts/release_binstall_extract.py \
+		scripts/release_binstall_probe.py \
+		scripts/consumer_smoke_evidence.py \
+		scripts/consumer_smoke_ledger.py \
+		scripts/consumer_smoke_cli.py \
+		scripts/consumer_smoke_verify.py \
 		-c /dev/null --rootdir=. \
 		-p no:cacheprovider --doctest-modules
 

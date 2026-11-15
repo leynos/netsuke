@@ -1,0 +1,255 @@
+"""Write the single root binary of a published archive into a fresh directory.
+
+The smoke must run exactly one file: the ``netsuke`` the archive ships. This
+adapter performs the only write in the smoke, and it is deliberately narrow.
+The archive is re-scanned first, so a file swapped since the caller's scan is
+refused rather than extracted. The output path is created with
+``O_CREAT | O_EXCL | O_NOFOLLOW``, so a directory that already holds a symlink
+cannot redirect the write, and the copy is streamed under the declared size so
+a member that lies about its length is stopped part-way. A failure deletes the
+partial output, because a half-written executable is something a later step
+could observe and run.
+
+Member safety itself is decided in
+:mod:`release_consumer_archive_policy`; this module never writes a member the
+policy has not accepted, and it writes no member but the binary.
+
+Run through ``scripts/consumer_smoke_cli.py``; behavioural coverage lives in
+``scripts/tests/test_release_binstall_archive.py``.
+"""
+
+import contextlib
+import os
+import typing as typ
+
+import release_consumer_archive_policy as policy
+from release_binstall_archive import (
+    CORRUPT_STREAM,
+    ArchiveCorruptError,
+    ExtractionError,
+    validated_archive,
+)
+
+if typ.TYPE_CHECKING:
+    import pathlib
+    import tarfile
+
+#: Block size for copying the binary out of the archive.
+COPY_CHUNK_BYTES = 1024 * 1024
+
+#: Permissions the extracted binary carries.
+BINARY_MODE = 0o755
+
+
+def extract_binary(
+    archive_path: pathlib.Path,
+    layout: policy.ArchiveLayout,
+    destination: pathlib.Path,
+) -> pathlib.Path:
+    """Write the root binary into ``destination`` and return its path.
+
+    Parameters
+    ----------
+    archive_path
+        The verified archive.
+    layout
+        The layout an earlier scan accepted. The archive is re-scanned, and a
+        difference is refused rather than trusted.
+    destination
+        A caller-created, empty directory.
+
+    Returns
+    -------
+    pathlib.Path
+        The absolute path of the written binary.
+
+    Raises
+    ------
+    ExtractionError
+        If ``destination`` is not an empty directory, the output path is
+        already occupied, the binary cannot be written, the bytes written
+        differ from the declared size, or the re-scan disagrees with
+        ``layout``.
+
+    Notes
+    -----
+    A member whose data cannot be read fails as
+    :class:`release_binstall_archive.ArchiveCorruptError`, and an archive that
+    no longer passes the member rules as a
+    :class:`release_consumer_archive_policy.ArchiveLayoutError`; both are
+    raised while the archive is reopened.
+
+    Examples
+    --------
+    >>> import io, tarfile, tempfile
+    >>> from pathlib import Path
+    >>> import release_binstall_archive as archive_adapter
+    >>> import release_digest_files
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     root = Path(tmp)
+    ...     path = root / "netsuke.tar.gz"
+    ...     with tarfile.open(path, "w:gz") as archive:
+    ...         entry = tarfile.TarInfo("netsuke")
+    ...         entry.size = 1
+    ...         _ = archive.addfile(entry, io.BytesIO(b"x"))
+    ...     layout = archive_adapter.scan_archive(
+    ...         path, expected_sha256=release_digest_files.digest_of_file(path)
+    ...     )
+    ...     out = root / "out"
+    ...     out.mkdir()
+    ...     extract_binary(path, layout, out).read_bytes()
+    b'x'
+    """
+    _require_fresh_directory(destination)
+    with validated_archive(archive_path) as validated:
+        if validated.layout != layout:
+            msg = (
+                "the archive changed between the verification scan and the "
+                "extraction; refusing to write bytes the scan did not accept"
+            )
+            raise ExtractionError(msg)
+        entry = _binary_entry(validated.archive)
+        return _write_entry(validated.archive, entry, destination, layout)
+
+
+def _require_fresh_directory(destination: pathlib.Path) -> None:
+    """Require ``destination`` to be a directory that holds no entry.
+
+    Raises
+    ------
+    ExtractionError
+        If the path is not a directory, or already holds anything.
+    """
+    if not destination.is_dir():
+        msg = f"{destination} is not a directory"
+        raise ExtractionError(msg)
+    if any(destination.iterdir()):
+        msg = (
+            f"{destination} is not empty; extraction writes only into a fresh directory"
+        )
+        raise ExtractionError(msg)
+
+
+def _binary_entry(archive: tarfile.TarFile) -> tarfile.TarInfo:
+    """Return the root binary's header, refusing an ambiguous match.
+
+    Returns
+    -------
+    tarfile.TarInfo
+        The header of the one regular member named like the shipped binary.
+
+    Raises
+    ------
+    ExtractionError
+        If the archive holds no unique regular root binary.
+
+    Notes
+    -----
+    A member name that could escape the extraction root fails as a
+    :class:`release_consumer_archive_policy.UnsafeMemberNameError`, which the
+    re-scan raises before this runs; the check here only counts matches.
+    """
+    matches = [
+        entry
+        for entry in archive.getmembers()
+        if policy.normalised_member_name(entry.name) == policy.BINARY_NAME
+        and entry.isreg()
+    ]
+    if len(matches) != 1:
+        msg = (
+            f"expected one regular {policy.BINARY_NAME!r} member, found {len(matches)}"
+        )
+        raise ExtractionError(msg)
+    return matches[0]
+
+
+def _write_entry(
+    archive: tarfile.TarFile,
+    entry: tarfile.TarInfo,
+    destination: pathlib.Path,
+    layout: policy.ArchiveLayout,
+) -> pathlib.Path:
+    """Copy one member's data into a newly created file.
+
+    Returns
+    -------
+    pathlib.Path
+        The path of the written binary, which is executable.
+
+    Raises
+    ------
+    ExtractionError
+        If the file already exists, cannot be created, or the copied size
+        differs from the declared size.
+
+    Notes
+    -----
+    The member's data failing part-way is
+    :class:`release_binstall_archive.ArchiveCorruptError`, raised by
+    :func:`_copy_member`; the partial file is deleted either way.
+    """
+    target = destination / layout.binary_name
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    try:
+        descriptor = os.open(target, flags, BINARY_MODE)
+    except OSError as error:
+        msg = f"could not create {target} exclusively: {error}"
+        raise ExtractionError(msg) from error
+    try:
+        os.fchmod(descriptor, BINARY_MODE)
+        _copy_member(archive, entry, descriptor, layout)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            target.unlink(missing_ok=True)
+        raise
+    finally:
+        with contextlib.suppress(OSError):
+            os.close(descriptor)
+    return target
+
+
+def _copy_member(
+    archive: tarfile.TarFile,
+    entry: tarfile.TarInfo,
+    descriptor: int,
+    layout: policy.ArchiveLayout,
+) -> None:
+    """Stream the member into ``descriptor``, reproducing the declared size.
+
+    Raises
+    ------
+    ExtractionError
+        If the member has no readable data or carries more bytes than its
+        header declares.
+    ArchiveCorruptError
+        If the compressed data fails part-way through.
+    """
+    try:
+        source = archive.extractfile(entry)
+    except CORRUPT_STREAM as error:
+        msg = f"the archive's data could not be read: {error}"
+        raise ArchiveCorruptError(msg) from error
+    if source is None:
+        msg = f"the archive member {layout.binary_name!r} carries no data"
+        raise ExtractionError(msg)
+    written = 0
+    with source, os.fdopen(descriptor, "wb") as sink:
+        try:
+            while block := source.read(COPY_CHUNK_BYTES):
+                written += len(block)
+                if written > layout.binary_size:
+                    msg = (
+                        f"the archive member {layout.binary_name!r} carries more "
+                        "bytes than its header declares"
+                    )
+                    raise ExtractionError(msg)
+                _ = sink.write(block)
+        except CORRUPT_STREAM as error:
+            msg = f"the archive's data failed part-way through: {error}"
+            raise ArchiveCorruptError(msg) from error
+    if written != layout.binary_size:
+        msg = (
+            f"wrote {written} bytes for {layout.binary_name!r}, but the header "
+            f"declares {layout.binary_size}"
+        )
+        raise ExtractionError(msg)
