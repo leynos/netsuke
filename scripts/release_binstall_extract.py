@@ -306,13 +306,15 @@ def _member_source(
     archive: tarfile.TarFile,
     entry: tarfile.TarInfo,
     layout: policy.ArchiveLayout,
-) -> typ.BinaryIO:
+) -> typ.IO[bytes]:
     """Return the member's data stream, or refuse one that carries none.
 
     Returns
     -------
-    typing.BinaryIO
-        The stream the member's bytes are read from.
+    typing.IO[bytes]
+        The stream the member's bytes are read from. It is the type
+        ``tarfile.extractfile`` declares rather than ``BinaryIO``, so the
+        annotation describes what the archive actually hands back.
 
     Raises
     ------
@@ -333,7 +335,7 @@ def _member_source(
 
 
 def _stream_member(
-    source: typ.BinaryIO, descriptor: int, layout: policy.ArchiveLayout
+    source: typ.IO[bytes], descriptor: int, layout: policy.ArchiveLayout
 ) -> int:
     """Copy the member's bytes into ``descriptor`` under the declared size.
 
@@ -362,7 +364,7 @@ def _stream_member(
 
 
 def _copy_under_cap(
-    source: typ.BinaryIO, sink: typ.BinaryIO, layout: policy.ArchiveLayout
+    source: typ.IO[bytes], sink: typ.IO[bytes], layout: policy.ArchiveLayout
 ) -> int:
     """Copy ``source`` into ``sink``, refusing to write past the declared size.
 
