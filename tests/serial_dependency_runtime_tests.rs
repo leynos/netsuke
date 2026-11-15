@@ -56,7 +56,14 @@ fn edge(
 
 fn serial_order_graph() -> BuildGraph {
     let mut graph = BuildGraph::default();
-    for (name, command) in [
+    insert_actions(&mut graph);
+    insert_edges(&mut graph);
+    graph
+}
+
+/// Register the three ordered stages plus their `all` aggregator.
+fn insert_actions(graph: &mut BuildGraph) {
+    let stages = [
         (
             "fmt",
             "test ! -e check-fmt && echo one >> order.log && touch check-fmt",
@@ -69,13 +76,18 @@ fn serial_order_graph() -> BuildGraph {
             "test",
             "test -e lint && test ! -e test && echo three >> order.log && touch test",
         ),
-    ] {
+    ];
+    for (name, command) in stages {
         graph.actions.insert(name.into(), action(command));
     }
     graph
         .actions
         .insert("all".into(), action(StringOrList::Empty));
-    for (action_id, output, deps, dependency_order) in [
+}
+
+/// Wire the stages in order, with `all` depending on all three serially.
+fn insert_edges(graph: &mut BuildGraph) {
+    let edges = [
         ("fmt", "check-fmt", &[][..], DependencyOrder::Parallel),
         ("lint", "lint", &[][..], DependencyOrder::Parallel),
         ("test", "test", &[][..], DependencyOrder::Parallel),
@@ -85,7 +97,8 @@ fn serial_order_graph() -> BuildGraph {
             &["check-fmt", "lint", "test"][..],
             DependencyOrder::Serial,
         ),
-    ] {
+    ];
+    for (action_id, output, deps, dependency_order) in edges {
         assert!(
             graph
                 .insert_edge(edge(action_id, output, deps, dependency_order))
@@ -93,7 +106,6 @@ fn serial_order_graph() -> BuildGraph {
             "test graph output aliases must be unique",
         );
     }
-    graph
 }
 
 fn shared_work_graph() -> BuildGraph {
