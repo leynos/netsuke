@@ -190,6 +190,42 @@ fn rejects_coverage_claimed_only_by_prose_in_the_trace(
     Ok(())
 }
 
+/// A row is evidence only when it both sits in a `Task` table and traces a task.
+///
+/// A pipe-delimited line is easy to mistake for a table row, and a wildcard is
+/// easy to mistake for a reference, so each case satisfies some of the rule and
+/// breaks the rest. The first is a well-formed wildcard on a line that belongs
+/// to no `Task`-headed table; the second is a real task in a row of the
+/// skeleton's own `Task` table, whose reference cell is a wildcard with no area
+/// name; the third is such a row whose first cell names no task at all.
+/// Accepting any of them would let a row that traces nothing cover a register
+/// item, which is the same fail-open the prose cases close by other means.
+#[rstest]
+#[case::row_outside_a_task_table(
+    "### Changes\n\n",
+    "### Changes\n\n| not-a-task | A1/* | -- | -- |\n\n"
+)]
+#[case::area_wildcard_with_no_area(
+    "| -- | -- | -- | -- |\n\n### Consumes",
+    "| -- | -- | -- | -- |\n| 26.1.2 | /* | -- | -- |\n\n### Consumes"
+)]
+#[case::task_row_naming_no_task(
+    "| -- | -- | -- | -- |\n\n### Consumes",
+    "| -- | -- | -- | -- |\n| nobody | A1/* | -- | -- |\n\n### Consumes"
+)]
+fn rejects_register_coverage_claimed_by_a_malformed_trace_row(
+    #[case] anchor: &str,
+    #[case] replacement: &str,
+) -> Result<()> {
+    let inventory = inventory_with_one_register_item().replace(anchor, replacement);
+    expect_validation_error(
+        &inventory,
+        SIMPLE_ROADMAP,
+        "neither traced nor listed unchanged",
+    )?;
+    Ok(())
+}
+
 #[test]
 fn rejects_an_obligation_claimed_only_by_prose_under_consumes() -> Result<()> {
     let inventory = VALID_SKELETON

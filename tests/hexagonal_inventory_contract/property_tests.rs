@@ -20,6 +20,25 @@ use super::markdown::{
 /// One generated heading: its depth, its title, and the line that renders it.
 type Generated = (u8, String, String);
 
+/// Unwrap a lookup the generator guarantees, failing the property otherwise.
+///
+/// Every generated document contains the heading being requested, so a `None`
+/// is a regression in the parser rather than an input to skip. Using `else {
+/// continue }` here would make the whole property vacuous against exactly that
+/// regression: a parser that always returned `None` would skip every case and
+/// pass.
+macro_rules! prop_assert_some {
+    ($lookup:expr, $message:literal $(, $argument:expr)*) => {
+        match $lookup {
+            Some(value) => value,
+            None => {
+                prop_assert!(false, $message $(, $argument)*);
+                unreachable!("prop_assert! returns from the test on failure")
+            }
+        }
+    };
+}
+
 /// Render one Markdown heading line, numbering it when asked.
 fn heading_line(depth: u8, index: usize, title: &str, is_numbered: bool) -> String {
     let hashes = "#".repeat(usize::from(depth));
@@ -93,9 +112,10 @@ proptest! {
             if *depth != 2 {
                 continue;
             }
-            let Some(region) = heading_body(&text, title, HeadingLevel::Section) else {
-                continue;
-            };
+            let region = prop_assert_some!(
+                heading_body(&text, title, HeadingLevel::Section),
+                "generated heading {title:?} should have a section region"
+            );
             for nested in deeper_headings_before_boundary(&headings, index, 2) {
                 prop_assert!(
                     region.contains(&nested),
@@ -112,9 +132,10 @@ proptest! {
     #[test]
     fn section_regions_stop_at_the_next_sibling_heading((text, headings) in document()) {
         for (_, title, _) in headings.iter().filter(|(depth, _, _)| *depth == 2) {
-            let Some(region) = heading_body(&text, title, HeadingLevel::Section) else {
-                continue;
-            };
+            let region = prop_assert_some!(
+                heading_body(&text, title, HeadingLevel::Section),
+                "generated heading {title:?} should have a section region"
+            );
             prop_assert!(
                 !region
                     .lines()
@@ -128,9 +149,10 @@ proptest! {
     #[test]
     fn subsection_regions_stop_at_the_next_sibling_heading((text, headings) in document()) {
         for (_, title, _) in headings.iter().filter(|(depth, _, _)| *depth == 3) {
-            let Some(region) = heading_body(&text, title, HeadingLevel::Subsection) else {
-                continue;
-            };
+            let region = prop_assert_some!(
+                heading_body(&text, title, HeadingLevel::Subsection),
+                "generated heading {title:?} should have a subsection region"
+            );
             prop_assert!(
                 !region
                     .lines()
@@ -148,16 +170,18 @@ proptest! {
     #[test]
     fn harvests_are_heading_free_prefixes_of_their_region((text, headings) in document()) {
         for (_, title, _) in headings.iter().filter(|(depth, _, _)| *depth == 3) {
-            let Some(harvest) = harvest_body(&text, title) else {
-                continue;
-            };
+            let harvest = prop_assert_some!(
+                harvest_body(&text, title),
+                "generated heading {title:?} should have a harvest body"
+            );
             prop_assert!(
                 !harvest.lines().any(is_heading),
                 "harvest for {title} should contain no heading line; got {harvest:?}"
             );
-            let Some(region) = heading_body(&text, title, HeadingLevel::Subsection) else {
-                continue;
-            };
+            let region = prop_assert_some!(
+                heading_body(&text, title, HeadingLevel::Subsection),
+                "generated heading {title:?} should have a subsection region"
+            );
             prop_assert!(
                 region.starts_with(harvest),
                 "harvest for {title} should prefix its region; harvest {harvest:?}, region {region:?}"

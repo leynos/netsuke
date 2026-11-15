@@ -21,17 +21,30 @@ use super::register::is_well_formed_register_id;
 /// the obligation and register references the same way, so one rule covers all
 /// three.
 pub(super) fn trace_table_tasks(trace: &str) -> BTreeSet<String> {
-    ["Changes", "Consumes"]
-        .iter()
-        .filter_map(|heading| harvest_body(trace, heading))
-        .flat_map(task_table_ids)
+    trace_subsections(trace)
+        .flat_map(task_table_rows)
+        .flat_map(|row| task_ids(first_cell(row).unwrap_or_default()))
         .collect()
 }
 
-/// Collect task identifiers from one trace subsection's `Task`-headed tables.
-fn task_table_ids(subsection: &str) -> BTreeSet<String> {
+/// Iterate the `Changes` and `Consumes` harvest bodies of the trace matrix.
+fn trace_subsections(trace: &str) -> impl Iterator<Item = &str> + '_ {
+    ["Changes", "Consumes"]
+        .into_iter()
+        .filter_map(move |heading| harvest_body(trace, heading))
+}
+
+/// Collect the rows of one trace subsection's `Task`-headed tables.
+///
+/// Task coverage and reference coverage share this selection so the two cannot
+/// disagree about which rows are evidence. A row counts only when it belongs to
+/// a `Task`-headed table *and* its first cell names a roadmap task: without the
+/// first condition an isolated pipe-delimited line under `### Changes` becomes a
+/// reference source, and with it a row naming no task would still be read as
+/// one. Both shapes let a row that traces nothing satisfy register coverage.
+fn task_table_rows(subsection: &str) -> Vec<&str> {
     let mut in_task_table = false;
-    let mut tasks = BTreeSet::new();
+    let mut rows = Vec::new();
     for line in subsection.lines() {
         let Some(cell) = first_cell(line) else {
             in_task_table = false;
@@ -39,11 +52,16 @@ fn task_table_ids(subsection: &str) -> BTreeSet<String> {
         };
         if cell == "Task" {
             in_task_table = true;
-        } else if in_task_table && !is_table_separator(cell) {
-            tasks.extend(task_ids(cell));
+        } else if is_task_row(in_task_table, cell) {
+            rows.push(line);
         }
     }
-    tasks
+    rows
+}
+
+/// Report whether a table row names at least one roadmap task.
+fn is_task_row(in_task_table: bool, cell: &str) -> bool {
+    in_task_table && !is_table_separator(cell) && !task_ids(cell).is_empty()
 }
 
 /// Collect excluded tasks and the reason text following each identifier.
@@ -99,21 +117,19 @@ fn exclusion_reason(line: &str, task: &str) -> String {
 /// `Unchanged` entries reach register coverage through `unchanged_ids`, which
 /// accepts only the bullet form.
 ///
-/// Within those subsections only pipe-delimited table rows survive. A sentence
-/// such as `No task currently covers A1/ast::Rule` sits directly under
+/// Within those subsections only the rows of a `Task`-headed table survive. A
+/// sentence such as `No task currently covers A1/ast::Rule` sits directly under
 /// `### Changes` and inside the harvest body, and counting it would let prose
 /// make the claim that a table row has to make — the same fail-open this
-/// function already closes for the introduction.
+/// function already closes for the introduction. An isolated pipe-delimited
+/// line is prose in a table's clothing and is refused by the same rule: a row
+/// that belongs to no `Task`-headed table traces nothing, however it is
+/// punctuated.
 pub(super) fn trace_rows(trace: &str) -> String {
     let mut rows = String::new();
-    for body in ["Changes", "Consumes"]
-        .iter()
-        .filter_map(|heading| harvest_body(trace, heading))
-    {
-        for line in body.lines().filter(|line| first_cell(line).is_some()) {
-            rows.push_str(line);
-            rows.push('\n');
-        }
+    for row in trace_subsections(trace).flat_map(task_table_rows) {
+        rows.push_str(row);
+        rows.push('\n');
     }
     rows
 }
@@ -155,13 +171,27 @@ pub(super) fn reference_covers(identifier: &str, references: &str) -> bool {
         .map(|reference| reference.trim_matches(['|', ',', ';', '`', '(', ')']))
         .any(|reference| {
             reference == identifier
-                || reference
-                    .strip_suffix("/*")
-                    .is_some_and(|prefix| identifier.starts_with(prefix))
-                || reference.strip_suffix("@*").is_some_and(|prefix| {
-                    identifier
-                        .strip_prefix(prefix)
-                        .is_some_and(|suffix| suffix.starts_with('@'))
-                })
+                || covers_area(reference, identifier)
+                || covers_site(reference, identifier)
         })
+}
+
+/// Report whether an `<area>/*` token names a non-empty prefix of `identifier`.
+///
+/// The prefix must be non-empty: a bare `/*` strips to `""`, and every string
+/// starts with `""`, so without this guard one malformed token would claim
+/// coverage of every register identifier at once.
+fn covers_area(reference: &str, identifier: &str) -> bool {
+    reference
+        .strip_suffix("/*")
+        .is_some_and(|prefix| !prefix.is_empty() && identifier.starts_with(prefix))
+}
+
+/// Report whether an `<area>@*` token names a site on `identifier`.
+fn covers_site(reference: &str, identifier: &str) -> bool {
+    reference.strip_suffix("@*").is_some_and(|prefix| {
+        identifier
+            .strip_prefix(prefix)
+            .is_some_and(|suffix| suffix.starts_with('@'))
+    })
 }
