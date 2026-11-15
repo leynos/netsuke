@@ -103,7 +103,7 @@ impl WindowsRoot {
 /// the home dotfile's, so a case cannot pass by reading the wrong one.
 pub(super) struct Case {
     /// Keeps the scenario directories alive for the whole case.
-    _temp: TempDir,
+    temp: TempDir,
     cli: Cli,
     home: PathBuf,
     profile: PathBuf,
@@ -126,7 +126,7 @@ impl Case {
         let system = temp.path().join("system");
         write_system_config(&system)?;
         Ok(Self {
-            _temp: temp,
+            temp,
             cli,
             home,
             profile,
@@ -146,7 +146,7 @@ impl Case {
 
     /// Create the case directory named `name` and return its path.
     pub(super) fn base(&self, name: &str) -> Result<PathBuf> {
-        let base = self._temp.path().join(name);
+        let base = self.temp.path().join(name);
         test_support::fs::create_dir(&base)
             .with_context(|| format!("create {}", base.display()))?;
         Ok(base)
@@ -214,10 +214,10 @@ impl Case {
             paths.is_empty(),
             "a rejected user candidate must not fall through to another layer, got {paths:?}"
         );
-        let error = error.context("the user candidate should fail discovery")?;
+        let report = error.context("the user candidate should fail discovery")?;
         ensure!(
-            error.contains(expected_fragment),
-            "the error should name {expected_fragment}: {error}"
+            report.contains(expected_fragment),
+            "the error should name {expected_fragment}: {report}"
         );
         Ok(())
     }
@@ -269,8 +269,8 @@ fn windows_user_roots_outrank_system_scope(
         }
     }
 
-    let expected = expected.context("the winning root should be configured")?;
-    case.assert_single_layer(&case.scoped_environment(environment), &expected)
+    let expected_path = expected.context("the winning root should be configured")?;
+    case.assert_single_layer(&case.scoped_environment(environment), &expected_path)
 }
 
 /// An empty base value is ignored, so no candidate is relative to the working

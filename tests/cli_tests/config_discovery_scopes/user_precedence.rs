@@ -23,22 +23,22 @@ use tempfile::{TempDir, tempdir};
 #[derive(Clone, Copy, Debug)]
 enum UserFileLocation {
     /// `$HOME/.netsuke.toml`, reached through the home dotfile fallback.
-    HomeDotfile,
+    Dotfile,
     /// `$HOME/.config/netsuke/config.toml`, reached through the home fallback
     /// when `XDG_CONFIG_HOME` names no usable user directory.
-    HomeConfigDirectory,
+    ConfigDirectory,
     /// `$HOME/.config/.netsuke.toml`, the dotfile spelling within the home
     /// `.config` base.
-    HomeConfigDotfile,
+    ConfigDotfile,
 }
 
 impl UserFileLocation {
     /// Return the configuration path for this location beneath `home`.
     fn path(self, home: &Path) -> PathBuf {
         match self {
-            Self::HomeDotfile => home.join(".netsuke.toml"),
-            Self::HomeConfigDirectory => home.join(".config/netsuke/config.toml"),
-            Self::HomeConfigDotfile => home.join(".config/.netsuke.toml"),
+            Self::Dotfile => home.join(".netsuke.toml"),
+            Self::ConfigDirectory => home.join(".config/netsuke/config.toml"),
+            Self::ConfigDotfile => home.join(".config/.netsuke.toml"),
         }
     }
 }
@@ -122,19 +122,16 @@ fn assert_user_precedence_applied(merged: &Cli) -> Result<()> {
 /// This extends `user_scope_config_takes_precedence_over_system_scope`, which
 /// covers only the case where `XDG_CONFIG_HOME` points at the user file.
 #[rstest]
-#[case::home_dotfile_unset(UserFileLocation::HomeDotfile, XdgConfigHomeMode::Unset)]
-#[case::home_dotfile_empty(UserFileLocation::HomeDotfile, XdgConfigHomeMode::Empty)]
-#[case::home_dotfile_no_config(UserFileLocation::HomeDotfile, XdgConfigHomeMode::NoConfigFile)]
-#[case::home_config_unset(UserFileLocation::HomeConfigDirectory, XdgConfigHomeMode::Unset)]
-#[case::home_config_empty(UserFileLocation::HomeConfigDirectory, XdgConfigHomeMode::Empty)]
-#[case::home_config_no_config(
-    UserFileLocation::HomeConfigDirectory,
-    XdgConfigHomeMode::NoConfigFile
-)]
-#[case::home_config_dotfile_unset(UserFileLocation::HomeConfigDotfile, XdgConfigHomeMode::Unset)]
-#[case::home_config_dotfile_empty(UserFileLocation::HomeConfigDotfile, XdgConfigHomeMode::Empty)]
+#[case::home_dotfile_unset(UserFileLocation::Dotfile, XdgConfigHomeMode::Unset)]
+#[case::home_dotfile_empty(UserFileLocation::Dotfile, XdgConfigHomeMode::Empty)]
+#[case::home_dotfile_no_config(UserFileLocation::Dotfile, XdgConfigHomeMode::NoConfigFile)]
+#[case::home_config_unset(UserFileLocation::ConfigDirectory, XdgConfigHomeMode::Unset)]
+#[case::home_config_empty(UserFileLocation::ConfigDirectory, XdgConfigHomeMode::Empty)]
+#[case::home_config_no_config(UserFileLocation::ConfigDirectory, XdgConfigHomeMode::NoConfigFile)]
+#[case::home_config_dotfile_unset(UserFileLocation::ConfigDotfile, XdgConfigHomeMode::Unset)]
+#[case::home_config_dotfile_empty(UserFileLocation::ConfigDotfile, XdgConfigHomeMode::Empty)]
 #[case::home_config_dotfile_no_config(
-    UserFileLocation::HomeConfigDotfile,
+    UserFileLocation::ConfigDotfile,
     XdgConfigHomeMode::NoConfigFile
 )]
 fn user_scope_config_takes_precedence_without_usable_xdg_config_home(
