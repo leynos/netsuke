@@ -350,4 +350,3 @@ define_keys! {
     EXAMPLE_FILES_PROCESSED => "example.files_processed",
     EXAMPLE_ERRORS_FOUND => "example.errors_found",
 }
-// weave: run 'weave explain src/localization/keys.rs' for per-hunk detail, 'weave check' to verify your resolution
