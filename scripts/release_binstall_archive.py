@@ -323,6 +323,34 @@ def verify_sidecar(archive_path: pathlib.Path, sidecar_path: pathlib.Path) -> st
     ...     verify_sidecar(archive, sidecar) == digest
     True
     """
+    text = _read_sidecar_text(sidecar_path)
+    actual = release_digest_files.digest_of_file(archive_path)
+    try:
+        return release_digest.verify_sidecar(archive_path.name, actual, text)
+    except release_digest.DigestError as error:
+        msg = f"the sidecar does not verify {archive_path.name}: {error}"
+        raise SidecarVerificationError(msg) from error
+
+
+def _read_sidecar_text(sidecar_path: pathlib.Path) -> str:
+    """Return the sidecar's text, or refuse a body that is not one checksum line.
+
+    Returns
+    -------
+    str
+        The decoded sidecar body.
+
+    Raises
+    ------
+    SidecarVerificationError
+        If the sidecar cannot be read, is empty, is larger than
+        :data:`MAX_SIDECAR_BYTES`, or is not UTF-8 text.
+
+    Notes
+    -----
+    The body is read one byte past the cap so an oversized file is recognised
+    from its first read rather than after it has been read whole.
+    """
     try:
         with sidecar_path.open("rb") as handle:
             text_bytes = handle.read(MAX_SIDECAR_BYTES + 1)
@@ -339,13 +367,7 @@ def verify_sidecar(archive_path: pathlib.Path, sidecar_path: pathlib.Path) -> st
         )
         raise SidecarVerificationError(msg)
     try:
-        text = text_bytes.decode("utf-8")
+        return text_bytes.decode("utf-8")
     except UnicodeDecodeError as error:
         msg = f"the sidecar {sidecar_path.name} is not UTF-8 text: {error}"
-        raise SidecarVerificationError(msg) from error
-    actual = release_digest_files.digest_of_file(archive_path)
-    try:
-        return release_digest.verify_sidecar(archive_path.name, actual, text)
-    except release_digest.DigestError as error:
-        msg = f"the sidecar does not verify {archive_path.name}: {error}"
         raise SidecarVerificationError(msg) from error
