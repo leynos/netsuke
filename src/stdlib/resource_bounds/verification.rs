@@ -111,6 +111,18 @@ fn binomial_kernel_matches_closed_form_for_r_up_to_two() {
         "a coefficient above u64::MAX is refused",
     );
 
+    // The plan asks for a cover of each concrete boundary, not only the
+    // assertion: a witness that stopped being evaluated would leave the
+    // assertion vacuous, and the cover is what reports that.
+    kani::cover!(
+        kernel::checked_binomial(1 << 33, 2).is_none(),
+        "a coefficient above u64::MAX is reached"
+    );
+    kani::cover!(
+        kernel::checked_binomial(5_000_000_000, 2).is_some(),
+        "an intermediate above u64::MAX still yields a representable coefficient"
+    );
+
     kani::cover!(
         n < r && kernel::checked_binomial(n, r) == Some(0),
         "choosing more items than exist yields zero"
@@ -315,6 +327,25 @@ fn running_total_never_admits_past_its_limit() {
             (Err(_), Some(_)) => kani::assert(false, "no refusal within the limit"),
         }
     }
+
+    // The symbolic domain cannot wrap a `u64`, so the checked-add boundary is
+    // pinned with concrete amounts: one that lands exactly on `u64::MAX` and
+    // one whose sum would wrap. Without these the harness would pass for an
+    // implementation that used a wrapping add, because no reachable sum here
+    // exceeds eight.
+    let mut boundary = RunningTotal::with_ceiling(StreamKind::MatchCount, u64::MAX);
+    kani::assert(
+        boundary.admit(u64::MAX - 1).is_ok(),
+        "a total that lands exactly on u64::MAX is admitted",
+    );
+    kani::assert(
+        boundary.admit(u64::MAX - 1).is_err(),
+        "a sum that would wrap u64 is refused",
+    );
+    kani::assert(
+        boundary.admitted() == u64::MAX - 1,
+        "a refused wrapping amount leaves the total unchanged",
+    );
 
     kani::assert(
         total.admitted() <= limit,
