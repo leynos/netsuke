@@ -254,7 +254,7 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-15 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 50 in the current `main` target and
-twenty-two on this branch, one of them adding this inventory's contract test,
+twenty-three on this branch, one of them adding this inventory's contract test,
 one raising the Whitaker span floor that the `test_support` crate shares, and
 the rest refactoring, tightening, or repairing the health of that contract.
 Regenerate the list with
@@ -290,6 +290,7 @@ context for later consumers; it does not move the inventory pin.
 - `354213289` Name the roadmap closure count and report the observed value
 - `392a77144` Adopt latest documentation style guide (#1125)
 - `3fa2d6fbe` Require the real inventory to populate its iterated sections
+- `47f8aaea1` Refuse unreadable obligation shapes in the inventory contract
 - `49f8fb3d6` Plan: Record CI test-speed evidence and adoption gates (#894)
   (#918)
 - `596cf74c2` Place Dependabot pull requests on GitHub-hosted runners (#932)

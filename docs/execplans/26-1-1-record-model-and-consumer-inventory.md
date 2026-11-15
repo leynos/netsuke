@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 53. See `Revision note` at the foot of this document. This plan was
+Revision 54. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -784,6 +784,18 @@ pre-rebase history if an old hash must be inspected.
   covers — so the list advances an eleventh time to 72 identifiers with a 50/22
   split. Regenerating rather than reasoning about the path list is what caught
   this: the plan initially recorded no advance.
+- [x] (2026-11-15) Closed CodeRabbit's fifth round (D-39), five findings, all
+  of them real fail-opens in the obligation binding check that this contract
+  exists to refuse. Two took the nearest interpretation instead of refusing a
+  shape they could not read: the label reader scanned the whole entry and
+  returned the lowest identifier, so a cross-reference displaced the declared
+  one, and the row reader took the last supplied cell, so a short row's
+  register value was read as its obligations. The other two were an entry that
+  fell through as prose and bound nothing, and an acceptance fixture that
+  passed an equality check as well as the one-directional one. Four regression
+  cases cover the refusals; the contract target runs 73 cases, up from 70. The
+  commit touches `tests/`, so the post-pin list advances a twelfth time to 73
+  identifiers with a 50/23 split.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1177,6 +1189,35 @@ pre-rebase history if an old hash must be inspected.
   The config change is the whole fix and touches no `src/` file. Date/Author:
   2026-11-15, implementation agent, after the post-turn gate surfaced the 0.3.0
   regression.
+- Decision D-39 (2026-11-15): closed CodeRabbit's fifth round, five findings on
+  the obligation binding check. All five were real, and all five were the class
+  of defect the check exists to refuse — a reader that accepts a shape it
+  cannot actually read rather than reporting it. Two took the nearest
+  interpretation: `declared_tasks` used `regex_values`, which scans the whole
+  entry and returns the lowest identifier, so `- CO-2: Preserve CO-1 too.`
+  verified `CO-1` and left `CO-2` unchecked; `row_obligations` took the last
+  supplied cell, so `| 26.1.2 | CO-1 |` read the register value as the
+  obligations column. One silently skipped: `is_obligation_start` matched only
+  a bare `CO-` prefix, so a backticked `` `CO-1` `` label fell through as prose
+  and bound nothing while `validate_obligations` still counted it as traced.
+  One was a fixture defect: the acceptance case for a one-directional binding
+  bound both obligations to `26.1.2`, so it passed an equality check too and
+  protected nothing.
+
+  The remedy is refusal at each point rather than a wider acceptance rule. The
+  label is read through an anchored `OBLIGATION_LABEL` pattern, so a cross
+  reference cannot displace it, and an unmatched label is an error. Rows must
+  carry the four cells their header declares, which threads a `Result` through
+  `trace_task_obligations`. `CO-13` now binds `26.1.1` in the acceptance
+  fixture, and the row under test names both obligations its own clause does
+  not bind. Four regression cases cover the refusals.
+
+  The row split is deliberately not escaped-pipe aware at the byte level: an
+  earlier attempt indexed a `&str` by byte offset to skip `\|`, which Clippy
+  correctly refused as indexing-slicing, indexing-slicing and string-slice
+  panics. The shipped splitter walks `chars`, so every slice is on a boundary
+  by construction and the `\|` rule survives. Date/Author: 2026-11-15,
+  implementation agent, after CodeRabbit's fifth hosted round.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
   the pin" list for in-scope paths at merge time. Rationale: the roadmap
@@ -2647,6 +2688,17 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   identifiers, 50 `main` and 22 branch, because `test_support/dylint.toml` is
   an in-scope path — a fact the plan first recorded wrongly, and found only by
   regenerating the list rather than reasoning about the path set.
+
+- Revision 54 (2026-11-15): closed CodeRabbit's fifth round (D-39), five
+  findings on the obligation binding check, all real. Two readers took the
+  nearest interpretation instead of refusing a shape they could not read — the
+  label reader returned the lowest identifier in the entry, so a cross
+  reference displaced the declared one, and the row reader took the last
+  supplied cell, so a short row's register value became its obligations. One
+  silently skipped an entry whose label was backticked. One acceptance fixture
+  passed an equality check as well as the one-directional one. The contract
+  target runs 73 cases, up from 70, and the post-pin list advances a twelfth
+  time to 73 identifiers, 50 `main` and 23 branch.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
