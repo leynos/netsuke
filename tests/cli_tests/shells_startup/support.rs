@@ -144,6 +144,9 @@ pub(super) fn json_failure(output: &Output) -> Result<Value> {
 /// Match the RFC 3339 prefix a tracing line stamps onto each record.
 const TRACE_TIMESTAMP: &str = r"(?m)^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z ";
 
+/// Stand in for the declaring file a diagnostic quotes.
+const DECLARING_FILE: &str = "[DECLARING_FILE]";
+
 /// Replace run-specific prefixes so a snapshot survives the host and the clock.
 ///
 /// The two formats snapshotted by the parent module are the ones a user or a
@@ -151,13 +154,46 @@ const TRACE_TIMESTAMP: &str = r"(?m)^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+
 /// exact collections and typed outcomes use ordinary assertions. A temporary
 /// workspace path, a tracing timestamp, and the crate version would otherwise
 /// make an unchanged diagnostic look like a drift.
+///
+/// The declaring-file preview is replaced wholesale rather than by its path.
+/// Discovery reports the canonical spelling of a path, whose separator and
+/// length differ between hosts, and the renderer bounds it, so the snapshot can
+/// pin the shape of the clause but not its contents;
+/// `a_rejection_names_the_declaring_file` is what pins the contents.
 pub(super) fn normalised(stderr: &str, startup: &Startup) -> Result<String> {
     let path = startup.path().to_string_lossy().into_owned();
     let located = stderr.replace(&path, "[WORKSPACE]");
-    let versioned = located.replace(env!("CARGO_PKG_VERSION"), "[VERSION]");
+    let redacted = redact_declaring_file(
+        &redact_declaring_file(&located, "declared in \"", "\""),
+        "declared in \\\"",
+        "\\\"",
+    );
+    let versioned = redacted.replace(env!("CARGO_PKG_VERSION"), "[VERSION]");
     let timestamp =
         regex::Regex::new(TRACE_TIMESTAMP).context("compile the tracing timestamp pattern")?;
     Ok(timestamp
         .replace_all(&versioned, "[TIMESTAMP] ")
         .into_owned())
+}
+
+/// Replace the preview between `open` and `close` with [`DECLARING_FILE`].
+///
+/// Each format quotes the clause in its own escaping, so the caller supplies
+/// those two literals. A preview holds no quote of its own, so the closing
+/// literal ends it.
+fn redact_declaring_file(text: &str, open: &str, close: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some((before, after)) = rest.split_once(open) {
+        let Some((_, tail)) = after.split_once(close) else {
+            break;
+        };
+        out.push_str(before);
+        out.push_str(open);
+        out.push_str(DECLARING_FILE);
+        out.push_str(close);
+        rest = tail;
+    }
+    out.push_str(rest);
+    out
 }

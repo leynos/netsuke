@@ -466,6 +466,17 @@ explicit and exercise the actual adapters in tests.
     (15 s) because the new preview reader sliced a `&str` by index, which this
     repository denies as `clippy::string_slice`; `split_once` now supplies both
     halves, and the `preview` fixture's fixed slice became `strip_suffix`.
+  - [x] 2026-11-15: Repair the two snapshot tests the next hosted Windows run
+    reported, which the earlier failure had hidden. nextest cancels a run at
+    its first failing test, so `json_diagnostic_format_is_stable` and
+    `text_diagnostic_format_is_stable` had never executed on either host. Both
+    pinned the declaring-file preview verbatim, and on Windows that preview is
+    the escaped, canonical long form of a temporary path cut at the
+    64-character bound, so the pinned text could not match. `normalised` now
+    replaces the whole preview with `[DECLARING_FILE]` in both the text and the
+    JSON escaping, which still pins the shape of the clause, and the contents
+    are pinned by `a_rejection_names_the_declaring_file`. Both snapshots were
+    updated to the marker.
 
 ## Surprises & discoveries
 
@@ -644,6 +655,15 @@ beside the renderer where no filesystem is involved. A test that builds its own
 expectation has to build it the way production does, canonical spelling and
 bound included, or it is testing the harness instead.
 
+The next hosted Windows run then failed two more tests the first had hidden:
+nextest cancels a run at its first failing test, so the two snapshot tests had
+never executed on either host. They pinned the declaring-file preview verbatim,
+which on Windows is the escaped and truncated canonical path, so the pinned
+text matched only the machine that produced it. The snapshot now pins the shape
+of the clause and leaves the contents to the dedicated assertion. A snapshot of
+host-supplied text is a record of one machine, and a suite that cancels at the
+first failure can hide a whole class of such tests behind one earlier red one.
+
 ## Decision log
 
 - 2026-10-20: Keep the plan approval-gated and the roadmap entry unchecked.
@@ -790,6 +810,11 @@ bound included, or it is testing the harness instead.
   Windows. The integration case therefore keeps the overlong directory, which
   every supported filesystem can create, and reads the quoted preview back out
   of the diagnostic instead of assuming the whole path is shown.
+- 2026-11-15: Redact the declaring-file preview in the snapshot tests instead of
+  normalizing its path. The path's canonical spelling, separators, and length
+  differ by host, and the renderer bounds it, so no substitution of the
+  workspace root can match. The clause's shape is what a format snapshot should
+  pin, and its contents are pinned by the dedicated assertion.
 - 2026-11-14: Check the correspondence against the production merge, not only
   against `validate_composition`. Every earlier property flattened the layers
   in the test before calling the validator, so the layer boundary was the

@@ -10,7 +10,7 @@ expression: rendered
   },
   "diagnostics": [
     {
-      "message": "Validation failed for 'shells[0].executable': a shell executable must be a bare name or an absolute path, not a relative path; value is \"bin/dash\"; declared in \"[WORKSPACE]/user/netsuke/config.toml\"",
+      "message": "Validation failed for 'shells[0].executable': a shell executable must be a bare name or an absolute path, not a relative path; value is \"bin/dash\"; declared in \"[DECLARING_FILE]\"",
       "code": null,
       "severity": "error",
       "help": null,
