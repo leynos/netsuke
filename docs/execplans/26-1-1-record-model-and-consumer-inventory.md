@@ -829,6 +829,20 @@ pre-rebase history if an old hash must be inspected.
   — the question `fa06bdb21` could not answer, because it never measured them.
   Every figure the rebase moved was re-measured: 74 post-pin identifiers at
   52/22, 24 in-scope files, 74 contract cases at that point and 80 after D-43.
+- [x] (2026-11-15) Closed the revision-56 assessment's two findings and ran the
+  complete sequential eleven-gate set on the resulting commit, `c1caa394b`
+  (D-43). The worktree was empty at both ends of the batch and the head did not
+  move during it: check-fmt, typecheck, lint-clippy, lint-whitaker,
+  lint-python, github-actions-lint, doc-coverage, test,
+  test-workflow-contracts, markdownlint, and nixie all exited 0. Re-measured
+  from that batch rather than carried over from the previous candidate:
+  doc-comment coverage 98.26% against the 80% threshold, 5,749 nextest cases
+  passed with 9 skipped, 2,330 Python workflow cases passed with 3 skipped and
+  30 actionlint cases passed, 227 Markdown files linted with 0 issues, 227
+  files unchanged at mdtablefix, and 33 Mermaid blocks across 228 files
+  validated. The in-scope diff against `fa06bdb21` is 25 files and the contract
+  module holds thirteen private files. The post-pin list advanced to 75
+  identifiers at 52/23, because this commit touches `tests/`.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1763,10 +1777,15 @@ pre-rebase history if an old hash must be inspected.
   Re-measured after both repairs, not reasoned about: the contract module holds
   thirteen private files (`landed.rs` is the new one), the in-scope diff against
   `fa06bdb21` is 25 files, and the contract target runs 80 cases, up from 73.
-  The post-pin identifier list is unchanged at 74, because `landed.rs` and the
-  two documents this decision edits all postdate the sweep's own commits; the
-  sweep was regenerated anyway rather than assumed. Date/Author: 2026-11-15,
-  implementation agent, on the hosted completeness reply.
+  At the moment the repairs were made the post-pin list stood at 74, because
+  `landed.rs` and the two documents this decision edits all postdate the
+  sweep's own commits. Committing them moved it: the delivered commit touches
+  `tests/`, so the list advances to 75 identifiers, 52 in `main` and 23 on this
+  branch, and the inventory now names `c1caa394b` in it. That is the same
+  mechanism D-21, D-24, D-27, and D-42 record — the sweep goes stale whenever a
+  commit touches one of those paths, and a decision that edits this plan is
+  itself such a commit. Date/Author: 2026-11-15, implementation agent, on the
+  hosted completeness reply.
 
 ## Outcomes & retrospective
 
@@ -2949,7 +2968,11 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   pull request that carried it. A contract rule now refuses an entry that omits
   either, and the real document's own history shows it biting: eleven of the
   twelve old entries would have been refused. The contract target runs 80
-  cases. The verdict itself was "not yet complete" and is not discharged by
+  cases, and the complete sequential eleven-gate set passes on `c1caa394b` with
+  an empty worktree at both ends of the batch. The in-scope diff against
+  `fa06bdb21` is 25 files, itself one more than D-42 measured. The post-pin
+  list advances to 75 identifiers at 52/23, because the delivered commit touches
+  `tests/`. The verdict itself was "not yet complete" and is not discharged by
   this revision; a fresh assessment is requested for this candidate.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
