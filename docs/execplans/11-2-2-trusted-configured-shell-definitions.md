@@ -503,6 +503,15 @@ explicit and exercise the actual adapters in tests.
     `test-documentation-contracts` 1s, `verus` 2s, `markdownlint` 33s,
     `nixie` 0s. `make verus` reports "9 verified, 0 errors" and doc-comment
     coverage is 98.26%.
+  - [x] 2026-11-15: Answer the hosted User-Facing Documentation pre-merge
+    warning, which passed the users' guide but found no beta5 signpost for the
+    feature. The v0.1.0 migration guide gains an Optional row in "Impact at a
+    glance", a beta5 section that links to the users' guide section and states
+    that existing manifests and configurations need no change, and a
+    migration-checklist item; the CHANGELOG records the feature under
+    "Unreleased / Added". `make check-fmt`, `make lint`, `make typecheck`,
+    `make markdownlint`, `make nixie`, `make test-documentation-contracts`,
+    and `make test` all pass against the repair.
 
 ## Surprises & discoveries
 
@@ -874,6 +883,14 @@ first failure can hide a whole class of such tests behind one earlier red one.
   `&Output` in `normalised` follows the same reasoning: the helper now derives
   the text it normalizes from the child's own output, as `stderr_of` and
   `json_failure` already do, instead of requiring every caller to extract it.
+- 2026-11-15: Treat the missing beta5 signpost as a documentation gap rather
+  than an out-of-scope suggestion. The migration guide is where a beta-series
+  operator learns that a key now fails closed, and the authority rule is the
+  one thing about this feature that can break an existing checkout; leaving it
+  only in the users' guide assumes the operator reads that guide before the
+  migration notes. The Optional row, the beta5 section, and the checklist item
+  state the same rule in the three places the guide already uses for a
+  voluntary change, and the CHANGELOG entry keeps the feature discoverable.
 
 ## Outcomes & retrospective
 
