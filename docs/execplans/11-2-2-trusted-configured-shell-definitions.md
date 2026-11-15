@@ -477,6 +477,15 @@ explicit and exercise the actual adapters in tests.
     JSON escaping, which still pins the shape of the clause, and the contents
     are pinned by `a_rejection_names_the_declaring_file`. Both snapshots were
     updated to the marker.
+  - [x] 2026-11-15: Pass the whole eleven-gate set against the snapshot repair.
+    The run tagged `final23` finished `failed=0` in 835 s: `check-fmt` 5s,
+    `lint` 63s, `typecheck` 6s, `doc-coverage` 55s, `test` 68s,
+    `test-workflow-contracts` 594s, `test-package-verify` 6s,
+    `test-documentation-contracts` 0s, `verus` 1s, `markdownlint` 33s,
+    `nixie` 1s. The run tagged `final22` before it aborted at `markdownlint`
+    (19 s) because the spelling gate rejects `normalising` in favour of the
+    en-GB-oxendict `normalizing`; that word was the only finding, and the
+    re-run above covers the corrected prose.
 
 ## Surprises & discoveries
 
