@@ -45,6 +45,7 @@ mod power_product;
 mod binomial;
 mod falling;
 mod admit;
+mod classify;
 
 /// Provide the entry point Verus requires; it carries no proof of its own.
 fn main() {}

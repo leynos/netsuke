@@ -49,7 +49,7 @@ fn admit_total(limit: u64, total: u64, amount: u64) -> (result: Option<u64>)
 }
 
 /// Classify an exact cardinality against the ceiling for its request kind.
-fn classify(cardinality: Option<u64>, ceiling: u64) -> (result: Result<u64, CardinalityError>)
+pub fn classify(cardinality: Option<u64>, ceiling: u64) -> (result: Result<u64, CardinalityError>)
     ensures
         match result {
             Result::Ok(v) => cardinality == Option::Some(v)
