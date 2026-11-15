@@ -4289,24 +4289,24 @@ rejected from environment ingress by its normalized top-level spelling.
    cumulative.
 
 3. **User scope**: Configuration files in user-specific directories, checked
-   before any system location:
-   - **Unix-like systems**, in order:
-     - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG (X Desktop Group) Base
-       Directory config home, typically `~/.config/netsuke/config.toml`)
-     - `$XDG_CONFIG_HOME/.netsuke.toml`
-     - `$HOME/.config/netsuke/config.toml`
-     - `$HOME/.config/.netsuke.toml`
-     - `$HOME/.netsuke.toml` (user home dotfile)
-   - **Windows**, in order:
-     - `%APPDATA%\netsuke\config.toml`
-     - `%APPDATA%\.netsuke.toml`
-     - `%LOCALAPPDATA%\netsuke\config.toml`
-     - `%LOCALAPPDATA%\.netsuke.toml`
-     - The same home locations as Unix-like systems.
+   before any system location, in this order:
+   - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG (X Desktop Group) Base
+     Directory config home, typically `~/.config/netsuke/config.toml`)
+   - `$XDG_CONFIG_HOME/.netsuke.toml`
+   - `%APPDATA%\netsuke\config.toml`
+   - `%APPDATA%\.netsuke.toml`
+   - `%LOCALAPPDATA%\netsuke\config.toml`
+   - `%LOCALAPPDATA%\.netsuke.toml`
+   - `$HOME/.config/netsuke/config.toml`
+   - `$HOME/.config/.netsuke.toml`
+   - `$HOME/.netsuke.toml` (user home dotfile)
 
-   `HOME` supplies the home directory when it is set and non-empty; otherwise
-   `USERPROFILE` does. An empty `XDG_CONFIG_HOME`, `APPDATA`, or `LOCALAPPDATA`
-   counts as unset.
+   Every variable is consulted on every platform, so a host that sets both
+   families follows this single order. An undefined variable is skipped, as is
+   one whose value is empty or not root-anchored: a relative base would resolve
+   against the working directory and load a file from wherever the tool
+   happened to run. `HOME` supplies the home directory when it is set to a
+   root-anchored value; otherwise `USERPROFILE` does.
 
 4. **System scope**: System-wide configuration directories, consulted only when
    no user file exists:
