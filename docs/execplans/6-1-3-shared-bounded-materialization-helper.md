@@ -877,6 +877,19 @@ conflict in `Decision log`, and escalate.
     hosted verdict on the repair is not yet available, because the repair has
     not been pushed. `cs delta` is the local evidence, and it reports both
     files at code health 10.00 with no issue on the new module.
+  - Hosted CI at `a064c68f3` (2026-11-15). Green in full: 26 check runs and no
+    failure, the skipped ones being the release jobs that only run on a
+    release event. `build-test` passed, which retires the D-21 failure: `#1139`
+    merged into `main` at 11:47Z, and a `pull_request` run checks the synthetic
+    merge with the base, so the restoration was present without this branch
+    rebasing. `CodeScene Code Health Review (main)` passed, which is the hosted
+    confirmation the local `cs delta` predicted for the duplication repair.
+    `kani-smoke`, `Verus`, the Windows jobs, and every release job also passed.
+  - The prediction recorded in the previous entry — that the candidate would
+    stay red on `build-test` until #1139 landed and the branch was rebased —
+    was wrong in its second half, and the plan now says what happened instead.
+    A prerequisite merge into `main` needs no rebase to take effect on a
+    `pull_request` run, and only a `push` run tests the branch's own base.
 
 ## Surprises & discoveries
 
@@ -1304,7 +1317,18 @@ conflict in `Decision log`, and escalate.
   shared bounds helper. This candidate therefore stays red on `build-test`
   until #1139 lands and this branch is rebased onto it. Nothing in this branch
   answers the findings: no `dylint.toml` threshold, no allowance, and no
-  refactor of an untouched file.
+  refactor of an untouched file. Second amendment of 2026-11-15: #1139 merged
+  into `main` at 11:47Z, and the hosted run for this candidate's next head
+  `a064c68f3` therefore built the synthetic merge of this branch with a base
+  that carries the restoration. Every check on that head is green, `build-test`
+  included, so no rebase was needed to clear the findings and this candidate is
+  not blocked on the prerequisite. The branch's own delta is unchanged by that;
+  what changed is the base it is measured against. The host's own `make lint`
+  also exited 0 in the same period, which #1139 cannot explain, because a merge
+  into `main` changes nothing in this worktree: that red cleared with the
+  host's Whitaker suite, which is the rolling-release effect the original
+  decision described. The two reds therefore had different causes, and neither
+  was this branch.
 - D-22. Decision: record the candidate's size against the tolerance as
   measured, and report the overage rather than re-base the bar unilaterally.
   Rationale: `Tolerances (exception triggers)` asks for a stop and an
