@@ -9,6 +9,14 @@
 # `test_support::fs`, which is the crate's ambient boundary module, and reach
 # for an entry here only when the operation cannot be expressed through a thin
 # wrapper at all.
+
+# Matches the root configuration. This crate is linted by a second, separate
+# `--package test_support` invocation, so the root `dylint.toml` never applies
+# here and the same setting has to be stated again. See the root file for the
+# measurement and the reasoning behind the value.
+[bumpy_road_function]
+min_bump_lines = 15
+
 [no_std_fs_operations]
 
 # `test_support::fs` is the general-purpose ambient boundary. Test fixtures

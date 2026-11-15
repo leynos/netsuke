@@ -5047,6 +5047,43 @@ names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
 must not contain `test_support`: every other module in the crate remains
 subject to the filesystem policy.
 
+## Complexity signals: `bumpy_road_function` and generated expressions
+
+`bumpy_road_function` measures a per-line complexity signal, smooths it with a
+centred moving average, and reports two or more separated contiguous runs above
+a weighted threshold. Its severity here is deliberate, so the rule runs at its
+default `threshold` of 2.5 rather than being narrowed or dropped from the load
+set.
+
+`min_bump_lines` is raised from its default of 2 to 15, in both the root
+`dylint.toml` and `test_support/dylint.toml`. The reason is a property of the
+rule, not a preference: it "descends through generated expressions and measures
+the authored code they wrap". Each `?` expands to a two-arm `match`, and each
+multi-line array literal expands to a generated `match`, so a flat run of
+fallible calls or a literal table presents as authored nesting. The clearest
+case is `src/graph_view/render/html/mod.rs::write_head`, which has no `if`,
+`match`, `else`, or loop and eleven straight-line `writeln!` calls, yet is
+reported as multiple clusters of nested conditional logic.
+
+Generated-expression artefacts are bounded by the size of the literal they sit
+in — the widest observed spans 18 lines and the rest under 12 — while a genuine
+bumpy road sustains a nested region over a whole body and is not bounded that
+way. A minimum span of 15 therefore drops the artefacts while keeping the rule
+live for the long functions it targets. Measured against the suite at
+`880939d1f6` on `e28f26ae2`: 60 findings across 22 files at the default, one at
+15, and none once that last genuine cluster was refactored.
+
+Re-measure that census before changing the value, and read the whole of it:
+under `-D warnings` Dylint aborts at the first failing target, so a CI log that
+names five findings can be hiding fifty-five. Run once with `RUSTFLAGS=""` and
+`--keep-going`, and confirm the suite is actually loaded by checking that a
+lower `min_bump_lines` still reports findings on the same tree. A run that
+finishes in about a second is a Cargo cache replay, not an analysis.
+
+Do not refactor production code to satisfy the taller artefacts. Two such
+refactors were written and reverted before the value was measured, and a third
+attempt that rewrote 22 files cleared none of the 60 findings.
+
 Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
 allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
 this Dylint lint is not known to `rustc`, so its exclusions must be configured
