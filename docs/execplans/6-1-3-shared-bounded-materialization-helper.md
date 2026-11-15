@@ -549,13 +549,28 @@ conflict in `Decision log`, and escalate.
     (`admit`, `admit_length`, `descend`, `collect_matches`, `RunningTotal`)
     rather than built from literals the assertions then restate. *Testing
     (Compile-Time / Ui)*: the privacy-enforced invariants now carry pinned
-    `compile_fail` doctests — `E0603` for the private `AdmittedCount` and
-    `NestingDepth` tuple constructors and `E0451` for `RunningTotal`'s private
-    fields — each paired with a passing example as the vacuity control,
-    following `src/manifest/glob/mod.rs`. Two documentation counts said "six"
-    Kani harnesses where seven exist; `docs/netsuke-design.md` §4.7 and
-    ADR-0075 now say seven, and the retrospective no longer calls the module
-    wholly private.
+    `compile_fail` doctests — one per type, all three declaring `E0451` and
+    written in the struct-literal form `T { 0: … }`, which is the only form
+    that reports the private field rather than a missing constructor: through
+    the `stdlib` re-export the call form `T(…)` reports `E0423`, not the
+    `E0603` the private module would give — each paired with a passing example
+    as the vacuity control, following `src/manifest/glob/mod.rs`. Two
+    documentation counts said "six" Kani harnesses where seven exist;
+    `docs/netsuke-design.md` §4.7 and ADR-0075 now say seven, and the
+    retrospective no longer calls the module wholly private.
+  - Gate repair (2026-11-15). The batch against the first repair head (since
+    amended into `607e5bdf5`) stopped in `make lint` at `lint-clippy` with
+    `range_plus_one` on the inclusive depth range in `tests/diagnostics.rs`;
+    that fix was folded into the same commit. The batch at `607e5bdf5` then
+    turned eleven gates green and `make lint` red for the first time at
+    `lint-whitaker`, whose `module-max-lines` rule rejected
+    `tests/limits.rs` at 419 lines against the 400-line cap AGENTS.md sets.
+    The fallible-collector battery therefore moved to a new
+    `tests/collectors.rs`, leaving `limits.rs` at 271 lines; `tests/mod.rs`
+    records that the new battery owns the two match collectors and the pull
+    counts that show where they stop. Because each `make lint` failure masks
+    the stages behind it, those two batches were the first to run Clippy at
+    all, and `lint-python` and `github-actions-lint` had still never executed.
 
 ## Surprises & discoveries
 
