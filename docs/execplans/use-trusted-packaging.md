@@ -11,10 +11,13 @@ The plan is approved and implementation has begun. EP-M1 and EP-M2 are
 complete. Issue #1064 delivers the first crates.io publisher and its workflow
 contracts, #1066 replaces the shared upload action in `publish-release` with a
 candidate-bound declared-asset upload, #1067 adds the downloaded-inventory
-verifier, and #1068 adds digest-aware GitHub release finalization. Stage C
-remains partial because the consumer smoke test is still open. Stage D is in
-progress. No release, tag, registry publication, live credential exchange,
-GitHub Release, or account setting has been changed by this work.
+verifier, #1068 adds digest-aware GitHub release finalization, and #1070 gates
+every release write on successful packaging and enforced, candidate-bound
+admission. Stage C remains partial because the consumer smoke test is still
+open; publishing now refuses with `missing_evidence` until #598 supplies a
+producer, by design. Stage D is in progress. No release, tag, registry
+publication, live credential exchange, GitHub Release, or account setting has
+been changed by this work.
 
 ## Purpose / big picture
 
@@ -850,13 +853,81 @@ consumer smoke remains:
 
 `publish-release` — not `release` — is the job holding `contents: write` and
 running the draft-creation steps; `release` holds `contents: read` and runs the
-dry-run rehearsal. Issue #1064 leaves `publish-release` unchanged, with its
-existing five-job dependency list. `publish-crates-io` and `publish-release`
-remain independent of one another, and `finalize-github-release` is what makes
-their outcomes gate the completed release path: it needs both, so neither can
-finish unproven while the release becomes public. Stage C as first drafted
-attributed the write permission to `release`; that predates PR #834, which
-split rehearsal from publication.
+dry-run rehearsal. #1070, delivered below, replaces `publish-release`'s
+five-job dependency list with the seven the registry job already carried.
+`publish-crates-io` and `publish-release` remain independent of one another, and
+`finalize-github-release` is what makes their outcomes gate the completed
+release path: it needs both, so neither can finish unproven while the release
+becomes public. Stage C as first drafted attributed the write permission to
+`release`; that predates PR #834, which split rehearsal from publication.
+
+**Packaging and admission gate every release write (#1070) — delivered.** At
+the revision the issue cites, `publish-release` waited on `metadata`, the three
+platform builds, and `windows-native-recipe-smoke`, but not on `package-crate`
+or `release-admission-canaries`, and the admission job hard-coded
+`NETSUKE_RELEASE_ADMISSION_ENFORCE: 'false'`. Adding the dependency alone would
+not have closed the hole, because a report-only gate reports success. Two
+changes were needed, and they are the gate's own terms rather than a second
+guard idiom.
+
+The enforcement mode is now derived, not configured: the step's environment sets
+`NETSUKE_RELEASE_ADMISSION_ENFORCE` to
+`${{ needs.metadata.outputs.should_publish == 'true' }}`, so a rehearsal
+observes and exits zero while a publishing run enforces and exits non-zero on
+the same refusal. The gate publishes `enforcement`, `gate_outcome`, and
+`candidate_commit` as job outputs; `candidate_commit` is the `GITHUB_SHA` the
+verifier bound the manifest to, and publication compares it with `github.sha`.
+
+Four jobs hold a write scope, and all four now carry the same five checks:
+`package-crate.result == 'success'`,
+`release-admission-canaries.result == 'success'`,
+`outputs.enforcement == 'true'`, `outputs.gate_outcome == 'success'`, and
+`outputs.candidate_commit == github.sha`, each a top-level conjunct beside
+`should_publish == 'true'`. The set is `publish-crates-io`, `publish-release`,
+`verify-release-inventory`, and `finalize-github-release`. `release` keeps its
+five-job rehearsal list and holds no write scope, so a failed package or a
+refused admission cannot make the read-only lane unreachable, and no mutually
+exclusive dependency or `always()` condition reaches the publication guard.
+
+The rule is enforced structurally rather than by enumerating today's jobs.
+`tests/workflow_contracts/release_write_authority_contract.py` derives the
+write-authority set from the workflow's own `contents`, `packages`, and
+`id-token` scopes, so a publisher added beside the gate fails the contract
+until it sits behind it. It requires each of the five clauses as a *top-level*
+conjunct, so `|| true`, `!(...)`, or a clause inside a disjunction is reported
+rather than read as present, and it refuses any `always()` in the guard.
+`release_admission_gate_contract.py` evaluates the enforcement expression in
+every modelled scenario instead of matching its text, so either hard-coded mode
+is reported for the run that exposes it, and a value that is not a flag fails
+rather than reading as "not enforcing".
+
+**Audit of the other publication entry points.** Every job in the repository
+outside `release.yml` that holds a write scope was reviewed:
+`dependabot-automerge.yml` writes `contents` to merge a pull request and never
+touches a release or the registry; `mutation-testing.yml` takes `id-token` to
+resolve the workflow source through OIDC rather than to exchange a registry
+credential. Neither is a release writer, so neither is gated. No `gh release` or
+`cargo publish` invocation exists outside `release.yml` apart from a `ci.yml`
+comment describing the release path. The audit is a one-time reading, not a
+contract: the generic rule covers `release.yml` only, and a new workflow that
+publishes would need its own reachability decision.
+
+**Fail-closed rollout.** Publishing now fails with
+`error_category=missing_evidence` until a producer uploads the
+`release-admission-evidence` artefact, and that is the intended state rather
+than a defect. Enforcement has to exist before a producer does, or the path
+that publishes without evidence stays reachable for however long the two
+changes land apart. The evidence contract is schema-versioned JSON: it names
+the repository, the full lowercase commit, the tag, the workflow run
+identifier, and the instant of issue, and carries one timestamped result per
+canary, of which `history_scan` and `release_candidate` are required. Extra
+results and unknown fields are accepted because #598 adds downstream canaries;
+a schema version the verifier does not know is refused rather than interpreted
+under the wrong rules. Freshness is bounded by a one-day default maximum age,
+provisional until a real producer's cadence is known and capped at one week,
+plus a five-minute allowance for clock skew. The follow-ups are therefore #598
+for the producer and #1065 for registry publication, in that order; the runbook
+records what an operator sees in the meantime.
 
 `concurrency.cancel-in-progress` stays **`false`** and is **not** made a
 function of the event. `pr_concurrency_test.py:275-278` pins
@@ -4215,6 +4286,51 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   run executes the reviewed versions, and `pytest tests/workflow_contracts`
   covers the whole directory rather than a selected subset.
 
+- [x] (2026-11-15) Delivered #1070: every release write now requires successful
+  packaging and enforced, candidate-bound admission.
+
+  **Red–Green–Refactor.** The red state was written first, as this plan's Stage
+  B discipline requires: the scenario table gained package and admission
+  results plus five cases (failed packaging, failed gate, report-only admission
+  on a publishing run, failed gate outcome, mismatched candidate), and the
+  write-authority and enforcement clauses were stated before the workflow
+  carried them, so the contract suite failed against the old `release.yml` for
+  the reason the issue gives. Green was the workflow change: the derived
+  enforcement mode, the three gate outputs, the evidence download, and the
+  seven-need dependency list on all four write jobs. The refactor split the new
+  Python across four modules rather than growing three, because
+  `tests/workflow_contracts` is held to a 400-line module ceiling: the mutation
+  primitives moved to `release_mutation_support`, and the gate's own mutations
+  to `release_publication_gate_mutations`. `release_publish_path_scenarios`
+  ended at 399 lines only after three comment rewraps, which is the same
+  ceiling the plan's earlier stages hit.
+
+  **Mutation control run.** The control is
+  `test_release_dry_run_reaches_the_staging_path`, which runs the contract over
+  the unmutated workflows and passes. The paired test then applies each of 34
+  labelled mutations — 20 already carried by the release-path corpus, 14 added
+  here — and requires the named scenario or structural rule to report. All 37
+  tests in the two files pass, so every new assertion is shown to fire rather
+  than merely to sit beside a green tree. A separate probe of six of the new
+  mutations confirmed the diagnostics name the structural rule, not just the
+  scenario: removing the enforcement check reports
+  `write-authority.publish-release.guard` *and*
+  `tag-publish-report-only-admission.publish-job`, and an `always()` guard
+  reports the bypass *and* the cancelled-publication scenario.
+
+  **Gates.** `make test-workflow-contracts` passed 2344 tests with 3 skipped and
+  `make test-release-admission` passed 131, with `make check-fmt`,
+  `make lint-python`, `make typecheck-python`, and `make github-actions-lint`
+  green on the same head.
+
+  **Lint baseline finding.** A full `make lint-python` reported three findings
+  in modules and a fixture committed by the previous stage: redundant
+  `from __future__ import annotations` on the 3.14 baseline (C9112), a type
+  dispatch that a `match` states more clearly (R9101), and a constant chain the
+  same rule set prefers as a `match` (R9103). They were fixed in their own
+  commit rather than inside this one, so the gate work stays reviewable apart
+  from a lint-baseline correction.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
@@ -5767,6 +5883,27 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   write-implying `gh api` flag, which is what keeps the job's
   `contents: write` — needed because a draft is invisible without it — from
   becoming mutation. Date/Author: 2026-11-08, implementation agent.
+
+- Decision: derive admission enforcement from the release mode and require it
+  before every release write, before any evidence producer exists. Rationale:
+  the admission job previously hard-coded `NETSUKE_RELEASE_ADMISSION_ENFORCE` to
+  `false`, and a report-only gate reports success, so adding a dependency on
+  it would have changed the picture without closing the path. Deriving the mode
+  from `should_publish` leaves no configuration to get wrong: a rehearsal
+  observes and exits zero, a publishing run enforces and exits non-zero, and
+  publication additionally requires `enforcement == 'true'`, so a report-only
+  success cannot satisfy it even if the derivation regressed. Gating before a
+  producer exists is deliberate ordering: the alternative connects a producer
+  first and leaves the publish-without-evidence path open until the gate
+  follows. The cost is that every publishing run now refuses with
+  `missing_evidence` until #598 lands, which the runbook states plainly rather
+  than treating as a transient defect. The write-authority rule is derived from
+  the workflow's `contents`, `packages`, and `id-token` scopes instead of
+  listing today's jobs, so `publish-crates-io` and `finalize-github-release` —
+  and anything added after them — satisfy it by construction rather than by
+  remembering. The rehearsal keeps its five-job list and no write scope, which
+  is what keeps the read-only lane reachable when either prerequisite fails.
+  Date/Author: 2026-11-15, implementation agent.
 
 ## Outcomes & retrospective
 

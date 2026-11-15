@@ -4457,9 +4457,15 @@ Each build job uploads its products as workflow artefacts. In dry-run mode, the
 and validates the upload plan without creating a draft or uploading assets to a
 GitHub release. For tag publication, `publish-release` downloads the same build
 artefacts and attaches the assets to the draft, prefixing names with their
-staging directories to avoid collisions. Dry-run staging writes its operation
-summary but does not upload diagnostic artefacts; publication telemetry and the
-full observability policy are documented in
+staging directories to avoid collisions. Neither publisher starts until
+`package-crate` has packaged the candidate and the release-admission gate has
+enforced and admitted that same commit; a pull-request rehearsal observes the
+gate without depending on it, so a refused admission cannot make the read-only
+lane unreachable. The gate's evidence contract and the fail-closed rollout are
+recorded in
+[ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md). Dry-run
+staging writes its operation summary but does not upload diagnostic artefacts;
+publication telemetry and the full observability policy are documented in
 [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md). Release
 policy decides from frozen slotted records at each boundary where an external
 record shape arrives, while adapters and CLIs own field names and decoding, as

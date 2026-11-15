@@ -2984,16 +2984,14 @@ request, and refuses any other condition. And the dry run's event types outside
 
 ## Release-admission observability
 
-The release workflow runs a read-only release-admission canary scaffold before
-publication. The gate's GitHub API requests and Git fetches emit bounded JSON
-Lines (JSONL) metrics to a runner-local file. Each fixed operation emits its
-counter and duration at the operation boundary; the final gate boundary emits
-the overall counter, including early failures. The scaffold is currently
-non-blocking for publication; the publication dependency is enabled once a real
-RFC 0005 evidence producer is connected. The workflow uploads the completed
-JSONL file as a workflow artefact and writes one concise outcome line to
-`GITHUB_STEP_SUMMARY`. In the release workflow,
-`NETSUKE_RELEASE_ADMISSION_METRICS_FILE` points to
+The release workflow runs a release-admission canary gate before every write to
+a GitHub release, the crates.io registry, or the repository's packages. Its
+GitHub API requests and Git fetches emit bounded JSON Lines (JSONL) metrics to
+a runner-local file. Each fixed operation emits its counter and duration at the
+operation boundary; the final gate boundary emits the overall counter,
+including early failures. The workflow uploads the completed JSONL file as a
+workflow artefact and writes one concise outcome line to `GITHUB_STEP_SUMMARY`.
+In the release workflow, `NETSUKE_RELEASE_ADMISSION_METRICS_FILE` points to
 `${runner.temp}/release-admission-metrics.jsonl`, and the file is uploaded
 under the `release-admission-metrics` artefact name. The summary and upload
 steps retain the result on failure; dry-run policy still controls whether an
@@ -3001,19 +2999,85 @@ artefact is uploaded. The workflow provisions Python before running the gate's
 monotonic duration timing helpers, using Python 3.14 through the SHA-pinned
 `astral-sh/setup-uv` action.
 
-The admission mode is a closed configuration vocabulary. The
-`NETSUKE_RELEASE_ADMISSION_ENFORCE` value is either `false` (observation) or
-`true` (enforcement), and an unset value defaults to `false`. The current
-release workflow explicitly selects `false` because no RFC 0005 evidence
-producer is connected. Observation mode records the fail-closed admission
-result, including `outcome=failure` and `error_category=missing_evidence` when
-the producer has not supplied evidence, writes the gate outputs and summary,
-and then exits successfully so the canary does not block publication.
-Enforcement mode preserves fail-closed behaviour: missing, stale, malformed,
-unknown, or mismatched evidence exits non-zero after recording its bounded
-result. An environment value such as `fresh` is not evidence and must never
-substitute for a real evidence producer. Any other mode value is an invalid
-configuration and fails closed as an unknown gate result.
+The gate has two modes, and the workflow derives which one applies rather than
+configuring it. `NETSUKE_RELEASE_ADMISSION_ENFORCE` is set from
+`needs.metadata.outputs.should_publish`: `false` (observation) on a rehearsal,
+`true` (enforcement) on a publishing run. Observation records the same
+fail-closed decision — including `outcome=failure` and
+`error_category=missing_evidence` when no producer has supplied evidence —
+writes the gate outputs and summary, and then exits successfully, so a missing
+producer cannot make the read-only lane unreachable. Enforcement exits non-zero
+after recording the same bounded result. Both modes run the gate; only the exit
+status differs. An environment value such as `fresh` is not evidence and must
+never substitute for a real evidence producer, and any value that is neither
+`true` nor `false` fails closed as an unknown gate result.
+
+The four jobs that hold `contents: write`, `packages: write`, or
+`id-token: write` require the gate explicitly. Each declares
+`release-admission-canaries` and `package-crate` as dependencies and carries
+four top-level conjuncts in its job-level condition:
+`needs.release-admission-canaries.result == 'success'`,
+`needs.release-admission-canaries.outputs.enforcement == 'true'`,
+`needs.release-admission-canaries.outputs.gate_outcome == 'success'`, and
+`needs.release-admission-canaries.outputs.candidate_commit == github.sha`,
+beside the packaging result and the mode output. A report-only gate therefore
+cannot satisfy a publishing job even when it reports success, and neither can a
+gate that admitted a different commit. The rule is stated once, in
+`tests/workflow_contracts/release_write_authority_contract.py`, which derives
+the set from the workflow's own permission scopes: a new publisher added beside
+the gate fails the contract until it sits behind it, and a clause hidden inside
+a disjunction or a negation does not count as present. The same module requires
+`release-admission-canaries`, `package-crate`, and `release` to hold no write
+scope, so the jobs that must stay reachable cannot mutate anything.
+
+Evidence is a candidate-bound JSON manifest, not a claim about one. Schema
+version 1 names the repository, the 40-character lowercase commit, the release
+tag, the workflow run identifier, and the instant the manifest was issued, and
+carries one timestamped result per canary. Two results are required:
+`history_scan` and `release_candidate`. A manifest may carry further results
+and unknown fields, because #598 adds downstream canaries and a verifier that
+refused every name it had not been taught would make each addition a breaking
+change; a schema version the verifier does not know is refused rather than
+interpreted under the wrong rules. Admission compares the manifest with the
+release the run is about to perform, and refuses a document naming another
+repository, commit, run, or tag. The workflow downloads the producer's
+`release-admission-evidence` artefact into
+`${runner.temp}/release-admission-evidence` and points
+`NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE` at `evidence.json` inside it; the
+download tolerates the artefact's absence, so a missing producer reaches the
+verifier as `missing_evidence` rather than as an anonymous job failure.
+
+Freshness is bounded at both ends. Every recorded instant must lie within
+`NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS`, which defaults to 86,400
+seconds and may not exceed one week, and no instant may sit more than five
+minutes ahead of the gate's own clock. Runner clocks are not synchronized, so a
+small lead is expected; a larger one means the document was written for a
+moment that has not arrived. The one-day default is provisional until a real
+producer's cadence is known, and is the number to revisit then rather than a
+settled tolerance.
+
+Refusals are reported as one category, never as a message body, path, or
+identifier. `missing_evidence` says no document was supplied,
+`malformed_evidence` says the document could not be read as schema 1,
+`candidate_mismatch` says it read perfectly well and describes a different
+release, `stale_evidence` says a timestamp fell outside the bounded window, and
+`unknown` says a required result reported a non-success outcome. The earlier
+operations add `api_error`, `fetch_error`, `timeout`, and `mismatch`. An
+operator fixes each in a different place, which is why they are separate words
+rather than one failure. The gate publishes six outputs — `gate-outcome`,
+`gate-error-category`, `enforcement`, `candidate-commit`, `metrics-file`, and
+`trace-file` — so a refused publication records why in the job that refused it.
+
+Publishing therefore fails with `missing_evidence` until a producer uploads
+`release-admission-evidence`, and that is the intended state. Enforcement lands
+before any producer exists, so the path that would publish without evidence is
+closed first; connecting a producer first would leave that path open for
+however long the two changes landed apart. The producer is tracked by
+[#598](https://github.com/leynos/netsuke/issues/598) and registry publication by
+[#1065](https://github.com/leynos/netsuke/issues/1065). No override exists: no
+input, environment variable, or workflow-dispatch field can request enforcement
+on a rehearsal or observation on a publishing run, because the mode is derived
+from the release mode the metadata job already resolved.
 
 The gate logic is Python, per the estate rule in
 [scripting standards](scripting-standards.md), not shell.
@@ -3262,20 +3326,20 @@ the builds and package validation, while the registry publisher and GitHub
 writer are skipped. A tagged publishing run reaches the crates.io publisher and
 the separate GitHub release writer after their prerequisites succeed.
 
-| Job                           | Needs                                                       | Permissions                         | Mode                           |
-| ----------------------------- | ----------------------------------------------------------- | ----------------------------------- | ------------------------------ |
-| `metadata`                    | —                                                           | `contents: read`                    | always                         |
-| `build-linux`                 | `metadata`                                                  | `contents: read`                    | always                         |
-| `build-windows`               | `metadata`                                                  | `contents: read`                    | always                         |
-| `build-macos`                 | `metadata`                                                  | `contents: read`                    | always                         |
-| `windows-native-recipe-smoke` | `metadata`                                                  | `contents: read`                    | publish or PR ready-for-review |
-| `release-admission-canaries`  | `metadata`                                                  | `contents: read`, `actions: read`   | always                         |
-| `package-crate`               | `metadata`                                                  | `contents: read`                    | always                         |
-| `publish-crates-io`           | all six validation jobs and `package-crate`                 | `contents: read`, `id-token: write` | `should_publish == 'true'`     |
-| `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: read`                    | `dry_run == 'true'`            |
-| `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | `should_publish == 'true'`     |
-| `verify-release-inventory`    | `metadata`, `publish-crates-io`, `publish-release`          | `contents: write`                   | both publishers succeeded      |
-| `finalize-github-release`     | `metadata`, `package-crate`, both publishers, the verifier  | `contents: write`                   | every prerequisite succeeded   |
+| Job                           | Needs                                                                                    | Permissions                         | Mode                           |
+| ----------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------ |
+| `metadata`                    | —                                                                                        | `contents: read`                    | always                         |
+| `build-linux`                 | `metadata`                                                                               | `contents: read`                    | always                         |
+| `build-windows`               | `metadata`                                                                               | `contents: read`                    | always                         |
+| `build-macos`                 | `metadata`                                                                               | `contents: read`                    | always                         |
+| `windows-native-recipe-smoke` | `metadata`                                                                               | `contents: read`                    | publish or PR ready-for-review |
+| `release-admission-canaries`  | `metadata`                                                                               | `contents: read`, `actions: read`   | always                         |
+| `package-crate`               | `metadata`                                                                               | `contents: read`                    | always                         |
+| `publish-crates-io`           | all six validation jobs and `package-crate`                                              | `contents: read`, `id-token: write` | `should_publish == 'true'`     |
+| `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke`                              | `contents: read`                    | `dry_run == 'true'`            |
+| `publish-release`             | the same seven as `publish-crates-io`                                                    | `contents: write`                   | `should_publish == 'true'`     |
+| `verify-release-inventory`    | `metadata`, `package-crate`, `release-admission-canaries`, both publishers               | `contents: write`                   | both publishers succeeded      |
+| `finalize-github-release`     | `metadata`, `package-crate`, `release-admission-canaries`, both publishers, the verifier | `contents: write`                   | every prerequisite succeeded   |
 
 *Table 1: `release.yml` jobs, their dependencies, permissions, and mode.*
 
@@ -3294,16 +3358,19 @@ finalizer takes no `id-token` and declares no `environment`, so it can neither
 exchange nor hold a registry credential. `release-admission-canaries`
 additionally takes `actions: read` to inspect prior runs.
 
-`release` and `publish-release` carry the same five-job dependency list and
-mutually exclusive guards, so a run is a rehearsal or a publication and never
-both. The guards are derived from `determine-release-modes`, which also supplies
-`should_publish` to the artefact upload so the upload stage and the jobs agree
-about the mode. The registry job has seven prerequisites: `metadata`,
-`package-crate`, all three platform builds, `windows-native-recipe-smoke`, and
-`release-admission-canaries`. Its job-level condition requires every
-prerequisite to succeed, the run not to be cancelled, and
-`should_publish == 'true'`. Pull requests and dry runs therefore skip the job
-before requesting the `crates-io` environment or exchanging credentials.
+`release` and `publish-release` carry mutually exclusive guards, so a run is a
+rehearsal or a publication and never both, but their dependency lists differ on
+purpose. `release` needs only `metadata`, the three builds, and
+`windows-native-recipe-smoke`, so packaging or admission failing cannot make
+the read-only lane unreachable. `publish-release` needs those five plus
+`package-crate` and `release-admission-canaries`, and its guard requires each
+of the seven to succeed, the run not to be cancelled, the gate to have enforced
+and admitted this commit, and `should_publish == 'true'`. The guards are
+derived from `determine-release-modes`, which also supplies `should_publish` to
+the artefact upload so the upload stage and the jobs agree about the mode. The
+registry job carries the same seven prerequisites and the same admission
+checks. Pull requests and dry runs therefore skip both publishers before
+requesting the `crates-io` environment or exchanging credentials.
 
 `package-crate` packages the crate, records its candidate identity and archive
 digest, and uploads them as the `release-crate-package` artefact. Before the
@@ -3319,15 +3386,15 @@ and digest before it probes crates.io. Its action consumes the recorded
 
 The registry job and `publish-release` remain independent siblings: neither
 depends on the other, so an upload interrupted on one surface can be resumed
-without repeating the other. `verify-release-inventory` runs only after both. A
-tagged run in which either publisher fails or is skipped therefore leaves the
-draft unverified, and `finalize-github-release` runs only after the verifier as
-well, so the release's inventory is reconciled once more by a read taken
-immediately before the edit. That read covers the GitHub release alone: the
-registry was verified earlier and is not read again. Those checks narrow the
-gap between the verified snapshot and the release this finalizer publishes;
-they cannot close it, because an asset can still change between that read and
-the edit.
+without repeating the other. `verify-release-inventory` runs only after both,
+and only once packaging and admission have succeeded as well. A tagged run in
+which either publisher fails or is skipped therefore leaves the draft
+unverified, and `finalize-github-release` runs only after the verifier as well,
+so the release's inventory is reconciled once more by a read taken immediately
+before the edit. That read covers the GitHub release alone: the registry was
+verified earlier and is not read again. Those checks narrow the gap between the
+verified snapshot and the release this finalizer publishes; they cannot close
+it, because an asset can still change between that read and the edit.
 
 That gate governs the transition, not a state. A rerun that begins with a
 release already public leaves it public whether or not the verifier and

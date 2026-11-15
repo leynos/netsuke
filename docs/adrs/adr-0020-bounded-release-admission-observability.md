@@ -355,3 +355,58 @@ operation names a call to trace, and the mapping between them is one table in
 beside `upload-plan.json` and `upload-timings.json` and retained by the same
 `always()` artefact step, and it never fails the run: the plan is the contract
 and the uploader has already reported a refusal on standard error.
+
+## Addendum (2026-11-15): Enforced admission before publication
+
+This addendum amends the 2026-09-04 addendum and the "non-blocking" statements
+in the accepted decision. Their text is preserved as written; the gating mode
+they specify is superseded here.
+
+Publication is conditional on the gate before any RFC 0005 evidence producer
+exists. The four jobs holding `contents: write`, `packages: write`, or
+`id-token: write` — `publish-crates-io`, `publish-release`,
+`verify-release-inventory`, and `finalize-github-release` — depend on
+`release-admission-canaries` and require, as top-level conjuncts of their
+job-level condition, that it succeeded, that `outputs.enforcement == 'true'`,
+that `outputs.gate_outcome == 'success'`, and that
+`outputs.candidate_commit == github.sha`. The gate derives
+`NETSUKE_RELEASE_ADMISSION_ENFORCE` from
+`needs.metadata.outputs.should_publish`, so a pull-request rehearsal still
+observes and exits zero while a publishing run enforces. No override exists: no
+input, environment variable, or workflow-dispatch field selects a mode beside
+the release mode the metadata job already resolved.
+
+The ordering is deliberate. Connecting a producer first would leave the
+publishing path able to proceed without evidence for however long the two
+changes landed apart. Until a producer uploads `release-admission-evidence`,
+every publishing run therefore refuses with `error_category=missing_evidence`;
+that is the intended fail-closed state, not a defect to work around by
+loosening the gate. The producer is tracked by
+[#598](https://github.com/leynos/netsuke/issues/598) and registry publication by
+[#1065](https://github.com/leynos/netsuke/issues/1065).
+
+The rehearsal lane stays reachable. The `release` job holds no write scope and
+must not depend on either `package-crate` or `release-admission-canaries`, so a
+failure in either cannot skip the read-only lane; the same prohibition applies
+in reverse, and neither `release` nor `package-crate` nor the gate may hold a
+write scope. `tests/workflow_contracts/release_write_authority_contract.py`
+asserts both directions and derives the write-authority set from the workflow's
+own permission scopes, so a new publisher added beside the gate fails the
+contract until it sits behind it.
+
+Two error categories join the closed vocabulary so the two ways a supplied
+manifest can be unusable are separable: `malformed_evidence` for a document
+that cannot be read as the schema at all, and `candidate_mismatch` for one that
+reads perfectly and describes another repository, commit, run, or tag. Both
+extend the gate and operation `error_category` vocabularies recorded in the
+accepted decision; an operator fixes them in different places, which is why
+they are not one category. Metric and label names are unchanged, and the
+extension is reviewed as the accepted decision requires.
+
+`tests/workflow_contracts/release_admission_gate_contract.py` evaluates the
+enforcement expression in every modelled scenario rather than matching its
+text, so either hard-coded mode is reported for the run that exposes it.
+`tests/workflow_contracts/release_publication_gate_mutations.py` states
+fourteen regressions — a removed dependency, a removed result or output check,
+either hard-coded mode, an `always()` publication bypass, and the gate and
+rehearsal adopting each other — each with the diagnostics that must notice it.
