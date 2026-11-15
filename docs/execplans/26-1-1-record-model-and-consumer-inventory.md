@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 49. See `Revision note` at the foot of this document. This plan was
+Revision 50. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -755,6 +755,14 @@ pre-rebase history if an old hash must be inspected.
   `cs delta origin/main`. Re-ran the eleven gates on `66b6cfa81`: all green.
   The commit touches `tests/`, so the post-pin list advanced an eighth time to
   69 identifiers and a 50/19 split.
+- [x] (2026-11-15) Corrected four trace rows the hosted completeness
+  assessment found omitting obligations their own `Tasks:` clauses bind, and
+  added `validate_obligation_tasks` so the binding is now a contract rule
+  (D-35, D-36). The assessment named six pairs; all six reproduced from a
+  re-derivation against the document rather than from its report, and no other
+  pair was missing. Three liveness probes each failed exactly their own cases.
+  The target now runs 70 cases, up from 60. This commit touches `tests/`, so
+  the post-pin list advances a ninth time.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1028,6 +1036,25 @@ pre-rebase history if an old hash must be inspected.
   functions is duplication to this detector even when the split is deliberate.
   Date/Author: 2026-11-15, implementation agent, after the hosted CodeScene
   re-review.
+- Decision D-35 (2026-11-15): corrected trace rows that omitted an obligation
+  their own `Tasks:` clause binds, after the hosted completeness assessment
+  reported that "a reader following a task row can miss an obligation that the
+  same inventory assigns to that task". The assessment named six task-to-
+  obligation pairs and all six held: `26.2.1` omitted `CO-15`, `26.2.2` omitted
+  `CO-1`, `CO-4` and `CO-10`, and `27.2.1` omitted `CO-5` and `CO-10`. The
+  pairs were re-derived from the document rather than taken from the report:
+  each obligation's `Tasks:` clause was parsed into an inverse map and compared
+  against the identifiers in its task's obligations cell, which reproduced all
+  six and found nothing else missing. The same check found two disagreements
+  the report did not name — `27.1.1` names `CO-13`, and `27.2.2` names `CO-9`,
+  without either clause binding that task — which are legitimate and were left
+  alone. The obligation's clause is authoritative for the direction checked,
+  because it is the document's own statement of which tasks must preserve that
+  obligation, while a row may also name obligations it merely must not regress.
+  Rows were therefore corrected and no obligation was edited. `CO-4`'s addition
+  to `26.2.2` is consistent with the register, which annotates every `A4/` row
+  with `CO-2, CO-4, CO-7, CO-15`. Date/Author: 2026-11-15, implementation
+  agent, after the hosted completeness assessment.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
   the pin" list for in-scope paths at merge time. Rationale: the roadmap
@@ -2455,6 +2482,15 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   and regenerated the post-pin list an eighth time to 69 identifiers, 50 `main`
   and 19 branch. The diff is still 22 files. The contract suite is unchanged at
   60 cases; only the table's shape moved.
+
+- Revision 50 (2026-11-15): dispositioned the hosted completeness
+  assessment's task-to-obligation finding (D-35) and closed the gap it
+  identified as a contract rule, `validate_obligation_tasks` (D-36). Four trace
+  rows gained an obligation their own `Tasks:` clause binds. The obligation
+  check previously asked only whether an obligation appeared somewhere in the
+  trace matrix, which is why these omissions survived every earlier round. The
+  contract target runs 70 cases, up from 60, and the post-pin list regenerates
+  to 70 identifiers.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
