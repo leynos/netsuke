@@ -486,6 +486,16 @@ explicit and exercise the actual adapters in tests.
     (19 s) because the spelling gate rejects `normalising` in favour of the
     en-GB-oxendict `normalizing`; that word was the only finding, and the
     re-run above covers the corrected prose.
+  - [x] 2026-11-15: Clear the hosted CodeScene finding for `b531c57c8`. The
+    advisory rule "String Heavy Function Arguments" rejected
+    `tests/cli_tests/shells_startup/support.rs` at 47.62% of its function
+    arguments being strings against a 39% threshold, which failed the quality
+    gate. The new redaction helper carried three `&str` parameters, so a
+    `DeclaringClause` value now owns one format's opening and closing literals
+    and redacts through a single borrowed argument, and `normalised` takes the
+    child's `&Output` like the sibling helpers instead of an extracted string.
+    `cs delta` now reports the module at Code Health 10.00 with the rule no
+    longer above its threshold, and the startup suite still passes 21 of 21.
 
 ## Surprises & discoveries
 
@@ -848,6 +858,15 @@ first failure can hide a whole class of such tests behind one earlier red one.
   `merge_violation` query returning the first disagreement, which keeps the
   property and the witnesses stating the same rule and gives each failure a
   diagnostic that names the layers.
+- 2026-11-15: Give each snapshotted format a `DeclaringClause` value rather than
+  passing its two delimiters to a free helper. The slice of the startup support
+  module that holds test plumbing had reached CodeScene's string-argument
+  threshold, and the threshold measures the module rather than the call: two
+  more `&str` parameters in one new helper was enough to fail it. The type also
+  states why the pair exists, which a bare pair of literals did not. Taking
+  `&Output` in `normalised` follows the same reasoning: the helper now derives
+  the text it normalizes from the child's own output, as `stderr_of` and
+  `json_failure` already do, instead of requiring every caller to extract it.
 
 ## Outcomes & retrospective
 

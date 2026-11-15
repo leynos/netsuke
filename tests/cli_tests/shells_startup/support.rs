@@ -160,14 +160,12 @@ const DECLARING_FILE: &str = "[DECLARING_FILE]";
 /// length differ between hosts, and the renderer bounds it, so the snapshot can
 /// pin the shape of the clause but not its contents;
 /// `a_rejection_names_the_declaring_file` is what pins the contents.
-pub(super) fn normalised(stderr: &str, startup: &Startup) -> Result<String> {
+pub(super) fn normalised(output: &Output, startup: &Startup) -> Result<String> {
     let path = startup.path().to_string_lossy().into_owned();
-    let located = stderr.replace(&path, "[WORKSPACE]");
-    let redacted = redact_declaring_file(
-        &redact_declaring_file(&located, "declared in \"", "\""),
-        "declared in \\\"",
-        "\\\"",
-    );
+    let located = stderr_of(output).replace(&path, "[WORKSPACE]");
+    let redacted = DECLARING_CLAUSES
+        .iter()
+        .fold(located, |text, clause| clause.redact(&text));
     let versioned = redacted.replace(env!("CARGO_PKG_VERSION"), "[VERSION]");
     let timestamp =
         regex::Regex::new(TRACE_TIMESTAMP).context("compile the tracing timestamp pattern")?;
@@ -176,24 +174,45 @@ pub(super) fn normalised(stderr: &str, startup: &Startup) -> Result<String> {
         .into_owned())
 }
 
-/// Replace the preview between `open` and `close` with [`DECLARING_FILE`].
+/// One output format's quoting of the declaring clause around its preview.
 ///
-/// Each format quotes the clause in its own escaping, so the caller supplies
-/// those two literals. A preview holds no quote of its own, so the closing
-/// literal ends it.
-fn redact_declaring_file(text: &str, open: &str, close: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some((before, after)) = rest.split_once(open) {
-        let Some((_, tail)) = after.split_once(close) else {
-            break;
-        };
-        out.push_str(before);
-        out.push_str(open);
-        out.push_str(DECLARING_FILE);
-        out.push_str(close);
-        rest = tail;
+/// The text renderer quotes the preview directly; the JSON renderer escapes
+/// the quotes. A preview holds no quote of its own, so `close` ends it.
+struct DeclaringClause {
+    /// Literal printed immediately before the preview.
+    open: &'static str,
+    /// Literal printed immediately after the preview.
+    close: &'static str,
+}
+
+/// The declaring clause as each snapshotted format spells it.
+const DECLARING_CLAUSES: [DeclaringClause; 2] = [
+    DeclaringClause {
+        open: "declared in \"",
+        close: "\"",
+    },
+    DeclaringClause {
+        open: "declared in \\\"",
+        close: "\\\"",
+    },
+];
+
+impl DeclaringClause {
+    /// Replace every preview this clause delimits with [`DECLARING_FILE`].
+    fn redact(&self, text: &str) -> String {
+        let mut out = String::with_capacity(text.len());
+        let mut rest = text;
+        while let Some((before, after)) = rest.split_once(self.open) {
+            let Some((_, tail)) = after.split_once(self.close) else {
+                break;
+            };
+            out.push_str(before);
+            out.push_str(self.open);
+            out.push_str(DECLARING_FILE);
+            out.push_str(self.close);
+            rest = tail;
+        }
+        out.push_str(rest);
+        out
     }
-    out.push_str(rest);
-    out
 }

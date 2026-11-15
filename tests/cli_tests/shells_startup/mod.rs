@@ -29,7 +29,7 @@ fn text_diagnostic_format_is_stable() -> Result<()> {
         !output.status.success(),
         "startup should reject the definition"
     );
-    let rendered = normalised(&stderr_of(&output), &startup)?;
+    let rendered = normalised(&output, &startup)?;
     insta::assert_snapshot!("shells_text_diagnostic", rendered);
     Ok(())
 }
@@ -42,7 +42,7 @@ fn json_diagnostic_format_is_stable() -> Result<()> {
         generate_with_operator_config(&startup, &format!("json = true\n{RELATIVE_EXECUTABLE}"))?;
 
     json_failure(&output)?;
-    let rendered = normalised(&stderr_of(&output), &startup)?;
+    let rendered = normalised(&output, &startup)?;
     insta::assert_snapshot!("shells_json_diagnostic", rendered);
     Ok(())
 }
