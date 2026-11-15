@@ -196,6 +196,7 @@ impact
 | Release packaging            | The release workflow validates the packaged candidate offline before upload: the identity, the archive digest, and the packaged manifest must agree, and a dry run must record no release tag.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Release packaging validation](#release-packaging-validates-its-candidate-offline)                                       |
 | Release upload               | The publishing lane uploads only the assets this run declared: producer records are bound to the candidate commit and the workflow run, and a stale, missing, doubled, or undeclared release-shaped artefact is refused before any release asset is transferred. The job may already have checked for or created the draft release, which touches the release API; selection and declaration come after that and before the upload. An attached asset with the recorded digest is skipped; one with different bytes stops the run and is never replaced.                                                                                                                                                                                                                                                                                                                                                                                                                                                | [Release uploads](#release-uploads-only-the-assets-this-run-declared)                                                    |
 | POSIX heredoc delimiters     | **Breaking:** a delimiter form whose quote removal Netsuke cannot reproduce now fails closed instead of being copied: a missing delimiter, a leading unquoted `#`, an unclosed quote, a trailing backslash, a line continuation, and an unescaped `$` or backtick outside single quotes. Quote the literal part instead, for example `<<'$DELIM'`; quoting any part of the delimiter also stops expansion in the body, so keep an unquoted literal delimiter such as `<<END` when the body must expand.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Heredoc delimiters](#update-heredoc-delimiters-the-tracker-cannot-model)                                                |
+| Project blocklists           | **Breaking:** project `env_block_var` and `fetch_block_host` values must be arrays; a non-array or invalid element stops loading with a field-named validation error instead of clearing the operator's block entries.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | [Write project blocklists as arrays](#write-project-blocklists-as-arrays)                                                |
 
 ## Remove order-only dependency cycles
 
@@ -840,6 +841,54 @@ This policy reduces secret ingress into rendered manifest fields. It does not
 make rendered manifest contents safe to log: allowed values still require the
 existing output and logging discipline.
 
+## Write project blocklists as arrays
+
+A project configuration file, meaning the primary `.netsuke.toml` or any file
+it reaches through `extends`, must write `env_block_var` and `fetch_block_host`
+as arrays. This release rejects any other shape. A `null`, a scalar, an object,
+a non-finite TOML float such as `nan`, `inf`, or `-inf`, and an array holding a
+non-string entry or an invalid host pattern all stop loading with a validation
+error that names the field. No discovered file layer is merged after such a
+failure.
+
+The reset is what this release removes. A non-finite TOML float becomes JSON
+`null` on the way to the configuration merge, and the append strategy treats a
+`null` collection as a reset, so a project file could clear block entries the
+operator had set and invert the promise that a project blocklist only adds
+restrictions.
+
+### Before
+
+```toml
+# .netsuke.toml: a non-array blocklist. Earlier releases accepted this and the
+# merge cleared the operator's block entries; loading is now refused.
+env_block_var = nan
+fetch_block_host = inf
+```
+
+### After
+
+```toml
+# .netsuke.toml: name the additional entries explicitly.
+env_block_var = ["CI_TOKEN"]
+fetch_block_host = ["169.254.169.254"]
+```
+
+An empty array adds no restriction and removes none. Writing
+`env_block_var = []` or `fetch_block_host = []` in a project file leaves every
+operator block entry in force, and omitting the field changes nothing. Operator
+configuration is unaffected by this rule, and a project blocklist that was
+already an array of valid entries needs no change.
+
+Failing closed here matters because a project blocklist only restricts access.
+See [Network fetch policy](users-guide.md#network-fetch-policy) and
+[Control manifest environment access](users-guide.md#control-manifest-environment-access)
+for the operator surface, and
+[ADR-0021](adrs/adr-0021-keep-project-fetch-policy-below-the-operator-ceiling.md)
+and
+[ADR-0026](adrs/adr-0026-keep-project-environment-policy-below-the-operator-ceiling.md)
+for the trust boundary.
+
 ## Opting into serial dependency ordering
 
 Set `dependency_order: serial` on an action or target to run its direct `deps`
@@ -1075,9 +1124,19 @@ owned sink and completion-ordering contract.
   errors.
 - [ ] If a script parses `netsuke` stdout, tolerate the
   `netsuke: warning: failed to forward child stderr` line.
+- [ ] Write project `env_block_var` and `fetch_block_host` values as arrays.
 
 ## Common errors and fixes
 
+- **Error:** `Validation failed for 'env_block_var': invalid type: null,
+  expected a sequence`
+  - **Fix:** Replace the project `env_block_var` value with an array of
+    variable names. Use `[]` only when the project adds no entry; an empty
+    array removes no operator restriction.
+- **Error:** `Validation failed for 'fetch_block_host': invalid type: null,
+  expected a sequence`
+  - **Fix:** Replace the project `fetch_block_host` value with an array of
+    valid host patterns. Use `[]` only when the project adds no entry.
 - **Error:** `Dependency-only entries cannot select the console pool.`
   - **Fix:** Remove `console: true` from any dependency-only target.
 - **Error:** `Build edge 'build/stamp' cannot select the console pool because its

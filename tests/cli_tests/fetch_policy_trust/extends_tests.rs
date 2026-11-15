@@ -104,6 +104,32 @@ fn inherited_project_blocks_remain_cumulative_and_authoritative() -> Result<()> 
     Ok(())
 }
 
+/// Reject a non-finite blocklist inherited through a project `extends` chain,
+/// whose `null` conversion would otherwise clear the operator block.
+///
+/// The assertion inspects the error chain, so a temporary-directory or
+/// `extends` resolution failure cannot stand in for the validation.
+#[rstest]
+#[case::nan("nan")]
+#[case::infinity("inf")]
+#[case::negative_infinity("-inf")]
+#[case::array_containing_nan("[nan]")]
+fn inherited_non_finite_project_blocklist_is_rejected(#[case] literal: &str) -> Result<()> {
+    let inherited = format!("fetch_block_host = {literal}\n");
+    let operator_url = url("https://operator-blocked.example")?;
+    let merged = merge_fetch_policy(
+        &FetchPolicyFileLayers {
+            project: Some("extends = \"policy.toml\"\n"),
+            project_files: Some(vec![("policy.toml", inherited.as_str())]),
+            ..FetchPolicyFileLayers::default()
+        },
+        &[],
+        &["netsuke", "--fetch-block-host", "operator-blocked.example"],
+    );
+
+    assert_project_fetch_block_rejected(merged, literal, |cli| is_host_blocked(cli, &operator_url))
+}
+
 #[rstest]
 fn trusted_user_policy_accepts_the_project_chain_in_dependency_order() -> Result<()> {
     let merged = merge_fetch_policy(

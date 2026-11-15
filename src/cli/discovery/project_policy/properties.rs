@@ -8,6 +8,22 @@ use crate::host_pattern::HostPattern;
 use proptest::prelude::*;
 use serde_json::{Map, Value, json};
 
+/// Map a generated blocklist shape to the value one occurrence supplies.
+///
+/// Kinds `0..=2` are supported inputs (absent, empty, and valid); kinds `3..=5`
+/// are reset representations that a project-policy boundary must reject.
+fn blocklist_value(kind: u8, is_environment: bool) -> Option<Value> {
+    match kind {
+        0 => None,
+        1 => Some(json!([])),
+        2 if is_environment => Some(json!(["BLOCKED_TOKEN"])),
+        2 => Some(json!(["blocked.example"])),
+        3 => Some(json!(null)),
+        4 => Some(json!("malformed")),
+        _ => Some(json!([null])),
+    }
+}
+
 proptest! {
     /// Fold project fetch grants in dependency order and quarantine every layer.
     #[test]
@@ -91,6 +107,68 @@ proptest! {
                 Some(&json!(["blocked.example"]))
             );
         }
+    }
+
+    /// Reject only resettable blocklist shapes, and only where the occurrence
+    /// carries the authority that the corresponding policy governs.
+    #[test]
+    fn blocklist_shape_validation_follows_occurrence_provenance(
+        occurrences in prop::collection::vec((0u8..4, 0u8..6, 0u8..6), 1..8),
+    ) {
+        let mut scoped = Vec::with_capacity(occurrences.len());
+        let mut expected_keys = Vec::new();
+        let mut expected_values = Vec::new();
+        for (role, environment_kind, fetch_kind) in &occurrences {
+            let (scope, project_chain) = match *role {
+                0 => (FileScope::Operator, false),
+                1 => (FileScope::Operator, true),
+                2 => (FileScope::Project, true),
+                _ => (FileScope::Project, false),
+            };
+            let mut fields = Map::new();
+            if let Some(value) = blocklist_value(*environment_kind, true) {
+                fields.insert("env_block_var".to_owned(), value);
+            }
+            if let Some(value) = blocklist_value(*fetch_kind, false) {
+                fields.insert("fetch_block_host".to_owned(), value);
+            }
+            let value = Value::Object(fields);
+            let validates_environment = scope == FileScope::Project || project_chain;
+            if validates_environment && *environment_kind >= 3 {
+                expected_keys.push("env_block_var");
+            }
+            if scope == FileScope::Project && *fetch_kind >= 3 {
+                expected_keys.push("fetch_block_host");
+            }
+            expected_values.push(value.clone());
+            scoped.push(ScopedFileLayer {
+                layer: MergeLayer::file(Cow::Owned(value), Some("shared.toml".into())),
+                scope,
+                project_chain,
+            });
+        }
+
+        let resolved = retain_layers_and_resolve_json(scoped);
+        prop_assert_eq!(resolved.errors.len(), expected_keys.len());
+        for (error, expected_key) in resolved.errors.iter().zip(&expected_keys) {
+            prop_assert!(
+                matches!(
+                    error.as_ref(),
+                    OrthoError::Validation { key, .. } if key.as_str() == *expected_key
+                ),
+                "unexpected error {error:?} for {expected_key}"
+            );
+        }
+        let actual_values = resolved
+            .layers
+            .into_iter()
+            .map(MergeLayer::into_value)
+            .collect::<Vec<_>>();
+        prop_assert_eq!(
+            actual_values,
+            expected_values,
+            "blocklist validation must not rewrite retained values"
+        );
     }
 
     /// Quarantine grants per occurrence across mixed roots and arbitrary order.
