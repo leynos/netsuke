@@ -298,7 +298,7 @@ proof fn lemma_product_fits_u128(a: int, b: int)
 }
 
 /// Return the exact binomial coefficient `n choose r`, or `None` on overflow.
-fn checked_binomial(n: u64, r: u64) -> (result: Option<u64>)
+pub fn checked_binomial(n: u64, r: u64) -> (result: Option<u64>)
     ensures
         match result {
             Option::Some(v) => v as int == spec_binom(n as int, r as int)

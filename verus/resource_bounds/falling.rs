@@ -169,7 +169,7 @@ proof fn lemma_falling_mono_r(n: int, a: int, b: int)
 
 /// Return the exact falling factorial `n * (n-1) * ... * (n-r+1)`, or `None`
 /// when it exceeds `u64::MAX`.
-fn checked_falling_factorial(n: u64, r: u64) -> (result: Option<u64>)
+pub fn checked_falling_factorial(n: u64, r: u64) -> (result: Option<u64>)
     ensures
         match result {
             Option::Some(v) => v as int == spec_falling(n as int, r as int)

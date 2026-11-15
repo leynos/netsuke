@@ -108,7 +108,7 @@ fn checked_power(base: u64, repeat: u64) -> (result: Option<u64>)
 }
 
 /// Return the exact tuple count of a `product` request, or `None` on overflow.
-fn checked_product(lengths: &Vec<usize>, repeat: u64) -> (result: Option<u64>)
+pub fn checked_product(lengths: &Vec<usize>, repeat: u64) -> (result: Option<u64>)
     ensures
         match result {
             Option::Some(v) => v as int == spec_product(lengths@, repeat as int),
