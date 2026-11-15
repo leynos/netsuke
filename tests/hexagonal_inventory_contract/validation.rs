@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, ensure};
 
+use super::landed::validate_landed_work;
 use super::markdown::{
     HeadingLevel, declared_pin, finding_entries, heading_body, non_id_register_headers, pins,
     regex_values, register_ids, task_ids,
@@ -74,6 +75,7 @@ pub(super) fn validate_inventory(inventory: &str, roadmap: &str) -> Result<()> {
         section(inventory, "Compatibility obligations"),
         section(inventory, "Trace matrix"),
     )?;
+    validate_landed_work(section(inventory, "Landed work"))?;
     validation.validate_findings()
 }
 

@@ -8117,31 +8117,40 @@ Netsuke uses a mixed strategy:
   its header declares; an identifier in the register or findings column is not
   evidence, and neither is one in a short row whose trailing cells are missing,
   since its last supplied cell is not the obligations column. An obligation's
-  identifier is its bullet label, matched by `OBLIGATION_LABEL` at the start of
+  identifier is its bullet label, read by `OBLIGATION_LABEL` from the start of
   the bullet, not the lowest `CO-` identifier anywhere in the entry: the entry
   `- CO-2: Preserve CO-1 too.` declares `CO-2`. A label in a form the pattern
-  does not match, such as a backticked `` `CO-1` ``, is reported as an error
-  rather than skipped, because a skipped entry binds nothing while
-  `validate_obligations` still counts it as traced.
+  does not match, such as a backticked `` `CO-1` `` or a bold `- **CO-1**:`, is
+  reported as an error rather than skipped, because a skipped entry binds
+  nothing while `validate_obligations` still counts it as traced. Which bullets
+  open an entry is decided by "carries a `CO-` identifier anywhere", not by
+  "opens with a label form this parser reads". Enumerating the readable
+  prefixes was the earlier rule, and it left the bold form read as prose: a
+  decoration missing from the list was a fresh fail-open.
 - The contract's modules are split by feature rather than by layer, forced by
   the 400-line file cap: `markdown.rs` (parsers), `trace.rs` (the trace
   matrix's four harvesters), `register.rs` (identifier grammar), `roadmap.rs`
   (task and dependency parsing), `validation.rs` (the cross-document checks),
-  `obligations.rs` (the obligation-to-task binding), `fixtures.rs` (shared
-  skeletons), and the four case modules `parser_tests.rs`, `tests.rs`,
-  `property_tests.rs`, and `obligation_tests.rs`. Gating is not uniform across
-  them. `property_tests.rs` declares `#[cfg(test)]`; `fail_open_tests.rs` does
-  not, because it is compiled into the test binary by its `#[path]` declaration
-  and its guards never reach a non-test build. Each trace subsection admits
-  exactly one shape of claim — a table row for `Changes` and `Consumes`, a
-  reason-bearing bullet for `Excluded`, an identifier bullet for `Unchanged` —
-  and every harvester drops the prose around it. `fail_open_tests.rs` holds the
-  regression guards for prose-claimed coverage; each fails against the parser
-  rule it protects, so add a case there rather than to `tests.rs` when closing
-  a new fail-open. `obligation_tests.rs` holds the same kind of guard for the
-  binding rule, and each of its rejection cases traces the obligation from a
-  row other than the one under test, so the older coverage check cannot be what
-  fails.
+  `obligations.rs` (the obligation-to-task binding), `landed.rs` (the
+  landed-work entry schema), `fixtures.rs` (shared skeletons), and the four
+  case modules `parser_tests.rs`, `tests.rs`, `property_tests.rs`, and
+  `obligation_tests.rs`. Gating is not uniform across them. `property_tests.rs`
+  declares `#[cfg(test)]`; `fail_open_tests.rs` does not, because it is
+  compiled into the test binary by its `#[path]` declaration and its guards
+  never reach a non-test build. Each trace subsection admits exactly one shape
+  of claim — a table row for `Changes` and `Consumes`, a reason-bearing bullet
+  for `Excluded`, an identifier bullet for `Unchanged` — and every harvester
+  drops the prose around it. `fail_open_tests.rs` holds the regression guards
+  for prose-claimed coverage; each fails against the parser rule it protects,
+  so add a case there rather than to `tests.rs` when closing a new fail-open.
+  `obligation_tests.rs` holds the same kind of guard for the binding rule, and
+  each of its rejection cases traces the obligation from a row other than the
+  one under test, so the older coverage check cannot be what fails. `landed.rs`
+  holds every landed-work bullet to the plan's own schema: a pull request
+  number and a commit. It reads one bullet at a time, so a neighbour's commit
+  cannot cover an omission — the shape that let twelve entries name no commit
+  at all. It checks presence only, because which commit is the right one is a
+  provenance question one document cannot settle.
 - Behavioural tests use Gherkin feature files in `tests/features/` and
   `tests/features_unix/`.
 - Behavioural step definitions and fixtures live in `tests/bdd/`.

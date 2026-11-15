@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 56. See `Revision note` at the foot of this document. This plan was
+Revision 57. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -338,13 +338,15 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   parser modules under `tests/hexagonal_inventory_contract/`, the exact-path
   CodeScene exemptions those parsers need, both `dylint.toml` policy files, and
   (only if the spelling gate requires it) `typos.local.toml` and its generated
-  `typos.toml`. The measured range is twenty-four files at the current base, so
-  this tolerance fired during the task; the expansion is recorded in D-14,
-  D-28, D-30, D-41, and D-42 rather than applied silently. The permitted-path
-  list keeps `dylint.toml` and `test_support/dylint.toml` even though the
-  rebase returned both to `main`'s content: a path being permitted is not a
-  claim that it changed, and D-38's commits did touch them before D-42
-  superseded them.
+  `typos.toml`. The measured range is twenty-five files at the current base —
+  twenty-four as D-42 recorded them, plus `landed.rs` from D-43 — so this
+  tolerance fired during the task; the expansion is recorded in D-14, D-28,
+  D-30, D-41, D-42, and D-43 rather than applied silently. Every addition is
+  inside the permitted-path list above: `landed.rs` is a private parser module
+  of the inventory contract test. The permitted-path list keeps `dylint.toml`
+  and `test_support/dylint.toml` even though the rebase returned both to
+  `main`'s content: a path being permitted is not a claim that it changed, and
+  D-38's commits did touch them before D-42 superseded them.
 - Drift: if the pin differs from `ebcedaef` and any commit between them
   touches `src/`, `build.rs`, `tests/`, `test_support/`, or `benches/`, re-run
   every sweep; do not patch this plan's planning-time observations. If
@@ -801,9 +803,9 @@ pre-rebase history if an old hash must be inspected.
   register value was read as its obligations. The other two were an entry that
   fell through as prose and bound nothing, and an acceptance fixture that
   passed an equality check as well as the one-directional one. Four regression
-  cases cover the refusals; the contract target runs 73 cases, up from 70. The
-  commit touches `tests/`, so the post-pin list advances a twelfth time to 73
-  identifiers with a 50/23 split.
+  cases cover the refusals; the contract target runs 74 cases at that point, up
+  from 70 (D-43 carries it to 80). The commit touches `tests/`, so the post-pin
+  list advances a twelfth time to 73 identifiers with a 50/23 split.
 - [x] (2026-11-15) Dispositioned the hosted completeness assessment's three
   remaining findings (D-40). The diagnostic inventory now carries a per-variant
   site census: 40 production construction sites over the four error enums,
@@ -826,7 +828,7 @@ pre-rebase history if an old hash must be inspected.
   the rebased tree, so 15 does clear this branch's twelve new contract modules
   — the question `fa06bdb21` could not answer, because it never measured them.
   Every figure the rebase moved was re-measured: 74 post-pin identifiers at
-  52/22, 24 in-scope files, 73 contract cases.
+  52/22, 24 in-scope files, 74 contract cases at that point and 80 after D-43.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1680,7 +1682,8 @@ pre-rebase history if an old hash must be inspected.
   completeness assessment reported the figure stale. Superseded by D-42: the
   rebase onto `fa06bdb21` dropped both `dylint.toml` rows from this branch, so
   the two D-38 additions named above no longer count, the live set is 24 files
-  at that base, and the contract module's twelve private files are unaffected.
+  at that base, and the contract module's private files are unaffected (twelve
+  then, thirteen after D-43).
 - Decision D-42 (2026-11-15): adopted the upstream `bumpy_road_function` fix
   on rebase and dropped this branch's own, then re-measured every figure the
   rebase moved. `main` advanced two commits — `e28f26ae2` running the Verus
@@ -1706,11 +1709,64 @@ pre-rebase history if an old hash must be inspected.
   of its two dylint commits to the supersession, the other having been absorbed
   with it. The in-scope diff against the new base is 24 files, not 26, because
   both `dylint.toml` rows left the tolerance. The contract module still holds
-  twelve private files, and the contract target still runs 73 cases. D-38 and
-  D-41 keep their original figures as the state at the time they were written;
-  where a later reader would otherwise rely on them, the paragraph says what
-  superseded it. Date/Author: 2026-11-15, implementation agent, while rebasing
-  the candidate onto `fa06bdb21`.
+  thirteen private files, and the contract target then ran 73 cases — 74 once
+  D-43 added the bold-label refusal and 80 once it added the landed-work rule.
+  D-38 and D-41 keep their original figures as the state at the time they were
+  written; where a later reader would otherwise rely on them, the paragraph
+  says what superseded it. Date/Author: 2026-11-15, implementation agent, while
+  rebasing the candidate onto `fa06bdb21`.
+- Decision D-43 (2026-11-15): closed the two findings the revision-56
+  completeness assessment returned, one as a real fail-open and one as a real
+  omission, and kept the third of its judgements as an instruction to hold. The
+  verdict was "not yet complete on the inspected PR head", so the gate is not
+  cleared; this decision records what was done about it, not a claim that it is
+  now clear.
+
+  The first finding is a defect of exactly the class
+  `validate_obligation_tasks` exists to refuse, and it was reachable:
+  `is_obligation_start` asked only whether a bullet opened with `CO-` or
+  `` `CO- ``, so `- **CO-1**: …` never opened an entry. The bullet was then
+  appended to whatever entry was open, or dropped when none was, and its
+  binding was never checked — while the global text check still saw `CO-1` in
+  the section and reported the obligation traced. A test proved it before the
+  fix: a bold-labelled obligation binding `26.1.2`, with `26.1.2`'s row
+  omitting it, was *accepted*. The repair is to stop enumerating readable
+  prefixes and ask instead whether the bullet carries an `CO-` identifier
+  anywhere, so every decoration the label parser cannot read opens an entry that
+  `declared_tasks` then refuses. Enumeration was the bug: the readable-prefix
+  list is an allowlist, and every entry missing from it is a new fail-open. The
+  contract target now runs 74 cases and passes, and the 16 real obligations
+  still open and bind, since each is a bare label with no nested bullet to
+  split.
+
+  The second finding is that the plan's landed-work step requires a merge
+  commit per entry and the inventory's twelve entries mostly named only an
+  issue. The commits were not knowable by inspection of the inventory: nine of
+  the twelve squash into `main` under a message carrying both the issue and the
+  pull request, and three landed the ADR file under one commit while the issue
+  closed under another. Each was resolved against `main` and verified an
+  ancestor of the pin, then written into the entry with the PR that carried it.
+  Two entries needed that distinction stated rather than a single SHA: ADR-0041
+  was added by `563261b0` on PR `#702`, which is not the PR its issue number
+  suggests, and `#858`'s landing commit is the pin itself.
+
+  The third judgement was that EP-M4 stays open until hosted equilibrium, which
+  is already the plan's state and no change. The assessment also reported its
+  own limits — a shallow clone, no gate runs, and a head one digit from the SHA
+  the request named. That typo was mine, in the request rather than the
+  candidate; CodeRabbit correctly refused to bind the verdict to a head it
+  could not find, inspected the head GitHub reported instead, and asked for
+  confirmation. It read the requested plan blob and revision correctly, so the
+  verdict binds to revision 56 and to `eb834346b`, and a fresh request is
+  posted for the repaired candidate rather than reinterpreting this one.
+
+  Re-measured after both repairs, not reasoned about: the contract module holds
+  thirteen private files (`landed.rs` is the new one), the in-scope diff against
+  `fa06bdb21` is 25 files, and the contract target runs 80 cases, up from 73.
+  The post-pin identifier list is unchanged at 74, because `landed.rs` and the
+  two documents this decision edits all postdate the sweep's own commits; the
+  sweep was regenerated anyway rather than assumed. Date/Author: 2026-11-15,
+  implementation agent, on the hosted completeness reply.
 
 ## Outcomes & retrospective
 
@@ -2850,8 +2906,8 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   supplied cell, so a short row's register value became its obligations. One
   silently skipped an entry whose label was backticked. One acceptance fixture
   passed an equality check as well as the one-directional one. The contract
-  target runs 73 cases, up from 70, and the post-pin list advances a twelfth
-  time to 73 identifiers, 50 `main` and 23 branch.
+  target ran 73 cases at that revision, up from 70, and the post-pin list
+  advances a twelfth time to 73 identifiers, 50 `main` and 23 branch.
 
 - Revision 55 (2026-11-15): closed the hosted completeness assessment's three
   remaining findings (D-40) and restated the scope measurement (D-41). The
@@ -2880,6 +2936,21 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   post-pin list regenerates to 74 identifiers, 52 `main` and 22 branch, and the
   in-scope diff against the new base is 24 files. Revisions 52 and 53 keep
   their figures as the state at the time and say what superseded them.
+- Revision 57 (2026-11-15): closed the revision-56 hosted completeness verdict's
+  two findings (D-43). The first was a real fail-open in the obligation bullet
+  reader: a bold-labelled bullet opened no entry, bound nothing, and was still
+  counted as traced by the global text check, so a bound task could omit its
+  obligation. The rule now asks whether a bullet carries an `CO-` identifier
+  rather than whether it opens with one of two readable prefixes, because an
+  allowlist of readable prefixes is a new fail-open for every missing entry.
+  The second was that the plan's landed-work step requires a merge commit per
+  entry and eleven of the twelve entries recorded none; each landing commit was
+  resolved against `main`, verified an ancestor of the pin, and paired with the
+  pull request that carried it. A contract rule now refuses an entry that omits
+  either, and the real document's own history shows it biting: eleven of the
+  twelve old entries would have been refused. The contract target runs 80
+  cases. The verdict itself was "not yet complete" and is not discharged by
+  this revision; a fresh assessment is requested for this candidate.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

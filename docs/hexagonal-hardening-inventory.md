@@ -2532,39 +2532,53 @@ item names contain inventoried uses.
 ## Landed work
 
 These changes predate the pin. Their contracts remain in force; this inventory
-schedules no repeat of issue `#652`.
+schedules no repeat of issue `#652`. Each entry names the pull request that
+carried the work and the squash commit that landed it in `main`; every squash
+commit named here is an ancestor of the pin. Where the landed work is an ADR,
+the entry also says which commit added that file rather than assuming the ADR
+arrived with its issue: ADR-0041 was introduced incidentally by a `#702` commit
+about Jinja command helpers, and ADR-0034 through ADR-0056 each landed on a
+pull request numbered differently from the issue cited here.
 
 - `#652` / PR `#714` (`2c030fd1`) moved graph edges into a canonical edge
   arena. Preserve alias identity, atomic duplicate rejection, and no per-output
   cloning (CO-14).
-- `#705` closed the typed redirect boundary work and completed the H6 context;
-  retain its redirect-policy limits when assessing later acquisition work.
-- `#699` and ADR-0027 established the command-placeholder contract. Preserve
-  placeholder substitution and shell quoting (CO-7).
-- `#753` and ADR-0034 preserved script `in` and `out` values as shell
-  variables, with the ADR's shell-level behaviour retained (CO-7).
-- `#754` added the JSON excerpt guard; preserve excerpt redaction and bounds
-  (CO-5).
-- `#696` introduced the injected monotonic-clock seam. Keep clock ownership
-  injectable in generation and status flows (CO-16); `CO-10` covers Kani
-  harness synchronization and does not describe this seam.
-- `#811` regrouped prefix-named modules into directory modules. All register
-  anchors use the post-regrouping paths at this pin.
-- `#857` and ADR-0045 added isolated command-list entries. Preserve their
-  separate rendering and validation across interpreters (CO-15).
-- ADR-0041 established the canonical `shell_quote` and `shell_join` surface;
-  keep shell quoting separate from Ninja escaping (CO-7).
-- `#778` added manifest-facing shell-selection vocabulary under
+- `#705` / PR `#735` (`024a9014`) closed the typed redirect boundary work and
+  completed the H6 context; retain its redirect-policy limits when assessing
+  later acquisition work.
+- PR `#699` (`ff797f68`) added ADR-0027 and established the command-placeholder
+  contract. Preserve placeholder substitution and shell quoting (CO-7).
+- `#737` / PR `#753` (`382395bc`) preserved script `in` and `out` values as
+  shell variables, and the same commit added ADR-0034 with the shell-level
+  behaviour the ADR retains (CO-7).
+- PR `#754` (`12a8e35c`) added the JSON excerpt guard; preserve excerpt
+  redaction and bounds (CO-5).
+- PR `#696` (`96aefc9c`) introduced the injected monotonic-clock seam. Keep
+  clock ownership injectable in generation and status flows (CO-16); `CO-10`
+  covers Kani harness synchronization and does not describe this seam.
+- `#811` / PR `#813` (`fce1a746`) regrouped prefix-named modules into directory
+  modules. All register anchors use the post-regrouping paths at this pin.
+- `#857` / PR `#915` (`f16c3176`) added isolated command-list entries, and the
+  same commit added ADR-0045. Preserve their separate rendering and validation
+  across interpreters (CO-15).
+- ADR-0041, added by PR `#702` (`563261b0`), established the canonical
+  `shell_quote` and `shell_join` surface; keep shell quoting separate from
+  Ninja escaping (CO-7).
+- PR `#778` (`37fc364a`) added manifest-facing shell-selection vocabulary under
   `src/shell_selection/`; it is not yet wired into authored types or lowering
   and remains distinct from `RecipeShell` under ADR-0044.
-- `#858` and ADR-0044 added the graph JSON export. Preserve its schema and
-  semantics as a committed external surface (CO-4).
-- `#592` and ADR-0056 added `netsuke check`. Its rules are compiler consumers
-  and must migrate with graph and recipe semantics.
-- The pin is 79 commits after the planning baseline `ebcedaef`; 45 intervening
+- `#858` / PR `#923` (`8a961000`) added the graph JSON export and ADR-0044.
+  Preserve its schema and semantics as a committed external surface (CO-4), and
+  note that the same commit is this inventory's pin.
+- `#592` / PR `#621` (`6572fb95`) added `netsuke check` and ADR-0056. Its rules
+  are compiler consumers and must migrate with graph and recipe semantics. The
+  pin is 79 commits after the planning baseline `ebcedaef`; 45 intervening
   commits touched in-scope paths. The earlier RFC 0026 audit also predates 113
   commits, 17 of which touched `src/`. The current register replaces that
-  earlier file-level snapshot rather than copying its observations.
+  earlier file-level snapshot rather than copying its observations. This
+  paragraph is prose rather than a bullet because it records the pin's
+  position, not landed work: the contract requires every landed-work entry to
+  name a pull request and a commit, and this claim has neither.
 
 ## Findings
 

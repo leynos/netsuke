@@ -13,6 +13,8 @@ mod fail_open_tests;
 #[cfg(test)]
 #[path = "hexagonal_inventory_contract/fixtures.rs"]
 mod fixtures;
+#[path = "hexagonal_inventory_contract/landed.rs"]
+mod landed;
 #[path = "hexagonal_inventory_contract/markdown.rs"]
 mod markdown;
 #[cfg(test)]

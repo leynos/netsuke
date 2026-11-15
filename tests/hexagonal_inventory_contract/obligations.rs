@@ -22,8 +22,10 @@
 //! success for a row that names nothing.
 
 use std::collections::BTreeSet;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result, bail, ensure};
+use regex::Regex;
 
 use super::markdown::{regex_values, task_ids};
 use super::trace::trace_task_obligations;
@@ -31,12 +33,25 @@ use super::trace::trace_task_obligations;
 /// The identifier form the compatibility obligations and trace matrix share.
 pub(super) const OBLIGATION_PATTERN: &str = r"\bCO-\d+\b";
 
+/// The compiled form of `OBLIGATION_PATTERN`.
+///
+/// `is_obligation_start` asks this question of every line in the section, so a
+/// fresh compile per line would repeat the same work for the same answer.
+static OBLIGATION_IDENTIFIER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(OBLIGATION_PATTERN).expect("obligation identifier pattern should compile")
+});
+
 /// The label form that may open a compatibility-obligation bullet.
 ///
 /// Anchored, and applied to the text after `- `, so it matches the bullet's
 /// label and nothing else. `regex_values` is deliberately not used: it scans
 /// the whole entry and cannot tell a label from a cross-reference.
 const OBLIGATION_LABEL: &str = r"^(?P<identifier>CO-\d+)\s*:";
+
+/// The compiled form of `OBLIGATION_LABEL`.
+static OBLIGATION_LABEL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(OBLIGATION_LABEL).expect("obligation label pattern should compile")
+});
 
 /// Read the identifier a compatibility-obligation bullet opens with.
 ///
@@ -54,9 +69,7 @@ const OBLIGATION_LABEL: &str = r"^(?P<identifier>CO-\d+)\s*:";
 fn obligation_label(line: &str) -> Result<&str> {
     let trimmed = line.trim_start();
     let bullet = trimmed.strip_prefix("- ").unwrap_or(trimmed);
-    let pattern =
-        regex::Regex::new(OBLIGATION_LABEL).expect("obligation label pattern should compile");
-    let captured = pattern
+    let captured = OBLIGATION_LABEL_PATTERN
         .captures(bullet)
         .and_then(|captures| captures.name("identifier"))
         .map(|matched| matched.as_str());
@@ -146,11 +159,17 @@ fn closed_entry(entry: Option<String>, entries: &mut Vec<String>) {
 ///
 /// A bullet whose label this parser cannot read still opens an entry, so the
 /// label check in `declared_tasks` reports it rather than letting it fall
-/// through as prose and bind nothing.
+/// through as prose and bind nothing. That is why the test is "carries a
+/// `CO-` identifier anywhere" rather than "opens with a label this parser
+/// accepts": enumerating the readable prefixes would reopen the fail-open for
+/// every decoration missing from the list. A bold label, `- **CO-1**: …`,
+/// renders as an obligation in Markdown and is reported here; matching only
+/// bare and backticked prefixes let it be read as prose, bind nothing, and
+/// still satisfy the global text check.
 fn is_obligation_start(line: &str) -> bool {
     line.trim_start()
         .strip_prefix("- ")
-        .is_some_and(|bullet| bullet.starts_with("CO-") || bullet.starts_with("`CO-"))
+        .is_some_and(|bullet| OBLIGATION_IDENTIFIER.is_match(bullet))
 }
 
 /// Report whether a line continues the bullet above it.

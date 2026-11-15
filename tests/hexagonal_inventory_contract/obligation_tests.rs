@@ -186,6 +186,23 @@ fn rejects_an_obligation_labelled_in_backticks() -> Result<()> {
     Ok(())
 }
 
+/// A bold label is refused rather than silently skipped.
+///
+/// `- **CO-1**: Preserve one. Tasks: 26.1.2.` is a bullet this parser cannot
+/// read a label from, and Markdown renders it as an obligation like any other.
+/// `is_obligation_start` recognises a bare or backticked `CO-` prefix, so a
+/// bold label never opens an entry: the bullet is appended to whatever entry is
+/// open, or dropped when none is, and the binding is never checked. The global
+/// obligation check still sees `CO-1` because it reads the section as text.
+/// `ELSEWHERE` supplies that reference, so only the binding can reject.
+#[test]
+fn rejects_an_obligation_labelled_in_bold() -> Result<()> {
+    let obligations = "## Compatibility obligations\n\n- **CO-1**: Preserve one. Tasks: 26.1.2.\n";
+    let inventory = inventory_with_rows(obligations, ELSEWHERE);
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "bare `CO-<number>:` label")?;
+    Ok(())
+}
+
 /// The declared identifier is the bullet's label, not a cross-reference.
 ///
 /// `- CO-2: Preserve CO-1 too. Tasks: 26.1.2.` binds 26.1.2 to `CO-2`. Reading

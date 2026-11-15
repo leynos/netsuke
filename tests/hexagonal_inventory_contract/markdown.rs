@@ -265,6 +265,34 @@ pub(super) fn is_table_separator(cell: &str) -> bool {
             .all(|character| matches!(character, '-' | ':' | ' '))
 }
 
+/// Collect one entry per bullet the predicate opens.
+///
+/// An indented line continues the open entry and any unindented line closes
+/// it, so the wrapped bullet and the trailing prose both land where a reader
+/// expects: continuation inside the entry, prose outside every entry. That
+/// distinction is why a schema requiring a fact per bullet cannot collect its
+/// identifiers across the section instead — one entry's fact would satisfy its
+/// neighbour's omission.
+pub(super) fn bullet_entries(text: &str, opens: impl Fn(&str) -> bool) -> Vec<String> {
+    let mut entries = Vec::new();
+    let mut open = None::<String>;
+    for line in text.lines() {
+        if opens(line) {
+            entries.extend(open.take());
+            open = Some(line.trim_start().to_owned());
+        } else if line.starts_with(' ') || line.starts_with('\t') {
+            if let Some(entry) = open.as_mut() {
+                entry.push('\n');
+                entry.push_str(line.trim());
+            }
+        } else {
+            entries.extend(open.take());
+        }
+    }
+    entries.extend(open);
+    entries
+}
+
 /// Collect finding bullets whose ownership must be recorded.
 pub(super) fn finding_entries(findings: &str) -> Vec<String> {
     let mut entries = Vec::new();
