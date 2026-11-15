@@ -6995,10 +6995,10 @@ pinned CLI against a fake verifier so the batching contract is checked over
 generated batch lengths, failure positions, and exit statuses: a successful
 batch must run every proof exactly once in order, and a failing batch must run
 exactly the prefix up to and including the failing proof and report that
-proof's status. Verus is an optional maintainer tool and the repository has no
-Verus CI job, so the cases skip when the pinned install is absent;
-`make test-verus-e2e` sets `NETSUKE_VERUS_E2E_STRICT=1` to turn that skip into
-a failure for a maintainer who means to run them.
+proof's status. CI runs the proof through `make verus` (`proofs.yml`), but
+these cases are an optional maintainer lane, so they skip when the pinned
+install is absent; `make test-verus-e2e` sets `NETSUKE_VERUS_E2E_STRICT=1` to
+turn that skip into a failure for a maintainer who means to run them.
 
 `tests/prover_tools_kani_check_tests.rs` holds the boundary around
 `make kani-check`. It requires that the query reads the pin, asks the installed

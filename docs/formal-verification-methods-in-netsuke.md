@@ -175,8 +175,8 @@ Verus is optional in phase 1 and remains proof-kernel-only. A proof kernel is a
 small proof-specific model for one mathematical contract; it is not a
 production subsystem, a replacement implementation, or a normal developer
 workflow gate. The repository provides `make install-verus` and `make verus` as
-optional maintainer tools, but has no Verus installer script or CI job, and
-keeps Verus files outside ordinary Cargo.
+maintainer tools, has no Verus installer script, runs the proof in CI through
+`make verus` (`proofs.yml`), and keeps Verus files outside ordinary Cargo.
 
 Verus is not the correct first tool for the manifest or command-interpolation
 layers. Two kernels are accepted, and both are narrow normalization or

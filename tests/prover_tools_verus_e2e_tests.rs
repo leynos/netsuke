@@ -8,8 +8,8 @@
 //! swap in a fake verifier, which is the only way to observe the batching loop
 //! without running Verus once per generated case.
 //!
-//! Verus is an optional maintainer tool and the repository deliberately has no
-//! Verus CI job, so a host without the pinned install skips these cases. The
+//! CI runs the proof itself through `make verus` (`proofs.yml`), but these test
+//! cases are an optional maintainer lane, so a host without the pinned install skips them. The
 //! `test-verus-e2e` target sets `NETSUKE_VERUS_E2E_STRICT=1`, which turns that
 //! skip into a failure for a maintainer who means to run them.
 

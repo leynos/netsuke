@@ -871,8 +871,8 @@ test-kani-check-isolation: ## Verify the kani-check boundary inside a read-only 
 	NETSUKE_KANI_CHECK_SANDBOX_STRICT=$(KANI_CHECK_ISOLATION_STRICT) \
 		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test prover_tools_kani_check_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
-# The real-verifier end-to-end lane. Verus is an optional maintainer tool and
-# the repository deliberately has no Verus CI job, so the cases skip on a host
+# The real-verifier end-to-end lane. `proofs.yml` runs `make verus` in CI, but
+# these Cargo test cases are an optional maintainer lane, so they skip on a host
 # without the pinned install. This target is for a maintainer who has run
 # `make install-verus` and wants the skip to be a failure instead.
 VERUS_E2E_STRICT ?= 1
