@@ -407,6 +407,12 @@ extension is reviewed as the accepted decision requires.
 enforcement expression in every modelled scenario rather than matching its
 text, so either hard-coded mode is reported for the run that exposes it.
 `tests/workflow_contracts/release_publication_gate_mutations.py` states
-fourteen regressions — a removed dependency, a removed result or output check,
-either hard-coded mode, an `always()` publication bypass, and the gate and
-rehearsal adopting each other — each with the diagnostics that must notice it.
+seventeen regressions — a removed dependency, a removed result or output check,
+either hard-coded mode, an `always()` publication bypass, an appended
+always-true disjunct that keeps every clause as a conjunct, a publisher
+declared with the `write-all` shorthand, a publisher inheriting write from the
+workflow, and the gate and rehearsal adopting each other — each with the
+diagnostics that must notice it. Effective scopes and the conjunction
+requirement are read by the same module, so a job's permissions and its guard
+are judged from what GitHub would actually honour rather than from the spelling
+the workflow happened to use.

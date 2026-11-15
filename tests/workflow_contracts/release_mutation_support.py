@@ -39,8 +39,40 @@ class MutationError(AssertionError):
 
 
 def replace_once(value: str, pattern: str, replacement: str) -> str:
-    """Replace one required expression shape, refusing stale mutation rules."""
-    mutated, count = re.subn(pattern, replacement, value, count=1)
+    """Replace the single match of a mutation pattern, refusing any other count.
+
+    The pattern must match exactly once. A pattern that matches twice is as
+    stale as one that matches never: a one-match substitution would edit the
+    first occurrence, leave the second as written, and report a mutation that
+    never reached the shape its rule names. Asking the engine for at most two
+    matches is what tells "unique" apart from "at least one".
+
+    Parameters
+    ----------
+    value : str
+        The text a mutation rewrites.
+    pattern : str
+        The regular expression that must match exactly once.
+    replacement : str
+        The text substituted for that match.
+
+    Returns
+    -------
+    str
+        The text with its single match replaced.
+
+    Raises
+    ------
+    MutationError
+        The pattern matched no occurrence or more than one, so the rule the
+        mutation states no longer describes this text.
+
+    Examples
+    --------
+    >>> replace_once("a && b", "b", "c")
+    'a && c'
+    """
+    mutated, count = re.subn(pattern, replacement, value, count=2)
     if count != 1:
         raise MutationError(MutationIssue.PATTERN_MISMATCH, (pattern, count))
     return mutated

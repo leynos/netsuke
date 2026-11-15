@@ -2,6 +2,7 @@
 
 import pytest
 from action_run_sources import action_sources
+from release_mutation_support import replace_once
 from release_publish_crates_io_contracts import ACTION_PATH
 from release_publish_path_contract import (
     CALLER_WORKFLOW_PATH,
@@ -28,6 +29,30 @@ def test_mutation_error_preserves_standard_exception_arguments() -> None:
 
     assert error.args == (MutationIssue.PATTERN_MISMATCH, detail), (
         "AssertionError args should retain mutation context"
+    )
+
+
+def test_replace_once_rewrites_a_unique_match() -> None:
+    """Apply a pattern that occurs once and leave the rest as written."""
+    assert replace_once("a && b && c", "b && ", "") == "a && c", (
+        "a pattern with one match should be the one rewritten"
+    )
+
+
+def test_replace_once_refuses_a_pattern_that_matches_twice() -> None:
+    """Refuse an ambiguous rule: editing the first of two matches is not the rule.
+
+    A one-match substitution reports success for a pattern that occurs twice,
+    so the mutation silently rewrites the wrong occurrence of the shape it
+    names. Both occurrences here are identical, which is exactly the case that
+    hides which one the rule meant.
+    """
+    clause = "needs.gate.result == 'success'"
+    with pytest.raises(MutationError) as refusal:
+        replace_once(f"{clause} && {clause}", clause, "rewritten")
+
+    assert refusal.value.detail == (clause, 2), (
+        "the refusal should name the pattern and its match count"
     )
 
 

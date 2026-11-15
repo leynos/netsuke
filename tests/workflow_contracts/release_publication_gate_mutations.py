@@ -2,10 +2,12 @@
 
 Each mutation states a plausible way to reopen the bypass the gate closes: drop
 a dependency, drop one result or output check, hard-code the enforcement mode
-in either direction, smuggle an ``always()`` onto the publication guard, let the
-rehearsal adopt the gate, or let publication adopt the rehearsal. The expected
-diagnostics name the scenario or the structural rule that must notice, so the
-mutation test shows each assertion fires rather than merely passing.
+in either direction, smuggle an ``always()`` onto the publication guard, disjoin
+the guard from an always-true clause, add a publisher whose scopes arrive as a
+``write-all`` shorthand or through the workflow level, let the rehearsal adopt
+the gate, or let publication adopt the rehearsal. The expected diagnostics name
+the scenario or the structural rule that must notice, so the mutation test
+shows each assertion fires rather than merely passing.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -27,6 +29,9 @@ if typ.TYPE_CHECKING:
 PUBLICATION_JOB = "publish-release"
 REGISTRY_JOB = "publish-crates-io"
 STAGING_JOB = "release"
+#: Names the two added-job mutations give the publisher they introduce.
+WRITE_ALL_JOB = "publish-packages"
+INHERITING_JOB = "publish-notes"
 
 GATE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "remove-publication-package-need": (
@@ -72,6 +77,18 @@ GATE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     "staging-adopts-admission": (("static", "release.needs"),),
     "publication-adopts-staging": (("static", "publish-release.needs"),),
+    "disjunctive-publication-guard": (
+        ("cancelled-publishing", "publish-job"),
+        ("static", "write-authority.publish-release.guard"),
+    ),
+    "write-all-publisher": (
+        ("static", "write-authority.publish-packages.needs"),
+        ("static", "write-authority.publish-packages.guard"),
+    ),
+    "inherited-write-publisher": (
+        ("static", "write-authority.publish-notes.needs"),
+        ("static", "write-authority.publish-notes.guard"),
+    ),
 }
 
 
@@ -135,6 +152,37 @@ def _publication_adopts_staging(release: dict[str, object]) -> None:
     _needs_of(release, PUBLICATION_JOB).append(STAGING_JOB)
 
 
+def _disjunctive_publication_guard(release: dict[str, object]) -> None:
+    """Authorize publication alone, keeping every gate clause as a conjunct.
+
+    ``&&`` binds tighter than ``||``, so appending an always-true disjunct
+    leaves the guard always true while every required clause still appears at
+    the top level. A clause-matching reader that never looks for a disjunction
+    reads this as fully gated.
+    """
+    job = workflow_job(release, PUBLICATION_JOB)
+    job["if"] = f"{job.get('if', '')} || true"
+
+
+def _add_job(release: dict[str, object], name: str, job: dict[str, object]) -> None:
+    """Add one job, refusing a rule whose name is already taken."""
+    jobs = require_mapping(release.get("jobs"), "release.jobs")
+    if name in jobs:
+        raise MutationError(MutationIssue.PATTERN_MISMATCH, name)
+    jobs[name] = job
+
+
+def _write_all_publisher(release: dict[str, object]) -> None:
+    """Add a publisher whose scope shorthand a mapping-only reader would miss."""
+    _add_job(release, WRITE_ALL_JOB, {"permissions": "write-all"})
+
+
+def _inherited_write_publisher(release: dict[str, object]) -> None:
+    """Grant write at the top level and add a job that inherits it."""
+    release["permissions"] = {"contents": "write"}
+    _add_job(release, INHERITING_JOB, {"runs-on": "ubuntu-latest"})
+
+
 #: Each labelled clause removal, with the job whose guard loses it.
 CLAUSE_REMOVALS: dict[str, tuple[str, str]] = {
     "remove-publication-package-result-check": (
@@ -185,6 +233,9 @@ GATE_MUTATIONS: dict[str, cabc.Callable[[dict[str, object]], None]] = {
     "always-publication-guard": _always_publication_guard,
     "staging-adopts-admission": _staging_adopts_admission,
     "publication-adopts-staging": _publication_adopts_staging,
+    "disjunctive-publication-guard": _disjunctive_publication_guard,
+    "write-all-publisher": _write_all_publisher,
+    "inherited-write-publisher": _inherited_write_publisher,
     **{
         label: (lambda release, name=label: _drop_clause_for(name, release))
         for label in CLAUSE_REMOVALS

@@ -6,7 +6,12 @@ new publisher be added beside the gate rather than behind it, so this module
 derives the set from the workflow itself and holds every member to the same
 rule: depend on packaging and on the gate, require both results to be
 successful, require enforcement, a successful outcome and the run's own
-candidate, and leave no ``always()`` to override any of it.
+candidate, and leave no ``always()`` or disjunction to override any of it.
+
+A job's scopes come from its own declaration, or from the workflow's when the
+job declares none, and either may be the ``write-all`` shorthand. A job whose
+scopes cannot be derived at all is reported rather than assumed read-only,
+because the repository default can grant write.
 
 It also holds the two shapes the gate cannot protect on its own. The jobs that
 must stay reachable whatever admission decides -- the gate, packaging and the
@@ -18,7 +23,7 @@ Run via ``make test-workflow-contracts``.
 
 import re
 
-from actions_expressions import top_level_conjuncts
+from actions_expressions import contains_unquoted_or, top_level_conjuncts
 from release_admission_gate_contract import ADMISSION_JOB
 from release_publish_needs import job_names
 from workflow_loading import require_mapping, workflow_job
@@ -27,6 +32,8 @@ from workflow_loading import require_mapping, workflow_job
 #: `packages` covers the package registry, and `id-token` is the OIDC exchange
 #: the crates.io publisher trades for a registry token.
 WRITE_SCOPES = ("contents", "id-token", "packages")
+#: The two shorthands a `permissions` declaration may use instead of a mapping.
+_SHORTHANDS: dict[str, str] = {"read-all": "read", "write-all": "write"}
 PACKAGE_JOB = "package-crate"
 #: The jobs that must remain read-only. Each either runs before admission has
 #: decided, or keeps a failed package or a refused admission from hiding the
@@ -34,8 +41,10 @@ PACKAGE_JOB = "package-crate"
 READ_ONLY_JOBS = (ADMISSION_JOB, PACKAGE_JOB, "release")
 REQUIRED_DEPENDENCIES = (PACKAGE_JOB, ADMISSION_JOB)
 #: Every top-level clause a write job's guard must carry. A clause inside a
-#: disjunction or a negation is not a top-level conjunct, so `|| true` and
-#: `a && !(b)` are both reported rather than read as present.
+#: negation is not a top-level conjunct, so `a && !(b)` is reported rather than
+#: read as present. A disjunction anywhere in the guard is refused outright:
+#: `&&` binds tighter than `||`, so `a && b && false || true` keeps every
+#: clause as a conjunct and is still always true.
 REQUIRED_GUARD_CLAUSES = (
     *(f"needs.{name}.result == 'success'" for name in REQUIRED_DEPENDENCIES),
     f"needs.{ADMISSION_JOB}.outputs.enforcement == 'true'",
@@ -58,17 +67,54 @@ def write_authority_jobs(
     -------
     dict[str, dict[str, object]]
         One entry per job granting ``contents``, ``packages`` or ``id-token``
-        at write.
+        at write, however the declaration spelled it.
     """
     jobs = require_mapping(release.get("jobs"), "release.jobs")
     found: dict[str, dict[str, object]] = {}
     for name, job in jobs.items():
         if not isinstance(job, dict):
             continue
-        permissions = job.get("permissions")
-        if isinstance(permissions, dict) and _holds_write(permissions):
+        permissions = effective_permissions(release, job)
+        if permissions is not None and _holds_write(permissions):
             found[str(name)] = job
     return found
+
+
+def effective_permissions(
+    release: dict[str, object], job: dict[str, object]
+) -> dict[str, object] | None:
+    """Return the scopes a job really holds, or ``None`` when undeclared.
+
+    GitHub resolves a job's permissions in two steps. A job that declares its
+    own wins outright; one that does not inherits the workflow-level
+    declaration. Either may be the ``write-all`` shorthand rather than a
+    mapping, and a shorthand grants every scope at its level. Returning
+    ``None`` for a job whose scopes cannot be derived keeps an omitted
+    workflow-level declaration from reading as "no write": the repository's
+    own default could grant it.
+
+    Parameters
+    ----------
+    release
+        Parsed release workflow.
+    job
+        One job from that workflow.
+
+    Returns
+    -------
+    dict[str, object] | None
+        The granted scopes, or ``None`` when neither the job nor the workflow
+        declares any.
+    """
+    declared = (
+        job["permissions"] if "permissions" in job else release.get("permissions")
+    )
+    if isinstance(declared, dict):
+        return declared
+    level = _SHORTHANDS.get(declared) if isinstance(declared, str) else None
+    if level is None:
+        return None
+    return dict.fromkeys(WRITE_SCOPES, level)
 
 
 def _holds_write(permissions: dict[str, object]) -> bool:
@@ -108,9 +154,12 @@ def check_read_only_jobs(release: dict[str, object], violations: list[str]) -> N
         Collector for every job's findings.
     """
     for name in READ_ONLY_JOBS:
-        permissions = workflow_job(release, name).get("permissions", {})
-        if not isinstance(permissions, dict):
-            violations.append(f"{name}.permissions: must be a mapping")
+        permissions = effective_permissions(release, workflow_job(release, name))
+        if permissions is None:
+            violations.append(
+                f"{name}.permissions: cannot derive the job's scopes; declare them "
+                "on the job or the workflow"
+            )
             continue
         granted = sorted(
             scope for scope in WRITE_SCOPES if permissions.get(scope) == "write"
@@ -123,6 +172,7 @@ def check_read_only_jobs(release: dict[str, object], violations: list[str]) -> N
 
 def _check_write_authority(release: dict[str, object], violations: list[str]) -> None:
     """Hold every write job to packaging, the gate and the absence of bypasses."""
+    _check_permissions_declared(release, violations)
     jobs = write_authority_jobs(release)
     if not jobs:
         violations.append("write-authority: no release job holds a write scope")
@@ -130,6 +180,19 @@ def _check_write_authority(release: dict[str, object], violations: list[str]) ->
     for name, job in sorted(jobs.items()):
         _check_write_needs(name, job, violations)
         _check_write_guard(name, job, violations)
+
+
+def _check_permissions_declared(
+    release: dict[str, object], violations: list[str]
+) -> None:
+    """Require every job's scopes to be derivable from its own or the top level."""
+    jobs = require_mapping(release.get("jobs"), "release.jobs")
+    violations.extend(
+        f"write-authority.{name}.permissions: cannot derive the job's scopes; "
+        "declare them on the job or the workflow"
+        for name, job in jobs.items()
+        if isinstance(job, dict) and effective_permissions(release, job) is None
+    )
 
 
 def _check_write_needs(
@@ -161,6 +224,11 @@ def _check_write_guard(
     if _ALWAYS.search(guard):
         violations.append(
             f"write-authority.{name}.guard: must not call always() over the gate"
+        )
+    if contains_unquoted_or(guard):
+        violations.append(
+            f"write-authority.{name}.guard: must be a conjunction, "
+            "with no disjunction to authorize the job alone"
         )
 
 
@@ -194,5 +262,6 @@ __all__ = (
     "check_publication_gate",
     "check_read_only_jobs",
     "check_rehearsal_caller",
+    "effective_permissions",
     "write_authority_jobs",
 )

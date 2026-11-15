@@ -3025,10 +3025,16 @@ cannot satisfy a publishing job even when it reports success, and neither can a
 gate that admitted a different commit. The rule is stated once, in
 `tests/workflow_contracts/release_write_authority_contract.py`, which derives
 the set from the workflow's own permission scopes: a new publisher added beside
-the gate fails the contract until it sits behind it, and a clause hidden inside
-a disjunction or a negation does not count as present. The same module requires
-`release-admission-canaries`, `package-crate`, and `release` to hold no write
-scope, so the jobs that must stay reachable cannot mutate anything.
+the gate fails the contract until it sits behind it. Scopes are read from the
+job's own `permissions` declaration or, when it declares none, from the
+workflow's, and either may be the `write-all` shorthand; a job whose scopes
+cannot be derived at all is reported rather than assumed read-only, because the
+repository default can grant write. A clause hidden inside a negation does not
+count as a conjunct, and a guard holding any `||` is refused outright: `&&`
+binds tighter than `||`, so an appended always-true disjunct leaves every
+required clause visible while making the guard always true. The same module
+requires `release-admission-canaries`, `package-crate`, and `release` to hold
+no write scope, so the jobs that must stay reachable cannot mutate anything.
 
 Evidence is a candidate-bound JSON manifest, not a claim about one. Schema
 version 1 names the repository, the 40-character lowercase commit, the release
