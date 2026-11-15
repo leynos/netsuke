@@ -85,6 +85,8 @@ SECTION_MODULES = (
     "scripts/tests/test_release_consumer_smoke.py",
     "scripts/tests/test_release_consumer_archive_policy.py",
     "scripts/tests/test_release_binstall_archive.py",
+    "scripts/tests/test_release_binstall_extract.py",
+    "scripts/tests/test_release_binstall_probe.py",
     "scripts/tests/test_consumer_smoke_cli.py",
 )
 
