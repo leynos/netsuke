@@ -378,3 +378,74 @@ live release, tag, or credential. This addendum supersedes the sentences in the
 2026-11-09 *the GitHub asset publisher* addendum's **Status** and in the
 2026-11-12 addendum above that name the finalizer as open; both record the
 state before this stage existed and are left as they were written.
+
+## Addendum (2026-11-15): the public-consumer smoke
+
+**Decision.** `release.yml` declares `consumer-smoke`, the last job of the
+publication sequence, and `./.github/actions/consumer-smoke` performs it. The
+job needs `metadata`, `package-crate`, and `finalize-github-release`; holds
+`contents: read` and nothing else; declares no environment, no `id-token`, and
+no token or secret of any kind; and checks out the candidate commit with
+`persist-credentials: false`. It runs only for a publishing run, after
+finalization has succeeded, because an asset attached to a draft release is not
+downloadable without a credential and this job deliberately holds none.
+
+- The smoke downloads the crate from `static.crates.io` and the cargo-binstall
+  archive with its `sha256` sidecar from the release's public
+  `releases/download/<tag>/…` URL. It never downloads a `${repo_name}-*`
+  platform bundle, and it never treats a workflow artefact as payload: the two
+  artefacts it reads are the identity record and the pre-upload digest record.
+  A check against the run's own retained bytes would prove only that the run
+  agrees with itself.
+- Each download is judged against the digest recorded before upload, and the
+  archive against its sidecar as well, so an archive substituted together with
+  a matching sidecar is still refused. The action's `curl` calls carry
+  `--proto '=https'` and `--proto-redir '=https'` so a redirect cannot
+  downgrade the transfer, bound the response with `--max-time` and
+  `--max-filesize`, and omit `--fail` so a `404` reaches the verifier as the
+  status that names a missing asset rather than as a retried transport failure.
+  No request sends an `Authorization` header.
+- The archive's whole member layout is judged before anything is extracted: a
+  name that leaves the extraction directory under either POSIX or Windows path
+  rules, a symlink, a device, a FIFO, or a second candidate binary is refused,
+  and the scan is repeated during extraction rather than trusted from the first
+  pass.
+- The one extracted executable is run under a fixed environment with its own
+  time bound, and must report the candidate version exactly. The version comes
+  from the validated candidate identity, not from the archive's name.
+- The checkout is pinned to the candidate commit and told not to persist
+  credentials. `actions/checkout` writes the workflow token into the local git
+  config by default, so leaving that on would give a job that must hold no
+  credential the one credential it could otherwise acquire, and checking out
+  the tag would exercise whatever the tag resolves to rather than the tree the
+  publisher built.
+- Every phase is reported, `skipped` included. The job's summary reads each
+  action output unconditionally, so an output a refused smoke never wrote would
+  reach it as an empty string and be summarised as `unknown`; reporting a phase
+  that never ran as `skipped` keeps a planning failure from reading as five
+  indeterminate outcomes.
+- What the release ships is `netsuke`, from `netsuke-build`; this job is the
+  place where the package-versus-target naming divergence is observed from
+  outside the build, because it runs the binary a consumer would install.
+
+**What this decision does not claim.** The smoke proves that the published
+bytes are the recorded bytes and that the shipped executable runs. It does not
+prove that a `cargo install`, a `cargo binstall`, or an operating-system
+package resolves to those bytes, and it exercises one target,
+`x86_64-unknown-linux-gnu` — a second target needs its own runner rather than
+another matrix row.
+
+**Status.** Implemented, with the job and action contract split between
+`tests/workflow_contracts/release_publish_path_consumer_shape.py`, which holds
+the dependency, permission, checkout, environment, artefact, action-input, and
+compilation checks, and
+`tests/workflow_contracts/release_publish_path_consumer_smoke.py`, which
+composes them with the guard's reachability oracle; thirteen labelled
+regressions in `release_publish_path_consumer_mutations.py`; telemetry wiring in
+`release_publish_path_consumer_smoke_test.py`; and record-driven suites beside
+the policy, archive, probe, and command-line modules under `scripts/tests/`.
+The two contract modules are split because together they exceeded the 400-line
+cap. Not yet exercised by a live release or tag. This addendum supersedes the
+sentence in the 2026-11-12 *the downloaded inventory verifier implemented*
+addendum's **Status** that names the consumer smoke as open; that addendum
+records the state before this job existed and is left as it was written.

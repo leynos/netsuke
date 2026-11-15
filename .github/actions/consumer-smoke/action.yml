@@ -1,0 +1,407 @@
+---
+name: Consumer smoke verification
+description: >-
+  Exercise a published release the way a consumer does: download the crate from
+  `static.crates.io` and the cargo-binstall archive and its checksum sidecar
+  from their public GitHub release URLs, verify each against the digests this
+  run recorded before upload, extract the shipped binary into a fresh
+  directory, and require it to report the candidate version. The action needs
+  no registry credential, no release-write authority, and no Rust toolchain: it
+  reads published bytes and runs one already-built executable.
+
+# No token input, deliberately. Every byte this action reads is public, so a
+# credential here could only widen the blast radius of a compromised smoke.
+inputs:
+  identity-path:
+    description: >-
+      The package record `package-crate` retained. It names the crate archive,
+      its digest, and the candidate whose version the executable must report.
+      It must be a regular file; the record is evidence, not the payload.
+    required: true
+  asset-digest-record:
+    description: >-
+      The trusted digest record the uploader wrote from the built bytes before
+      upload, keyed by published asset name. It is the only input that can
+      detect a substituted archive which agrees with its own sidecar.
+    required: true
+  repository:
+    description: >-
+      The `OWNER/REPOSITORY` whose release is downloaded. Passed explicitly
+      because a fork's release is not the upstream's.
+    required: true
+  commit:
+    description: >-
+      The full commit this run checked out. The package record must name it, so
+      a smoke cannot verify another candidate's bytes under this release's
+      names.
+    required: true
+  target:
+    description: >-
+      The Rust target triple whose cargo-binstall archive is exercised. The
+      release declaration must list it, so a target the release never published
+      is refused before any download is attempted.
+    required: true
+  work-dir:
+    description: >-
+      The directory holding this run's plan, downloads, extracted binary, and
+      verdict records. It must be absent or empty: a leftover file from an
+      earlier attempt must not be counted as part of this smoke.
+    required: true
+
+outputs:
+  # The report step owns this rather than the verification step, because a
+  # refused smoke has still written a verdict and that verdict is what an
+  # operator reads afterwards.
+  verdict-path:
+    description: >-
+      The bounded verdict record, written whenever verification began. A
+      refused smoke writes one too; only a run that could not derive its plan
+      leaves none.
+    value: ${{ steps.report.outputs.verdict-path }}
+  # One outcome and one timing pair per phase. They are read from the phase log
+  # the verifier rewrites as it walks the smoke, so the labels here and the
+  # labels in the catalogue cannot drift apart: the log is the single source.
+  crate-download-outcome:
+    description: Outcome of the public crate download's arrival check.
+    value: ${{ steps.report.outputs.crate-download-outcome }}
+  crate-download-started-ns:
+    description: Crate download phase start time in nanoseconds.
+    value: ${{ steps.report.outputs.crate-download-started-ns }}
+  crate-download-ended-ns:
+    description: Crate download phase end time in nanoseconds.
+    value: ${{ steps.report.outputs.crate-download-ended-ns }}
+  crate-verification-outcome:
+    description: Outcome of the crate's digest check.
+    value: ${{ steps.report.outputs.crate-verification-outcome }}
+  crate-verification-started-ns:
+    description: Crate verification phase start time in nanoseconds.
+    value: ${{ steps.report.outputs.crate-verification-started-ns }}
+  crate-verification-ended-ns:
+    description: Crate verification phase end time in nanoseconds.
+    value: ${{ steps.report.outputs.crate-verification-ended-ns }}
+  archive-download-outcome:
+    description: Outcome of the archive and sidecar download arrival check.
+    value: ${{ steps.report.outputs.archive-download-outcome }}
+  archive-download-started-ns:
+    description: Archive download phase start time in nanoseconds.
+    value: ${{ steps.report.outputs.archive-download-started-ns }}
+  archive-download-ended-ns:
+    description: Archive download phase end time in nanoseconds.
+    value: ${{ steps.report.outputs.archive-download-ended-ns }}
+  archive-verification-outcome:
+    description: Outcome of the archive's digest, sidecar, and member checks.
+    value: ${{ steps.report.outputs.archive-verification-outcome }}
+  archive-verification-started-ns:
+    description: Archive verification phase start time in nanoseconds.
+    value: ${{ steps.report.outputs.archive-verification-started-ns }}
+  archive-verification-ended-ns:
+    description: Archive verification phase end time in nanoseconds.
+    value: ${{ steps.report.outputs.archive-verification-ended-ns }}
+  executable-probe-outcome:
+    description: Outcome of extracting and running the shipped executable.
+    value: ${{ steps.report.outputs.executable-probe-outcome }}
+  executable-probe-started-ns:
+    description: Executable probe phase start time in nanoseconds.
+    value: ${{ steps.report.outputs.executable-probe-started-ns }}
+  executable-probe-ended-ns:
+    description: Executable probe phase end time in nanoseconds.
+    value: ${{ steps.report.outputs.executable-probe-ended-ns }}
+
+runs:
+  using: composite
+  # A composite action's steps cannot carry `timeout-minutes`
+  # (actions/runner#1979), so each `uv` invocation is bounded with GNU
+  # `timeout` and each transfer by curl's own `--max-time` and
+  # `--retry-max-time`. The workflow step that calls this action carries the
+  # aggregate ceiling.
+  steps:
+    - name: Validate inputs
+      id: validate
+      shell: bash
+      # No command bound: this step runs shell builtins plus `mkdir`,
+      # `mktemp`, and `realpath`, none of which can wait on the network.
+      env:
+        IDENTITY_PATH: ${{ inputs['identity-path'] }}
+        TRUSTED_RECORD_PATH: ${{ inputs['asset-digest-record'] }}
+        RELEASE_REPOSITORY: ${{ inputs.repository }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_TARGET: ${{ inputs.target }}
+        WORK_DIRECTORY: ${{ inputs['work-dir'] }}
+      run: |
+        set -euo pipefail
+        require_value() {
+          local name="$1" value="$2"
+          if [[ -z "$value" ]]; then
+            printf '%s must not be empty\n' "$name" >&2
+            exit 1
+          fi
+        }
+        require_file() {
+          local name="$1" path="$2"
+          if [[ ! -f "$path" ]]; then
+            printf '%s (%s) is not a regular file\n' "$name" "$path" >&2
+            exit 1
+          fi
+        }
+        canonical() {
+          realpath -m -- "$1"
+        }
+        overlaps() {
+          local first="${1%/}/" second="${2%/}/"
+          [[ "$1" == "$2" || "$1" == "$second"* || "$2" == "$first"* ]]
+        }
+        for name in RELEASE_REPOSITORY RELEASE_COMMIT RELEASE_TARGET \
+          WORK_DIRECTORY; do
+          require_value "$name" "${!name}"
+        done
+        # Both records are read-only evidence. A mistyped path would otherwise
+        # be reported later as an unreadable record rather than as the wiring
+        # fault it is.
+        require_file identity-path "$IDENTITY_PATH"
+        require_file asset-digest-record "$TRUSTED_RECORD_PATH"
+        # The work directory receives downloads, so it must not overlap either
+        # record: a download must never be able to overwrite the evidence it is
+        # judged against.
+        work_root="$(canonical "$WORK_DIRECTORY")"
+        for record in "$IDENTITY_PATH" "$TRUSTED_RECORD_PATH"; do
+          if overlaps "$work_root" "$(canonical "$record")"; then
+            printf 'work-dir (%s) must not overlap the record %s\n' \
+              "$work_root" "$record" >&2
+            exit 1
+          fi
+        done
+        # A re-run on the same runner must not succeed on the previous
+        # attempt's bytes, so a populated work directory is refused rather than
+        # reused.
+        if [[ -e "$WORK_DIRECTORY" ]]; then
+          if [[ ! -d "$WORK_DIRECTORY" ]]; then
+            printf 'work-dir (%s) must be a directory\n' "$WORK_DIRECTORY" >&2
+            exit 1
+          fi
+          if [[ -n "$(ls -A -- "$WORK_DIRECTORY")" ]]; then
+            printf 'work-dir (%s) must be empty\n' "$WORK_DIRECTORY" >&2
+            exit 1
+          fi
+        fi
+        mkdir -p "$WORK_DIRECTORY/downloads"
+        # `mktemp -d` rather than `mkdir`: the extractor writes the one binary
+        # it verified, so the destination must be new and empty rather than
+        # merely one this run has not used yet.
+        extract_root="$(mktemp -d "$WORK_DIRECTORY/extract.XXXXXXXX")"
+        printf 'extract-dir=%s\n' "$extract_root" >>"$GITHUB_OUTPUT"
+
+    - name: Plan the public downloads
+      id: plan
+      shell: bash
+      env:
+        IDENTITY_PATH: ${{ inputs['identity-path'] }}
+        TRUSTED_RECORD_PATH: ${{ inputs['asset-digest-record'] }}
+        RELEASE_REPOSITORY: ${{ inputs.repository }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_TARGET: ${{ inputs.target }}
+        WORK_DIRECTORY: ${{ inputs['work-dir'] }}
+      run: |
+        set -euo pipefail
+        # The planner binds the trusted evidence to the exact URLs and digests
+        # this run must exercise. It reads files only; the downloads below are
+        # the only network access in this action.
+        timeout --kill-after=30s 300s \
+          uv run --no-project --python 3.14 scripts/consumer_smoke_cli.py \
+            plan \
+            --identity "$IDENTITY_PATH" \
+            --trusted "$TRUSTED_RECORD_PATH" \
+            --repository "$RELEASE_REPOSITORY" \
+            --target "$RELEASE_TARGET" \
+            --commit "$RELEASE_COMMIT" \
+            --output "$WORK_DIRECTORY/plan.json"
+        plan_field() {
+          jq -er "$1" "$WORK_DIRECTORY/plan.json"
+        }
+        emit() {
+          local name="$1" value="$2"
+          if [[ -z "$value" || "$value" == *$'\n'* ]]; then
+            printf 'the plan does not carry one non-empty line for %s\n' \
+              "$name" >&2
+            exit 1
+          fi
+          printf '%s=%s\n' "$name" "$value" >>"$GITHUB_OUTPUT"
+        }
+        # A name becomes a file name under the downloads directory, so it must
+        # be one path segment. A `/` or a `..` here would let a plan redirect a
+        # write outside the directory this action owns.
+        require_asset_name() {
+          local label="$1" name="$2"
+          if [[ ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+            printf '%s (%s) is not a single asset file name\n' \
+              "$label" "$name" >&2
+            exit 1
+          fi
+        }
+        for asset in crate archive sidecar; do
+          url="$(plan_field ".${asset}.url")"
+          name="$(plan_field ".${asset}.name")"
+          # Every download is public and token-free, and curl is also told to
+          # refuse a non-HTTPS redirect; a plain-HTTP plan is refused here so
+          # the two never disagree about what may be fetched.
+          if [[ "$url" != https://* ]]; then
+            printf '%s (%s) must be an https URL\n' "$asset.url" "$url" >&2
+            exit 1
+          fi
+          require_asset_name "$asset.name" "$name"
+          emit "${asset}-url" "$url"
+          emit "${asset}-name" "$name"
+        done
+        emit user-agent "$(plan_field '.user_agent')"
+
+    - name: Download the public assets
+      id: download
+      # The downloads are attempted only once the plan names them. A refused
+      # download does not stop this step: it is recorded as a status and the
+      # verifier reports which phase it belongs to, which is the diagnosis an
+      # operator needs.
+      if: steps.plan.outcome == 'success'
+      shell: bash
+      env:
+        WORK_DIRECTORY: ${{ inputs['work-dir'] }}
+        USER_AGENT: ${{ steps.plan.outputs.user-agent }}
+        CRATE_NAME: ${{ steps.plan.outputs.crate-name }}
+        CRATE_URL: ${{ steps.plan.outputs.crate-url }}
+        ARCHIVE_NAME: ${{ steps.plan.outputs.archive-name }}
+        ARCHIVE_URL: ${{ steps.plan.outputs.archive-url }}
+        SIDECAR_NAME: ${{ steps.plan.outputs.sidecar-name }}
+        SIDECAR_URL: ${{ steps.plan.outputs.sidecar-url }}
+      run: |
+        set -euo pipefail
+        downloads="$WORK_DIRECTORY/downloads"
+        fetch() {
+          local name="$1" url="$2"
+          local body="$downloads/$name" status="$downloads/$name.status"
+          local transport=0
+          # No `--fail` and no credential: an HTTP error status must reach the
+          # verifier as a status, and `--retry` then retries only the failures
+          # curl classifies as transient (timeouts, connection resets, and the
+          # 408/429/5xx responses) rather than a 404 that names a missing
+          # asset. `--proto` and `--proto-redir` keep every hop HTTPS even
+          # though the release host redirects to a CDN, and `--max-filesize`
+          # bounds what a hostile or broken response can write to disk.
+          curl \
+            --disable \
+            --proto '=https' \
+            --proto-redir '=https' \
+            --location \
+            --max-redirs 5 \
+            --connect-timeout 15 \
+            --max-time 180 \
+            --max-filesize 268435456 \
+            --retry 3 \
+            --retry-delay 5 \
+            --retry-max-time 60 \
+            --silent \
+            --show-error \
+            --user-agent "$USER_AGENT" \
+            --output "$body" \
+            --write-out '%{http_code}\n' \
+            --url "$url" >"$status" || transport=$?
+          if [[ "$transport" -ne 0 ]]; then
+            # A transport failure is recorded as no status at all, which is
+            # exactly how the verifier reads a download the host never
+            # delivered, and the partial body is removed so nothing on disk can
+            # be mistaken for what arrived.
+            printf '000\n' >"$status"
+            rm -f "$body"
+          fi
+          printf '%s: curl exit %s, http %s\n' \
+            "$name" "$transport" "$(tr -d '[:space:]' <"$status")" >&2
+        }
+        fetch "$CRATE_NAME" "$CRATE_URL"
+        fetch "$ARCHIVE_NAME" "$ARCHIVE_URL"
+        fetch "$SIDECAR_NAME" "$SIDECAR_URL"
+
+    - name: Verify the downloads and the shipped executable
+      id: verify
+      if: steps.plan.outcome == 'success'
+      shell: bash
+      env:
+        WORK_DIRECTORY: ${{ inputs['work-dir'] }}
+        EXTRACT_DIRECTORY: ${{ steps.validate.outputs.extract-dir }}
+        IDENTITY_PATH: ${{ inputs['identity-path'] }}
+        TRUSTED_RECORD_PATH: ${{ inputs['asset-digest-record'] }}
+        RELEASE_REPOSITORY: ${{ inputs.repository }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_TARGET: ${{ inputs.target }}
+        CRATE_NAME: ${{ steps.plan.outputs.crate-name }}
+        ARCHIVE_NAME: ${{ steps.plan.outputs.archive-name }}
+        SIDECAR_NAME: ${{ steps.plan.outputs.sidecar-name }}
+      run: |
+        set -euo pipefail
+        downloads="$WORK_DIRECTORY/downloads"
+        # The verifier re-derives the plan from the same evidence and refuses a
+        # saved plan that disagrees, so the bytes checked here are the bytes
+        # this run's evidence names rather than whatever the downloads happened
+        # to produce. It exits 1 through 4 to name the phase that refused:
+        # evidence, download, archive, or executable.
+        timeout --kill-after=30s 600s \
+          uv run --no-project --python 3.14 scripts/consumer_smoke_cli.py \
+            verify \
+            --identity "$IDENTITY_PATH" \
+            --trusted "$TRUSTED_RECORD_PATH" \
+            --repository "$RELEASE_REPOSITORY" \
+            --target "$RELEASE_TARGET" \
+            --commit "$RELEASE_COMMIT" \
+            --plan "$WORK_DIRECTORY/plan.json" \
+            --crate "$downloads/$CRATE_NAME" \
+            --crate-status "$downloads/$CRATE_NAME.status" \
+            --archive "$downloads/$ARCHIVE_NAME" \
+            --archive-status "$downloads/$ARCHIVE_NAME.status" \
+            --sidecar "$downloads/$SIDECAR_NAME" \
+            --sidecar-status "$downloads/$SIDECAR_NAME.status" \
+            --extract-dir "$EXTRACT_DIRECTORY" \
+            --verdict "$WORK_DIRECTORY/verdict.json" \
+            --phase-log "$WORK_DIRECTORY/phase-log.json"
+
+    - name: Report the smoke phases
+      id: report
+      # The log is read after a refusal as well as after a success: which phase
+      # failed is the fact the job's telemetry exists to record. It is absent
+      # only when planning failed, and then every phase is reported as skipped
+      # rather than left for the summary to guess at.
+      if: always()
+      shell: bash
+      env:
+        WORK_DIRECTORY: ${{ inputs['work-dir'] }}
+      run: |
+        set -euo pipefail
+        phase_log="$WORK_DIRECTORY/phase-log.json"
+        if [[ ! -f "$phase_log" ]]; then
+          printf 'no phase log: the smoke never began verifying\n' >&2
+        fi
+        # Read one field of one phase, or nothing when neither the log nor the
+        # label exists. The caller supplies the default, because the two
+        # defaults differ: an outcome that was never recorded is `skipped`,
+        # while a timing that was never recorded stays empty.
+        log_field() {
+          local phase="$1" query="$2"
+          if [[ ! -f "$phase_log" ]]; then
+            return 0
+          fi
+          jq -r --arg phase "$phase" "$query" "$phase_log"
+        }
+        # A fixed label list, so nothing a record holds can add a phase the
+        # catalogue does not know. Every label is emitted, `skipped` included:
+        # the job's summary reads each output unconditionally, and an absent
+        # output arrives there as an empty string, which it reports as
+        # `unknown` rather than as the phase that never ran.
+        for phase in crate_download crate_verification archive_download \
+          archive_verification executable_probe; do
+          key="${phase//_/-}"
+          outcome="$(log_field "$phase" '.[$phase].outcome // "skipped"')"
+          started="$(log_field "$phase" '.[$phase].started_ns // ""')"
+          ended="$(log_field "$phase" '.[$phase].ended_ns // ""')"
+          printf '%s-outcome=%s\n' "$key" "$outcome" >>"$GITHUB_OUTPUT"
+          printf '%s-started-ns=%s\n' "$key" "$started" >>"$GITHUB_OUTPUT"
+          printf '%s-ended-ns=%s\n' "$key" "$ended" >>"$GITHUB_OUTPUT"
+        done
+        verdict="$WORK_DIRECTORY/verdict.json"
+        if [[ -f "$verdict" ]]; then
+          printf 'verdict-path=%s\n' "$verdict" >>"$GITHUB_OUTPUT"
+        fi

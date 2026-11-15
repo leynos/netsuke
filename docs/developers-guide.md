@@ -2843,12 +2843,13 @@ against it, and then by `finalize-github-release`, which reconciles the draft
 against the same record before un-drafting it. Only a release the workflow
 creates is a draft: `ensure_draft_release.py` returns as soon as the tag
 already has one, without checking whether it is public, so a rerun attaches
-assets to whatever release the tag already names. `consumer-smoke` remains a
-planned job-matched action, so the release path ends at a public release whose
-published bytes have not yet been exercised as a consumer would. Read the
-section above as describing the upload path; the verification and finalization
-hand-off is described under *Verifying the downloaded release inventory* and
-*Finalizing the verified release*.
+assets to whatever release the tag already names. `consumer-smoke` then
+downloads the published crate and archive from their public URLs and runs the
+shipped binary, so the path ends by exercising a public release the way a
+consumer would. Read the section above as describing the upload path; the
+verification, finalization, and smoke hand-off is described under *Verifying
+the downloaded release inventory*, *Finalizing the verified release*, and
+*Smoke-testing the published release*.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
@@ -3180,6 +3181,7 @@ the separate GitHub release writer after their prerequisites succeed.
 | `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | `should_publish == 'true'`     |
 | `verify-release-inventory`    | `metadata`, `publish-crates-io`, `publish-release`          | `contents: write`                   | both publishers succeeded      |
 | `finalize-github-release`     | `metadata`, `package-crate`, both publishers, the verifier  | `contents: write`                   | every prerequisite succeeded   |
+| `consumer-smoke`              | `metadata`, `package-crate`, `finalize-github-release`      | `contents: read`                    | every prerequisite succeeded   |
 
 *Table 1: `release.yml` jobs, their dependencies, permissions, and mode.*
 
@@ -3196,7 +3198,10 @@ with write access, and it reads without mutating, as the verification section
 below describes. Neither publishing job receives the other's authority, and the
 finalizer takes no `id-token` and declares no `environment`, so it can neither
 exchange nor hold a registry credential. `release-admission-canaries`
-additionally takes `actions: read` to inspect prior runs.
+additionally takes `actions: read` to inspect prior runs. `consumer-smoke` runs
+after the release is public and holds `contents: read` alone: it downloads what
+a consumer downloads and runs one published executable, so it needs no write
+authority over the release it is checking.
 
 `release` and `publish-release` carry the same five-job dependency list and
 mutually exclusive guards, so a run is a rehearsal or a publication and never
@@ -3547,7 +3552,7 @@ substitution visible, and that comparison is only meaningful if the record
 comes from the build.
 
 `publish` exits with the vocabulary below. The plan step runs the planner
-instead, whose own statuses are in Table 10, and reads `0`, `1`, and `2` as
+instead, whose own statuses are in Table 11, and reads `0`, `1`, and `2` as
 normal: a conflict and a missing asset are both decisions the finalize step
 turns into a diagnosis, and only a run whose planner could not record a plan
 stops there. The status alone cannot say a plan exists, because an `argparse`
@@ -3635,6 +3640,130 @@ interrupted retries, an already-finalized release, an already-public release
 that must not be edited, an undeclared attachment seen before the edit and on
 both later passes, missing and conflicting assets, and API and output failures
 through `cmd-mox`.
+
+### Smoke-testing the published release
+
+`consumer-smoke` is the last job of a publishing run and the only one that
+touches the release the way a consumer does. It runs after
+`finalize-github-release`, because an archive attached to a draft release is
+not downloadable without a token and this job deliberately holds none. Its
+dependencies are `metadata`, `package-crate`, and `finalize-github-release`,
+and its guard names each result explicitly beside `!cancelled()` and
+`should_publish == 'true'`. Its whole grant is `contents: read`: it declares no
+environment, takes no `id-token`, receives no secret, and passes no token to
+the action it calls. The checkout is pinned to
+`needs.metadata.outputs.candidate_commit` with `persist-credentials: false`, so
+the smoke runs the candidate's own scripts and leaves no credential behind.
+
+The job downloads two artefacts by exact name — `release-crate-package` for the
+candidate's identity and the publisher's `trusted-artifact` output for the
+pre-upload digest record — and both are evidence rather than payload. Every
+byte it exercises arrives over HTTPS from a public host: the `.crate` from
+`static.crates.io`, and the cargo-binstall archive with its `.sha256` sidecar
+from the release's own download URL. That is the point of the job. A smoke that
+read the run's artefacts would prove the build directory agrees with itself;
+only a public download proves the published release is what a consumer receives.
+
+`.github/actions/consumer-smoke` holds five bounded steps, and no step in it
+holds a token:
+
+- **Validate inputs** requires both records as regular files, refuses a work
+  directory that is not absent or empty, refuses one that overlaps either
+  record, and creates the extraction directory with `mktemp -d`. A re-run on
+  the same runner therefore cannot pass on the previous attempt's bytes, and a
+  download cannot overwrite the evidence it is judged against.
+- **Plan the public downloads** runs `consumer_smoke_cli.py plan`, whose output
+  binds the trusted evidence to the exact URLs and digests this run must
+  exercise. Every URL must be `https`, and every asset name must be a single
+  path segment, because that name becomes a file name under the downloads
+  directory.
+- **Download the public assets** runs one `curl` per asset. Nothing else in the
+  action reaches the network.
+- **Verify the downloads and the shipped executable** runs
+  `consumer_smoke_cli.py verify`, which re-derives the plan from the same
+  evidence and refuses a saved plan that disagrees with it, so the bytes
+  checked are the bytes this run's evidence names rather than whatever the
+  downloads produced.
+- **Report the smoke phases** reads the phase log and emits one outcome and one
+  timing pair per phase, whether verification passed or refused, including
+  `skipped` for a phase the log never reached.
+
+`curl` is pinned rather than merely invoked. `--proto '=https'` and
+`--proto-redir '=https'` keep every hop on TLS even though the release host
+redirects to a CDN, `--max-redirs 5` bounds the chain, `--disable` ignores any
+`.curlrc` the runner might carry, the connect, transfer, and retry budgets
+bound the wait, and `--max-filesize` bounds what a broken or hostile response
+can write to disk. There is no `--fail`: an HTTP error status has to reach the
+verifier as a status, because a 404 naming a missing asset and a 503 that never
+delivered are different diagnoses. `--retry` consequently retries only the
+failures `curl` classifies as transient, never a missing asset. No request
+carries an `Authorization` header, so every transfer is the token-free download
+a consumer performs.
+
+Verification compares the crate bytes with the digest the package record
+retained, and the archive with both its own trusted digest and its published
+`.sha256` sidecar. The trusted record is the input, never the sidecar alone: a
+substituted archive uploaded together with a matching sidecar agrees with
+GitHub and disagrees with the build. The sidecar is checked as well because it
+is what a consumer's installer reads, so an archive whose sidecar describes
+different bytes is a release a `cargo-binstall` user cannot install even though
+the archive itself is sound.
+
+The archive is untrusted input, so its whole member layout is judged before the
+first byte is written. Every name must stay inside the extraction directory
+under both path flavours, no member may be a link, device, or FIFO, and exactly
+one regular, non-empty file may sit at the root as the shipped binary. Member
+counts and sizes carry fixed caps, so a hostile archive is refused from its
+metadata rather than discovered mid-write. The archive is scanned again while
+the binary is copied, so a member swapped between the scan and the write is
+refused instead of extracted.
+
+The binary is then run once with `--version` under a wall-clock limit, an
+output bound, and an environment that inherits nothing, so a downloaded file
+cannot read whatever the runner exports. Its banner must name the candidate
+version exactly; a prerelease suffix is matched in full, and a banner that
+merely contains the version is refused. `consumer_smoke_cli.py` reports the
+phase that refused:
+
+| Exit | Meaning                                                        |
+| ---- | -------------------------------------------------------------- |
+| 0    | every phase verified                                           |
+| 1    | the identity, trusted record, archive set, or plan is unusable |
+| 2    | a download is missing, empty, or not the bytes we published    |
+| 3    | the archive is corrupt, unsafe to extract, or unwritable       |
+| 4    | the executable could not report the candidate's exact version  |
+
+*Table 5: `consumer_smoke_cli.py` exit statuses.*
+
+The job records the `consumer_smoke` operation through
+`scripts/release_operation_observability.py` with the five phases
+`crate_download`, `crate_verification`, `archive_download`,
+`archive_verification`, and `executable_probe`, and uploads the record whether
+the smoke verified or refused. The verifier writes the phase log as it walks
+the smoke, and the report step turns that log into the action's outputs, so the
+job's summary and the catalogue cannot drift apart: the log is the only source
+of a phase outcome. Every phase is emitted, `skipped` included. The summary
+reads each output unconditionally, so an omitted output would arrive there as
+an empty string and be reported as `unknown`; emitting `skipped` for a phase
+the log does not name keeps a planning failure from reading as five
+indeterminate outcomes.
+
+`tests/workflow_contracts/release_publish_path_consumer_shape.py` holds the
+job's dependencies, permissions, checkout, environment, artefact selection,
+action inputs, and compilation checks, and
+`release_publish_path_consumer_smoke.py` composes them with the guard's
+reachability oracle, re-exporting the shape names its callers use; the split
+keeps each module inside the 400-line cap. The checkout check is what keeps the
+workflow token from being persisted into the job's git config, the one
+credential a read-only job could still acquire.
+`release_publish_path_consumer_mutations.py` registers one labelled regression
+for each of those properties and
+`release_publish_path_consumer_mutations_test.py` requires the contract to
+report it.
+`tests/workflow_contracts/release_publish_path_consumer_smoke_test.py` holds
+the telemetry to the catalogue. The adapter behaviour — the downloads, the
+digest checks, the archive refusals, the extraction, and the probe — is covered
+by `make test-release-publication`.
 
 ### Crate-package operation telemetry
 
@@ -3733,7 +3862,7 @@ one from the other.
 | Installed binary | `netsuke`                       | `[[bin]] name`   |
 | Packaged archive | `netsuke-build-<version>.crate` | `cargo package`  |
 
-*Table 5: The package-versus-binary identity contract.* (ADR-0007 records why
+*Table 6: The package-versus-binary identity contract.* (ADR-0007 records why
 the crate cannot be called `netsuke`.)
 
 The trusted-publication plan targets a flat set of twenty names: the six
@@ -3751,7 +3880,7 @@ Linux, two `.pkg` for macOS, two `.msi` for Windows.
 | Hoist adapter's `expected_archive_names`        | six archives and their six sidecars |
 | `PLATFORM_FORMATS` held against the staged tree | eight operating-system packages     |
 
-*Table 6: The two sources of the planned twenty-name declaration.*
+*Table 7: The two sources of the planned twenty-name declaration.*
 
 Holding the staged tree to a count is what makes a failed package build a
 refusal rather than a smaller declaration. The
@@ -3792,7 +3921,7 @@ state determines whether the workflow exchanges credentials or stops:
 | `yanked`        | Fail without mutation                    | No                  | None                      |
 | `indeterminate` | Fail closed without mutation             | No                  | None                      |
 
-*Table 7: crates.io version-state decisions.*
+*Table 8: crates.io version-state decisions.*
 
 The `crates_io_registry_http.py` adapter permits HTTPS requests only to
 `crates.io` and `static.crates.io`. urllib applies the same host and scheme
@@ -3872,7 +4001,7 @@ check run for both `publish` and `skip` decisions.
 | Upload failure or ambiguous response              | 2         | Stop; do not retry in the same job     |
 | Downloaded bytes match / fail verification        | 0 / 2     | Verified / fail the job                |
 
-*Table 8: Exit statuses used by the candidate and registry CLIs.*
+*Table 9: Exit statuses used by the candidate and registry CLIs.*
 
 ### Recovering a partial crates.io publication
 
@@ -4086,7 +4215,7 @@ four actions, and the name's own evidence decides which:
 | `CONFLICT`      | the attached digest was read and differs from the record's     |
 | `UNVERIFIABLE`  | the name is attached and no digest could be established for it |
 
-*Table 9: The four actions `plan_asset_actions` assigns.*
+*Table 10: The four actions `plan_asset_actions` assigns.*
 
 `CONFLICT` and `UNVERIFIABLE` both stop the upload, and they are kept apart
 because their remedies differ. A conflict says the release holds demonstrably
@@ -4152,7 +4281,7 @@ operator acts.
 | `EXIT_INPUT_UNREADABLE`  | 3    | the record cannot support a decision at all              |
 | `EXIT_OUTPUT_UNWRITABLE` | 4    | the reconciliation plan could not be written             |
 
-*Table 10: `finalize_github_release_cli` exit statuses.*
+*Table 11: `finalize_github_release_cli` exit statuses.*
 
 Conflict outranks upload when a draft holds both kinds of finding. The
 precedence is stated in `_verdict` rather than taken from the numeric maximum,
@@ -4385,7 +4514,7 @@ CLI also refuses, so the mistake surfaces as the input that caused it.
 | `version`      | yes      | the crate version from the manifest                   |
 | `bin-name`     | yes      | `netsuke`, the installed binary name                  |
 
-*Table 11: `package-crate` action inputs.*
+*Table 12: `package-crate` action inputs.*
 
 The action publishes three outputs — `identity-path`, `crate-name`, and
 `crate-path` — and resolves the archive name from the record it just wrote

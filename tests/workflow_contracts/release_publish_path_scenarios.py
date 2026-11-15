@@ -46,6 +46,10 @@ PUBLISHER_NEEDS = {"publish-crates-io", "publish-release"}
 #: failed or skipped publisher leaves the inventory unverified rather than
 #: verified against a release that was never completed.
 VERIFY_NEEDS = {"metadata", *PUBLISHER_NEEDS}
+#: The consumer smoke depends on the candidate's three stages and on nothing
+#: else. Finalization is one of them because an archive attached to a draft
+#: release needs a token to download, and the smoke deliberately holds none.
+CONSUMER_SMOKE_NEEDS = {"metadata", "package-crate", "finalize-github-release"}
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -85,7 +89,9 @@ def _needs_results(
         change, leaving every real dependency at success and the scenario green
         while testing nothing.
     """
-    results = dict.fromkeys(CRATES_IO_NEEDS | PUBLISHER_NEEDS, "success")
+    results = dict.fromkeys(
+        CRATES_IO_NEEDS | PUBLISHER_NEEDS | CONSUMER_SMOKE_NEEDS, "success"
+    )
     results["windows-native-recipe-smoke"] = smoke
     if outcomes is not None:
         # A mistyped job name would otherwise add a result no job declares and
@@ -229,6 +235,27 @@ SCENARIOS = (
         "publish",
         "",
         _needs_results(outcomes={"publish-release": "skipped"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    # A release left as a draft is not publicly downloadable, so a smoke that
+    # ran anyway would fail on a 404 rather than skip. These two cases are what
+    # make the finalization prerequisite observable: without them a guard that
+    # dropped the finalize result but kept the dependency would still agree
+    # with every other scenario.
+    Scenario(
+        "finalize-failure",
+        "publish",
+        "",
+        _needs_results(outcomes={"finalize-github-release": "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "finalize-skipped",
+        "publish",
+        "",
+        _needs_results(outcomes={"finalize-github-release": "skipped"}),
         cancelled=False,
         release_runs=False,
     ),

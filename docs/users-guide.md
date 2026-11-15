@@ -184,6 +184,26 @@ candidate and its inventory still matches the trusted record; a public release
 whose flag or inventory disagrees is refused, because it cannot be made a draft
 again. Either way the rerun is safe.
 
+A publishing run that has finalized the release then exercises it the way a
+consumer would. The `consumer-smoke` job runs after the verification and
+finalization jobs and holds `contents: read` alone: it declares no environment,
+receives no token, and cannot publish, upload, or exchange a registry
+credential. It downloads the crate from `static.crates.io` and the
+cargo-binstall archive with its `sha256` sidecar from the release's public
+download URL, and checks both against the digest record the uploader wrote
+before upload -- so an archive swapped for a different build is refused even
+when its sidecar was swapped with it. It downloads no platform bundle, compiles
+nothing, and never runs `cargo install`. Before extracting anything it judges
+the archive's whole member layout, refusing a member whose name would escape
+the extraction directory, a link, a device, or a second candidate binary; it
+then runs the one executable it verified under a fixed environment and requires
+it to report the candidate version exactly. A release whose version differs
+from the candidate is a failure, not a match. A refusal names the boundary that
+made it -- `crate-download`, `crate-verification`, `archive-download`,
+`archive-verification`, or `executable-probe` -- so an unavailable, empty,
+corrupt, or mismatched download is told apart without reading logs, and a rerun
+is safe because nothing in the smoke writes to the release or the registry.
+
 A caller that invokes `./.github/actions/upload-declared-assets` directly,
 rather than through `release.yml`, must pass `commit` as the **full, lowercase
 40-character hexadecimal** object name of the candidate -- the value

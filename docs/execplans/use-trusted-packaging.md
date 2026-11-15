@@ -11,10 +11,12 @@ The plan is approved and implementation has begun. EP-M1 and EP-M2 are
 complete. Issue #1064 delivers the first crates.io publisher and its workflow
 contracts, #1066 replaces the shared upload action in `publish-release` with a
 candidate-bound declared-asset upload, #1067 adds the downloaded-inventory
-verifier, and #1068 adds digest-aware GitHub release finalization. Stage C
-remains partial because the consumer smoke test is still open. Stage D is in
-progress. No release, tag, registry publication, live credential exchange,
-GitHub Release, or account setting has been changed by this work.
+verifier, #1068 adds digest-aware GitHub release finalization, and #1069 adds
+the public-consumer smoke that exercises the published release. Stage C's
+sequence is now fully declared, but no tagged run has exercised it, so its
+roadmap entry stays open; Stage D is in progress. No release, tag, registry
+publication, live credential exchange, GitHub Release, or account setting has
+been changed by this work.
 
 ## Purpose / big picture
 
@@ -27,8 +29,12 @@ registry bytes, and then finalizes the GitHub Release. Issue #1064 adds the
 candidate-backed crates.io publisher, and #1067 verifies the downloaded GitHub
 inventory against the digest record `publish-release` retained, not against the
 crates.io publisher or its package bytes. #1068 un-drafts the release only
-after both surfaces are proven; the consumer smoke test remains open before the
-full release path can make that end-to-end claim.
+after both surfaces are proven, and #1069 then exercises the result the way a
+consumer does: it downloads the crate from `static.crates.io` and the
+cargo-binstall archive from the release's public URL, verifies both against the
+digests recorded before upload, and runs the shipped binary to read the version
+it reports. No step of that smoke holds a registry credential or write
+authority over the release it is checking.
 
 The registry upload itself stops depending on a long-lived secret. GitHub mints
 a short-lived, repository-scoped token from an OIDC identity; the token exists
@@ -669,9 +675,16 @@ against the declaration and the pre-upload digest record the publisher
 retained; its job needs both publishers and holds `contents: write` for draft
 visibility alone.
 
-One job-matched action remains open:
-
-- `consumer-smoke/` — download, verify, extract and run the published bytes.
+`consumer-smoke/` is **delivered** (#1069): it downloads the crate from
+`static.crates.io` and the cargo-binstall archive with its sidecar from the
+release's public download URL, verifies each against the pre-upload digest
+record, judges the archive's whole member layout before extracting the one
+binary, and runs it to read the version it reports. Its job needs `metadata`,
+`package-crate`, and `finalize-github-release`, holds `contents: read` alone,
+declares no environment, and receives no token, so it cannot publish, upload,
+or exchange a registry credential. The archive and probe boundaries refuse
+corruption, unsafe member paths, and a banner that does not name the candidate
+version exactly, and every refusal is reported as the phase that made it.
 
 `finalize-github-release/` is **delivered** (#1068): it reconciles the draft
 against the trusted digest record and un-drafts it only when every declared
@@ -1719,9 +1732,13 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the retained declaration and digest record, and #1068 has added
   `finalize-github-release`, which reconciles the recorded listing against that
   record and un-drafts the release only when every declared asset already holds
-  its trusted digest. `consumer-smoke` remains. No live exchange or release has
-  exercised the publisher; the external GitHub `crates-io` environment and
-  crates.io publisher registration remain unverified, so Stage C remains open.
+  its trusted digest, and #1069 has added `consumer-smoke`, which downloads the
+  published crate and cargo-binstall archive from their public URLs and runs
+  the shipped binary with `contents: read` alone. Every job in the sequence is
+  now declared; no live exchange or release has exercised the publisher or the
+  smoke, and the external GitHub `crates-io` environment and crates.io
+  publisher registration remain unverified, so Stage C stays open until a
+  tagged run passes through it.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 - [x] (2026-10-17) Ran the full eleven-target batch over the review-closure
   change and committed it as `d604b0cd`. Nine targets pass outright:
@@ -4214,6 +4231,82 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `release_inventory.py` path — so this candidate's `test-workflow-contracts`
   run executes the reviewed versions, and `pytest tests/workflow_contracts`
   covers the whole directory rather than a selected subset.
+- [x] (2026-11-15) Delivered the public-consumer smoke (#1069) and the contracts
+  that hold it, completing the last job of Stage C's sequence.
+
+  **The delivery.** `release.yml` declares `consumer-smoke` after
+  `finalize-github-release`, and `./.github/actions/consumer-smoke` performs
+  it. The job needs `metadata`, `package-crate`, and `finalize-github-release`,
+  holds `contents: read` alone, declares no environment, takes no `id-token`,
+  and checks out the candidate commit with `persist-credentials: false`; the
+  contract refuses a checkout that persists the token or resolves the tag, so
+  the one credential a read-only job could acquire is held to the same rule as
+  the ones it must not be given. Its guard names every dependency result
+  explicitly, because the `!cancelled()` it opens with is a status function and
+  would otherwise suppress the implicit success check; the rehearsal job
+  `release` is absent from `needs` because a dry run publishes nothing to
+  exercise. `finalize-github-release` gained one passive output,
+  `trusted-artifact`, forwarding the publisher's artefact name, so the smoke's
+  dependency list stays at three rather than reaching past the finalizer for a
+  name it already has.
+
+  **Public downloads, not artefact storage.** The smoke downloads the crate from
+  `https://static.crates.io/…` and the cargo-binstall archive with its
+  `sha256` sidecar from the release's `releases/download/<tag>/…` URL. The two
+  workflow artefacts it downloads are evidence, never payload:
+  `release-crate-package` carries the identity record and `trusted.json`
+  carries the pre-upload digest record. A smoke that verified the workflow's
+  own retained bytes would prove only that the run agrees with itself; the
+  archive is judged against the digest recorded before upload, so a substituted
+  archive that agrees with its own sidecar is still refused.
+
+  **The boundaries and their refusals.** `release_consumer_payload` binds the
+  evidence to the exact URLs, names, and digests and refuses a target the
+  declaration never listed and a plan that disagrees with a re-derivation from
+  the same evidence. `release_binstall_archive` and
+  `release_consumer_archive_policy` judge the whole member layout before
+  extracting anything — a name that leaves the extraction directory under
+  either POSIX or Windows path rules, a symlink, a device, a FIFO, or a second
+  candidate binary — and re-scan during extraction rather than trusting the
+  first pass. `release_binstall_probe` runs the one extracted binary under a
+  fixed environment (`PATH=/usr/bin:/bin`, `LANG=C`, `LC_ALL=C`) with a
+  60-second bound and requires the exact candidate version, so a binary that
+  reports a nearby version is refused rather than accepted as a match.
+  `consumer_smoke_cli` exits `0` verified, `1` evidence or verdict unusable,
+  `2` download missing, empty, or mismatched, `3` archive corrupt, unsafe, or
+  unwritable, and `4` executable reporting the wrong version.
+
+  **Telemetry.** The five phases `crate_download`, `crate_verification`,
+  `archive_download`, `archive_verification`, and `executable_probe` are
+  registered on the `consumer_smoke` operation, so a refusal names the boundary
+  that made it. The action reports them from one phase log written by the
+  verifier, and the job's summary reads the action's outputs rather than
+  restating labels, so the catalogue and the action cannot drift into reporting
+  a phase the smoke never runs as skipped on every run.
+
+  **The contracts.** Four modules join the directory:
+  `release_publish_path_consumer_shape` holds the job's dependencies,
+  permissions, checkout, environment, artefact, action-input, and compilation
+  checks; `release_publish_path_consumer_smoke` composes those with the
+  reachability oracle and re-exports them, which is also what keeps each module
+  inside the 400-line cap; `release_publish_path_consumer_mutations` registers
+  thirteen labelled regressions with the scenario and contract each must break;
+  and `release_publish_path_consumer_smoke_test` holds the telemetry and
+  action-output wiring. Two scenarios were added to
+  `release_publish_path_scenarios` — `finalize-failure` and
+  `finalize-skipped` — because without them a guard that dropped
+  `needs.finalize-github-release.result == 'success'` while keeping the
+  dependency would agree with every existing scenario. The compilation check is
+  proved live in both directions: appending `cargo install netsuke-build` to
+  either the job or the action is reported, and the shipped documents clear the
+  same scan.
+
+  **The evidence.** The six release-path suites report 59 passed, of which 14
+  are the smoke mutations (thirteen regressions plus the compilation control)
+  and 5 are the telemetry wiring. The smoke's own unit suites landed with
+  `04528ef3e`, which added the policy, adapters, and CLI. No release, tag,
+  registry credential, or GitHub setting was touched, and the smoke has not run
+  against a real release: a tagged run is still what would exercise it.
 
 ## Surprises & discoveries
 
