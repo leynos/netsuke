@@ -4331,6 +4331,97 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   commit rather than inside this one, so the gate work stays reviewable apart
   from a lint-baseline correction.
 
+- [x] (2026-11-15) Answered the first CodeRabbit review of #1070: the
+  publication-gate contract now reads effective permissions and refuses a
+  disjunctive guard.
+
+  **Findings and dispositions.** The review raised four items. Two were defects
+  in the contract, and both were confirmed against the code before being fixed.
+
+  *Effective permissions.* `_holds_write` read only a job's own mapping
+  declaration, so a publisher spelled `permissions: write-all` was not
+  recognized as a write job at all, and a job that inherited write from the
+  workflow level was invisible. `effective_permissions` now resolves the job's
+  declaration first and the workflow's only when the job declares none,
+  normalizes the `write-all` and `read-all` shorthands, and returns `None` when
+  neither declares anything; that last state is reported rather than read as
+  "no write", because the repository default can grant it. The crates.io
+  OIDC-exclusivity reader had the same blind spot — it read
+  `job.get("permissions", {})`, so an inherited `id-token: write` counted as
+  empty — and now shares the same resolver.
+
+  *Disjunctive guard.* `&&` binds tighter than `||`, so
+  `… && needs.metadata.outputs.should_publish == 'true' || true` keeps every
+  required clause as a top-level conjunct and is still always true; the
+  clause-by-clause reader read it as fully gated. A write guard holding any
+  `||` is now refused outright, reusing `contains_unquoted_or` from
+  `actions_expressions` rather than adding a second expression reader. The rule
+  is stated as a conjunction requirement because a disjunction has no
+  legitimate use in a guard that must be satisfied by five named checks.
+
+  The other two findings did not survive verification. The first asked for a
+  `RecursionError` refusal in `parse_manifest`, on the theory that a deeply
+  nested document crashes the JSON decoder. The size bound
+  (`MAX_EVIDENCE_BYTES`, 65,536) caps nesting at 32,768, and a document of
+  exactly that shape decodes on the pinned 3.14.7 baseline and returns
+  `malformed_evidence` with no crash; no input inside the bound reaches the
+  handler, and the branch could not be covered by a test that fails without it.
+  The second asked for a `replace_once` that refuses an ambiguous pattern,
+  which was real and is fixed below rather than rejected.
+
+  **Ambiguity in mutation rules.** `replace_once` asked the engine for one
+  substitution and required one match, which reports success for a pattern that
+  occurs twice: the first occurrence is rewritten and the rule silently edits
+  text it did not mean. It now asks for at most two matches, so "unique" is
+  distinguishable from "at least one", and two regression cases sit beside the
+  mutation suite.
+
+  **Control run.** The three new mutations were run against pre-fix readers
+  rather than only against the fixed ones. With the mapping-only permission
+  reader, neither the `write-all` publisher nor the inheriting publisher is
+  held to `needs` or the guard; with the disjunction reader stubbed to `False`,
+  the disjunctive guard produces no `write-authority` finding at all. The fixed
+  readers report `write-authority.publish-packages.{needs,guard}`,
+  `write-authority.publish-notes.{needs,guard}`, and
+  `write-authority.publish-release.guard` respectively, so each mutation is
+  load-bearing. The gate corpus is now 37 labelled mutations — 20 release-path
+  and 17 gate mutations — and the contract suite runs 2350 tests with 3 skipped.
+
+  **Gates.** A first full batch on the intermediate tree failed only
+  `make lint`: four Ruff findings, three of them in the new docstrings and
+  helper (DOC501, DOC201, an import-order pair) and one a dict comprehension
+  the rule set prefers as `dict.fromkeys`. All four were fixed, and the first
+  attempt to document `_has_oidc_write_permission`'s parameters pushed
+  `release_publish_crates_io_contracts.py` to 409 lines against the 400-line
+  ceiling, so the section was cut to the `Returns` entry the rule requires and
+  the module sits at exactly 400. The second batch passed all nine gates on
+  that tree: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.26%,
+  6478/6593), `test` (nextest 5669 passed with 9 skipped, plus doctests),
+  `test-workflow-contracts` (2350 passed with 3 skipped, then 30),
+  `test-release-admission` (131), `markdownlint`, and `nixie`.
+
+  **A tool rebuilt under the gate.** Moving one constant beside its siblings
+  afterwards prompted a third batch, which failed `lint` alone, at
+  `lint-whitaker`, with eighteen `bumpy_road_function` findings across
+  `src/cli`, `src/graph_view`, `src/ir`, `src/manifest`, `src/ninja_gen`, and
+  `src/runner`. The branch touches none of them:
+  `git diff --name-only
+  d8adff001 -- src/ test_support/ build_l10n_audit/ Cargo.toml Cargo.lock
+  rust-toolchain.toml .cargo/ dylint.toml`
+  is empty, and the same sources passed the same gate at 05:54. The cause is
+  tool drift, not code: `libwhitaker_suite@nightly-2026-05-28.so` and the
+  bootstrap's `bootstrap.json` were rewritten at 06:09:22, between the two
+  runs, so the local tip suite now enforces the 2.5 threshold this repository's
+  own Whitaker guide documents. The remaining third-batch gates passed on the
+  final tree — `check-fmt`, `typecheck`, `doc-coverage`, `test`,
+  `test-workflow-contracts` (2350 with 3 skipped, then 30),
+  `test-release-admission` (131), `markdownlint`, `nixie` — and
+  `make lint-python` and `make github-actions-lint`, which `make lint` never
+  reached, were run separately and pass. The eighteen findings are a base
+  condition of the rebuilt suite on `d8adff001`'s Rust sources, reported to the
+  operator rather than fixed here, because rewriting eighteen unrelated
+  functions is not this issue's scope.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
