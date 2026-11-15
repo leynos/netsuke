@@ -63,7 +63,7 @@ fn insert_base(environment: &mut MapEnv, key: &str, choice: BaseChoice, base: &P
             environment.insert(key, OsString::new());
         }
         BaseChoice::Set => {
-            environment.insert(key, base.as_os_str().to_os_string());
+            environment.insert(key, base.as_os_str());
         }
     }
 }
@@ -126,7 +126,7 @@ proptest! {
         insert_base(&mut environment, "HOME", home, &home_base);
         insert_base(&mut environment, "USERPROFILE", userprofile, &profile_base);
         let system = root.join("system");
-        environment.insert("XDG_CONFIG_DIRS", system.as_os_str().to_os_string());
+        environment.insert("XDG_CONFIG_DIRS", system.as_os_str());
 
         let candidates = user_scope_candidates(&environment);
 
@@ -171,18 +171,15 @@ proptest! {
             (_, BaseChoice::Set) => Some(profile_base),
             _ => None,
         };
-        match &resolved_home {
-            Some(base) => {
-                prop_assert_eq!(
-                    &files_under(&candidates, base),
-                    &expected_files(&HOME_FILES),
-                    "the home directory contributes its documented files in order"
-                );
-                present_bases.push(base.clone());
-            }
-            // With no resolved home the only candidates are the base ones, and
-            // the count below rejects any candidate no base accounts for.
-            None => {}
+        // With no resolved home the only candidates are the base ones, and the
+        // count below rejects any candidate no base accounts for.
+        if let Some(base) = &resolved_home {
+            prop_assert_eq!(
+                &files_under(&candidates, base),
+                &expected_files(&HOME_FILES),
+                "the home directory contributes its documented files in order"
+            );
+            present_bases.push(base.clone());
         }
 
         let accounted: usize = present_bases
@@ -196,10 +193,14 @@ proptest! {
             candidates
         );
 
-        for pair in present_bases.windows(2) {
+        let later_bases = present_bases.iter().skip(1);
+        for (earlier, later) in present_bases.iter().zip(later_bases) {
             prop_assert!(
                 matches!(
-                    (span_under(&candidates, &pair[0]), span_under(&candidates, &pair[1])),
+                    (
+                        span_under(&candidates, earlier),
+                        span_under(&candidates, later)
+                    ),
                     (Some((_, end)), Some((start, _))) if end < start
                 ),
                 "each base must finish before the next begins: {:?}",
@@ -241,8 +242,8 @@ proptest! {
         if let (true, Some(first)) = (corrupt_first, first_present) {
             write_config(first, MALFORMED).expect("corrupt the first candidate");
         }
-        let environment = case.scoped_environment(environment);
-        let (paths, error) = case.discover(&environment);
+        let scoped = case.scoped_environment(environment);
+        let (paths, error) = case.discover(&scoped);
 
         match (first_present, corrupt_first) {
             (Some(_), true) => {
