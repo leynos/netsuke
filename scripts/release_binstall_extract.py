@@ -2,16 +2,18 @@
 
 The smoke must run exactly one file: the ``netsuke`` the archive ships. This
 adapter performs the only write in the smoke, and it is deliberately narrow.
-The archive's bytes are checked against the trusted digest and its member
-layout is re-scanned before anything is written, so a file swapped since the
-caller's scan is refused rather than extracted. The digest is the part that
-matters: a layout records the binary's name and declared size and the member
-count, so a replacement archive whose members match would pass a layout-only
-check. The output path is created with ``O_CREAT | O_EXCL | O_NOFOLLOW``, so a
-directory that already holds a symlink cannot redirect the write, and the copy
-is streamed under the declared size so a member that lies about its length is
-stopped part-way. A failure deletes the partial output, because a half-written
-executable is something a later step could observe and run.
+The archive is opened once and both hashed and parsed through that one
+descriptor, so a pathname swapped after the caller's scan cannot be
+substituted for the archive that was accepted, and the layout the caller
+passed is compared with the one this scan produces before anything is written.
+The digest is the part that matters: a layout records the binary's name and
+declared size and the member count, so a replacement archive whose members
+match would pass a layout-only check. The output path is created with
+``O_CREAT | O_EXCL | O_NOFOLLOW``, so a directory that already holds a symlink
+cannot redirect the write, and the copy is streamed under the declared size so
+a member that lies about its length is stopped part-way. A failure deletes the
+partial output, because a half-written executable is something a later step
+could observe and run.
 
 Member safety itself is decided in
 :mod:`release_consumer_archive_policy`; this module never writes a member the
@@ -49,13 +51,11 @@ import os
 import typing as typ
 
 import release_consumer_archive_policy as policy
-import release_digest
-import release_digest_files
 from release_binstall_archive import (
     CORRUPT_STREAM,
     ArchiveCorruptError,
     ExtractionError,
-    validated_archive,
+    verified_archive,
 )
 
 if typ.TYPE_CHECKING:
@@ -88,9 +88,10 @@ def extract_binary(
     destination
         A caller-created, empty directory.
     expected_sha256
-        The trusted digest the archive was verified against. It is the only
-        value here that binds extraction to the exact bytes a consumer
-        receives, because ``layout`` describes members rather than content.
+        The trusted digest the archive is verified against while it is open
+        for extraction. It is the only value here that binds the copy to the
+        exact bytes a consumer receives, because ``layout`` describes members
+        rather than content.
 
     Returns
     -------
@@ -102,21 +103,22 @@ def extract_binary(
     ExtractionError
         If ``destination`` is not an empty directory, the output path is
         already occupied, the binary cannot be written, the bytes written
-        differ from the declared size, the archive no longer hashes to
-        ``expected_sha256``, or the re-scan disagrees with ``layout``.
+        differ from the declared size, the archive does not hash to
+        ``expected_sha256``, or the scan disagrees with ``layout``.
 
     Notes
     -----
     A member whose data cannot be read fails as
-    :class:`release_binstall_archive.ArchiveCorruptError`, and an archive that
-    no longer passes the member rules as a
-    :class:`release_consumer_archive_policy.ArchiveLayoutError`; both are
-    raised while the archive is reopened. The module docstring shows a complete
+    :class:`release_binstall_archive.ArchiveCorruptError`, an archive that does
+    not pass the member rules as a
+    :class:`release_consumer_archive_policy.ArchiveLayoutError`, and a download
+    that cannot be opened at all as
+    :class:`release_binstall_archive.ArchiveRefusedError`; all are raised while
+    the archive is opened and scanned. The module docstring shows a complete
     extraction of a one-member archive.
     """
     _require_fresh_directory(destination)
-    _require_trusted_bytes(archive_path, expected_sha256)
-    with validated_archive(archive_path) as validated:
+    with verified_archive(archive_path, expected_sha256=expected_sha256) as validated:
         if validated.layout != layout:
             msg = (
                 "the archive changed between the verification scan and the "
@@ -125,27 +127,6 @@ def extract_binary(
             raise ExtractionError(msg)
         entry = _binary_entry(validated.archive)
         return _write_entry(validated.archive, entry, destination, layout)
-
-
-def _require_trusted_bytes(archive_path: pathlib.Path, expected_sha256: str) -> None:
-    """Require the archive's bytes to still match the trusted digest.
-
-    Raises
-    ------
-    ExtractionError
-        If the archive no longer hashes to ``expected_sha256``. The bytes are
-        re-read rather than trusted from the caller's scan because the file
-        may have been replaced between that scan and this write, and a
-        replacement can match the scanned layout exactly.
-    """
-    observed = release_digest_files.digest_of_file(archive_path)
-    if release_digest.constant_time_equal(observed, expected_sha256):
-        return
-    msg = (
-        f"the archive's bytes no longer match the trusted digest: {observed}, "
-        f"expected {expected_sha256}"
-    )
-    raise ExtractionError(msg)
 
 
 def _require_fresh_directory(destination: pathlib.Path) -> None:
@@ -211,6 +192,13 @@ def _write_entry(
     -------
     pathlib.Path
         The path of the written binary, which is executable.
+
+    Raises
+    ------
+    ExtractionError
+        If the output path is occupied or cannot be created, the member has no
+        data or carries more or fewer bytes than its header declares, or the
+        write itself fails.
 
     Notes
     -----

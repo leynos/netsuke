@@ -23,6 +23,7 @@ import consumer_smoke_evidence as evidence
 import release_binstall_archive as archive_adapter
 import release_binstall_extract as extract_adapter
 import release_binstall_probe as probe_adapter
+import release_binstall_sidecar as sidecar_adapter
 import release_consumer_archive_policy as archive_policy
 import release_consumer_payload as payload
 import release_consumer_smoke as smoke
@@ -174,23 +175,20 @@ def verify_archive(
     The archive's own refusals — too large, corrupt, or describing different
     bytes than its sidecar — are raised by
     :func:`release_binstall_archive.scan_archive` and
-    :func:`release_binstall_archive.verify_sidecar`; an unsafe member layout by
-    :func:`release_consumer_archive_policy.require_safe_layout`.
+    :func:`release_binstall_sidecar.verify_sidecar`; an unsafe member layout
+    by :func:`release_consumer_archive_policy.require_safe_layout`.
     """
-    _ = payload.require_payload(
-        facts=archive.facts,
-        asset_name=plan.archive_name,
-        expected_sha256=plan.archive_sha256,
-    )
-    _ = payload.require_payload(
-        facts=sidecar.facts,
-        asset_name=plan.sidecar_name,
-        expected_sha256=plan.sidecar_sha256,
-    )
+    for download, name, digest in (
+        (archive, plan.archive_name, plan.archive_sha256),
+        (sidecar, plan.sidecar_name, plan.sidecar_sha256),
+    ):
+        _ = payload.require_payload(
+            facts=download.facts, asset_name=name, expected_sha256=digest
+        )
     layout = archive_adapter.scan_archive(
         archive.path, expected_sha256=plan.archive_sha256
     )
-    _ = archive_adapter.verify_sidecar(archive.path, sidecar.path)
+    _ = sidecar_adapter.verify_sidecar(archive.path, sidecar.path)
     return layout
 
 

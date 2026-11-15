@@ -3714,9 +3714,13 @@ first byte is written. Every name must stay inside the extraction directory
 under both path flavours, no member may be a link, device, or FIFO, and exactly
 one regular, non-empty file may sit at the root as the shipped binary. Member
 counts and sizes carry fixed caps, so a hostile archive is refused from its
-metadata rather than discovered mid-write. The archive is scanned again while
-the binary is copied, so a member swapped between the scan and the write is
-refused instead of extracted.
+metadata rather than discovered mid-write. The archive is opened once, and the
+digest and the member scan are taken through that one descriptor, so the bytes
+that were hashed are the bytes that are copied; checking a pathname and then
+reopening it would leave a window in which the name resolves to a different
+file whose members still match the accepted layout. Extraction still compares
+the layout it was handed with the one its own scan produces, so a caller
+holding a layout from some other archive is refused rather than trusted.
 
 The binary is then run once with `--version` under a wall-clock limit, an
 output bound, and an environment that inherits nothing, so a downloaded file

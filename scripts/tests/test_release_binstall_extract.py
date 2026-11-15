@@ -7,6 +7,7 @@ fixtures come from :mod:`release_binstall_fixtures`.
 Run via ``make test-release-publication``.
 """
 
+import pathlib
 import typing as typ
 
 import pytest
@@ -14,9 +15,6 @@ import release_binstall_archive as adapter
 import release_binstall_extract as extract
 import release_consumer_archive_policy as policy
 from release_binstall_fixtures import BINARY_BYTES, digest_of, tarball
-
-if typ.TYPE_CHECKING:
-    import pathlib
 
 
 def test_extract_binary_writes_only_the_root_binary(
@@ -107,8 +105,10 @@ def test_extract_binary_refuses_a_replacement_that_keeps_the_layout(
 
     ``ArchiveLayout`` records the binary's name, its declared size and the
     member count, not the content, so a replacement of equal size passes the
-    re-scan. The trusted digest is what separates the two archives, and this
-    test changes only the bytes: the file is replaced, the layout is not.
+    scan. The trusted digest is what separates the two archives, and this
+    test changes only the bytes: the file is replaced, the layout is not. The
+    refusal is the digest's own, because extraction and verification share one
+    open archive and the mismatch is found while that archive is hashed.
     """
     archive = tarball(tmp_path / "archive.tar.gz")
     trusted = digest_of(archive)
@@ -124,11 +124,42 @@ def test_extract_binary_refuses_a_replacement_that_keeps_the_layout(
     destination = tmp_path / "out"
     destination.mkdir()
 
-    with pytest.raises(adapter.ExtractionError):
+    with pytest.raises(adapter.ArchiveDigestMismatchError):
         extract.extract_binary(archive, layout, destination, expected_sha256=trusted)
 
     assert not list(destination.iterdir()), (
         "a refused extraction must leave the directory empty"
+    )
+
+
+def test_extract_binary_opens_the_archive_once(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hash and parse one open archive rather than a pathname opened twice.
+
+    Two opens leave a window between the digest check and the scan in which
+    the name can resolve to a different archive whose members still match the
+    accepted layout. Opening once removes the window, so this counts opens.
+    """
+    archive = tarball(tmp_path / "archive.tar.gz")
+    digest = digest_of(archive)
+    layout = adapter.scan_archive(archive, expected_sha256=digest)
+    destination = tmp_path / "out"
+    destination.mkdir()
+    opened: list[pathlib.Path] = []
+    original = pathlib.Path.open
+
+    def counting(target: pathlib.Path, mode: str) -> typ.IO[bytes]:
+        """Record one open and read the file the adapter asked for."""
+        opened.append(target)
+        return original(target, mode)
+
+    monkeypatch.setattr(pathlib.Path, "open", counting)
+
+    _ = extract.extract_binary(archive, layout, destination, expected_sha256=digest)
+
+    assert opened == [archive], (
+        "extraction must hash and parse the archive through a single open"
     )
 
 
