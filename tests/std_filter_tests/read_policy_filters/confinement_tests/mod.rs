@@ -178,10 +178,12 @@ fn reading_filters_do_not_fold_a_missing_intermediate_directory(
     }
     #[cfg(windows)]
     {
-        let rendered = rendered?;
+        // The inner result is unwrapped here rather than shadowing the outer
+        // binding, which the restriction lints reject.
+        let output = rendered?;
         ensure!(
-            rendered == case.followed,
-            "{}: Windows folds the missing component away, so the root file should render {} but rendered {rendered}",
+            output == case.followed,
+            "{}: Windows folds the missing component away, so the root file should render {} but rendered {output}",
             case.name,
             case.followed
         );
