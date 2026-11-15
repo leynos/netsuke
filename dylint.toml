@@ -6,6 +6,27 @@
 # compilation unit. A crate-level entry is justified only when the ambient
 # access lives in the crate root itself, where a path entry would be identical
 # to a crate entry. See docs/whitaker-users-guide.md.
+
+# `bumpy_road_function` "descends through generated expressions and measures the
+# authored code they wrap". Each `?` expands to a two-arm `match`, so a flat run
+# of `?`-bearing calls presents as nested conditional logic, and so does a
+# multi-line array literal. `src/graph_view/render/html/mod.rs::write_head`
+# carries no `if`, `match`, `else`, or loop at all — eleven straight-line
+# `writeln!` calls — and is still reported.
+#
+# Those artefacts are bounded by the size of the literal they sit in: the widest
+# observed spans 18 lines and the rest under 12. A genuine bumpy road sustains a
+# nested region over the whole body rather than a fixed-size literal, so it is
+# not bounded by one. Requiring a bump to span 15 lines drops every
+# generated-expression artefact observed while keeping the rule live for the
+# long functions it targets. Measured on `e28f26ae2` with the suite at
+# `880939d1f6`: 60 findings across 22 files at the default of 2, 1 at 15.
+#
+# The weighted `threshold` is left at its default: this narrows the span a peak
+# must cover and does not lower the complexity bar.
+[bumpy_road_function]
+min_bump_lines = 15
+
 [no_std_fs_operations]
 
 # Modules that need ambient filesystem access, scoped as narrowly as the lint
