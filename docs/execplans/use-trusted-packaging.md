@@ -4743,6 +4743,57 @@ and pass, on the final wording.
   request rather than here, so the record of a passing run is not itself an
   edit that invalidates the run.
 
+- **2026-11-15: the review's two coverage findings, and the base skew behind
+  one red gate (completed).**
+
+  *The harness handed the gate an inherited environment (fixed).* The test
+  harness built the child's environment from `os.environ` whole, so a developer
+  with `NETSUKE_RELEASE_ADMISSION_TAG`, `..._ENFORCE`, a bound, or an adapter
+  exported would silently change what a case exercised: the default rehearsal
+  became a tagged run, and the failure would have read as a defect in the gate.
+  `gate_environment` now drops every inherited name under the admission prefix
+  before the harness's fixed values and the case's overrides are applied, and
+  takes the environment to inherit from as a parameter. The drop is asserted
+  through that seam rather than through the ambient environment, because
+  in-process environment mutation is forbidden in tests.
+
+  **Evidence that the new case is not vacuous.**
+  `scripts/tests/test_release_admission_harness_isolation.py` injects a tag, a
+  mode and a timeout, alongside a variable outside the prefix, and asserts what
+  reaches the child. Removing the filter makes it fail on the mode assertion
+  while the case's own tag still arrives, which is the distinction it exists to
+  draw.
+
+  *The byte-bound assertions could be satisfied without reading (fixed).*
+  `filesystem.read_bytes` states that the bound applies to what was read rather
+  than to the size the filesystem reports. Both earlier assertions used a file
+  whose size was fixed before the call, so an implementation comparing the
+  reported size with the limit passed them both and could still admit a
+  document that grew. The new case writes a file shorter than the bound and
+  stubs the reader's `os` binding to hand back one byte more than the bound;
+  replacing the post-read check with a size precheck fails the new case and
+  leaves the two earlier assertions passing, which was measured rather than
+  assumed.
+
+  *A red gate in a file this branch does not touch (the base was stale).*
+  `lint-whitaker` reported `bumpy_road_function` against
+  `src/cli/merge/observability.rs`, a file the branch does not modify. The
+  branch predated #1139, which raised `min_bump_lines` to 15 in both
+  `dylint.toml` files after measuring 60 findings at the default; the rolling
+  suite had meanwhile been reinstalled. The remedy was to rebase onto
+  `fa06bdb21`, not to add a suppression, and `make lint-whitaker` passes on the
+  rebase.
+
+  **Inventories.** The new isolation module is part of the runtime suite, so it
+  is listed in the Makefile target, in
+  `tests/workflow_contracts/release_admission_runtime_gate_test.py`'s
+  `RUNTIME_MODULES`, and in the developers' guide's copy of that list, which
+  now enumerates nineteen modules.
+
+  **Verification.** Both added cases pass with the modules around them, and the
+  full eight-gate batch passes on the rebased head with the working-tree
+  fingerprint unchanged; its results are recorded in the pull request.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
