@@ -619,6 +619,86 @@ conflict in `Decision log`, and escalate.
     batch, including the twelve-gate runs at `29dc6df5a` and `b5d98b783`,
     predates this rebase and no longer describes the candidate; a fresh
     twelve-gate batch is required at the restored head.
+  - Restored-head gates (2026-11-15). The required fresh batch ran against
+    `fdd42359e`, one gate at a time, and all twelve exited 0 in 2747 s
+    (45 m 47 s) with a clean working tree after every gate and no gate
+    retried. `check-fmt` 3 s (`cargo fmt` clean; Ruff left 548 Python files
+    formatted; `mdtablefix` left 227 Markdown files unchanged); `lint` 63 s,
+    with `lint-clippy`, `lint-whitaker`, `lint-python` (Interrogate 100%,
+    Pylint 10.00/10 on both trees, plus `ambrleaks`) and
+    `github-actions-lint` all executing; `typecheck` 7 s; `test` 90 s (5742
+    nextest tests passed, 9 skipped; 217 doctests passed, 63 ignored,
+    0 failed); `doc-coverage` 26 s (6552 of 6667 items, 98.28%, against the
+    80% bar, and 65 script tests); `markdownlint` 35 s (227 files, 0 issues,
+    spelling gate included, `typos.toml` current); `nixie` 3 s;
+    `test-workflow-contracts` 540 s (2330 passed, 3 skipped in 528.42 s, and
+    30 script tests in 9.47 s); `test-documentation-contracts` 1 s (15
+    passed, 50 skipped); `test-rfc-stdlib-coverage` 1 s (282 passed,
+    0 skipped); `kani-ir` 536 s, reporting
+    `Complete - 24 successfully verified harnesses, 0 failures, 24 total`
+    with 24 `VERIFICATION:- SUCCESSFUL` lines, including all seven
+    `stdlib::resource_bounds::verification::*` harnesses; and
+    `test-kani-mutations` 1442 s, whose prewarm passed in 892.737 s and whose
+    compile guard built every one of the 37 tracked patches in 466.882 s.
+  - Restored-head batch 1, and why it was superseded (2026-11-15). The first
+    batch at the rebased head turned ten gates green and two red, neither for
+    a code defect. `make markdownlint` exited 2 because the plan paragraph
+    this record continues wrote `initialiser`, which the shared
+    en-GB-oxendict dictionary rejects in favour of `initializer`; the word was
+    corrected and `make spelling` re-run clean before the plan commit was
+    amended. `make test-kani-mutations` exited 2 because nextest reported
+    `TIMEOUT [900.018s]` in `prewarm::prewarm_kani_mutation_target` — the
+    mutation profile's `slow-timeout` with `terminate-after = 15` at the
+    recorded 762.60 s measurement, a capacity bound rather than a defect. The
+    allowance was deliberately not raised; the batch-2 prewarm passed in
+    892.737 s, only 7 s inside that bound, so the margin is thin and the
+    recorded measurement in `.config/nextest.toml` understates a loaded host.
+  - Kani runtime caps (2026-11-15). `kani-ir` and `test-kani-mutations` ran
+    inside the mandated `systemd-run --user --scope` wrapper with
+    `RuntimeMaxSec=100m` rather than the eight-minute figure the developers'
+    guide states. The eight-minute bound describes the resource-bounds
+    module's own seven harnesses, which this run verified far inside it —
+    the slowest pair are
+    `binomial_kernel_matches_closed_form_for_r_up_to_two` at 29.404 s and
+    `binomial_kernel_never_panics_for_small_r` at 28.395 s, and the remaining
+    five take between 0.291 s and 8.410 s. The whole 24-harness suite is a
+    different measurement and does not fit eight minutes: it took 536 s here,
+    and 1819 s and 2117 s in the warm full-suite runs that motivated the
+    wider cap. No harness, gate, or allowance was weakened; the wrapper's
+    bound was simply set to a value the suite can reach.
+  - Plan-edit gates at `03570278c` (2026-11-15). The seven-gate plan-edit set
+    ran against the commit that carries the three paragraphs above, one gate at
+    a time. Six exited 0: `check-fmt` 3 s, `typecheck` 3 s, `markdownlint` 30 s
+    (227 files, 0 issues), `nixie` 1 s, `test` 53 s (5742 nextest tests passed,
+    9 skipped; 217 doctests passed, 63 ignored, 0 failed), and
+    `test-workflow-contracts` 546 s (2330 passed, 3 skipped in 535.80 s, plus
+    30 script tests in 7.97 s). `make lint` exited 2 after 41 s inside
+    `lint-whitaker`, before the `test_support` Whitaker pass, `lint-python`, or
+    `github-actions-lint` could run, so this batch carries no Pylint, yamllint,
+    or actionlint evidence; the twelve-gate batch at `fdd42359e` remains the
+    last run in which all four stages executed.
+  - The `lint` red is the base's, not this candidate's (2026-11-15). The 18
+    errors are all `bumpy-road-function`, in 17 files outside this branch's
+    delta, and none under `src/stdlib/resource_bounds/`. The same command run
+    at the base `e28f26ae2`, in a detached worktree, reproduced the identical
+    18 locations in 64 s under byte-identical suite bytes (`5cf987051be2…`,
+    2,320,152 bytes), so the finding set predates the branch. The green
+    `make lint` at 04:28Z had loaded a different suite
+    (`310631ef811e…`) from
+    `/home/leynos/.local/share/whitaker/lints/nightly-2026-05-28/x86_64-unknown-linux-gnu/lib/`;
+    every run after 05:09Z loads the build of the Whitaker workspace's current
+    HEAD, `880939d1 Implement the macro-aware cognitive complexity rule (#504)
+    (#574)`, which applies `bumpy_road_function` at its 2.5 default to code
+    nobody on this branch touched. Nothing in the repository selects that
+    suite, and `dylint.toml` carries no `[bumpy_road_function]` section, so the
+    verdict follows the host's Whitaker revision rather than the tree. See
+    D-21.
+  - The commits carrying these paragraphs and D-21 change prose only, so the
+    twelve and six passes stand for the trees they read; this plan's own delta
+    is validated by the seven-gate plan-edit set re-dispatched against this
+    commit's head, whose result is recorded in the pull request rather than in
+    the plan the batch validates. `make test-package-verify` does not apply,
+    because no include list, `build.rs`, or `build_l10n_audit/` file changed.
 
 ## Surprises & discoveries
 
@@ -774,6 +854,28 @@ conflict in `Decision log`, and escalate.
   `main` before resolving, and the repair is to rebuild the file from `main`
   and re-apply the intended edits rather than to accept either side of the
   conflict.
+- Observation: the mutation gate's prewarm has almost no margin, so its verdict
+  is a statement about host load as much as about the tree. Evidence: the
+  recorded measurement in `.config/nextest.toml` is 762.60 s against the
+  profile's 900 s bound, and the restored-head batch 1 tripped
+  `TIMEOUT [900.018s]` while batch 2 passed in 892.737 s — 7 s inside the same
+  bound, on the same host, for the same tree. Impact: a red
+  `make test-kani-mutations` whose only failure is the prewarm's timeout is
+  evidence of capacity, not of a code defect; the response is to re-run the
+  gate and record the margin, not to raise the allowance or treat the patch set
+  as broken.
+- Observation: a `make lint` verdict belongs to the host's Whitaker revision as
+  much as to the tree, because the workspace it builds from tracks Whitaker's
+  own branch tip. Evidence: the same tree passed `make lint` at 04:28Z under
+  suite `310631ef811e…` and failed it at 05:20Z under `5cf987051be2…`, after
+  the whitaker workspace at `~/.local/share/whitaker` advanced to `880939d1` and
+  `whitaker` began building that revision; the base commit `e28f26ae2`
+  reproduces the identical 18 findings under the new suite. Impact: a local
+  `lint` red that names functions the branch never touched is a statement about
+  the oracle, so the first move is to look up which suite the run loaded and to
+  reproduce at the base, not to start refactoring. This is the same family as
+  the `mdtablefix` version skew, with the added wrinkle that the suite identity
+  is a moving branch tip rather than a pinned release.
 
 ## Decision log
 
@@ -959,6 +1061,21 @@ conflict in `Decision log`, and escalate.
   offending commit resolves to the target branch's copy, and the re-applied
   edits land in their own commit, so no other file's history is rewritten.
   Date/Author: 2026-11-15.
+- D-21. Decision: treat the 18 `bumpy_road_function` findings as a base-wide
+  consequence of the host's Whitaker revision, and do not answer them inside
+  this task — no `dylint.toml` threshold, no `allow`, and no refactors of the
+  17 untouched files. Rationale: the branch's own delta is prose, the identical
+  finding set reproduces at `e28f26ae2`, and the suite that reports it
+  (`880939d1`) is selected by nothing in the repository, so any local remedy
+  would either suppress a rule repository-wide or spend a shared-bounds task on
+  unrelated code. The three plausible actions were weighed: raising
+  `bumpy_road_function` to 3.0 would silence a rule the vendored guide
+  documents at 2.5 and would hide a real signal from every future branch;
+  restaging the Whitaker workspace would mutate a host tool other agents share;
+  the refactors are 18 sites of their own work with their own review. The task
+  proceeds on the hosted run's verdict, which uses the published Whitaker
+  archive rather than the host's workspace, and this decision is reopened only
+  if that hosted run reproduces the same 18 findings. Date/Author: 2026-11-15.
 
 ## Outcomes & retrospective
 
