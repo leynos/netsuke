@@ -369,39 +369,52 @@ runs:
       shell: bash
       env:
         WORK_DIRECTORY: ${{ inputs['work-dir'] }}
+        VALIDATE_OUTCOME: ${{ steps.validate.outcome }}
       run: |
         set -euo pipefail
         phase_log="$WORK_DIRECTORY/phase-log.json"
-        if [[ ! -f "$phase_log" ]]; then
+        verdict="$WORK_DIRECTORY/verdict.json"
+        # The validate step owns the work directory: when it refuses one (a
+        # re-run's leftovers, an overlapping record, a missing input), nothing
+        # inside it belongs to this attempt. Reading it anyway could attribute
+        # an earlier run's verdict to this one, so a refused validation reports
+        # every phase as skipped and names no verdict.
+        validated=false
+        if [[ "$VALIDATE_OUTCOME" == "success" ]]; then
+          validated=true
+        fi
+        if [[ "$validated" == true && ! -f "$phase_log" ]]; then
           printf 'no phase log: the smoke never began verifying\n' >&2
         fi
-        # Read one field of one phase, or nothing when neither the log nor the
-        # label exists. The caller supplies the default, because the two
-        # defaults differ: an outcome that was never recorded is `skipped`,
-        # while a timing that was never recorded stays empty.
+        # Read one field of one phase, or nothing when validation refused the
+        # work directory, the log is absent, or the label is not in it. The
+        # caller supplies the default, because the two defaults differ: an
+        # outcome that was never recorded is `skipped`, while a timing that was
+        # never recorded stays empty.
         log_field() {
           local phase="$1" query="$2"
-          if [[ ! -f "$phase_log" ]]; then
+          if [[ "$validated" != true || ! -f "$phase_log" ]]; then
             return 0
           fi
           jq -r --arg phase "$phase" "$query" "$phase_log"
         }
         # A fixed label list, so nothing a record holds can add a phase the
-        # catalogue does not know. Every label is emitted, `skipped` included:
-        # the job's summary reads each output unconditionally, and an absent
-        # output arrives there as an empty string, which it reports as
-        # `unknown` rather than as the phase that never ran.
+        # catalogue does not know. Every label is emitted with a registered
+        # outcome, `skipped` included: the observer maps an empty outcome to
+        # `unknown`, which would report a phase that never ran as one whose
+        # outcome could not be read. The label is completed here rather than
+        # left for the summary to interpret.
         for phase in crate_download crate_verification archive_download \
           archive_verification executable_probe; do
           key="${phase//_/-}"
           outcome="$(log_field "$phase" '.[$phase].outcome // "skipped"')"
+          outcome="${outcome:-skipped}"
           started="$(log_field "$phase" '.[$phase].started_ns // ""')"
           ended="$(log_field "$phase" '.[$phase].ended_ns // ""')"
           printf '%s-outcome=%s\n' "$key" "$outcome" >>"$GITHUB_OUTPUT"
           printf '%s-started-ns=%s\n' "$key" "$started" >>"$GITHUB_OUTPUT"
           printf '%s-ended-ns=%s\n' "$key" "$ended" >>"$GITHUB_OUTPUT"
         done
-        verdict="$WORK_DIRECTORY/verdict.json"
-        if [[ -f "$verdict" ]]; then
+        if [[ "$validated" == true && -f "$verdict" ]]; then
           printf 'verdict-path=%s\n' "$verdict" >>"$GITHUB_OUTPUT"
         fi
