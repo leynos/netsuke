@@ -175,7 +175,7 @@ request.
   through the state machines rather than testing them inline.
 - A ceiling change is a one-line change with one test update, not eight.
 - The module carries two verification artefacts that must move with it: the
-  Verus model under `verus/resource_bounds/` and the six Kani harnesses in
+  Verus model under `verus/resource_bounds/` and the seven Kani harnesses in
   `src/stdlib/resource_bounds/verification.rs`, each with a committed mutation
   patch under `docs/verification/mutations/`. A change to a kernel is expected
   to update all three.
