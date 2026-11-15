@@ -372,3 +372,5 @@ fn absent_user_dotfile_falls_through_to_system_scope() -> Result<()> {
     let environment = case.environment(HomeArrangement::EmptyXdgConfigHome);
     case.assert_single_layer(&environment, &case.system_config())
 }
+
+mod properties;

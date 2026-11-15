@@ -1,14 +1,14 @@
 //! Property tests for user-scope candidate derivation and selection.
 //!
-//! The fixed cases in [`super::user_scope`] pin the named contract scenarios.
+//! The fixed cases in the parent module pin the named contract scenarios.
 //! These properties extend them over the environment states a table can only
-//! sample: which user bases are set, empty, or unset, and which candidate files
-//! exist or fail to load.
+//! sample: which user bases are set, empty, relative, or unset, and which
+//! candidate files exist or fail to load.
 
-use super::super::super::discovery_env_source;
-use super::super::super::paths::user_scope_candidates;
-use super::TestEnv;
-use super::user_scope::{Case, canonical, write_config};
+use super::{Case, canonical, write_config};
+use crate::cli::discovery::discovery_env_source;
+use crate::cli::discovery::paths::user_scope_candidates;
+use crate::cli::test_support::TestEnv;
 use ortho_config::MapEnv;
 use proptest::prelude::*;
 use std::ffi::OsString;
