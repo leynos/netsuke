@@ -41,13 +41,24 @@ pub(super) fn width_of(length: usize) -> u64 {
 
 /// Compute the exact product of `lengths` raised to `repeat`, or `None`.
 ///
-/// The operands are folded first and the result is then raised in `u128`, which
-/// is the same quantity the kernel computes but by a route that shares no code
-/// with it. A zero operand absorbs the whole product because the fold reaches
-/// it, and `repeat == 0` gives the single empty tuple because the empty power
-/// is one — both matching `itertools.product`.
+/// The zero repeat and the zero operand are answered before anything is
+/// multiplied, because those two answers do not depend on the operands. That
+/// ordering keeps the oracle sound where the kernel's does: the prefix
+/// `[usize::MAX, usize::MAX, 0]` overflows a `u128` fold partway through, and
+/// folding first would report "above `u64::MAX`" for a request the kernel
+/// answers with zero.
+///
+/// Otherwise the operands are folded and the result raised in `u128`, which is
+/// the same quantity the kernel computes by a route that shares no code with
+/// it.
 #[must_use]
 pub(super) fn product(lengths: &[usize], repeat: u64) -> Option<u64> {
+    if repeat == 0 {
+        return Some(1);
+    }
+    if lengths.contains(&0) {
+        return Some(0);
+    }
     let base = lengths.iter().try_fold(1_u128, |product, length| {
         product.checked_mul(u128::try_from(*length).ok()?)
     })?;
@@ -139,5 +150,31 @@ fn the_written_maximum_matches_u64() {
         as_kernel_result(MAX_AS_U128 + 1),
         None,
         "one past the constant must be unrepresentable"
+    );
+}
+
+/// Check the product oracle answers the cases the kernel answers first.
+///
+/// Each operand here is wide enough that a fold over the whole tuple overflows
+/// the oracle's own `u128`. The oracle must still report the zero operand and
+/// the zero repeat exactly as the kernel does, and must still report "above
+/// `u64::MAX`" when the product really is out of range, so this case pins the
+/// short circuits without excusing the overflow answer.
+#[test]
+fn the_product_oracle_short_circuits_like_the_kernel() {
+    assert_eq!(
+        product(&[usize::MAX, usize::MAX, 0], 1),
+        Some(0),
+        "a zero operand must absorb an overflowing prefix"
+    );
+    assert_eq!(
+        product(&[usize::MAX, usize::MAX, 2], 0),
+        Some(1),
+        "a zero repeat must give the empty product whatever the operands"
+    );
+    assert_eq!(
+        product(&[usize::MAX, usize::MAX], 1),
+        None,
+        "two maximal operands must still be reported as unrepresentable"
     );
 }
