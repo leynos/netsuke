@@ -4472,6 +4472,28 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the new one in its Makefile position; the target itself was left as the only
   place the suite is enumerated.
 
+  **Lint corrections before the batch.** The new `_evidence_path` and its
+  docstring pushed `release_admission_test_harness.py` to 436 lines against the
+  400-line ceiling, so the protocol, the file loader, and the loaded validator
+  moved into `release_admission_validator`: they are not part of the subprocess
+  boundary, and the support facade re-exports the validator unchanged. Ruff
+  also required a trailing newline on files the editor had left unterminated
+  and a one-line signature for `check_write_guard`; `make fmt` applied both.
+
+  **Gates.** All nine gates pass on `a6448603a`, the head that carries the
+  three commits: `check-fmt`, `lint`, `typecheck`, `doc-coverage`, `test`,
+  `test-workflow-contracts` (2356 passed with 3 skipped, then 30),
+  `test-release-admission` (134), `markdownlint`, and `nixie`.
+
+  **Correction: the Whitaker red was transient.** The third batch above failed
+  eighteen `bumpy_road_function` findings after the tip suite was rewritten
+  mid-run, and recorded them as a base condition of the rebuilt suite. That
+  diagnosis does not survive this batch: the same `libwhitaker_suite` file,
+  unchanged since 06:09:22, now reports nothing at all on the same `src/` tree,
+  and `make lint` passes. The findings belonged to a run that overlapped the
+  suite's own replacement, not to the suite's policy, so there is no tool drift
+  to report and nothing for the operator to recover.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
