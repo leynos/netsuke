@@ -844,6 +844,39 @@ conflict in `Decision log`, and escalate.
     that can see the finding: it reports both files moving to code health
     10.00 and no issue on the new module. The twelve-gate set is re-run at
     the new head rather than reused, because the delta changes compiled code.
+  - Twelve-gate batch at `f84cf345f` (2026-11-15). Green in full: all fifteen
+    targets exited 0. `check-fmt` 3 s; `lint` 92 s, which is the first host run
+    in which the Whitaker suites reported nothing, and so confirms that the 18
+    `bumpy_road_function` findings were a property of the host suite revision
+    rather than of this branch; `lint-workflow-scripts` 0 s; `lint-python` 29 s
+    (Pylint 10.00/10); `github-actions-lint` 1 s; `typecheck` 16 s; `test`
+    98 s (5,743 nextest tests passed, 9 skipped; 219 doctests passed, 63
+    ignored); `doc-coverage` 31 s (aggregate 6,552/6,667 = 98.28%);
+    `markdownlint` 32 s; `nixie` 1 s; `test-workflow-contracts` 554 s;
+    `test-documentation-contracts` 1 s; `test-rfc-stdlib-coverage` 1 s;
+    `kani-ir` 628 s (240 checks, 0 failed, 8 unreachable; 24 of 24 harnesses
+    verified); `test-kani-mutations` 880 s (`prewarm_kani_mutation_target`
+    48.15 s, the compile guard 745.19 s and reported slow, 2/2 then 1/1
+    passed). The tree was clean before and after the batch.
+  - Two batches were voided on the way to that head, both because a repair
+    touched tracked files while a batch was live. The first exited 2 at
+    `lint-clippy` with `` `refused` is shadowed ``, from the workspace's denied
+    `clippy::shadow_reuse`: the deduplicated ceiling assertion bound the
+    collector's outcome to `refused` and then rebound `refused` from
+    `expect_err`. The repair names the first binding `outcome`, which is what it
+    holds. The second exited 2 at the spelling stage of `markdownlint`, which
+    rejected `parameterised` in the Progress entry above. Each repair was
+    re-gated from the new head rather than resumed, because gates that ran
+    before it read a tree no commit describes.
+  - Hosted CI at `03b5ca08c` (2026-11-15). Every job was green except
+    `build-test`, which reported the 18 `bumpy_road_function` findings on the
+    11 files this branch never touches, so D-21's reopen condition fired and
+    was answered by the amendment recorded there and by the prerequisite pull
+    request #1139. The `CodeScene Code Health Review (main)` check was red at
+    that head with the two duplication findings the repair above answers; the
+    hosted verdict on the repair is not yet available, because the repair has
+    not been pushed. `cs delta` is the local evidence, and it reports both
+    files at code health 10.00 with no issue on the new module.
 
 ## Surprises & discoveries
 
@@ -1258,25 +1291,44 @@ conflict in `Decision log`, and escalate.
   proceeds on the hosted run's verdict, which uses the published Whitaker
   archive rather than the host's workspace, and this decision is reopened only
   if that hosted run reproduces the same 18 findings. Date/Author: 2026-11-15.
+  Amendment of 2026-11-15: the reopen condition was met. The hosted
+  `build-test` job at `03b5ca08c` reported the same 18 findings on the same 11
+  files, none of them in `src/stdlib/resource_bounds/`, under Whitaker suite
+  archive `e4608a25c2e20116fbc1e97a51a73f094a1db7a1` — a revision published
+  after the base commit `e28f26ae2` last ran CI, so the base is latently
+  subject to the same failure. The remedy is the standalone prerequisite pull
+  request `leynos/netsuke#1139`, "Restore the lint gate against
+  bumpy_road_function 0.3.0", branched from this candidate's own base and
+  carrying only that repair, because the repository's review ruling keeps a
+  repository-wide lint restoration out of a feature diff whose subject is a
+  shared bounds helper. This candidate therefore stays red on `build-test`
+  until #1139 lands and this branch is rebased onto it. Nothing in this branch
+  answers the findings: no `dylint.toml` threshold, no allowance, and no
+  refactor of an untouched file.
 - D-22. Decision: record the candidate's size against the tolerance as
   measured, and report the overage rather than re-base the bar unilaterally.
   Rationale: `Tolerances (exception triggers)` asks for a stop and an
   escalation above 40 changed files or 2,000 net added Rust lines outside
   snapshots, mutation patches, and the Verus proof. Against the base
-  `e28f26ae2` this candidate changes 37 such files — inside the file bar — and
-  adds 3,213 net Rust lines, 1,213 over the line bar. Two readings are possible
-  and the plan does not settle which applies: the literal one counts every Rust
-  line and records a breach; the one that matches the tolerance's purpose
-  counts the production surface, which is 1,017 lines in
-  `src/stdlib/resource_bounds/` (`streams.rs` 295, `cardinality.rs` 252,
-  `limits.rs` 184, `kernel.rs` 156, `mod.rs` 123, with 7 in
-  `src/stdlib/mod.rs`), against 2,196 lines of tests, the Kani harness file,
-  and the BDD steps. Neither reading was chosen on the owner's behalf: the
-  breach, its breakdown, and the proposed production-only basis are reported
-  here and in the pull request, and the candidate proceeds so the owner can
-  accept or reject the deviation against the implemented change rather than in
-  the abstract. No test, harness, or proof was removed or weakened to fit a
-  bar. Date/Author: 2026-11-15.
+  `e28f26ae2`, measured at `f84cf345f`, this candidate changes 38 files with
+  the Verus crate and the mutation patches excluded — inside the file bar, and
+  32 once the snapshot files are excluded too, as the tolerance's own wording
+  has them — and adds 3,328 net Rust lines, 1,328 over the line bar. The line
+  figure is `git diff --numstat e28f26ae2 HEAD` summed over `.rs` paths outside
+  `verus/`; the deduplication that answered the CodeScene finding moved it from
+  3,213 to 3,328, a net +115 (`properties.rs` −120, `tests/generated.rs` +194,
+  `collectors.rs` +38, `tests/mod.rs` +3). Two readings are possible and the
+  plan does not settle which applies: the literal one counts every Rust line
+  and records a breach; the one that matches the tolerance's purpose counts the
+  production surface, which is 1,017 lines in `src/stdlib/resource_bounds/`
+  (`streams.rs` 295, `cardinality.rs` 252, `limits.rs` 184, `kernel.rs` 156,
+  `mod.rs` 123, with 7 in `src/stdlib/mod.rs`), against 2,311 lines of tests,
+  the Kani harness file, and the BDD steps. Neither reading was chosen on the
+  owner's behalf: the breach, its breakdown, and the proposed production-only
+  basis are reported here and in the pull request, and the candidate proceeds
+  so the owner can accept or reject the deviation against the implemented
+  change rather than in the abstract. No test, harness, or proof was removed or
+  weakened to fit a bar. Date/Author: 2026-11-15.
 
 ## Outcomes & retrospective
 
