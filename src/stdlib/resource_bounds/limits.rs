@@ -84,6 +84,28 @@ fn measured_length(bytes: &[u8]) -> u64 {
 /// it recurses and refuses before entering the container that would exceed the
 /// ceiling. A depth value is obtained from [`Self::root`] and advanced only by
 /// [`Self::descend`], so it always reports a depth the caller measured.
+///
+/// # Examples
+///
+/// A rooted depth advances one level per admitted descent:
+///
+/// ```
+/// use netsuke::stdlib::NestingDepth;
+///
+/// let first = NestingDepth::root().descend().expect("one level is admitted");
+/// assert_eq!(first.level(), 1);
+/// ```
+///
+/// The private field is what makes that guarantee hold. A depth cannot be
+/// asserted into existence from outside this module:
+///
+/// ```compile_fail,E0451
+/// let unchecked = netsuke::stdlib::NestingDepth { 0: 3 };
+/// ```
+///
+/// The first example is the control for the second: if the re-export or the
+/// doctest wiring broke, it would fail rather than the rejection passing
+/// vacuously.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NestingDepth(u32);
 

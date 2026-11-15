@@ -52,6 +52,34 @@ impl StreamKind {
 /// every step of the stream. A refused addition leaves the total unchanged, so
 /// the caller can report the refusal and abandon the stream without having to
 /// reason about a partially applied step.
+///
+/// # Examples
+///
+/// A total starts at zero against its kind's ceiling:
+///
+/// ```
+/// use netsuke::stdlib::{RunningTotal, StreamKind};
+///
+/// let total = RunningTotal::new(StreamKind::MatchCount);
+/// assert_eq!(total.admitted(), 0);
+/// ```
+///
+/// The private fields are what make that guarantee hold. A total cannot be
+/// assembled around an arbitrary sum and ceiling from outside this module:
+///
+/// ```compile_fail,E0451
+/// use netsuke::stdlib::{RunningTotal, StreamKind};
+///
+/// let unchecked = RunningTotal {
+///     kind: StreamKind::MatchCount,
+///     admitted: 0,
+///     ceiling: u64::MAX,
+/// };
+/// ```
+///
+/// The first example is the control for the second: if the re-export or the
+/// doctest wiring broke, it would fail rather than the rejection passing
+/// vacuously.
 #[derive(Debug)]
 pub struct RunningTotal {
     /// The quantity this total counts.

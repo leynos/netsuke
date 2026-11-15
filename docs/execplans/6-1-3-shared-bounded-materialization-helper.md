@@ -534,6 +534,28 @@ conflict in `Decision log`, and escalate.
     list, `build.rs`, or `build_l10n_audit/` file changed. Logs are the
     `/tmp/<gate>-netsuke-6-1-3-shared-bounded-materialization-helper.out` files
     named in `Concrete steps`.
+  - Pre-merge review repair (2026-11-15). CodeRabbit's pre-merge walkthrough on
+    head `cdcd1c38e` reported one error and one warning, and both were
+    confirmed against the tree. *Testing (Overall)*: `try_collect_matches`
+    enforced the match ceiling at `streams.rs:252`, while its only test failed
+    at the fourth of ten items, so no case ever reached the ceiling; deleting
+    the check left every gate green. Three cases now cover the ceiling refusal
+    (100 001 pulls), the exact-ceiling collection, and the
+    `From<StreamLimitExceeded>` conversion into a caller's own error type. The
+    same battery's two cap cases claimed an observable boundary the arithmetic
+    cannot show — both sides return `None` through overflow as well as through
+    the cap — and now say that the caps are performance guards. The refusal
+    snapshots in `tests/diagnostics.rs` are produced by the production paths
+    (`admit`, `admit_length`, `descend`, `collect_matches`, `RunningTotal`)
+    rather than built from literals the assertions then restate. *Testing
+    (Compile-Time / Ui)*: the privacy-enforced invariants now carry pinned
+    `compile_fail` doctests — `E0603` for the private `AdmittedCount` and
+    `NestingDepth` tuple constructors and `E0451` for `RunningTotal`'s private
+    fields — each paired with a passing example as the vacuity control,
+    following `src/manifest/glob/mod.rs`. Two documentation counts said "six"
+    Kani harnesses where seven exist; `docs/netsuke-design.md` §4.7 and
+    ADR-0075 now say seven, and the retrospective no longer calls the module
+    wholly private.
 
 ## Surprises & discoveries
 
@@ -856,9 +878,13 @@ contract can carry every later helper. It can: `src/stdlib/resource_bounds/`
 now owns the RFC 0006 table 3 ceilings, the checked cardinality and
 running-total arithmetic, and the typed refusals, and it is independent of
 `minijinja`, so a template adapter can call it without the kernel depending on
-a template engine. The module is private to the crate, which is what makes the
-re-use policy enforceable: there is no public surface to freeze before the
-consumer tasks land.
+a template engine. The module's internals are private, and `src/stdlib/mod.rs`
+re-exports a named surface — the ceilings, the request and admission types, the
+depth and running-total state machines, the two match collectors, and the
+refusal types — which is what makes the re-use policy enforceable: a consumer
+reaches the checked paths and nothing else. That surface is public because the
+doctests and the external behavioural fixtures exercise it as an embedder
+would; it carries no stability promise beyond the roadmap tasks that consume it.
 
 What was delivered:
 

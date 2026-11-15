@@ -165,6 +165,30 @@ fn falling_factorial_of(length: usize, r: u64) -> Option<u64> {
 /// It is a tuple count, not a memory budget: RFC 0015 §5.8 still requires an
 /// output-content check, because a hundred thousand tuples can each hold a
 /// hundred thousand elements.
+///
+/// # Examples
+///
+/// An admitted count comes from `admit` and reads back exactly:
+///
+/// ```
+/// use netsuke::stdlib::CardinalityRequest;
+///
+/// let admitted = CardinalityRequest::Product { lengths: &[4], repeat: 2 }
+///     .admit()
+///     .expect("sixteen tuples fit under the ceiling");
+/// assert_eq!(admitted.get(), 16);
+/// ```
+///
+/// The private field is what makes that guarantee hold. Constructing the tuple
+/// struct outside this module is rejected, so no unchecked count can exist:
+///
+/// ```compile_fail,E0451
+/// let unchecked = netsuke::stdlib::AdmittedCount { 0: 0 };
+/// ```
+///
+/// The first example is the control for the second: if the re-export or the
+/// doctest wiring broke, it would fail rather than the rejection passing
+/// vacuously.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AdmittedCount(usize);
 

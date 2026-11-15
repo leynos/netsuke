@@ -6,6 +6,11 @@
 //! including the integer formatting of a `u64::MAX` value, which no field
 //! assertion would notice. Neither half subsumes the other, so both are kept.
 //!
+//! Every refusal below is produced by the production path that raises it — a
+//! refused request, a refused collector, a refused descent — rather than built
+//! from a literal in the test. A literal would make the field assertions
+//! restate their own fixture; this way they check the value the API returned.
+//!
 //! The messages are English and developer-facing. They are not Fluent keys and
 //! carry no `netsuke::jinja::` code (D-03): the consumer task owns localised
 //! text, and `Display` output must never be forwarded into a template error.
@@ -26,10 +31,12 @@ fn assert_rendered(name: &str, rendered: &str) {
 /// An over-ceiling refusal names the cardinality and the ceiling.
 #[test]
 fn cardinality_exceeded_names_both_numbers() {
-    let refusal = CardinalityError::Exceeded {
-        cardinality: 100_172,
-        ceiling: OUTPUT_TUPLE_CEILING,
-    };
+    let refusal = CardinalityRequest::Product {
+        lengths: &[100_172],
+        repeat: 1,
+    }
+    .admit()
+    .expect_err("100172 tuples exceed the product ceiling");
     let rendered = refusal.to_string();
     let CardinalityError::Exceeded {
         cardinality,
@@ -49,9 +56,12 @@ fn cardinality_exceeded_names_both_numbers() {
 /// formatter, which is why it is snapshotted rather than only compared.
 #[test]
 fn cardinality_overflow_states_the_largest_count() {
-    let refusal = CardinalityError::Overflow {
-        ceiling: OUTPUT_TUPLE_CEILING,
-    };
+    let refusal = CardinalityRequest::Combinations {
+        length: usize::MAX,
+        r: 40,
+    }
+    .admit()
+    .expect_err("that coefficient is above u64::MAX");
     let rendered = refusal.to_string();
     let CardinalityError::Overflow { ceiling } = refusal else {
         panic!("the fixture must be the overflow variant");
@@ -63,10 +73,8 @@ fn cardinality_overflow_states_the_largest_count() {
 /// An input-length refusal names the measured byte length.
 #[test]
 fn input_length_exceeded_names_the_bytes() {
-    let refusal = InputLengthExceeded {
-        length: u64::MAX,
-        ceiling: INPUT_LENGTH_CEILING,
-    };
+    let refusal = super::super::limits::admit_length(u64::MAX)
+        .expect_err("the largest representable length exceeds the ceiling");
     let rendered = refusal.to_string();
     assert_that!(refusal.length, eq(u64::MAX));
     assert_that!(refusal.ceiling, eq(INPUT_LENGTH_CEILING));
@@ -76,13 +84,12 @@ fn input_length_exceeded_names_the_bytes() {
 /// A depth refusal names the attempted depth.
 #[test]
 fn depth_exceeded_names_the_depth() {
-    let refusal = DepthExceeded {
-        depth: 129,
-        ceiling: 128,
-    };
+    let refusal = (0..=NESTING_DEPTH_CEILING)
+        .try_fold(NestingDepth::root(), |depth, _| depth.descend())
+        .expect_err("the level past the ceiling is refused");
     let rendered = refusal.to_string();
-    assert_that!(refusal.depth, eq(129_u32));
-    assert_that!(refusal.ceiling, eq(128_u32));
+    assert_that!(refusal.depth, eq(NESTING_DEPTH_CEILING + 1));
+    assert_that!(refusal.ceiling, eq(NESTING_DEPTH_CEILING));
     assert_rendered("depth_exceeded", &rendered);
 }
 
@@ -93,10 +100,8 @@ fn depth_exceeded_names_the_depth() {
 /// a count (D-08).
 #[test]
 fn match_count_refusal_names_the_ceiling() {
-    let refusal = StreamLimitExceeded {
-        kind: StreamKind::MatchCount,
-        ceiling: MATCH_COUNT_CEILING,
-    };
+    let refusal =
+        collect_matches(std::iter::repeat(1_u64)).expect_err("an unbounded stream is refused");
     let rendered = refusal.to_string();
     assert_that!(refusal.kind, eq(StreamKind::MatchCount));
     assert_that!(refusal.ceiling, eq(MATCH_COUNT_CEILING));
@@ -106,10 +111,13 @@ fn match_count_refusal_names_the_ceiling() {
 /// An output-byte refusal renders its own sentence for the same shape.
 #[test]
 fn output_bytes_refusal_names_the_ceiling() {
-    let refusal = StreamLimitExceeded {
-        kind: StreamKind::OutputBytes,
-        ceiling: OUTPUT_BYTES_CEILING,
-    };
+    let mut total = RunningTotal::new(StreamKind::OutputBytes);
+    total
+        .admit(OUTPUT_BYTES_CEILING)
+        .expect("exactly the ceiling is admitted");
+    let refusal = total
+        .admit_one()
+        .expect_err("one byte past the ceiling is refused");
     let rendered = refusal.to_string();
     assert_that!(refusal.kind, eq(StreamKind::OutputBytes));
     assert_that!(refusal.ceiling, eq(OUTPUT_BYTES_CEILING));

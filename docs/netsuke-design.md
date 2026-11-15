@@ -2518,9 +2518,9 @@ conversion arrive with the consumer that can trigger them (roadmap 6.1.4 and
 the child helpers), never with this module.
 
 The module is also where the mathematical claim lives. `verus/resource_bounds/`
-mirrors the arithmetic kernel in Verus, and the six `#[kani::proof]` harnesses
-in `src/stdlib/resource_bounds/verification.rs` drive the production kernels
-over bounded symbolic inputs; both are described in the
+mirrors the arithmetic kernel in Verus, and the seven `#[kani::proof]`
+harnesses in `src/stdlib/resource_bounds/verification.rs` drive the production
+kernels over bounded symbolic inputs; both are described in the
 [developer's guide](developers-guide.md#resource-bounds-for-template-helpers).
 
 ## Section 5: The Bridge to Ninja: Intermediate Representation and Code Generation

@@ -126,10 +126,12 @@ fn permutation_witnesses(#[case] length: usize, #[case] r: u64, #[case] expected
 
 /// The binomial cap refuses before the loop, whatever the coefficient is.
 ///
-/// A reduced iteration count of 34 or more cannot produce a `u64`, so the cap
-/// check answers `None` without walking the loop at all. The case is here
-/// rather than only in Kani because it also pins the cap's boundary: 33 steps
-/// still run and 34 do not.
+/// The reduced iteration count is a performance guard, not a semantic one:
+/// any coefficient needing more than the cap's steps already exceeds
+/// `u64::MAX`, so the cap changes how long the kernel runs and never what it
+/// answers. These cases therefore pin the refusal only. They cannot observe
+/// where the cap lies, because both operands below return `None` whether the
+/// arithmetic overflows on its own or the cap stops it first.
 #[test]
 fn binomial_cap_stops_symbolically_large_inputs() {
     assert_eq!(
@@ -140,26 +142,30 @@ fn binomial_cap_stops_symbolically_large_inputs() {
     assert_eq!(
         kernel::checked_binomial(u64::MAX, 34),
         None,
-        "the cap boundary is 34, not 33"
+        "a reduced count above the cap is refused"
     );
     assert_eq!(
         kernel::checked_binomial(u64::MAX, 33),
         None,
-        "33 steps run, and the coefficient itself still overflows"
+        "the largest usable reduced count still overflows"
     );
 }
 
 /// The falling-factorial cap refuses before the loop for the same reason.
+///
+/// As with the binomial cap, the guard is a performance bound: an arrangement
+/// that long overflows `u64` anyway, so the cases pin the refusal rather than
+/// a boundary this arithmetic could make observable.
 #[test]
 fn falling_factorial_cap_stops_symbolically_large_inputs() {
     assert_eq!(
         kernel::checked_falling_factorial(1_000_000_000_000_000_000, 1_000_000_000_000_000_000),
         None,
-        "an arrangement longer than the cap is unrepresentable"
+        "an arrangement longer than the cap is refused"
     );
     assert_eq!(
         kernel::checked_falling_factorial(1_000_000_000_000_000_000, 20),
         None,
-        "20 steps run, and the product itself still overflows"
+        "the cap's largest context still overflows the product"
     );
 }
