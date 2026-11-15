@@ -4,7 +4,8 @@ GitHub accepts a job-level ``if`` either as a bare expression or wrapped in
 ``${{ }}``, and the two spellings mean the same guard. The publication gate
 reads the guard structurally, so this module holds a wrapped guard to exactly
 the verdict the bare one receives: every required clause counts as present,
-and a disjunction or ``always()`` is still refused. The mutation suite proves
+and a disjunction, ``always()`` or a ``cancelled()``-led guard is still
+refused. The mutation suite proves
 the gate rejects regressions in the committed workflow; these cases prove it
 reads a guard GitHub would honour rather than only the spelling it happens to
 be written in today.
@@ -14,7 +15,7 @@ import pytest
 from release_write_authority_contract import REQUIRED_GUARD_CLAUSES, check_write_guard
 
 #: A guard carrying every clause the publication gate requires.
-COMPLETE_GUARD = " && ".join(("!cancelled()", *REQUIRED_GUARD_CLAUSES))
+COMPLETE_GUARD = " && ".join(REQUIRED_GUARD_CLAUSES)
 
 
 def _violations(guard: str) -> list[str]:
@@ -68,6 +69,29 @@ def test_wrapped_always_call_is_still_refused() -> None:
     assert any("always()" in v for v in violations), (
         f"an unconditional status call should be refused; got {violations!r}"
     )
+
+
+def test_a_cancelled_status_call_does_not_replace_the_negation() -> None:
+    """Refuse `cancelled() && ...`, which can start the job after cancellation.
+
+    Notes
+    -----
+    Every other required clause is present, so the only thing standing between
+    this guard and a cancelled run is the missing negation. During a cancelled
+    run the dependencies it names may all have succeeded already, which makes
+    the conjunction true.
+    """
+    without_negation = " && ".join(
+        clause for clause in REQUIRED_GUARD_CLAUSES if clause != "!cancelled()"
+    )
+    guard = f"cancelled() && {without_negation}"
+
+    violations = _violations(guard)
+
+    assert any(
+        violation.endswith("missing top-level check '!cancelled()'")
+        for violation in violations
+    ), f"a guard starting with cancelled() should be refused; got {violations!r}"
 
 
 def test_wrapped_guard_missing_a_clause_still_reports_it() -> None:

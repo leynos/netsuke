@@ -1,8 +1,9 @@
 """Break the publication gate one clause at a time.
 
 Each mutation states a plausible way to reopen the bypass the gate closes: drop
-a dependency, drop one result or output check, hard-code the enforcement mode
-in either direction, smuggle an ``always()`` onto the publication guard, disjoin
+a dependency, drop one result or output check, invert the guard's cancellation
+negation, hard-code the enforcement mode in either direction, smuggle an
+``always()`` onto the publication guard, disjoin
 the guard from an always-true clause, add a publisher whose scopes arrive as a
 ``write-all`` shorthand or through the workflow level, let the rehearsal adopt
 the gate, let publication adopt the rehearsal, or grant the rehearsal a write
@@ -66,6 +67,10 @@ GATE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "remove-registry-enforcement-check": (
         ("tag-publish-report-only-admission", "crates-io-job"),
         ("static", "write-authority.publish-crates-io.guard"),
+    ),
+    "positive-cancellation-publication-guard": (
+        ("cancelled-publishing", "publish-job"),
+        ("static", "write-authority.publish-release.guard"),
     ),
     "remove-finalize-package-need": (
         ("static", "write-authority.finalize-github-release.needs"),
@@ -142,6 +147,17 @@ def _always_publication_guard(release: dict[str, object]) -> None:
     job["if"] = replace_once(
         str(job.get("if", "")), r"!cancelled\(\)\s*&&\s*", "always() && "
     )
+
+
+def _cancelled_publication_guard(release: dict[str, object]) -> None:
+    """Start publication when the run was cancelled, keeping every gate clause.
+
+    ``cancelled()`` is true after a run is cancelled, and the dependencies the
+    rest of the guard names may all have succeeded by then, so the conjunction
+    is satisfied exactly when publication must not happen.
+    """
+    job = workflow_job(release, PUBLICATION_JOB)
+    job["if"] = replace_once(str(job.get("if", "")), r"!cancelled\(\)", "cancelled()")
 
 
 def _staging_adopts_admission(release: dict[str, object]) -> None:
@@ -243,6 +259,7 @@ GATE_MUTATIONS: dict[str, cabc.Callable[[dict[str, object]], None]] = {
     "force-observation-enforcement": lambda release: _set_enforcement(release, "false"),
     "force-enforced-rehearsal": lambda release: _set_enforcement(release, "true"),
     "always-publication-guard": _always_publication_guard,
+    "positive-cancellation-publication-guard": _cancelled_publication_guard,
     "staging-adopts-admission": _staging_adopts_admission,
     "publication-adopts-staging": _publication_adopts_staging,
     "disjunctive-publication-guard": _disjunctive_publication_guard,

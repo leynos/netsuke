@@ -6,7 +6,8 @@ new publisher be added beside the gate rather than behind it, so this module
 derives the set from the workflow itself and holds every member to the same
 rule: depend on packaging and on the gate, require both results to be
 successful, require enforcement, a successful outcome and the run's own
-candidate, and leave no ``always()`` or disjunction to override any of it.
+candidate, require the job not to start on a cancelled run, and leave no
+``always()`` or disjunction to override any of it.
 
 A job's scopes come from its own declaration, or from the workflow's when the
 job declares none, and either may be the ``write-all`` shorthand. A job whose
@@ -45,12 +46,17 @@ PACKAGE_JOB = "package-crate"
 #: dry run.
 READ_ONLY_JOBS = (ADMISSION_JOB, PACKAGE_JOB, "release")
 REQUIRED_DEPENDENCIES = (PACKAGE_JOB, ADMISSION_JOB)
-#: Every top-level clause a write job's guard must carry. A clause inside a
-#: negation is not a top-level conjunct, so `a && !(b)` is reported rather than
-#: read as present. A disjunction anywhere in the guard is refused outright:
-#: `&&` binds tighter than `||`, so `a && b && false || true` keeps every
-#: clause as a conjunct and is still always true.
+#: Every top-level clause a write job's guard must carry. The cancellation
+#: negation is required in its own right: a guard that begins with
+#: `cancelled() &&` can start the job after the run was cancelled, whenever the
+#: dependencies it names had already succeeded, and every other clause here
+#: would read as satisfied. A clause inside a negation is not a top-level
+#: conjunct, so `a && !(b)` is reported rather than read as present. A
+#: disjunction anywhere in the guard is refused outright: `&&` binds tighter
+#: than `||`, so `a && b && false || true` keeps every clause as a conjunct and
+#: is still always true.
 REQUIRED_GUARD_CLAUSES = (
+    "!cancelled()",
     *(f"needs.{name}.result == 'success'" for name in REQUIRED_DEPENDENCIES),
     f"needs.{ADMISSION_JOB}.outputs.enforcement == 'true'",
     f"needs.{ADMISSION_JOB}.outputs.gate_outcome == 'success'",
