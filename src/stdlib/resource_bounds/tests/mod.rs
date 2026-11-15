@@ -13,10 +13,11 @@
 //! `properties` owns the generated cases and their class-coverage tripwires;
 //! `cardinality` owns the named arithmetic witnesses; `admission` owns the
 //! boundary table and the argument that refusal allocation cannot happen;
-//! `limits` owns depth, input-length, and stream boundaries; `diagnostics` owns
-//! the snapshots that pin each refusal's rendered message. The fixture below
-//! lives here rather than beside its first caller so that a battery cannot
-//! quietly drift onto a private copy of it.
+//! `limits` owns depth, input-length, and running-total boundaries;
+//! `collectors` owns the two match collectors and the pull counts that show
+//! where they stop; `diagnostics` owns the snapshots that pin each refusal's
+//! rendered message. The fixture below lives here rather than beside its first
+//! caller so that a battery cannot quietly drift onto a private copy of it.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -25,6 +26,7 @@ use super::*;
 
 mod admission;
 mod cardinality;
+mod collectors;
 mod diagnostics;
 mod limits;
 mod oracle;
