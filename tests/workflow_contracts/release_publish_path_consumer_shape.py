@@ -188,6 +188,13 @@ def check_smoke_checkout(job: dict[str, object], violations: list[str]) -> None:
             "persist-credentials: false and the candidate commit"
         )
         return
+    _require_checkout_values(values, violations)
+
+
+def _require_checkout_values(
+    values: dict[str, object], violations: list[str]
+) -> None:
+    """Require the checkout's inputs to drop the token and pin the candidate."""
     # `is not False` rather than a falsy test: an omitted key, the string
     # "false", and a `true` all leave a credential, and only a YAML boolean
     # false removes it.
@@ -206,24 +213,30 @@ def check_smoke_checkout(job: dict[str, object], violations: list[str]) -> None:
 def check_smoke_artifacts(job: dict[str, object], violations: list[str]) -> None:
     """Require every artefact download to name one permitted artefact exactly."""
     for step in steps_of(job):
-        if not str(step.get("uses", "")).startswith(DOWNLOAD_ARTIFACT_PREFIX):
-            continue
-        values = step.get("with")
-        if not isinstance(values, dict):
-            violations.append(
-                f"{CONSUMER_SMOKE_JOB}.artifacts: every download must name its artefact"
-            )
-            continue
-        if "pattern" in values:
-            violations.append(
-                f"{CONSUMER_SMOKE_JOB}.artifacts: a pattern download would let "
-                "artefact storage stand in for the public download"
-            )
-        if str(values.get("name")) not in SMOKE_ARTIFACTS:
-            violations.append(
-                f"{CONSUMER_SMOKE_JOB}.artifacts: {values.get('name')!r} is not "
-                "one of the permitted artefact names"
-            )
+        if str(step.get("uses", "")).startswith(DOWNLOAD_ARTIFACT_PREFIX):
+            _require_named_artifact(step, violations)
+
+
+def _require_named_artifact(
+    step: dict[str, object], violations: list[str]
+) -> None:
+    """Require one artefact download to name its artefact and no pattern."""
+    values = step.get("with")
+    if not isinstance(values, dict):
+        violations.append(
+            f"{CONSUMER_SMOKE_JOB}.artifacts: every download must name its artefact"
+        )
+        return
+    if "pattern" in values:
+        violations.append(
+            f"{CONSUMER_SMOKE_JOB}.artifacts: a pattern download would let "
+            "artefact storage stand in for the public download"
+        )
+    if str(values.get("name")) not in SMOKE_ARTIFACTS:
+        violations.append(
+            f"{CONSUMER_SMOKE_JOB}.artifacts: {values.get('name')!r} is not "
+            "one of the permitted artefact names"
+        )
 
 
 def check_smoke_action_inputs(job: dict[str, object], violations: list[str]) -> None:
@@ -246,7 +259,11 @@ def check_smoke_action_inputs(job: dict[str, object], violations: list[str]) -> 
             f"{LOCAL_SMOKE_ACTION} step, found {len(invocations)}"
         )
         return
-    step = invocations[0]
+    _require_invocation(invocations[0], violations)
+
+
+def _require_invocation(step: dict[str, object], violations: list[str]) -> None:
+    """Require the invocation to carry no condition and exactly the reviewed inputs."""
     if "if" in step:
         violations.append(
             f"{CONSUMER_SMOKE_JOB}.action: the smoke invocation must run "
@@ -276,14 +293,27 @@ def check_smoke_action_declared(
             f"{CONSUMER_SMOKE_JOB}.action: inputs must be exactly "
             f"{sorted(SMOKE_ACTION_INPUTS)}, got {sorted(names)}"
         )
-    credential = sorted(
-        name for name in names if TOKEN_EXPRESSION.search(name) or "token" in name
-    )
+    credential = _credential_inputs(names)
     if credential:
         violations.append(
             f"{CONSUMER_SMOKE_JOB}.action: the smoke must declare no credential "
             f"input, got {credential}"
         )
+
+
+def _credential_inputs(names: set[str]) -> list[str]:
+    """Return the declared input names that resolve to a credential.
+
+    Returns
+    -------
+    list[str]
+        The offending names, sorted, or an empty list. A name is judged by the
+        expression it holds and by the word it uses, because a token can be
+        spelled into an input either way.
+    """
+    return sorted(
+        name for name in names if TOKEN_EXPRESSION.search(name) or "token" in name
+    )
 
 
 def check_smoke_compilation(
