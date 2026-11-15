@@ -21,6 +21,12 @@ owns exactly one of them:
   under release. The two are split because a schema change and an admission-rule
   change are different changes, and because each half then sits well inside
   the module-length ceiling.
+- ``admission_evidence`` composes those two: it reads the manifest through the
+  filesystem port, classifies its window, and re-reads the window at the
+  admission decision, so the bound holds when the gate answers rather than only
+  when it first looked. It is separate from ``gate`` because the evidence
+  decisions had grown to a third of the orchestration module, and because the
+  questions it answers are about the document rather than about the run.
 - ``filesystem`` performs the filesystem effects the gate needs: make a parent
   directory, create one file empty, and read one file under a byte bound. It is
   the gate's only *start-up* write, and it exists so those effects can be
@@ -35,8 +41,9 @@ owns exactly one of them:
 - ``telemetry`` decides whether and where a record is written, and what a
   failed write costs the gate.
 - ``gate`` owns orchestration, and is the composition root. It depends on
-  ``configuration`` for one name, the resolved settings it runs against, and on
-  ``filesystem`` for the port it reads the evidence through.
+  ``configuration`` for one name, the resolved settings it runs against, on
+  ``filesystem`` for the port the evidence decisions read through, and on
+  ``admission_evidence`` for those two decisions.
 
 Splitting them keeps each module small enough to read and lets the runtime
 tests double a single boundary at a time.

@@ -290,11 +290,12 @@ def test_documented_adapters_receive_native_boundary_contracts(
         CLOCK_ARGUMENTS,
         WALL_CLOCK_ARGUMENTS,
     }, "the clock adapter must receive both clock program argument vectors"
-    assert len(adapted.clock.calls) == 11, (
-        "the gate reads the clock twice per operation and once for freshness"
+    assert len(adapted.clock.calls) == 12, (
+        "the gate reads the clock twice per operation, once for freshness, and "
+        "once at the admission decision"
     )
-    assert adapted.clock.calls.count(list(WALL_CLOCK_ARGUMENTS)) == 1, (
-        "evidence freshness is the only wall-clock reading"
+    assert adapted.clock.calls.count(list(WALL_CLOCK_ARGUMENTS)) == 2, (
+        "the window must be read at the freshness check and again at the decision"
     )
     assert len(adapted.metrics.calls) == len(run.metrics), (
         "the metric sink must receive exactly the records the artefact holds"

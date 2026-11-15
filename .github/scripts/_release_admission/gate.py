@@ -13,9 +13,10 @@ freeze them:
 
 - Evidence is verified, not asserted. ``check_scan_freshness`` reads the
   manifest and refuses a timestamp outside the window; ``verify_evidence`` then
-  requires that manifest to name this repository, revision, tag and run and to
-  report both required canaries as successful. A freshness check passing is
-  therefore never sufficient for admission.
+  requires that manifest to name this repository, revision, tag and run, to
+  report both required canaries as successful, and to still be inside its
+  window at that later moment. A freshness check passing is therefore never
+  sufficient for admission.
 - Bash's trailing-newline handling. A command substitution strips trailing
   newlines from a revision, but the value embedded in the next command's
   argument vector keeps them; the comparison between the two is what turns a
@@ -38,7 +39,7 @@ import dataclasses
 import math
 import typing as typ
 
-from . import commands, evidence, policy, records, telemetry
+from . import admission_evidence, commands, evidence, policy, records, telemetry
 
 if typ.TYPE_CHECKING:
     from . import filesystem
@@ -79,13 +80,17 @@ class Gate:
     ) -> None:
         """Bind the resolved configuration, the filesystem port, and the record.
 
-        The port is a parameter rather than a lookup so that the verification's
-        only filesystem effect can be observed, and so a test can hand in a
-        manifest without arranging a directory tree.
+        The port is a parameter rather than a lookup so that the evidence read
+        can be observed, and so a test can hand in a manifest without arranging
+        a directory tree. It reaches the evidence decisions through
+        :class:`~.admission_evidence.AdmissionEvidence`, which also takes this
+        gate's own wall-clock reader so the window is measured where the record
+        is written.
         """
         self._configuration = configuration
-        self._file_system = file_system
-        self._manifest: evidence.Manifest | None = None
+        self._evidence = admission_evidence.AdmissionEvidence(
+            configuration, file_system, self._read_wall_clock
+        )
         self._outcome = policy.Outcome.UNKNOWN
         self._error_category = policy.ErrorCategory.UNKNOWN
         self._trace_sink_failed = False
@@ -245,9 +250,9 @@ class Gate:
             case policy.Operation.FETCH_WORKFLOW_RUN:
                 self._fetch_workflow_run()
             case policy.Operation.CHECK_SCAN_FRESHNESS:
-                self._check_scan_freshness()
+                self._apply(self._evidence.check_freshness())
             case _:
-                self._verify_evidence()
+                self._apply(self._evidence.admit())
 
     def _resolve_tag_commit(self) -> None:
         """Resolve the candidate through the API and compare it with ``GITHUB_SHA``.
@@ -324,68 +329,6 @@ class Gate:
         self._apply(
             policy.classify_run_head(result.output, self._configuration.revision)
         )
-
-    def _check_scan_freshness(self) -> None:
-        """Read the evidence manifest and refuse every unbounded timestamp.
-
-        The three ways the document can fail to arrive are told apart because an
-        operator fixes them differently: nothing at the path is
-        ``missing_evidence``, a file the operating system will not read or that
-        exceeds the byte bound is ``malformed_evidence``, and a document that
-        parsed but lies outside the window is ``stale_evidence``. A parse
-        refusal keeps the category the parser chose, so one function decides
-        what a malformed document is.
-        """
-        configured = self._configuration.evidence_file
-        try:
-            raw = self._file_system.read_bytes(configured, evidence.MAX_EVIDENCE_BYTES)
-        except FileNotFoundError:
-            self._refuse(policy.ErrorCategory.MISSING_EVIDENCE)
-            return
-        except OSError:
-            # Includes `filesystem.EvidenceTooLargeError` and
-            # `filesystem.NotRegularFileError`: something is at the path, but it
-            # cannot be read as the manifest.
-            self._refuse(policy.ErrorCategory.MALFORMED_EVIDENCE)
-            return
-        parsed = evidence.parse_manifest(raw)
-        if parsed.manifest is None:
-            self._refuse(parsed.error_category)
-            return
-        self._manifest = parsed.manifest
-        now, failed = self._read_wall_clock()
-        if failed:
-            self._refuse(policy.ErrorCategory.UNKNOWN)
-            return
-        self._apply(
-            evidence.classify_freshness(
-                parsed.manifest,
-                now=now,
-                max_age_seconds=int(self._configuration.max_evidence_age_seconds),
-            )
-        )
-
-    def _verify_evidence(self) -> None:
-        """Require the manifest the freshness check read to admit the candidate.
-
-        A gate that reached this operation has already refused every absent,
-        unreadable, and stale document, so the manifest is always present while
-        operations stop at the first failure. The guard reports
-        ``missing_evidence`` rather than assuming: a future reordering that
-        skipped the read would then fail closed instead of admitting on no
-        document at all.
-        """
-        if self._manifest is None:
-            self._refuse(policy.ErrorCategory.MISSING_EVIDENCE)
-            return
-        configuration = self._configuration
-        candidate = evidence.Candidate(
-            repository=configuration.repository,
-            commit=configuration.revision,
-            tag=configuration.tag,
-            run_id=configuration.run_id,
-        )
-        self._apply(evidence.verify(self._manifest, candidate))
 
     def _refuse(self, error_category: policy.ErrorCategory) -> None:
         """Record the operation in progress as failed, for a bounded category."""
