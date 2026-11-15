@@ -162,3 +162,34 @@ def test_extract_binary_removes_a_partial_file_when_the_copy_fails(
     assert not list(destination.iterdir()), (
         "a failed extraction must not leave a partial binary behind"
     )
+
+
+def test_extract_binary_translates_a_write_failure(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Report a failed write as an archive refusal rather than a bare OSError.
+
+    A full or read-only filesystem surfaces here as :class:`OSError`, which
+    the smoke's exit-code table does not classify. Left untranslated it would
+    end the run with a traceback instead of the archive-refused status.
+    """
+
+    def no_space(*_args: object, **_kwargs: object) -> None:
+        """Fail the copy the way a full filesystem does."""
+        msg = "No space left on device"
+        raise OSError(msg)
+
+    archive = tarball(tmp_path / "archive.tar.gz")
+    layout = adapter.scan_archive(archive, expected_sha256=digest_of(archive))
+    destination = tmp_path / "out"
+    destination.mkdir()
+    monkeypatch.setattr(extract, "_copy_member", no_space)
+
+    with pytest.raises(adapter.ExtractionError):
+        extract.extract_binary(
+            archive, layout, destination, expected_sha256=digest_of(archive)
+        )
+
+    assert not list(destination.iterdir()), (
+        "a refused write must leave the directory as it found it"
+    )

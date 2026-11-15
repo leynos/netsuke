@@ -220,12 +220,23 @@ def _write_entry(
     :class:`ExtractionError` and damaged data as
     :class:`release_binstall_archive.ArchiveCorruptError`. The partial file is
     deleted either way.
+
+    An :class:`OSError` from the write, the permission change, or the buffer's
+    final flush is translated into :class:`ExtractionError` after the cleanup.
+    Left untranslated it would escape
+    :data:`consumer_smoke_verify._REFUSAL_TYPES` and end the smoke with a
+    traceback instead of the archive-refused status it promises, for a failure
+    a full or read-only filesystem produces routinely.
     """
     target = destination / layout.binary_name
     descriptor = _created_exclusively(target)
     try:
         os.fchmod(descriptor, BINARY_MODE)
         _copy_member(archive, entry, descriptor, layout)
+    except OSError as error:
+        _discard(target)
+        msg = f"the binary could not be written to {target}: {error}"
+        raise ExtractionError(msg) from error
     except BaseException:
         _discard(target)
         raise
