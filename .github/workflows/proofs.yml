@@ -1,3 +1,4 @@
+---
 name: Proofs
 
 # The Verus proof under `verus/` (the canonical-value proof). Proof code that no
@@ -25,7 +26,7 @@ name: Proofs
       - 'Makefile'
       - '.github/workflows/proofs.yml'
   schedule:
-    - cron: '17 5 * * 3' # Weekly, Wednesday 05:17 UTC
+    - cron: '17 5 * * 3'  # Weekly, Wednesday 05:17 UTC
   workflow_dispatch:
 
 concurrency:
