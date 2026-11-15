@@ -979,29 +979,30 @@ pre-rebase history if an old hash must be inspected.
   `| not-a-task | A1/* | -- | -- |` acted as a reference source even though a
   real row belongs to a `Task`-headed table; `trace_table_tasks` had the
   stronger rule, and the two now share `task_table_rows`, which also requires
-  the first cell to name a task. Second, `reference_covers` stripped `/*` from a
-  bare `/*` and got the empty string, which every identifier starts with, so one
-  token claimed the whole register; `covers_area` now refuses an empty prefix
-  and `covers_site` was extracted alongside it. Both were proved before the fix:
-  the throwaway cases failed with `fixture should have failed validation for
-  neither traced nor listed unchanged`, which is the defect, not the proposal.
-  The third finding was in `property_tests.rs`, where five lookups the
-  generator guarantees were written `if let Some(..) else { continue }`; a
-  parser that returned `None` everywhere would have skipped every case and
-  passed. A local `prop_assert_some!` turns those into assertions, since
-  proptest has no such macro. All four rules now fail against a probe that
-  reverts them: reverting the empty-prefix guard fails only
-  `area_wildcard_with_no_area`, dropping table membership fails only
+  the first cell to name a task. Second, `reference_covers` stripped `/*` from
+  a bare `/*` and got the empty string, which every identifier starts with, so
+  one token claimed the whole register; `covers_area` now refuses an empty
+  prefix and `covers_site` was extracted alongside it. Both were proved before
+  the fix: the throwaway cases failed with
+  `fixture should have failed validation for
+  neither traced nor listed unchanged`,
+  which is the defect, not the proposal. The third finding was in
+  `property_tests.rs`, where five lookups the generator guarantees were written
+  `if let Some(..) else { continue }`; a parser that returned `None` everywhere
+  would have skipped every case and passed. A local `prop_assert_some!` turns
+  those into assertions, since proptest has no such macro. All four rules now
+  fail against a probe that reverts them: reverting the empty-prefix guard
+  fails only `area_wildcard_with_no_area`, dropping table membership fails only
   `row_outside_a_task_table`, dropping the task requirement fails only
   `task_row_naming_no_task`, and making `harvest_body` return `None` fails
   `harvests_are_heading_free_prefixes_of_their_region` where the skipped form
   passed. The two throwaway cases became the documented three-case table
-  `rejects_register_coverage_claimed_by_a_malformed_trace_row`. One
-  correction came out of the probing rather than the reviewing: the first two
-  cases were both written against the same anchor, so the wildcard case never
-  reached `covers_area`; it moved into the skeleton's own `Task` table, which
-  made it live. The fix touches `tests/`, so the post-pin list is now stale
-  again and will be regenerated before the next batch. Date/Author: 2026-11-15,
+  `rejects_register_coverage_claimed_by_a_malformed_trace_row`. One correction
+  came out of the probing rather than the reviewing: the first two cases were
+  both written against the same anchor, so the wildcard case never reached
+  `covers_area`; it moved into the skeleton's own `Task` table, which made it
+  live. The fix touches `tests/`, so the post-pin list is now stale again and
+  will be regenerated before the next batch. Date/Author: 2026-11-15,
   implementation agent, after the hosted fourth round.
 - Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
   the branch onto it so the pin is the merge base, and append a "commits since
@@ -2418,11 +2419,12 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   time to 66 identifiers, 50 `main` and 16 branch. The re-gated candidate is
   66, not the 65 this revision first quoted.
 - Revision 48 (2026-11-15): closed CodeRabbit's fourth round (D-33), three
-  findings, two of them real fail-opens in `trace.rs` and one a vacuous property
-  pattern in `property_tests.rs`. The diff is still 22 files. Because the fixes
-  touch `tests/`, the post-pin list is stale once more and will be regenerated
-  before the next gate run; this revision does not quote a count it has not
-  re-measured, which is the lesson D-31 through D-33 now carry four times over.
+  findings, two of them real fail-opens in `trace.rs` and one a vacuous
+  property pattern in `property_tests.rs`. The diff is still 22 files. Because
+  the fixes touch `tests/`, the post-pin list is stale once more and will be
+  regenerated before the next gate run; this revision does not quote a count it
+  has not re-measured, which is the lesson D-31 through D-33 now carry four
+  times over.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
