@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 55. See `Revision note` at the foot of this document. This plan was
+Revision 56. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -338,9 +338,13 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   parser modules under `tests/hexagonal_inventory_contract/`, the exact-path
   CodeScene exemptions those parsers need, both `dylint.toml` policy files, and
   (only if the spelling gate requires it) `typos.local.toml` and its generated
-  `typos.toml`. The measured range `origin/main...HEAD` is twenty-six files, so
+  `typos.toml`. The measured range is twenty-four files at the current base, so
   this tolerance fired during the task; the expansion is recorded in D-14,
-  D-28, D-30, and D-41 rather than applied silently.
+  D-28, D-30, D-41, and D-42 rather than applied silently. The permitted-path
+  list keeps `dylint.toml` and `test_support/dylint.toml` even though the
+  rebase returned both to `main`'s content: a path being permitted is not a
+  claim that it changed, and D-38's commits did touch them before D-42
+  superseded them.
 - Drift: if the pin differs from `ebcedaef` and any commit between them
   touches `src/`, `build.rs`, `tests/`, `test_support/`, or `benches/`, re-run
   every sweep; do not patch this plan's planning-time observations. If
@@ -775,15 +779,19 @@ pre-rebase history if an old hash must be inspected.
   awaited. The detector keeps a bump when its span is at least
   `min_bump_lines`, so a floor must exceed the widest artefact rather than
   match it; a first attempt at 15 was honoured and still failed on both hosted
-  lanes, and 25 is what ships. `make lint-whitaker` also runs the suite from
-  `test_support`, which reads that crate's own `dylint.toml`, so the table had
-  to be stated in both files. No `src/` file changes. Two code refactors
-  written against the narrower settings were reverted once the chosen setting
-  left the untouched code clean. The commit does touch an in-scope path —
-  `test_support/dylint.toml` is under `test_support/`, which the post-pin sweep
-  covers — so the list advances an eleventh time to 72 identifiers with a 50/22
-  split. Regenerating rather than reasoning about the path list is what caught
-  this: the plan initially recorded no advance.
+  lanes, and 25 was what this branch shipped. Superseded by D-42: `fa06bdb21`
+  landed the same fix upstream as a floor of 15 plus a refactor of the one
+  genuine cluster, which the rebase adopted, so this branch now carries no
+  `dylint.toml` change and the setting in the tree is 15. `make lint-whitaker`
+  also runs the suite from `test_support`, which reads that crate's own
+  `dylint.toml`, so the table had to be stated in both files. No `src/` file
+  changes. Two code refactors written against the narrower settings were
+  reverted once the chosen setting left the untouched code clean. The commit
+  did touch an in-scope path — `test_support/dylint.toml` is under
+  `test_support/`, which the post-pin sweep covers — so the list advanced an
+  eleventh time at the time it was made. Regenerating rather than reasoning
+  about the path list is what caught this: the plan initially recorded no
+  advance.
 - [x] (2026-11-15) Closed CodeRabbit's fifth round (D-39), five findings, all
   of them real fail-opens in the obligation binding check that this contract
   exists to refuse. Two took the nearest interpretation instead of refusing a
@@ -807,6 +815,18 @@ pre-rebase history if an old hash must be inspected.
   `ir::from_manifest`. The clock seam gains its own obligation, `CO-16`,
   because the citation it carried (`CO-10`) names Kani harness synchronization
   and had been wrong since the seam landed.
+- [x] (2026-11-15) Rebased onto `fa06bdb21` and adopted the upstream
+  `bumpy_road_function` fix (D-42). `main` solved the same regression D-38
+  solved, with a floor of 15 *and* a refactor of `serial_order_graph`, the one
+  genuine cluster; a floor of 25 silences that finding rather than repairing
+  it, so keeping both would have left two versions of one shared policy file
+  and the weaker of the two on this branch. Resolving both `dylint` files to
+  `main`'s content emptied two commits at replay, which `--empty=stop` halted
+  on and which were then dropped deliberately. `make lint-whitaker` exits 0 on
+  the rebased tree, so 15 does clear this branch's twelve new contract modules
+  — the question `fa06bdb21` could not answer, because it never measured them.
+  Every figure the rebase moved was re-measured: 74 post-pin identifiers at
+  52/22, 24 in-scope files, 73 contract cases.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -989,8 +1009,8 @@ pre-rebase history if an old hash must be inspected.
   rather than a sentence, because a trailing full stop is rejected by
   `reference_covers` for the wrong reason and made a dead rule look live.
   Date/Author: 2026-11-14, implementation agent. The file count moved again
-  after D-35 to D-41: D-41 records the current twenty-six files and the reasons
-  the last four are forced.
+  after D-35 to D-41, and again after the D-42 rebase, which is the current
+  measurement: twenty-four files.
 - Decision D-31 (2026-11-15): regenerated the post-pin commit list a fifth
   time, from 62 identifiers to 64. The two commits D-30 and D-29 authored,
   `10e649d47` and `07dcaeca7`, both touch `tests/`, so the list went stale as
@@ -1146,7 +1166,11 @@ pre-rebase history if an old hash must be inspected.
 - Decision D-38 (2026-11-15): raised `bumpy_road_function`'s `min_bump_lines`
   from its default of 2 to 25, in both the root `dylint.toml` and
   `test_support/dylint.toml`, because Whitaker 0.3.0 made the rule unsound on
-  code no one had changed. The released suite "descends through generated
+  code no one had changed. **Superseded by D-42**, which adopted the upstream
+  fix and dropped this branch's configuration change; the record is kept
+  because its measurements, its oracle lesson, and its refactor-reversion
+  reasoning outlive the value it chose. The paragraph below is the state as
+  this decision left it. The released suite "descends through generated
   expressions and measures the authored code they wrap", so each `?` (which
   desugars to a two-arm `match`) and each multi-line array literal counts as
   authored nesting. `src/cli/merge/mod.rs::insert_global_cli_overrides` carries
@@ -1653,7 +1677,40 @@ pre-rebase history if an old hash must be inspected.
   `typos.toml` plus `typos.local.toml` were already inside the tolerance. No
   new kind of path appears, and no production source, manifest, or workflow is
   touched. Date/Author: 2026-11-15, implementation agent, after the hosted
-  completeness assessment reported the figure stale.
+  completeness assessment reported the figure stale. Superseded by D-42: the
+  rebase onto `fa06bdb21` dropped both `dylint.toml` rows from this branch, so
+  the two D-38 additions named above no longer count, the live set is 24 files
+  at that base, and the contract module's twelve private files are unaffected.
+- Decision D-42 (2026-11-15): adopted the upstream `bumpy_road_function` fix
+  on rebase and dropped this branch's own, then re-measured every figure the
+  rebase moved. `main` advanced two commits — `e28f26ae2` running the Verus
+  proof in CI and `fa06bdb21` restoring the lint gate — and the second solves
+  the same regression D-38 solved, with a better remedy: a floor of 15 *and* a
+  refactor of `serial_order_graph` into `insert_actions` and `insert_edges`,
+  which is the one genuine cluster rather than a generated-expression artefact.
+  Keeping 25 would have left two permanent versions of one shared policy file,
+  and 25 is the weaker of the two because it silences a real finding instead of
+  fixing it. Both `dylint.toml` and `test_support/dylint.toml` were resolved to
+  `fa06bdb21`'s content, which made this branch's two configuration commits
+  empty at replay; the rebase stopped on them under `--empty=stop` and they
+  were dropped deliberately, not skipped by accident. The open question was
+  whether 15 still clears this branch's twelve new contract modules, which are
+  code `fa06bdb21` never measured. `make lint-whitaker` is the only oracle for
+  that lint (D-38), and it exits 0 on the rebased tree, so 15 is sufficient and
+  no refactor is owed.
+
+  The rebase rewrote every SHA in the series, so every count the plan quotes
+  from before it is now wrong. Re-measured, not reasoned about: the post-pin
+  sweep returns 74 identifiers, 52 in `main` and 22 on this branch, where the
+  plan last recorded 73 at 50/23 — `main` gained two while this branch lost one
+  of its two dylint commits to the supersession, the other having been absorbed
+  with it. The in-scope diff against the new base is 24 files, not 26, because
+  both `dylint.toml` rows left the tolerance. The contract module still holds
+  twelve private files, and the contract target still runs 73 cases. D-38 and
+  D-41 keep their original figures as the state at the time they were written;
+  where a later reader would otherwise rely on them, the paragraph says what
+  superseded it. Date/Author: 2026-11-15, implementation agent, while rebasing
+  the candidate onto `fa06bdb21`.
 
 ## Outcomes & retrospective
 
@@ -1682,6 +1739,14 @@ at the next rebase, and this section has already had that happen once. The
 rebase is by construction content-preserving — `range-diff` reports all 32
 commits as `=` — but it is a new candidate, so its own gate run and hosted
 assessment are separate evidence from `a05187397`'s.
+
+A second rebase followed, onto `fa06bdb21` (D-42), because `main` restored the
+`bumpy_road_function` lint gate with a better remedy than this branch had
+chosen. That replay is not content-preserving in the same sense: two
+configuration commits were dropped because the upstream fix superseded them, so
+the series is shorter by those two and the plan's bases, counts, and file
+tolerances were re-measured rather than carried over. Its gate evidence is
+therefore separate again from both earlier candidates.
 
 What remains is not implementation. The pull request is ready rather than
 draft, and EP-M4's current-head assessment — validating the rebased candidate,
@@ -2774,7 +2839,8 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   the only valid oracle. The post-pin list advances an eleventh time to 72
   identifiers, 50 `main` and 22 branch, because `test_support/dylint.toml` is
   an in-scope path — a fact the plan first recorded wrongly, and found only by
-  regenerating the list rather than reasoning about the path set.
+  regenerating the list rather than reasoning about the path set. Revision 56
+  supersedes the value: `main` landed its own fix before this branch merged.
 
 - Revision 54 (2026-11-15): closed CodeRabbit's fifth round (D-39), five
   findings on the obligation binding check, all real. Two readers took the
@@ -2796,9 +2862,24 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   seam gains `CO-16`, because the obligation it cited describes Kani harness
   synchronization. The scope figures move from twenty-two files and four
   private modules to twenty-six and twelve, both re-measured rather than
-  reasoned about. The diff is 26 files; no `src/` file is touched. This
-  candidate needs its own eleven-gate run: the plan and the inventory are both
-  read live by the contract test, so neither is a docs-only delta.
+  reasoned about. The diff was 26 files at the then-current base; no `src/`
+  file is touched. This candidate needs its own eleven-gate run: the plan and
+  the inventory are both read live by the contract test, so neither is a
+  docs-only delta.
+
+- Revision 56 (2026-11-15): rebased onto `fa06bdb21`, adopted the upstream
+  `bumpy_road_function` fix, and dropped this branch's own (D-42). `main`
+  restored the lint gate with a floor of 15 plus a refactor of the one genuine
+  cluster, which is strictly better than the floor of 25 this branch had
+  chosen: 25 silences a real finding rather than repairing it. Both `dylint`
+  files were resolved to `main`'s content, which emptied two commits at replay;
+  `--empty=stop` halted there and they were dropped deliberately. The open
+  question — whether 15 still clears this branch's twelve new contract modules
+  — was answered by `make lint-whitaker`, which exits 0 on the rebased tree.
+  Every figure the rebase moved was re-measured rather than reasoned about: the
+  post-pin list regenerates to 74 identifiers, 52 `main` and 22 branch, and the
+  in-scope diff against the new base is 24 files. Revisions 52 and 53 keep
+  their figures as the state at the time and say what superseded them.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
