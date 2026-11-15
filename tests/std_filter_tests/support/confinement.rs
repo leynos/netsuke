@@ -147,6 +147,11 @@ pub(crate) fn confinement_workspace() -> Result<ConfinementWorkspace> {
         .context("write confinement fixture 'sub/file'")?;
 
     let links = create_escape_links(&root, &handle)?;
+    // Build the junction before the struct literal: a field initialiser is
+    // evaluated in written order, so borrowing `root` and `outside_dir` from
+    // inside the literal would read them after they had been moved.
+    #[cfg(windows)]
+    let junction = create_junction_escape(&root, &outside_dir)?;
     Ok(ConfinementWorkspace {
         _temp: temp,
         root,
@@ -154,7 +159,7 @@ pub(crate) fn confinement_workspace() -> Result<ConfinementWorkspace> {
         secret,
         links,
         #[cfg(windows)]
-        junction: create_junction_escape(&root, &outside_dir)?,
+        junction,
     })
 }
 
