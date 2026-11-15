@@ -287,18 +287,37 @@ def _results(value: object) -> dict[str, ObservedResult] | None:
         return None
     results: dict[str, ObservedResult] = {}
     for name, record in value.items():
-        if not isinstance(name, str) or not name:
+        observed = _observed_result(name, record)
+        if observed is None:
             return None
-        if not isinstance(record, dict):
-            return None
-        outcome = record.get("outcome")
-        observed_at = _timestamp(record.get("observed_at"))
-        if not isinstance(outcome, str) or not policy.Outcome.contains(outcome):
-            return None
-        if observed_at is None:
-            return None
-        results[name] = ObservedResult(outcome=outcome, observed_at=observed_at)
+        results[name] = observed
     return results
+
+
+def _observed_result(name: object, record: object) -> ObservedResult | None:
+    """Return one recorded result, or ``None`` when the entry is unusable.
+
+    The entry is validated as a whole rather than field by field at the call
+    site, so :func:`_results` stays a loop over entries and the refusals stay
+    together where a reader looks for them.
+
+    Returns
+    -------
+    ObservedResult | None
+        The result the entry records, or ``None`` when its name, outcome, or
+        observation time is not something this verifier can act on.
+    """
+    if not isinstance(name, str) or not name:
+        return None
+    if not isinstance(record, dict):
+        return None
+    outcome = record.get("outcome")
+    if not isinstance(outcome, str) or not policy.Outcome.contains(outcome):
+        return None
+    observed_at = _timestamp(record.get("observed_at"))
+    if observed_at is None:
+        return None
+    return ObservedResult(outcome=outcome, observed_at=observed_at)
 
 
 __all__ = (

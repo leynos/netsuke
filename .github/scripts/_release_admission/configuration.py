@@ -128,10 +128,9 @@ def resolve_configuration(
     """Resolve the gate's settings, performing no filesystem access.
 
     An unset or empty ``GITHUB_REPOSITORY``, ``GITHUB_SHA`` or ``GITHUB_RUN_ID``
-    is refused here, with the shell's own diagnostic, through :func:`_required`.
-    An *enforcing* run must also name a tag and an evidence file; a rehearsal
-    may leave both unset, which keeps the read-only lane reachable with no
-    override.
+    is refused through :func:`_required` with the shell's own diagnostic. An
+    *enforcing* run must also name a tag and an evidence file; a rehearsal may
+    leave both unset, which keeps the read-only lane reachable with no override.
 
     Returns
     -------
@@ -149,9 +148,8 @@ def resolve_configuration(
     Notes
     -----
     The artefact spellings reach the sinks here and are never read from the
-    environment again, so each sink is handed the value the workflow output
-    publishes. *destination* is passed in rather than resolved here: resolving
-    it twice would give two steps their own answer to one question.
+    environment again. *destination* is passed in rather than resolved here:
+    resolving it twice would give two steps their own answer to one question.
     """
     # Required variables are resolved first, and the artefacts are created
     # after them, because that is the order the shell refused them in and the
