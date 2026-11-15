@@ -252,9 +252,9 @@ helper functions; their sum is the compiler message count.
 ### In-scope commits since the pin
 
 The snapshot remains pinned to the commit above. These are the commits between
-that pin and the branch's 2026-11-15 head that changed `src/`, `build.rs`,
+that pin and the branch's 2026-11-16 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 52 in the current `main` target and
-twenty-three on this branch, one of them adding this inventory's contract test,
+twenty-five on this branch, one of them adding this inventory's contract test,
 and the rest refactoring, tightening, or repairing the health of that contract.
 The span floor the `test_support` crate shares with the root is no longer among
 them: `fa06bdb21` landed that setting upstream, with a refactor of the one
@@ -330,6 +330,7 @@ context for later consumers; it does not move the inventory pin.
 - `921320086` Derive NETSUKE_RUST_TOOLCHAIN from rust-toolchain.toml in CI
   (DF12-102) (#1112)
 - `9602e5ffb` Bound the direct rustc spawns in tests with a deadline (#1107)
+- `967fc14ca` Read coverage from the trace cell that carries it
 - `974428fef` Use POSIX token boundaries when detecting shell comments (#971)
   (#1058)
 - `9e29978e1` Stop dependency continuations at unindented lines
@@ -366,6 +367,7 @@ context for later consumers; it does not move the inventory pin.
   test (#1108)
 - `e4ef7c511` Add terminal rendering regression tests (3.12.3) (#809)
 - `e52d3ef49` Show readable inline-recipe progress (3.14.11) (#944) (#956)
+- `e6412c5ea` Share the bullet collector instead of duplicating it
 - `e6c49be3f` Tighten inventory contract checks against silent passes
 - `f8df5d808` Bump the toolchain to nightly-2026-10-22 (#947)
 - `fa06bdb21` Restore the lint gate against bumpy_road_function 0.3.0 (#1139)

@@ -1839,11 +1839,17 @@ pre-rebase history if an old hash must be inspected.
   root declares thirteen, including `landed.rs`. Corrected to thirteen.
 
   Re-measured after the repairs: the contract target runs 82 cases, up from 80,
-  and `real_inventory_is_consistent` still passes, so the real inventory's 75
-  entries satisfy the narrower cell rule — every traced item is named in a
-  `Register items` cell and no entry relied on a neighbour's column.
-  Date/Author: 2026-11-16, implementation agent, on the hosted completeness
-  reply.
+  and `real_inventory_is_consistent` still passes, so the real document
+  satisfies the narrower cell rule — every traced register item is named in a
+  `Register items` cell, and no row was relying on a neighbour's column to
+  cover its item. That was not a foregone conclusion: the rule is stricter than
+  the one the document was written under, and it would have failed had any row
+  carried its reference one cell to the right. Committing the repair touches
+  `tests/`, so the post-pin sweep advances again — to 77 identifiers at 52/25,
+  the same mechanism D-21, D-24, D-27, D-42, and D-43 record. It took two
+  commits rather than one because the collector repair also touched `tests/`
+  and had not itself been swept into the list yet. Date/Author: 2026-11-16,
+  implementation agent, on the hosted completeness reply.
 
 ## Outcomes & retrospective
 
