@@ -11,9 +11,8 @@ use ortho_config::{OrthoError, OrthoResult};
 use std::sync::Arc;
 
 use super::command::Cli;
-use super::constants::SHELLS_KEY;
 use super::discovery::{
-    DiscoveryOutcome, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env,
+    DiscoveryOutcome, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env, is_shells_key,
 };
 
 /// Environment variable carrying an explicit JSON-output preference.
@@ -124,18 +123,6 @@ fn is_quarantined_scalar_policy_key(key: &str) -> bool {
             | "env_allow_var"
             | "trust_project_fetch_policy"
     )
-}
-
-/// Report whether `key` names the shell registry or one of its definitions.
-///
-/// Discovery reports an untrusted declaration as the bare `shells` key and a
-/// malformed operator declaration as `shells[index].field`, so both spellings
-/// must defer for a later `json = true` to select JSON diagnostics.
-fn is_shells_key(key: &str) -> bool {
-    key == SHELLS_KEY
-        || key
-            .strip_prefix(SHELLS_KEY)
-            .is_some_and(|rest| rest.starts_with('['))
 }
 
 /// Determine whether `--json` was supplied on the command line.

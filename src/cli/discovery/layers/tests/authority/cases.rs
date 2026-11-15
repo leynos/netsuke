@@ -3,7 +3,9 @@
 //! These drive the classifier directly, including the fail-closed branches that
 //! keep an unprovable occurrence from being treated as operator configuration.
 
-use super::super::super::super::paths::{FailingPathNormalizer, FsPathNormalizer};
+use super::super::super::super::paths::{
+    FailingPathNormalizer, FsPathNormalizer, UnreadablePathNormalizer,
+};
 use super::super::super::super::project_policy::RootAuthority;
 use super::super::super::{ProjectKey, ScopedFileLayer, scope_discovered_occurrence};
 use anyhow::{Context, Result, ensure};
@@ -79,6 +81,11 @@ impl ProjectFixture {
     fn unresolved_key(&self) -> ProjectKey {
         ProjectKey::classify(&FailingPathNormalizer, &self.file())
     }
+
+    /// Classify the project file with a normalizer that cannot probe existence.
+    fn unreadable_key(&self) -> ProjectKey {
+        ProjectKey::classify(&UnreadablePathNormalizer, &self.file())
+    }
 }
 
 #[test]
@@ -129,6 +136,32 @@ fn unresolved_project_key_withholds_operator_authority() -> Result<()> {
     ensure!(
         occurrence.authority() == RootAuthority::Untrusted,
         "an existing project file that cannot be normalized must fail closed"
+    );
+    Ok(())
+}
+
+#[test]
+fn unreadable_existence_withholds_operator_authority() -> Result<()> {
+    let project = ProjectFixture::new()?;
+
+    let occurrence = operator_occurrence(Some(&project.unreadable_key()));
+
+    ensure!(
+        occurrence.authority() == RootAuthority::Untrusted,
+        "a project file whose existence cannot be probed must fail closed"
+    );
+    Ok(())
+}
+
+#[test]
+fn unknown_existence_is_not_read_as_absence() -> Result<()> {
+    let project = ProjectFixture::empty()?;
+
+    let occurrence = operator_occurrence(Some(&project.unreadable_key()));
+
+    ensure!(
+        occurrence.authority() == RootAuthority::Untrusted,
+        "a failed existence query must not license operator authority"
     );
     Ok(())
 }

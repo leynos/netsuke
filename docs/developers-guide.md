@@ -7483,12 +7483,17 @@ Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
 optional, proof-kernel-only, and not installed or run by default; any Verus
 work must stay outside ordinary Cargo and is limited to small, self-contained
-kernels. Two are accepted: the cycle canonicalization model derived from
-`src/ir/cycle/mod.rs`, and the canonical value key and equality relation
-(`src/stdlib/canonical_value/`, proved in `verus/canonical_value/main.rs`).
-Verus remains outside `formal-pr`, which runs Kani only, and outside every
-routine gate. Stateright is deferred entirely until Netsuke gains an accepted
-stateful concurrent subsystem such as a daemon, watch service, remote-execution
+kernels. Three are accepted: the cycle canonicalization model derived from
+`src/ir/cycle/mod.rs`, which is not yet committed; the canonical value key and
+equality relation (`src/stdlib/canonical_value/`, proved in
+`verus/canonical_value/main.rs`); and the configured-shell name-sequence rule
+(`verus/configured_shells/main.rs`, described under
+[Configured shell definitions](#configured-shell-definitions) below).
+`make verus` proves `verus/canonical_value/main.rs` by default, so select any
+other kernel by repeating `--proof-file` through `VERUS_FLAGS`. Verus remains
+outside `formal-pr`, which runs Kani only, and outside every routine gate.
+Stateright is deferred entirely until Netsuke gains an accepted stateful
+concurrent subsystem such as a daemon, watch service, remote-execution
 coordinator, actor protocol, or internal scheduler with long-lived mutable
 control-plane state. See
 [`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
@@ -11478,9 +11483,27 @@ comparison, and tests alongside the main discovery flow:
   unresolved path fatal. `FsPathNormalizer` uses `dunce::canonicalize` to
   mirror OrthoConfig's native Windows identity (without UNC-prefix or
   short-name divergence); on other platforms it follows
-  `std::fs::canonicalize`. Keep it confined to this comparison boundary:
-  selectors remain pure path queries, OrthoConfig supplies the layer path, and
-  tracing remains at the orchestration boundary.
+  `std::fs::canonicalize`. The `PathNormalizer` seam also answers `exists` with
+  an `io::Result<bool>`, because the caller has to distinguish an absent
+  project file from an unreadable one and `Path::exists` collapses every error
+  into `false`. Keep the seam confined to this comparison boundary: selectors
+  remain pure path queries, OrthoConfig supplies the layer path, and tracing
+  remains at the orchestration boundary.
+- `discovery/layers/` — the collection pass that keeps each root's authority
+  attached to the layer it loaded. It runs the `OrthoConfig` scan and the
+  project-scope second pass, and returns `ScopedFileLayer` values rather than
+  bare `MergeLayer`s. Each occurrence carries `RootAuthority::Operator` when a
+  system or user root loaded it, and `RootAuthority::Untrusted` when a project,
+  explicit, or environment root did, or when an untrusted root appears anywhere
+  in its chain. Authority is separate from `FileScope`: scope decides
+  precedence and quarantine, authority decides whether the occurrence may
+  declare executable policy at all. `layers/project_key.rs` classifies the
+  project `.netsuke.toml` once per scan so the second pass can compare recorded
+  layer paths against it without re-normalizing each one, and it fails closed:
+  a project file that exists but cannot be normalized leaves its identity
+  unproven, and every occurrence is then treated as possibly that file. An
+  existence query that fails is classified the same way, because absence cannot
+  be concluded from a failed probe.
 - `discovery/event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`
@@ -11515,14 +11538,45 @@ the schema module rather than `cli::constants` so the build script's compiled
 slice can carry the key without pulling in the modules that share the constants
 file.
 
+`ShellExecutable` spelling rules live in `src/cli/config/shells/spelling.rs`
+and take the host family as a parameter, so both families' rules run on either
+build host. Both reject an empty value, an embedded NUL, and the `.` and `..`
+directory references. Beyond that, a Unix-like host accepts a rooted path or a
+spelling with no separator at all, and rejects every other relative path. A
+Windows host accepts a bare name, a drive letter with a root (`C:\tools\dash` or
+`C:/tools/dash`), or a complete UNC share (`\\server\share`); `C:dash` names a
+drive without a root and is rejected as drive-relative, a rooted path such as
+`/bin/dash` or `\bin\dash` is rejected because it names no drive, and anything
+else carrying either separator is relative. Neither family probes the
+filesystem, so an uninstalled program is accepted at configuration time.
+
+Configuration deserialization is the one caller that cannot be handed a family:
+serde's `Deserialize` signature carries no context, and the configuration tree
+is parsed before any per-host value could be threaded through it.
+`ShellExecutable`'s `Deserialize` therefore uses `HostFamily::current()`, the
+build host, and the impl documents that compile-time dependency. A definition
+spelled for the other family is rejected while the file is read rather than
+accepted and refused later; callers that must choose a family explicitly use
+`ShellExecutable::parse`.
+
 Source-label handling: discovery records the root that loaded each occurrence
 before merging. `src/cli/discovery/shell_definitions.rs` checks `shells`
 presence before any typed merge and reports either an untrusted-source error
 for a project, explicit, or unproven root, or `shells[index].field` errors for
-an operator root. That check runs in `retain_layers_and_resolve_json` before
-the JSON preference is read, so a malformed declaration still lets a later
-`json = true` select JSON diagnostics. The environment layer rejects the key
-outright rather than stripping it.
+an operator root. `project_policy::shells_authority_errors` is a step of its
+own rather than part of the collecting loop: authority answers a different
+question from the precedence and quarantine rules beside it, so the step
+returns its errors and `retain_layers_and_resolve_json` joins them into
+`ResolvedFileLayers.errors`. It runs before the JSON preference is read, so a
+malformed declaration still lets a later `json = true` select JSON diagnostics.
+The environment layer rejects the key outright rather than stripping it.
+
+Validation and rendering are separate in that module. A check yields an
+`OccurrenceDiagnostic` holding the field key and the rule it broke;
+`OccurrenceDiagnostic::render` is the one place that appends the declaring file
+and bounds the quoted path. A unit test can therefore assert the exact key and
+rule text without creating a file, and a new check cannot forget to name the
+source.
 
 Proof scope: `verus/configured_shells/main.rs` proves that its model walk,
 `walk`, accepts exactly the pairwise specification — no reserved name and no

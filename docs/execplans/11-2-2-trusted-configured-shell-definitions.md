@@ -520,6 +520,23 @@ explicit and exercise the actual adapters in tests.
     the declaring-file assertion to require the directory only when it falls
     inside the preview's quoting budget. All three were verified against the
     current tree and repaired.
+  - [x] 2026-11-15: Repair the two pre-merge errors and the
+    developer-documentation warning raised against `69355e214`. The existence
+    query for an unresolvable project file now goes through the
+    `PathNormalizer` seam, which gained `exists` returning `io::Result<bool>`,
+    and a failed query is classified as present so operator authority is
+    withheld rather than granted on an absent-looking path. Shell authority
+    became its own named step, `shells_authority_errors`, whose errors the
+    collecting loop joins into `ResolvedFileLayers.errors`.
+    `shell_definitions.rs` now yields typed `OccurrenceDiagnostic` values and
+    renders them in one place, the shell-key deferral rule moved beside the
+    checks that mint those keys, and `ShellExecutable`'s `Deserialize`
+    documents its compile-time host dependency. New tests cover every shape
+    branch at unit and pipeline level, and removing the unknown-field check
+    was observed to fail exactly its two pipeline cases. The
+    formal-verification document, developers' guide, and repository layout now
+    record the third kernel, the `discovery/layers/` pass, and the executable
+    spelling rules.
 
 ## Surprises & discoveries
 
@@ -915,6 +932,51 @@ first failure can hide a whole class of such tests behind one earlier red one.
   requires the directory only when the canonical path reaches it within that
   budget, and the budget is a named constant beside the assertion that mirrors
   `src/cli/config/shells/preview.rs`.
+- 2026-11-15: Extend `PathNormalizer` with `exists` instead of adding a second
+  filesystem seam. `ProjectKey::classify` needs to know whether an unresolvable
+  project file is present, and the trait is already documented as the one place
+  discovery reaches the filesystem; a second seam would have been a parallel
+  boundary with its own test doubles. `Path::exists` reports `false` for every
+  I/O error, so a failed query is classified as *present* here: concluding
+  absence from an unreadable directory entry is exactly the trust upgrade the
+  ambiguity flag exists to prevent. Two tests pin the classification, one with
+  a project file on disk and one without, so neither error-as-absent nor
+  error-as-present can be reintroduced.
+- 2026-11-15: Return errors from `shells_authority_errors` rather than pushing
+  into `ResolvedFileLayers` from inside the check. The collecting loop already
+  owns accumulation for every other quarantine step, and authority answers a
+  different question from precedence, so the step now reads as one query whose
+  result the caller joins. The error list is the only output, which also lets a
+  future caller report authority faults without allocating a resolver.
+- 2026-11-15: Separate occurrence validation from message decoration with a
+  typed `OccurrenceDiagnostic`. The previous report struct built strings while
+  it validated, which made the rule text and the declaring-file clause
+  inseparable in tests and left the clause one edit away from being forgotten
+  by a new check. A check now states a key and a rule, and one renderer adds
+  the bounded declaring-file preview, so unit tests assert exact keys and rules
+  without a temporary file.
+- 2026-11-15: Keep the shell-key deferral rule in
+  `src/cli/discovery/shell_definitions.rs` rather than
+  `src/cli/config/shells/`. The build script compiles the schema module as part
+  of its own slice for manual-page and completion generation, where no caller
+  of that rule exists; placing it there triggers `-D dead-code` in that slice,
+  whose unused-item analysis is deliberately kept meaningful. The discovery
+  module mints every `shells` key, so owning the grammar there keeps one owner
+  and lets `cli::diag` import it instead of restating it.
+- 2026-11-15: Document `ShellExecutable`'s compile-time host dependency instead
+  of injecting a host family into deserialization. Serde's `Deserialize` has no
+  place to carry a context, and the whole configuration tree would need a
+  threaded host to change that; the impl now states the dependency, the module
+  doc names the exception, and the developers' guide records the operator-
+  visible consequence, which is that a spelling for the other host family is
+  rejected while the file is read. `ShellExecutable::parse` remains the
+  injectable entry point.
+- 2026-11-15: Leave `VERUS_FLAGS`'s default on the canonical-value kernel.
+  `make verus` is a maintainer target with a tested command shape, and the
+  approved scope selected the new kernel through `VERUS_FLAGS` rather than
+  moving the default. The documentation now states which kernel the default
+  proves and how to select the others, and every gate run for this plan passes
+  both `--proof-file` values so the new kernel is proved as well.
 
 ## Outcomes & retrospective
 

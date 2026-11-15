@@ -136,6 +136,12 @@ output and some leaf files so the long-lived structure remains visible.
   generation, packaging, and formal checks.
 - `src/`: Main `netsuke-build` Rust package source code.
 - `src/cli/`: Command-line configuration, parsing, validation, and merge logic.
+- `src/cli/discovery/layers/`: Discovery's file-layer collection pass. Each
+  returned occurrence carries the authority of the root that loaded it, and the
+  project configuration file's comparison key is classified once per scan,
+  failing closed when an existing project file cannot be normalized. See the
+  [developers' guide](developers-guide.md) for the authority and scope
+  boundaries.
 - `src/cli/config/shells/`: The trusted `shells` schema. `ShellDefinition`
   groups a validated `ShellName`, `ShellExecutable`, and `ShellArguments`;
   `validate_composition` applies the registry rules after merging. See the

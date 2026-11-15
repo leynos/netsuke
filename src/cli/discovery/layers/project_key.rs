@@ -33,10 +33,7 @@ impl ProjectKey {
         Self {
             lossy: key.to_str().is_none().then_some(literal),
             key,
-            // A missing project file cannot appear as an occurrence, so literal
-            // fallback stays trustworthy; one that exists but will not resolve
-            // does not.
-            unresolved: !is_resolved && path.exists(),
+            unresolved: !is_resolved && may_exist(normalizer, path),
         }
     }
 
@@ -64,4 +61,16 @@ impl ProjectKey {
     pub(super) const fn is_ambiguous(&self) -> bool {
         self.unresolved
     }
+}
+
+/// Report whether an unresolvable project path must be treated as present.
+///
+/// A missing project file cannot appear as an occurrence, so the literal
+/// fallback key stays trustworthy. One that exists but will not resolve does
+/// not, and neither does a path whose existence could not be established at
+/// all: an unreadable directory entry is classified as present, because
+/// concluding absence from a failed query is exactly the silent trust upgrade
+/// the ambiguity flag exists to prevent.
+fn may_exist(normalizer: &impl PathNormalizer, path: &Path) -> bool {
+    normalizer.exists(path).unwrap_or(true)
 }

@@ -4,7 +4,8 @@
 //! the type that holds an accepted value, its serde surface, and the error
 //! vocabulary those rules report. Host semantics are an explicit parameter
 //! rather than `cfg!(windows)`, so both families' rules are exercised on either
-//! build host.
+//! build host. Configuration deserialization is the one place with no parameter
+//! to carry them, so it uses the build host and says so at the impl.
 
 use super::preview::preview;
 use super::spelling::check_spelling;
@@ -62,6 +63,16 @@ impl Serialize for ShellExecutable {
     }
 }
 
+/// Deserialize a spelling under the rules of the host this build targets.
+///
+/// Serde's `Deserialize` signature carries no context, and the configuration
+/// tree is parsed before any per-host value could be threaded through it, so
+/// this impl takes the host from [`HostFamily::current()`] instead of a
+/// parameter. The dependency is compile-time and deliberate: a definition
+/// spelled for the other host family is rejected while the configuration is
+/// read, not accepted and refused later. [`ShellExecutable::parse`] remains the
+/// injectable entry point for callers that must pick a family explicitly, and
+/// the developers' guide records the consequence.
 impl<'de> Deserialize<'de> for ShellExecutable {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let text = String::deserialize(deserializer)?;

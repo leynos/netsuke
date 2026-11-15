@@ -75,6 +75,16 @@ impl PathNormalizer for CountingPathNormalizer {
         self.calls.set(self.calls.get() + 1);
         Ok(path.to_path_buf())
     }
+
+    /// Answer existence from the real filesystem without counting the query.
+    ///
+    /// The recorded `calls` count measures normalization only. Discovery asks
+    /// about existence solely when normalization failed, which this double never
+    /// does, so the counter is unaffected in practice; the delegation keeps the
+    /// answer honest if that ever changes.
+    fn exists(&self, path: &Path) -> std::io::Result<bool> {
+        FsPathNormalizer.exists(path)
+    }
 }
 /// Build a [`Cli`] for `scenario`, rooted in the isolated `temp` directory.
 ///

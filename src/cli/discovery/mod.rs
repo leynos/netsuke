@@ -26,6 +26,7 @@ mod project_policy;
 
 mod selector;
 mod shell_definitions;
+pub(crate) use shell_definitions::is_shells_key;
 mod trace;
 
 mod telemetry;

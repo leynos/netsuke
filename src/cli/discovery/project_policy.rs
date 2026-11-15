@@ -191,7 +191,9 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
     {
         let path = layer.path().map(ToOwned::to_owned);
         let mut value = layer.into_value();
-        check_shells_occurrence(&value, path.as_deref(), authority, &mut resolved);
+        resolved
+            .errors
+            .extend(shells_authority_errors(&value, path.as_deref(), authority));
         if let Some(json) = json_from_value(&value) {
             resolved.json_preference = json;
         }
@@ -217,28 +219,30 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
     resolved
 }
 
-/// Retain an operator `shells` declaration or reject an untrusted one.
+/// Validate one occurrence's executable-authority claim.
 ///
-/// Presence is checked before any typed merging, so a project, explicit, or
-/// environment occurrence cannot reach the schema through an empty or malformed
-/// declaration. An operator occurrence is validated field by field in
-/// [`occurrence_errors`], whose diagnosis names `shells[index].name`,
-/// `shells[index].executable`, or `shells[index].args`; the error becomes an
-/// ordinary discovery error, so startup stops before any manifest is read.
-/// Both paths name the declaring file when the layer has one, because the same
-/// key and index can appear in several layers.
-fn check_shells_occurrence(
+/// This is a step of its own because authority answers a different question
+/// from the precedence and quarantine rules that follow it in the collecting
+/// loop: it decides whether an occurrence may declare executable policy at
+/// all, not where its values rank. Presence is checked before any typed
+/// merging, so a project, explicit, or environment occurrence cannot reach the
+/// schema through an empty or malformed declaration. An operator occurrence is
+/// validated field by field in [`occurrence_errors`], whose diagnosis names
+/// `shells[index].name`, `shells[index].executable`, or `shells[index].args`;
+/// the returned errors become ordinary discovery errors, so startup stops
+/// before any manifest is read. Both paths name the declaring file when the
+/// layer has one, because the same key and index can appear in several layers.
+fn shells_authority_errors(
     value: &serde_json::Value,
     source: Option<&Utf8Path>,
     authority: RootAuthority,
-    resolved: &mut ResolvedFileLayers,
-) {
+) -> Vec<Arc<OrthoError>> {
     if !declares_shells(value) {
-        return;
+        return Vec::new();
     }
     match authority {
-        RootAuthority::Operator => resolved.errors.extend(occurrence_errors(value, source)),
-        RootAuthority::Untrusted => resolved.errors.push(untrusted_shells_error(source)),
+        RootAuthority::Operator => occurrence_errors(value, source),
+        RootAuthority::Untrusted => vec![untrusted_shells_error(source)],
     }
 }
 

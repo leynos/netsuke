@@ -8,6 +8,7 @@
 //! [`success`].
 
 mod diagnostics;
+mod shape;
 mod success;
 mod support;
 
