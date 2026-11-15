@@ -77,7 +77,10 @@ fn beta1_installation_notice_pins_version_toolchain_and_polonius() -> Result<()>
     // its version, toolchain, and Polonius flag are historical facts. Assert
     // them literally rather than deriving them from the current crate version.
     let guide = test_fs::read_to_string("docs/v0-1-0-migration-guide.md")
-        .context("read docs/v0-1-0-migration-guide.md")?;
+        .context("read docs/v0-1-0-migration-guide.md")?
+        // Git checks the guide out with CRLF line endings on Windows, so
+        // normalise before comparing the multi-line PowerShell block verbatim.
+        .replace("\r\n", "\n");
     let required_command_fragments = [
         "RUSTFLAGS=-Zpolonius=next",
         "cargo +nightly-2026-06-25 install netsuke-build",
