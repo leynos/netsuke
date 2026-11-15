@@ -4582,6 +4582,83 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   this issue's change, so the condition is reported to the operator instead. No
   Lody, build-limits, or Whitaker process was signalled or reconfigured.
 
+- [x] (2026-11-15) Answered the fourth CodeRabbit review of #1070: a tag is
+  resolved under its own namespace, the admission package is imported from one
+  place, and a guard that starts on cancellation is refused.
+
+  **Findings and dispositions.** The review raised three items -- one minor,
+  one trivial and one minor -- each confirmed against the code.
+
+  *Tag namespace.* `_resolve_tag_commit` passed the bare tag name to
+  `github_resolve_commit`, which asks the API about
+  `repos/{repository}/commits/{ref}`. That endpoint resolves branch names as
+  well as tags, so a branch sharing the release tag's name answers for a tag
+  that does not exist, and its commit is then compared with the candidate. A
+  publishing run now asks about `tags/<tag>`, which makes the tag's own
+  existence part of admission; the rehearsal keeps the bare candidate because
+  it names no tag. Probed against the live API on `leynos/netsuke`:
+  `commits/v0.1.0-beta4`, `commits/tags/v0.1.0-beta4` and
+  `commits/refs/tags/v0.1.0-beta4` all answer `b0e8547f…`, while
+  `commits/heads/main` answers `e28f26ae…` -- the branch spelling the bare form
+  admits. The mode-parametrized admission test pinned the bare spelling, so it
+  now pins the namespace, and restoring the bare subject fails
+  `test_gate_admits_the_candidate_on_valid_evidence[publishing]` with "the
+  GitHub adapter must receive both native admission queries".
+
+  *Import path.* The gate is a package under `.github/scripts`, which the
+  `PYTHONPATH` the Makefile exports does not name, so each admission test
+  module inserted that directory into `sys.path` during its own collection. The
+  shared `scripts/tests/conftest.py` now inserts it once, before any module is
+  imported, and the three modules this branch touched import the package like
+  any other. Their documented single-module invocations still work, because
+  pytest loads the conftest from the module's own directory first.
+
+  *Cancellation guard.* `check_write_guard` required each gate clause as a
+  top-level conjunct and refused `always()` and disjunctions, but not
+  `cancelled()`: a guard beginning with `cancelled() &&` carries every other
+  required clause and is true exactly when the run was cancelled after its
+  dependencies succeeded. `!cancelled()` is now a required clause itself, the
+  guard test refuses the positive spelling, and the new mutation
+  `positive-cancellation-publication-guard` inverts the committed publication
+  guard and requires both the `cancelled-publishing` scenario finding and the
+  structural one. The first attempt dropped the clause instead of inverting it;
+  a guard with no status function at all is implicitly success-guarded, so that
+  mutation would have described a benign edit rather than this regression.
+
+  **Lint corrections after the batch.** Ruff required the admission import to
+  share a block with `pytest` in two modules, and named `pathlib.Path` a
+  typing-only import in the new evidence-reading module, which now annotates
+  with `pathlib.Path` behind `typ.TYPE_CHECKING` as its siblings do;
+  `make lint-python` then reached 10.00/10.
+
+  **Gates.** The nine-gate batch ran on the working tree that became
+  `43e302278`, `ec63947eb` and `faae17e32`. Eight gates passed: `check-fmt`,
+  `typecheck`, `doc-coverage`, `test` (5669 nextest tests with 9 skipped, then
+  the doctests), `test-workflow-contracts` (2360 passed with 3 skipped, then
+  30), `test-release-admission` (138), `markdownlint` and `nixie`. `make lint`
+  failed at `lint-whitaker` alone, with the same eighteen `bumpy_road_function`
+  findings across the same seventeen untouched `src/` files that the third
+  round recorded. The batch preceded the ruff corrections, so `make check-fmt`
+  and `make test-release-admission` were re-run on the committed tree and pass.
+
+  **The Whitaker red cleared with the next install.** The failed run used the
+  suite installed at 09:36:17. At 11:45:27 another process on this host rewrote
+  `~/.local/bin/whitaker`, `whitaker-ls`, the installed
+  `libwhitaker_suite@nightly-2026-05-28.so` (md5 `85d56666…`) and
+  `bootstrap.json` together, and the plan batch below then passed `make lint`
+  in full -- on the same sources, because the branch still changes no Rust and
+  the only difference between the two runs is the document this entry is
+  written in. Nothing was raised, silenced or reconfigured here, so
+  `dylint.toml` and the untouched sources stand as they were.
+
+**Plan-edit gates.** With this document modified and the code committed, the
+seven-gate set passes: `check-fmt`, `lint`, `typecheck`, `markdownlint`,
+`nixie`, `test` and `test-workflow-contracts`. The first attempt failed
+`markdownlint` at the spelling gate, which wanted the `-ize` spelling of
+"parametrize" where that sentence had used the `-ise` form, and `check-fmt`
+then required the rewrap `make fmt` applies. Both Markdown gates were re-run,
+and pass, on the final wording.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
