@@ -8,6 +8,11 @@ Beta4 is an early-adopter release. The compiler pipeline is useful, but command
 names, flags, diagnostic schemas, and some manifest details may change before
 1.0. Pin the Netsuke version in automated workflows.
 
+The installation channels this guide describes apply to v0.1.0-beta4. Readers
+installing v0.1.0-beta1 should follow
+[Published beta1 installation](v0-1-0-migration-guide.md#published-beta1-installation),
+where compiling from crates.io is the only available path.
+
 ## Install Netsuke
 
 Netsuke requires [Ninja](https://ninja-build.org/) on `PATH`. A source build
