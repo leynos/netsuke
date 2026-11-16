@@ -71,7 +71,6 @@ fn counters_with_outcome(samples: &[Sample], outcome: &str) -> usize {
 /// test first requires discovery to fail: if the candidate were treated as
 /// absent, discovery would succeed with the system layer and the assertions
 /// below would be checking a success signal instead.
-#[cfg(unix)]
 #[rstest]
 fn dangling_user_candidate_records_a_bounded_error_signal() -> Result<()> {
     let case = Case::new()?;

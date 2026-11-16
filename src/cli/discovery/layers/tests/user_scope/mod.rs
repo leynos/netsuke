@@ -337,4 +337,9 @@ fn absent_user_dotfile_falls_through_to_system_scope() -> Result<()> {
 
 mod fallback;
 mod properties;
+// The dangling-link fixture needs symbolic links, so the module is absent on
+// targets without them. Gating the declaration, rather than the single test
+// inside, keeps the module's imports and helpers from reading as dead code
+// where the test cannot compile.
+#[cfg(unix)]
 mod signals;
