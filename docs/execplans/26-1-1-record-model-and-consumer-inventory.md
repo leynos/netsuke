@@ -852,7 +852,8 @@ pre-rebase history if an old hash must be inspected.
   coverage and one obligation case gained the row it needed to be rejected by
   the binding alone; all three were probed against the reverted readers and
   fail there. The plan's module count was corrected from ten to thirteen. The
-  contract target runs 82 cases.
+  contract target runs 82 cases, and the complete sequential eleven-gate set
+  passes on `3b91d5b5f` with the worktree empty at both ends.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1844,12 +1845,26 @@ pre-rebase history if an old hash must be inspected.
   `Register items` cell, and no row was relying on a neighbour's column to
   cover its item. That was not a foregone conclusion: the rule is stricter than
   the one the document was written under, and it would have failed had any row
-  carried its reference one cell to the right. Committing the repair touches
-  `tests/`, so the post-pin sweep advances again — to 77 identifiers at 52/25,
-  the same mechanism D-21, D-24, D-27, D-42, and D-43 record. It took two
-  commits rather than one because the collector repair also touched `tests/`
-  and had not itself been swept into the list yet. Date/Author: 2026-11-16,
-  implementation agent, on the hosted completeness reply.
+  carried its reference one cell to the right. The complete sequential
+  eleven-gate set passes on the corrected candidate, `3b91d5b5f`: check-fmt,
+  typecheck, lint-clippy, lint-whitaker, lint-python, github-actions-lint,
+  doc-coverage, test, test-workflow-contracts, markdownlint, and nixie all
+  exited 0, with the worktree empty at both ends of the batch. The first batch
+  on this work failed lint-clippy alone, on a `shadow_reuse` in
+  `parse_trace_row`, which is why this decision records two candidates rather
+  than one. Re-measured from the passing batch: doc-comment coverage 98.26%,
+  5,751 nextest cases passed with 9 skipped, 2,330 workflow cases with 3
+  skipped and 30 actionlint cases, 227 Markdown files clean, and the contract
+  target's own 82 cases.
+
+  Committing the repair touches `tests/`, so the post-pin sweep advances — to
+  78 identifiers at 52/26, the same mechanism D-21, D-24, D-27, D-42, and D-43
+  record. It took three commits rather than one because each of the two
+  `tests/` commits had to be swept in turn, and the second sweep's own edits
+  are what stop the chain: the plan and inventory are not in-scope paths, so
+  the documentation commit that records the sweep does not extend it.
+  Date/Author: 2026-11-16, implementation agent, on the hosted completeness
+  reply.
 
 ## Outcomes & retrospective
 
@@ -3050,13 +3065,16 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   narrowing. Two register refusal cases were added, one per neighbouring
   column, and the obligation case gained the row it needed to be rejected by
   the binding rather than by coverage; all three were probed against the
-  reverted readers and fail there. The second finding, a hosted CodeScene
-  "Bumpy Road Ahead" on `markdown::bullet_entries`, was already repaired by
-  `e6412c5ea`, which postdates the head the assessment inspected. The third,
-  the plan's module count, said ten where the crate root declares thirteen, and
-  is corrected. The contract target runs 82 cases and the real inventory still
-  satisfies the narrower cell rule. The verdict is not discharged by this
-  revision; a fresh assessment is requested for this candidate.
+  reverted readers and fail there. The complete sequential eleven-gate set
+  passes on `3b91d5b5f`, with the worktree empty at both ends, and the post-pin
+  sweep stands at 78 identifiers, 52 in `main` and 26 on this branch. The
+  second finding, a hosted CodeScene "Bumpy Road Ahead" on
+  `markdown::bullet_entries`, was already repaired by `e6412c5ea`, which
+  postdates the head the assessment inspected. The third, the plan's module
+  count, said ten where the crate root declares thirteen, and is corrected. The
+  contract target runs 82 cases and the real inventory still satisfies the
+  narrower cell rule. The verdict is not discharged by this revision; a fresh
+  assessment is requested for this candidate.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
