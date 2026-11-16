@@ -87,8 +87,8 @@ class InflatedStream(io.RawIOBase):
         self._inflated = 0
         self._exhausted = False
 
-    @staticmethod
-    def readable() -> bool:
+    @typ.override
+    def readable(self) -> bool:
         """Report that this stream serves bytes.
 
         Returns
@@ -99,8 +99,8 @@ class InflatedStream(io.RawIOBase):
         """
         return True
 
-    @staticmethod
-    def seekable() -> bool:
+    @typ.override
+    def seekable(self) -> bool:
         """Report that this stream is not advertised as seeking.
 
         Returns
@@ -111,8 +111,20 @@ class InflatedStream(io.RawIOBase):
         """
         return False
 
+    @typ.override
     def tell(self) -> int:
-        """Return the position within the decompressed archive."""
+        """Return the position within the decompressed archive.
+
+        Returns
+        -------
+        int
+            The bytes served in the current pass.
+
+        Notes
+        -----
+        ``tarfile`` calls ``tell`` on the file object it is handed, so this
+        has to be a method rather than a property.
+        """
         return self._inflated
 
     def readinto(self, buffer: cabc.Buffer) -> int:
