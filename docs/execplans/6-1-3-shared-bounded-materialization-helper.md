@@ -1410,7 +1410,8 @@ conflict in `Decision log`, and escalate.
   Date/Author: 2026-11-05. Amendment (2026-11-15): a review finding asked for
   the contract theorem's composition rather than its halves, so `classify.rs`
   (82 lines) joins the crate as an eighth file that calls each kernel and
-  `classify` together and states the composed postcondition. `make verus` then
+  `classify` together and states the composed postcondition.
+  `make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'` then
   reports `67 verified, 0 errors`. The file count is an artefact of the cap,
   not a design constraint; the one-root rule is unchanged.
 - D-19. Decision: a Kani harness in `src/stdlib/resource_bounds/verification.rs`
@@ -1622,9 +1623,11 @@ What was delivered:
   types with their `Display` renderings. The kernel is exercised by Proptest
   oracles, unit tests, and rstest-bdd behavioural scenarios.
 - `verus/resource_bounds/`: an eight-file proof crate behind one
-  `--proof-file` root. `make verus` reports
+  `--proof-file` root.
+  `make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'` reports
   `verification results:: 67 verified, 0 errors`, with no `assume`, `admit`, or
-  `external_body` and `vstd` as the only trusted base.
+  `external_body` and `vstd` as the only trusted base. Bare `make verus`
+  selects the canonical-value proof and does not reach this one.
 - `src/stdlib/resource_bounds/verification.rs`: seven Kani harnesses that
   report `Complete - 7 successfully verified harnesses, 0 failures, 7 total`
   inside the eight-minute scope wrapper, every `kani::cover!` `SATISFIED`.
