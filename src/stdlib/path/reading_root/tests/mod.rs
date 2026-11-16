@@ -5,6 +5,10 @@
 //! lexical edges around the root. The capability-escape cases drive a real
 //! link, because cap-std's escape error is the seam the filter diagnostics
 //! depend on.
+//!
+//! The tables below pin named spellings as a readable contract. The open-ended
+//! space between them — any sequence of `.`, `..` and ordinary names a
+//! template can compose — belongs to [`resolution_properties`].
 
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -15,6 +19,8 @@ use std::sync::Arc;
 use test_support::{localizer_test_lock, set_en_localizer};
 
 use super::{ReadingRoot, is_capability_escape};
+
+mod resolution_properties;
 
 /// A reading root bound to `directory` with its absolute spelling recorded.
 fn root_at(directory: &Utf8Path) -> Result<ReadingRoot> {
