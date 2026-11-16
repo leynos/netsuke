@@ -103,6 +103,17 @@ def check_smoke_privileges(
     composite action's steps are a separate scan, in
     :func:`check_smoke_action_environment`.
     """
+    _check_grants(job, violations)
+    violations.extend(_environment_violations(release, job))
+    violations.extend(_job_script_violations(job))
+
+
+def _check_grants(job: dict[str, object], violations: list[str]) -> None:
+    """Refuse any permission, environment, or OIDC grant on the smoke job.
+
+    The grant is read as one exact mapping, so an added ``id-token`` or a
+    raised scope fails rather than being tolerated as a superset.
+    """
     if job.get("permissions") != CONSUMER_SMOKE_PERMISSIONS:
         violations.append(
             f"{CONSUMER_SMOKE_JOB}.permissions: expected contents: read and "
@@ -113,20 +124,80 @@ def check_smoke_privileges(
             f"{CONSUMER_SMOKE_JOB}.environment: the smoke must not require an "
             "environment's secrets or protection rules"
         )
+
+
+def _environment_violations(
+    release: dict[str, object], job: dict[str, object]
+) -> cabc.Iterator[str]:
+    """Yield a violation for every environment that reaches the smoke.
+
+    Yields
+    ------
+    str
+        One violation per scope whose mapping defines or resolves to a
+        credential, labelled with the scope that declares it.
+    """
     for label, scope in _environments(release, job):
-        leaked = _leaked_credentials(scope)
-        if leaked:
-            violations.append(
-                f"{CONSUMER_SMOKE_JOB}.token: {label} must not define a "
-                f"credential, got {leaked}"
-            )
+        message = _environment_violation(label, scope)
+        if message is not None:
+            yield message
+
+
+def _environment_violation(label: str, scope: object) -> str | None:
+    """Return the violation one environment mapping earns, or ``None``.
+
+    Returns
+    -------
+    str | None
+        The refusal when the scope is a mapping holding or resolving to a
+        credential, or ``None`` when it declares no environment or is clean.
+    """
+    if not isinstance(scope, dict):
+        return None
+    leaked = _leaked_credentials(scope)
+    if not leaked:
+        return None
+    return (
+        f"{CONSUMER_SMOKE_JOB}.token: {label} must not define a "
+        f"credential, got {leaked}"
+    )
+
+
+def _job_script_violations(job: dict[str, object]) -> cabc.Iterator[str]:
+    """Yield a violation for every job step whose script reads a credential.
+
+    The step mappings were already read by :func:`_environment_violations`, so
+    only the scripts are scanned here: a step needs no environment to expand a
+    token expression, which is why the two scans are separate.
+
+    Yields
+    ------
+    str
+        One violation per step that reads a credential, quoting its first
+        offending line.
+    """
     for index, step in enumerate(steps_of(job)):
-        leaked_lines = _credential_lines(step.get("run"))
-        if leaked_lines:
-            violations.append(
-                f"{CONSUMER_SMOKE_JOB}.token: step {step.get('name', index)} "
-                f"must not read a credential expression, got {leaked_lines[0]!r}"
-            )
+        message = _script_violation(f"step {step.get('name', index)}", step.get("run"))
+        if message is not None:
+            yield message
+
+
+def _script_violation(label: str, run: object) -> str | None:
+    """Return the violation one step's script earns, or ``None``.
+
+    Returns
+    -------
+    str | None
+        The refusal quoting the first executable line that reads a credential,
+        or ``None`` when the script reads none.
+    """
+    offending = _credential_lines(run)
+    if not offending:
+        return None
+    return (
+        f"{CONSUMER_SMOKE_JOB}.token: {label} must not read a credential "
+        f"expression, got {offending[0]!r}"
+    )
 
 
 def check_smoke_action_environment(
@@ -146,19 +217,12 @@ def check_smoke_action_environment(
         return
     for index, step in enumerate(action_steps(action)):
         label = f"{CONSUMER_SMOKE_ACTION_PATH} step {step.get('name', index)}"
-        scope = step.get("env")
-        leaked = _leaked_credentials(scope) if isinstance(scope, dict) else []
-        if leaked:
-            violations.append(
-                f"{CONSUMER_SMOKE_JOB}.token: {label} must not define a "
-                f"credential, got {leaked}"
-            )
-        leaked_lines = _credential_lines(step.get("run"))
-        if leaked_lines:
-            violations.append(
-                f"{CONSUMER_SMOKE_JOB}.token: {label} must not read a credential "
-                f"expression, got {leaked_lines[0]!r}"
-            )
+        environment = _environment_violation(label, step.get("env"))
+        if environment is not None:
+            violations.append(environment)
+        script = _script_violation(label, step.get("run"))
+        if script is not None:
+            violations.append(script)
 
 
 __all__ = [

@@ -11,10 +11,12 @@ credential or a compiler fails a contract instead of quietly passing.
 The credential scans read the job and the action together and live in
 ``release_publish_path_consumer_credentials``, because a token can be defined in
 either document. What the action's command lines may run is asserted in
-``release_publish_path_consumer_commands``, and the two evidence downloads in
-``release_publish_path_consumer_artifacts``. The scenario-level composition and
-the reachability oracle live in ``release_publish_path_consumer_smoke``, which
-re-exports everything these modules define.
+``release_publish_path_consumer_commands``, the shape of the script around each
+invocation in ``release_publish_path_consumer_script``, and the two evidence
+downloads in ``release_publish_path_consumer_artifacts``. The scenario-level
+composition and the reachability oracle live in
+``release_publish_path_consumer_smoke``, which re-exports everything these
+modules define.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -65,6 +67,10 @@ SMOKE_ARTIFACT_INPUTS = {
     PACKAGE_RECORD_ARTIFACT: "identity-path",
     TRUSTED_RECORD_ARTIFACT: "asset-digest-record",
 }
+#: The CLI the action must run for each phase, and the only code that may read
+#: the downloaded bytes. It lives here with the other document paths because
+#: both the invocation contract and the script-shape readers look it up.
+SMOKE_CLI = "scripts/consumer_smoke_cli.py"
 #: The expressions that resolve to a credential, whatever name stores them.
 TOKEN_EXPRESSION = re.compile(r"\bgithub\.token\b|\bsecrets\b")
 TOKEN_NAMES = frozenset({"GH_TOKEN", "GITHUB_TOKEN"})
@@ -324,6 +330,7 @@ __all__ = [
     "SMOKE_ACTION_INPUTS",
     "SMOKE_ACTION_TARGET",
     "SMOKE_ARTIFACTS",
+    "SMOKE_CLI",
     "action_steps",
     "check_smoke_action_declared",
     "check_smoke_action_inputs",

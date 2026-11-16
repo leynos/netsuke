@@ -3823,12 +3823,13 @@ that runs too late can leave the verifier reading a path that was never filled.
 What the action's command lines may run is asserted in
 `release_publish_path_consumer_commands.py`: both CLI invocations must appear
 exactly once, carry no `if`, and run exactly the reviewed command line,
-launcher included, so a step that only `echo`es it is refused; the script
-around each invocation is read as a shape, so it may prepare the step with
-`set -…` and plain assignments and nothing else — a conditional, a loop, a bare
-command, or a `set +e` above the invocation, and a success exit below it, are
-each refused because they can skip the verification or absorb its refusal; and
-no command line in the job or the action may name a compiler.
+launcher included, so a step that only `echo`es it is refused, and no command
+line in the job or the action may name a compiler.
+`release_publish_path_consumer_script.py` judges the script around each
+invocation as a shape: a step may prepare it with `set -…` and plain
+assignments and nothing else, while a conditional, a loop, a bare command, or a
+`set +e` above the invocation, and a success exit below it, are each refused
+because they can skip the verification or absorb its refusal.
 `release_publish_path_consumer_mutations.py` registers one labelled regression
 for each of the wiring properties and
 `release_publish_path_consumer_artifact_mutations.py` for each download

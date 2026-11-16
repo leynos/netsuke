@@ -13,11 +13,11 @@ what a comment says, so documentation naming a compiler or a flag cannot be
 mistaken for an invocation.
 
 Reachability and failure propagation are read as a shape rather than as a
-search for one suspicious line. The script may prepare the invocation with
-``set -…`` and plain assignments and nothing else: a conditional, a loop, a
-bare command, or a ``set +e`` above it can skip the invocation or stop it
-failing, and a success exit below it can absorb the refusal even when the
-invocation itself is byte-for-byte correct.
+search for one suspicious line, using the readers in
+``release_publish_path_consumer_script``: a conditional, a loop, a bare
+command, or a ``set +e`` above the invocation can skip it or stop it failing,
+and a success exit below it can absorb the refusal even when the invocation
+itself is byte-for-byte correct.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -25,16 +25,21 @@ Run via ``make test-workflow-contracts``.
 import re
 import shlex
 
+from release_publish_path_consumer_script import (
+    ends_after_smoke_cli,
+    ends_successfully,
+    unsupported_prologue,
+)
 from release_publish_path_consumer_shape import (
     CONSUMER_SMOKE_ACTION_PATH,
     CONSUMER_SMOKE_JOB,
+    SMOKE_CLI,
     action_steps,
     command_lines,
     steps_of,
 )
 
-#: The CLI both invocations must run, and the evidence flags both pass.
-SMOKE_CLI = "scripts/consumer_smoke_cli.py"
+#: The evidence flags both invocations must pass, in the reviewed order.
 _EVIDENCE_ARGUMENTS = (
     "--identity",
     "$IDENTITY_PATH",
@@ -98,12 +103,6 @@ SMOKE_ACTION_LAUNCHERS = {
 #: only executable lines are read; a command line naming any of these would let
 #: the smoke build what it is supposed to download.
 COMPILATION_COMMAND = re.compile(r"\b(?:cargo|rustc|rustup)\b")
-#: The only lines a step may run before the reviewed invocation: an assignment
-#: of one variable, or a ``set`` that enables options. Shell separators and
-#: substitutions that run a command are excluded from an assignment's value, so
-#: a line cannot both assign and run something.
-_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=[^;&|`]*")
-_ENABLING_SET = re.compile(r"set -[A-Za-z]+(?: [A-Za-z][A-Za-z0-9_]*)*")
 
 
 def smoke_command_line(step: dict[str, object]) -> tuple[str, ...] | None:
@@ -142,100 +141,6 @@ def invoked_phase(tokens: tuple[str, ...] | None) -> str | None:
         if token == SMOKE_CLI:
             return tokens[index + 1] if index + 1 < len(tokens) else None
     return None
-
-
-def ends_successfully(line: str) -> bool:
-    """Return whether one shell command line exits the step successfully.
-
-    Returns
-    -------
-    bool
-        True for a bare ``exit`` or ``return``, or one naming status ``0``.
-        A non-zero status fails the step instead of skipping the rest of it,
-        so it makes no command unreachable.
-
-    Examples
-    --------
-    >>> ends_successfully("exit 0"), ends_successfully("exit 1")
-    (True, False)
-    """
-    try:
-        tokens = tuple(shlex.split(line))
-    except ValueError:
-        return False
-    return tokens[:1] in {("exit",), ("return",)} and tokens[1:] in {(), ("0",)}
-
-
-def _is_prologue(line: str) -> bool:
-    """Return whether one line only prepares the step for the invocation.
-
-    Returns
-    -------
-    bool
-        True for an assignment of one variable or a ``set`` that enables
-        options, which are the two things a step needs before the command it
-        exists to run. Everything else — a conditional, a loop, a bare command,
-        or a ``set +e`` — can decide whether the invocation runs at all.
-    """
-    return (
-        _ASSIGNMENT.fullmatch(line) is not None
-        or _ENABLING_SET.fullmatch(line) is not None
-    )
-
-
-def unsupported_prologue(step: dict[str, object]) -> str | None:
-    r"""Return the first line before the CLI that could skip or disarm it.
-
-    The reviewed invocation is one command inside a script, so an exact match
-    on that line says nothing about the script around it. ``exit 0`` above it
-    makes it unreachable, ``if false; then`` above it confines it to a branch
-    bash never takes, and ``set +e`` above it lets a refusal fall through to an
-    ``exit 0`` below. Only a prologue that plainly prepares the step is
-    accepted, so a construct nobody reviewed is refused rather than assumed
-    harmless.
-
-    Returns
-    -------
-    str | None
-        The first line ahead of :data:`SMOKE_CLI` that is not a plain prologue,
-        or ``None`` when every line ahead of the invocation prepares the step.
-
-    Examples
-    --------
-    >>> step = {"run": "set -e\nexit 0\nuv run x scripts/consumer_smoke_cli.py"}
-    >>> unsupported_prologue(step)
-    'exit 0'
-    """
-    for line in command_lines(step.get("run")):
-        if SMOKE_CLI in line:
-            return None
-        if not _is_prologue(line):
-            return line
-    return None
-
-
-def ends_after_smoke_cli(step: dict[str, object]) -> str | None:
-    """Return the line that ends a step successfully after the CLI runs.
-
-    A success exit below the invocation absorbs the refusal: with the shell's
-    fail-fast disabled, or never enabled, a verifier that exits non-zero is
-    followed by ``exit 0`` and the step reports success.
-
-    Returns
-    -------
-    str | None
-        The first success exit that follows :data:`SMOKE_CLI`, or ``None`` when
-        nothing after the invocation would end the step successfully.
-    """
-    lines = command_lines(step.get("run"))
-    position = next(
-        (index for index, line in enumerate(lines) if SMOKE_CLI in line), None
-    )
-    if position is None:
-        return None
-    return next(
-        (line for line in lines[position + 1 :] if ends_successfully(line)), None
-    )
 
 
 def check_smoke_action_commands(
