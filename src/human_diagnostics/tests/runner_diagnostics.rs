@@ -90,8 +90,14 @@ fn contained_reports_render_their_diagnostic() -> Result<()> {
 /// Deleting the [`repeats_the_message`] branch leaves every other test in this
 /// module passing: they all wrap their error in a context, so their two strings
 /// differ and the branch never fires for them.
-#[test]
-fn bare_runner_failures_print_their_message_once() -> Result<()> {
+///
+/// It takes the same [`EnLocalizer`] fixture as the neighbouring rendering
+/// test because both assert on localized FTL text: the fixture installs the
+/// English locale and holds the global localizer lock, so a parallel test that
+/// switches locale cannot change the sentence either one searches for.
+#[rstest]
+fn bare_runner_failures_print_their_message_once(en_localizer: EnLocalizer) -> Result<()> {
+    let _en_localizer = en_localizer;
     let error = anyhow::Error::new(runner::RunnerError::ManifestNotFound {
         manifest_name: String::from("Netsukefile"),
         directory: String::from("the current directory"),

@@ -183,7 +183,7 @@ impact
 | ------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | Optional           | Convenience wrappers         | Unchanged. `run_ninja` and `run_ninja_tool` behave exactly as before, inheriting the process environment.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [Users' guide](users-guide.md)                                                                                                            |
 | Optional           | Child environment            | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Developers' guide](developers-guide.md#ninja-invocation-with-an-explicit-environment)                                                    |
-| Optional           | Request types                | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, `NinjaProcessOptions`, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | [Developers' guide](developers-guide.md#ninja-invocation-with-an-explicit-environment)                                                    |
+| Required if called | Request types                | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, `NinjaProcessOptions`, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions. A direct `NinjaBuildRequest` or `NinjaToolRequest` literal stops compiling until it gains `options` and `stderr_mode`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | [Developers' guide](developers-guide.md#ninja-invocation-with-an-explicit-environment)                                                    |
 | Required if called | Cached CLI configuration API | Breaking for callers of the unstable Rust API: use the opt-in cached discovery flow with `ConfigEnvProvider`; `ConfigStdEnvProvider` supplies process-backed access.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | [Developers' guide](developers-guide.md#cached-configuration-merge)                                                                       |
 | Optional           | Timing output                | Existing `VerboseTimingReporter::new` keeps its stderr sink; Rust callers can opt into an owned `Write + Send` sink with `with_writer`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Developers' guide](developers-guide.md#verbose-timing-sink)                                                                              |
 | Review if enabled  | Glob expansion               | Parent-relative patterns such as `glob('../shared/*.h')` now expand. The Jinja helper rejects matched paths that are not portable unquoted shell words. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [Users' guide](users-guide.md) and [ADR-0010](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md)                  |
@@ -238,7 +238,17 @@ failure diagnostic.
 ## Declare the manifest schema version
 
 A manifest whose root is a mapping must now declare the schema it is written
-against. The current reader accepts exactly `1.0.0`:
+against. The current reader accepts exactly `1.0.0`.
+
+### Before: a mapping-root manifest
+
+```yaml
+targets:
+  - name: hello
+    command: echo hello
+```
+
+### After: the same manifest with a declaration
 
 ```yaml
 netsuke_version: "1.0.0"
@@ -263,9 +273,40 @@ diagnostic does not name the declared and supported schemas; it reports the
 `netsuke::manifest::schema_version` code. Only an unsupported version names
 both schemas.
 
-In human output that code appears in the diagnostic header. In `--json` output
-the top-level `code` is `netsuke::manifest::parse` and the schema code appears
-inside an entry of the `causes` array. See
+Each rejection prints one of three messages. A missing declaration prints:
+
+```text
+[netsuke::manifest::schema_version] The manifest must declare 'netsuke_version'.
+```
+
+A value that is not a string, is not a semantic version, or is semantic but not
+canonical prints:
+
+```text
+[netsuke::manifest::schema_version] 'netsuke_version' must be a semantic-version release in MAJOR.MINOR.0 form.
+```
+
+An unsupported version names the manifest as the loader knew it — the path
+given to `--file` or discovered by default — together with the declared
+`MAJOR.MINOR` and the schema this release accepts:
+
+```text
+[netsuke::manifest::schema_version] Netsukefile declares manifest schema 1.1, but this Netsuke supports schema 1.0.
+```
+
+Every case carries the same remedy line, which is not part of the bracketed
+message:
+
+```text
+Declare the exact supported schema release in MAJOR.MINOR.0 form, without prerelease or build metadata.
+```
+
+The bracketed code is part of the localized message text rather than only a
+diagnostic-code field, so it also appears as prose. In human mode the report
+keeps the `Failed to load manifest at <path>.` context line, because the schema
+diagnostic names the declared and supported schemas but never the file it
+refused. In `--json` output the top-level `code` is `netsuke::manifest::parse`,
+and the whole bracketed message appears as an entry of the `causes` array. See
 [Declare the schema version](users-guide.md#declare-the-schema-version) for the
 full behaviour and the diagnostic shape.
 
@@ -287,6 +328,45 @@ Their program and build-file path parameters now use `&Utf8Path`, so callers
 using `std::path::Path` must convert those values. A caller that constructs
 `NinjaBuildRequest`/`NinjaToolRequest` directly must pass `options: &options`
 and supply the required `stderr_mode: StderrMode` field.
+
+### Before: a beta2 request literal
+
+```rust,no_run
+use netsuke::runner::{BuildTargets, CommandEnv, NinjaBuildRequest, StderrMode};
+use std::path::Path;
+
+let targets = BuildTargets::default();
+let build = NinjaBuildRequest {
+    program: Path::new("ninja"),
+    cli: &cli,
+    build_file: Path::new("build.ninja"),
+    targets: &targets,
+    env: &CommandEnv::inherit(),
+    stderr_mode: StderrMode::from_json_enabled(cli.json),
+};
+```
+
+### After: the same literal on the beta3 shape
+
+```rust,no_run
+use netsuke::runner::{
+    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, StderrMode,
+};
+use camino::Utf8Path;
+
+let targets = BuildTargets::default();
+let options = NinjaProcessOptions::default();
+let build = NinjaBuildRequest {
+    program: Utf8Path::new("ninja"),
+    options: &options,
+    build_file: Utf8Path::new("build.ninja"),
+    targets: &targets,
+    env: &CommandEnv::inherit(),
+    stderr_mode: StderrMode::Forward,
+};
+```
+
+`NinjaToolRequest` changes the same way, with `tool:` in place of `targets:`.
 
 Existing callers that construct `VerboseTimingReporter::new` continue to
 receive timing summaries on stderr. Callers that need to capture or redirect
@@ -942,7 +1022,7 @@ env_block_var = nan
 fetch_block_host = inf
 ```
 
-### After
+### After: blocklists written as arrays
 
 ```toml
 # .netsuke.toml: name the additional entries explicitly.

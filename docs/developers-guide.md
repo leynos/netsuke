@@ -12067,6 +12067,15 @@ while every other failure keeps `error_kind = "runner"`, so an operator can
 count version faults apart from build faults without the log line carrying
 manifest-controlled text.
 
+Two classifications sit outside that pair. A cycle found by
+`circular_dependency_cause` is logged under
+`error_kind = "circular_dependency"` and reported with its own bounded
+rendering, so target names stay out of the log; it is never logged as
+`"runner"`. A failure the runner did not anticipate is still logged as
+`"runner"`, but a runner failure the runner raised deliberately is not logged
+at all — its diagnostic is the whole report, and a tracing event would prepend
+a timestamped line to text that already reads as a complete answer.
+
 ### Recipe-text dialect telemetry
 
 `src/stdlib/recipe_text/dialect_telemetry.rs` owns telemetry for the dialect
