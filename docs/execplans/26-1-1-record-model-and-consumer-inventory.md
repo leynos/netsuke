@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 67. See `Revision note` at the foot of this document. This plan was
+Revision 68. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -3643,6 +3643,47 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   read rather than trusted: the gate's 3-second wall time came from warm
   artefacts, and its log shows the `netsuke-build` and `test_support` runs each
   finishing.
+
+- Revision 68 (2026-11-16): this revision changes no product code or
+  acceptance evidence; it records a hosted-check reconciliation for the
+  published head `213885f53` and is the reconciliation, not a repair. No new
+  finding was raised, so D-52 and D-53 stand unchanged and the contract target
+  still runs 101 cases.
+
+  All four workflows for the head completed `success`: `CI`,
+  `Netsukefile Build Test`, `Release Dry Run`, and the Windows jobs within
+  `CI`. The four checks the `main-required-checks` ruleset names — `build-test`,
+  `kani-smoke`, `netsukefile` and `release / metadata` — are each `success`,
+  and the live merge state is `clean` and `mergeable`, so branch protection is
+  satisfied on this head rather than assumed green from an aggregate badge.
+
+  Two observations needed care and neither is a defect. First, sixteen
+  `check_suites` for this head reported `status=queued` with
+  `latest_check_runs_count=0`: they belong to third-party apps (`codecov`,
+  `codescene-delta-analysis`, `cursor`, `greptile-apps` and others) that
+  registered a suite and never produced a check run. The `main` head carries
+  twenty of the same empty suites, so the pattern is repository-wide and not
+  something this branch introduced; a suite with no check run supplies no
+  result and cannot gate. Second, polling `commits/<sha>/check-runs` reported
+  `release / build-macos (aarch64…)` as `in_progress` for over an hour after
+  `actions/jobs/133452842050` had recorded that same job `completed`/`success`,
+  and later reported the `release / release` fan-in as `queued` after
+  `actions/runs/43906656082` had completed `success`. The check-run listings
+  were serving stale replicas; the job and workflow-run endpoints, read for the
+  same IDs, agreed with each other and post-dated the stale rows. The lesson
+  repeats one this plan already records in another form: a single endpoint's
+  field is evidence about that endpoint, and a claim that a job is still
+  running has to survive a read of the run itself.
+
+  `dependabot-automerge` shows `conclusion=startup_failure` on this head. It is
+  not a required check, it is triggered by `pull_request_target` for Dependabot
+  branches rather than for this one, and it is therefore outside this PR's
+  scope; it is recorded here rather than repaired or suppressed.
+
+  The `CHANGES_REQUESTED` review decision still points at CodeRabbit's review of
+  `ccef3c3e5`, three heads back. A resume for `d0750063` is queued and had 6h
+  58m remaining when this note was written; the decision is reconciled from a
+  read-back only after that review lands on the current head.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
