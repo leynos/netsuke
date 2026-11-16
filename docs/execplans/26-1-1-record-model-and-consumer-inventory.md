@@ -2237,28 +2237,31 @@ pre-rebase history if an old hash must be inspected.
   Date/Author: 2026-11-16, implementation agent, on CodeRabbit's inline review.
 
 - Decision D-53 (2026-11-16): closed the pre-merge table's failing Unit
-  Architecture row, which named a real fail-open I had written myself.
+  Architecture row, and corrected my own first account of why it mattered.
 
   The row said `roadmap_tasks` should be explicit about its regex failure
-  rather than returning `BTreeMap::new()`. It is right, and it is the same
-  defect class the whole contract exists to refuse: `.ok()` followed by an
-  empty return maps "the pattern did not compile" onto "this roadmap has no
-  tasks", and every caller reads an empty map as agreement.
-  `validate_trace_coverage` asks which tasks depend on 26.1.1, gets none, and
-  passes; `dependents_of` over an empty map is empty, so the difference it
-  computes is empty too.
+  rather than returning `BTreeMap::new()`. That is right: `.ok()` followed by
+  an empty return maps "the pattern did not compile" onto "this roadmap has no
+  tasks". The patterns are compile-time constants, so the failure has no
+  recoverable meaning; they are now `LazyLock` statics that panic through
+  `expect`, matching `markdown.rs`, and each compiles once rather than per call.
 
-  The patterns are compile-time constants, so the failure is a programming
-  error with no recoverable meaning. They are now `LazyLock` statics that panic
-  through `expect`, matching what `markdown.rs` already does for its constant
-  patterns, and each is compiled once rather than per call. The new
-  `roadmap_parser_never_reports_an_empty_map_for_a_populated_roadmap` pins the
-  direction that matters — a populated roadmap must yield tasks — and I
-  verified it fails against a re-injected empty map.
+  My first account of the consequence was wrong, and CodeRabbit's reply to my
+  disposition comment caught it. I had written that `validate_trace_coverage`
+  would read the empty map as coverage satisfied and pass vacuously. It does
+  not: it guards `tasks.contains_key("26.1.1")` *before* asking for dependents,
+  so an empty map is rejected outright, and the real-inventory test's
+  dependent-count guard is a second net. The fix is still right — a panic at
+  the pattern is a far better diagnostic than a downstream "roadmap should
+  contain task 26.1.1" that hides the cause — but it prevents a confusing
+  failure, not a vacuous pass.
 
-  Worth recording: 15 other cases failed with that probe, so the whole target
-  would have caught the regression. The narrow test is still the one that names
-  the defect, which is what a future reader of a red run needs.
+  The lesson is worth more than the fix: I asserted a consequence from the
+  shape of the code without following the caller, and printed it in a review
+  comment as established. Reading `validate_trace_coverage` took one `sed`. The
+  `roadmap_parser_never_reports_an_empty_map_for_a_populated_roadmap` test I
+  added is sound and does fail against a re-injected empty map, but this
+  decision does not claim it closes a hole that was open.
 
   This is a `tests/` change, so the post-pin sweep advances to 89 identifiers
   at 52/37. Date/Author: 2026-11-16, implementation agent, on the pre-merge row.
@@ -3620,12 +3623,16 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
 
 - Revision 67 (2026-11-16): closed the pre-merge table's failing Unit
   Architecture row (D-53). `roadmap_tasks` compiled its patterns with
-  `Regex::new(...).ok()` and returned an empty map on failure, which every
-  caller reads as "the roadmap covers nothing" — `validate_trace_coverage` then
-  passes vacuously. The patterns are now `LazyLock` statics that panic through
-  `expect`, and a test pins that a populated roadmap yields tasks. The contract
-  target runs 101 cases, and the post-pin sweep advances to 89 identifiers, 52
-  in `main` and 37 on this branch. No proof artefact is affected.
+  `Regex::new(...).ok()` and returned an empty map on failure, so a broken
+  pattern surfaced as "roadmap should contain task 26.1.1" rather than as the
+  cause. My first account claimed the empty map let coverage pass vacuously;
+  CodeRabbit's reply showed `validate_trace_coverage` guards
+  `contains_key("26.1.1")` first, so it rejects. The fix stands on
+  diagnosability, not on a closed hole. The patterns are now `LazyLock` statics
+  that panic through `expect`, and a test pins that a populated roadmap yields
+  tasks. The contract target runs 101 cases, and the post-pin sweep advances to
+  89 identifiers, 52 in `main` and 37 on this branch. No proof artefact is
+  affected.
 
   The complete sequential eleven-gate set passed on `878a87486` with an
   unchanged HEAD and an empty working tree at both ends of the batch: 98.26%
