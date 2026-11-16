@@ -10,8 +10,12 @@ a member record.
 This module puts the cap where the bytes are actually produced, and gives the
 tar reader the one thing it needs from a file object besides ``read``: a
 backward ``seek``, which opens a second bounded pass over the same download.
-The archive's own refusals stay in :mod:`release_binstall_archive`; the error
-raised at the cap is supplied by the caller so a refusal keeps that identity.
+Reads are served in chunks, so a header that declares a huge size cannot make
+the reader allocate that size before the cap has refused it, and
+:meth:`InflatedStream.drain` reads a pass to its end so gzip verifies the
+trailer that the tar end marker leaves unread. The archive's own refusals stay
+in :mod:`release_binstall_archive`; the error raised at the cap is supplied by
+the caller so a refusal keeps that identity.
 
 Run through ``scripts/release_binstall_archive.py``; behavioural coverage lives
 in ``scripts/tests/test_release_binstall_archive.py``.
@@ -30,9 +34,11 @@ if typ.TYPE_CHECKING:
 #: reading instead of the disk-free gigabytes it would otherwise cost.
 MAX_INFLATED_BYTES = 4 * 64 * 1024 * 1024
 
-#: Bytes read at a time when seeking forward, so skipping over an offset does
-#: not allocate a buffer the size of the distance skipped.
-SEEK_CHUNK_BYTES = 64 * 1024
+#: Bytes served at a time. Seeking forward reads in these steps so skipping an
+#: offset does not allocate a buffer the size of the distance skipped, and
+#: :meth:`InflatedStream.read` serves a request in them so a huge request is
+#: never allocated before the budget has refused it.
+CHUNK_BYTES = 64 * 1024
 
 
 class InflatedStream(io.RawIOBase):
@@ -127,6 +133,67 @@ class InflatedStream(io.RawIOBase):
         """
         return self._inflated
 
+    @typ.override
+    def read(self, size: int = -1) -> bytes:
+        """Serve at most ``size`` bytes, allocating only what arrives.
+
+        Returns
+        -------
+        bytes
+            Up to ``size`` decompressed bytes, or everything left in this pass
+            when ``size`` is negative. Fewer bytes mean the pass's budget or
+            the archive ended first.
+
+        Notes
+        -----
+        ``tarfile`` reads an extended header with the size that header claims,
+        and the inherited ``read`` allocates that many bytes before
+        :meth:`readinto` can refuse them. Serving the request in chunks keeps
+        the allocation within what the budget admits, whichever interpreter
+        the smoke runs on.
+
+        The refusal raised at the cap is the caller's own class rather than one
+        defined here; :meth:`_require_end` describes when it is raised.
+        """
+        if size < 0:
+            return self._read_all()
+        served = bytearray()
+        while len(served) < size:
+            chunk = bytearray(min(CHUNK_BYTES, size - len(served)))
+            count = self.readinto(chunk)
+            if count == 0:
+                break
+            served += chunk[:count]
+        return bytes(served)
+
+    def _read_all(self) -> bytes:
+        """Read the rest of this pass in bounded chunks.
+
+        Returns
+        -------
+        bytes
+            Every byte left in this pass, which is at most the pass's budget.
+        """
+        served = bytearray()
+        while True:
+            chunk = bytearray(CHUNK_BYTES)
+            count = self.readinto(chunk)
+            if count == 0:
+                return bytes(served)
+            served += chunk[:count]
+
+    def drain(self) -> None:
+        """Read to the end of this pass so gzip checks its trailer.
+
+        Notes
+        -----
+        ``tarfile`` stops at the archive's end marker, which leaves the
+        decompressor short of the gzip trailer; only a read to the end of the
+        compressed member makes gzip verify the CRC and length it recorded.
+        A pass that runs out of budget first is refused exactly as a read is.
+        """
+        _ = self._read_all()
+
     def readinto(self, buffer: cabc.Buffer) -> int:
         """Serve decompressed bytes without passing the pass's budget.
 
@@ -207,7 +274,7 @@ class InflatedStream(io.RawIOBase):
 
     def _discard_to(self, target: int) -> None:
         """Read forward to ``target`` without retaining the skipped bytes."""
-        scratch = bytearray(min(SEEK_CHUNK_BYTES, max(target, 1)))
+        scratch = bytearray(min(CHUNK_BYTES, max(target, 1)))
         while self._inflated < target:
             want = min(len(scratch), target - self._inflated)
             if not self.readinto(memoryview(scratch)[:want]):
@@ -219,4 +286,4 @@ class InflatedStream(io.RawIOBase):
         super().close()
 
 
-__all__ = ["MAX_INFLATED_BYTES", "SEEK_CHUNK_BYTES", "InflatedStream"]
+__all__ = ["CHUNK_BYTES", "MAX_INFLATED_BYTES", "InflatedStream"]

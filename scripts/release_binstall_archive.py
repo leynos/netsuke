@@ -10,11 +10,10 @@ Every safety decision about member names and kinds belongs to
 :mod:`release_consumer_archive_policy`; this module only maps tar metadata into
 the policy's records and refuses an archive the policy has not accepted.
 Writing the binary out is :mod:`release_binstall_extract`, running it is
-:mod:`release_binstall_probe`, and checking its published ``.sha256`` sidecar
-is :mod:`release_binstall_sidecar`. Verification and extraction share one open
-archive, so the bytes hashed are the bytes copied; extraction still compares
-the layout it was handed with the one its own scan produces, so a caller that
-passes a layout from some other archive is refused.
+:mod:`release_binstall_probe`, and checking its ``.sha256`` sidecar is
+:mod:`release_binstall_sidecar`. Verification and extraction share one open
+archive, so the bytes hashed are the bytes copied; extraction still compares the
+layout it was handed with the one its own scan produces.
 
 Run through ``scripts/consumer_smoke_cli.py``; behavioural coverage lives in
 ``scripts/tests/test_release_binstall_archive.py``.
@@ -72,11 +71,7 @@ class ArchiveCorruptError(ArchiveRefusedError):
 
 
 class ArchiveInflationError(ArchiveRefusedError):
-    """Report an archive that expands past the decompressed-byte cap.
-
-    A gzip bomb fits within :data:`MAX_ARCHIVE_BYTES` yet expands without
-    limit, so the bytes read are capped separately.
-    """
+    """Report an archive that expands past the decompressed-byte cap."""
 
 
 class ExtractionError(ArchiveRefusedError):
@@ -168,23 +163,8 @@ def verified_archive(
     unsafe member layout is refused by
     :func:`release_consumer_archive_policy.require_safe_layout` before the
     value is yielded, so the caller never holds an archive the policy has not
-    accepted.
-
-    Examples
-    --------
-    >>> import io, tempfile
-    >>> from pathlib import Path
-    >>> import release_digest_files
-    >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     path = Path(tmp) / "netsuke.tar.gz"
-    ...     with tarfile.open(path, "w:gz") as archive:
-    ...         entry = tarfile.TarInfo("netsuke")
-    ...         entry.size = 1
-    ...         _ = archive.addfile(entry, io.BytesIO(b"x"))
-    ...     digest = release_digest_files.digest_of_file(path)
-    ...     with verified_archive(path, expected_sha256=digest) as validated:
-    ...         validated.layout.binary_name
-    'netsuke'
+    accepted. The stream is read to its end before the value is yielded, so a
+    download whose gzip trailer is missing or wrong is refused here too.
     """
     handle = _opened_file(archive_path)
     with handle:
@@ -194,6 +174,7 @@ def verified_archive(
         try:
             headers = _scanned_headers(archive)
             layout = _scanned_layout(headers)
+            _require_stream_complete(stream)
             yield ValidatedArchive(archive=archive, headers=headers, layout=layout)
         finally:
             archive.close()
@@ -300,6 +281,24 @@ def _opened_archive(
     except CORRUPT_STREAM as error:
         stream.close()
         msg = f"the downloaded archive is not a readable gzip tar file: {error}"
+        raise ArchiveCorruptError(msg) from error
+
+
+def _require_stream_complete(stream: inflate.InflatedStream) -> None:
+    """Read the stream to its end so gzip checks the trailer it recorded.
+
+    Raises
+    ------
+    ArchiveCorruptError
+        If the compressed stream is damaged after the archive's end marker.
+        Nothing before that point reads those bytes: ``tarfile`` stops at the
+        marker, and closing the reader performs no check, so a download missing
+        the gzip trailer would otherwise be accepted.
+    """
+    try:
+        stream.drain()
+    except CORRUPT_STREAM as error:
+        msg = f"the archive's compressed stream is corrupt: {error}"
         raise ArchiveCorruptError(msg) from error
 
 

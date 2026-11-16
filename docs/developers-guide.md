@@ -3721,16 +3721,25 @@ rather than by the number of headers it claims. Decompression is capped
 separately, because a cap on the compressed download bounds neither the memory
 the reader holds nor the work a gzip bomb can demand: every decompressed byte
 is counted before `tarfile` parses it, including the extended-header bodies
-that carry long member names. Reaching that cap is refused as an oversized
-archive rather than reported as a corrupt one, and the one backward seek
-`tarfile` performs, to read the member it has indexed, opens a second bounded
-pass over the same download. The archive is opened once, and the digest and the
-member scan are taken through that one descriptor, so the bytes that were
-hashed are the bytes that are copied; checking a pathname and then reopening it
-would leave a window in which the name resolves to a different file whose
-members still match the accepted layout. Extraction still compares the layout
-it was handed with the one its own scan produces, so a caller holding a layout
-from some other archive is refused rather than trusted.
+that carry long member names. A header declares the size of its own body, so
+reads are served in bounded chunks rather than allocating whatever a hostile
+header claims before the cap can refuse it. Reaching that cap is refused as an
+oversized archive rather than reported as a corrupt one, and the one backward
+seek `tarfile` performs, to read the member it has indexed, opens a second
+bounded pass over the same download. Once the member index has been accepted,
+the rest of the decompressed stream is read under the same cap before anything
+is yielded: `tarfile` stops at the archive's end marker, which leaves the gzip
+trailer unread, and only reaching the end of the compressed member makes gzip
+verify the CRC and length it recorded, so a download truncated after that
+marker or carrying a damaged trailer is refused as corrupt instead of accepted.
+
+The archive is opened once, and the digest and the member scan are taken
+through that one descriptor, so the bytes that were hashed are the bytes that
+are copied; checking a pathname and then reopening it would leave a window in
+which the name resolves to a different file whose members still match the
+accepted layout. Extraction still compares the layout it was handed with the
+one its own scan produces, so a caller holding a layout from some other archive
+is refused rather than trusted.
 
 The binary is then run once with `--version` under a wall-clock limit, a
 ceiling on how much of its output the smoke will read, and a replaced

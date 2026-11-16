@@ -86,6 +86,50 @@ def test_scan_archive_refuses_a_truncated_archive(tmp_path: pathlib.Path) -> Non
         adapter.scan_archive(truncated, expected_sha256=digest_of(truncated))
 
 
+def test_scan_archive_refuses_a_missing_gzip_trailer(tmp_path: pathlib.Path) -> None:
+    """Refuse a download truncated after the archive's own end.
+
+    The tar member index is complete, so nothing the archive itself parses
+    reaches the missing bytes; only reading the compressed stream to its end
+    makes gzip notice that its trailer never arrived.
+    """
+    archive = tarball(tmp_path / "archive.tar.gz")
+    truncated = tmp_path / "truncated.tar.gz"
+    _ = truncated.write_bytes(archive.read_bytes()[:-8])
+
+    with pytest.raises(adapter.ArchiveCorruptError):
+        adapter.scan_archive(truncated, expected_sha256=digest_of(truncated))
+
+
+def test_scan_archive_refuses_an_incorrect_gzip_crc(tmp_path: pathlib.Path) -> None:
+    """Refuse a download whose gzip trailer records the wrong checksum."""
+    archive = tarball(tmp_path / "archive.tar.gz")
+    trailer = bytearray(archive.read_bytes())
+    trailer[-8] ^= 0xFF
+    damaged = tmp_path / "damaged.tar.gz"
+    _ = damaged.write_bytes(trailer)
+
+    with pytest.raises(adapter.ArchiveCorruptError):
+        adapter.scan_archive(damaged, expected_sha256=digest_of(damaged))
+
+
+def test_inflate_refuses_an_oversized_read_without_allocating_it() -> None:
+    """Serve an oversized read in chunks and refuse it at the budget.
+
+    A pax header carries the size of its own body, and the inherited
+    ``RawIOBase.read`` allocates the whole request before ``readinto`` can
+    refuse it. A request larger than any allocation the host would grant must
+    still surface as the budget's refusal, which shows the request was served
+    in chunks rather than allocated whole.
+    """
+    stream = inflate.InflatedStream(
+        io.BytesIO(gzip.compress(b"netsuke" * 4)), limit=16, refusal=ValueError
+    )
+
+    with stream, pytest.raises(ValueError, match="more than the 16 bytes"):
+        _ = stream.read(1 << 48)
+
+
 def _incompressible_payload(size: int) -> bytes:
     """Return ``size`` bytes that deflate cannot shrink.
 
@@ -145,25 +189,25 @@ def _truncated_index(path: pathlib.Path) -> pathlib.Path:
     return path
 
 
-def test_scan_archive_refuses_an_archive_that_expands_past_the_cap(
+def test_scan_archive_refuses_a_header_that_declares_more_than_the_cap(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Refuse a stream that inflates further than the budget allows.
+    """Refuse a stream whose extended header claims more than the budget.
 
-    The long member name travels in an extended PAX header, which ``tarfile``
-    decodes before it can produce a member record, so the expansion is measured
-    while the header is read. The cap is placed between the two fixtures: an
-    archive of the shipped shape must still scan under it, so the refusal is
-    the budget rather than the patch itself.
+    The long member name travels in an extended PAX header, whose declared size
+    ``tarfile`` reads before it can produce a member record, so the expansion is
+    measured while the header is read — and the size declared there is beyond
+    the budget. The smaller archive must still scan under the same budget, so
+    the refusal is the budget rather than the patched limit.
     """
     short = tarball(tmp_path / "short.tar.gz")
     long = _long_named_archive(tmp_path / "long.tar.gz")
-    short_bytes = len(gzip.decompress(short.read_bytes()))
-    long_bytes = len(gzip.decompress(long.read_bytes()))
-    cap = (short_bytes + long_bytes) // 2
-    assert (
-        adapter.scan_archive(long, expected_sha256=digest_of(long)).member_count == 2
-    ), "the fixture must be a valid archive, so only the budget refuses it"
+    cap = len(gzip.decompress(short.read_bytes())) + tarfile.BLOCKSIZE
+    declared = _declared_header_size(long)
+    assert declared is not None, "the fixture must carry an extended header"
+    assert declared > cap, (
+        "the fixture's declared header size must exceed the budget under test"
+    )
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(inflate, "MAX_INFLATED_BYTES", cap)
@@ -173,6 +217,23 @@ def test_scan_archive_refuses_an_archive_that_expands_past_the_cap(
         ), "the budget must admit an archive of the shipped shape"
         with pytest.raises(adapter.ArchiveInflationError):
             adapter.scan_archive(long, expected_sha256=digest_of(long))
+
+
+def _declared_header_size(path: pathlib.Path) -> int | None:
+    """Return the body size the archive's first extended header declares.
+
+    Returns
+    -------
+    int | None
+        The byte count recorded in the header block for an extended or global
+        pax header, or ``None`` when the archive carries none.
+    """
+    blocks = gzip.decompress(path.read_bytes())
+    for offset in range(0, len(blocks), tarfile.BLOCKSIZE):
+        block = blocks[offset : offset + tarfile.BLOCKSIZE]
+        if block[156:157] in {b"x", b"g"}:
+            return int(block[124:136].rstrip(b"\0 ") or b"0", 8)
+    return None
 
 
 def _long_named_archive(path: pathlib.Path) -> pathlib.Path:
