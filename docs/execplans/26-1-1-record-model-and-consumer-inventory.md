@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 60. See `Revision note` at the foot of this document. This plan was
+Revision 61. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -869,6 +869,16 @@ pre-rebase history if an old hash must be inspected.
   heading provides. Both halves are tested, and the stricter rule was checked
   against the real document before it was committed. The contract target runs
   85 cases.
+- [x] (2026-11-16) Closed both finding-reader findings from the revision-60
+  verdict (D-47). `is_finding_start` now matches any decoration around a
+  finding identifier, so `- **OBS-1**: no owner.` is reported rather than read
+  as prose; `bullet_entries` no longer closes an open entry on a blank line, so
+  an owner, `Tasks:` clause, or commit written below a gap in the same list
+  item survives. The shared obligation and landed-work readers gained the same
+  acceptance case, and all three fail when the blank line closes the entry
+  again. The four finding cases now share `inventory_with_findings`, clearing
+  the duplication CodeScene reported; every changed file scores 10.00. The
+  contract target runs 89 cases.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1940,15 +1950,75 @@ pre-rebase history if an old hash must be inspected.
   loses its owner. The refusal was probed too — restoring the old boundary
   fails the new paragraph case and no other.
 
-  The same verdict repeated that EP-M4 remains open. It does: this task records
-  the inventory and its contract, and every migration step the roadmap places
-  under 26.1.1's dependent tasks is still theirs to deliver. Nothing in this
-  branch claims otherwise, and the roadmap checkbox stays untouched.
+  The revision-59 verdict repeated that EP-M4 remains open, and I recorded that
+  as the dependent tasks' work. That reading was wrong, and the revision-60
+  verdict corrects it: EP-M4 is *this plan's* integration and hosted-review
+  milestone — take the pull request through hosted review to equilibrium, then
+  record the plan as complete. The dependent migration tasks are separate
+  roadmap work that this plan never claimed to deliver. The roadmap already
+  marks 26.1.1 complete at `docs/roadmap-hexagonal-hardening.md`, which is what
+  EP-M4's edit list asks for; the checkbox was not mine to withhold while
+  claiming the converse. What remains for EP-M4 is the hosted equilibrium, so
+  the line stays open for that and nothing else.
 
   This repair is a `tests/` change, so the post-pin sweep advances to 80
   identifiers at 52/28. As D-44 explains, the chain stops with the
   documentation commit that records it. Date/Author: 2026-11-16, implementation
   agent, on the revision-59 assessment.
+
+- Decision D-47 (2026-11-16): closed the three findings of the revision-60
+  verdict, and corrected a reading of EP-M4 that D-46 got wrong.
+
+  The reader findings were two halves of one fail-open. `is_finding_start`
+  accepted a short list of bare prefixes, so `- **OBS-1**: no owner.` matched
+  nothing, was treated as prose, and bound no owner — while a valid
+  neighbouring finding satisfied the population guard that exists to keep the
+  loop live. Enumerating decorations would reopen this for every form the list
+  lacks, which is exactly how the bold label escaped, so the label is now
+  matched by pattern with any non-word characters allowed around the
+  identifier. Refusing the decoration outright would have been the other
+  option; reporting it keeps the document's own rendering valid, and the owner
+  check then applies.
+
+  The second was `bullet_entries` treating a blank line as the end of an entry.
+  Markdown lets a list item hold several paragraphs, so a blank line followed
+  by an indented line is the *same* entry, and the entry's owner, `Tasks:`
+  clause, or commit written below the gap was silently dropped. The collector
+  now skips a blank line and lets the following line decide, as the finding
+  reader's earlier repair already depended on: an indented line continues and
+  an unindented one closes. The unindented-paragraph rejection D-46 added still
+  holds, and its test still fails if that behaviour is reverted.
+
+  The revision-60 verdict also asked whether the shared obligation and
+  landed-work readers had the same gap. They did — they call the same collector
+  — so each now has an acceptance case for the shape. My first pass at this was
+  inadequate and I nearly recorded it as done: the full suite showed one
+  failure under a revert, and I read that as the finding case being the only
+  live guard. It was nextest's fail-fast ordering, not evidence. Running the
+  three cases on their own showed all three fail under the revert. That is
+  worth recording because a single failing case after a revert looks exactly
+  like proof that the others are vacuous, and it is not.
+
+  CodeScene's third finding was duplication in `fail_open_tests.rs`, reproduced
+  locally at 9.38 before the repair and 10.00 after: four copies of the
+  skeleton anchor became `inventory_with_findings`. `landed.rs`,
+  `obligation_tests.rs`, `markdown.rs`, and `validation.rs` all score 10.00.
+
+  EP-M4's reading needed correcting. D-46 said EP-M4 stays open because the
+  dependent roadmap tasks own it. It is instead *this plan's* integration and
+  hosted-review milestone: take the pull request to hosted equilibrium, then
+  record the plan as complete. Those dependent tasks are separate roadmap work
+  this plan never claimed. The roadmap already marks 26.1.1 complete at
+  `docs/roadmap-hexagonal-hardening.md`, which is what EP-M4's own edit list
+  asks for, so the checkbox needed no change and D-46's claim that it stays
+  untouched was wrong. Only hosted equilibrium remains, and the Progress line
+  stays open for that alone.
+
+  This repair is a `tests/` change, so the post-pin sweep advances to 82
+  identifiers at 52/30, verified equal to the live `git log` in both
+  directions. As D-44 explains, the chain stops with the documentation commit
+  that records it. Date/Author: 2026-11-16, implementation agent, on the
+  revision-60 assessment.
 
 ## Outcomes & retrospective
 
@@ -3184,8 +3254,27 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   continuation working; both collectors were compared on the real inventory
   first and produce the same 22 findings with the same owners. The contract
   target runs 85 cases and the post-pin sweep advances to 80 identifiers, 52 in
-  `main` and 28 on this branch. EP-M4 remains open by design: the dependent
-  roadmap tasks own that work. No proof artefact is affected. A fresh
+  `main` and 28 on this branch. The section also said EP-M4 stays open because
+  the dependent roadmap tasks own that work; revision 61 corrects that reading
+  (D-47). No proof artefact is affected. A fresh assessment is requested for
+  this candidate.
+- Revision 61 (2026-11-16): closed both finding-reader findings from the
+  revision-60 verdict (D-47). `is_finding_start` matched a list of bare
+  prefixes, so `- **OBS-1**: no owner.` read as prose and escaped the owner
+  check while a neighbour satisfied the population guard; the label now matches
+  any decoration around the identifier. `bullet_entries` closed an open entry
+  on a blank line, which dropped an owner, `Tasks:` clause, or commit written
+  below a gap inside one Markdown list item; the blank line is now transparent
+  and the line after it decides. Both repairs are probed, and the shared
+  obligation and landed-work readers gained the same acceptance case, so all
+  three readers are guarded rather than only the finding one. The four finding
+  cases also share `inventory_with_findings`, which is what CodeScene reported
+  as duplication at 9.38; every changed file now scores 10.00. The contract
+  target runs 89 cases and the post-pin sweep advances to 82 identifiers, 52 in
+  `main` and 30 on this branch. EP-M4's reading was corrected here too: it is
+  this plan's integration and hosted-review milestone, not the dependent
+  migration work, and the roadmap already marks 26.1.1 complete. What remains
+  for EP-M4 is hosted equilibrium. No proof artefact is affected. A fresh
   assessment is requested for this candidate.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
