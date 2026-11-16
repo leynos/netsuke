@@ -254,7 +254,7 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-16 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 52 in the current `main` target and
-twenty-six on this branch, one of them adding this inventory's contract test,
+twenty-seven on this branch, one of them adding this inventory's contract test,
 and the rest refactoring, tightening, or repairing the health of that contract.
 The span floor the `test_support` crate shares with the root is no longer among
 them: `fa06bdb21` landed that setting upstream, with a refactor of the one
@@ -344,6 +344,7 @@ context for later consumers; it does not move the inventory pin.
 - `ac826aa97` Disable incremental compilation and dev debug data (#948)
 - `b19386767` Evaluate typed records for release policy boundaries (9.1.1.)
   (#964) (#1052)
+- `b19d8ca96` Require the real inventory to record landed work
 - `b87baf96c` Install Kani in CI through the shared install-prover-tools action
   (#1126)
 - `bb0bbc683` Add the offline candidate boundary and publication resume for

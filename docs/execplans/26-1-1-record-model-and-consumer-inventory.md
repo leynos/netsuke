@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 58. See `Revision note` at the foot of this document. This plan was
+Revision 59. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -854,6 +854,14 @@ pre-rebase history if an old hash must be inspected.
   fail there. The plan's module count was corrected from ten to thirteen. The
   contract target runs 82 cases, and the complete sequential eleven-gate set
   passes on `3b91d5b5f` with the worktree empty at both ends.
+- [x] (2026-11-16) Closed the landed-work population finding from the
+  hosted review round that followed (D-45). `validate_populated` guarded three
+  of the four sections it iterates; the landed-work list was unguarded, so
+  deleting every entry satisfied both it and `validate_landed_work`, which only
+  inspects the entries it sees. The guard now asks the section too, and
+  collects through the shared `landed_work_entries`, so one selector decides
+  what an entry is. A `no_landed_work` rejection case covers it, and removing
+  the guard fails that case alone. The contract target runs 83 cases.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1865,6 +1873,37 @@ pre-rebase history if an old hash must be inspected.
   the documentation commit that records the sweep does not extend it.
   Date/Author: 2026-11-16, implementation agent, on the hosted completeness
   reply.
+
+- Decision D-45 (2026-11-16): closed the landed-work population finding from
+  the hosted review round that followed D-44. The finding is a second instance
+  of the vacuous-pass class, arrived at from the opposite direction to the one
+  D-44 repaired.
+
+  `validate_populated` guards the real document against an emptied section. It
+  asked the register, the compatibility obligations, and the findings — the
+  three sections it iterates — but not the landed-work list.
+  `validate_landed_work` asks only whether each entry it *sees* is complete, so
+  an inventory whose landed-work bullets had all been deleted satisfied both
+  readers: the population guard never asked, and the per-entry rule iterated an
+  empty collection and passed. The section the completed plan requires could
+  have vanished from the real inventory without a single test failing. The
+  guard now asks it too, and collects its entries through the same
+  `landed_work_entries` the per-entry rule uses, so the two cannot disagree
+  about what counts as an entry. A `no_landed_work` rejection case covers the
+  empty section, and the population fixture gained one landed-work bullet so
+  the positive case still exercises all four guarded sections.
+
+  The refusal was probed rather than assumed: with the population check removed,
+  `case_4_no_landed_work` fails and the other 82 cases pass, so the new case
+  is the only thing that rule holds up. `real_inventory_is_consistent` passes
+  in both states, which is the honest limit of this repair — the real inventory
+  does record twelve landed-work entries, so the guard is a regression defence
+  for a future deletion, not a repair of a present omission.
+
+  This repair is a `tests/` change, so the post-pin sweep advances again — to
+  79 identifiers at 52/27. As D-44 explains, that chain stops with the
+  documentation commit that records it. Date/Author: 2026-11-16, implementation
+  agent, on the hosted review round.
 
 ## Outcomes & retrospective
 
@@ -3075,6 +3114,20 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   contract target runs 82 cases and the real inventory still satisfies the
   narrower cell rule. The verdict is not discharged by this revision; a fresh
   assessment is requested for this candidate.
+- Revision 59 (2026-11-16): closed the landed-work population finding from the
+  hosted review round that followed revision 58 (D-45). `validate_populated`
+  guarded the register, the compatibility obligations, and the findings, but
+  not the landed-work list, and `validate_landed_work` asks only whether each
+  entry it sees is complete — so an inventory whose landed-work bullets had all
+  been deleted passed both readers. The guard now asks the section, collecting
+  through the same `landed_work_entries` the per-entry rule uses. A
+  `no_landed_work` rejection case covers the empty section, and removing the
+  guard fails that case and no other; the real inventory passes in both states,
+  because it does record twelve entries, so this is a regression defence rather
+  than a repair of a present omission. The contract target runs 83 cases, and
+  the post-pin sweep advances to 79 identifiers, 52 in `main` and 27 on this
+  branch. No proof artefact is affected. The revision-58 verdict is not
+  discharged here either; a fresh assessment is requested for this candidate.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
