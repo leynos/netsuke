@@ -13095,7 +13095,7 @@ arithmetic that decides whether a request fits inside them, and the typed
 refusals every bounded helper reports. It is the single source for all three,
 so a ceiling changes in one place and two helpers cannot disagree about what
 "the same" cardinality is.
-[ADR-0075](adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md) records
+[ADR-0082](adrs/adr-0082-shared-resource-bounds-for-stdlib-helpers.md) records
 the decision and its alternatives.
 
 The public surface is re-exported from `src/stdlib`:
