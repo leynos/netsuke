@@ -64,17 +64,39 @@ fn retained_sidecar_bytes(dir: &Dir) -> Result<u64> {
         })
 }
 
+/// Describe a run of sidecars that differ only in their sequence number.
+///
+/// The count belongs with the naming scheme because together they define the
+/// series; keeping them in one value stops the publishing helper's parameter
+/// list from growing one argument per naming detail.
+#[derive(Clone, Copy)]
+struct SidecarSeries<'a> {
+    prefix: &'a str,
+    content: &'a str,
+    publications: usize,
+}
+
+impl<'a> SidecarSeries<'a> {
+    /// Name a series that publishes `content` `publications` times.
+    const fn new(prefix: &'a str, content: &'a str, publications: usize) -> Self {
+        Self {
+            prefix,
+            content,
+            publications,
+        }
+    }
+}
+
 fn publish_repeated_sidecars(
     dir: &Dir,
-    prefix: &str,
-    content: &str,
+    series: SidecarSeries<'_>,
     policy: RetentionPolicy,
 ) -> Result<GeneratedDyndep> {
     let mut latest_sidecar = None;
 
-    for index in 0..6 {
-        let path = format!(".netsuke/dyndep/{prefix}-{index}.dd");
-        let current = sidecar(&path, content);
+    for index in 0..series.publications {
+        let path = format!(".netsuke/dyndep/{}-{index}.dd", series.prefix);
+        let current = sidecar(&path, series.content);
         let lease = materialize_dyndep_files(dir, std::slice::from_ref(&current))?;
         prune_dyndep_sidecars(dir, &lease, std::slice::from_ref(&current), policy)?;
         latest_sidecar = Some(current);
@@ -85,6 +107,8 @@ fn publish_repeated_sidecars(
 }
 
 mod budget;
+
+mod budget_proptests;
 
 mod entries;
 

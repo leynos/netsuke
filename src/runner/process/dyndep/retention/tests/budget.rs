@@ -7,7 +7,8 @@ fn repeated_publication_respects_the_obsolete_file_count_budget(
 ) -> Result<()> {
     let (_workspace, dir) = dyndep_workspace?;
     let policy = RetentionPolicy::new(2, 1024);
-    let latest = publish_repeated_sidecars(&dir, "count", "content", policy)?;
+    let latest =
+        publish_repeated_sidecars(&dir, SidecarSeries::new("count", "content", 6), policy)?;
     let count = sidecar_names(&dir)?
         .iter()
         .filter(|path| has_extension(path, "dd"))
@@ -137,7 +138,8 @@ fn repeated_publication_respects_the_obsolete_byte_budget(
 ) -> Result<()> {
     let (_workspace, dir) = dyndep_workspace?;
     let policy = RetentionPolicy::new(8, 12);
-    let latest = publish_repeated_sidecars(&dir, "bytes", "12345678", policy)?;
+    let latest =
+        publish_repeated_sidecars(&dir, SidecarSeries::new("bytes", "12345678", 6), policy)?;
     ensure!(
         retained_sidecar_bytes(&dir)? <= policy.max_bytes + latest.content().len() as u64,
         "the current bundle plus obsolete sidecars must fit the byte policy"
