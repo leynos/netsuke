@@ -1000,11 +1000,12 @@ conflict in `Decision log`, and escalate.
   - Assessment repairs at `5e8cb9474` (2026-11-16). Both tagged assessments
     replied substantively, and five items survived verification against the
     tree. First, the size tally was stale: the recorded 3,328 net Rust lines
-    predated `d99b5d9c6`, and the current figure is 3,360 (3,361 added, 1
+    predated `d99b5d9c6`, and the figure at that head was 3,360 (3,361 added, 1
     deleted), 16 new files holding 3,333 lines plus a net 27 in three modified
     files. D-22's third amendment carries the corrected arithmetic and the
     overage it moves to 1,360 lines; the plan owner's acceptance is still
-    requested rather than assumed. Second, the developers' guide claimed that
+    requested rather than assumed, and the round-three record below re-measures
+    the tally at the head that now stands. Second, the developers' guide claimed that
     universal correspondence is the Verus theorem's claim, which overstates it:
     the theorem discharges contracts for the transcription it verifies, and the
     harnesses are the only check on the compiled kernel, within their bounds.
@@ -1082,6 +1083,54 @@ conflict in `Decision log`, and escalate.
       `make doc-coverage` 243 s (98.28% aggregate, 6,552 of 6,667 items,
       against the 80% threshold). The three owner decisions are requested, not
       assumed; they are the only items left before a whole-plan verdict.
+  - Rebase onto `19b235138` and the ADR renumber (2026-11-16). `main` advanced
+    twice while this candidate waited: the fifteen-gate batch above ran against
+    `fa06bdb21`, and then PR
+    [#808](https://github.com/leynos/netsuke/pull/808) merged and `19b235138`
+    became the base GitHub compares against. The branch was rebased onto it,
+    with one textual conflict in `docs/contents.md` resolved by keeping both
+    sides' entries. That merge also took ADR serial 0075 for "Manifest schema
+    versions and admission", so this branch's ADR became 0082: the file, its
+    heading, the contents entry, five references, and the plan's history were
+    renumbered in `f2940f8f3`, and D-26 records the renumber and the lesson.
+  - Assessment repairs round three at `c4fc9388b` (2026-11-16). The follow-ups
+    above were answered by `EP613-COMPLETE-F43195C`, which found no runtime
+    defect, and `EP613-PROOF-F43195C`, which found no mathematical defect. Two
+    items survived verification against the tree, and both are repaired at this
+    head; no production code changed to make them.
+    - Exact-boundary witness. The proof assessment observed that neither
+      binomial boundary witness separates `>` from `>=` in the overflow guard:
+      `C(5_000_000_000, 2)` fits and `C(2^33, 2)` does not, so a guard relaxed
+      by one would admit both. `checked_binomial(u64::MAX, 1)` returns exactly
+      `u64::MAX`, which is representable and must be admitted, so that guard
+      fails it. The witness is asserted and covered, and the harness docs now
+      say three witnesses carry the boundary rather than two.
+    - Falling-factorial refusal set. "Every `r` from 21 upwards" overstated what
+      the cap refuses: the `r > n` shortcut answers zero before the cap is
+      consulted, so the refused set is every such `r` with `r <= n`. The doc
+      comment now says that, and each of those products still overflows on its
+      own, so the pair still pins refusal rather than the cap's position.
+    - Mutation control. That the new witness is load-bearing was measured rather
+      than argued. Seeding `coefficient >= u128::from(u64::MAX)` into
+      `kernel.rs::checked_binomial` and running the exactness harness inside the
+      scope wrapper reports `Failed Checks: a coefficient of exactly u64::MAX is
+      admitted, not refused` at `verification.rs:121`, `VERIFICATION:- FAILED`,
+      one of 83 checks failing and five cover properties unreachable; reverting
+      the seed reports `VERIFICATION:- SUCCESSFUL`, 0 of 83 failing and five of
+      five cover properties satisfied, in 29.66 s. The kernel file was restored,
+      and the only dirty path afterwards was `verification.rs`.
+    - Size tally. Re-measured at `c4fc9388b` against the comparison base
+      `19b235138`: `git diff --numstat 19b235138 HEAD` over `.rs` paths outside
+      `verus/` sums to 3,381 added and 1 deleted, a net 3,380 — 1,380 over the
+      2,000-line bar. The 3,366 that CodeRabbit reported described the previous
+      head; this repair added the boundary witness and its comment. The 16 new
+      Rust files outside `verus/` hold 3,353 lines, and the three modified Rust
+      files add 28 and delete 1. The candidate changes 54 files, 39 with the
+      Verus crate and mutation patches excluded and 33 once the snapshots are
+      excluded too. The production surface is unchanged at 1,017 lines, so the
+      tests, harness, and BDD reading moves to 2,363. The breach and the request
+      for the plan owner's acceptance stand; only the magnitude moves, and
+      D-22's fourth amendment carries it.
 
 ## Surprises & discoveries
 
@@ -1591,6 +1640,18 @@ conflict in `Decision log`, and escalate.
   unchanged at 1,017 lines, so the tests, harness, and BDD reading moves to
   2,343 lines. The file counts are unchanged. The breach, its breakdown, and
   the request for the owner's acceptance stand; only the magnitude moves.
+  Fourth amendment of 2026-11-16: those figures belong to the pre-rebase head.
+  Re-measured at `c4fc9388b` against the comparison base `19b235138`, which is
+  the base GitHub reports for this pull request,
+  `git diff --numstat 19b235138 HEAD` over `.rs` paths outside `verus/` sums to
+  3,381 added and 1 deleted, a net 3,380 — 1,380 over the 2,000-line bar. The
+  16 new Rust files outside `verus/` hold 3,353 lines and the three modified
+  ones add 28 and delete 1. The file counts are 54 changed, 39 with the Verus
+  crate and mutation patches excluded, and 33 with the snapshots excluded too;
+  that is one more than the earlier counts because the `Proofs` workflow header
+  became part of the delta. The production surface is unchanged at 1,017 lines,
+  so the tests, harness, and BDD reading is 2,363 lines. The breach, its
+  breakdown, and the request for the owner's acceptance stand unchanged.
 - D-23. Decision: correct the Kani stopping condition rather than leave a cap
   the runs did not obey, and state the two measurements it conflated. The
   correction is recorded here; whether the whole-suite exception is acceptable
