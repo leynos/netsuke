@@ -37,8 +37,10 @@ type SubprocessRunner = cabc.Callable[..., subprocess.CompletedProcess[str]]
 #: Wall-clock seconds the version probe may run before it is killed.
 PROBE_TIMEOUT_SECONDS = 60
 
-#: Environment the probe receives. It inherits nothing, so no exported
-#: credential reaches a file this workflow downloaded.
+#: Environment the probe receives. It inherits nothing, so no credential the
+#: runner exports as an environment variable reaches a file this workflow
+#: downloaded. It is an allowlist for that one channel, not a sandbox: the
+#: child keeps the runner's filesystem, network, and every other resource.
 PROBE_ENVIRONMENT = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"}
 
 
