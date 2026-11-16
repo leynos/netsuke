@@ -494,10 +494,15 @@ decision D-15.
     re-verifies it. A plan that records its own gate runs cannot converge if
     each record demands a fresh run, because the commit that writes the record
     is itself the tree change that voids it. The last revision all nine gates
-    verified is `b25820d84`. Every commit after it carries prose in this one
-    file and nothing else, so its Rust, YAML, Python, catalogue, and Markdown
-    content is byte-identical to what those gates passed; `make check-fmt` on
-    the later tips is what confirms the prose is well formed.
+    verified is `b25820d84`. `make check-fmt` on the later tips is what
+    confirms the prose is well formed.
+
+    This paragraph previously went further and claimed every later commit
+    carried prose in this file and nothing else. The two entries below refute
+    that: `81f73eb7a` repairs `src/main.rs`, and the review rounds that follow
+    it touch Rust, YAML, and the locale catalogues too. Only `b25820d84` and
+    its own record commit `cfb453c63` are covered by the batch above, so trust
+    it for that revision alone. Later heads carry their own entries.
   - (2026-11-13) That reasoning held only while the later commits really were
     prose. Rebase conflicts are not prose, and `main`'s own `e4ef7c511` landed
     terminal-rendering tests that this branch then failed. The rebase onto
@@ -520,6 +525,20 @@ decision D-15.
     `81f73eb7a` is therefore the last revision all nine gates verified, and it
     supersedes `b25820d84`: the suite grew from 5210 to 5538 cases when `main`
     landed its new tests, so the older batch cannot speak for this tree.
+  - (2026-11-16) The review of `00ba7aabb` raised five findings. The repairs
+    touch `docs/developers-guide.md`, `docs/v0-1-0-migration-guide.md`, and
+    `src/human_diagnostics/tests/runner_diagnostics.rs`, so this head is not
+    the `81f73eb7a` tree and owes its own batch. The batch ran on the frozen
+    tree that `48e04e7e3` commits: `typecheck` 16s, `lint` 172s, `doc-coverage`
+    81s, `test` 128s (**5767 nextest cases, all passed**, 9 skipped, plus
+    doctests), `markdownlint` 32s, `nixie` 1s, `test-documentation-contracts`
+    11s, `test-workflow-contracts` 595s (**2330 passed**, 3 skipped, plus 30
+    Python doctest cases). All eight exited 0. `check-fmt` passed as the
+    prerequisite of every one, and the lint gate reported 5574/5574 items
+    documented at 100.0% with Pylint 10.00/10 twice; `doc-coverage` measured
+    6550/6665, aggregate 98.27%, above the 80% bar. This entry is itself a plan
+    edit, so `48e04e7e3` is verified and the commit recording it is prose
+    only.
 - [x] EP-M4: developers' guide and documentation clean-up. The developers'
   guide gained "Manifest schema versioning and feature admission" (reservation,
   admission, allocation, the registry contract, and the rejection ladder) and
