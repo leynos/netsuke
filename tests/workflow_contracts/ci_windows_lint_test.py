@@ -43,10 +43,12 @@ WHITAKER_WORKSPACE_FRAGMENTS = (
     '$env:RUSTFLAGS = "-D warnings"',
     "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
     "$suite = '--lib', 'whitaker_suite', '--fail-on-no-libraries'",
-    (
-        "& $whitaker @suite --no-deps --package netsuke-build '--' "
-        "--all-targets --all-features"
-    ),
+    "$packages = '--package', 'netsuke-build'",
+    "$packages += '--package', 'netsuke-build-slice-fixture'",
+    "$packages += '--package', 'netsuke-public-api-fixture'",
+    "& $whitaker @suite --no-deps @packages '--' --all-targets --all-features",
+    # The default-feature pass has no `--all-features` to follow it.
+    "& $whitaker @suite --no-deps @packages '--' --all-targets\n",
     "Push-Location test_support",
 )
 
@@ -57,6 +59,7 @@ WHITAKER_TEST_SUPPORT_FRAGMENTS = (
         "& $whitaker @suite --no-deps --package test_support '--' "
         "--all-targets --all-features"
     ),
+    "& $whitaker @suite --no-deps --package test_support '--' --all-targets\n",
     "finally {",
     "Pop-Location",
 )

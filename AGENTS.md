@@ -284,12 +284,16 @@ directive anywhere.
     cargo clippy --workspace --all-targets --all-features -- -D warnings
     env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$(cat dylint.toml)" \
     RUSTFLAGS="-D warnings" whitaker --lib whitaker_suite \
-      --fail-on-no-libraries --no-deps --package netsuke-build -- \
+      --fail-on-no-libraries --no-deps --package netsuke-build \
+      --package netsuke-build-slice-fixture \
+      --package netsuke-public-api-fixture -- \
       --all-targets --all-features
+    # The same pass again with the default features: drop `--all-features`.
     cd test_support && env -u CARGO_ENCODED_RUSTFLAGS \
     DYLINT_TOML="$(cat dylint.toml)" RUSTFLAGS="-D warnings" whitaker \
       --lib whitaker_suite --fail-on-no-libraries --no-deps \
       --package test_support -- --all-targets --all-features
+    # And likewise from test_support/ without `--all-features`.
     yamllint --config-file .yamllint.yml .github/workflows
     actionlint
     ```
