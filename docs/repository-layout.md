@@ -220,14 +220,15 @@ output and some leaf files so the long-lived structure remains visible.
   [ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).
 - `tools/mold/`: Pinned `mold` linker release version and the SHA-256 checksums
   used to verify the downloaded release artefacts.
-- `verus/`: Verus refinement proofs, one self-contained program per proof. A
-  proof states a specification over the same sequence the production code walks
-  and proves its own model walk agrees with it; a repository Rust oracle tests
-  the production function over bounded generated inputs. `configured_shells/`
-  proves the trusted shell-composition rule and `canonical_value/` the
-  action-hash canonicalizer. `resource_bounds/` models the stdlib combinatorial
-  and running-total arithmetic; it is run by `make verus` and is not part of
-  the ordinary pull-request gate.
+- `verus/`: Optional Verus proof crates, one directory per verified kernel,
+  each with its own crate root. `verus/configured_shells/` proves the trusted
+  shell-composition rule, `verus/canonical_value/` proves the canonical value
+  key and equality relation, and `verus/resource_bounds/` models the stdlib
+  combinatorial and running-total arithmetic. Bare `make verus` selects
+  only the canonical-value proof; the resource-bounds proof runs as
+  `make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'`, and
+  `.github/workflows/proofs.yml` runs both as separate steps. Neither is part
+  of the ordinary pull-request gate.
 
 ## Internal support module ownership
 

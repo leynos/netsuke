@@ -106,10 +106,14 @@ final and does not widen the hardening release defined by issue #594.
   summaries without doctests. Use `foo/mod.rs` layout for the new multi-file
   module; its test subtree has several files, so it is `tests/mod.rs`.
 - Verus remains optional, proof-kernel-only, and outside ordinary Cargo and
-  continuous-integration gates. Do not use `assume`, `admit`, `external_body`,
-  trusted bodies, or added axioms in the Verus proof. Do not put
-  `#![allow(warnings)]` or `#![allow(clippy::all)]` in the proof file, which
-  sits under a root the environment-access scan reads.
+  continuous-integration gates. D-25 amends the second half of that sentence:
+  the dedicated `Proofs` workflow now runs every repository proof, which is the
+  estate prover-tooling rule PT-006 as the workflow's own header states it,
+  while `make test`, `make lint`, `make check-fmt`, `make all`, and the
+  ordinary pull-request gates still never run Verus. Do not use `assume`,
+  `admit`, `external_body`, trusted bodies, or added axioms in the Verus proof.
+  Do not put `#![allow(warnings)]` or `#![allow(clippy::all)]` in the proof
+  file, which sits under a root the environment-access scan reads.
 - Every Kani harness must own a committed mutation patch under
   `docs/verification/mutations/`; `EXEMPT_HARNESSES` in
   `tests/kani_mutation_evidence_tests.rs` stays empty.
@@ -943,15 +947,23 @@ conflict in `Decision log`, and escalate.
     routine gate", so this is the approved design rather than a gap in the
     shipped verification. The resource-bounds proof is run by the acceptance
     command under `Validation and acceptance`, and its evidence is the
-    `67 verified, 0 errors` result recorded under EP-M4.
+    `67 verified, 0 errors` result recorded under EP-M4. Superseded
+    2026-11-16: the proof assessment replied that the workflow's own header
+    states PT-006 requires CI to run the proofs a repository holds, so a
+    header that names one proof while the repository holds two is a
+    misdescription rather than a design choice. `.github/workflows/proofs.yml`
+    now runs both selections as separate steps and its header says so; see
+    D-25.
   - Rebase onto `fa06bdb21` and the rebased fifteen-gate batch (2026-11-16).
     The branch was replayed from `e28f26ae2` onto `fa06bdb21`, the merge of
     `#1139`, with no conflict and no change to the branch's own delta:
     re-measured against the new base the candidate still changes 53 files, 38
     of them outside `verus/resource_bounds/` and
     `docs/verification/mutations/` (32 once snapshots are excluded too), and
-    still adds 3,328 net Rust lines. The batch ran at `424ac15bb` against the
-    four-file dirty tree that the code commit publishes, one gate at a time,
+    still added 3,328 net Rust lines at that head (3,360 at `5e8cb9474`, after
+    `d99b5d9c6`; see D-22's third amendment). The batch ran at `424ac15bb`
+    against the four-file dirty tree that the code commit publishes, one gate
+    at a time,
     and fourteen targets exited 0: `check-fmt` 3 s; `lint` 1,255 s with no
     Whitaker finding of any kind, which retires the pre-rebase red;
     `lint-workflow-scripts` 0 s; `lint-python` 25 s (Interrogate 100%, Pylint
@@ -982,6 +994,42 @@ conflict in `Decision log`, and escalate.
     the only run in this batch that executed both recipe lines, so it is also
     the only one that produced the patch-compilation evidence the gate
     exists for. See D-24.
+  - Assessment repairs at `5e8cb9474` (2026-11-16). Both tagged assessments
+    replied substantively, and five items survived verification against the
+    tree. First, the size tally was stale: the recorded 3,328 net Rust lines
+    predated `d99b5d9c6`, and the current figure is 3,360 (3,361 added, 1
+    deleted), 16 new files holding 3,333 lines plus a net 27 in three modified
+    files. D-22's third amendment carries the corrected arithmetic and the
+    overage it moves to 1,360 lines; the plan owner's acceptance is still
+    requested rather than assumed. Second, the developers' guide claimed that
+    universal correspondence is the Verus theorem's claim, which overstates it:
+    the theorem discharges contracts for the transcription it verifies, and the
+    harnesses are the only check on the compiled kernel, within their bounds.
+    The paragraph now says exactly that. Third, the proof execution and CI
+    coverage were misdescribed: `docs/repository-layout.md` said bare
+    `make verus` runs the resource-bounds proof, and
+    `docs/formal-verification-methods-in-netsuke.md` still spoke of one Verus
+    kernel. Both now name
+    `make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'`, and
+    `.github/workflows/proofs.yml` runs both selections as separate steps so
+    that the PT-006 sentence in its header is true of this repository; D-25
+    records the deviation and asks for ratification. Fourth, the wrapping-add
+    mutation control was re-run against the candidate's own harness, because the
+    earlier control commit's harness blob differed: seeding
+    `Some(total.wrapping_add(amount)).filter(…)` into `kernel.rs::admit_total`
+    and running `cargo-kani --harness
+    running_total_never_admits_past_its_limit` inside the scope wrapper reports
+    `Failed Checks: a sum that would wrap u64 is refused` at
+    `src/stdlib/resource_bounds/verification.rs:349`, `VERIFICATION:- FAILED`,
+    1 of 178 checks failed; reverting the seed and re-running the same command
+    reports `VERIFICATION:- SUCCESSFUL`, 0 of 178 failed and 1 of 1 cover
+    property satisfied. The build was cold, at 33 minutes, and the harness
+    itself verifies in 1.24 s and 1.38 s. Fifth, the 32-bit concern is answered
+    without a code change: the release matrix is six targets and every one is
+    64-bit (`x86_64`/`aarch64` for Linux, Windows, and macOS), the README table
+    describes pre-built packages rather than a source-build support policy, and
+    the 64-bit `usize` assumption the oversized witnesses rely on is recorded
+    under `External assumptions and residual gaps`.
 
 ## Surprises & discoveries
 
@@ -1476,7 +1524,17 @@ conflict in `Decision log`, and escalate.
   snapshots excluded too. The base advance adds lines to
   `tests/serial_dependency_runtime_tests.rs` and does not touch this branch's
   delta, which is why the numbers did not move. The breach and the request for
-  the owner's acceptance stand unchanged. Date/Author: 2026-11-16.
+  the owner's acceptance stand unchanged. Date/Author: 2026-11-16. Third
+  amendment of 2026-11-16: that 3,328 is superseded. It was measured before
+  `d99b5d9c6`, which added 32 net Rust lines when it deduplicated the
+  generated-case batteries. Re-measured at `5e8cb9474` against `fa06bdb21`,
+  `git diff --numstat fa06bdb21 HEAD` over `.rs` paths outside `verus/` sums to
+  3,361 added and 1 deleted, a net 3,360 — 1,360 over the 2,000-line bar. The
+  16 new Rust files outside `verus/` hold 3,333 lines, and the three modified
+  Rust files add 28 lines and delete 1, a net 27. The production surface is
+  unchanged at 1,017 lines, so the tests, harness, and BDD reading moves to
+  2,343 lines. The file counts are unchanged. The breach, its breakdown, and
+  the request for the owner's acceptance stand; only the magnitude moves.
 - D-23. Decision: correct the Kani stopping condition rather than leave a cap
   the runs did not obey, and state the two measurements it conflated. The
   correction is recorded here; whether the whole-suite exception is acceptable
@@ -1520,6 +1578,25 @@ conflict in `Decision log`, and escalate.
   recorded rather than hidden — on a cold target this gate will time out on a
   host this loaded, and the recorded measurement understates that host by
   roughly seven times. Date/Author: 2026-11-16.
+- D-25. Decision: run both repository proofs in `.github/workflows/proofs.yml`
+  rather than leave the second one unrun by CI, and record that as a deliberate
+  deviation from the constraint that Verus stays outside CI gates. Rationale:
+  the proof assessment of `5e8cb9474` observed that the workflow's own header
+  cites the estate prover-tooling rule PT-006 ("CI must run the proofs a
+  repository holds") while running only `make verus`'s default selection, which
+  is `verus/canonical_value/main.rs`. Once this branch adds
+  `verus/resource_bounds/main.rs`, that header describes a repository that no
+  longer exists: it names one proof, and the repository holds two. The two ways
+  out are to run the second proof or to obtain an exception from the policy
+  owner, and only the first is inside this branch's authority. The cost is one
+  extra step in a job that already installs Verus and Z3 on a GitHub-hosted
+  runner, where the proof itself takes seconds and the install dominates; the
+  job's 30-minute timeout is unchanged. The constraint remains true of what it
+  was written for — `make test`, `make lint`, `make check-fmt`, `make all`, and
+  the ordinary pull-request gates still never run Verus. This entry records the
+  deviation and requests the plan owner's ratification; the change is shipped
+  rather than held because leaving the workflow inconsistent with the rule it
+  cites is the worse failure. Date/Author: 2026-11-16.
 
 ## Outcomes & retrospective
 

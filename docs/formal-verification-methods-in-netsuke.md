@@ -63,12 +63,15 @@ changing the global PATH order used to select the pinned `mold`. The repository
 no longer carries a Kani downloader. `make install-kani` uses the verified
 prebuilt release on Linux x86_64 and keeps the Cargo compile fallback for other
 local hosts. CI passes explicit paths for the Kani front-end and verified
-archives. Two Verus kernels are committed: `verus/canonical_value/main.rs` and
-`verus/configured_shells/main.rs`. `make verus` defaults to the first, so a
-maintainer proof run covers one kernel unless `VERUS_FLAGS` selects more;
-callers repeat `--proof-file` through that variable to run an ordered batch.
-The runner stops at the first failed proof and returns the verifier's status.
-The developers' guide documents the commands and their local usage.
+archives. Three Verus kernels are committed: `verus/canonical_value/main.rs`,
+`verus/configured_shells/main.rs`, and `verus/resource_bounds/main.rs`.
+`make verus` defaults to the first, so a maintainer proof run covers one kernel
+unless `VERUS_FLAGS` selects more; callers repeat `--proof-file` through that
+variable to run an ordered batch. The runner stops at the first failed proof
+and returns the verifier's status. `proofs.yml` runs the canonical-value and
+resource-bounds proofs as separate steps, so the resource-bounds proof is
+selected with `VERUS_FLAGS` rather than left to the default. The developers'
+guide documents the commands and their local usage.
 
 The composite [Kani cache action](../.github/actions/kani-cache/action.yml) owns
 `.kani-cargo`, `.kani-home`, and `.kani-rustup` under a key that includes the
@@ -177,8 +180,9 @@ Verus is optional in phase 1 and remains proof-kernel-only. A proof kernel is a
 small proof-specific model for one mathematical contract; it is not a
 production subsystem, a replacement implementation, or a normal developer
 workflow gate. The repository provides `make install-verus` and `make verus` as
-maintainer tools, has no Verus installer script, runs the proof in CI through
-`make verus` (`proofs.yml`), and keeps Verus files outside ordinary Cargo.
+maintainer tools, has no Verus installer script, runs every repository proof in
+CI through `make verus` (`proofs.yml`, one step per proof), and keeps Verus
+files outside ordinary Cargo.
 
 Verus is not the correct first tool for the manifest or command-interpolation
 layers. Three kernels are accepted, and all three are narrow normalization or
@@ -300,8 +304,9 @@ stands; parts of it were never adopted. The `tools/` entries are real, and
 `tools/verus/VERSION` and `tools/verus/SHA256SUMS` are the pins that
 `make install-verus` and `make verus` read. The `verus/` filenames and the three
 `src/` harness modules are illustrative: the repository instead colocated its
-Kani harnesses beside the helpers they exercise, and its Verus kernels are
-`verus/canonical_value/main.rs` and `verus/configured_shells/main.rs`. The
+Kani harnesses beside the helpers they exercise, and its three Verus kernels
+are `verus/canonical_value/main.rs`, `verus/configured_shells/main.rs`, and
+`verus/resource_bounds/main.rs`. The
 `## Current repository state` section above records the actual layout.
 
 Kani and Verus installation and execution should be delegated to the

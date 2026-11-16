@@ -7542,6 +7542,20 @@ Use the Make targets for day-to-day formal-verification checks:
   make verus VERUS_FLAGS='--proof-file "verus/first proof.rs" --proof-file verus/second.rs'
   ```
 
+  The repository holds two proofs, and the default selects only one of them.
+  `verus/canonical_value/main.rs` is the default,
+  `verus/resource_bounds/main.rs` is the combinatorial and running-total
+  arithmetic, and that second proof is run by:
+
+  ```bash
+  make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'
+  ```
+
+  `.github/workflows/proofs.yml` runs both selections as two steps of the
+  `Verus` job, so a green job now means both repository proofs verified; the
+  estate prover-tooling rule PT-006 requires CI to run the proofs a repository
+  holds, and the default selection alone no longer covers them.
+
   The pinned CLI runs files in order, stops at the first failed proof, and
   returns the verifier's exit status. `make test-prover-tools-integration`
   exercises this contract with fake verifier processes and never installs
@@ -7564,10 +7578,11 @@ pinned CLI against a fake verifier so the batching contract is checked over
 generated batch lengths, failure positions, and exit statuses: a successful
 batch must run every proof exactly once in order, and a failing batch must run
 exactly the prefix up to and including the failing proof and report that
-proof's status. CI runs the proof through `make verus` (`proofs.yml`), but
-these cases are an optional maintainer lane, so they skip when the pinned
-install is absent; `make test-verus-e2e` sets `NETSUKE_VERUS_E2E_STRICT=1` to
-turn that skip into a failure for a maintainer who means to run them.
+proof's status. CI runs both repository proofs through `make verus`
+(`proofs.yml`, one step per proof), but these cases are an optional maintainer
+lane, so they skip when the pinned install is absent; `make test-verus-e2e` sets
+`NETSUKE_VERUS_E2E_STRICT=1` to turn that skip into a failure for a maintainer
+who means to run them.
 
 `tests/prover_tools_kani_check_tests.rs` holds the boundary around
 `make kani-check`. It requires that the query reads the pin, asks the installed
@@ -7792,8 +7807,11 @@ correspondence gap by checking the production code against an independent
 `u128` oracle or against the admission contract its callers rely on. They
 narrow that gap rather than close it: a harness reaches only its stated bounds,
 and its oracle is a second expression of the same arithmetic rather than
-evidence about the proof. Universal correspondence stays the Verus theorem's
-claim. Each harness bounds its symbolic operands so the arithmetic stays
+evidence about the proof. Neither artefact establishes universal correspondence
+between the two: the Verus theorem discharges the contracts it states for the
+transcription it verifies, and these harnesses are the only check that the
+compiled kernel agrees with that arithmetic, within their bounds and no
+further. Each harness bounds its symbolic operands so the arithmetic stays
 decidable, and each bound admits exactly the cases the oracle is exact for.
 Every harness in this module carries a committed mutation patch under
 `docs/verification/mutations/`, named after the harness path.
@@ -8043,21 +8061,20 @@ environment mutation unless a guarded helper is already in place.
 
 Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
-optional, proof-kernel-only, and not installed or run by default; any Verus
-work must stay outside ordinary Cargo and is limited to small, self-contained
-kernels. Four are accepted: the cycle canonicalization model derived from
-`src/ir/cycle/mod.rs`, which is not yet committed; the canonical value key and
-equality relation (`src/stdlib/canonical_value/`, proved in
-`verus/canonical_value/main.rs`); the configured-shell name-sequence rule
+optional, proof-kernel-only, and not installed or run by default. The dedicated
+`Proofs` workflow is the only job that runs Verus; it runs each repository
+proof and is not a required gate. Any Verus work must stay outside ordinary
+Cargo and is limited to small, self-contained kernels. Four are accepted: the
+cycle canonicalization model derived from `src/ir/cycle/mod.rs`, the canonical
+value key and equality relation (`src/stdlib/canonical_value/`, proved in
+`verus/canonical_value/main.rs`), the configured-shell name-sequence rule
 (`verus/configured_shells/main.rs`, described under
-[Configured shell definitions](#configured-shell-definitions) below); and the
+[Configured shell definitions](#configured-shell-definitions) below), and the
 resource-bounds combinatorial and running-total arithmetic
 (`src/stdlib/resource_bounds/`, proved in `verus/resource_bounds/main.rs`).
-`make verus` proves `verus/canonical_value/main.rs` by default, so select any
-other kernel by repeating `--proof-file` through `VERUS_FLAGS`. Verus remains
-outside `formal-pr`, which runs Kani only, and outside every routine gate.
-Stateright is deferred entirely until Netsuke gains an accepted stateful
-concurrent subsystem such as a daemon, watch service, remote-execution
+Verus remains outside `formal-pr`, which runs Kani only, and outside every
+routine gate. Stateright is deferred entirely until Netsuke gains an accepted
+stateful concurrent subsystem such as a daemon, watch service, remote-execution
 coordinator, actor protocol, or internal scheduler with long-lived mutable
 control-plane state. See
 [`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
