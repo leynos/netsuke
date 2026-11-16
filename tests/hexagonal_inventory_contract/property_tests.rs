@@ -13,7 +13,7 @@
 
 use proptest::prelude::*;
 
-use super::markdown::{HeadingLevel, harvest_body, heading_body, is_heading};
+use super::markdown::{HeadingLevel, harvest_body, heading_body};
 
 /// One generated heading: its depth, its title, and the line that renders it.
 type Generated = (u8, String, String);
@@ -191,29 +191,38 @@ proptest! {
         }
     }
 
-    /// A harvest keeps no heading line at all, and prefixes its own region.
+    /// A harvest is exactly the prefix of its region before the first heading.
     ///
-    /// Both halves matter. Dropping the truncation would let a deeper
-    /// subheading's prose make a coverage claim; truncating anywhere but the
-    /// first heading would make the harvest cut into text the region retains.
+    /// Both halves matter. A harvest that kept a heading line would let a
+    /// deeper subheading's prose make a coverage claim; one that truncated
+    /// anywhere but the first heading would cut into text the region retains.
+    ///
+    /// Both the expected boundary and the headings the harvest must not
+    /// contain come from the generator's record, never from the parser's
+    /// predicates. Asking `is_heading` about the harvest is the shared-oracle
+    /// defect these properties were already repaired for: with `is_heading`
+    /// always false, `first_heading_offset` returns the whole region, the
+    /// heading-free assertion sees nothing, and a bare `starts_with` still
+    /// holds because the region starts with itself. Asserting the exact
+    /// expected prefix binds the harvest even when every predicate lies.
     #[test]
-    fn harvests_are_heading_free_prefixes_of_their_region((text, headings) in document()) {
-        for (_, title, _) in headings.iter().filter(|(depth, _, _)| *depth == 3) {
+    fn harvests_are_exactly_the_region_before_the_first_heading((text, headings) in document()) {
+        let expected = body_after_heading();
+        for (_, title, line) in headings.iter().filter(|(depth, _, _)| *depth == 3) {
             let harvest = prop_assert_some!(
                 harvest_body(&text, title),
                 "generated heading {title:?} should have a harvest body"
             );
-            prop_assert!(
-                !harvest.lines().any(is_heading),
-                "harvest for {title} should contain no heading line; got {harvest:?}"
-            );
-            let region = prop_assert_some!(
-                heading_body(&text, title, HeadingLevel::Subsection),
-                "generated heading {title:?} should have a subsection region"
+            prop_assert_eq!(
+                harvest,
+                expected.as_str(),
+                "harvest for {} should be the body before the next heading",
+                title
             );
             prop_assert!(
-                region.starts_with(harvest),
-                "harvest for {title} should prefix its region; harvest {harvest:?}, region {region:?}"
+                !harvest.contains(line.as_str()),
+                "harvest for {} should exclude its own heading line",
+                title
             );
         }
     }
