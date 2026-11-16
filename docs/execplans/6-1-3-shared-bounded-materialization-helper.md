@@ -135,11 +135,19 @@ conflict in `Decision log`, and escalate.
 - Semantics: stop if the exact-cardinality contract cannot be met for some
   admissible input without an estimate, or if a child RFC requirement turns out
   to conflict with a refusal shape in a way this plan does not record.
-- Kani: every local run is capped at 8 minutes by the wrapper. If a single new
-  harness takes more than 60 seconds or breaches the 8 GiB cap, reduce its
-  stated bound once and record the new bound; if the reduced harness is still
-  intractable, or its bound no longer reaches every `kani::cover!`, stop and
-  escalate rather than deleting the harness.
+- Kani: the documented local verification budget is eight minutes for a capped
+  `make kani-ir`, and this module's seven harnesses reach it with room to spare
+  — the slowest is 29.404 s and all seven together take well under a minute.
+  The whole suite is a different measurement and does not fit eight minutes: it
+  measured 536–628 s once this module's seven harnesses joined the 24, and 1819
+  s and 2117 s in warm runs under host load. Whole-suite runs therefore use the
+  mandated scope wrapper with `RuntimeMaxSec` set to contain the suite, the
+  Progress record names the bound each run used, and a focused module run stays
+  inside the documented eight minutes. If a single new harness takes more than
+  60 seconds or breaches the 8 GiB cap, reduce its stated bound once and record
+  the new bound; if the reduced harness is still intractable, or its bound no
+  longer reaches every `kani::cover!`, stop and escalate rather than deleting
+  the harness.
 - Verus, tiered: lemmas L4, L5, L5a, L6, and L8 (the binomial) must be proved.
   If three focused attempts fail on one of them, record the failing
   verification condition and the decompositions tried in
@@ -890,6 +898,90 @@ conflict in `Decision log`, and escalate.
     was wrong in its second half, and the plan now says what happened instead.
     A prerequisite merge into `main` needs no rebase to take effect on a
     `pull_request` run, and only a `push` run tests the branch's own base.
+  - Wrapping-add control (2026-11-15). The committed patch for
+    `running_total_never_admits_past_its_limit` is an off-by-one (`<=` to
+    `<`), so the fault the bounded domain genuinely cannot reach — a sum that
+    wraps rather than a sum that exceeds — was seeded separately. `admit_total`
+    became `Some(total.wrapping_add(amount)).filter(|sum| *sum <= limit)`, the
+    harness was run alone inside the mandated scope wrapper, and it failed with
+    `Failed Checks: a sum that would wrap u64 is refused` at
+    `verification.rs:341`, `1 of 179 failed (6 unreachable)`, exit 2, in
+    1.055 s. The seed was reverted with `git checkout` and the tree confirmed
+    clean. This is report evidence rather than a tracked patch: the committed
+    set stays one patch per harness.
+  - Assessment round at `3b1686892c98` (2026-11-15). The completeness reply
+    `EP613-COMPLETE-3B16868` confirmed the earlier findings addressed —
+    the developers'-guide restoration, the zero-repeat product proof, the
+    `RunningTotal::admitted` example, the sixteen controls, the CodeScene
+    repair, and the hosted checks — and left four items, all answered in this
+    batch. The scope overage stayed the plan owner's decision and D-22 records
+    it as such rather than accepting it on the owner's behalf. The Kani
+    stopping condition at line 138 was corrected to state the documented
+    eight-minute `make kani-ir` budget and the wider whole-suite bound the runs
+    used, recorded as D-23 with that exception reported for the same owner
+    decision.
+    The two proof-correspondence claims were corrected: the harnesses narrow
+    the transcription gap rather than close it, and the binomial witnesses
+    carry a coefficient whose `u128` intermediate, not the coefficient itself,
+    exceeds `u64::MAX`. The two named gates are run on the final commit rather
+    than inferred from `make test`, which only reaches the RFC coverage binary
+    through the workspace run. The proof reply `EP613-PROOF-3B16868` reached
+    the same correspondence correction and three further items, answered in
+    the same batch: the product oracle's witness now carries the third operand
+    that makes its prefix overflow a `u128`, with a case that pins that
+    premise rather than asserting it; the running-total witness now lands the
+    total exactly on `u64::MAX` rather than one short of it; EP-V4 now states
+    the structural argument the universal panic-freedom claim rests on; and the
+    64-bit `usize` assumption is recorded under `External assumptions and
+    residual gaps`.
+  - The hosted `Verus` job does not run this proof, by design (2026-11-15).
+    The reviewer noted that `Verus` passing on a head does not establish that
+    the resource-bounds proof ran, which is correct: `make verus` defaults to
+    `VERUS_FLAGS ?= --proof-file verus/canonical_value/main.rs`, and
+    `.github/workflows/proofs.yml` runs that default. `Context and
+    orientation` already records that Verus proofs "are not part of any
+    routine gate", so this is the approved design rather than a gap in the
+    shipped verification. The resource-bounds proof is run by the acceptance
+    command under `Validation and acceptance`, and its evidence is the
+    `67 verified, 0 errors` result recorded under EP-M4.
+  - Rebase onto `fa06bdb21` and the rebased fifteen-gate batch (2026-11-16).
+    The branch was replayed from `e28f26ae2` onto `fa06bdb21`, the merge of
+    `#1139`, with no conflict and no change to the branch's own delta:
+    re-measured against the new base the candidate still changes 53 files, 38
+    of them outside `verus/resource_bounds/` and
+    `docs/verification/mutations/` (32 once snapshots are excluded too), and
+    still adds 3,328 net Rust lines. The batch ran at `424ac15bb` against the
+    four-file dirty tree that the code commit publishes, one gate at a time,
+    and fourteen targets exited 0: `check-fmt` 3 s; `lint` 1,255 s with no
+    Whitaker finding of any kind, which retires the pre-rebase red;
+    `lint-workflow-scripts` 0 s; `lint-python` 25 s (Interrogate 100%, Pylint
+    10.00/10 on both trees); `github-actions-lint` 1 s; `typecheck` 419 s;
+    `test` 965 s (5,744 nextest tests passed, 9 skipped; 218 doctests passed,
+    63 ignored, 0 failed); `doc-coverage` 367 s (aggregate 6,552 of 6,667 =
+    98.28%); `markdownlint` 34 s; `nixie` 2 s; `test-workflow-contracts`
+    518 s (2,330 passed, 3 skipped, plus 30 script tests);
+    `test-documentation-contracts` 76 s (15 passed, 50 skipped);
+    `test-rfc-stdlib-coverage` 43 s (282 passed); `kani-ir` 654 s (24 of 24
+    harnesses verified, 0 failures). The status and diff hashes were
+    identical before and after every gate.
+  - `test-kani-mutations` and the prewarm's allowance (2026-11-16). The
+    fifteenth target was red three times, each at nextest's own allowance
+    rather than at any assertion: `prewarm::prewarm_kani_mutation_target`
+    terminated at 900.019 s, 900.026 s and 900.020 s under `terminate-after =
+    15`, on a host carrying 120–135 queued `rustc` requests with the managed
+    sccache server not serving compilations. The allowance is not the defect
+    and was not changed. What the three runs establish is that the recorded
+    sizing measurement — 762.60 s for the cold dependency graph — understates
+    this host by nearly an order of magnitude: the same test body, run once
+    through plain `cargo test` inside the mandated wrapper so that no
+    per-test clock applied, exited 0 after 5,214.00 s and left
+    `target/kani-mutation-compile` populated. The gate then passed in 1,504 s
+    with the prewarm at 186.710 s (713.29 s inside its allowance), the
+    negative control at 248.402 s, and the compile guard at 1,065.414 s over
+    all 37 tracked patches (1,334.59 s inside its 2,400 s allowance). That is
+    the only run in this batch that executed both recipe lines, so it is also
+    the only one that produced the patch-compilation evidence the gate
+    exists for. See D-24.
 
 ## Surprises & discoveries
 
@@ -1054,7 +1146,17 @@ conflict in `Decision log`, and escalate.
   `make test-kani-mutations` whose only failure is the prewarm's timeout is
   evidence of capacity, not of a code defect; the response is to re-run the
   gate and record the margin, not to raise the allowance or treat the patch set
-  as broken.
+  as broken. Amendment of 2026-11-16: three consecutive re-runs each consumed
+  the allowance exactly (900.019 s, 900.026 s, 900.020 s), so on a shared host
+  the margin is not thin but absent, and re-running alone does not recover it.
+  Measuring the body once without a per-test clock settled the question: the
+  same prewarm took 5,214.00 s on a cold target, roughly seven times the
+  recorded 762.60 s, under a 200% CPU quota and 120–135 queued `rustc`
+  requests. The recorded figure is therefore a lower bound from a quieter host,
+  and the prewarm's real cost is a function of the shared compile queue rather
+  than of the tree. With the target warm the prewarm took 186.710 s and the
+  whole gate 1,504 s, so the allowance is sufficient for what it was meant to
+  bound once the cold build has been paid.
 - Observation: a `make lint` verdict belongs to the host's Whitaker revision as
   much as to the tree, because the workspace it builds from tracks Whitaker's
   own branch tip. Evidence: the same tree passed `make lint` at 04:28Z under
@@ -1328,7 +1430,16 @@ conflict in `Decision log`, and escalate.
   into `main` changes nothing in this worktree: that red cleared with the
   host's Whitaker suite, which is the rolling-release effect the original
   decision described. The two reds therefore had different causes, and neither
-  was this branch.
+  was this branch. Third amendment of 2026-11-16: the branch was rebased
+  anyway, for the reason the next paragraph records, and the rebase produced
+  the result this decision predicted. Before it, the host's `make lint` failed
+  after 2,174 s with `bumpy_road_function` at
+  `src/cli/merge/observability.rs:214` — a file this branch never touches —
+  because the host suite had rolled forward again. After replaying the branch
+  onto `fa06bdb21`, `make lint` exited 0 in 1,255 s with no Whitaker finding of
+  any kind, so `#1139`'s `min_bump_lines = 15` answers the rule at the branch
+  level as well as at the hosted one. The decision's substance is unchanged:
+  nothing in this branch suppresses or refactors around the rule.
 - D-22. Decision: record the candidate's size against the tolerance as
   measured, and report the overage rather than re-base the bar unilaterally.
   Rationale: `Tolerances (exception triggers)` asks for a stop and an
@@ -1352,7 +1463,63 @@ conflict in `Decision log`, and escalate.
   basis are reported here and in the pull request, and the candidate proceeds
   so the owner can accept or reject the deviation against the implemented
   change rather than in the abstract. No test, harness, or proof was removed or
-  weakened to fit a bar. Date/Author: 2026-11-15.
+  weakened to fit a bar. Amendment of 2026-11-15: the completeness assessment
+  measured the same 3,328 lines independently and recorded that this entry
+  states the breach but not its acceptance. That is the intended division: the
+  acceptance is the plan owner's to give, and it is requested rather than
+  assumed. Until it is given, the deviation is recorded, escalated, and
+  unresolved — not waived. Second amendment of 2026-11-16: the figures were
+  re-measured against the rebased base `fa06bdb21` and are unchanged.
+  `git diff --numstat fa06bdb21 HEAD` over `.rs` paths outside `verus/` sums to
+  3,329 added and 1 deleted, a net 3,328; the file counts are still 53 changed,
+  38 with the Verus crate and mutation patches excluded, and 32 with the
+  snapshots excluded too. The base advance adds lines to
+  `tests/serial_dependency_runtime_tests.rs` and does not touch this branch's
+  delta, which is why the numbers did not move. The breach and the request for
+  the owner's acceptance stand unchanged. Date/Author: 2026-11-16.
+- D-23. Decision: correct the Kani stopping condition rather than leave a cap
+  the runs did not obey, and state the two measurements it conflated. The
+  correction is recorded here; whether the whole-suite exception is acceptable
+  remains the plan owner's decision, exactly as D-22's overage does, and the
+  candidate proceeds so that decision can be made against the implemented work.
+  Rationale: `Tolerances (exception triggers)` said every local run was capped
+  at eight minutes by the wrapper, while the whole-suite runs recorded under
+  Progress used `RuntimeMaxSec=100m`. Both statements were true of different
+  things and the sentence named neither. Eight minutes is the documented local
+  verification budget for a capped `make kani-ir`, stated in the developers'
+  guide's wrapper example and in the 4.2.3 plan's verification budget; this
+  module's seven harnesses sit far inside it, at 0.291 s to 29.404 s each and
+  well under a minute together. The whole suite does not fit it: 24 harnesses
+  measured 536 s here, 628 s at the later head, and 1819 s and 2117 s in the
+  warm runs under load that motivated the wider cap, and the 4.2.3 plan already
+  recorded a 1,200 s full-suite pass against the same eight-minute budget. So
+  the tension predates this branch and this branch widens it by seven harnesses
+  rather than creating it. Whole-suite runs therefore set `RuntimeMaxSec` to
+  contain the suite, the Progress record names the bound each run used, and
+  focused module runs stay inside the eight minutes. No harness, gate,
+  allowance, memory cap, or timeout was weakened: `MemoryMax` stays 8 GiB and
+  `TimeoutStopSec` stays 20 s. Date/Author: 2026-11-15.
+- D-24. Decision: pay the Kani mutation gate's cold dependency build once,
+  outside the timed test, rather than raise the prewarm's allowance or accept a
+  red gate. Rationale: the `[[profile.kani.overrides]]` entry sizes the prewarm
+  at `terminate-after = 15` from a recorded 762.60 s cold-dependency
+  measurement, and on 2026-11-15/16 the same body took 5,214.00 s under a 200%
+  CPU quota and a saturated shared compile queue — a capacity change, not a
+  code change. Three identical re-runs could not finish it, and the standing
+  observation under Surprises & discoveries says a prewarm timeout is capacity
+  evidence whose response is a re-run rather than an allowance edit. The
+  warm-up used the gate's own test body through plain `cargo test`, so it
+  executed the same `Sandbox::create` and `compile_kani_tree` path, asserted
+  the same `-D warnings` compile of the unpatched tree, and populated the same
+  fixed sandbox and shared `CARGO_TARGET_DIR`; it therefore weakens nothing the
+  gate checks. The gate then ran its own prewarm, its own negative control, and
+  all 37 patch compiles, each inside its unchanged allowance, and all three
+  passed. Raising the allowance was rejected as outside this branch's scope: it
+  is repository policy justified by one host's contention, and the profile's
+  comment carries the measurement it was sized from. The residual risk is
+  recorded rather than hidden — on a cold target this gate will time out on a
+  host this loaded, and the recorded measurement understates that host by
+  roughly seven times. Date/Author: 2026-11-16.
 
 ## Outcomes & retrospective
 
@@ -1953,6 +2120,27 @@ obligations.
   enabled, plus unit witnesses at each cap. Bounded work rests on the
   structural caps, lemmas L8 and L9, and the witnesses; there is no symbolic
   iteration-count harness, because 33 symbolic `u128` steps would not finish.
+- Amendment of 2026-11-15: the obligation above is universal and the harnesses
+  are bounded, so this bullet says where the universal part rests, which the
+  plan previously left implicit. It rests on a structural argument over
+  `src/stdlib/resource_bounds/kernel.rs`, checkable against the source: every
+  arithmetic operation in the file is a `checked_*` call whose failure becomes
+  `Option`, a subtraction guarded by a comparison established earlier in the
+  same function, or a widening conversion that cannot fail. By function, with
+  the panicking operations named: `checked_product` uses `contains`,
+  `u64::try_from(...).ok()?`, and `checked_mul`; `checked_power` uses
+  `u32::try_from(...).ok()?` and `checked_pow`; `checked_binomial` returns for
+  `r > n` before computing `n - r`, keeps `k = r.min(n - r)`, and in its loop
+  uses `checked_mul`, `checked_div` on a divisor of `i + 1` (never zero), and
+  `u64::try_from(...).ok()`; `checked_falling_factorial` returns for `r > n`
+  before computing anything, and its loop's `n - i` cannot underflow because
+  `i < r <= n`; `admit_total` is `checked_add` plus a `filter`; and `classify`
+  is a `const fn` of comparisons. Kani confirms that argument inside each
+  harness's stated bounds (D-19) rather than carrying it, and the Verus model
+  carries the same guards, so neither substitutes for the inspection. The
+  mutation controls are what make the inspection falsifiable: a seeded wrapping
+  add, an off-by-one in the cap, and a `>=` for `>` each fail their owning
+  harness or proof.
 - Harnesses and bounds (names are provisional; each gets a mutation patch):
   1. `product_kernel_respects_zero_and_repeat`: up to three symbolic `usize`
      lengths and a symbolic `u64` `repeat`; asserts `repeat == 0` gives
@@ -2086,6 +2274,19 @@ obligations.
   bits on every supported target; Verus and `vstd` are sound for the constructs
   used, and `vstd`'s specifications of the checked operations are faithful;
   Kani's documented bounded semantics with overflow checks enabled.
+- Width assumption: the tests assume a 64-bit `usize`, not merely one no wider
+  than 64 bits. Four cases depend on it. The cardinality cases in
+  `src/stdlib/resource_bounds/tests/cardinality.rs` carry `usize` operands above
+  `u32::MAX`, `tests/features/resource_bounds.feature` names operand lengths
+  of 2^32, `verification.rs` declares `const BIG: usize = 1 << 40` for the
+  overflowing-prefix witness, and
+  `tests/oracle.rs::the_product_oracle_short_circuits_like_the_kernel` expects
+  two `usize::MAX` operands to exceed `u64::MAX`. The literal-carrying cases
+  would fail to compile on a 32-bit target and the last would assert falsely
+  there, because that product fits `u64` at 32 bits. The README's platform
+  table lists only x86-64 and Arm64 for Linux, macOS, and Windows, so no
+  supported target reaches the assumption; a 32-bit port would owe all four a
+  width-derived form.
 - Residual gap: the Verus proof covers a transcription of the production
   kernel, not the compiled kernel. It is narrowed by token-for-token
   correspondence, by Kani on the production kernel within bounds, and by
