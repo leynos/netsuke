@@ -3685,6 +3685,19 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   58m remaining when this note was written; the decision is reconciled from a
   read-back only after that review lands on the current head.
 
+  The complete sequential eleven-gate set passed on `9e7e0993d` with an
+  unchanged HEAD and an empty working tree at both ends of the batch: 98.26%
+  doc-comment coverage (6478/6593), 5,770 Nextest cases with 9 skipped and the
+  doctests alongside them, 2,330 plus 30 workflow-contract cases, 227 Markdown
+  files linted with 0 issues, and every Mermaid block validated. The batch was
+  restarted once: the first run was killed by its background wrapper partway
+  through `doc-coverage`, and the rerun was started detached in its own session
+  so no wrapper lifetime bounded it. The killed run is not evidence, and no
+  gate result here comes from it. `lint-whitaker` took 16 minutes rather than
+  its warm 3 seconds because the compiler pool was full with other agents'
+  work; admission reported `healthy` throughout and the gate is counted on its
+  exit status, not its wall time.
+
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
 [roadmap]: ../roadmap-hexagonal-hardening.md
