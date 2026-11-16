@@ -6,12 +6,15 @@ is stated in ``release_publish_path_consumer_expectations`` and re-exported
 here, so the registry and its claims are read together while the claims stay
 reviewable on their own.
 
+The accessors that reach into the copied documents live with the shared
+mutation types in ``release_publish_path_consumer_mutation_support``, so an
+applier reads as the one change it makes rather than as document traversal.
+
 Run via ``make test-workflow-contracts``.
 """
 
 import typing as typ
 
-from release_publish_path_consumer_commands import action_cli_invocation
 from release_publish_path_consumer_expectations import (
     CONSUMER_SMOKE_EXPECTED_VIOLATIONS,
     MUTATION_LABELS,
@@ -20,8 +23,13 @@ from release_publish_path_consumer_mutation_support import (
     ConsumerSmokeMutationError,
     ConsumerSmokeMutationIssue,
     Job,
+    cli_invocation,
+    invocation,
+    permissions,
+    remove_guard_clause,
+    smoke_job,
+    steps,
 )
-from release_publish_path_consumer_smoke import CONSUMER_SMOKE_JOB, LOCAL_SMOKE_ACTION
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -40,101 +48,6 @@ DOWNLOAD_PREFIX = "actions/download-artifact@"
 CHECKOUT_PREFIX = "actions/checkout@"
 
 
-def _smoke_job(release: Job) -> Job:
-    """Return the smoke job of a copied release workflow.
-
-    Returns
-    -------
-    Job
-        The mutable job mapping.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the copied workflow no longer declares the job, which means the
-        fixture moved and the mutation would test nothing.
-    """
-    jobs = release.get("jobs")
-    if not isinstance(jobs, dict):
-        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_JOBS)
-    job = jobs.get(CONSUMER_SMOKE_JOB)
-    if not isinstance(job, dict):
-        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_JOB)
-    return job
-
-
-def _steps(document: Job) -> list[Job]:
-    """Return a job's or action's step list for structural mutation.
-
-    Returns
-    -------
-    list[Job]
-        The mutable steps, in declaration order, whether the steps hang off a
-        job or off a composite action's ``runs`` mapping.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the document declares no steps, or declares one that is not a
-        mapping.
-    """
-    runs = document.get("runs")
-    holder = runs if isinstance(runs, dict) else document
-    declared = holder.get("steps")
-    if not isinstance(declared, list) or not all(
-        isinstance(step, dict) for step in declared
-    ):
-        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MALFORMED_STEPS)
-    # The caller mutates this list in place, so it must be the one the document
-    # holds. A filtered copy would accept an append and change nothing.
-    return typ.cast("list[Job]", declared)
-
-
-def _without(guard: str, clause: str) -> str:
-    """Return ``guard`` with one required clause removed.
-
-    Returns
-    -------
-    str
-        The guard without the clause.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the clause is absent, which means the guard was rewritten and this
-        mutation no longer removes anything.
-    """
-    if clause not in guard:
-        raise ConsumerSmokeMutationError(
-            ConsumerSmokeMutationIssue.MISSING_CLAUSE, (clause, guard)
-        )
-    return guard.replace(clause, "", 1)
-
-
-def _set_guard(job: Job, clause: str) -> None:
-    """Remove ``clause`` from the smoke job's guard."""
-    job["if"] = _without(str(job.get("if", "")), clause)
-
-
-def _permissions(job: Job) -> Job:
-    """Return the job's permission mapping for mutation.
-
-    Returns
-    -------
-    Job
-        The mutable permissions.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the job declares no permissions to mutate.
-    """
-    permissions = job.get("permissions")
-    if not isinstance(permissions, dict):
-        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_PERMISSIONS)
-    return permissions
-
-
 def _drop_finalize_need(release: Job, _action: Job) -> None:
     """Remove finalization from the smoke's dependencies and its guard.
 
@@ -148,52 +61,52 @@ def _drop_finalize_need(release: Job, _action: Job) -> None:
         If the job declares no dependency list, so the mutation would change
         nothing the contract reads.
     """
-    job = _smoke_job(release)
+    job = smoke_job(release)
     needs = job.get("needs")
     if not isinstance(needs, list):
         raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_NEEDS)
     needs.remove("finalize-github-release")
-    _set_guard(job, FINALIZE_CLAUSE)
+    remove_guard_clause(job, FINALIZE_CLAUSE)
 
 
 def _ignore_finalize_result(release: Job, _action: Job) -> None:
     """Stop requiring finalization to have succeeded, keeping the dependency."""
-    _set_guard(_smoke_job(release), FINALIZE_CLAUSE)
+    remove_guard_clause(smoke_job(release), FINALIZE_CLAUSE)
 
 
 def _remove_publish_guard(release: Job, _action: Job) -> None:
     """Let the smoke run in a mode that publishes nothing."""
-    _set_guard(_smoke_job(release), PUBLISH_CLAUSE)
+    remove_guard_clause(smoke_job(release), PUBLISH_CLAUSE)
 
 
 def _remove_cancelled_guard(release: Job, _action: Job) -> None:
     """Drop the explicit cancellation check from the smoke's guard."""
-    _set_guard(_smoke_job(release), CANCELLED_CLAUSE)
+    remove_guard_clause(smoke_job(release), CANCELLED_CLAUSE)
 
 
 def _remove_permissions(release: Job, _action: Job) -> None:
     """Remove the job's permission grant entirely."""
-    _smoke_job(release).pop("permissions", None)
+    smoke_job(release).pop("permissions", None)
 
 
 def _grant_contents_write(release: Job, _action: Job) -> None:
     """Broaden the smoke's repository permission to write."""
-    _permissions(_smoke_job(release))["contents"] = "write"
+    permissions(smoke_job(release))["contents"] = "write"
 
 
 def _add_id_token(release: Job, _action: Job) -> None:
     """Grant the smoke an OIDC token exchange it must never need."""
-    _permissions(_smoke_job(release))["id-token"] = "write"
+    permissions(smoke_job(release))["id-token"] = "write"
 
 
 def _add_environment(release: Job, _action: Job) -> None:
     """Bind the smoke to a deployment environment's secrets."""
-    _smoke_job(release)["environment"] = "release"
+    smoke_job(release)["environment"] = "release"
 
 
 def _add_token_environment(release: Job, _action: Job) -> None:
     """Give the smoke a GitHub token in its job environment."""
-    _smoke_job(release)["env"] = {"GH_TOKEN": "${{ github.token }}"}
+    smoke_job(release)["env"] = {"GH_TOKEN": "${{ github.token }}"}
 
 
 def _add_workflow_token_environment(release: Job, _action: Job) -> None:
@@ -215,7 +128,7 @@ def _add_action_token_environment(_release: Job, action: Job) -> None:
     ConsumerSmokeMutationError
         If no action step carries a command to attach the environment to.
     """
-    for step in _steps(action):
+    for step in steps(action):
         if "run" in step:
             step["env"] = {"GITHUB_TOKEN": "${{ github.token }}"}
             return
@@ -229,7 +142,7 @@ def _guard_invocation(release: Job, _action: Job) -> None:
     all still read as correct while the step that exercises the release never
     runs.
     """
-    _invocation(_smoke_job(release))["if"] = "false"
+    invocation(smoke_job(release))["if"] = "false"
 
 
 def _persist_checkout_credentials(release: Job, _action: Job) -> None:
@@ -244,7 +157,7 @@ def _persist_checkout_credentials(release: Job, _action: Job) -> None:
         If the job has no checkout step, or its checkout passes no inputs, so
         the mutation would change nothing the contract reads.
     """
-    for step in _steps(_smoke_job(release)):
+    for step in steps(smoke_job(release)):
         if not str(step.get("uses", "")).startswith(CHECKOUT_PREFIX):
             continue
         values = step.get("with")
@@ -266,31 +179,11 @@ def _select_pattern_artifact(release: Job, _action: Job) -> None:
         If the job downloads no artefact, so the mutation would change nothing
         the contract reads.
     """
-    for step in _steps(_smoke_job(release)):
+    for step in steps(smoke_job(release)):
         if str(step.get("uses", "")).startswith(DOWNLOAD_PREFIX):
             step["with"] = {"pattern": "release-*", "path": "downloaded"}
             return
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
-
-
-def _invocation(job: Job) -> Job:
-    """Return the job's one smoke invocation step.
-
-    Returns
-    -------
-    Job
-        The mutable step that calls the local action.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the job no longer invokes the action, so a mutation targeting that
-        step would change nothing the contract reads.
-    """
-    for step in _steps(job):
-        if str(step.get("uses", "")) == LOCAL_SMOKE_ACTION:
-            return step
-    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
 
 
 def _drop_artifact_download(release: Job, _action: Job) -> None:
@@ -306,46 +199,22 @@ def _drop_artifact_download(release: Job, _action: Job) -> None:
         If the job downloads no artefact, so the mutation would change nothing
         the contract reads.
     """
-    steps = _steps(_smoke_job(release))
-    for index, step in enumerate(steps):
+    declared = steps(smoke_job(release))
+    for index, step in enumerate(declared):
         if str(step.get("uses", "")).startswith(DOWNLOAD_PREFIX):
-            del steps[index]
+            del declared[index]
             return
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
 
 
 def _absorb_job_failure(release: Job, _action: Job) -> None:
     """Absorb a failed smoke at the job level."""
-    _smoke_job(release)["continue-on-error"] = True
+    smoke_job(release)["continue-on-error"] = True
 
 
 def _absorb_step_failure(release: Job, _action: Job) -> None:
     """Absorb a failed smoke on its one invocation step."""
-    _invocation(_smoke_job(release))["continue-on-error"] = True
-
-
-def _cli_invocation(action: Job, phase: str) -> tuple[list[Job], int]:
-    """Return the action's step list and the index of one CLI invocation.
-
-    Returns
-    -------
-    tuple[list[Job], int]
-        The action's own step list — not a copy, so the caller mutates or
-        deletes the step in place — and the index of the step that runs
-        ``consumer_smoke_cli.py <phase>``.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If no step runs that subcommand, so the mutation would change nothing
-        the contract reads.
-    """
-    steps = _steps(action)
-    for index, step in enumerate(steps):
-        tokens = action_cli_invocation(step)
-        if tokens is not None and tokens[1:2] == (phase,):
-            return steps, index
-    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
+    invocation(smoke_job(release))["continue-on-error"] = True
 
 
 def _absorb_action_failure(_release: Job, action: Job) -> None:
@@ -354,8 +223,8 @@ def _absorb_action_failure(_release: Job, action: Job) -> None:
     The job and its invocation step stay clean, so only a scan of the action's
     own steps sees the failure being swallowed.
     """
-    steps, index = _cli_invocation(action, "verify")
-    steps[index]["continue-on-error"] = True
+    declared, index = cli_invocation(action, "verify")
+    declared[index]["continue-on-error"] = True
 
 
 def _drop_verifier(_release: Job, action: Job) -> None:
@@ -364,19 +233,19 @@ def _drop_verifier(_release: Job, action: Job) -> None:
     The report step still emits an outcome for every phase — all ``skipped`` —
     so the run reads as a completed smoke that verified nothing.
     """
-    steps, index = _cli_invocation(action, "verify")
-    del steps[index]
+    declared, index = cli_invocation(action, "verify")
+    del declared[index]
 
 
 def _compile_in_job(release: Job, _action: Job) -> None:
     """Append the source build a smoke must never run."""
-    _steps(_smoke_job(release)).append(dict(COMPILATION_STEP))
+    steps(smoke_job(release)).append(dict(COMPILATION_STEP))
 
 
 def _compile_in_action(release: Job, action: Job) -> None:
     """Append the source build to the action the job calls."""
     _ = release
-    _steps(action).append(dict(COMPILATION_STEP))
+    steps(action).append(dict(COMPILATION_STEP))
 
 
 _MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {

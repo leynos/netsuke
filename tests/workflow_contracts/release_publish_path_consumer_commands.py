@@ -135,9 +135,7 @@ def _require_invocation(
         if tokens is not None and tokens[:2] == (SMOKE_CLI, phase)
     ]
     if len(found) != 1:
-        violations.append(
-            f"{label} must appear exactly once, found {len(found)}"
-        )
+        violations.append(f"{label} must appear exactly once, found {len(found)}")
         return
     step, tokens = found[0]
     if "if" in step:
