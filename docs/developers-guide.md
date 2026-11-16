@@ -5129,14 +5129,14 @@ enumerated integration-test crates. The `test_support` crate uses
 capability-backed fixture helpers and remains linted by Whitaker under its own
 narrow policy.
 
-The root Whitaker invocation selects only the `netsuke-build` package (the
-Cargo package name behind the `netsuke` targets; see ADR-0007) and disables
-Dylint dependency checks. It supplies the root `dylint.toml` contents
+The root Whitaker invocations select the `netsuke-build` package (the Cargo
+package name behind the `netsuke` targets; see ADR-0007) and the two fixture
+packages, and disable Dylint dependency checks. It supplies the root `dylint.toml` contents
 explicitly through `DYLINT_TOML`, so every invocation receives the same
 capability-boundary policy regardless of how Dylint resolves the current crate.
 `test_support` is a workspace member with one sanctioned ambient boundary
-configured per crate. Its second, scoped invocation supplies
-`test_support/dylint.toml` through `DYLINT_TOML`, and uses
+configured per crate. Its scoped invocations (all features, then defaults)
+supply `test_support/dylint.toml` through `DYLINT_TOML`, and use
 `--package test_support` and `--no-deps` because running from a member
 directory alone would otherwise check the parent workspace. That configuration
 names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
