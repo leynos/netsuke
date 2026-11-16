@@ -1,15 +1,18 @@
 ---
 name: Proofs
 
-# The Verus proof under `verus/` (the canonical-value proof). Proof code that no
-# job runs is a comment, so this workflow runs it: on a pull request or push to
-# `main` that touches what it verifies or how it is run, and weekly. Verus was
-# once an optional maintainer tool with no CI job; the estate prover-tooling
-# rule (PT-006) now requires CI to run the proofs a repository holds.
+# The Verus proofs under `verus/`: the canonical-value proof and the
+# resource-bounds proof. Proof code that no job runs is a comment, so this
+# workflow runs both of them: on a pull request or push to `main` that touches
+# what they verify or how they are run, and weekly. Verus was once an optional
+# maintainer tool with no CI job; the estate prover-tooling rule (PT-006) now
+# requires CI to run the proofs a repository holds, which is every proof under
+# `verus/`, not only the one `make verus` selects by default.
 #
 # Verus and Z3 are installed only through the shared install-prover-tools
 # action, which reads the release from tools/verus/VERSION. `make verus` then
-# runs the proof through the pinned rust-prover-tools.
+# runs one proof through the pinned rust-prover-tools: the canonical-value proof
+# by default, or the proof named by `VERUS_FLAGS`.
 
 'on':
   pull_request:
@@ -54,7 +57,11 @@ jobs:
         with:
           tools: verus
           runner-image: ubuntu2404
-      - name: Run the Verus proof
+      - name: Run the canonical-value Verus proof
         env:
           VERUS_Z3_PATH: ${{ steps.prover.outputs.z3-path }}
         run: make verus
+      - name: Run the resource-bounds Verus proof
+        env:
+          VERUS_Z3_PATH: ${{ steps.prover.outputs.z3-path }}
+        run: make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'
