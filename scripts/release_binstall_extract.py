@@ -209,9 +209,11 @@ def _write_entry(
     Notes
     -----
     The file is created by :func:`_created_exclusively`, which refuses an
-    existing entry as :class:`ExtractionError`, and the bytes are copied by
-    :func:`_copy_member`, which refuses a short or over-long member as
-    :class:`ExtractionError` and damaged data as
+    existing entry as :class:`ExtractionError`. Its descriptor is wrapped in
+    one buffered file object here, and that single object is both the sink the
+    bytes are copied into and the one owner that closes it, on every path. The
+    bytes are copied by :func:`_copy_member`, which refuses a short or
+    over-long member as :class:`ExtractionError` and damaged data as
     :class:`release_binstall_archive.ArchiveCorruptError`. The partial file is
     deleted either way.
 
@@ -225,8 +227,9 @@ def _write_entry(
     target = destination / layout.binary_name
     descriptor = _created_exclusively(target)
     try:
-        os.fchmod(descriptor, BINARY_MODE)
-        _copy_member(archive, entry, descriptor, layout)
+        with os.fdopen(descriptor, "wb") as sink:
+            os.fchmod(sink.fileno(), BINARY_MODE)
+            _copy_member(archive, entry, sink, layout)
     except OSError as error:
         _discard(target)
         msg = f"the binary could not be written to {target}: {error}"
@@ -234,8 +237,6 @@ def _write_entry(
     except BaseException:
         _discard(target)
         raise
-    finally:
-        _closed(descriptor)
     return target
 
 
@@ -272,19 +273,13 @@ def _discard(target: pathlib.Path) -> None:
         target.unlink(missing_ok=True)
 
 
-def _closed(descriptor: int) -> None:
-    """Close ``descriptor``, ignoring a failure to do so."""
-    with contextlib.suppress(OSError):
-        os.close(descriptor)
-
-
 def _copy_member(
     archive: tarfile.TarFile,
     entry: tarfile.TarInfo,
-    descriptor: int,
+    sink: typ.IO[bytes],
     layout: policy.ArchiveLayout,
 ) -> None:
-    """Stream the member into ``descriptor``, reproducing the declared size.
+    """Stream the member into ``sink``, reproducing the declared size.
 
     Raises
     ------
@@ -298,7 +293,7 @@ def _copy_member(
     steps that read it, before or during the copy.
     """
     source = _member_source(archive, entry, layout)
-    written = _stream_member(source, descriptor, layout)
+    written = _stream_member(source, sink, layout)
     if written != layout.binary_size:
         msg = (
             f"wrote {written} bytes for {layout.binary_name!r}, but the header "
@@ -340,9 +335,9 @@ def _member_source(
 
 
 def _stream_member(
-    source: typ.IO[bytes], descriptor: int, layout: policy.ArchiveLayout
+    source: typ.IO[bytes], sink: typ.IO[bytes], layout: policy.ArchiveLayout
 ) -> int:
-    """Copy the member's bytes into ``descriptor`` under the declared size.
+    """Copy the member's bytes into ``sink`` under the declared size.
 
     Returns
     -------
@@ -360,7 +355,7 @@ def _stream_member(
     A member that carries more bytes than its header declares is refused as
     :class:`ExtractionError` by :func:`_copy_under_cap`.
     """
-    with source, os.fdopen(descriptor, "wb") as sink:
+    with source:
         try:
             return _copy_under_cap(source, sink, layout)
         except CORRUPT_STREAM as error:
