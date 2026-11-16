@@ -54,11 +54,11 @@ pub(super) fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {
 /// ```
 pub(super) fn user_scope_candidates(env_source: &dyn EnvSource) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
-    if let Some(base) = rooted_base(env_source, "XDG_CONFIG_HOME") {
+    if let Some(base) = absolute_base(env_source, "XDG_CONFIG_HOME") {
         push_base_candidates(&mut candidates, &base);
     }
     for key in ["APPDATA", "LOCALAPPDATA"] {
-        if let Some(base) = rooted_base(env_source, key) {
+        if let Some(base) = absolute_base(env_source, key) {
             push_base_candidates(&mut candidates, &base);
         }
     }
@@ -75,27 +75,33 @@ fn push_base_candidates(candidates: &mut Vec<PathBuf>, base: &Path) {
     candidates.push(base.join(DOTFILE_NAME));
 }
 
-/// Read `key` as a root-anchored base directory, treating anything else as unset.
+/// Read `key` as an absolute base directory, treating anything else as unset.
 ///
 /// An empty or relative value joined with a file name yields a
 /// working-directory relative candidate, which would load configuration from
 /// wherever the tool happened to be run rather than from a user location. Such a
 /// file would then be merged with operator authority, so the value is ignored
 /// and the next base is tried, exactly as for an empty value.
-fn rooted_base(env_source: &dyn EnvSource, key: &str) -> Option<PathBuf> {
+///
+/// The predicate is `is_absolute()` rather than `has_root()`. On Windows a bare
+/// leading separator such as `\config` is rooted but carries no drive, so it
+/// resolves on whichever drive the process happens to run from — the same
+/// process-state dependence the filter exists to exclude, merely anchored at the
+/// current drive instead of the working directory.
+fn absolute_base(env_source: &dyn EnvSource, key: &str) -> Option<PathBuf> {
     let path = PathBuf::from(env_source.get(key)?);
-    path.has_root().then_some(path)
+    path.is_absolute().then_some(path)
 }
 
 /// Resolve the home directory from the injected environment.
 ///
-/// `HOME` outranks `USERPROFILE`, and an empty or relative value counts as
-/// unset so a populated `USERPROFILE` stays reachable. The environment source's own
+/// `HOME` outranks `USERPROFILE`, and an empty, relative, or drive-relative
+/// value counts as unset so a populated `USERPROFILE` stays reachable. The environment source's own
 /// `home_fallback` is deliberately not consulted: Netsuke injects a closed set
 /// of documented variables, and a platform lookup would make the candidate list
 /// depend on the host rather than on the environment Netsuke was given.
 fn resolve_home(env_source: &dyn EnvSource) -> Option<PathBuf> {
-    rooted_base(env_source, "HOME").or_else(|| rooted_base(env_source, "USERPROFILE"))
+    absolute_base(env_source, "HOME").or_else(|| absolute_base(env_source, "USERPROFILE"))
 }
 
 /// Compare a canonical project path, falling back literally if resolution fails.

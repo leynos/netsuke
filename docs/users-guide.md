@@ -1927,9 +1927,11 @@ file. The user locations are checked in this order on every platform:
 
 An undefined variable is skipped, as is one whose value is empty or not an
 absolute path, because a relative base would resolve against the working
-directory and load a file from wherever the tool happened to be run. `HOME`
-supplies the home directory when it is set to an absolute path; otherwise
-`USERPROFILE` does.
+directory and load a file from wherever the tool happened to be run. On Windows
+a value that begins with a separator but names no drive, such as `\config`, is
+skipped for the same reason: it would resolve on whichever drive the process
+runs from. `HOME` supplies the home directory when it is set to an absolute
+path; otherwise `USERPROFILE` does.
 
 System configuration is consulted only when no user file exists. On Unix that
 means each directory in `$XDG_CONFIG_DIRS`, defaulting to `/etc/xdg`, looking

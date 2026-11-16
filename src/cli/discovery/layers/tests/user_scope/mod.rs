@@ -274,23 +274,28 @@ fn windows_user_roots_outrank_system_scope(
     case.assert_single_layer(&case.scoped_environment(environment), &expected_path)
 }
 
-/// An empty or relative base value is ignored, so no candidate is relative to
-/// the working directory.
+/// A base value that is not absolute is ignored, so no candidate depends on
+/// process state.
 ///
 /// A relative candidate would load configuration from wherever the tool
 /// happened to run rather than from a user location, and its grants would be
-/// merged with operator authority. The surviving `USERPROFILE` base keeps the
-/// list non-empty, so removing the filter shows up as a relative candidate or a
-/// candidate outside the home directory.
+/// merged with operator authority. A drive-relative rooted value such as
+/// `\config` is the same hazard on Windows: it resolves on whichever drive the
+/// process happens to run from. The surviving `USERPROFILE` base keeps the list
+/// non-empty, so a weakened filter shows up as a non-absolute candidate or one
+/// outside the home directory.
 #[rstest]
 #[case::xdg_config_home_empty("XDG_CONFIG_HOME", "")]
 #[case::xdg_config_home_relative("XDG_CONFIG_HOME", "relative-base")]
+#[case::xdg_config_home_drive_relative_root("XDG_CONFIG_HOME", "\\config")]
 #[case::appdata_empty("APPDATA", "")]
 #[case::appdata_relative("APPDATA", "relative-base")]
+#[case::appdata_drive_relative_root("APPDATA", "\\config")]
 #[case::localappdata_empty("LOCALAPPDATA", "")]
 #[case::localappdata_relative("LOCALAPPDATA", "relative-base")]
 #[case::home_empty("HOME", "")]
 #[case::home_relative("HOME", "relative-base")]
+#[case::home_drive_relative_root("HOME", "\\config")]
 fn unusable_base_value_is_ignored(
     #[case] variable: &'static str,
     #[case] value: &'static str,
