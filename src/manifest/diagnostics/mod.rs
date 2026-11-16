@@ -29,6 +29,7 @@
 )]
 
 use crate::localization::{self, LocalizedMessage, keys};
+use crate::manifest::schema_version::{SUPPORTED, SchemaVersionRejection};
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -177,6 +178,59 @@ struct DataDiagnostic {
     source: serde_json::Error,
     /// Localized diagnostic message.
     message: LocalizedMessage,
+}
+
+/// A safe diagnostic for a rejected manifest schema declaration.
+#[derive(Debug, Error, Diagnostic)]
+#[error("{message}")]
+#[diagnostic(code(netsuke::manifest::schema_version), help("{help}"))]
+struct SchemaVersionDiagnostic {
+    /// Localized explanation of the schema-version rejection.
+    message: LocalizedMessage,
+    /// Localized remedy that names the supported declaration shape.
+    help: LocalizedMessage,
+}
+
+/// Map schema-version policy facts to a localized coded diagnostic.
+///
+/// # Examples
+///
+/// ```ignore
+/// use miette::Diagnostic;
+///
+/// let diagnostic = map_schema_version_error(
+///     SchemaVersionRejection::Unsupported { major: 1, minor: 1 },
+///     &ManifestName::new("Netsukefile"),
+/// );
+/// assert_eq!(diagnostic.code().unwrap().to_string(), "netsuke::manifest::schema_version");
+/// ```
+pub(super) fn map_schema_version_error(
+    rejection: SchemaVersionRejection,
+    name: &ManifestName,
+) -> Box<dyn Diagnostic + Send + Sync + 'static> {
+    let message = match rejection {
+        SchemaVersionRejection::Missing => {
+            localization::message(keys::MANIFEST_SCHEMA_VERSION_MISSING)
+        }
+        SchemaVersionRejection::NotAString
+        | SchemaVersionRejection::Invalid
+        | SchemaVersionRejection::NotCanonical => {
+            localization::message(keys::MANIFEST_SCHEMA_VERSION_INVALID)
+        }
+        SchemaVersionRejection::Unsupported { major, minor } => {
+            localization::message(keys::MANIFEST_SCHEMA_VERSION_UNSUPPORTED)
+                .with_arg("name", name.as_str())
+                .with_arg("declared", format!("{major}.{minor}"))
+                .with_arg(
+                    "supported",
+                    format!("{}.{}", SUPPORTED.major, SUPPORTED.max_minor),
+                )
+        }
+    };
+    Box::new(SchemaVersionDiagnostic {
+        message,
+        help: localization::message(keys::MANIFEST_SCHEMA_VERSION_HELP),
+    })
 }
 
 /// Map a [`serde_json`] structural error into a diagnostic without a source

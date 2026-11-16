@@ -1,0 +1,4 @@
+netsuke_version: "1.1.0"
+targets:
+  - name: hello
+    command: echo hello

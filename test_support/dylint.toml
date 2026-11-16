@@ -17,6 +17,14 @@
 [bumpy_road_function]
 min_bump_lines = 15
 
+# Matches the root configuration, for the same reason: this crate is linted by
+# its own invocation. See the root file for the rationale.
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 9
+
 [no_std_fs_operations]
 
 # `test_support::fs` is the general-purpose ambient boundary. Test fixtures

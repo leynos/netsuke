@@ -266,7 +266,7 @@ fn the_real_invocation_is_selected(#[case] source: &str) -> Result<()> {
 )]
 #[case::manifest(
     include_str!("../src/localization/manifest_keys.rs"),
-    "manifest.parse",
+    "manifest.schema_version.missing",
     40
 )]
 fn the_repository_macro_parses(

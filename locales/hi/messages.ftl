@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = { $path } पर बनाई गई dyndep फ़�
 
 # मैनिफ़ेस्ट के निदान।
 manifest.parse = मैनिफ़ेस्ट का विश्लेषण विफल रहा।
+manifest.schema_version.missing = [netsuke::manifest::schema_version] मैनिफ़ेस्ट में 'netsuke_version' घोषित करना आवश्यक है।
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' MAJOR.MINOR.0 प्रारूप में एक सिमैंटिक-वर्ज़न रिलीज़ होना चाहिए।
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } मैनिफ़ेस्ट स्कीमा { $declared } घोषित करता है, लेकिन Netsuke स्कीमा { $supported } का समर्थन करता है।
+manifest.schema_version.help = बिना प्री-रिलीज़ या बिल्ड मेटाडेटा के, MAJOR.MINOR.0 प्रारूप में ठीक समर्थित स्कीमा रिलीज़ घोषित करें।
 manifest.structure_error = { $name } पर मैनिफ़ेस्ट की संरचना में त्रुटि: { $details }
 manifest.yaml.parse = पंक्ति { $line }, स्तंभ { $column } पर YAML विश्लेषण त्रुटि: { $details }
 manifest.yaml.label = अमान्य YAML

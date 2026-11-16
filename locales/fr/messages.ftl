@@ -132,6 +132,10 @@ runner.io.dyndep.too_large = Le fichier dyndep généré à l’emplacement { $p
 
 # Diagnostics du manifeste.
 manifest.parse = L'analyse du manifeste a échoué.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Le manifeste doit déclarer 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' doit être une version de publication sémantique au format MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } déclare le schéma de manifeste { $declared }, mais Netsuke prend en charge le schéma { $supported }.
+manifest.schema_version.help = Déclarez exactement la version de schéma prise en charge au format MAJOR.MINOR.0, sans métadonnées de prépublication ni de compilation.
 manifest.structure_error = Erreur de structure du manifeste dans { $name } : { $details }
 manifest.yaml.parse = Erreur d'analyse YAML à la ligne { $line }, colonne { $column } : { $details }
 manifest.yaml.label = YAML non valide

@@ -70,7 +70,7 @@ use netsuke::ir::BuildGraph;       // assumed IR data structure
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example Netsuke manifest in YAML (string literal for test)
     let manifest_yaml = r#"
-        netsuke_version: "0.1"
+        netsuke_version: "1.0.0"
         rules:
           - name: "compile"
             command: "gcc -c $in -o $out"
@@ -160,7 +160,7 @@ use netsuke::ninja_gen;          // module for Ninja file generation
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
     // (Re-use the same manifest YAML as before)
     let manifest_yaml = r#"
-        netsuke_version: "0.1"
+        netsuke_version: "1.0.0"
         rules:
           - name: "compile"
             command: "gcc -c $in -o $out"
@@ -282,18 +282,24 @@ JSON diagnostics and help-target catalogues embed Netsuke's crate version. Left
 unredacted, that field changes on every version bump and would churn their
 snapshots without a behavioural change.
 
-The shared, private `add_generator_version_filter` helper in
-`src/snapshot_test_support.rs` is composed by the specialized
-`diagnostic_json_snapshot_settings()` and
-`help_targets_json_snapshot_settings()` builders. These builders add an insta
-filter that rewrites the Netsuke generator's version to `[version]`.
+The pattern itself is published by `test_support::generator_version`, because
+the integration suites bind the same definition and cannot reach this
+`#[cfg(test)]` module. Inside the library, the private
+`add_generator_version_filter` helper in `src/snapshot_test_support.rs` applies
+it, and three specialized builders compose that helper —
+`diagnostic_json_snapshot_settings()`, `help_targets_json_snapshot_settings()`,
+and the lint-gated `check_json_snapshot_settings()`.
+`schema_admission_diagnostic_snapshot_settings()` extends the diagnostic
+builder. These builders add an insta filter that rewrites the Netsuke
+generator's version to `[version]`.
 
 JSON diagnostic snapshot tests must bind through
-`snapshot_test_support::diagnostic_json_snapshot_settings()`, and JSON
-help-target catalogue snapshot tests must bind through
-`snapshot_test_support::help_targets_json_snapshot_settings()`. Text catalogue
-tests must continue to use the unfiltered `snapshot_settings("help_targets")`
-builder.
+`snapshot_test_support::diagnostic_json_snapshot_settings()`, JSON help-target
+catalogue snapshot tests through
+`snapshot_test_support::help_targets_json_snapshot_settings()`, and lint-result
+snapshot tests through `snapshot_test_support::check_json_snapshot_settings()`.
+Text catalogue tests must continue to use the unfiltered
+`snapshot_settings("help_targets")` builder.
 
 The filter anchors on the enclosing `"generator"` object and its
 `"name": "netsuke"` line. It redacts only that generator version; any other
@@ -302,8 +308,10 @@ field named `version` remains visible in snapshot diffs. The generator name and
 asserted structurally.
 
 The fixed diagnostic example exercises every structural filter path because the
-regular expression has no data-dependent branches. The `snapshot_test_support`
-property test separately varies valid `SemVer` generator versions.
+regular expression has no data-dependent branches. The
+`generator_version_filter_redacts_semver_variants` property test in
+`test_support::generator_version` separately varies valid `SemVer` generator
+versions.
 
 ## Running and Updating Snapshot Tests
 

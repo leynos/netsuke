@@ -99,6 +99,57 @@ pub(crate) fn diagnostic_json_snapshot_settings() -> Settings {
     settings
 }
 
+/// Add redaction filters for a schema-admission diagnostic snapshot.
+///
+/// The declared and supported schema releases, and the manifest file name that
+/// appears in the sentence, are sample values rather than properties of the
+/// diagnostic shape. Leaving them literal makes the row fail for the wrong
+/// reason twice over: it changes whenever `SupportedSchema::max_minor` advances,
+/// and it records a version pair that only one fixture supplies. Redacting them
+/// leaves the sentence's structure and code visible, which is what the snapshot
+/// exists to hold.
+///
+/// The patterns are anchored on the sentence shape the localizer emits, so an
+/// unrelated version or file name elsewhere in the document stays visible.
+pub(crate) fn schema_admission_diagnostic_snapshot_settings() -> Settings {
+    let mut settings = diagnostic_json_snapshot_settings();
+    settings.add_filter(DECLARED_SCHEMA_FILTER_PATTERN, DECLARED_SCHEMA_REPLACEMENT);
+    settings.add_filter(
+        SUPPORTED_SCHEMA_FILTER_PATTERN,
+        SUPPORTED_SCHEMA_REPLACEMENT,
+    );
+    settings.add_filter(MANIFEST_NAME_FILTER_PATTERN, MANIFEST_NAME_REPLACEMENT);
+    settings
+}
+
+/// Match the declared schema release in a schema-admission cause sentence.
+///
+/// Each pattern captures the surrounding wording and replaces only the
+/// substituted value, so the stored snapshot keeps reading as a sentence.
+const DECLARED_SCHEMA_FILTER_PATTERN: &str = r"(manifest schema )\x{2068}[0-9]+\.[0-9]+\x{2069}";
+
+/// Replace the declared release, keeping the clause that introduces it.
+const DECLARED_SCHEMA_REPLACEMENT: &str = "${1}[declared_schema]";
+
+/// Match the supported schema release in a schema-admission cause sentence.
+const SUPPORTED_SCHEMA_FILTER_PATTERN: &str = r"(supports schema )\x{2068}[0-9]+\.[0-9]+\x{2069}";
+
+/// Replace the supported release, keeping the clause that introduces it.
+const SUPPORTED_SCHEMA_REPLACEMENT: &str = "${1}[supported_schema]";
+
+/// Match the manifest file name in a schema-admission cause sentence.
+///
+/// Fluent isolates a substituted argument between U+2068 (first strong isolate)
+/// and U+2069 (pop directional isolate). Consuming the marks with the value
+/// matters twice over: a leftover isolate is invisible in the stored snapshot,
+/// and the name is only identifiable because the clause that follows it is
+/// fixed.
+const MANIFEST_NAME_FILTER_PATTERN: &str =
+    r"\x{2068}[^\x{2069}]*\x{2069}( declares manifest schema)";
+
+/// Replace the captured file name, keeping the clause that identifies it.
+const MANIFEST_NAME_REPLACEMENT: &str = "[manifest]${1}";
+
 /// Build snapshot settings for JSON help-target catalogues.
 ///
 /// Extend the help-target settings with the generator-version redaction while
@@ -128,4 +179,76 @@ pub(crate) fn theme_prefs(theme: ThemePreference) -> OutputPrefs {
         ThemeContext::new(None, None, OutputMode::Standard),
         |_| None,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    //! Verify the schema-admission filters redact exactly what they claim.
+    //!
+    //! A filter that stops matching fails silently: the snapshot simply starts
+    //! recording the sample data again. These rows therefore hold the rendered
+    //! sentence, the exact placeholder set, and the absence of Fluent's
+    //! directional isolates, so a pattern that drifts reds instead.
+    //!
+    //! This module owns the schema-admission filters, and its `#[cfg(test)]`
+    //! code is unreachable from an integration crate. The generator-version
+    //! rows moved to `test_support::generator_version` and the temporary-path
+    //! rows to `test_support::temp_path_filter`, so each definition and its
+    //! evidence are shared with the suites that bind them.
+
+    use super::*;
+    use anyhow::{Result, ensure};
+    use regex::Regex;
+    use rstest::rstest;
+
+    /// Redact one schema-admission cause sentence the way the settings do.
+    fn redact_schema_admission(sentence: &str) -> Result<String, regex::Error> {
+        let declared = Regex::new(DECLARED_SCHEMA_FILTER_PATTERN)?;
+        let supported = Regex::new(SUPPORTED_SCHEMA_FILTER_PATTERN)?;
+        let name = Regex::new(MANIFEST_NAME_FILTER_PATTERN)?;
+        let without_declared = declared.replace_all(sentence, DECLARED_SCHEMA_REPLACEMENT);
+        let without_supported =
+            supported.replace_all(&without_declared, SUPPORTED_SCHEMA_REPLACEMENT);
+        Ok(name
+            .replace_all(&without_supported, MANIFEST_NAME_REPLACEMENT)
+            .into_owned())
+    }
+
+    /// Wrap an argument the way Fluent isolates a substituted value.
+    ///
+    /// The marks are built from escapes rather than written literally, because
+    /// rustc denies invisible text-direction codepoints in source literals.
+    fn isolated(value: &str) -> String {
+        format!("\u{2068}{value}\u{2069}")
+    }
+
+    /// The schema-admission filters must keep the sentence readable while
+    /// removing every fixture value, because a filter that stops matching fails
+    /// silently: the snapshot simply starts recording the sample data again.
+    #[rstest]
+    #[case::supported_1_0("Netsukefile", "1.1", "1.0")]
+    #[case::later_minor("build.ninja", "99.42", "1.7")]
+    fn schema_admission_filters_redact_fixture_values(
+        #[case] name: &str,
+        #[case] declared: &str,
+        #[case] supported: &str,
+    ) -> Result<()> {
+        let sentence = format!(
+            "{} declares manifest schema {}, but this Netsuke supports schema {}.",
+            isolated(name),
+            isolated(declared),
+            isolated(supported),
+        );
+        let redacted = redact_schema_admission(&sentence)?;
+        let expected = concat!(
+            "[manifest] declares manifest schema [declared_schema], ",
+            "but this Netsuke supports schema [supported_schema]."
+        );
+        ensure!(redacted == expected, "unexpected redaction: {redacted:?}");
+        ensure!(
+            !redacted.contains('\u{2068}') && !redacted.contains('\u{2069}'),
+            "directional isolates must be consumed with the values they wrap: {redacted:?}"
+        );
+        Ok(())
+    }
 }

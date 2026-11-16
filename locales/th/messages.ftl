@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = ไฟล์ dyndep ที่สร้างขึ�
 
 # การวินิจฉัยไฟล์รายการ
 manifest.parse = การแจงไฟล์รายการล้มเหลว
+manifest.schema_version.missing = [netsuke::manifest::schema_version] ไฟล์รายการต้องประกาศ 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' ต้องเป็นรุ่นที่เผยแพร่ของเวอร์ชันเชิงความหมายในรูปแบบ MAJOR.MINOR.0
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } ระบุสคีมาของไฟล์รายการเป็น { $declared } แต่ Netsuke รองรับสคีมา { $supported }
+manifest.schema_version.help = ประกาศรุ่นสคีมาที่รองรับให้ตรงทุกประการในรูปแบบ MAJOR.MINOR.0 โดยไม่มีข้อมูลเมตาของรุ่นก่อนเผยแพร่หรือรุ่นบิลด์
 manifest.structure_error = โครงสร้างของไฟล์รายการผิดพลาดที่ { $name }: { $details }
 manifest.yaml.parse = การแจง YAML ผิดพลาดที่บรรทัด { $line } คอลัมน์ { $column }: { $details }
 manifest.yaml.label = YAML ไม่ถูกต้อง
