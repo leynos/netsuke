@@ -60,6 +60,11 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     "select-consumer-smoke-pattern-artifact": (
         ("static", f"{CONSUMER_SMOKE_JOB}.artifacts"),
     ),
+    # The name and the action inputs stay correct while the bytes land where
+    # the verifier will never look for them.
+    "redirect-consumer-smoke-artifact": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.artifacts"),
+    ),
     # The remaining download still names its artefact exactly, so only a
     # contract that requires both to be present sees the missing evidence.
     "drop-consumer-smoke-artifact-download": (
@@ -81,6 +86,9 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     # The report step survives, so the run still reads as a complete smoke
     # while nothing verified the published bytes.
     "drop-consumer-smoke-verifier": (("static", f"{CONSUMER_SMOKE_JOB}.action"),),
+    # A launcher that only prints the reviewed command runs nothing, so the
+    # whole command line, not just its arguments, is part of the contract.
+    "echo-consumer-smoke-verifier": (("static", f"{CONSUMER_SMOKE_JOB}.action"),),
     "compile-in-consumer-smoke-job": (("static", f"{CONSUMER_SMOKE_JOB}.compilation"),),
     "compile-in-consumer-smoke-action": (
         ("static", f"{CONSUMER_SMOKE_JOB}.compilation"),

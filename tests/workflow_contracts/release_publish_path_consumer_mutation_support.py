@@ -14,7 +14,7 @@ Run via ``make test-workflow-contracts``.
 import enum
 import typing as typ
 
-from release_publish_path_consumer_commands import action_cli_invocation
+from release_publish_path_consumer_commands import invoked_phase, smoke_command_line
 from release_publish_path_consumer_smoke import CONSUMER_SMOKE_JOB, LOCAL_SMOKE_ACTION
 
 #: One parsed workflow or composite-action document, mutated in place.
@@ -195,8 +195,7 @@ def cli_invocation(action: Job, phase: str) -> tuple[list[Job], int]:
     """
     declared = steps(action)
     for index, step in enumerate(declared):
-        tokens = action_cli_invocation(step)
-        if tokens is not None and tokens[1:2] == (phase,):
+        if invoked_phase(smoke_command_line(step)) == phase:
             return declared, index
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
 

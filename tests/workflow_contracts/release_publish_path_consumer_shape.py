@@ -30,16 +30,15 @@ CONSUMER_SMOKE_ACTION_PATH = ".github/actions/consumer-smoke/action.yml"
 #: The whole grant. The smoke reads public bytes and downloads them; it never
 #: writes repository state, exchanges an OIDC token, or enters an environment.
 CONSUMER_SMOKE_PERMISSIONS = {"contents": "read"}
-#: The only artefact names the job may download. The package record is the
-#: candidate's evidence and the trusted record is the publisher's; both arrive
-#: under fixed names. Anything else — above all a ``pattern`` — would let
-#: workflow artefact storage stand in for the public download the smoke exists
-#: to exercise.
+#: The only artefact names the job may download: the candidate's package record
+#: and the publisher's trusted record, both under fixed names. Anything else —
+#: above all a ``pattern`` — would let workflow artefact storage stand in for
+#: the public download the smoke exists to exercise.
 PACKAGE_RECORD_ARTIFACT = "release-crate-package"
-SMOKE_ARTIFACTS = frozenset({
-    PACKAGE_RECORD_ARTIFACT,
-    "${{ needs.finalize-github-release.outputs.trusted-artifact }}",
-})
+TRUSTED_RECORD_ARTIFACT = (
+    "${{ needs.finalize-github-release.outputs.trusted-artifact }}"
+)
+SMOKE_ARTIFACTS = frozenset({PACKAGE_RECORD_ARTIFACT, TRUSTED_RECORD_ARTIFACT})
 DOWNLOAD_ARTIFACT_PREFIX = "actions/download-artifact@"
 #: The checkout the job must use, and the two values it must pass. A persisted
 #: token would leave a credential in the job's git configuration, which is the
@@ -47,9 +46,8 @@ DOWNLOAD_ARTIFACT_PREFIX = "actions/download-artifact@"
 #: would exercise whatever the tag resolves to rather than the candidate.
 CHECKOUT_PREFIX = "actions/checkout@"
 CANDIDATE_REF = "${{ needs.metadata.outputs.candidate_commit }}"
-#: The target the shipped archive is executed on, and the exact inputs the job
-#: must pass. The action is not a matrix: a second platform would need its own
-#: runner rather than another row on this one.
+#: The target the shipped archive is executed on, and the exact inputs. The
+#: action is not a matrix: a second platform would need its own runner.
 SMOKE_ACTION_TARGET = "x86_64-unknown-linux-gnu"
 SMOKE_ACTION_INPUTS = {
     "identity-path": f"{PACKAGE_RECORD_ARTIFACT}/artifacts/package/identity.json",
@@ -58,6 +56,13 @@ SMOKE_ACTION_INPUTS = {
     "commit": "${{ needs.metadata.outputs.candidate_commit }}",
     "target": SMOKE_ACTION_TARGET,
     "work-dir": "${{ runner.temp }}/release-consumer-smoke",
+}
+#: The action input that reads each permitted artefact, and so the directory it
+#: must be downloaded to. Deriving the destination from the input keeps one
+#: source of truth: a download elsewhere leaves the verifier reading nothing.
+SMOKE_ARTIFACT_INPUTS = {
+    PACKAGE_RECORD_ARTIFACT: "identity-path",
+    TRUSTED_RECORD_ARTIFACT: "asset-digest-record",
 }
 #: The expressions that resolve to a credential, whatever name stores them.
 TOKEN_EXPRESSION = re.compile(r"\bgithub\.token\b|\bsecrets\b")
@@ -255,7 +260,7 @@ def check_smoke_failure_visibility(
 
 
 def _require_named_artifact(step: dict[str, object], violations: list[str]) -> None:
-    """Require one artefact download to name its artefact and no pattern."""
+    """Require one artefact download to name its artefact, path, and no pattern."""
     values = step.get("with")
     if not isinstance(values, dict):
         violations.append(
@@ -267,11 +272,32 @@ def _require_named_artifact(step: dict[str, object], violations: list[str]) -> N
             f"{CONSUMER_SMOKE_JOB}.artifacts: a pattern download would let "
             "artefact storage stand in for the public download"
         )
-    if str(values.get("name")) not in SMOKE_ARTIFACTS:
+    name = values.get("name")
+    if str(name) not in SMOKE_ARTIFACTS:
         violations.append(
-            f"{CONSUMER_SMOKE_JOB}.artifacts: {values.get('name')!r} is not "
+            f"{CONSUMER_SMOKE_JOB}.artifacts: {name!r} is not "
             "one of the permitted artefact names"
         )
+        return
+    destination = _artifact_destination(name)
+    if values.get("path") != destination:
+        violations.append(
+            f"{CONSUMER_SMOKE_JOB}.artifacts: {name!r} must be downloaded to "
+            f"{destination!r}, where the action's input reads it, got "
+            f"{values.get('path')!r}"
+        )
+
+
+def _artifact_destination(name: object) -> str:
+    """Return the directory the action reads one permitted artefact from.
+
+    Returns
+    -------
+    str
+        The first path segment of the input that reads the artefact.
+    """
+    input_name = SMOKE_ARTIFACT_INPUTS[str(name)]
+    return SMOKE_ACTION_INPUTS[input_name].split("/", maxsplit=1)[0]
 
 
 def check_smoke_action_inputs(job: dict[str, object], violations: list[str]) -> None:

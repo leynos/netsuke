@@ -15,6 +15,7 @@ Run via ``make test-workflow-contracts``.
 
 import typing as typ
 
+from release_publish_path_consumer_commands import SMOKE_CLI
 from release_publish_path_consumer_expectations import (
     CONSUMER_SMOKE_EXPECTED_VIOLATIONS,
     MUTATION_LABELS,
@@ -30,6 +31,7 @@ from release_publish_path_consumer_mutation_support import (
     smoke_job,
     steps,
 )
+from release_publish_path_consumer_shape import command_lines
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -186,6 +188,32 @@ def _select_pattern_artifact(release: Job, _action: Job) -> None:
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
 
 
+def _redirect_artifact_destination(release: Job, _action: Job) -> None:
+    """Send one permitted artefact to a directory the action never reads.
+
+    The artefact name, the action inputs, and the other download all stay as
+    reviewed, so only a contract that ties each destination to the file the
+    action opens notices the verifier will read a path that never arrived.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If the job downloads no artefact, so the mutation would change nothing
+        the contract reads.
+    """
+    for step in steps(smoke_job(release)):
+        if not str(step.get("uses", "")).startswith(DOWNLOAD_PREFIX):
+            continue
+        values = step.get("with")
+        if not isinstance(values, dict):
+            raise ConsumerSmokeMutationError(
+                ConsumerSmokeMutationIssue.MISSING_DOWNLOAD
+            )
+        values["path"] = "elsewhere"
+        return
+    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
+
+
 def _drop_artifact_download(release: Job, _action: Job) -> None:
     """Remove one artefact download, leaving the other exact and in place.
 
@@ -237,6 +265,27 @@ def _drop_verifier(_release: Job, action: Job) -> None:
     del declared[index]
 
 
+def _echo_verifier(_release: Job, action: Job) -> None:
+    """Replace the verifier's launcher with ``echo``, printing its command only.
+
+    Every reviewed argument stays in place, so only a contract that compares
+    the whole command line, launcher included, notices that nothing verified.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If no verify line remains to prefix, so the mutation would change
+        nothing the contract reads.
+    """
+    declared, index = cli_invocation(action, "verify")
+    step = declared[index]
+    for line in command_lines(step.get("run")):
+        if SMOKE_CLI in line:
+            step["run"] = f"echo {line}"
+            return
+    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
+
+
 def _compile_in_job(release: Job, _action: Job) -> None:
     """Append the source build a smoke must never run."""
     steps(smoke_job(release)).append(dict(COMPILATION_STEP))
@@ -263,11 +312,13 @@ _MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "add-consumer-smoke-invocation-guard": _guard_invocation,
     "persist-consumer-smoke-checkout-credentials": _persist_checkout_credentials,
     "select-consumer-smoke-pattern-artifact": _select_pattern_artifact,
+    "redirect-consumer-smoke-artifact": _redirect_artifact_destination,
     "drop-consumer-smoke-artifact-download": _drop_artifact_download,
     "absorb-consumer-smoke-job-failure": _absorb_job_failure,
     "absorb-consumer-smoke-step-failure": _absorb_step_failure,
     "absorb-consumer-smoke-action-failure": _absorb_action_failure,
     "drop-consumer-smoke-verifier": _drop_verifier,
+    "echo-consumer-smoke-verifier": _echo_verifier,
     "compile-in-consumer-smoke-job": _compile_in_job,
     "compile-in-consumer-smoke-action": _compile_in_action,
 }

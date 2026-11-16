@@ -3802,8 +3802,8 @@ from a work directory that validation refused: every phase is reported as
 to a smoke that never began.
 
 `tests/workflow_contracts/release_publish_path_consumer_shape.py` holds the
-job's dependencies, permissions, checkout, environment, artefact selection,
-action inputs, and failure-visibility checks, and
+job's dependencies, permissions, checkout, environment, artefact selection and
+destination, action inputs, and failure-visibility checks, and
 `release_publish_path_consumer_smoke.py` composes them with the guard's
 reachability oracle, re-exporting the shape names its callers use; the split
 keeps each module inside the 400-line cap. The checkout check is what keeps the
@@ -3814,10 +3814,13 @@ action's step environments as well as the job's, because those steps run in the
 same process but appear nowhere in the workflow. The failure-visibility check
 reads the job, its invocation step, and every step of the action, because a
 composite step that tolerates its own failure ends the action successfully and
-the job never sees the refusal. What the action's command lines may run is
+the job never sees the refusal. Each permitted download must also land in the
+directory the matching action input reads, so the file the verifier opens is
+the file the download wrote. What the action's command lines may run is
 asserted in `release_publish_path_consumer_commands.py`: both CLI invocations
-must appear exactly once, carry no `if`, and pass exactly the reviewed
-arguments, and no command line in the job or the action may name a compiler.
+must appear exactly once, carry no `if`, and run exactly the reviewed command
+line, launcher included, so a step that only `echo`es it is refused; and no
+command line in the job or the action may name a compiler.
 `release_publish_path_consumer_mutations.py` registers one labelled regression
 for each of those properties, each with the violation it must produce stated in
 `release_publish_path_consumer_expectations.py`, and

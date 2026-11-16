@@ -76,23 +76,31 @@ SMOKE_ACTION_ARGUMENTS = {
         "$WORK_DIRECTORY/phase-log.json",
     ),
 }
+#: How each invocation is launched: the step bounds it with ``timeout`` and
+#: reaches the PEP 723 script through ``uv run``. The launcher is part of the
+#: contract because ``echo`` in front of the reviewed arguments runs nothing,
+#: so a check that compared only the arguments would accept a step that merely
+#: printed its invocation.
+_UV_LAUNCHER = ("uv", "run", "--no-project", "--python", "3.14")
+SMOKE_ACTION_LAUNCHERS = {
+    "plan": ("timeout", "--kill-after=30s", "300s", *_UV_LAUNCHER),
+    "verify": ("timeout", "--kill-after=30s", "600s", *_UV_LAUNCHER),
+}
 #: A whole-word Rust build command. A comment may name the archive format, so
 #: only executable lines are read; a command line naming any of these would let
 #: the smoke build what it is supposed to download.
 COMPILATION_COMMAND = re.compile(r"\b(?:cargo|rustc|rustup)\b")
 
 
-def action_cli_invocation(step: dict[str, object]) -> tuple[str, ...] | None:
-    """Return the smoke-CLI command line a step runs, or ``None``.
+def smoke_command_line(step: dict[str, object]) -> tuple[str, ...] | None:
+    """Return the complete command line a step runs for the smoke CLI.
 
     Returns
     -------
     tuple[str, ...] | None
-        The tokens from :data:`SMOKE_CLI` to the end of the first command line
-        that runs it, or ``None`` when no line does. The path is stripped of
-        the wrapper that launches it — ``timeout`` and ``uv run`` — so the
-        comparison is of the invocation itself. A line that cannot be tokenized
-        is not a valid invocation and is skipped.
+        Every token of the first line that runs :data:`SMOKE_CLI`, launcher
+        included, or ``None`` when no line does. A line that cannot be
+        tokenized is not a command and is skipped.
     """
     for line in command_lines(step.get("run")):
         try:
@@ -100,7 +108,25 @@ def action_cli_invocation(step: dict[str, object]) -> tuple[str, ...] | None:
         except ValueError:
             continue
         if SMOKE_CLI in tokens:
-            return tokens[tokens.index(SMOKE_CLI) :]
+            return tokens
+    return None
+
+
+def invoked_phase(tokens: tuple[str, ...] | None) -> str | None:
+    """Return the subcommand one tokenised command line runs, or ``None``.
+
+    Returns
+    -------
+    str | None
+        The token after :data:`SMOKE_CLI`, which names the phase the CLI is
+        asked to run, or ``None`` when the line does not run the CLI or names
+        no phase after it.
+    """
+    if tokens is None:
+        return None
+    for index, token in enumerate(tokens):
+        if token == SMOKE_CLI:
+            return tokens[index + 1] if index + 1 < len(tokens) else None
     return None
 
 
@@ -113,11 +139,12 @@ def check_smoke_action_commands(
     dependencies, and the inputs all still read as correct, and a missing or
     rewritten invocation can leave the smoke reporting a release it never
     checked. Each subcommand must therefore appear exactly once, carry no
-    condition, and pass exactly the arguments the review approved.
+    condition, and run exactly the reviewed command line, launcher included.
     """
     if action is None:
         return
-    for phase, expected in SMOKE_ACTION_ARGUMENTS.items():
+    for phase, arguments in SMOKE_ACTION_ARGUMENTS.items():
+        expected = (*SMOKE_ACTION_LAUNCHERS[phase], *arguments)
         _require_invocation(phase, expected, action_steps(action), violations)
 
 
@@ -131,8 +158,9 @@ def _require_invocation(
     label = f"{CONSUMER_SMOKE_JOB}.action: the {phase} invocation"
     found = [
         (step, tokens)
-        for step, tokens in ((step, action_cli_invocation(step)) for step in steps)
-        if tokens is not None and tokens[:2] == (SMOKE_CLI, phase)
+        for step in steps
+        if (tokens := smoke_command_line(step)) is not None
+        and invoked_phase(tokens) == phase
     ]
     if len(found) != 1:
         violations.append(f"{label} must appear exactly once, found {len(found)}")
@@ -144,7 +172,7 @@ def _require_invocation(
         )
     if tokens != expected:
         violations.append(
-            f"{label} must pass exactly {list(expected)}, got {list(tokens)}"
+            f"{label} must run exactly {list(expected)}, got {list(tokens)}"
         )
 
 
@@ -182,8 +210,10 @@ def check_smoke_compilation(
 __all__ = [
     "COMPILATION_COMMAND",
     "SMOKE_ACTION_ARGUMENTS",
+    "SMOKE_ACTION_LAUNCHERS",
     "SMOKE_CLI",
-    "action_cli_invocation",
     "check_smoke_action_commands",
     "check_smoke_compilation",
+    "invoked_phase",
+    "smoke_command_line",
 ]
