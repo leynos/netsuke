@@ -102,8 +102,10 @@ fn binomial_kernel_matches_closed_form_for_r_up_to_two() {
         "the binomial kernel matches the u128 closed form on the bounded domain",
     );
 
-    // `2 * C(n, 2) = n * (n - 1)` lands just inside `u64` here, and just
-    // outside it at `2^33`, so an off-by-one in the overflow test cannot pass.
+    // The `n * (n - 1)` step behind both coefficients exceeds `u64::MAX`, so
+    // neither witness can pass through `u64` arithmetic; what separates them is
+    // the coefficient. `C(5_000_000_000, 2)` still fits and `C(2^33, 2)` does
+    // not, so an off-by-one in the overflow test cannot pass.
     kani::assert(
         kernel::checked_binomial(5_000_000_000, 2) == Some(12_499_999_997_500_000_000),
         "a step above u64::MAX still yields a representable coefficient",
@@ -158,8 +160,9 @@ fn binomial_kernel_never_panics_for_small_r() {
 
     // Then the loop itself on a symbolic operand. Each 128-bit division step
     // is a large circuit, so the sweep covers the reduced indices a template
-    // reaches most often rather than every index the cap admits; the exactness
-    // harness next to this one carries the rest.
+    // reaches most often rather than every index the cap admits. Indices from
+    // 3 to 33 are exercised by the unit tests and the Proptest oracles only:
+    // neither this harness nor the exactness sweep above reaches them.
     for r in [1_u64, 2] {
         let n: u64 = kani::any();
         kani::assume(n >= 8 && n <= 64);
@@ -175,9 +178,10 @@ fn binomial_kernel_never_panics_for_small_r() {
 /// Prove the falling-factorial kernel matches a checked `u128` product.
 ///
 /// The symbolic operand is bounded so the `u128` product stays small enough to
-/// bit-blast. The iteration cap itself is pinned by the boundary harness next
-/// to this one, because reaching it needs a twenty-step concrete loop and a
-/// symbolic loop of that depth costs paths rather than unrollings.
+/// bit-blast, so this harness covers small operands only. The boundary harness
+/// next to it adds concrete witnesses at the overflow edge, and no harness
+/// pins where the iteration cap lies: every `r` the cap refuses would overflow
+/// on its own, so the two refusals are indistinguishable.
 #[kani::proof]
 #[kani::solver(kissat)]
 #[kani::unwind(5)]
@@ -193,20 +197,22 @@ fn falling_factorial_kernel_matches_checked_product() {
     );
 }
 
-/// Pin the falling-factorial iteration cap from both sides.
+/// Pin the falling-factorial overflow boundary from both sides.
 ///
-/// `20!` is the largest falling factorial that still fits in `u64` and the cap
-/// refuses from 21 upwards, so these two witnesses straddle the boundary. Both
-/// loops are concrete — the twenty-step one and the immediate refusal — so the
-/// deep unwind bound costs unrollings rather than symbolic paths, and the
-/// unbounded operand exercises an early `None` on the second step.
+/// `20!` is the largest factorial that fits in `u64` and `21!` is the first
+/// that does not, so these two witnesses straddle the overflow boundary. They
+/// pin refusal rather than the cap's position: the cap refuses every `r` from
+/// 21 upwards, and each of those products overflows on its own. Both loops are
+/// concrete — the twenty-step one and the immediate refusal — so the deep
+/// unwind bound costs unrollings rather than symbolic paths, and the unbounded
+/// operand exercises an early `None` on the second step.
 #[kani::proof]
 #[kani::solver(kissat)]
 #[kani::unwind(21)]
 fn falling_factorial_boundary_is_pinned() {
     kani::assert(
         kernel::checked_falling_factorial(20, 20) == Some(2_432_902_008_176_640_000),
-        "the largest representable falling factorial is admitted",
+        "the largest factorial that fits in u64 is admitted",
     );
     kani::assert(
         kernel::checked_falling_factorial(u64::MAX, 20).is_none(),
@@ -214,7 +220,7 @@ fn falling_factorial_boundary_is_pinned() {
     );
     kani::assert(
         kernel::checked_falling_factorial(21, 21).is_none(),
-        "the first unrepresentable falling factorial is refused",
+        "the first length whose every product overflows is refused",
     );
 }
 
