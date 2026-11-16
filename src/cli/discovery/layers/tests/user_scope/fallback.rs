@@ -24,6 +24,19 @@ fn candidates(env_source: SharedEnvSource) -> Vec<PathBuf> {
     config_discovery(None, env_source).candidates()
 }
 
+/// Return a base path that is absolute on the host platform.
+///
+/// A literal `/config` carries no drive, so on Windows it is rooted but not
+/// absolute and the sanitised view would correctly treat it as unset. The
+/// pass-through case needs a value the host itself calls absolute.
+fn platform_absolute_base() -> OsString {
+    if cfg!(windows) {
+        OsString::from(r"C:\config")
+    } else {
+        OsString::from("/config")
+    }
+}
+
 /// An unusable base value reads as unset in the sanitised view.
 ///
 /// Each case names the variable on the test rather than reading a shared list,
@@ -55,7 +68,7 @@ fn absolute_value_passes_through(
     #[values("XDG_CONFIG_HOME", "APPDATA", "LOCALAPPDATA", "HOME", "USERPROFILE")]
     key: &'static str,
 ) {
-    let absolute = OsString::from("/config");
+    let absolute = platform_absolute_base();
     let source: SharedEnvSource = Arc::new(SanitisedUserBases::new(Arc::new(
         MapEnv::new().with_var(key, &absolute),
     )));
