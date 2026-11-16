@@ -1176,6 +1176,10 @@ conflict in `Decision log`, and escalate.
       `cfe95b461`; every log for that head reports 220, so the count is
       corrected in place rather than carried forward. Nothing else in that
       entry changes.
+    - Size tally. The corrected comment costs three net lines, so the
+      base-to-head figure is now 3,384 added and 1 deleted, a net 3,383 —
+      1,383 over the 2,000-line bar. D-22's fifth amendment carries the
+      arithmetic; the file counts and the production surface do not move.
 
 ## Surprises & discoveries
 
@@ -1696,7 +1700,15 @@ conflict in `Decision log`, and escalate.
   that is one more than the earlier counts because the `Proofs` workflow header
   became part of the delta. The production surface is unchanged at 1,017 lines,
   so the tests, harness, and BDD reading is 2,363 lines. The breach, its
-  breakdown, and the request for the owner's acceptance stand unchanged.
+  breakdown, and the request for the owner's acceptance stand unchanged. Fifth
+  amendment of 2026-11-16: the comment repair at `cd77f225e` moved the figure
+  again. `git diff --numstat 19b235138 HEAD` over `.rs` paths outside `verus/`
+  now sums to 3,384 added and 1 deleted, a net 3,383 — 1,383 over the bar. The
+  `cardinality.rs` doc comment grew by three lines to say what its witnesses do
+  not pin; no case, helper, or production line changed. The file counts and the
+  1,017-line production surface are unchanged, so the tests, harness, and BDD
+  reading is 2,366 lines. The breach, its breakdown, and the request for the
+  owner's acceptance stand unchanged.
 - D-23. Decision: correct the Kani stopping condition rather than leave a cap
   the runs did not obey, and state the two measurements it conflated. The
   correction is recorded here; whether the whole-suite exception is acceptable
