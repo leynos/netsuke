@@ -3627,6 +3627,16 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   target runs 101 cases, and the post-pin sweep advances to 89 identifiers, 52
   in `main` and 37 on this branch. No proof artefact is affected.
 
+  The complete sequential eleven-gate set passed on `878a87486` with an
+  unchanged HEAD and an empty working tree at both ends of the batch: 98.26%
+  doc-comment coverage (6478/6593), 5,770 Nextest cases with 9 skipped and the
+  doctests alongside them, 2,330 plus 30 workflow-contract cases, 227 Markdown
+  files linted with 0 issues and 227 unchanged at mdtablefix, every Mermaid
+  block validated, and every lint gate green. Both Whitaker invocations were
+  read rather than trusted: the gate's 3-second wall time came from warm
+  artefacts, and its log shows the `netsuke-build` and `test_support` runs each
+  finishing.
+
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
 [roadmap]: ../roadmap-hexagonal-hardening.md
