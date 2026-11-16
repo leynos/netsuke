@@ -2574,7 +2574,7 @@ refusal vocabulary.
 
 The ceilings are the RFC 0006 table 3 defaults, plus the output-content bound
 that six accepted child RFCs require, recorded in
-[ADR-0075](adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md):
+[ADR-0082](adrs/adr-0082-shared-resource-bounds-for-stdlib-helpers.md):
 
 | Constant                    | Value  | Applies to                                            |
 | --------------------------- | ------ | ----------------------------------------------------- |

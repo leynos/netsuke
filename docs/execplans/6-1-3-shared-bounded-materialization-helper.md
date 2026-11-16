@@ -467,8 +467,8 @@ conflict in `Decision log`, and escalate.
     authoritative run of this gate remains the hosted `kani-smoke` job, whose
     own log records 257.7 s and 261.5 s for a smaller patch set there.
 - [x] EP-M5: documentation, ADR, roadmap, and final gates.
-  - ADR (2026-11-09, renumbered 2026-11-13).
-    `docs/adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md` is
+  - ADR (2026-11-09, renumbered 2026-11-13, renumbered again 2026-11-16).
+    `docs/adrs/adr-0082-shared-resource-bounds-for-stdlib-helpers.md` is
     `Accepted`, dated 2026-11-09, and carries the context, the four options
     with a captioned comparison table, the outcome, the consequences, and the
     known risks (the `serde_json` off-by-one, the output-content row, and the
@@ -481,7 +481,10 @@ conflict in `Decision log`, and escalate.
     moved to 0075. The first sweep under-reported because it compared the
     zero-padded numbers as strings, so `0069 >= "060"` was false and the whole
     range was filtered out; the corrected sweep compares numerically. The ADR
-    is indexed in `docs/contents.md` as ADR-0075.
+    is indexed in `docs/contents.md` as ADR-0082. It was ADR-0075 from
+    2026-11-13 until 2026-11-16, when `main` took 0075 for the manifest
+    schema-version ADR [#808](https://github.com/leynos/netsuke/pull/808)
+    merged; D-26 records the renumber.
   - Design and layout (2026-11-09). `docs/netsuke-design.md` §4.7 gains a
     "Resource bounds" subsection with the ceilings, the exactness and
     precedence rules, the ownership boundary, and the ADR reference.
@@ -568,7 +571,7 @@ conflict in `Decision log`, and escalate.
     `E0603` the private module would give — each paired with a passing example
     as the vacuity control, following `src/manifest/glob/mod.rs`. Two
     documentation counts said "six" Kani harnesses where seven exist;
-    `docs/netsuke-design.md` §4.7 and ADR-0075 now say seven, and the
+    `docs/netsuke-design.md` §4.7 and ADR-0082 now say seven, and the
     retrospective no longer calls the module wholly private.
   - Gate repair (2026-11-15). The batch against the first repair head (since
     amended into `607e5bdf5`) stopped in `make lint` at `lint-clippy` with
@@ -1147,7 +1150,10 @@ conflict in `Decision log`, and escalate.
   0070 already allocated to `adr-0070-deny-by-default-test-mode-stdlib` and
   0074 as the highest, so the ADR, its heading, and its five references were
   moved to 0075. Impact: compare serials numerically, and sweep every remote
-  under `refs/remotes/`, not one named remote.
+  under `refs/remotes/`, not one named remote. A later merge proved the point
+  again: `main` took 0075 for a different decision in
+  [#808](https://github.com/leynos/netsuke/pull/808), so this branch's ADR
+  became 0082 on 2026-11-16 (D-26).
 - Observation: the installed Verus 0.2026.10.04.426d8b0 runs offline from
   `.verus/0.2026.10.04.426d8b0/verus/`. `rust_verify` needs two variables that
   the wrapper does not set for a direct invocation: `VERUS_Z3_PATH` pointing at
@@ -1655,6 +1661,20 @@ conflict in `Decision log`, and escalate.
   against the new code, which is a weaker claim than no claim at all; the
   correspondence limit belongs in the design record, where it already is, and
   the weekly schedule is what catches a proof that stops compiling.
+- D-26. Decision: renumber this branch's ADR from 0075 to 0082, because `main`
+  allocated 0075 to *Manifest schema versions and admission* when
+  [#808](https://github.com/leynos/netsuke/pull/808) merged on 2026-11-16.
+  Rationale: two accepted ADRs cannot share a serial, and the branch's own
+  reservation predates the merge rather than outranking it. Renumbering the
+  newcomer is the only option that leaves `main`'s published record intact. The
+  file, its heading, its `docs/contents.md` entry, and its five references in
+  `docs/netsuke-design.md`, `docs/developers-guide.md`,
+  `docs/repository-layout.md`, and RFC 0006 move together; the branch's own
+  records keep their history, and this entry plus the ADR bullet's amendment
+  explain the two earlier numbers (0070, then 0075). Impact: an ADR serial is a
+  claim on a shared namespace, so a branch that reserves one must re-check it
+  whenever the base advances, not only when the branch is written. Date/Author:
+  2026-11-16.
 
 ## Outcomes & retrospective
 
@@ -1692,7 +1712,7 @@ What was delivered:
   before being reverted, plus registration in the mutation workflow's
   `exclude-globs`, `KANI_EXCLUDES`, the `cargo-mutants` exclusion paragraph,
   and the Kani proof scope.
-- ADR-0075, the design §4.7 subsection, the developers'-guide re-use policy,
+- ADR-0082, the design §4.7 subsection, the developers'-guide re-use policy,
   the formal-verification record, the repository layout, the regenerated Kani
   harness table, the roadmap checkbox, and the RFC 0006 table 3 output-content
   row.
@@ -1705,7 +1725,7 @@ the surface that renders these refusals belongs to 6.1.4, 6.2.1, 6.4.2, and
 
 Discoveries and how they landed. The `serde_json` off-by-one (127 admitted
 containers for a nominal 128) is recorded in D-06, in the developers' guide,
-and in ADR-0075 rather than being silently matched. The missing table 3
+and in ADR-0082 rather than being silently matched. The missing table 3
 output-content row became D-12, the RFC amendment, and the ADR. Fluent's `f64`
 number storage is recorded as a hazard for counts above `2^53`, which matters
 because 100000 and 10000 are both far below it today but a future ceiling need

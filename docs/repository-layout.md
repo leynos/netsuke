@@ -196,7 +196,7 @@ output and some leaf files so the long-lived structure remains visible.
 - `src/stdlib/resource_bounds/`: The RFC 0006 ceilings, checked cardinality and
   running-total arithmetic, and typed refusals shared by every bounded template
   helper (see
-  [ADR-0075](adrs/adr-0075-shared-resource-bounds-for-stdlib-helpers.md)). Its
+  [ADR-0082](adrs/adr-0082-shared-resource-bounds-for-stdlib-helpers.md)). Its
   Kani harnesses live in `verification.rs` behind `#[cfg(kani)]`.
 - `test_support/`: Shared Rust test-support crate used by integration and
   behavioural tests.
