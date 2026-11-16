@@ -103,6 +103,22 @@ mod tests {
         ))
     }
 
+    /// A commit may sit below a blank line inside the same list item.
+    ///
+    /// Markdown lets a list item hold several paragraphs, and this rule shares
+    /// `markdown::bullet_entries` with the finding and obligation readers.
+    /// Ending the entry at the blank line dropped the commit, so a valid entry
+    /// was refused for naming none.
+    #[test]
+    fn accepts_a_wrapped_entry_whose_commit_follows_a_blank_line() -> Result<()> {
+        validate_landed_work(concat!(
+            "- `#652` / PR `#714` moved graph edges into a canonical\n",
+            "  edge arena.\n",
+            "\n",
+            "  Committed as `2c030fd1`.\n",
+        ))
+    }
+
     /// An entry that names only its issue is the shape that went unnoticed.
     #[test]
     fn rejects_an_entry_without_a_commit() -> Result<()> {

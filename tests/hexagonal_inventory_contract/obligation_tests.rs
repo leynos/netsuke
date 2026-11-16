@@ -86,6 +86,26 @@ fn accepts_a_row_naming_an_obligation_whose_clause_does_not_bind_it() -> Result<
     )
 }
 
+/// A `Tasks:` clause may sit below a blank line inside the same list item.
+///
+/// Markdown lets a list item hold several paragraphs, and this reader shares
+/// `markdown::bullet_entries` with the finding and landed-work rules. Ending
+/// the entry at the blank line dropped the clause, so a valid obligation was
+/// refused for naming no task — the same boundary the finding reader had to
+/// stop applying.
+#[test]
+fn accepts_a_tasks_clause_indented_after_a_blank_line() -> Result<()> {
+    accepts(
+        concat!(
+            "## Compatibility obligations\n\n",
+            "- CO-1: Preserve one.\n",
+            "\n",
+            "  Tasks: 26.1.2.\n",
+        ),
+        "| 26.1.2 | -- | -- | CO-1 |",
+    )
+}
+
 /// The obligated task's row omits the obligation another row names.
 ///
 /// This is the defect the older check could not see: `CO-1` is traced, so
