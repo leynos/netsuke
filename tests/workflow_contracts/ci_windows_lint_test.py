@@ -43,10 +43,12 @@ WHITAKER_WORKSPACE_FRAGMENTS = (
     '$env:RUSTFLAGS = "-D warnings"',
     "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
     "$suite = '--lib', 'whitaker_suite', '--fail-on-no-libraries'",
-    (
-        "& $whitaker @suite --no-deps --package netsuke-build '--' "
-        "--all-targets --all-features"
-    ),
+    "$packages = '--package', 'netsuke-build'",
+    "$packages += '--package', 'netsuke-build-slice-fixture'",
+    "$packages += '--package', 'netsuke-public-api-fixture'",
+    "& $whitaker @suite --no-deps @packages '--' --all-targets --all-features",
+    # The default-feature pass has no `--all-features` to follow it.
+    "& $whitaker @suite --no-deps @packages '--' --all-targets\n",
     "Push-Location test_support",
 )
 
@@ -57,6 +59,7 @@ WHITAKER_TEST_SUPPORT_FRAGMENTS = (
         "& $whitaker @suite --no-deps --package test_support '--' "
         "--all-targets --all-features"
     ),
+    "& $whitaker @suite --no-deps --package test_support '--' --all-targets\n",
     "finally {",
     "Pop-Location",
 )
@@ -150,4 +153,39 @@ def test_windows_job_runs_whitaker_through_powershell_wrapper(
     ]
     assert not missing, (
         f"{step_name} must propagate a test_support lint failure; missing {missing!r}"
+    )
+
+
+def test_windows_job_guards_each_of_the_four_whitaker_passes(
+    lint_steps: list[dict[str, object]],
+) -> None:
+    """Require an exit-code guard immediately after every Whitaker call.
+
+    A broad search for a guard would still pass if one pass lost its own guard
+    while a later pass kept one, letting a failed pass pass silently.
+    """
+    step = named_step(lint_steps, "Lint (Whitaker)")
+    match step.get("run"):
+        case str() as run:
+            pass
+        case _:
+            pytest.fail("Lint (Whitaker) must declare a PowerShell run block")
+
+    lines = [line.strip() for line in run.splitlines() if line.strip()]
+    calls = [
+        index for index, line in enumerate(lines) if line.startswith("& $whitaker")
+    ]
+    assert len(calls) == 4, (
+        f"expected four Whitaker passes (application and fixtures, test_support; "
+        f"each with all features and with defaults), found {len(calls)}"
+    )
+    expected = [*WHITAKER_EXIT_GUARD_FRAGMENTS, "}"]
+    unguarded = [
+        lines[index]
+        for index in calls
+        if lines[index + 1 : index + 1 + len(expected)] != expected
+    ]
+    assert not unguarded, (
+        f"each Whitaker call must be followed immediately by the exit-code "
+        f"guard; unguarded: {unguarded!r}"
     )

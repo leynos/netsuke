@@ -197,7 +197,17 @@ jobs:
           # keeps a missing suite from passing as a lint-free check. The
           # Makefile's `WHITAKER_SUITE_SELECTION` carries the full rationale.
           $suite = '--lib', 'whitaker_suite', '--fail-on-no-libraries'
-          & $whitaker @suite --no-deps --package netsuke-build '--' --all-targets --all-features
+          # The root pass also covers the two fixture packages, which Clippy's
+          # workspace-wide gate once covered, and each location runs twice: all
+          # features, then the default features.
+          $packages = '--package', 'netsuke-build'
+          $packages += '--package', 'netsuke-build-slice-fixture'
+          $packages += '--package', 'netsuke-public-api-fixture'
+          & $whitaker @suite --no-deps @packages '--' --all-targets --all-features
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          & $whitaker @suite --no-deps @packages '--' --all-targets
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
@@ -205,6 +215,10 @@ jobs:
           try {
             $env:DYLINT_TOML = Get-Content dylint.toml -Raw
             & $whitaker @suite --no-deps --package test_support '--' --all-targets --all-features
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+            & $whitaker @suite --no-deps --package test_support '--' --all-targets
             if ($LASTEXITCODE -ne 0) {
               exit $LASTEXITCODE
             }

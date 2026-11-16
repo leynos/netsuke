@@ -3,10 +3,12 @@
 //! The lint gate is configuration, so a wrong invocation is silent: it either
 //! lints less than intended or refuses to start at all. Two properties matter.
 //!
-//! First, the gate must run twice — once at the repository root for
-//! `netsuke-build` and once from `test_support/` — because the two packages
-//! carry different `dylint.toml` policies. A single invocation would apply the
-//! root policy to `test_support` or leave the crate unlinted.
+//! First, the gate must run from two places — at the repository root for
+//! `netsuke-build` and the two fixture packages, and from `test_support/` —
+//! because the packages carry different `dylint.toml` policies. A single
+//! invocation would apply the root policy to `test_support` or leave the crate
+//! unlinted. Each place runs twice, with all features and with the default
+//! features, so code selected by a feature being absent is linted too.
 //!
 //! Second, both invocations must select `whitaker_suite` by name and refuse to
 //! run without it. The rolling release publishes a standalone library for every
@@ -142,6 +144,94 @@ fn suite_selection_definition(makefile: &str) -> Result<&str> {
     Ok(*selection)
 }
 
+/// Require exactly one of a location's passes to enable `--all-features`.
+///
+/// `location` names the place the passes run from, and `lines` holds that
+/// location's Whitaker invocations. The other pass is the default-feature one,
+/// which lints code that a feature being absent selects.
+///
+/// # Errors
+///
+/// Returns an error if the number of `--all-features` passes is not one.
+fn ensure_one_all_features_pass(location: &str, lines: &[&str]) -> Result<()> {
+    // Cargo's arguments follow the standalone `--`; a pass that omits
+    // `--all-targets` skips tests, examples and benches.
+    for line in lines {
+        let cargo_arguments: Vec<&str> = line
+            .split_whitespace()
+            .skip_while(|token| *token != "--")
+            .collect();
+        ensure!(
+            cargo_arguments.contains(&"--all-targets"),
+            "every {location} Whitaker pass must pass --all-targets; found {line:?}"
+        );
+        // The default-feature pass must not select features by another route.
+        if !cargo_arguments.contains(&"--all-features") {
+            ensure!(
+                !cargo_arguments.iter().any(|token| {
+                    token.starts_with("--features")
+                        || token.starts_with("--no-default-features")
+                        || *token == "-F"
+                }),
+                concat!(
+                    "the {location} default-feature Whitaker pass must not ",
+                    "select features explicitly; found {line:?}",
+                ),
+                location = location,
+                line = line
+            );
+        }
+    }
+    let all_features = lines
+        .iter()
+        .filter(|line| line.contains("--all-features"))
+        .count();
+    ensure!(
+        all_features == 1,
+        concat!(
+            "the {location} Whitaker passes should be one with --all-features ",
+            "and one with the default features; found {all_features} with ",
+            "--all-features in {lines:?}",
+        ),
+        location = location,
+        all_features = all_features,
+        lines = format!("{lines:?}")
+    );
+    Ok(())
+}
+
+/// Require each root invocation to select the application and both fixtures.
+///
+/// `root` holds the Whitaker invocations that run from the repository root. The
+/// fixture packages are workspace members that Clippy's workspace-wide
+/// complexity gate once covered; `--no-deps` keeps each package on the
+/// configuration it is run with, so `test_support` loads its own.
+///
+/// # Errors
+///
+/// Returns an error if any root invocation selects another set of packages or
+/// omits `--no-deps`.
+fn ensure_root_selects_application_and_fixtures(root: &[&str]) -> Result<()> {
+    let expected_root = [
+        "netsuke-build",
+        "netsuke-build-slice-fixture",
+        "netsuke-public-api-fixture",
+    ];
+    ensure!(
+        root.iter().all(|line| {
+            package_selections(line) == expected_root && line.contains("--no-deps")
+        }),
+        concat!(
+            "each root Whitaker invocation must select exactly {expected_root:?} ",
+            "and skip dependency checks so test_support loads its own ",
+            "dylint.toml; found {root:?}",
+        ),
+        expected_root = expected_root,
+        root = format!("{root:?}")
+    );
+    Ok(())
+}
+
 #[test]
 fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
@@ -153,11 +243,11 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
         .filter(|line| line.contains("$(WHITAKER)"))
         .collect();
     ensure!(
-        invocations.len() == 2,
+        invocations.len() == 4,
         concat!(
-            "lint-whitaker should invoke Whitaker twice — once at the ",
-            "repository root for netsuke and once inside test_support — ",
-            "found {count}: {recipe:?}",
+            "lint-whitaker should invoke Whitaker four times — at the ",
+            "repository root and inside test_support, each with all features ",
+            "and with the default features — found {count}: {recipe:?}",
         ),
         count = invocations.len(),
         recipe = recipe
@@ -169,22 +259,22 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
         .iter()
         .partition(|line| line.contains("cd test_support"));
     ensure!(
-        scoped.len() == 1,
+        scoped.len() == 2,
         concat!(
-            "exactly one lint-whitaker invocation should run from ",
+            "exactly two lint-whitaker invocations should run from ",
             "test_support/, found {count}: {recipe:?}",
         ),
         count = scoped.len(),
         recipe = recipe
     );
     ensure!(
-        scoped.first().is_some_and(|line| {
+        scoped.iter().all(|line| {
             line.contains(r#"DYLINT_TOML="$$(cat dylint.toml)""#)
                 && package_selections(line) == ["test_support"]
                 && line.contains("--no-deps")
         }),
         concat!(
-            "the scoped Whitaker invocation must explicitly load ",
+            "each scoped Whitaker invocation must explicitly load ",
             "test_support/dylint.toml and select exactly test_support after ",
             "workspace membership changes Cargo's configuration and package ",
             "roots; found {scoped:?}",
@@ -192,25 +282,18 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
         scoped = format!("{scoped:?}")
     );
     ensure!(
-        root.len() == 1,
+        root.len() == 2,
         concat!(
-            "exactly one lint-whitaker invocation should run from the ",
+            "exactly two lint-whitaker invocations should run from the ",
             "repository root, found {count}: {recipe:?}",
         ),
         count = root.len(),
         recipe = recipe
     );
-    ensure!(
-        root.first().is_some_and(|line| {
-            package_selections(line) == ["netsuke-build"] && line.contains("--no-deps")
-        }),
-        concat!(
-            "the root Whitaker invocation must select exactly netsuke-build and skip ",
-            "dependency checks so test_support loads its own dylint.toml; ",
-            "found {root:?}",
-        ),
-        root = format!("{root:?}")
-    );
+    ensure_root_selects_application_and_fixtures(&root)?;
+    // One pass per feature set in each location: all features, and defaults.
+    ensure_one_all_features_pass("root", &root)?;
+    ensure_one_all_features_pass("test_support", &scoped)?;
     Ok(())
 }
 

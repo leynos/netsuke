@@ -670,15 +670,22 @@ lint-clippy: check-build-tools ## Run rustdoc and Clippy with warnings denied
 	$(GATE_RUSTFLAGS) $(CARGO) clippy $(CLIPPY_FLAGS)
 
 # Whitaker builds on its installer-managed toolchain, which must not inherit the
-# repository's development flags, so its two commands take neither
-# GATE_RUSTFLAGS nor the caller's flags: each clears the encoded flags and
-# assigns the warning policy as its own `RUSTFLAGS`. An unset value would leave
-# Cargo reading the configuration's `rustflags`.
+# repository's development flags, so its commands take neither GATE_RUSTFLAGS
+# nor the caller's flags: each clears the encoded flags and assigns the warning
+# policy as its own `RUSTFLAGS`. An unset value would leave Cargo reading the
+# configuration's `rustflags`.
+#
+# The gate runs four passes, matching the coverage Clippy's workspace-wide
+# `cognitive_complexity` once gave: the application and the two fixture
+# packages, then `test_support`, each with all features and again with the
+# default features, because some code is selected by a feature being absent.
 lint-whitaker: check-build-tools ## Run the Whitaker Dylint suite with warnings denied
-	env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) $(WHITAKER_SUITE_SELECTION) --no-deps --package netsuke-build -- --all-targets --all-features
+	env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) $(WHITAKER_SUITE_SELECTION) --no-deps --package netsuke-build --package netsuke-build-slice-fixture --package netsuke-public-api-fixture -- --all-targets --all-features
+	env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) $(WHITAKER_SUITE_SELECTION) --no-deps --package netsuke-build --package netsuke-build-slice-fixture --package netsuke-public-api-fixture -- --all-targets
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
 	cd test_support && env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) $(WHITAKER_SUITE_SELECTION) --no-deps --package test_support -- --all-targets --all-features
+	cd test_support && env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) $(WHITAKER_SUITE_SELECTION) --no-deps --package test_support -- --all-targets
 
 # actionlint is resolved in the recipe shell below, never while Make parses the
 # file: only the recipe shell receives the curated PATH, so a parse-time probe
