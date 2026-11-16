@@ -3277,6 +3277,11 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   for EP-M4 is hosted equilibrium. No proof artefact is affected. A fresh
   assessment is requested for this candidate.
 
+  The complete sequential eleven-gate set passed on `0ae1c17cb` with an
+  unchanged HEAD and an empty working tree at both ends of the batch: 98.26%
+  doc-comment coverage, 5,758 Nextest cases with 9 skipped, 2,330 plus 30
+  workflow-contract cases, 227 Markdown files clean, and every lint gate green.
+
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
 [roadmap]: ../roadmap-hexagonal-hardening.md
