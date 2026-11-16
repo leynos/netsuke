@@ -105,7 +105,14 @@ Ninja or output consumption.
 - Serial dyndep architecture:
   [ADR-0011](adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md)
 
-## Amendment — 2026-11-12: Reject generated-state aliases
+## Amendments
+
+One amendment, dated 2026-11-12, is recorded below. It tightens how the
+generated-state directory is established and does not change the retention
+decision itself. No separate ADR amends this record, so the Status section
+carries no `Amended by ADR-nnnn` banner; the dated entries here are the record.
+
+### Amendment 1: reject generated-state aliases (2026-11-12)
 
 The original decision assumed `.netsuke` and `.netsuke/dyndep` were ordinary
 directories. They are project-controlled state, so a manifest can ship either
