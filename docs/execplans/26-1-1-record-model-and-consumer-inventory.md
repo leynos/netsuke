@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 66. See `Revision note` at the foot of this document. This plan was
+Revision 67. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -2236,6 +2236,33 @@ pre-rebase history if an old hash must be inspected.
   branch-only range `fa06bdb21..HEAD` is 36, leaving 52 in the `main` target.
   Date/Author: 2026-11-16, implementation agent, on CodeRabbit's inline review.
 
+- Decision D-53 (2026-11-16): closed the pre-merge table's failing Unit
+  Architecture row, which named a real fail-open I had written myself.
+
+  The row said `roadmap_tasks` should be explicit about its regex failure
+  rather than returning `BTreeMap::new()`. It is right, and it is the same
+  defect class the whole contract exists to refuse: `.ok()` followed by an
+  empty return maps "the pattern did not compile" onto "this roadmap has no
+  tasks", and every caller reads an empty map as agreement.
+  `validate_trace_coverage` asks which tasks depend on 26.1.1, gets none, and
+  passes; `dependents_of` over an empty map is empty, so the difference it
+  computes is empty too.
+
+  The patterns are compile-time constants, so the failure is a programming
+  error with no recoverable meaning. They are now `LazyLock` statics that panic
+  through `expect`, matching what `markdown.rs` already does for its constant
+  patterns, and each is compiled once rather than per call. The new
+  `roadmap_parser_never_reports_an_empty_map_for_a_populated_roadmap` pins the
+  direction that matters — a populated roadmap must yield tasks — and I
+  verified it fails against a re-injected empty map.
+
+  Worth recording: 15 other cases failed with that probe, so the whole target
+  would have caught the regression. The narrow test is still the one that names
+  the defect, which is what a future reader of a red run needs.
+
+  This is a `tests/` change, so the post-pin sweep advances to 89 identifiers
+  at 52/37. Date/Author: 2026-11-16, implementation agent, on the pre-merge row.
+
 ## Outcomes & retrospective
 
 EP-M1 to EP-M3 are complete. On 2026-11-03, the user directed acceptance of
@@ -3590,6 +3617,15 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   files linted with 0 issues and 227 unchanged at mdtablefix, every Mermaid
   block validated, and every lint gate green. The contract target runs the 100
   cases this revision records.
+
+- Revision 67 (2026-11-16): closed the pre-merge table's failing Unit
+  Architecture row (D-53). `roadmap_tasks` compiled its patterns with
+  `Regex::new(...).ok()` and returned an empty map on failure, which every
+  caller reads as "the roadmap covers nothing" — `validate_trace_coverage` then
+  passes vacuously. The patterns are now `LazyLock` statics that panic through
+  `expect`, and a test pins that a populated roadmap yields tasks. The contract
+  target runs 101 cases, and the post-pin sweep advances to 89 identifiers, 52
+  in `main` and 37 on this branch. No proof artefact is affected.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

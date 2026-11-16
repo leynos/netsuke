@@ -254,12 +254,12 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-16 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 52 in the current `main` target and
-thirty-six on this branch. Every one of the thirty-six touches this inventory's
-contract test, adding it, refactoring it, or repairing a hole a review found in
-it; none changes production behaviour. The span floor the `test_support` crate
-shares with the root is no longer among them: `fa06bdb21` landed that setting
-upstream, with a refactor of the one genuine cluster, before this branch was
-rebased onto it. Regenerate the list with
+thirty-seven on this branch. Every one of the thirty-seven touches this
+inventory's contract test, adding it, refactoring it, or repairing a hole a
+review found in it; none changes production behaviour. The span floor the
+`test_support` crate shares with the root is no longer among them: `fa06bdb21`
+landed that setting upstream, with a refactor of the one genuine cluster,
+before this branch was rebased onto it. Regenerate the list with
 `git log 8a961000..HEAD --format=%h -- src build.rs tests test_support benches`;
 it goes stale whenever a commit touches one of those paths, so treat the
 enumeration below, not a remembered count, as the claim. This list is re-sweep
@@ -379,6 +379,7 @@ context for later consumers; it does not move the inventory pin.
 - `e4ef7c511` Add terminal rendering regression tests (3.12.3) (#809)
 - `e52d3ef49` Show readable inline-recipe progress (3.14.11) (#944) (#956)
 - `e6412c5ea` Share the bullet collector instead of duplicating it
+- `e65a21143` Stop reporting a broken roadmap pattern as no tasks
 - `e6c49be3f` Tighten inventory contract checks against silent passes
 - `f8df5d808` Bump the toolchain to nightly-2026-10-22 (#947)
 - `fa06bdb21` Restore the lint gate against bumpy_road_function 0.3.0 (#1139)
