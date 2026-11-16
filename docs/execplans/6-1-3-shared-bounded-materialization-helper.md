@@ -1132,6 +1132,20 @@ conflict in `Decision log`, and escalate.
       tests, harness, and BDD reading moves to 2,363. The breach and the request
       for the plan owner's acceptance stand; only the magnitude moves, and
       D-22's fourth amendment carries it.
+    - Final-commit gates. All nine ran at `cfe95b461` with a clean working tree:
+      `make check-fmt` 3 s; `make lint` 34 s; `make typecheck` 1 s;
+      `make markdownlint` 31 s; `make nixie` 2 s; `make test` 81 s (5,842
+      nextest cases passed, 9 skipped; 219 doctests passed, 66 ignored);
+      `make test-workflow-contracts` 542 s (2,330 passed, 3 skipped, plus 30
+      passed); `make test-rfc-stdlib-coverage` 5 s (282 passed); and
+      `make doc-coverage` 16 s (98.29% aggregate, 6,624 of 6,739 items, against
+      the 80% threshold). The short figures are warm-cache runs after the batch
+      that preceded them, not reduced work; `make test` alone had run cold in
+      the previous batch at 180 s. The first attempt at this set, at
+      `91607117a`, failed `make markdownlint` with `MD013` on an 85-column line
+      the inserted prose pushed over the limit, which is why the record is
+      `cfe95b461`; every other gate in that void batch had passed. The three
+      owner decisions are still requested rather than assumed.
 
 ## Surprises & discoveries
 
