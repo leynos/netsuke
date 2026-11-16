@@ -224,3 +224,34 @@ def test_extract_binary_translates_a_write_failure(
     assert not list(destination.iterdir()), (
         "a refused write must leave the directory as it found it"
     )
+
+
+def test_extract_binary_reports_an_absolute_path_for_a_relative_destination(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Write and report one entry, however the destination was named.
+
+    The destination is resolved once, before it is checked, so a caller that
+    passed a relative path still receives the absolute path of the file that
+    was written. Resolving the write and the report separately would let the
+    two name different entries.
+    """
+    monkeypatch.chdir(tmp_path)
+    archive = tarball(tmp_path / "archive.tar.gz")
+    layout = adapter.scan_archive(archive, expected_sha256=digest_of(archive))
+    destination = pathlib.Path("out")
+    destination.mkdir()
+
+    written = extract.extract_binary(
+        archive, layout, destination, expected_sha256=digest_of(archive)
+    )
+
+    assert written.is_absolute(), (
+        "the returned path must not depend on the caller's working directory"
+    )
+    assert written == tmp_path / "out" / policy.BINARY_NAME, (
+        "the returned path must name the file the extraction wrote"
+    )
+    assert written.read_bytes() == BINARY_BYTES, (
+        "the file at the returned path must be the archive's binary"
+    )

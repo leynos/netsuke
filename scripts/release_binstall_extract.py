@@ -87,7 +87,8 @@ def extract_binary(
         The layout an earlier scan accepted. The archive is re-scanned, and a
         difference is refused rather than trusted.
     destination
-        A caller-created, empty directory.
+        A caller-created, empty directory. It is resolved once, so the returned
+        path is absolute even when this one is relative.
     expected_sha256
         The trusted digest the archive is verified against while it is open
         for extraction. It is the only value here that binds the copy to the
@@ -118,7 +119,11 @@ def extract_binary(
     the archive is opened and scanned. The module docstring shows a complete
     extraction of a one-member archive.
     """
-    _require_fresh_directory(destination)
+    # Resolved once, against the caller's working directory, so the path handed
+    # back and the file written name the same entry whatever directory the
+    # caller happens to run in.
+    output = destination.absolute()
+    _require_fresh_directory(output)
     with verified_archive(archive_path, expected_sha256=expected_sha256) as validated:
         if validated.layout != layout:
             msg = (
@@ -127,7 +132,7 @@ def extract_binary(
             )
             raise ExtractionError(msg)
         entry = _binary_entry(validated.headers)
-        return _write_entry(validated.archive, entry, destination, layout)
+        return _write_entry(validated.archive, entry, output, layout)
 
 
 def _require_fresh_directory(destination: pathlib.Path) -> None:
