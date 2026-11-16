@@ -8,7 +8,9 @@
 //!
 //! The tables below pin named spellings as a readable contract. The open-ended
 //! space between them — any sequence of `.`, `..` and ordinary names a
-//! template can compose — belongs to [`resolution_properties`].
+//! template can compose — belongs to [`resolution_properties`], and how a
+//! recorded root is matched against a request spelt with a different case
+//! belongs to [`case_matching`].
 
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -20,6 +22,7 @@ use test_support::{localizer_test_lock, set_en_localizer};
 
 use super::{ReadingRoot, is_capability_escape};
 
+mod case_matching;
 mod resolution_properties;
 
 /// A reading root bound to `directory` with its absolute spelling recorded.
