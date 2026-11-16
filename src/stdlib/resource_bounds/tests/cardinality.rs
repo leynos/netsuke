@@ -56,8 +56,11 @@ fn product_witnesses(
 /// Witnesses for the binomial coefficient, cross-checked against Pascal.
 ///
 /// `C(67, 33)` is the largest central coefficient that fits in a `u64`, and
-/// `C(68, 34)` is the first that does not, so the pair pins the iteration cap
-/// from both sides.
+/// `C(68, 34)` is the first that does not, so the pair pins the
+/// representability boundary. It does not pin where the iteration cap lies:
+/// `C(68, 34)` needs 34 iterations, which the cap refuses, but its product
+/// overflows on its own, so a raised or removed cap refuses it too and the two
+/// refusals are indistinguishable.
 #[rstest]
 #[case::largest_central_fit(67, 33, Some(14_226_520_737_620_288_370))]
 #[case::next_central_overflows(68, 34, None)]
