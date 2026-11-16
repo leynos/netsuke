@@ -197,7 +197,7 @@ pub(super) struct TraceRow {
 pub(super) fn parse_trace_row(row: &str) -> Result<TraceRow> {
     let cells = table_cells(row);
     let width = cells.len();
-    let Ok(cells) = <[String; TRACE_COLUMNS]>::try_from(cells) else {
+    let Ok(columns) = <[String; TRACE_COLUMNS]>::try_from(cells) else {
         bail!(
             concat!(
                 "trace row should carry {} cells, the width its `Task`-headed header ",
@@ -208,7 +208,7 @@ pub(super) fn parse_trace_row(row: &str) -> Result<TraceRow> {
             row
         );
     };
-    let [_task, register_items, _findings, obligations] = cells;
+    let [_task, register_items, _findings, obligations] = columns;
     Ok(TraceRow {
         register_items,
         obligations,
