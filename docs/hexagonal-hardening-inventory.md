@@ -254,7 +254,7 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-16 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 52 in the current `main` target and
-thirty-one on this branch. Every one of the thirty-one touches this inventory's
+thirty-two on this branch. Every one of the thirty-two touches this inventory's
 contract test, adding it, refactoring it, or repairing a hole a review found in
 it; none changes production behaviour. The span floor the `test_support` crate
 shares with the root is no longer among them: `fa06bdb21` landed that setting
@@ -296,6 +296,7 @@ context for later consumers; it does not move the inventory pin.
 - `3b41f0b83` Add the pinned inventory contract (26.1.1)
 - `3b91d5b5f` Read the row's width without shadowing its cells
 - `4211f22f0` Require the real inventory to populate its iterated sections
+- `43cd9a7ff` Give the region properties an independent oracle
 - `49f8fb3d6` Plan: Record CI test-speed evidence and adoption gates (#894)
   (#918)
 - `4a48e7a9c` Replace heading wrappers with a level-typed parser
