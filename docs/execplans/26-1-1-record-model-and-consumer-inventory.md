@@ -2088,37 +2088,6 @@ pre-rebase history if an old hash must be inspected.
   D-44 explains, the chain stops with the documentation commit that records it.
   Date/Author: 2026-11-16, implementation agent, on the pre-merge row.
 
-- Decision D-50 (2026-11-16): closed the third shared-oracle case, which only
-  a mutation I had not run could expose.
-
-  D-49 recorded that I checked the module's other properties and found only the
-  boundary pair defective. That check was sound but incomplete: I probed the
-  harvest property by removing its truncation, which fails it, and concluded
-  the rule was guarded. CodeRabbit's follow-up named a different mutation —
-  making `is_heading` always return false — under which `first_heading_offset`
-  returns the whole region, the heading-free assertion sees nothing, and
-  `region.starts_with(harvest)` holds trivially because the region starts with
-  itself. Passing one mutation does not clear a predicate that the code and the
-  assertion both call; the relevant mutation is the one applied to the shared
-  predicate itself, and I had not applied it here.
-
-  The property is now
-  `harvests_are_exactly_the_region_before_the_first_heading` and asserts that
-  the harvest equals the body the generator wrote beneath the heading. That
-  oracle involves no parser predicate at all, so it holds under every mutation
-  of one. It fails under the always-false mutation and passes against the
-  control. `is_heading` left the test module's imports with the last assertion
-  that used it.
-
-  The general lesson, worth more than the fix: when a property and the code
-  under test share a predicate, enumerate the mutations of *that predicate*
-  rather than mutations of the behaviour around it. D-49 stated the rule and I
-  still applied it too narrowly.
-
-  This is a `tests/` change, so the post-pin sweep advances to 85 identifiers
-  at 52/33, verified equal to the live `git log` and to its own sorted form.
-  Date/Author: 2026-11-16, implementation agent, on CodeRabbit's follow-up.
-
 - Decision D-49 (2026-11-16): confirmed and fixed the shared-oracle defect
   CodeRabbit's pre-merge row reported but had not executed.
 
@@ -2159,6 +2128,37 @@ pre-rebase history if an old hash must be inspected.
   its `3*` neighbours was wrong twice; the check now compares the enumeration
   against its own sorted form as well as against the live `git log`.
   Date/Author: 2026-11-16, implementation agent, on the pre-merge row.
+
+- Decision D-50 (2026-11-16): closed the third shared-oracle case, which only
+  a mutation I had not run could expose.
+
+  D-49 recorded that I checked the module's other properties and found only the
+  boundary pair defective. That check was sound but incomplete: I probed the
+  harvest property by removing its truncation, which fails it, and concluded
+  the rule was guarded. CodeRabbit's follow-up named a different mutation —
+  making `is_heading` always return false — under which `first_heading_offset`
+  returns the whole region, the heading-free assertion sees nothing, and
+  `region.starts_with(harvest)` holds trivially because the region starts with
+  itself. Passing one mutation does not clear a predicate that the code and the
+  assertion both call; the relevant mutation is the one applied to the shared
+  predicate itself, and I had not applied it here.
+
+  The property is now
+  `harvests_are_exactly_the_region_before_the_first_heading` and asserts that
+  the harvest equals the body the generator wrote beneath the heading. That
+  oracle involves no parser predicate at all, so it holds under every mutation
+  of one. It fails under the always-false mutation and passes against the
+  control. `is_heading` left the test module's imports with the last assertion
+  that used it.
+
+  The general lesson, worth more than the fix: when a property and the code
+  under test share a predicate, enumerate the mutations of *that predicate*
+  rather than mutations of the behaviour around it. D-49 stated the rule and I
+  still applied it too narrowly.
+
+  This is a `tests/` change, so the post-pin sweep advances to 85 identifiers
+  at 52/33, verified equal to the live `git log` and to its own sorted form.
+  Date/Author: 2026-11-16, implementation agent, on CodeRabbit's follow-up.
 
 ## Outcomes & retrospective
 
@@ -3467,6 +3467,13 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   The contract target still runs 97 cases, and the post-pin sweep advances to
   85 identifiers, 52 in `main` and 33 on this branch. No proof artefact is
   affected. A fresh assessment is requested for this candidate.
+
+  The complete sequential eleven-gate set passed on `91e4f0b07` with an
+  unchanged HEAD and an empty working tree at both ends of the batch: 98.26%
+  doc-comment coverage (6478/6593), 5,766 Nextest cases with 9 skipped and the
+  doctests alongside them, 2,330 plus 30 workflow-contract cases, 227 Markdown
+  files linted with 0 issues and 227 unchanged at mdtablefix, every Mermaid
+  block validated, and every lint gate green.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
