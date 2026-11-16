@@ -15,6 +15,7 @@ Run via ``make test-workflow-contracts``.
 
 import typing as typ
 
+from release_publish_path_consumer_artifact_mutations import ARTIFACT_MUTATIONS
 from release_publish_path_consumer_commands import SMOKE_CLI
 from release_publish_path_consumer_expectations import (
     CONSUMER_SMOKE_EXPECTED_VIOLATIONS,
@@ -52,7 +53,6 @@ TOKEN_READING_STEP = {
     "name": "Read the token",
     "run": 'echo "${{ github.token }}" > token.txt',
 }
-DOWNLOAD_PREFIX = "actions/download-artifact@"
 CHECKOUT_PREFIX = "actions/checkout@"
 
 
@@ -178,69 +178,6 @@ def _persist_checkout_credentials(release: Job, _action: Job) -> None:
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_CHECKOUT)
 
 
-def _select_pattern_artifact(release: Job, _action: Job) -> None:
-    """Replace one exact artefact download with a wildcard pattern download.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the job downloads no artefact, so the mutation would change nothing
-        the contract reads.
-    """
-    for step in steps(smoke_job(release)):
-        if str(step.get("uses", "")).startswith(DOWNLOAD_PREFIX):
-            step["with"] = {"pattern": "release-*", "path": "downloaded"}
-            return
-    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
-
-
-def _redirect_artifact_destination(release: Job, _action: Job) -> None:
-    """Send one permitted artefact to a directory the action never reads.
-
-    The artefact name, the action inputs, and the other download all stay as
-    reviewed, so only a contract that ties each destination to the file the
-    action opens notices the verifier will read a path that never arrived.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the job downloads no artefact, so the mutation would change nothing
-        the contract reads.
-    """
-    for step in steps(smoke_job(release)):
-        if not str(step.get("uses", "")).startswith(DOWNLOAD_PREFIX):
-            continue
-        values = step.get("with")
-        if not isinstance(values, dict):
-            raise ConsumerSmokeMutationError(
-                ConsumerSmokeMutationIssue.MISSING_DOWNLOAD
-            )
-        values["path"] = "elsewhere"
-        return
-    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
-
-
-def _drop_artifact_download(release: Job, _action: Job) -> None:
-    """Remove one artefact download, leaving the other exact and in place.
-
-    The surviving download still names its artefact and passes every check made
-    of a download that exists, so only a contract that requires both to be
-    present notices the evidence the smoke no longer receives.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the job downloads no artefact, so the mutation would change nothing
-        the contract reads.
-    """
-    declared = steps(smoke_job(release))
-    for index, step in enumerate(declared):
-        if str(step.get("uses", "")).startswith(DOWNLOAD_PREFIX):
-            del declared[index]
-            return
-    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
-
-
 def _absorb_job_failure(release: Job, _action: Job) -> None:
     """Absorb a failed smoke at the job level."""
     smoke_job(release)["continue-on-error"] = True
@@ -292,16 +229,19 @@ def _echo_verifier(_release: Job, action: Job) -> None:
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
 
 
-def _short_circuit_verifier(_release: Job, action: Job) -> None:
-    """End the verify step successfully before the verifier can run.
+def _verify_script(action: Job) -> tuple[dict[str, object], str]:
+    """Return the verify step and its script, ready for one wrapper.
 
-    Every reviewed argument stays in place, so only a contract that follows
-    the step's own control flow notices that the verification is unreachable.
+    Returns
+    -------
+    tuple[dict[str, object], str]
+        The step and the script it currently runs, so an applier can replace
+        the script with a wrapped copy without re-reading the document.
 
     Raises
     ------
     ConsumerSmokeMutationError
-        If the verify step carries no script to prefix, so the mutation would
+        If the verify step carries no script to wrap, so the mutation would
         change nothing the contract reads.
     """
     declared, index = cli_invocation(action, "verify")
@@ -309,7 +249,42 @@ def _short_circuit_verifier(_release: Job, action: Job) -> None:
     run = step.get("run")
     if not isinstance(run, str):
         raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
+    return step, run
+
+
+def _short_circuit_verifier(_release: Job, action: Job) -> None:
+    """End the verify step successfully before the verifier can run.
+
+    Every reviewed argument stays in place, so only a contract that reads the
+    script's shape rather than searching it for an exit notices that the
+    verification is unreachable.
+    """
+    step, run = _verify_script(action)
     step["run"] = f"exit 0\n{run}"
+
+
+def _hide_verifier_failure(_release: Job, action: Job) -> None:
+    """Let the verifier fail without failing the step.
+
+    ``set +e`` above the invocation turns off the fail-fast the script starts
+    with, and ``exit 0`` below it then ends the step successfully, so a refused
+    verification reaches the job as a pass. The invocation line itself is
+    untouched, so only a contract that reads the prologue and what follows it
+    notices the refusal being absorbed.
+    """
+    step, run = _verify_script(action)
+    step["run"] = f"set +e\n{run}\nexit 0"
+
+
+def _enclose_verifier_in_false_branch(_release: Job, action: Job) -> None:
+    """Confine the verifier to a branch bash never takes.
+
+    The invocation stays on its own line with every reviewed argument, so only
+    a contract that reads the script's control flow notices that the branch's
+    condition is false and nothing verified the release.
+    """
+    step, run = _verify_script(action)
+    step["run"] = f"if false; then\n{run}\nfi"
 
 
 def _read_token_in_job_run(release: Job, _action: Job) -> None:
@@ -347,15 +322,17 @@ _MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "add-consumer-smoke-action-token-environment": _add_action_token_environment,
     "add-consumer-smoke-invocation-guard": _guard_invocation,
     "persist-consumer-smoke-checkout-credentials": _persist_checkout_credentials,
-    "select-consumer-smoke-pattern-artifact": _select_pattern_artifact,
-    "redirect-consumer-smoke-artifact": _redirect_artifact_destination,
-    "drop-consumer-smoke-artifact-download": _drop_artifact_download,
+    **ARTIFACT_MUTATIONS,
     "absorb-consumer-smoke-job-failure": _absorb_job_failure,
     "absorb-consumer-smoke-step-failure": _absorb_step_failure,
     "absorb-consumer-smoke-action-failure": _absorb_action_failure,
     "drop-consumer-smoke-verifier": _drop_verifier,
     "echo-consumer-smoke-verifier": _echo_verifier,
     "short-circuit-consumer-smoke-verifier": _short_circuit_verifier,
+    "hide-consumer-smoke-verifier-failure": _hide_verifier_failure,
+    "enclose-consumer-smoke-verifier-in-false-branch": (
+        _enclose_verifier_in_false_branch
+    ),
     "read-consumer-smoke-token-in-run": _read_token_in_job_run,
     "read-consumer-smoke-action-token-in-run": _read_token_in_action_run,
     "compile-in-consumer-smoke-job": _compile_in_job,

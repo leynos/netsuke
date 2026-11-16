@@ -3802,30 +3802,37 @@ from a work directory that validation refused: every phase is reported as
 to a smoke that never began.
 
 `tests/workflow_contracts/release_publish_path_consumer_shape.py` holds the
-job's dependencies, permissions, checkout, environment, artefact selection and
-destination, action inputs, and failure-visibility checks, and
-`release_publish_path_consumer_smoke.py` composes them with the guard's
-reachability oracle, re-exporting the shape names its callers use; the split
-keeps each module inside the 400-line cap. The checkout check is what keeps the
-workflow token from being persisted into the job's git config, the one
-credential a read-only job could still acquire. The credential scans live in
-`release_publish_path_consumer_credentials.py`, which reads the workflow's, the
-job's, and the composite action's step environments, together with the
-executable lines of every step: a token can be expanded in a script without any
-environment declaring it, and the action's steps run in the same process but
-appear nowhere in the workflow. The failure-visibility check reads the job, its
-invocation step, and every step of the action, because a composite step that
-tolerates its own failure ends the action successfully and the job never sees
-the refusal. Each permitted download must also land in the directory the
-matching action input reads, so the file the verifier opens is the file the
-download wrote. What the action's command lines may run is asserted in
+job's dependencies, permissions, checkout, environment, action inputs, and
+failure-visibility checks, and `release_publish_path_consumer_smoke.py`
+composes them with the guard's reachability oracle, re-exporting the shape
+names its callers use; the split keeps each module inside the 400-line cap. The
+checkout check is what keeps the workflow token from being persisted into the
+job's git config, the one credential a read-only job could still acquire. The
+credential scans live in `release_publish_path_consumer_credentials.py`, which
+reads the workflow's, the job's, and the composite action's step environments,
+together with the executable lines of every step: a token can be expanded in a
+script without any environment declaring it, and the action's steps run in the
+same process but appear nowhere in the workflow. The failure-visibility check
+reads the job, its invocation step, and every step of the action, because a
+composite step that tolerates its own failure ends the action successfully and
+the job never sees the refusal. `release_publish_path_consumer_artifacts.py`
+owns the two evidence downloads: each must name its artefact exactly, land in
+the directory the matching action input reads, carry no `if`, and be declared
+before the step that calls the action, so neither a skipped download nor one
+that runs too late can leave the verifier reading a path that was never filled.
+What the action's command lines may run is asserted in
 `release_publish_path_consumer_commands.py`: both CLI invocations must appear
 exactly once, carry no `if`, and run exactly the reviewed command line,
-launcher included, so a step that only `echo`es it is refused; each must also
-be reachable, so a step that exits successfully above the invocation is
-refused; and no command line in the job or the action may name a compiler.
+launcher included, so a step that only `echo`es it is refused; the script
+around each invocation is read as a shape, so it may prepare the step with
+`set -…` and plain assignments and nothing else — a conditional, a loop, a bare
+command, or a `set +e` above the invocation, and a success exit below it, are
+each refused because they can skip the verification or absorb its refusal; and
+no command line in the job or the action may name a compiler.
 `release_publish_path_consumer_mutations.py` registers one labelled regression
-for each of those properties, each with the violation it must produce stated in
+for each of the wiring properties and
+`release_publish_path_consumer_artifact_mutations.py` for each download
+property, with the violation each must produce stated in
 `release_publish_path_consumer_expectations.py`, and
 `release_publish_path_consumer_mutations_test.py` requires the contract to
 report it.

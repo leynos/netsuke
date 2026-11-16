@@ -11,7 +11,8 @@ credential or a compiler fails a contract instead of quietly passing.
 The credential scans read the job and the action together and live in
 ``release_publish_path_consumer_credentials``, because a token can be defined in
 either document. What the action's command lines may run is asserted in
-``release_publish_path_consumer_commands``. The scenario-level composition and
+``release_publish_path_consumer_commands``, and the two evidence downloads in
+``release_publish_path_consumer_artifacts``. The scenario-level composition and
 the reachability oracle live in ``release_publish_path_consumer_smoke``, which
 re-exports everything these modules define.
 
@@ -203,29 +204,6 @@ def _require_checkout_values(values: dict[str, object], violations: list[str]) -
         )
 
 
-def check_smoke_artifacts(job: dict[str, object], violations: list[str]) -> None:
-    """Require every permitted artefact to be downloaded by its exact name.
-
-    A download that is present must name its artefact and no pattern. A
-    permitted artefact with no download at all is refused too: the smoke binds
-    the crate and the archive to that evidence, so a run missing half of it
-    would verify less than the release it reports on.
-    """
-    named: set[object] = set()
-    for step in steps_of(job):
-        if not str(step.get("uses", "")).startswith(DOWNLOAD_ARTIFACT_PREFIX):
-            continue
-        _require_named_artifact(step, violations)
-        values = step.get("with")
-        if isinstance(values, dict):
-            named.add(values.get("name"))
-    violations.extend(
-        f"{CONSUMER_SMOKE_JOB}.artifacts: nothing downloads {name}, so the "
-        "smoke would run without its evidence"
-        for name in sorted(SMOKE_ARTIFACTS - named)
-    )
-
-
 def check_smoke_failure_visibility(
     job: dict[str, object],
     action: dict[str, object] | None,
@@ -257,47 +235,6 @@ def check_smoke_failure_visibility(
                 f"{CONSUMER_SMOKE_JOB}.continue-on-error: {label} must not set "
                 f"it, got {holder['continue-on-error']!r}"
             )
-
-
-def _require_named_artifact(step: dict[str, object], violations: list[str]) -> None:
-    """Require one artefact download to name its artefact, path, and no pattern."""
-    values = step.get("with")
-    if not isinstance(values, dict):
-        violations.append(
-            f"{CONSUMER_SMOKE_JOB}.artifacts: every download must name its artefact"
-        )
-        return
-    if "pattern" in values:
-        violations.append(
-            f"{CONSUMER_SMOKE_JOB}.artifacts: a pattern download would let "
-            "artefact storage stand in for the public download"
-        )
-    name = values.get("name")
-    if str(name) not in SMOKE_ARTIFACTS:
-        violations.append(
-            f"{CONSUMER_SMOKE_JOB}.artifacts: {name!r} is not "
-            "one of the permitted artefact names"
-        )
-        return
-    destination = _artifact_destination(name)
-    if values.get("path") != destination:
-        violations.append(
-            f"{CONSUMER_SMOKE_JOB}.artifacts: {name!r} must be downloaded to "
-            f"{destination!r}, where the action's input reads it, got "
-            f"{values.get('path')!r}"
-        )
-
-
-def _artifact_destination(name: object) -> str:
-    """Return the directory the action reads one permitted artefact from.
-
-    Returns
-    -------
-    str
-        The first path segment of the input that reads the artefact.
-    """
-    input_name = SMOKE_ARTIFACT_INPUTS[str(name)]
-    return SMOKE_ACTION_INPUTS[input_name].split("/", maxsplit=1)[0]
 
 
 def check_smoke_action_inputs(job: dict[str, object], violations: list[str]) -> None:
@@ -390,7 +327,6 @@ __all__ = [
     "action_steps",
     "check_smoke_action_declared",
     "check_smoke_action_inputs",
-    "check_smoke_artifacts",
     "check_smoke_checkout",
     "check_smoke_failure_visibility",
     "check_smoke_needs",

@@ -130,6 +130,35 @@ def test_inflate_refuses_an_oversized_read_without_allocating_it() -> None:
         _ = stream.read(1 << 48)
 
 
+def test_drain_consumes_the_padding_tail_and_keeps_nothing() -> None:
+    """Read the tail after the payload to its end without retaining it.
+
+    ``drain`` exists so gzip verifies the trailer the tar end marker leaves
+    unread, which means it must keep reading past the payload. The observable
+    consequence of discarding rather than accumulating is that the same pass
+    continues to its end: a tail far larger than the payload is consumed, the
+    position reaches the whole decompressed length, and a further read finds
+    nothing left.
+    """
+    payload = b"netsuke" * 4
+    padded = payload + b"\0" * 8192
+    stream = inflate.InflatedStream(
+        io.BytesIO(gzip.compress(padded)),
+        limit=len(padded) + 1,
+        refusal=ValueError,
+    )
+
+    with stream:
+        assert stream.read(len(payload)) == payload, (
+            "the stream must serve the payload before the drain"
+        )
+        stream.drain()
+        assert stream.tell() == len(padded), (
+            "drain must consume the whole padding tail, not stop at the payload"
+        )
+        assert stream.read() == b"", "a drained pass must have nothing left to serve"
+
+
 def _incompressible_payload(size: int) -> bytes:
     """Return ``size`` bytes that deflate cannot shrink.
 

@@ -191,8 +191,16 @@ class InflatedStream(io.RawIOBase):
         decompressor short of the gzip trailer; only a read to the end of the
         compressed member makes gzip verify the CRC and length it recorded.
         A pass that runs out of budget first is refused exactly as a read is.
+
+        The bytes are read into one reused buffer and dropped, because nothing
+        here consumes them: a small archive followed by a large compressed
+        padding tail would otherwise be held in full and then copied, spending
+        the whole budget's worth of memory to verify a trailer.
         """
-        _ = self._read_all()
+        scratch = bytearray(CHUNK_BYTES)
+        count = self.readinto(scratch)
+        while count:
+            count = self.readinto(scratch)
 
     def readinto(self, buffer: cabc.Buffer) -> int:
         """Serve decompressed bytes without passing the pass's budget.

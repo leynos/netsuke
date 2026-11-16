@@ -21,6 +21,7 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
+from release_publish_path_consumer_artifacts import check_smoke_artifacts
 from release_publish_path_consumer_commands import (
     check_smoke_action_commands,
     check_smoke_compilation,
@@ -44,7 +45,6 @@ from release_publish_path_consumer_shape import (
     action_steps,
     check_smoke_action_declared,
     check_smoke_action_inputs,
-    check_smoke_artifacts,
     check_smoke_checkout,
     check_smoke_failure_visibility,
     check_smoke_needs,

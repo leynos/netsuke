@@ -6,12 +6,18 @@ lines. Without the checks here an action that kept its report step and dropped
 or weakened its verification would satisfy every other shape check, and the
 step that was supposed to fail would quietly pass.
 
-Three properties are asserted: the verifier is invoked exactly as reviewed, the
-invocation is reachable, and nothing in the action builds from source. All
-three read what bash would run rather than what a comment says, so
-documentation naming a compiler or a flag cannot be mistaken for an invocation,
-and a line that ends the step before the verifier runs cannot be read as a
-script that reaches it.
+Four properties are asserted: the verifier is invoked exactly as reviewed, the
+invocation is reachable, its refusal reaches the step as a failure, and nothing
+in the action builds from source. All four read what bash would run rather than
+what a comment says, so documentation naming a compiler or a flag cannot be
+mistaken for an invocation.
+
+Reachability and failure propagation are read as a shape rather than as a
+search for one suspicious line. The script may prepare the invocation with
+``set -…`` and plain assignments and nothing else: a conditional, a loop, a
+bare command, or a ``set +e`` above it can skip the invocation or stop it
+failing, and a success exit below it can absorb the refusal even when the
+invocation itself is byte-for-byte correct.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -92,6 +98,12 @@ SMOKE_ACTION_LAUNCHERS = {
 #: only executable lines are read; a command line naming any of these would let
 #: the smoke build what it is supposed to download.
 COMPILATION_COMMAND = re.compile(r"\b(?:cargo|rustc|rustup)\b")
+#: The only lines a step may run before the reviewed invocation: an assignment
+#: of one variable, or a ``set`` that enables options. Shell separators and
+#: substitutions that run a command are excluded from an assignment's value, so
+#: a line cannot both assign and run something.
+_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=[^;&|`]*")
+_ENABLING_SET = re.compile(r"set -[A-Za-z]+(?: [A-Za-z][A-Za-z0-9_]*)*")
 
 
 def smoke_command_line(step: dict[str, object]) -> tuple[str, ...] | None:
@@ -154,29 +166,76 @@ def ends_successfully(line: str) -> bool:
     return tokens[:1] in {("exit",), ("return",)} and tokens[1:] in {(), ("0",)}
 
 
-def ends_before_smoke_cli(step: dict[str, object]) -> str | None:
-    """Return the line that ends a step successfully before the CLI runs.
+def _is_prologue(line: str) -> bool:
+    """Return whether one line only prepares the step for the invocation.
 
-    A line that exits the shell makes every later command unreachable, so a
-    step that ran ``exit 0`` above the reviewed invocation would satisfy an
-    exact-match check while verifying nothing.
+    Returns
+    -------
+    bool
+        True for an assignment of one variable or a ``set`` that enables
+        options, which are the two things a step needs before the command it
+        exists to run. Everything else — a conditional, a loop, a bare command,
+        or a ``set +e`` — can decide whether the invocation runs at all.
+    """
+    return (
+        _ASSIGNMENT.fullmatch(line) is not None
+        or _ENABLING_SET.fullmatch(line) is not None
+    )
+
+
+def unsupported_prologue(step: dict[str, object]) -> str | None:
+    r"""Return the first line before the CLI that could skip or disarm it.
+
+    The reviewed invocation is one command inside a script, so an exact match
+    on that line says nothing about the script around it. ``exit 0`` above it
+    makes it unreachable, ``if false; then`` above it confines it to a branch
+    bash never takes, and ``set +e`` above it lets a refusal fall through to an
+    ``exit 0`` below. Only a prologue that plainly prepares the step is
+    accepted, so a construct nobody reviewed is refused rather than assumed
+    harmless.
 
     Returns
     -------
     str | None
-        The first success exit that precedes :data:`SMOKE_CLI`, or ``None``
-        when every line ahead of the invocation falls through to it.
+        The first line ahead of :data:`SMOKE_CLI` that is not a plain prologue,
+        or ``None`` when every line ahead of the invocation prepares the step.
+
+    Examples
+    --------
+    >>> step = {"run": "set -e\nexit 0\nuv run x scripts/consumer_smoke_cli.py"}
+    >>> unsupported_prologue(step)
+    'exit 0'
     """
     for line in command_lines(step.get("run")):
-        try:
-            tokens = tuple(shlex.split(line))
-        except ValueError:
-            continue
-        if SMOKE_CLI in tokens:
+        if SMOKE_CLI in line:
             return None
-        if ends_successfully(line):
+        if not _is_prologue(line):
             return line
     return None
+
+
+def ends_after_smoke_cli(step: dict[str, object]) -> str | None:
+    """Return the line that ends a step successfully after the CLI runs.
+
+    A success exit below the invocation absorbs the refusal: with the shell's
+    fail-fast disabled, or never enabled, a verifier that exits non-zero is
+    followed by ``exit 0`` and the step reports success.
+
+    Returns
+    -------
+    str | None
+        The first success exit that follows :data:`SMOKE_CLI`, or ``None`` when
+        nothing after the invocation would end the step successfully.
+    """
+    lines = command_lines(step.get("run"))
+    position = next(
+        (index for index, line in enumerate(lines) if SMOKE_CLI in line), None
+    )
+    if position is None:
+        return None
+    return next(
+        (line for line in lines[position + 1 :] if ends_successfully(line)), None
+    )
 
 
 def check_smoke_action_commands(
@@ -203,7 +262,7 @@ def _require_invocation(
     steps: list[dict[str, object]],
     violations: list[str],
 ) -> None:
-    """Require one subcommand to be invoked once, unconditionally and exactly."""
+    """Require one subcommand to run once, unconditionally, exactly, and so it fails."""
     label = f"{CONSUMER_SMOKE_JOB}.action: the {phase} invocation"
     found = [
         (step, tokens)
@@ -223,10 +282,16 @@ def _require_invocation(
         violations.append(
             f"{label} must run exactly {list(expected)}, got {list(tokens)}"
         )
-    unreachable = ends_before_smoke_cli(step)
+    unreachable = unsupported_prologue(step)
     if unreachable is not None:
         violations.append(
-            f"{label} is unreachable: {unreachable!r} ends the step first"
+            f"{label} is unreachable: {unreachable!r} may skip it or disarm it"
+        )
+    absorbed = ends_after_smoke_cli(step)
+    if absorbed is not None:
+        violations.append(
+            f"{label} must propagate its refusal, but {absorbed!r} ends the "
+            "step successfully afterwards"
         )
 
 
@@ -268,8 +333,9 @@ __all__ = [
     "SMOKE_CLI",
     "check_smoke_action_commands",
     "check_smoke_compilation",
-    "ends_before_smoke_cli",
+    "ends_after_smoke_cli",
     "ends_successfully",
     "invoked_phase",
     "smoke_command_line",
+    "unsupported_prologue",
 ]

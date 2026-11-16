@@ -70,6 +70,16 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     "drop-consumer-smoke-artifact-download": (
         ("static", f"{CONSUMER_SMOKE_JOB}.artifacts"),
     ),
+    # The download still names its artefact and its destination, so only a
+    # contract that reads the step's condition notices it never runs.
+    "disable-consumer-smoke-artifact-download": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.artifacts"),
+    ),
+    # The download runs, in the right place, but after the action has already
+    # read the directory it fills, so only an ordering check sees it.
+    "delay-consumer-smoke-artifact-download": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.artifacts"),
+    ),
     # A smoke that cannot fail reports a release whose bytes were never
     # checked as verified, at the job level or on the one step that runs it.
     "absorb-consumer-smoke-job-failure": (
@@ -93,6 +103,16 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     # and unreachable, so the contract has to read the step's control flow and
     # not only the invocation it contains.
     "short-circuit-consumer-smoke-verifier": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.action"),
+    ),
+    # The invocation line is untouched, so only a contract that reads the
+    # prologue and what follows it notices the refusal being absorbed.
+    "hide-consumer-smoke-verifier-failure": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.action"),
+    ),
+    # The invocation stays on its own line with every reviewed argument; only
+    # the branch around it makes it unreachable.
+    "enclose-consumer-smoke-verifier-in-false-branch": (
         ("static", f"{CONSUMER_SMOKE_JOB}.action"),
     ),
     # A step declares no environment and still expands the workflow token in
