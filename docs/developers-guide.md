@@ -9834,9 +9834,9 @@ is a workspace member and carries its own Clippy configuration file because
 Clippy configuration is discovered per crate, even when `make lint` invokes
 Clippy once with `--workspace`. The root and `test_support/clippy.toml` files
 therefore intentionally repeat the CodeScene argument-count, length and nesting
-ceilings, `allow-expect-in-tests`, and the environment-method restrictions. Keep these
-shared settings synchronized: `[workspace.lints]` shares lint levels, but not
-the values in `clippy.toml`.
+ceilings, `allow-expect-in-tests`, and the environment-method restrictions.
+Keep these shared settings synchronized: `[workspace.lints]` shares lint
+levels, but not the values in `clippy.toml`.
 
 Dylint resolves configuration differently. A workspace member discovers the
 workspace-root configuration, so `test_support` needs the separate Whitaker
