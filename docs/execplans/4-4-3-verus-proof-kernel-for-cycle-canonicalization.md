@@ -8,10 +8,11 @@ proceeds.
 
 Status: DRAFT
 
-Revision 2, drafted on 2026-11-15 against `origin/main` at
-`5c707ef339254a60d58f191c563bfe8597be9deb`, after an expert-panel design review
-(see `Revision note`). Implementation must not begin until the user explicitly
-approves this plan.
+Revision 3, rebased on 2026-11-15 onto `origin/main` at
+`fa06bdb21e49dfcd70e432e85123127ec9961684`. It follows an expert-panel design
+review (revision 2) and the user's direction on decision D4 and on the new
+Verus CI workflow (see `Revision note`). Implementation must not begin until
+the user explicitly approves this plan.
 
 Branch: `4-4-3-verus-proof-kernel-for-cycle-canonicalization`
 
@@ -281,8 +282,21 @@ multi-component paths or duplicates.
   requires. Its recorded result is
   `verification results:: 16 verified, 0 errors`; no run time was recorded.
 - Verus is outside `make test`, `make lint`, `make check-fmt`, `make all`,
-  `make kani-check`, `make kani-full`, `make formal-pr`, and CI. No file under
-  `.github/` mentions Verus.
+  `make kani-check`, `make kani-full`, and `make formal-pr`. Since #1138 it
+  runs in CI through `.github/workflows/proofs.yml`:
+  - the job installs Verus and Z3 only through the shared
+    `leynos/shared-actions` `install-prover-tools` action, which reads
+    `tools/verus/VERSION`, then runs `make verus`;
+  - it triggers on pull requests and pushes to `main` that touch `verus/**`,
+    `tools/verus/**`, the `Makefile`, or the workflow itself, weekly on
+    Wednesday at 05:17 UTC, and on manual dispatch;
+  - it has a 30-minute timeout.
+
+  Because `make verus` runs only the files in `VERUS_FLAGS`, a kernel missing
+  from that default is never checked in CI. Because of the path filters, a
+  change to production code that a kernel mirrors does not re-run the proof
+  until the weekly run unless that source path is added to both the
+  `pull_request` and `push` filters.
 - One exception matters. `tests/prover_tools_verus_e2e_tests.rs` is compiled
   and run by `make test`. Its cases skip when the pinned install under
   `.verus/` is absent, but they run real Verus through `make verus` when it is
@@ -380,10 +394,27 @@ Expected non-ExecPlan changes, on the acceptance path:
 | Documentation | `docs/contents.md`                                                 | 4                    |
 | Documentation | `docs/roadmap.md`                                                  | 10                   |
 
-That is 18 files: about 1,150 code lines, about 6 configuration lines, and
-about 340 documentation lines. The rejection path deletes the kernel and the
-correspondence file and skips the `Makefile` change, so it is smaller in every
-category.
+Revision 3 adds these, on the acceptance path only:
+
+| Category      | Path                                                            | Estimate (net lines) |
+| ------------- | --------------------------------------------------------------- | -------------------- |
+| Configuration | `.github/workflows/proofs.yml` (two path entries; comment)      | 3                    |
+| Code          | `src/ir/cycle/verification.rs` (two harnesses removed)          | -16                  |
+| Code          | `src/ir/cycle/verification/support.rs` (two builders removed)   | -40                  |
+| Code          | `docs/verification/mutations/..._three_node_...patch` (deleted) | -13                  |
+| Code          | `docs/verification/mutations/..._four_node_...patch` (deleted)  | -14                  |
+| Documentation | `docs/adrs/adr-0047-...md` (amendment banner and entry)         | 12                   |
+
+The mutation patches are executable test inputs, so they count as code even
+though they live under `docs/`. Retirement also removes two rows from the
+developers' guide harness table and changes the harness counts in the
+formal-verification document. Those edits are included in the documentation
+estimates above.
+
+That is 24 files: about 1,070 net code lines, about 9 configuration lines, and
+about 350 documentation lines. The rejection path deletes the kernel and the
+correspondence file and skips the `Makefile`, workflow, and retirement changes,
+so it is smaller in every category.
 
 If `make spelling` regenerates `typos.toml`, the regenerated file is not
 committed here. `AGENTS.md` requires a separate base pull request for it.
@@ -450,10 +481,23 @@ Upstream artefacts, all at `origin/main` `5c707ef33`:
   - `FV-CLAUSES`: length preserved, the cycle stays closed, the interior
     multiset is preserved, and the start node is stable under the ordering
     rule.
-  - `FV-GATES`: Verus stays outside the pull-request gates, `make test`,
-    `make lint`, `make check-fmt`, `make all`, `make kani-check`,
-    `make kani-full`, and `make formal-pr`.
-  - `FV-CI`: a Verus CI job is added only after a stable kernel exists.
+  - `FV-GATES`: Verus stays outside `make test`, `make lint`,
+    `make check-fmt`, `make all`, `make kani-check`, `make kani-full`, and
+    `make formal-pr`.
+  - `FV-CI` (as amended by #1138): CI runs every proof the repository holds,
+    through `make verus` in `.github/workflows/proofs.yml`, installing Verus
+    only through the shared `install-prover-tools` action.
+- User direction, 2026-11-15:
+  - `UD-D4`: retire the three- and four-node Kani canonicalization harnesses,
+    because Verus now runs in CI.
+  - `UD-FLAGS`: a new kernel must be added to `make verus` (to `VERUS_FLAGS`,
+    or by running every proof under `verus/`), or it passes only when run by
+    hand.
+  - `UD-PATHS`: production source paths that a kernel covers must be added to
+    both the `pull_request` and `push` path filters of `proofs.yml`.
+  - `UD-INSTALL`: Verus is installed only from the `tools/verus/VERSION` pin,
+    through `install-prover-tools` in CI and through `rust-prover-tools`
+    (`make install-verus`, `make verus`) locally.
 - `docs/execplans/4-1-3-record-phase-1-scope-boundary-for-verus-and-stateright.md`:
   - `SB-CARGO`: keep Verus out of production Cargo.
   - `SB-FIRST`: the first proof focuses on cycle canonicalization.
@@ -495,7 +539,11 @@ RM-443-OUT, SB-CARGO, FV-KERNEL, AG-400, AG-DOC -> EP-M1/EP-M3 -> VC-HYGIENE
 RM-443-MODEL, ADR47-U8 -> EP-M2 -> u64 mirror; VC-HYGIENE forbidden-type check
 REP (mirror ~ production) -> EP-M3 -> VC-CORRESPOND
 RM-443-ACC -> EP-M0 baseline + EP-M2 measurement -> gate G1 -> EP-M4 or EP-M4R
-FV-GATES, FV-CI -> EP-M3 -> VC-WIRING; grep shows no .github/ file names Verus
+FV-GATES, FV-CI, UD-FLAGS, UD-PATHS -> EP-M3 -> VC-WIRING (Makefile default and
+  proofs.yml filters checked by VC-HYGIENE); CI Proofs job green on the PR
+UD-D4, ADR47-U8 -> EP-M3 -> N=3/N=4 harnesses and patches removed; EP-M4 ->
+  ADR-0047 amendment banner
+UD-INSTALL -> Constraints; EP-M0 installs through make install-verus only
 AG-VER, SB-FIRST -> Verification plan "Where Verus is warranted"
 GAP-HYGIENE -> EP-M1 -> VC-HYGIENE over verus/canonical_value/main.rs
 GAP-STALE-REF, GAP-NO-ADR, AG-ADR -> EP-M4 or EP-M4R -> ADR-0082, doc edits
@@ -512,16 +560,31 @@ GAP-STALE-REF, GAP-NO-ADR, AG-ADR -> EP-M4 or EP-M4R -> ADR-0082, doc edits
   `IrHashMap`, `BuildGraph`, `BuildEdge`, `Utf8PathBuf`, `camino`, `minijinja`,
   or any filesystem or process API.
 - Do not add Verus to `make test`, `make lint`, `make check-fmt`, `make all`,
-  `make kani-check`, `make kani-full`, `make formal-pr`, or any CI workflow
-  (`FV-GATES`, `FV-CI`). Plain Rust tests that read the Verus source as text
-  may run in `make test`. The pre-existing e2e lane's behaviour on hosts with
-  Verus installed is unchanged in kind; it now proves two files instead of one.
+  `make kani-check`, `make kani-full`, or `make formal-pr` (`FV-GATES`). In CI,
+  Verus runs only in `.github/workflows/proofs.yml` (`FV-CI`). The one
+  permitted workflow edit adds `src/ir/cycle/support.rs` to that file's
+  `pull_request` and `push` path filters (`UD-PATHS`). Plain Rust tests that
+  read the Verus source as text may run in `make test`. The pre-existing e2e
+  lane's behaviour on hosts with Verus installed is unchanged in kind; it now
+  proves two files instead of one.
+- Install Verus only from the `tools/verus/VERSION` pin: locally through
+  `make install-verus` and `make verus` (`rust-prover-tools`), and in CI through
+  `install-prover-tools` (`UD-INSTALL`). No other build, cache, or download of
+  Verus may supply evidence. The panel's prototype ran on an unpinned cached
+  build and is feasibility evidence only.
 - Do not change production behaviour. The only production edit permitted is
   the doc-comment wording on `canonicalize_cycle` (`support.rs`, line 84),
   which is outside the four mirrored functions. Any other production edit is an
   escalation (see `Tolerances`).
-- Keep every existing Kani harness, Kani mutation patch, and Proptest property
-  (D4).
+- On the acceptance path only, retire exactly the two Kani harnesses
+  `canonicalize_three_node_cycle_is_canonical` and
+  `canonicalize_four_node_cycle_is_canonical` (`UD-D4`, D4). Also remove their
+  now-unused builders, `closed_three_node_id_cycle` and
+  `closed_four_node_id_cycle`, with any helper only they use, and their two
+  mutation patches, because `tests/kani_mutation_evidence_tests.rs` requires
+  every patch to name a live harness. Keep the two-node kernel harness, the
+  path-wrapper harness, every other Kani harness and patch, and every Proptest
+  property. On the rejection path, retire nothing.
 - Verus files contain no `assume`, `admit`, `#[verifier::external_body]`,
   `#[verifier::external]`, `external_fn_specification`, `assume_specification`,
   `external_type_specification`, `#[verifier::trusted]`, `uninterp`, `axiom`
@@ -546,7 +609,9 @@ GAP-STALE-REF, GAP-NO-ADR, AG-ADR -> EP-M4 or EP-M4R -> ADR-0082, doc edits
   `git diff --exit-code`. Never do this while a gate batch is running. Verus
   mutants are single files and may live under `/tmp`.
 - Completed ExecPlans (4.1.3, 4.2.2, 4.4.2, 6.1.2) stay untouched. Accepted ADRs
-  are not rewritten; ADR-0047 needs no amendment (D12).
+  are not rewritten. On the acceptance path, ADR-0047 gains an
+  `Amended by ADR-0082 (date)` banner and an `## Amendments` entry, because
+  retiring N=3 and N=4 changes its N=2..4 boundary (D12).
 - Transient measurements (timings, memory peaks, host details) go in the ADR's
   evidence section and this plan, never in the developers' guide.
 - The ADR serial is re-derived across every remote branch immediately before
@@ -587,14 +652,16 @@ Budgets: the estimates from `Context and orientation` plus about 15-20%
 contingency, informed by 4.4.2's inventory overrun and the panel's line
 estimates. Spare capacity in one category never offsets another.
 
-- Files: escalate above 22 non-ExecPlan files (estimate 18). Any `other`
-  category file is itself an escalation.
+- Files: escalate above 28 non-ExecPlan files (estimate 24). Any `other`
+  category file is itself an escalation. Deleted files count.
 - Code: escalate above 1,350 net lines (estimate about 1,150).
 - Kernel: escalate if `verus/cycle_canonicalization/main.rs` exceeds 400 lines.
   Splitting it into modules is not an allowed workaround; that would be
   evidence against "narrower".
-- Configuration: escalate above 12 net lines, or on any change to
-  `Cargo.toml`, `Cargo.lock`, or `.github/**` (estimate 6, all `Makefile`).
+- Configuration: escalate above 14 net lines, or on any change to
+  `Cargo.toml`, `Cargo.lock`, or `.github/**` other than the two path-filter
+  lines in `.github/workflows/proofs.yml` (estimate 8: 6 in the `Makefile`, 2 in
+  `proofs.yml`).
 - Documentation: escalate above 420 net lines (estimate about 340).
 - Interface: escalate on any production signature, visibility, or behaviour
   change, or any `make verus` change beyond its default `VERUS_FLAGS`.
@@ -683,7 +750,18 @@ Each risk gives severity (impact if it occurs), likelihood, and mitigation.
 - R12. Severity low, likelihood low: the pinned Verus differs from the panel's
   older build.
   - Mitigation: EP-M0's probe file and canonical-value run catch version
-    differences before any proof work.
+    differences before any proof work. Only pinned-Verus output counts as
+    evidence (`UD-INSTALL`).
+- R13. Severity medium, likelihood low: retiring N=3 and N=4 removes bounded
+  checks of the *compiled* production kernel at those sizes.
+  - Mitigation: the retirement happens only after G1 acceptance. The two-node
+    harness stays, and it must kill both retired patches' faults before they
+    are deleted (EP-M3 step 4). VC-CORRESPOND ties the proved mirror to
+    production. VC-SPEC-ORACLE samples production at every length up to 64.
+- R14. Severity medium, likelihood medium: the CI Proofs job does not run
+  when only `src/ir/cycle/support.rs` changes.
+  - Mitigation: EP-M3 adds the path to both filters (`UD-PATHS`), and
+    VC-HYGIENE fails `make test` if the filter is ever dropped (D17).
 
 ## Verification plan
 
@@ -924,6 +1002,9 @@ for every N and every value pattern, and adds C5-C8. Neither establishes
 anything about the path wrapper, which stays Kani's, with VC-RANK as its
 Proptest companion.
 
+On acceptance, the N=3 and N=4 harnesses retire (`UD-D4`). The two-node harness
+remains the bounded check of the compiled kernel.
+
 ### Verification artefacts, methods, and evidence
 
 **VP-1: Verus proof of T-CANON, INV-*, LEM-*, C1-C8, and C7-NEED.**
@@ -1091,7 +1172,15 @@ Proptest companion.
 - Cross-file checks:
   - no `Cargo.toml` mentions `verus/`;
   - the `Makefile` `VERUS_FLAGS` default lists exactly the discovered kernels,
-    in sorted order. This mechanically closes D5's "unrun kernel" risk.
+    in sorted order. This mechanically closes D5's "unrun kernel" risk
+    (`UD-FLAGS`).
+  - `.github/workflows/proofs.yml`, parsed with `serde_yaml`, includes in both
+    `on.pull_request.paths` and `on.push.paths`:
+    - `verus/**`, `tools/verus/**`, and `Makefile`;
+    - every production path a kernel mirrors, as declared by VC-CORRESPOND's
+      table (`src/ir/cycle/support.rs`).
+
+    This is `UD-PATHS` and D17.
 - Non-vacuity: the checker is a pure function over `&str`, tested with
   in-memory fixtures:
   - `assume(false)` in code fails;
@@ -1099,7 +1188,9 @@ Proptest companion.
   - `broadcast use vstd::seq::group_seq_axioms;` passes;
   - `#[verifier::external_body]` fails;
   - a 401-line text generated as `"x\n".repeat(401)` fails;
-  - an undocumented `proof fn` fails.
+  - an undocumented `proof fn` fails;
+  - a workflow fixture whose `push` filter omits `src/ir/cycle/support.rs`
+    fails.
 
 **VC-CORRESPOND: REP, the mirror matching production.**
 
@@ -1134,9 +1225,12 @@ Proptest companion.
   - The e2e test asserts `verification_runs(&output) == 2` and two result
     lines that each end in `0 errors`.
 - Commands: `make test`, `make test-prover-tools-integration`, and, with
-  Verus installed, `make test-verus-e2e`.
-- Non-vacuity: the updated tests fail against the old default (red), then
-  pass (green).
+  Verus installed, `make test-verus-e2e`. In CI, the pull request's
+  `Proofs / Verus` check runs `make verus`, which now covers both kernels. The
+  pull request touches `verus/**`, the `Makefile`, and `proofs.yml`, so the
+  check is triggered.
+- Non-vacuity: the updated tests fail against the old default and old filters
+  (red), then pass (green).
 
 ### Acceptance rule (decision gate G1)
 
@@ -1149,7 +1243,8 @@ breach means a constraint was violated, which is an escalation, not a verdict:
 - F1: the proof boundary is the pure rotation kernel only.
 - F2: no forbidden trusted construct.
 - F3: one file of at most 400 lines.
-- F4: no Cargo dependency, CI job, or routine gate.
+- F4: no Cargo dependency, no new CI job or workflow, and no routine gate.
+  The existing `proofs.yml` job runs the kernel.
 
 **Narrower.** All three must hold:
 
@@ -1183,9 +1278,12 @@ warm runs:
   kernel harnesses (the harnesses and their `verification/support.rs` helpers).
   Informative only; ADR-0082 must state and justify the ratio.
 
-Acceptance is **additive**: D4 keeps every Kani harness, so accepting the
-kernel saves no existing cost. "Cheaper" compares the proofs as alternatives,
-which is how the roadmap phrases it, and K4 shows the added surface honestly.
+Acceptance is **partly substitutive**: under `UD-D4`, accepting the kernel
+retires the N=3 and N=4 harnesses. That removes about 19.4 s of recorded
+`kani-full` verification time (7.602 s + 11.815 s at 4.2.2, re-measured in
+EP-M0) from every Kani run, which happens on each pull request that changes a
+proof input. The Verus job adds its own cost in `proofs.yml`, which runs only
+when its path filters match and weekly. ADR-0082 records both sides.
 
 **Verdict.**
 
@@ -1328,37 +1426,74 @@ default, and the project is pre-1.0.
 - Commit: none on its own. Accepted work is committed in EP-M3; a rejection
   goes to EP-M4R.
 
-### EP-M3: Accept path: kernel, correspondence, and `make verus` wiring
+### EP-M3: Accept path: kernel, correspondence, CI wiring, and Kani retirement
 
-- Requirements: REP (N5, enforced), `FV-GATES`, `FV-CI`.
+- Requirements: REP (N5, enforced), `FV-GATES`, `FV-CI`, `UD-FLAGS`,
+  `UD-PATHS`, and `UD-D4`.
 - Work:
   1. Add `correspondence.rs` (VC-CORRESPOND), with its fixtures first. Red:
      they fail before the scanner exists.
-  2. Update the three pinned tests to the two-file default (VC-WIRING). Red:
-     they fail against the old `Makefile`.
-  3. Commit the kernel, change `VERUS_FLAGS` to
+  2. Extend VC-HYGIENE with the `proofs.yml` check (see VC-WIRING) and update
+     the three pinned tests to the two-file default. Red: they fail against
+     the old `Makefile` and workflow.
+  3. Commit the kernel. Change `VERUS_FLAGS` to
      `--proof-file verus/canonical_value/main.rs --proof-file
-     verus/cycle_canonicalization/main.rs`, and update its comment. Green:
-     VC-HYGIENE's cross-check, VC-CORRESPOND, and VC-WIRING all pass.
-- End state: `make verus` proves both kernels. `make test` enforces hygiene,
-  correspondence, and the default, and no routine gate runs Verus, except
-  through the pre-existing e2e lane on hosts with Verus installed.
+     verus/cycle_canonicalization/main.rs` and update its comment. Add
+     `src/ir/cycle/support.rs` to both the `pull_request` and `push` `paths`
+     lists of `.github/workflows/proofs.yml`, and update the workflow's header
+     comment to name both proofs. Green: VC-HYGIENE, VC-CORRESPOND, and
+     VC-WIRING all pass.
+  4. Retire the N=3 and N=4 Kani harnesses (`UD-D4`), as a separate commit:
+     - delete `canonicalize_three_node_cycle_is_canonical` and
+       `canonicalize_four_node_cycle_is_canonical` from
+       `src/ir/cycle/verification.rs`;
+     - delete `closed_three_node_id_cycle`, `closed_four_node_id_cycle`, and
+       any helper only they used from `src/ir/cycle/verification/support.rs`;
+     - delete `docs/verification/mutations/ir__cycle__verification__canonicalize_three_node_cycle_is_canonical.patch`
+       and `..._four_node_cycle_is_canonical.patch`.
+
+     Their faults (a lost closing push and a missing wrap) stay covered by the
+     two-node harness, by Verus mutants M3 and M4, and by VC-SPEC-ORACLE's
+     recorded production-mutant evidence from EP-M1. Before deleting, confirm
+     the two-node harness kills both faults. Apply each patch with the
+     `git apply` and `git apply -R` procedure, run the command below, and
+     record the failing assertion:
+
+     ```bash
+     H=canonicalize_two_node_cycle_is_canonical
+     make kani-full KANI_FLAGS="--harness $H --exact"
+     ```
+
+- End state:
+  - `make verus` proves both kernels, and the CI Proofs job runs them whenever
+    a kernel, its pin, the `Makefile`, the workflow, or the mirrored
+    `src/ir/cycle/support.rs` changes.
+  - `make test` enforces hygiene, correspondence, the default, and the path
+    filters. No routine gate runs Verus, except the pre-existing e2e lane on
+    hosts with Verus installed.
+  - Kani holds 15 harnesses, nine of them in `src/ir/cycle/verification.rs`.
 - Acceptance:
   - The standard gates, `make test-workflow-contracts`,
-    `make test-prover-tools-integration`, and `make test-verus-e2e`
-    (strict) pass.
+    `make test-prover-tools-integration`, `make test-verus-e2e` (strict), and
+    `make test-kani-mutations` pass.
   - `make verus` prints two `0 errors` lines.
   - The e2e default case's duration is recorded and is under 150 s.
-  - `rg -il verus .github` prints nothing.
+  - `make kani-ir` reports 15 harnesses verified, 0 failures.
+  - On the pushed pull request, the `Proofs / Verus` check passes and the
+    `kani-smoke` job passes.
 - Conformance check:
-  1. `FV-GATES` holds.
-  2. No CI change.
-  3. The rewrite table has exactly four rows.
-  4. No new dependency.
-  5. The trust boundary is as documented in `Verification plan`.
-  6. VC-WIRING is linked in the trace.
-- Recovery: `git revert` restores the single-file default and removes the
-  kernel and the correspondence test.
+  1. Do `FV-GATES` and `FV-CI` hold, with `proofs.yml` the only workflow
+     touched?
+  2. Is the `proofs.yml` edit limited to the two path entries and its comment?
+  3. Does the rewrite table have exactly four rows?
+  4. Was no dependency added?
+  5. Were exactly the two named harnesses, their builders, and their patches
+     removed?
+  6. Is VC-WIRING linked in the trace?
+- Recovery: `git revert` of the retirement commit restores the two harnesses
+  and patches. `git revert` of the wiring commit restores the single-file
+  default and the old path filters, and removes the kernel and the
+  correspondence test.
 - Remaining gaps: `GAP-STALE-REF`, `GAP-NO-ADR`, `GAP-ORDER` (design-document
   text).
 - Commit: `Add Verus kernel for cycle canonicalization`.
@@ -1397,7 +1532,15 @@ default, and the project is pre-1.0.
 
     Then say what is proved of the mirror, what is tested of production, and
     link the ADR and the kernel. Do not use plan identifiers such as C1-C8.
+  - `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`:
+    an `Amended by ADR-0082 (date)` banner and an `## Amendments` entry. The
+    entry records that the N=3 and N=4 canonicalization harnesses retired in
+    favour of the Verus kernel, and that N=2 and the path wrapper remain (D12).
   - `docs/formal-verification-methods-in-netsuke.md`:
+    - lines 47-48 and 344: "17 harnesses" becomes 15, and the cycle module's
+      11 becomes 9;
+    - the `proofs.yml` description: both proofs, and the mirrored source path
+      in the filters;
     - lines 66-67: two kernels, and the `make verus` default batch;
     - lines 104-110: the kernel now exists;
     - lines 172-214: the kernel exists, with an ADR link;
@@ -1405,7 +1548,12 @@ default, and the project is pre-1.0.
     - footnote 7: `src/ir/cycle/support.rs`.
   - `docs/developers-guide.md`:
     - lines 6966-6968 and 6991-6992: the default batch;
-    - lines 7203-7208: mention VC-RANK and VC-SPEC-ORACLE;
+    - lines 7203-7208: N=2 only, with N=3 and N=4 retired to the Verus kernel,
+      and mention VC-RANK and VC-SPEC-ORACLE;
+    - the Kani harness table (around lines 7273-7274): delete the N=3 and N=4
+      rows;
+    - the CI Proofs description: both kernels, and why
+      `src/ir/cycle/support.rs` is in its path filters;
     - lines 7446-7452: correct the stale path, two kernels, and run "by
       default" for `make verus`;
     - a new "Verus kernels" subsection: what each kernel proves and does not
@@ -1447,8 +1595,7 @@ default, and the project is pre-1.0.
   5. The ADR index is consistent.
   6. Trace links resolve.
 - Recovery: a documentation-only commit; `git revert`.
-- Remaining gaps: none in scope. A Verus CI job remains a future decision
-  (`FV-CI`).
+- Remaining gaps: none in scope.
 - Commit: `Record Verus cycle kernel decision`.
 
 ### EP-M4R: Reject path: rejection record
@@ -1605,7 +1752,9 @@ M3:
 make test-prover-tools-integration 2>&1 | tee "/tmp/prover-int-netsuke-$BR.out"
 make test-verus-e2e 2>&1 | tee "/tmp/verus-e2e-netsuke-$BR.out"
 make verus 2>&1 | tee "/tmp/verus-all-netsuke-$BR.out"
-rg -il verus .github || echo "no Verus in CI"
+grep -n -A6 -E '^  (pull_request|push):' .github/workflows/proofs.yml   # both list src/ir/cycle/support.rs
+make kani-ir 2>&1 | tee "/tmp/kani-ir-netsuke-$BR.out"                  # after retirement: 15 verified
+make test-kani-mutations 2>&1 | tee "/tmp/kani-mutations-netsuke-$BR.out"
 ```
 
 M4.1: re-derive the ADR serial. Use the clean SSH environment the user's global
@@ -1737,6 +1886,10 @@ These are filled in during implementation:
   target.
 - The `Makefile` `VERUS_FLAGS` default becomes a two-file ordered batch, on
   the acceptance path only.
+- `.github/workflows/proofs.yml` gains `src/ir/cycle/support.rs` in both path
+  filters, on the acceptance path only.
+- Kani loses two harnesses and two mutation patches, on the acceptance path
+  only.
 - Dependencies: none added.
 - Reuse policy:
   - The VC-HYGIENE checker is the single owner of the Verus-kernel hygiene
@@ -1760,10 +1913,12 @@ These are filled in during implementation:
   (Verus proof engineering, formal-methods evaluation, test and tooling,
   documentation and governance).
 - [x] 2026-11-15T00:55+01:00: wrote revision 2, applying the review.
-- [ ] Plan pull request opened as a draft. Title:
-  `Plan: Evaluate a minimal Verus proof kernel for cycle canonicalization (4.4.3)`.
-  The body links this file on the branch and the roadmap entry, and ends with a
-  `## References` section.
+- [x] 2026-11-15: opened draft plan pull request #1136.
+- [x] 2026-11-15: rebased onto `origin/main` `fa06bdb21`, cleanly; the
+  range-diff showed both commits unchanged. Main had added #1138 (the Verus CI
+  workflow) and #1139.
+- [x] 2026-11-15: wrote revision 3, applying the user's D4 decision and the CI
+  notes.
 - [ ] User approval.
 - [ ] EP-M0 preflight and baselines.
 - [ ] EP-M1 specification and hygiene tests.
@@ -1819,16 +1974,19 @@ These are filled in during implementation:
     kernel boundary.
   - The headline justification is C7 and T-CANON for every N, not ties
     (see "Where Verus is warranted").
-- D4 (2026-11-15). Decision: keep all Kani canonicalization harnesses. **The
-  user may choose otherwise at approval.**
-  - Rationale: Kani checks the compiled production function and is
-    gate-enforced in CI; Verus checks a mirror and is optional.
-  - Options:
-    - (a) keep all (recommended);
-    - (b) retire the N=3 and N=4 harnesses, saving about 19.4 s of
-      `kani-full`. This is acceptable only if Verus also enters CI, which
-      `FV-CI` defers.
-  - Consequence: acceptance is additive (G1, K4).
+- D4 (2026-11-15, revised by the user the same day). Decision: on
+  acceptance, retire the N=3 and N=4 Kani canonicalization harnesses, their
+  builders, and their mutation patches (`UD-D4`). Keep the two-node kernel
+  harness and the path-wrapper harness.
+  - Revision 2 recommended keeping all of them, because Verus then had no CI
+    job. #1138 added `proofs.yml`, which removes that objection, and the user
+    chose option (b).
+  - The two-node harness stays as the only check of the *compiled* production
+    kernel. The Verus kernel covers every length of the mirror. VC-CORRESPOND
+    ties the two together.
+  - On rejection nothing is retired, because the proof would not exist to
+    replace them.
+  - Consequence: acceptance is partly substitutive (G1, K4).
 - D5 (2026-11-15). Decision: on acceptance, `make verus` defaults to every
   kernel. VC-HYGIENE cross-checks the default against the discovered kernels.
   - Rationale: an accepted kernel the default skips will rot unrun.
@@ -1850,9 +2008,24 @@ These are filled in during implementation:
 - D11 (2026-11-15). Decision: model the short-input guard so T-CANON is
   total, but not the `debug_assert!` panic, which is a debug-only diagnostic
   for an input AXM-DET excludes.
-- D12 (2026-11-15). Decision: ADR-0047 gets no amendment banner.
-  - Rationale: Verus complements its Kani boundary without changing it.
-    ADR-0082 cross-references it.
+- D12 (2026-11-15, revised). Decision: on acceptance, ADR-0047 gets an
+  `Amended by ADR-0082` banner and an `## Amendments` entry.
+  - Rationale: D4 now retires part of the N=2..4 Kani boundary that ADR-0047
+    recorded. Revision 2 had said no amendment was needed, which held only
+    while every harness was kept.
+- D16 (2026-11-15). Decision: keep the explicit two-file `VERUS_FLAGS` batch
+  rather than making `make verus` glob `verus/*/main.rs`.
+  - Rationale: the explicit list keeps the documented `--proof-file`
+    interface and its pinned tests. VC-HYGIENE's cross-check fails `make test`
+    whenever a discovered kernel is missing from the default, which closes the
+    "passes only when run by hand" risk (`UD-FLAGS`) as firmly as a glob would.
+- D17 (2026-11-15). Decision: VC-HYGIENE also checks that each kernel's
+  mirrored production path, which VC-CORRESPOND declares
+  (`src/ir/cycle/support.rs`), appears in both the `pull_request` and `push`
+  path filters of `proofs.yml` (`UD-PATHS`).
+  - Rationale: without the filter, a production change would re-check its
+    proof only at the weekly run. VC-CORRESPOND catches syntactic drift in
+    `make test`, but only CI re-runs the proof itself.
 - D13 (2026-11-15). Decision: drift is detected by a structural
   correspondence test, not an insta snapshot or digest.
   - Rationale: a snapshot of production source has no precedent here, can be
@@ -1911,3 +2084,22 @@ Not started.
       the panel's line estimates and 4.4.2's history.
   - Effect on remaining work: more test code in EP-M1, a stricter gate, and an
     honest completion path for either verdict.
+- Revision 3 (2026-11-15): rebased onto `fa06bdb21`, and applied the user's
+  direction.
+  - The new CI workflow: #1138 added `.github/workflows/proofs.yml`. The plan
+    now:
+    - records `FV-CI` as amended, and adds `UD-D4`, `UD-FLAGS`, `UD-PATHS`,
+      and `UD-INSTALL`;
+    - adds `src/ir/cycle/support.rs` to both path filters in EP-M3;
+    - extends VC-HYGIENE to check the filters (D17);
+    - explains why the explicit `VERUS_FLAGS` batch stays (D16);
+    - requires pinned-only Verus installation.
+  - The D4 decision: on acceptance, the N=3 and N=4 Kani harnesses, their
+    builders, and their patches retire, after the two-node harness is shown
+    to kill both patches' faults. ADR-0047 gains an amendment (D12 revised).
+    G1 notes that acceptance is now partly substitutive. New risks: R13 and
+    R14.
+  - Budgets: files rise from 22 to 28 and configuration from 12 to 14 for the
+    six added paths. The code and documentation limits are unchanged.
+  - Effect on remaining work: EP-M3 gains a workflow edit and a retirement
+    commit. EP-M4 gains the ADR-0047 amendment and harness-count corrections.
