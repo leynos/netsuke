@@ -3698,6 +3698,24 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   work; admission reported `healthy` throughout and the gate is counted on its
   exit status, not its wall time.
 
+  `9e7e0993d` is the last revision the full eleven-gate set verified. The
+  commits after it change this one file and nothing else: `20302c245` adds 13
+  lines of prose recording the run above, and `git diff --name-only` across
+  `9e7e0993d..HEAD` lists only this plan. `make fmt` and `make check-fmt` were
+  both run on exactly this content and exited 0, mdtablefix reporting 227 files
+  unchanged. The `Status:` line still reads one bare `IN PROGRESS`.
+
+  Those later commits are not re-gated locally, and the recursion is why.
+  `tests/execplan_status_contract_tests.rs` reads every `docs/execplans/*.md`,
+  so a plan edit owes the full set; but the commit that records a gate run
+  moves HEAD past the revision that run verified, so gating the record requires
+  another run whose record requires another. Applied literally this does not
+  converge. The rule is honoured by naming the last verified revision and the
+  delta since it, and by letting CI cover the tip on push: the four contexts the
+  `main-required-checks` ruleset names run on every head regardless. What
+  would not be honest is to call `9e7e0993d`'s run evidence for `20302c245`; it
+  is evidence for `9e7e0993d`, and the delta since is prose this note describes.
+
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
 [roadmap]: ../roadmap-hexagonal-hardening.md
