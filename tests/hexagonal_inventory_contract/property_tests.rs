@@ -13,9 +13,7 @@
 
 use proptest::prelude::*;
 
-use super::markdown::{
-    HeadingLevel, harvest_body, heading_body, is_heading, is_heading_at_or_above,
-};
+use super::markdown::{HeadingLevel, harvest_body, heading_body, is_heading};
 
 /// One generated heading: its depth, its title, and the line that renders it.
 type Generated = (u8, String, String);
@@ -100,6 +98,29 @@ fn deeper_headings_before_boundary(
         .collect()
 }
 
+/// Render the headings after `index` that a region at `boundary_depth` must
+/// stop before.
+///
+/// The oracle is the generator's own record of each heading's depth and
+/// rendered line, never the parser's predicate. These two properties once
+/// asked `is_heading_at_or_above` about every line of the region, which is the
+/// same function the reader under test calls: a mutation making it always
+/// return false let the reader absorb every later section while the assertion
+/// still saw no boundary, so both properties passed against a broken reader.
+/// A property must not ask the code under test whether its own answer is right.
+fn headings_at_or_above_after(
+    headings: &[Generated],
+    index: usize,
+    boundary_depth: u8,
+) -> Vec<String> {
+    headings
+        .iter()
+        .skip(index + 1)
+        .filter(|(depth, _, _)| *depth <= boundary_depth)
+        .map(|(_, _, line)| line.clone())
+        .collect()
+}
+
 proptest! {
     /// A region slice retains the deeper headings inside it.
     ///
@@ -128,37 +149,45 @@ proptest! {
     /// A region slice stops at the next heading at or above its own level.
     ///
     /// The complement of the retention rule: absorbing the next sibling section
-    /// would make one region's claims readable as another's.
+    /// would make one region's claims readable as another's. The headings the
+    /// region must exclude come from the generator, not from the reader's own
+    /// predicate — see `headings_at_or_above_after`.
     #[test]
     fn section_regions_stop_at_the_next_sibling_heading((text, headings) in document()) {
-        for (_, title, _) in headings.iter().filter(|(depth, _, _)| *depth == 2) {
+        for (index, (depth, title, _)) in headings.iter().enumerate() {
+            if *depth != 2 {
+                continue;
+            }
             let region = prop_assert_some!(
                 heading_body(&text, title, HeadingLevel::Section),
                 "generated heading {title:?} should have a section region"
             );
-            prop_assert!(
-                !region
-                    .lines()
-                    .any(|line| is_heading_at_or_above(line, HeadingLevel::Section)),
-                "region for {title} should stop before any depth-1 or depth-2 heading; got {region:?}"
-            );
+            for boundary in headings_at_or_above_after(&headings, index, 2) {
+                prop_assert!(
+                    !region.contains(&boundary),
+                    "region for {title} should stop before {boundary:?}; got {region:?}"
+                );
+            }
         }
     }
 
     /// A subsection region stops at the next heading at or above depth three.
     #[test]
     fn subsection_regions_stop_at_the_next_sibling_heading((text, headings) in document()) {
-        for (_, title, _) in headings.iter().filter(|(depth, _, _)| *depth == 3) {
+        for (index, (depth, title, _)) in headings.iter().enumerate() {
+            if *depth != 3 {
+                continue;
+            }
             let region = prop_assert_some!(
                 heading_body(&text, title, HeadingLevel::Subsection),
                 "generated heading {title:?} should have a subsection region"
             );
-            prop_assert!(
-                !region
-                    .lines()
-                    .any(|line| is_heading_at_or_above(line, HeadingLevel::Subsection)),
-                "region for {title} should stop before any heading at depth three or above; got {region:?}"
-            );
+            for boundary in headings_at_or_above_after(&headings, index, 3) {
+                prop_assert!(
+                    !region.contains(&boundary),
+                    "region for {title} should stop before {boundary:?}; got {region:?}"
+                );
+            }
         }
     }
 
