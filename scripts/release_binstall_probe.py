@@ -5,43 +5,28 @@ launched. Nothing here decides whether the reported version is the candidate's
 — that is :func:`release_consumer_payload.require_probe` — and nothing here
 touches the archive; this module passes an absolute path, ``--version`` as an
 argument, a wall-clock budget, a ceiling on what it will read back, and a fixed
-environment, then reports what the child did.
+environment, then reports what the child did. The launcher is injected so a
+test can observe the launch without executing a downloaded file. The
+environment is fixed rather than inherited: the binary came from a public URL
+and has no business reading any credential the runner happens to export.
 
-The environment is fixed rather than inherited. The job holds a read-only
-token, but the binary came from a public URL and has no business reading any
-credential the runner happens to export. The launcher is injected so a test can
-observe the launch without executing a downloaded file.
-
-Standard error is discarded rather than captured. Only the banner decides
-acceptance, and decoding a stray byte on standard error would let a diagnostic
-the smoke never reads turn a correct banner into a failed run.
-
-Standard output is read to a ceiling rather than captured whole, and a child
-that writes past it is killed rather than read further. A banner is one short
-line, so the ceiling never refuses a binary that answered the question it was
-asked, and the read is incremental so the bytes a hostile child writes never
-become the smoke's memory.
+Standard error is discarded rather than captured, because only the banner
+decides acceptance and a stray byte there would otherwise fail a correct run.
+Standard output is read to a ceiling rather than captured whole, so a hostile
+child's bytes never become the smoke's memory.
 
 The read runs on its own daemon thread and is joined against one deadline,
 because a blocking read cannot be bounded any other way: the child is not the
-only holder of its standard output, so a descendant that inherited the pipe
-keeps the read blocked after the child itself has exited. The child is started
-in its own session, so stopping it stops everything it started and releases the
-pipe that would otherwise stay open. The same deadline then bounds the wait for
-the child to exit: a binary that closes its standard output and then hangs is
-refused as a timeout rather than waited on, and one that closes it and finishes
-is reaped normally rather than killed for having been slow to exit. Every
-refusal stops, reaps, and closes the child, so no path leaves a process behind.
+only holder of its standard output. The child is started in its own session, so
+stopping it stops everything it started, and the same deadline bounds the wait
+for it to exit. The captured output is released by whichever party is not
+blocked on it: a descendant that started a session of its own escapes the kill,
+so the reader closes the stream when its read returns and the probe closes it
+only once that thread has finished.
 
-The child is launched through :mod:`subprocess` rather than through ``cuprum``,
-which this repository uses for automation scripts generally. The ceiling and
-the kill are the reason: ``cuprum`` captures whole, and its line stream is
-asynchronous, so bounding the capture there would mean rebuilding this read
-against a cancellation path that is further from the signal that has to stop
-the child. The smoke also runs under ``uv run --no-project``, where ``cuprum``
-is not installed, and this is the only subprocess it starts. The real child
-lives in :mod:`release_binstall_child`, so this module holds the seam and the
-decisions rather than the process plumbing.
+The child is launched through :mod:`subprocess` rather than ``cuprum``, which
+captures whole and is not installed under ``uv run --no-project``. The real
+child lives in :mod:`release_binstall_child`, so this module holds the seam.
 
 Run through ``scripts/consumer_smoke_cli.py``; behavioural coverage lives in
 ``scripts/tests/test_release_binstall_probe.py``.
@@ -105,7 +90,7 @@ class ProbeProcess(typ.Protocol):
         """Stop the child, reap it, and report the status it exited with."""
 
     def close(self) -> None:
-        """Release the captured standard output."""
+        """Release the captured standard output, idempotently."""
 
 
 class ProbeLauncher(typ.Protocol):
@@ -177,20 +162,34 @@ def _stopped(process: ProbeProcess) -> None:
         _ = process.stop()
 
 
+def _closed(process: ProbeProcess) -> None:
+    """Release the captured output, ignoring a stream already released.
+
+    Both the reader thread and the probe release the stream, so the second call
+    is ordinary rather than exceptional.
+    """
+    with contextlib.suppress(OSError, ValueError):
+        process.close()
+
+
+def _released(process: ProbeProcess, reader: threading.Thread) -> None:
+    """Release the captured output unless its reader is still blocked on it.
+
+    A reader still alive is blocked in a read that a descendant escaped the kill
+    to hold open, and closing now would wait on the lock that read holds; the
+    reader releases the stream when the read returns.
+    """
+    if reader.is_alive():
+        return
+    _closed(process)
+
+
 @dataclasses.dataclass(slots=True)
 class _Reading:
     """Hold what the reader thread observed, for the caller to act on.
 
-    Attributes
-    ----------
-    size
-        The number of characters to ask for: one past the ceiling, so
-        "exactly at the ceiling" and "over it" are told apart without reading
-        any further.
-    banner
-        What the child wrote, once the read returned.
-    error
-        What the read raised instead of returning, if it did.
+    ``size`` asks for one character past the ceiling, so "exactly at the
+    ceiling" and "over it" are told apart without reading any further.
     """
 
     size: int
@@ -198,14 +197,20 @@ class _Reading:
     error: BaseException | None = None
 
     def run(self, process: ProbeProcess) -> None:
-        """Read the child's standard output, recording the outcome."""
+        """Read the child's standard output, recording the outcome.
+
+        The stream is released here because a read that outlasted the deadline
+        is what the caller must not block on, and a second release is harmless.
+        """
         try:
             self.banner = process.read_stdout(self.size)
         except (UnicodeDecodeError, OSError, ValueError) as error:
-            # ValueError covers a stream the probe closed from the main thread
-            # after the drain budget expired. It is a refusal to report, not a
-            # traceback to leave on a daemon thread nobody is watching.
+            # ValueError covers a stream already released by the other party.
+            # It is a refusal to report, not a traceback to leave on a daemon
+            # thread nobody is watching.
             self.error = error
+        finally:
+            _closed(process)
 
 
 def _reader(process: ProbeProcess, reading: _Reading) -> threading.Thread:
@@ -245,7 +250,12 @@ def _unreadable_message(error: BaseException | None) -> str:
     return f"the shipped binary's standard output could not be read: {error}"
 
 
-def _banner(process: ProbeProcess, deadline: float) -> str:
+def _banner(
+    process: ProbeProcess,
+    reading: _Reading,
+    reader: threading.Thread,
+    deadline: float,
+) -> str:
     """Read standard output up to the ceiling, bounded by ``deadline``.
 
     Returns
@@ -261,11 +271,8 @@ def _banner(process: ProbeProcess, deadline: float) -> str:
     ProbeOutputError
         If the output could not be decoded as UTF-8, or could not be read.
     ProbeOutputLimitError
-        If the child wrote past the ceiling; it is stopped before this is
-        raised.
+        If the child wrote past the ceiling.
     """
-    reading = _Reading(size=PROBE_OUTPUT_LIMIT + 1)
-    reader = _reader(process, reading)
     reader.join(max(0.0, deadline - time.monotonic()))
     if reader.is_alive():
         _stopped(process)
@@ -288,7 +295,12 @@ def _banner(process: ProbeProcess, deadline: float) -> str:
     raise ProbeOutputLimitError(msg)
 
 
-def _observed(process: ProbeProcess, deadline: float) -> tuple[str, int]:
+def _observed(
+    process: ProbeProcess,
+    reading: _Reading,
+    reader: threading.Thread,
+    deadline: float,
+) -> tuple[str, int]:
     """Read the banner, then wait for the child to exit within the budget.
 
     Returns
@@ -301,7 +313,7 @@ def _observed(process: ProbeProcess, deadline: float) -> tuple[str, int]:
     ProbeTimeoutError
         If the read or the wait has not completed by ``deadline``.
     """
-    banner = _banner(process, deadline)
+    banner = _banner(process, reading, reader, deadline)
     status = process.wait_until(deadline)
     if status is None:
         _stopped(process)
@@ -349,7 +361,10 @@ def probe_version(binary: pathlib.Path, *, launcher: ProbeLauncher) -> ProbeResu
     which is a different operational fact from a binary that never ran.
 
     Every refusal stops and reaps the child, and the captured standard output
-    is released on the way out whether the run was accepted or refused.
+    is released on the way out whether the run was accepted or refused. The
+    one exception is a read still blocked by a descendant that escaped the
+    kill: waiting on that read would defeat the deadline, so the reader thread
+    releases the stream when the read finally returns.
 
     Examples
     --------
@@ -370,12 +385,10 @@ def probe_version(binary: pathlib.Path, *, launcher: ProbeLauncher) -> ProbeResu
     """  # ruff: ignore[docstring-extraneous-exception] - raised by the helpers above
     process = _launched(launcher, binary)
     deadline = time.monotonic() + PROBE_TIMEOUT_SECONDS
+    reading = _Reading(size=PROBE_OUTPUT_LIMIT + 1)
+    reader = _reader(process, reading)
     try:
-        banner, status = _observed(process, deadline)
+        banner, status = _observed(process, reading, reader, deadline)
     finally:
-        # Closing after the child is gone cannot disturb a live reader, and a
-        # stream that is already closed raises here for no reason worth
-        # reporting.
-        with contextlib.suppress(OSError, ValueError):
-            process.close()
+        _released(process, reader)
     return ProbeResult(returncode=status, stdout=banner)

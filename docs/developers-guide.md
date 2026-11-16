@@ -3753,10 +3753,15 @@ exit, because the child is not the only holder of the pipe: a descendant that
 inherited it keeps a blocking read open after the child itself has exited. The
 child is therefore started in a session of its own, and a refusal kills the
 process group rather than the child alone, which is what releases that pipe. A
-binary that prints its banner, closes its output, and then finishes is waited
-for and reaped; one that stays alive once its output is closed is refused as a
-timeout rather than waited on indefinitely. The process plumbing lives in
-`release_binstall_child.py`, which drives `subprocess` directly rather than
+descendant that starts a session of its own escapes the kill and keeps the pipe
+open past the drain budget, so the captured stream is released by whichever
+party is not blocked on it: the reader thread closes it when its read returns,
+and the probe closes it only once that thread has finished. Closing a stream a
+live read holds would wait on that read's lock and stretch the probe past its
+deadline. A binary that prints its banner, closes its output, and then finishes
+is waited for and reaped; one that stays alive once its output is closed is
+refused as a timeout rather than waited on indefinitely. The process plumbing
+lives in `release_binstall_child.py`, which drives `subprocess` directly rather
 through `cuprum`, because the ceiling has to stop the child at the byte that
 passes it, `cuprum` captures whole, and the smoke runs under
 `uv run --no-project`, where `cuprum` is not installed. Replacing the child's

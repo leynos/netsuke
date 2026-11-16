@@ -291,3 +291,43 @@ def test_probe_version_releases_a_pipe_a_descendant_holds(
         "the read must be released by stopping the process group; waiting for "
         "the drain budget means the descendant kept the pipe open"
     )
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="needs a POSIX shell script")
+def test_probe_version_refuses_a_descendant_that_escapes_the_kill(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Report the timeout without waiting for a read the kill cannot release.
+
+    The descendant here starts a session of its own, so stopping the child's
+    process group does not reach it and the captured pipe stays open past the
+    drain budget. Closing the stream while the reader is still blocked on it
+    would wait for the descendant to exit, so the probe must leave the release
+    to the reader and report its refusal on time. The descendant's lifetime is
+    bounded so nothing outlives the case, and it is long enough that only a
+    probe which does not wait on it can finish inside the bound.
+    """
+    lifetime = 5
+    monkeypatch.setattr(probe, "PROBE_TIMEOUT_SECONDS", 1.0)
+    monkeypatch.setattr(probe, "PROBE_DRAIN_SECONDS", 0.5)
+    binary = tmp_path / policy.BINARY_NAME
+    detached = f"import os, time; os.setsid(); time.sleep({lifetime})"
+    _ = binary.write_text(
+        "#!/bin/sh\n"
+        "printf 'netsuke 1.2.3\\n'\n"
+        f"'{sys.executable}' -c '{detached}' &\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+
+    started = time.monotonic()
+    with pytest.raises(probe.ProbeTimeoutError):
+        probe.probe_version(binary, launcher=child_adapter.launch)
+    elapsed = time.monotonic() - started
+
+    assert elapsed < lifetime / 2, (
+        "the probe must not close a stream its reader is still blocked on; "
+        f"waiting for the descendant means {elapsed:.1f}s of its {lifetime}s "
+        "lifetime elapsed"
+    )
