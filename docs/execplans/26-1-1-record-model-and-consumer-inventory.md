@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 59. See `Revision note` at the foot of this document. This plan was
+Revision 60. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -862,6 +862,13 @@ pre-rebase history if an old hash must be inspected.
   collects through the shared `landed_work_entries`, so one selector decides
   what an entry is. A `no_landed_work` rejection case covers it, and removing
   the guard fails that case alone. The contract target runs 83 cases.
+- [x] (2026-11-16) Closed the finding-ownership boundary finding from the
+  revision-59 assessment (D-46). Findings now collect through the shared
+  `bullet_entries`, so an unindented paragraph no longer donates an owner to
+  the bullet above it; the subheading repair had closed only the route a
+  heading provides. Both halves are tested, and the stricter rule was checked
+  against the real document before it was committed. The contract target runs
+  85 cases.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -1904,6 +1911,44 @@ pre-rebase history if an old hash must be inspected.
   79 identifiers at 52/27. As D-44 explains, that chain stops with the
   documentation commit that records it. Date/Author: 2026-11-16, implementation
   agent, on the hosted review round.
+
+- Decision D-46 (2026-11-16): closed the finding-ownership boundary finding from
+  the revision-59 completeness verdict. It is the subheading fail-open D-42
+  repaired, reached along the path that repair left open.
+
+  `finding_entries` ended an entry at a list item or a heading, so an
+  unindented paragraph after a blank line was appended to the bullet above it.
+  `validate_findings` reads the owner from the whole entry, so a paragraph
+  naming a task satisfied the owner check for a finding that named none. The
+  subheading case had been fixed by making *any* heading end the entry, which
+  closed the one route a heading provides and left the paragraph route open;
+  enumerating more boundary forms would have kept leaving routes open, because
+  the paragraph needs no heading at all.
+
+  The reader now collects through `markdown::bullet_entries`, the collector the
+  obligation and landed-work rules already share: an indented line continues
+  the open entry and any unindented line closes it. `is_finding_boundary` and
+  `finish_finding` are deleted rather than extended, so there is one boundary
+  rule in the module instead of three hand-rolled ones. Both halves are tested:
+  `rejects_a_finding_whose_owner_appears_only_in_a_following_paragraph` and
+  `accepts_a_finding_whose_owner_is_on_an_indented_continuation`, the second so
+  the refusal is not bought by ending every entry at the first blank line.
+
+  The stricter rule was checked against the real inventory before committing
+  rather than after: both collectors produce the same 22 findings with the same
+  owner sets, so the permissive reading was not load-bearing and no real entry
+  loses its owner. The refusal was probed too — restoring the old boundary
+  fails the new paragraph case and no other.
+
+  The same verdict repeated that EP-M4 remains open. It does: this task records
+  the inventory and its contract, and every migration step the roadmap places
+  under 26.1.1's dependent tasks is still theirs to deliver. Nothing in this
+  branch claims otherwise, and the roadmap checkbox stays untouched.
+
+  This repair is a `tests/` change, so the post-pin sweep advances to 80
+  identifiers at 52/28. As D-44 explains, the chain stops with the
+  documentation commit that records it. Date/Author: 2026-11-16, implementation
+  agent, on the revision-59 assessment.
 
 ## Outcomes & retrospective
 
@@ -3128,6 +3173,20 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   the post-pin sweep advances to 79 identifiers, 52 in `main` and 27 on this
   branch. No proof artefact is affected. The revision-58 verdict is not
   discharged here either; a fresh assessment is requested for this candidate.
+- Revision 60 (2026-11-16): closed the finding-ownership boundary finding from
+  the revision-59 verdict (D-46). `finding_entries` ended an entry only at a
+  list item or a heading, so an unindented paragraph after a blank line was
+  appended to the bullet above it and `validate_findings` read an owner out of
+  prose for a finding that named none. The reader now collects through the
+  shared `markdown::bullet_entries`, whose rule — indented continues, any
+  unindented line closes — is the one Markdown applies to a list item. A
+  rejection case covers the paragraph and an acceptance case keeps the indented
+  continuation working; both collectors were compared on the real inventory
+  first and produce the same 22 findings with the same owners. The contract
+  target runs 85 cases and the post-pin sweep advances to 80 identifiers, 52 in
+  `main` and 28 on this branch. EP-M4 remains open by design: the dependent
+  roadmap tasks own that work. No proof artefact is affected. A fresh
+  assessment is requested for this candidate.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

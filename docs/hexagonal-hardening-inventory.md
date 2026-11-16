@@ -254,7 +254,7 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-16 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 52 in the current `main` target and
-twenty-seven on this branch, one of them adding this inventory's contract test,
+twenty-eight on this branch, one of them adding this inventory's contract test,
 and the rest refactoring, tightening, or repairing the health of that contract.
 The span floor the `test_support` crate shares with the root is no longer among
 them: `fa06bdb21` landed that setting upstream, with a refactor of the one
@@ -349,6 +349,7 @@ context for later consumers; it does not move the inventory pin.
   (#1126)
 - `bb0bbc683` Add the offline candidate boundary and publication resume for
   crates.io (#1065) (#1083)
+- `be9728449` End a finding entry at an unindented paragraph
 - `c1caa394b` Close the completeness assessment's two findings
 - `c37768353` Stop trace harvesters absorbing subheading prose
 - `c82189bf4` Install the built .deb and .rpm before publishing them (#799)
