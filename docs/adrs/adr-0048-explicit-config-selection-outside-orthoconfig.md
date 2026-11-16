@@ -149,6 +149,37 @@ user scope first changes which candidates are considered, not how a loaded file
 is trusted. This is a Netsuke CLI-adapter decision for the same reason as the
 original one: the ordering is Netsuke policy, not a generic library contract.
 
+## Addendum — 2026-11-16
+
+The user-scope pass also settles what counts as an existing user file and what
+counts as a usable base value, because OrthoConfig 0.10.0 answers both
+questions differently from the policy in the previous addendum.
+
+A candidate that exists but does not resolve is now an error rather than an
+absence. The dependency probes a candidate through a capability on its parent
+directory and maps `NotFound` to `Ok(None)`, which is the same answer it gives
+for a file that is not installed. A dangling `$HOME/.netsuke.toml` would
+therefore fall through to system scope, reinstating the policy the user meant
+to override. `paths::candidate_entry_metadata` decides presence for a candidate
+that did not load, using `cap_std` to stat the entry without following it at
+its final component: a genuinely absent entry is still skipped, and a link
+whose target exists still loads that target.
+
+A base value that is empty or not absolute is now ignored by both passes. The
+predicate is `Path::is_absolute`, not `has_root`, because a Windows value such
+as `\config` is rooted but names no drive and would resolve on whichever drive
+the process runs from. The dependency filters only empty values, so its own
+scan receives `paths::SanitisedUserBases`, an environment view in which a
+rejected user base value reads as unset; otherwise a relative value would
+return as a working-directory relative candidate in the fallback scan.
+`XDG_CONFIG_DIRS` stays outside that view, because system-scope handling
+remains the dependency's contract.
+
+Both changes are Netsuke CLI-adapter policy for the same reason as the ordering
+above. The rejection is reported as `OrthoError::File`, so the existing
+discovery series counts the pass under `outcome="error"` and the discovery span
+records `error_category="file"`.
+
 ## Related documents
 
 - [`docs/developers-guide.md`](../developers-guide.md)

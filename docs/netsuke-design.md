@@ -4308,7 +4308,11 @@ rejected from environment ingress by its normalized top-level spelling.
    happened to run. On Windows the same rule excludes a rooted value without a
    drive, such as `\config`, which would resolve on whichever drive the process
    runs from. `HOME` supplies the home directory when it is set to an absolute
-   value; otherwise `USERPROFILE` does.
+   value; otherwise `USERPROFILE` does. The same predicate governs the
+   dependency's own scan, which filters only empty values: it receives an
+   environment view in which a rejected base reads as unset, so a relative
+   value cannot return as a working-directory relative candidate through the
+   system-scope fallback.
 
 4. **System scope**: System-wide configuration directories, consulted only when
    no user file exists:

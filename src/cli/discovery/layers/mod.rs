@@ -24,7 +24,8 @@ use super::diagnostics::{
     BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
 };
 use super::paths::{
-    PathNormalizer, candidate_entry_metadata, project_scope_file, user_scope_candidates,
+    PathNormalizer, SanitisedUserBases, candidate_entry_metadata, project_scope_file,
+    user_scope_candidates,
 };
 use super::project_policy::scope_project_chain;
 pub(super) use super::project_policy::{
@@ -33,6 +34,7 @@ pub(super) use super::project_policy::{
 
 mod project_key;
 use project_key::ProjectKey;
+
 
 /// Project-scope outcome retained for a later trace replay.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -243,8 +245,14 @@ fn automatic_base_layers(
     if let Some(layers) = user_scope_base_layers(env_source.as_ref())? {
         return Ok((layers, true));
     }
-    let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), env_source);
+    // The dependency filters only empty base values, so its scan would resolve a
+    // relative one against the working directory. Hand it the same view the
+    // user pass used, where such a value reads as unset, and neither path can
+    // load configuration from wherever the tool happened to run.
+    let fallback_env: SharedEnvSource = Arc::new(SanitisedUserBases::new(Arc::clone(&env_source)));
+    let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), fallback_env);
     first_automatic_chain(&discovery, project_key)
+}
 }
 
 /// Load the first user-scope configuration file, if one exists.
@@ -453,6 +461,7 @@ mod selector_tests;
 
 #[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
 // weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
 // weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
 // weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
