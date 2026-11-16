@@ -9,7 +9,10 @@ nothing an input, an asset name, or an error string says can reach them.
 Each phase is recorded as ``failure`` *before* its work begins and raised to
 ``success`` only once the work returns. A run that dies mid-phase therefore
 names the phase that was in flight, which is what the job telemetry needs to
-distinguish "the archive was corrupt" from "the runner vanished".
+distinguish "the archive was corrupt" from "the runner vanished". A phase that
+refuses records ``failure`` a second time with its end timestamp before the
+refusal propagates, so a completed refusal carries the same timing pair a
+success does.
 
 Run through ``scripts/consumer_smoke_cli.py``; behavioural coverage lives in
 ``scripts/tests/test_consumer_smoke_cli.py``.
@@ -95,8 +98,18 @@ class PhaseLedger:
         :class:`VerdictWriteError`, raised by the write this method performs.
         """
         started_ns = self.clock()
+        # Recorded as failed before the work starts, so a run killed mid-phase
+        # still names the phase in flight and leaves its start time behind.
         self._record(label, "failure", started_ns, None)
-        result = action()
+        try:
+            result = action()
+        except Exception:
+            # A phase that refuses has finished, so it reports an end time even
+            # though its outcome stays ``failure``. An interrupted run never
+            # reaches here and keeps the start-only record above, which is how
+            # a refusal is told apart from a runner that vanished.
+            self._record(label, "failure", started_ns, self.clock())
+            raise
         self._record(label, "success", started_ns, self.clock())
         return result
 

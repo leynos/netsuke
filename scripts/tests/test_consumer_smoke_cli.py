@@ -165,8 +165,11 @@ def test_verify_reports_a_download_the_host_did_not_deliver(
     )
     failure = read_phase_log(staged)["crate_download"]
     assert failure["outcome"] == "failure", "the phase in flight must be recorded"
-    assert failure["ended_ns"] is None, (
-        "a phase that never finished must record no end timestamp"
+    assert isinstance(failure["ended_ns"], int), (
+        "a phase that refused has finished, so it records an end timestamp"
+    )
+    assert failure["started_ns"] <= failure["ended_ns"], (
+        "a refusal's end must not precede its start"
     )
 
 
