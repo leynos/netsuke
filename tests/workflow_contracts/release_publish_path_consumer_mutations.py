@@ -9,61 +9,21 @@ reviewable on their own.
 Run via ``make test-workflow-contracts``.
 """
 
-import enum
 import typing as typ
 
 from release_publish_path_consumer_expectations import (
     CONSUMER_SMOKE_EXPECTED_VIOLATIONS,
     MUTATION_LABELS,
 )
+from release_publish_path_consumer_mutation_support import (
+    ConsumerSmokeMutationError,
+    ConsumerSmokeMutationIssue,
+    Job,
+)
 from release_publish_path_consumer_smoke import CONSUMER_SMOKE_JOB, LOCAL_SMOKE_ACTION
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
-
-#: One parsed workflow or composite-action document, mutated in place.
-type Job = dict[str, object]
-
-
-class ConsumerSmokeMutationIssue(enum.StrEnum):
-    """Classify why a mutation no longer matches the fixture it mutates."""
-
-    MISSING_JOBS = "the release workflow must declare its jobs"
-    MISSING_JOB = f"the release workflow must declare {CONSUMER_SMOKE_JOB}"
-    MALFORMED_STEPS = "the mutated document must declare a list of step mappings"
-    MISSING_CLAUSE = "the smoke guard no longer carries the clause to remove"
-    MISSING_PERMISSIONS = f"{CONSUMER_SMOKE_JOB} must set permissions"
-    MISSING_NEEDS = f"{CONSUMER_SMOKE_JOB} must declare needs"
-    MISSING_CHECKOUT_INPUTS = "the smoke checkout must pass inputs"
-    MISSING_CHECKOUT = f"{CONSUMER_SMOKE_JOB} must check the candidate out"
-    MISSING_DOWNLOAD = f"{CONSUMER_SMOKE_JOB} must download at least one artefact"
-    MISSING_ACTION_STEP = f"{CONSUMER_SMOKE_JOB} must call {LOCAL_SMOKE_ACTION}"
-    UNKNOWN_LABEL = "unknown consumer-smoke mutation"
-
-
-class ConsumerSmokeMutationError(AssertionError):
-    """Report a mutation that no longer matches the fixture it mutates.
-
-    Raised explicitly rather than left to an ``assert`` so the precondition
-    survives ``python -O``, where an assertion is dropped and a mutation would
-    silently apply to nothing. The category carries the message and the detail
-    carries whatever the category cannot say, which keeps long explanations out
-    of the ``raise`` sites.
-    """
-
-    def __init__(
-        self, issue: ConsumerSmokeMutationIssue, detail: object | None = None
-    ) -> None:
-        """Record the mutation error category and any stale clause or label."""
-        self.issue = issue
-        self.detail = detail
-        super().__init__(issue, detail)
-
-    def __str__(self) -> str:
-        """Render the mutation error with the detail that makes it diagnosable."""
-        if self.detail is None:
-            return self.issue.value
-        return f"{self.issue.value}: {self.detail}"
 
 
 #: The guard clauses, each with the operator that joins it to the previous
@@ -267,18 +227,8 @@ def _guard_invocation(release: Job, _action: Job) -> None:
     Nothing else changes: the dependency list, the job guard, and the inputs
     all still read as correct while the step that exercises the release never
     runs.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the job no longer invokes the action, so the mutation would change
-        nothing the contract reads.
     """
-    for step in _steps(_smoke_job(release)):
-        if str(step.get("uses", "")) == LOCAL_SMOKE_ACTION:
-            step["if"] = "false"
-            return
-    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
+    _invocation(_smoke_job(release))["if"] = "false"
 
 
 def _persist_checkout_credentials(release: Job, _action: Job) -> None:
@@ -320,6 +270,26 @@ def _select_pattern_artifact(release: Job, _action: Job) -> None:
             step["with"] = {"pattern": "release-*", "path": "downloaded"}
             return
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
+
+
+def _invocation(job: Job) -> Job:
+    """Return the job's one smoke invocation step.
+
+    Returns
+    -------
+    Job
+        The mutable step that calls the local action.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If the job no longer invokes the action, so a mutation targeting that
+        step would change nothing the contract reads.
+    """
+    for step in _steps(job):
+        if str(step.get("uses", "")) == LOCAL_SMOKE_ACTION:
+            return step
+    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
 
 
 def _compile_in_job(release: Job, _action: Job) -> None:

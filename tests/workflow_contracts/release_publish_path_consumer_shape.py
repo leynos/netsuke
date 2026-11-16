@@ -91,10 +91,7 @@ def _command_lines(run: object) -> list[str]:
 
 
 def steps_of(job: dict[str, object]) -> list[dict[str, object]]:
-    """Return one job's steps, tolerating a job that declares none.
-
-    A mutated job without steps must still produce a contract violation rather
-    than an exception from the reader.
+    """Return one job's steps, or none, so a mutated job raises no exception.
 
     Returns
     -------
@@ -126,10 +123,7 @@ def action_steps(action: dict[str, object]) -> list[dict[str, object]]:
 
 
 def smoke_job(release: dict[str, object], violations: list[str]) -> dict[str, object]:
-    """Return the smoke job, or an empty job that every check then refuses.
-
-    Returning an empty mapping keeps a workflow with no smoke job to one
-    violation per missing property instead of an exception from the reader.
+    """Return the smoke job, or an empty job every check then refuses.
 
     Returns
     -------
@@ -164,11 +158,10 @@ def check_smoke_needs(job: dict[str, object], violations: list[str]) -> None:
 def check_smoke_checkout(job: dict[str, object], violations: list[str]) -> None:
     """Require the candidate checkout to keep no credential in the job.
 
-    ``actions/checkout`` writes the workflow token into the local git config
-    by default, where every later step of the job can read it. The smoke reads
-    public bytes and runs one executable, so the token would be a credential
-    held for no reason; and checking out the tag rather than the resolved
-    candidate would exercise a tree the publisher never built.
+    ``actions/checkout`` writes the workflow token into the local git config by
+    default, where every later step can read it, and the smoke reads public
+    bytes. Checking out the tag rather than the resolved candidate would
+    exercise a tree the publisher never built.
     """
     checkouts = [
         step
@@ -238,11 +231,9 @@ def _require_named_artifact(step: dict[str, object], violations: list[str]) -> N
 def check_smoke_action_inputs(job: dict[str, object], violations: list[str]) -> None:
     """Require the one local-action invocation, its inputs, and no step condition.
 
-    A step-level ``if`` is refused because it can stop the smoke without
-    touching anything else: the job guard, the dependency list, and the inputs
-    would all still read as correct while the one step that exercises the
-    release never ran. The job's own guard is the only condition allowed to
-    decide whether the smoke runs.
+    A step-level ``if`` can stop the smoke while the job guard, the dependency
+    list, and the inputs all still read as correct. The job's own guard is the
+    only condition allowed to decide whether the smoke runs.
     """
     invocations = [
         step
