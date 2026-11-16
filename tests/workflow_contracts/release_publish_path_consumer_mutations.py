@@ -46,6 +46,12 @@ PUBLISH_CLAUSE = "&& needs.metadata.outputs.should_publish == 'true'"
 #: compiled instead of downloading would run, and is the substitution the
 #: compilation contract exists to refuse.
 COMPILATION_STEP = {"name": "Install from source", "run": "cargo install netsuke-build"}
+#: A step that expands the workflow token in its own shell while declaring no
+#: environment, so only a scan of executable lines sees the credential.
+TOKEN_READING_STEP = {
+    "name": "Read the token",
+    "run": 'echo "${{ github.token }}" > token.txt',
+}
 DOWNLOAD_PREFIX = "actions/download-artifact@"
 CHECKOUT_PREFIX = "actions/checkout@"
 
@@ -286,6 +292,36 @@ def _echo_verifier(_release: Job, action: Job) -> None:
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
 
 
+def _short_circuit_verifier(_release: Job, action: Job) -> None:
+    """End the verify step successfully before the verifier can run.
+
+    Every reviewed argument stays in place, so only a contract that follows
+    the step's own control flow notices that the verification is unreachable.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If the verify step carries no script to prefix, so the mutation would
+        change nothing the contract reads.
+    """
+    declared, index = cli_invocation(action, "verify")
+    step = declared[index]
+    run = step.get("run")
+    if not isinstance(run, str):
+        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
+    step["run"] = f"exit 0\n{run}"
+
+
+def _read_token_in_job_run(release: Job, _action: Job) -> None:
+    """Append a job step that reads the workflow token in its own shell."""
+    steps(smoke_job(release)).append(dict(TOKEN_READING_STEP))
+
+
+def _read_token_in_action_run(_release: Job, action: Job) -> None:
+    """Append an action step that reads the workflow token in its own shell."""
+    steps(action).append(dict(TOKEN_READING_STEP))
+
+
 def _compile_in_job(release: Job, _action: Job) -> None:
     """Append the source build a smoke must never run."""
     steps(smoke_job(release)).append(dict(COMPILATION_STEP))
@@ -319,6 +355,9 @@ _MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "absorb-consumer-smoke-action-failure": _absorb_action_failure,
     "drop-consumer-smoke-verifier": _drop_verifier,
     "echo-consumer-smoke-verifier": _echo_verifier,
+    "short-circuit-consumer-smoke-verifier": _short_circuit_verifier,
+    "read-consumer-smoke-token-in-run": _read_token_in_job_run,
+    "read-consumer-smoke-action-token-in-run": _read_token_in_action_run,
     "compile-in-consumer-smoke-job": _compile_in_job,
     "compile-in-consumer-smoke-action": _compile_in_action,
 }

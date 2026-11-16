@@ -6,7 +6,9 @@ Three separate scopes can define one: the workflow's top-level ``env``, which
 reaches every job; the smoke job and its steps, whose environment the job-level
 scan reads; and the composite action the job calls, whose steps run in the same
 process but appear nowhere in the workflow. All three are read here, so an edit
-that reaches for a token fails a contract wherever it is made.
+that reaches for a token fails a contract wherever it is made. A step can also
+expand ``${{ github.token }}`` in its shell without declaring any environment,
+so every step's executable lines are scanned alongside its mappings.
 
 The rest of the smoke's shape lives in ``release_publish_path_consumer_shape``,
 which owns the low-level readers these checks share and the constants that name
@@ -25,6 +27,7 @@ from release_publish_path_consumer_shape import (
     TOKEN_EXPRESSION,
     TOKEN_NAMES,
     action_steps,
+    command_lines,
     steps_of,
 )
 
@@ -72,6 +75,22 @@ def _leaked_credentials(scope: cabc.Mapping[str, object]) -> list[str]:
     )
 
 
+def _credential_lines(run: object) -> list[str]:
+    """Return the executable lines of a step that name a credential.
+
+    A step needs no environment to expand ``${{ github.token }}``: the
+    expression in its script reaches the same credential, so a scan of mappings
+    alone would miss it.
+
+    Returns
+    -------
+    list[str]
+        The offending command lines, so a violation quotes the command rather
+        than the whole script.
+    """
+    return [line for line in command_lines(run) if TOKEN_EXPRESSION.search(line)]
+
+
 def check_smoke_privileges(
     release: dict[str, object], job: dict[str, object], violations: list[str]
 ) -> None:
@@ -101,6 +120,13 @@ def check_smoke_privileges(
                 f"{CONSUMER_SMOKE_JOB}.token: {label} must not define a "
                 f"credential, got {leaked}"
             )
+    for index, step in enumerate(steps_of(job)):
+        leaked_lines = _credential_lines(step.get("run"))
+        if leaked_lines:
+            violations.append(
+                f"{CONSUMER_SMOKE_JOB}.token: step {step.get('name', index)} "
+                f"must not read a credential expression, got {leaked_lines[0]!r}"
+            )
 
 
 def check_smoke_action_environment(
@@ -119,15 +145,19 @@ def check_smoke_action_environment(
         # repeating it here would only bury the cause under its consequences.
         return
     for index, step in enumerate(action_steps(action)):
+        label = f"{CONSUMER_SMOKE_ACTION_PATH} step {step.get('name', index)}"
         scope = step.get("env")
-        if not isinstance(scope, dict):
-            continue
-        leaked = _leaked_credentials(scope)
+        leaked = _leaked_credentials(scope) if isinstance(scope, dict) else []
         if leaked:
             violations.append(
-                f"{CONSUMER_SMOKE_JOB}.token: {CONSUMER_SMOKE_ACTION_PATH} step "
-                f"{step.get('name', index)} must not define a credential, got "
-                f"{leaked}"
+                f"{CONSUMER_SMOKE_JOB}.token: {label} must not define a "
+                f"credential, got {leaked}"
+            )
+        leaked_lines = _credential_lines(step.get("run"))
+        if leaked_lines:
+            violations.append(
+                f"{CONSUMER_SMOKE_JOB}.token: {label} must not read a credential "
+                f"expression, got {leaked_lines[0]!r}"
             )
 
 

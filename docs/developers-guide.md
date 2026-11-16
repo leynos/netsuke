@@ -3809,9 +3809,11 @@ reachability oracle, re-exporting the shape names its callers use; the split
 keeps each module inside the 400-line cap. The checkout check is what keeps the
 workflow token from being persisted into the job's git config, the one
 credential a read-only job could still acquire. The credential scans live in
-`release_publish_path_consumer_credentials.py`, which reads the composite
-action's step environments as well as the job's, because those steps run in the
-same process but appear nowhere in the workflow. The failure-visibility check
+`release_publish_path_consumer_credentials.py`, which reads the workflow's, the
+job's, and the composite action's step environments, together with the
+executable lines of every step: a token can be expanded in a script without any
+environment declaring it, and the action's steps run in the same process but
+appear nowhere in the workflow. The failure-visibility check
 reads the job, its invocation step, and every step of the action, because a
 composite step that tolerates its own failure ends the action successfully and
 the job never sees the refusal. Each permitted download must also land in the
@@ -3819,8 +3821,9 @@ directory the matching action input reads, so the file the verifier opens is
 the file the download wrote. What the action's command lines may run is
 asserted in `release_publish_path_consumer_commands.py`: both CLI invocations
 must appear exactly once, carry no `if`, and run exactly the reviewed command
-line, launcher included, so a step that only `echo`es it is refused; and no
-command line in the job or the action may name a compiler.
+line, launcher included, so a step that only `echo`es it is refused; each must
+also be reachable, so a step that exits successfully above the invocation is
+refused; and no command line in the job or the action may name a compiler.
 `release_publish_path_consumer_mutations.py` registers one labelled regression
 for each of those properties, each with the violation it must produce stated in
 `release_publish_path_consumer_expectations.py`, and

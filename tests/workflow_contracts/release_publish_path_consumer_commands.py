@@ -6,10 +6,12 @@ lines. Without the checks here an action that kept its report step and dropped
 or weakened its verification would satisfy every other shape check, and the
 step that was supposed to fail would quietly pass.
 
-Two properties are asserted: the verifier is invoked exactly as reviewed, and
-nothing in the action builds from source. Both read what bash would run rather
-than what a comment says, so documentation naming a compiler or a flag cannot
-be mistaken for an invocation.
+Three properties are asserted: the verifier is invoked exactly as reviewed, the
+invocation is reachable, and nothing in the action builds from source. All
+three read what bash would run rather than what a comment says, so
+documentation naming a compiler or a flag cannot be mistaken for an invocation,
+and a line that ends the step before the verifier runs cannot be read as a
+script that reaches it.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -130,6 +132,53 @@ def invoked_phase(tokens: tuple[str, ...] | None) -> str | None:
     return None
 
 
+def ends_successfully(line: str) -> bool:
+    """Return whether one shell command line exits the step successfully.
+
+    Returns
+    -------
+    bool
+        True for a bare ``exit`` or ``return``, or one naming status ``0``.
+        A non-zero status fails the step instead of skipping the rest of it,
+        so it makes no command unreachable.
+
+    Examples
+    --------
+    >>> ends_successfully("exit 0"), ends_successfully("exit 1")
+    (True, False)
+    """
+    try:
+        tokens = tuple(shlex.split(line))
+    except ValueError:
+        return False
+    return tokens[:1] in {("exit",), ("return",)} and tokens[1:] in {(), ("0",)}
+
+
+def ends_before_smoke_cli(step: dict[str, object]) -> str | None:
+    """Return the line that ends a step successfully before the CLI runs.
+
+    A line that exits the shell makes every later command unreachable, so a
+    step that ran ``exit 0`` above the reviewed invocation would satisfy an
+    exact-match check while verifying nothing.
+
+    Returns
+    -------
+    str | None
+        The first success exit that precedes :data:`SMOKE_CLI`, or ``None``
+        when every line ahead of the invocation falls through to it.
+    """
+    for line in command_lines(step.get("run")):
+        try:
+            tokens = tuple(shlex.split(line))
+        except ValueError:
+            continue
+        if SMOKE_CLI in tokens:
+            return None
+        if ends_successfully(line):
+            return line
+    return None
+
+
 def check_smoke_action_commands(
     action: dict[str, object] | None, violations: list[str]
 ) -> None:
@@ -174,6 +223,11 @@ def _require_invocation(
         violations.append(
             f"{label} must run exactly {list(expected)}, got {list(tokens)}"
         )
+    unreachable = ends_before_smoke_cli(step)
+    if unreachable is not None:
+        violations.append(
+            f"{label} is unreachable: {unreachable!r} ends the step first"
+        )
 
 
 def check_smoke_compilation(
@@ -214,6 +268,8 @@ __all__ = [
     "SMOKE_CLI",
     "check_smoke_action_commands",
     "check_smoke_compilation",
+    "ends_before_smoke_cli",
+    "ends_successfully",
     "invoked_phase",
     "smoke_command_line",
 ]

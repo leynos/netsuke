@@ -89,6 +89,18 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     # A launcher that only prints the reviewed command runs nothing, so the
     # whole command line, not just its arguments, is part of the contract.
     "echo-consumer-smoke-verifier": (("static", f"{CONSUMER_SMOKE_JOB}.action"),),
+    # An `exit 0` above the verifier leaves the reviewed command line intact
+    # and unreachable, so the contract has to read the step's control flow and
+    # not only the invocation it contains.
+    "short-circuit-consumer-smoke-verifier": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.action"),
+    ),
+    # A step declares no environment and still expands the workflow token in
+    # its shell, so a scan of environment mappings alone would leave it.
+    "read-consumer-smoke-token-in-run": (("static", f"{CONSUMER_SMOKE_JOB}.token"),),
+    "read-consumer-smoke-action-token-in-run": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.token"),
+    ),
     "compile-in-consumer-smoke-job": (("static", f"{CONSUMER_SMOKE_JOB}.compilation"),),
     "compile-in-consumer-smoke-action": (
         ("static", f"{CONSUMER_SMOKE_JOB}.compilation"),
