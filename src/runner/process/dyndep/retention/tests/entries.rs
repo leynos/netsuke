@@ -299,9 +299,18 @@ fn retention_rejects_a_dyndep_directory_junction(
 
     let result = prune_dyndep_cache(&dir, &[]);
 
+    let Err(error) = result else {
+        anyhow::bail!("retention must reject a dyndep directory junction");
+    };
+    // The refusal must be the alias diagnostic, not whichever error the open
+    // happened to raise first, so a regression that stops attributing the
+    // junction to the aliased component fails here as well as on Unix.
+    let expected = localization::message(keys::RUNNER_IO_DYNDEP_ALIAS)
+        .with_arg("path", DYNDEP_DIR)
+        .to_string();
     ensure!(
-        result.is_err(),
-        "retention must reject a dyndep directory junction"
+        format!("{error:#}").contains(&expected),
+        "the refusal must name the aliased component: {error:#}"
     );
     ensure!(
         test_support::fs::exists(victim.join("keep.dd")),

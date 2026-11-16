@@ -912,10 +912,13 @@ then at most 32 obsolete `.dd` files and 1 MiB of obsolete `.dd` bytes. Stale
 `build` and `generate` prune after materialization; `clean` prunes only after
 successful `ninja -t clean`, and does not prune when clean fails.
 
-Netsuke refuses to use `.netsuke` or `.netsuke/dyndep` when either is a
-symbolic link, a Windows junction, or not a directory. Retention never deletes
-through such an alias, and the command fails with an error naming the offending
-path. `build` and `generate` check the directory before they run Ninja or write
+For its dyndep state, Netsuke refuses to use `.netsuke` or `.netsuke/dyndep`
+when either is a symbolic link, a Windows junction, or not a directory.
+Retention never deletes through such an alias, and the command fails with an
+error naming the offending path. The other contents of `.netsuke` — the fetch
+cache, command tempfiles, and the serial gates Ninja writes — are not checked,
+so the refusal covers the sidecar directory rather than the whole namespace.
+`build` and `generate` check the directory before they run Ninja or write
 output, and `clean` publishes its sidecars before invoking `ninja -t clean`, so
 a command carrying sidecars refuses before doing any work. A bundle with no
 sidecars checks the directory only at retention: `build` and `generate` still
