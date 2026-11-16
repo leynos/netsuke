@@ -347,10 +347,16 @@ def read_verdict(target: Workspace) -> VerdictRecord:
     members are established here, once, so a caller can read
     ``verdict["phases"][label]`` without re-checking the shape at each site; an
     artefact missing either fails the assertions below rather than handing back
-    a value the caller would have to re-check.
+    a value the caller would have to re-check. The top-level member set is
+    matched exactly rather than sampled, so a run that starts reporting
+    something new to a consumer fails the suite that reads this artefact.
     """
     decoded = json.loads(target.verdict.read_text(encoding="utf-8"))
     assert isinstance(decoded, dict), "the verdict artefact must be a JSON object"
+    assert set(decoded) == {"phases", "verdict"}, (
+        "the verdict artefact must carry exactly its phase table and its verdict, "
+        f"not {sorted(decoded)}"
+    )
     phases = decoded.get("phases")
     assert isinstance(phases, dict), "the verdict artefact must record its phases"
     verdict = decoded.get("verdict")
