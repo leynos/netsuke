@@ -163,7 +163,12 @@ fn dyndep_entry_name(path: &Utf8Path) -> Option<&str> {
     (name.components().count() == 1).then(|| name.as_str())
 }
 
-/// Select obsolete sidecars during one directory traversal with bounded memory.
+/// Select obsolete sidecars during one directory traversal.
+///
+/// Selection runs over [`entry_names`], so the retained set does not depend on
+/// the order the filesystem lists the directory. Each entry's size is still
+/// read during the traversal, and the selection state stays bounded by the
+/// retention budget.
 fn retain_obsolete_sidecars(
     dyndep: &Dir,
     current_names: &HashSet<&str>,
@@ -175,13 +180,31 @@ fn retain_obsolete_sidecars(
         retained: RetentionSelection::new(policy),
         summary,
     };
-    for entry_result in dyndep
-        .entries()
-        .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?
-    {
-        retain_directory_entry(dyndep, entry_result, &mut pass)?;
+    for name in &entry_names(dyndep)? {
+        retain_entry(dyndep, name, &mut pass)?;
     }
     Ok(())
+}
+
+/// Collect the directory's entry names in ascending path order.
+///
+/// ADR-0012 promises that obsolete files are considered in deterministic path
+/// order, and a directory promises no order of its own: the same cache can be
+/// listed in a different order by a different filesystem, so selecting during
+/// the walk would make the retained set host-dependent. Only names are
+/// buffered; the traversal still reads each entry's metadata as it goes.
+fn entry_names(dyndep: &Dir) -> Result<Vec<String>> {
+    let mut names = dyndep
+        .entries()
+        .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?
+        .map(|entry_result| {
+            entry_result
+                .and_then(|entry| entry.file_name())
+                .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    names.sort();
+    Ok(names)
 }
 
 /// Mutable state scoped to one leased directory traversal.
@@ -192,19 +215,6 @@ struct RetentionPass<'current, 'summary> {
     retained: RetentionSelection,
     /// Aggregate counts of removed candidates so far.
     summary: &'summary mut RetentionSummary,
-}
-
-/// Apply retention policy to one directory entry while the lease is held.
-fn retain_directory_entry(
-    dyndep: &Dir,
-    entry_result: std::io::Result<cap_std::fs_utf8::DirEntry>,
-    pass: &mut RetentionPass<'_, '_>,
-) -> Result<()> {
-    let entry = entry_result.with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
-    let name = entry
-        .file_name()
-        .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
-    retain_entry(dyndep, &name, pass)
 }
 
 /// Apply retention policy to one entry name while the lease is held.
@@ -253,11 +263,14 @@ impl RetentionSelection {
         }
     }
 
-    /// Reapply lexical greedy selection to the retained paths and one candidate.
+    /// Apply lexical greedy selection to the retained paths plus one candidate.
     ///
-    /// A directory does not promise an entry order. Reconsidering the at-most
-    /// `max_files + 1` paths therefore lets an earlier path evict every later
-    /// path it displaces without retaining an unbounded candidate list.
+    /// The retention pass sorts entry names first, so in production a
+    /// candidate arrives in lexical order and is simply accepted or rejected.
+    /// Reapplying the rule over the retained paths keeps the arithmetic
+    /// correct for a caller that supplies another order, and the retained set
+    /// never exceeds `max_files + 1` entries, so the work stays bounded
+    /// whatever order arrives.
     fn select(&mut self, path: Utf8PathBuf, bytes: u64) -> Vec<(Utf8PathBuf, u64)> {
         self.paths.insert(path, bytes);
         let candidates = std::mem::take(&mut self.paths);
