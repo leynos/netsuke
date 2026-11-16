@@ -32,7 +32,10 @@ use netsuke::{
         DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL,
         PATH_VALIDATION_REASON_VALUES, PATH_VALIDATION_SOURCE_VALUES, PATH_VALIDATION_TOTAL,
     },
-    manifest::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL},
+    manifest::{
+        ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL, SCHEMA_ADMISSION_OUTCOME_VALUES,
+        SCHEMA_ADMISSION_TOTAL,
+    },
     runner::{
         BASH_PREFLIGHT_TOTAL, FORWARD_FAILURE_LABELS, FORWARD_FAILURES_TOTAL,
         LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
@@ -83,13 +86,10 @@ const CATEGORY_LABEL: &str = "category";
 
 /// Counter recording filtered manifest targets during normal manifest loading.
 const FILTERED_TARGETS_TOTAL: &str = "netsuke_manifest_filtered_targets_total";
-
 /// Counter recording filtered manifest actions during normal manifest loading.
 const FILTERED_ACTIONS_TOTAL: &str = "netsuke_manifest_filtered_actions_total";
-
 /// Counter recording filtering records omitted from bounded manifest reports.
 const OMITTED_FILTERED_ENTRIES_TOTAL: &str = "netsuke_manifest_omitted_filtered_entries_total";
-
 /// Counter recording bounded manifest-structure summaries emitted by the runner.
 const MANIFEST_STRUCTURES_TOTAL: &str = "netsuke_runner_manifest_structures_total";
 /// Bounded runner-operation values emitted by legacy-recipe telemetry.
@@ -151,6 +151,7 @@ impl ConfigMetricsRecorder {
                 | OMITTED_FILTERED_ENTRIES_TOTAL
                 | FILE_READ_TOTAL
                 | ENV_LOOKUP_TOTAL
+                | SCHEMA_ADMISSION_TOTAL
                 | WHICH_CACHE_TOTAL
                 | WHICH_RESOLUTION_TOTAL
                 | MANIFEST_STRUCTURES_TOTAL
@@ -215,6 +216,9 @@ impl ConfigMetricsRecorder {
             | MANIFEST_STRUCTURES_TOTAL
             | NINJA_STATUS_OVERSIZED_LINES_TOTAL => exact_labels(key, &[]),
             ENV_LOOKUP_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &ENV_LOOKUP_OUTCOME_VALUES)]),
+            SCHEMA_ADMISSION_TOTAL => {
+                exact_labels(key, &[(OUTCOME_LABEL, &SCHEMA_ADMISSION_OUTCOME_VALUES)])
+            }
             FILE_READ_TOTAL
             | WHICH_CACHE_TOTAL
             | WHICH_RESOLUTION_TOTAL

@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Tệp dyndep đã tạo tại { $path } vượt qu�
 
 # Chẩn đoán tệp kê khai.
 manifest.parse = Phân tích tệp kê khai thất bại.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Tệp kê khai phải khai báo 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' phải là một bản phát hành phiên bản ngữ nghĩa theo định dạng MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } khai báo lược đồ tệp kê khai { $declared }, nhưng Netsuke hỗ trợ lược đồ { $supported }.
+manifest.schema_version.help = Khai báo chính xác bản phát hành lược đồ được hỗ trợ theo định dạng MAJOR.MINOR.0, không có siêu dữ liệu phát hành trước hoặc bản dựng.
 manifest.structure_error = Lỗi cấu trúc tệp kê khai tại { $name }: { $details }
 manifest.yaml.parse = Lỗi phân tích YAML tại dòng { $line }, cột { $column }: { $details }
 manifest.yaml.label = YAML không hợp lệ

@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Tha am faidhle dyndep a chaidh a chruthachadh aig {
 
 # Breithneachadh an fhoirm-liosta.
 manifest.parse = Dh'fhàillig parsadh an fhoirm-liosta.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Feumaidh am foirm-liosta 'netsuke_version' ainmeachadh.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] Feumaidh 'netsuke_version' a bhith na sgaoileadh tionndadh semantach ann an cruth MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] Tha { $name } ag ainmeachadh sgeama an fhoirm-liosta { $declared }, ach tha Netsuke a' cur taic ri sgeama { $supported }.
+manifest.schema_version.help = Ainmich an dearbh sgaoileadh sgeama a tha taiceil ann an cruth MAJOR.MINOR.0, gun mheata-dàta ro-sgaoilidh no togail.
 manifest.structure_error = Mearachd structair san fhoirm-liosta aig { $name }: { $details }
 manifest.yaml.parse = Mearachd parsaidh YAML air loidhne { $line }, colbh { $column }: { $details }
 manifest.yaml.label = YAML mì-dhligheach

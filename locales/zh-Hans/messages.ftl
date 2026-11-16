@@ -130,6 +130,10 @@ runner.io.dyndep.too_large = { $path } 处生成的 dyndep 文件超过 { $limit
 
 # 清单诊断。
 manifest.parse = 清单解析失败。
+manifest.schema_version.missing = [netsuke::manifest::schema_version] 清单必须声明 'netsuke_version'。
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' 必须是 MAJOR.MINOR.0 格式的语义版本正式发行版。
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } 声明的清单架构为 { $declared }，但 Netsuke 支持的架构为 { $supported }。
+manifest.schema_version.help = 请以 MAJOR.MINOR.0 格式准确声明受支持的架构正式发行版，不得包含预发行版或构建元数据。
 manifest.structure_error = 清单在 { $name } 处存在结构错误：{ $details }
 manifest.yaml.parse = 第 { $line } 行第 { $column } 列出现 YAML 解析错误：{ $details }
 manifest.yaml.label = 无效的 YAML

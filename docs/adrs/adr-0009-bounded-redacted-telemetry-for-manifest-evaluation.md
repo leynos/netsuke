@@ -198,3 +198,33 @@ the value it resolved to are absent by construction, because environment
 variable names routinely identify credentials and a permitted value can carry
 secret material. The accompanying `tracing` event records the same bounded
 `failure_kind` field, so neither surface can disclose either.
+
+## Addendum — 2026-11-05: Manifest schema-admission boundary
+
+The manifest schema-version gate now counts every full-load admission decision
+at the gate itself. `parse_admitted_document` in `src/manifest/mod.rs` records
+the decision returned by `schema_version::admit_document` before mapping a
+rejection into `ManifestError::Parse`, so the counter observes the rejections
+that abort the load rather than only the loads that survive. Recording is gated
+on `StdlibRegistration::records_schema_admission`, which is true for
+`AmbientFull` and `Full` only: discovery queries and `netsuke test` runs share
+this loader and reach the same gate, but they are not admissions of a user's
+manifest, so the counter measures full-load admissions rather than load
+attempts. A direct library call such as `netsuke::manifest::from_str` is an
+`AmbientFull` load, so it is counted.
+
+`src/manifest/schema_version/telemetry.rs::record_admission` returns the
+decision unchanged and increments `netsuke_manifest_schema_admissions_total`,
+labelled by the closed `outcome` vocabulary `admitted`, `missing`, `not_string`,
+`invalid`, `unsupported`, and `not_canonical`. The `describe_counter!`
+registration is guarded by `std::sync::Once`, and the application recorder
+admits exactly that one-label series, so no other label name, label count, or
+out-of-vocabulary value is retained.
+
+The counter carries only the bounded category. `outcome_label` consumes the
+rejection by value and returns a `&'static str`, so the declared version text,
+the manifest path, and the manifest body cannot reach a label. The accompanying
+`manifest.schema.admission` span and decision event name the operation and the
+category only. The failure boundary classifies these rejections separately as
+`error_kind = "manifest_schema_version"`, reading the diagnostic's stable code
+rather than its localized message.

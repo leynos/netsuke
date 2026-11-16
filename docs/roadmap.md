@@ -2676,6 +2676,9 @@ contract before any new command can execute.
     bounded stale-plan cleanup are now defined in RFC 0001 §13.3 and §17.4.
 - [ ] 12.1.2. Add the closed structured-command AST and schema version gate.
   - Requires 12.1.1 and 11.2.1.
+  - [ ] Extend the reader gate in [ADR-0075][schema-admission] by admitting
+    ADR-0043's `1.1`, implementing rejection rungs 2 and 2b, and reserving
+    the D-8 command discriminators in the closed AST.
   - Follow up the help-targets graph export with structured-command recipe
     variants after the AST and schema version gate are defined.
   - Preserve scalar commands and all-string lists; accept an `invoke` mapping
@@ -3175,10 +3178,13 @@ gates the manifest-version promise rather than merely a parser milestone.
     distinctions, cleanup guarantees, and the absence of child sandboxing.
 - [ ] 14.3.3. Enable the complete amended manifest contract.
   - Requires 14.3.1 and 14.3.2.
-  - Finalize the minor-version gate selected in 12.1.1, including whether
-    named shells share the first structured-command minor. Reject unsupported
-    persisted schemas rather than ignoring fields, and keep legacy manifests
-    supported without automatic semantic migration.
+  - Finalize the minor-version gate selected in 12.1.1. Named shells share the
+    first structured-command minor, so confirm at release time that both
+    `structured-commands` and `named-shells` are admitted before any tag
+    carries minor `1.1`; a tag that would freeze either feature out of the
+    shared reservation waits instead. Reject unsupported persisted schemas
+    rather than ignoring fields, and keep legacy manifests supported without
+    automatic semantic migration.
   - Run the repository's formatting, lint, documentation, unit, behavioural,
     property, and bounded proof gates on the supported target matrix; retain
     compatibility, deterministic plan, and cleanup evidence with the change.
@@ -3676,3 +3682,5 @@ lint core names no reporting framework and the command reports its own
 telemetry; and the JSON documents, exit classes, and rule-name guarantees are
 snapshotted, published, and stable enough that a downstream consumer can depend
 on them.
+
+[schema-admission]: adrs/adr-0075-manifest-schema-versions-and-admission.md

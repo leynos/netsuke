@@ -245,7 +245,10 @@ version `1.1.0`, the number RFC 0001 section 19.2 and RFC 0011 section 9
 already proposed. RFC 0009, RFC 0010, and RFC 0011 land inside that single
 increment rather than taking one each, because all four amend the same mapping
 schema. Roadmap tasks 16.1.1 and 17.1.1 must not claim `1.1.0` for an unrelated
-schema; they coordinate the next number, not this one.
+schema; they coordinate the next number, not this one. Because the number is
+shared, [ADR-0075](adr-0075-manifest-schema-versions-and-admission.md)'s
+release freeze covers the whole reservation: no tag may carry minor `1.1` until
+both `structured-commands` and `named-shells` are admitted.
 
 Persisted action plans use an independent version namespace. A plan is
 versioned by the variants it contains, so a runner that cannot represent a
