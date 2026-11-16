@@ -623,6 +623,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_binstall_child.py \
 		scripts/consumer_smoke_evidence.py \
 		scripts/consumer_smoke_ledger.py \
+		scripts/consumer_smoke_options.py \
 		scripts/consumer_smoke_cli.py \
 		scripts/consumer_smoke_verify.py \
 		-c /dev/null --rootdir=. \

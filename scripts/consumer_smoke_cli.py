@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.14"
-# dependencies = []
+# dependencies = ["cyclopts>=4.25.3,<5"]
 # ///
 """Plan and verify the public-consumer smoke for one release candidate.
 
@@ -15,6 +15,11 @@ Nothing here fetches anything. The workflow performs the downloads with a
 credential-free ``curl`` and this CLI reads what was saved, so the smoke
 exercises the same public URLs a consumer uses while the Python side stays
 network-free and testable.
+
+The command line is Cyclopts's. Each command takes one dataclass from
+:mod:`consumer_smoke_options`, which Cyclopts flattens into one flag per field;
+the flag the action passes and the value the stage below reads are the same
+name, so neither can move without the other.
 
 Decisions live in :mod:`release_consumer_smoke` and
 :mod:`release_consumer_payload`, the trusted-record reads in
@@ -85,25 +90,25 @@ does not compare:
 1
 """
 
-import argparse
-import pathlib
 import sys
 import typing as typ
 
 import consumer_smoke_evidence as evidence
-import consumer_smoke_verify as verify
+import consumer_smoke_verify as verify_stage
 import release_binstall_child as child_adapter
 import release_consumer_smoke as smoke
+from consumer_smoke_options import PlanOptions, VerifyOptions
 from consumer_smoke_verify import EXIT_EVIDENCE_REJECTED, EXIT_OK
 
+from cyclopts import App, Parameter
+
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     import release_binstall_probe as probe_adapter
 
-#: The default release staging configuration, relative to the repository root.
-DEFAULT_STAGING_CONFIG = pathlib.Path(".github/release-staging.toml")
 
-
-def run_plan(arguments: argparse.Namespace) -> int:
+def run_plan(options: PlanOptions) -> int:
     """Write the plan document for this run's evidence.
 
     Returns
@@ -113,144 +118,53 @@ def run_plan(arguments: argparse.Namespace) -> int:
         evidence-rejected status when the evidence is unreadable or unusable.
     """
     try:
-        plan = smoke.plan_smoke(evidence.gather_evidence(arguments))
-        evidence.write_json(arguments.output, evidence.plan_document(plan))
+        plan = smoke.plan_smoke(evidence.gather_evidence(options))
+        evidence.write_json(options.output, evidence.plan_document(plan))
     except (smoke.EvidenceRejectedError, OSError) as error:
         print(f"consumer smoke evidence rejected: {error}", file=sys.stderr)
         return EXIT_EVIDENCE_REJECTED
     return EXIT_OK
 
 
-def _evidence_parser() -> argparse.ArgumentParser:
-    """Build the parser holding the evidence both commands share."""
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument(
-        "--identity",
-        required=True,
-        type=pathlib.Path,
-        help="the package record the packaging stage wrote",
-    )
-    parser.add_argument(
-        "--trusted",
-        required=True,
-        type=pathlib.Path,
-        help="the pre-upload digest record, keyed by published asset name",
-    )
-    parser.add_argument(
-        "--staging-config",
-        type=pathlib.Path,
-        default=DEFAULT_STAGING_CONFIG,
-        help="the release staging configuration naming every target",
-    )
-    parser.add_argument(
-        "--manifest",
-        type=pathlib.Path,
-        default=pathlib.Path("Cargo.toml"),
-        help="the Cargo manifest naming the package",
-    )
-    parser.add_argument(
-        "--repository", required=True, help="the 'owner/name' GitHub slug"
-    )
-    parser.add_argument("--target", required=True, help="the Rust target triple")
-    parser.add_argument(
-        "--commit", required=True, help="the commit this run checked out"
-    )
-    return parser
+def build_app(launcher: probe_adapter.ProbeLauncher | None = None) -> App:
+    """Build the command app, binding the launcher this run will use.
 
-
-#: Each saved download ``verify`` is handed: its option name, the help naming
-#: the saved body, and the help naming the status file curl recorded beside it.
-_SAVED_DOWNLOADS = (
-    ("crate", "the saved crate archive", "the HTTP status curl recorded for the crate"),
-    (
-        "archive",
-        "the saved binstall archive",
-        "the HTTP status curl recorded for the archive",
-    ),
-    (
-        "sidecar",
-        "the saved checksum sidecar",
-        "the HTTP status curl recorded for the sidecar",
-    ),
-)
-
-#: The outputs ``verify`` writes, with the help naming each.
-_VERIFY_OUTPUTS = (
-    ("--extract-dir", "a fresh, empty directory the binary is extracted into"),
-    ("--verdict", "where to write the bounded phase-and-verdict record"),
-    ("--phase-log", "where to write the bounded per-phase outcome and timing record"),
-)
-
-
-def build_parser() -> argparse.ArgumentParser:
-    """Build the parser for the consumer-smoke CLI.
+    Parameters
+    ----------
+    launcher
+        The callable that starts the extracted binary. ``None`` starts a real
+        child, which is why this is the composition root for the probe; a test
+        supplies its own so the probe boundary is exercised without executing a
+        downloaded file.
 
     Returns
     -------
-    argparse.ArgumentParser
-        A parser whose ``plan`` and ``verify`` subcommands share the evidence
-        arguments.
+    App
+        An app whose ``plan`` and ``verify`` commands are the ones the
+        composite action invokes. Building it per call rather than once at
+        import keeps the injected launcher out of module state.
     """
-    parser = argparse.ArgumentParser(
-        prog="consumer_smoke_cli",
-        description="Plan and verify the public-consumer release smoke.",
-    )
-    commands = parser.add_subparsers(dest="command", required=True)
-    plan = commands.add_parser(
-        "plan",
-        parents=[_evidence_parser()],
-        help="derive the public downloads this run must perform",
-    )
-    _add_plan_options(plan)
-    verify_command = commands.add_parser(
-        "verify",
-        parents=[_evidence_parser()],
-        help="check the saved downloads and the shipped executable",
-    )
-    _add_verify_options(verify_command)
-    return parser
-
-
-def _add_plan_options(plan: argparse.ArgumentParser) -> None:
-    """Add where the ``plan`` command writes the plan document."""
-    plan.add_argument(
-        "--output",
-        required=True,
-        type=pathlib.Path,
-        help="where to write the plan document",
+    chosen = child_adapter.launch if launcher is None else launcher
+    app = App(
+        name="consumer_smoke_cli",
+        help="Plan and verify the public-consumer release smoke.",
     )
 
+    @app.command
+    def plan(options: typ.Annotated[PlanOptions, Parameter(name="*")]) -> int:
+        """Derive the public downloads this run must perform."""
+        return run_plan(options)
 
-def _add_verify_options(verify_command: argparse.ArgumentParser) -> None:
-    """Add the saved downloads, plan, and outputs the ``verify`` command reads.
+    @app.command
+    def verify(options: typ.Annotated[VerifyOptions, Parameter(name="*")]) -> int:
+        """Check the saved downloads and the shipped executable."""
+        return verify_stage.run_verify(options, launcher=chosen)
 
-    Notes
-    -----
-    The downloads are tabled rather than spelled three times: each saved body
-    carries the status file curl recorded beside it, so a download added here
-    cannot arrive without the status the payload check requires.
-    """
-    verify_command.add_argument(
-        "--plan",
-        required=True,
-        type=pathlib.Path,
-        help="the plan document this run re-derives and enforces",
-    )
-    for name, body_help, status_help in _SAVED_DOWNLOADS:
-        verify_command.add_argument(
-            f"--{name}", required=True, type=pathlib.Path, help=body_help
-        )
-        verify_command.add_argument(
-            f"--{name}-status", required=True, type=pathlib.Path, help=status_help
-        )
-    for option, help_text in _VERIFY_OUTPUTS:
-        verify_command.add_argument(
-            option, required=True, type=pathlib.Path, help=help_text
-        )
+    return app
 
 
 def main(
-    argv: list[str] | None = None,
+    argv: cabc.Sequence[str] | None = None,
     *,
     launcher: probe_adapter.ProbeLauncher | None = None,
 ) -> int:
@@ -261,10 +175,7 @@ def main(
     argv
         Command-line arguments. Defaults to ``sys.argv[1:]``.
     launcher
-        The callable that starts the extracted binary. ``None`` starts a real
-        child, which is why this is the composition root for the probe; a test
-        supplies its own so the probe boundary is exercised without executing a
-        downloaded file.
+        The callable that starts the extracted binary; see :func:`build_app`.
 
     Returns
     -------
@@ -277,11 +188,7 @@ def main(
     behavioural coverage of both commands lives in
     ``scripts/tests/test_consumer_smoke_cli.py``.
     """
-    arguments = build_parser().parse_args(argv)
-    if arguments.command == "plan":
-        return run_plan(arguments)
-    chosen = child_adapter.launch if launcher is None else launcher
-    return verify.run_verify(arguments, launcher=chosen)
+    return build_app(launcher)(argv, result_action="return_value")
 
 
 if __name__ == "__main__":

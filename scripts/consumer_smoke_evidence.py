@@ -36,7 +36,7 @@ import release_identity_record
 from release_consumer_smoke import EvidenceRejectedError
 
 if typ.TYPE_CHECKING:
-    import argparse
+    from consumer_smoke_options import EvidenceOptions
 
 
 def read_json(source: pathlib.Path) -> object:
@@ -196,7 +196,7 @@ def declared_archives(
         raise EvidenceRejectedError(msg) from error
 
 
-def gather_evidence(arguments: argparse.Namespace) -> smoke.SmokeEvidence:
+def gather_evidence(arguments: EvidenceOptions) -> smoke.SmokeEvidence:
     """Gather the trusted evidence one plan is bound to.
 
     Returns

@@ -185,6 +185,7 @@ SOURCE_MODULES = (
     "scripts/release_binstall_child.py",
     "scripts/consumer_smoke_evidence.py",
     "scripts/consumer_smoke_ledger.py",
+    "scripts/consumer_smoke_options.py",
     "scripts/consumer_smoke_cli.py",
     "scripts/consumer_smoke_verify.py",
 )
@@ -289,6 +290,7 @@ ADAPTER_MODULES = (
     "scripts/consumer_smoke_ledger.py",
     "scripts/consumer_smoke_verify.py",
     "scripts/consumer_smoke_cli.py",
+    "scripts/consumer_smoke_options.py",
 )
 
 #: Sources that own the network boundary. The boundary test uses this same

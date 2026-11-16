@@ -17,6 +17,7 @@ import typing as typ
 
 import consumer_smoke_evidence
 import pytest
+from consumer_smoke_cli import build_app, main
 from consumer_smoke_harness import (
     ARCHIVE_NAME,
     BANNER,
@@ -326,4 +327,52 @@ def test_verify_reports_an_unreadable_trusted_record(tmp_path: pathlib.Path) -> 
 
     assert run_verify(staged, launcher=fake_probe()) == 1, (
         "an unusable trusted record must be refused as evidence"
+    )
+
+
+class _CommandRegistry(typ.Protocol):
+    """Name the one Cyclopts member this suite reads.
+
+    Cyclopts resolves lazy commands through ``App.resolved_commands`` at
+    runtime, but the stub package the type checker loads describes nothing on
+    ``App`` beyond its constructor. Stating the member's shape here keeps the
+    test honest about what it reads without suppressing the checker for the
+    whole module, where the mistake would go unseen.
+    """
+
+    def resolved_commands(self) -> dict[str, object]:
+        """Return every registered command, keyed by the name it answers to."""
+
+
+def test_the_app_exposes_exactly_the_two_action_commands() -> None:
+    """Require the two commands the composite action invokes, and no others.
+
+    The action calls ``plan`` and ``verify`` by name, and the contract that
+    holds the action's command lines to their reviewed shape reads those two
+    names. A renamed command would break the release with nothing failing
+    until a release ran, and a third command would be a surface no contract
+    covers.
+    """
+    registered = typ.cast("_CommandRegistry", build_app()).resolved_commands()
+    commands = sorted(name for name in registered if not name.startswith("-"))
+
+    assert commands == ["plan", "verify"], (
+        f"the app must expose exactly the action's two commands, got {commands!r}"
+    )
+
+
+def test_a_missing_required_flag_is_refused_not_defaulted() -> None:
+    """Require Cyclopts to reject an invocation that omits a required flag.
+
+    Every flag the action passes is required, because the evidence it names is
+    what binds the smoke to one candidate's bytes. A flag that lost that
+    requirement would let the command run against a default path instead, so
+    the assertion is that the exit is a refusal rather than a plan.
+    """
+    with pytest.raises(SystemExit) as refusal:
+        _ = main(["plan"])
+
+    assert refusal.value.code not in {0, None}, (
+        "an invocation missing --identity and --trusted must exit non-zero, "
+        f"got {refusal.value.code!r}"
     )

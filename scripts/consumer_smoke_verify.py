@@ -31,8 +31,9 @@ from consumer_smoke_ledger import PhaseLedger
 from release_consumer_smoke import ConsumerSmokeError, EvidenceRejectedError
 
 if typ.TYPE_CHECKING:
-    import argparse
     import pathlib
+
+    from consumer_smoke_options import VerifyOptions
 
 #: The exit status of a run in which every phase verified.
 EXIT_OK = 0
@@ -225,7 +226,7 @@ def probe(
 
 
 def run_verify(
-    arguments: argparse.Namespace,
+    arguments: VerifyOptions,
     *,
     launcher: probe_adapter.ProbeLauncher,
 ) -> int:
@@ -253,7 +254,7 @@ def run_verify(
 
 
 def _run_phases(
-    arguments: argparse.Namespace,
+    arguments: VerifyOptions,
     plan: smoke.SmokePlan,
     ledger: PhaseLedger,
     launcher: probe_adapter.ProbeLauncher,
@@ -332,7 +333,7 @@ def _delivered(
 
 
 def _delivered_assets(
-    arguments: argparse.Namespace, plan: smoke.SmokePlan
+    arguments: VerifyOptions, plan: smoke.SmokePlan
 ) -> tuple[SavedDownload, SavedDownload]:
     """Require both release downloads to have arrived.
 
