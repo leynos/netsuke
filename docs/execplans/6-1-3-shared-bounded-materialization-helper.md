@@ -1005,11 +1005,12 @@ conflict in `Decision log`, and escalate.
     files. D-22's third amendment carries the corrected arithmetic and the
     overage it moves to 1,360 lines; the plan owner's acceptance is still
     requested rather than assumed, and the round-three record below re-measures
-    the tally at the head that now stands. Second, the developers' guide claimed that
-    universal correspondence is the Verus theorem's claim, which overstates it:
-    the theorem discharges contracts for the transcription it verifies, and the
-    harnesses are the only check on the compiled kernel, within their bounds.
-    The paragraph now says exactly that. Third, the proof execution and CI
+    the tally at the head that now stands. Second, the developers' guide
+    claimed that universal correspondence is the Verus theorem's claim, which
+    overstates it: the theorem discharges contracts for the transcription it
+    verifies, and the harnesses are the only check on the compiled kernel,
+    within their bounds. The paragraph now says exactly that. Third, the proof
+    execution and CI
     coverage were misdescribed: `docs/repository-layout.md` said bare
     `make verus` runs the resource-bounds proof, and
     `docs/formal-verification-methods-in-netsuke.md` still spoke of one Verus
