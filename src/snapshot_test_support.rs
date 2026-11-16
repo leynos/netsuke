@@ -6,6 +6,7 @@
 use insta::Settings;
 use rstest::fixture;
 use std::path::PathBuf;
+use test_support::generator_version;
 use test_support::temp_path_filter::temp_dir_filter_pattern;
 
 use crate::output_mode::OutputMode;
@@ -74,20 +75,15 @@ fn add_temp_dir_filter(settings: &mut Settings) {
 /// Add a redaction filter for the Netsuke generator version.
 ///
 /// Anchor the filter on the enclosing generator object so unrelated versioned
-/// content remains visible in snapshot diffs.
+/// content remains visible in snapshot diffs. The pattern is shared with the
+/// integration suites through `test_support`, because those cannot reach this
+/// `#[cfg(test)]` module and a second copy could drift while both still passed.
 fn add_generator_version_filter(settings: &mut Settings) {
     settings.add_filter(
-        GENERATOR_VERSION_FILTER_PATTERN,
-        GENERATOR_VERSION_REPLACEMENT,
+        generator_version::GENERATOR_VERSION_PATTERN,
+        generator_version::GENERATOR_VERSION_REPLACEMENT,
     );
 }
-
-/// Match the generator-version field scoped to Netsuke's generator object.
-const GENERATOR_VERSION_FILTER_PATTERN: &str =
-    r#"("generator": \{\s*\n\s*"name": "netsuke",\s*\n\s*"version": ")[^"]+(")"#;
-
-/// Replace the matched generator version while retaining its JSON structure.
-const GENERATOR_VERSION_REPLACEMENT: &str = r"${1}[version]${2}";
 
 /// Build snapshot settings for diagnostic-JSON documents.
 ///
@@ -132,79 +128,4 @@ pub(crate) fn theme_prefs(theme: ThemePreference) -> OutputPrefs {
         ThemeContext::new(None, None, OutputMode::Standard),
         |_| None,
     )
-}
-
-#[cfg(test)]
-mod tests {
-    //! Verify the generator-version filter redacts exactly what it claims.
-    //!
-    //! Both snapshot filters are the reason a checked-in snapshot repeats on a
-    //! machine that did not record it: one hides the generator version across
-    //! `SemVer` values, the other hides the temporary directory a staged
-    //! workspace lives in.
-    //!
-    //! Only the version filter is exercised here, because it is the only one
-    //! this module still owns. The temporary-path pattern moved to
-    //! `test_support::temp_path_filter` and its cases moved with it, so this
-    //! crate and the integration suite share one set of rows rather than
-    //! holding a copy each.
-
-    use super::*;
-    use proptest::prelude::*;
-    use regex::Regex;
-    use serde_json::Value;
-
-    proptest! {
-        #[test]
-        fn generator_version_filter_redacts_semver_variants(
-            major in any::<u64>(),
-            minor in any::<u64>(),
-            patch in any::<u64>(),
-            prerelease in prop_oneof![
-                Just(String::new()),
-                "[A-Za-z][A-Za-z0-9-]{0,31}".prop_map(|identifier| format!("-{identifier}")),
-            ],
-            build in prop_oneof![
-                Just(String::new()),
-                "[A-Za-z][A-Za-z0-9-]{0,31}".prop_map(|identifier| format!("+{identifier}")),
-            ],
-            unrelated_version in "[A-Za-z0-9.+-]{1,64}",
-        ) {
-            let generator_version = format!("{major}.{minor}.{patch}{prerelease}{build}");
-            let rendered = format!(
-                concat!(
-                    "{{\n",
-                    "  \"generator\": {{\n",
-                    "    \"name\": \"netsuke\",\n",
-                    "    \"version\": \"{}\"\n",
-                    "  }},\n",
-                    "  \"tool\": {{\n",
-                    "    \"name\": \"netsuke\",\n",
-                    "    \"version\": \"{}\"\n",
-                    "  }}\n",
-                    "}}",
-                ),
-                generator_version,
-                unrelated_version,
-            );
-            let filter = match Regex::new(GENERATOR_VERSION_FILTER_PATTERN) {
-                Ok(filter) => filter,
-                Err(error) => return Err(TestCaseError::fail(error.to_string())),
-            };
-            let filtered = filter.replace_all(&rendered, GENERATOR_VERSION_REPLACEMENT);
-            let document = match serde_json::from_str::<Value>(&filtered) {
-                Ok(document) => document,
-                Err(error) => return Err(TestCaseError::fail(error.to_string())),
-            };
-
-            prop_assert_eq!(
-                document.pointer("/generator/version").and_then(Value::as_str),
-                Some("[version]"),
-            );
-            prop_assert_eq!(
-                document.pointer("/tool/version").and_then(Value::as_str),
-                Some(unrelated_version.as_str()),
-            );
-        }
-    }
 }

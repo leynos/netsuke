@@ -48,10 +48,20 @@ fn json_diagnostic_format_is_stable() -> Result<()> {
     Ok(())
 }
 
+/// A manifest that cannot compile, so reaching it is visible in the output.
+///
+/// The ordering test needs the manifest itself to be a detectable failure. With
+/// a harmless manifest, a regression that compiled it before rejecting `shells`
+/// would still leave the sentinel absent in some paths — compilation can fail or
+/// write nothing — and the test would pass. An unparsable manifest turns
+/// "compilation ran first" into a different diagnostic.
+const INVALID_MANIFEST: &str = "netsuke_version: [unterminated\n";
+
 #[test]
 fn project_definition_fails_before_manifest_compilation() -> Result<()> {
     let startup = Startup::new()?;
     startup.write(".netsuke.toml", &definition_body("dash"))?;
+    startup.write("Netsukefile", INVALID_MANIFEST)?;
 
     let output = startup.generate()?;
 

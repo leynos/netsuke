@@ -191,3 +191,38 @@ fn occurrence_without_a_path_is_untrusted() -> Result<()> {
     );
     Ok(())
 }
+
+/// Classify a project file that exists under a directory name Unix cannot spell
+/// as UTF-8.
+///
+/// Normalization has to read the path the caller held, because its lossy
+/// spelling names no file on disk: resolving that spelling fails, and the
+/// failure marks the key ambiguous, which withholds operator authority from
+/// every occurrence in a workspace that is perfectly valid. Unix is the only
+/// supported platform where a directory name can be unspellable text.
+#[cfg(unix)]
+#[test]
+fn non_utf8_project_root_still_resolves() -> Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let root = tempdir().context("create project dir")?;
+    let directory = root
+        .path()
+        .join(OsString::from_vec(b"project-\xff".to_vec()));
+    test_support::fs::create_dir_all(&directory).context("create non-UTF-8 project dir")?;
+    let file = directory.join(".netsuke.toml");
+    test_support::fs::write(&file, "jobs = 3\n").context("write project config")?;
+
+    let key = project_key(&directory);
+
+    ensure!(
+        !key.is_ambiguous(),
+        "an existing project file under a non-UTF-8 directory must resolve"
+    );
+    ensure!(
+        key.matches_path(&dunce::canonicalize(&file).context("canonicalize project file")?),
+        "the key must recognize the recorded spelling of the file it classified"
+    );
+    Ok(())
+}

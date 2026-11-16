@@ -13,6 +13,10 @@
 //! echoing it would break the rule that a diagnostic never prints an argument
 //! vector.
 //!
+//! Authority is classified here beside the checks that consume it, because
+//! "may this occurrence declare definitions?" and "is this definition valid?"
+//! are answered from the same inspected value.
+//!
 //! Validation and rendering are separate. A check yields an
 //! [`OccurrenceDiagnostic`], which carries the field key and the rule the
 //! occurrence broke; [`OccurrenceDiagnostic::render`] is the single place that
@@ -101,6 +105,48 @@ pub(super) fn occurrence_errors(value: &Value, source: Option<&Utf8Path>) -> Vec
         .into_iter()
         .map(|diagnostic| diagnostic.render(source))
         .collect()
+}
+
+/// Whether a root may declare executable shell policy.
+///
+/// Root authority answers a different question from the precedence scope a
+/// project occurrence carries. Scope decides which merge and quarantine rules
+/// apply; authority decides whether an occurrence may grant executable
+/// authority at all. Keeping them separate lets an explicit selector keep
+/// operator-scope precedence while still withholding definition authority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RootAuthority {
+    /// A system or user operator root, or a parent it inherited.
+    Operator,
+    /// A project, explicit, or otherwise unproven root, and its parents.
+    Untrusted,
+}
+
+/// Validate one occurrence's executable-authority claim.
+///
+/// This is a step of its own because authority answers a different question
+/// from the precedence and quarantine rules that consume it: it decides
+/// whether an occurrence may declare executable policy at all, not where its
+/// values rank. Presence is checked before any typed merging, so a project,
+/// explicit, or environment occurrence cannot reach the schema through an
+/// empty or malformed declaration. An operator occurrence is validated field by
+/// field in [`occurrence_errors`], whose diagnosis names `shells[index].name`,
+/// `shells[index].executable`, or `shells[index].args`; the returned errors
+/// become ordinary discovery errors, so startup stops before any manifest is
+/// read. Both paths name the declaring file when the layer has one, because the
+/// same key and index can appear in several layers.
+pub(super) fn shells_authority_errors(
+    value: &Value,
+    source: Option<&Utf8Path>,
+    authority: RootAuthority,
+) -> Vec<Arc<OrthoError>> {
+    if !declares_shells(value) {
+        return Vec::new();
+    }
+    match authority {
+        RootAuthority::Operator => occurrence_errors(value, source),
+        RootAuthority::Untrusted => vec![untrusted_shells_error(source)],
+    }
 }
 
 /// Collect every diagnostic one layer's `shells` value warrants.

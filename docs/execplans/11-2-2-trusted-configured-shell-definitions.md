@@ -572,6 +572,53 @@ explicit and exercise the actual adapters in tests.
     `wrong_typed_name_is_rejected_without_echoing_it` and cases 08 and 09;
     removing the `args` list guard fails
     `wrong_typed_arguments_are_rejected_without_echoing_them` and case 10.
+  - [x] 2026-11-16: Rebase onto `f49104fc4`, the merge of PR #1128, which
+    advanced `main` while the review queue ran and made the pull request
+    unmergeable. Forty commits replayed with the driver bypassed. One conflict
+    appeared, in the closing checklist of
+    `docs/v0-1-0-migration-guide.md`, where both sides appended an item after
+    the same line; both items were kept. The replayed delta is byte-identical to
+    the pre-rebase delta apart from hunk offsets, blob hashes, and the
+    checklist item `main` contributed.
+  - [x] 2026-11-16: Repair the four findings CodeRabbit raised at
+    `142b341fd`. The documented Verus command now selects the shell-composition
+    proof, because a bare `make verus` runs `verus/canonical_value/main.rs`
+    only. `ProjectKey::classify` normalizes the path it was handed instead of
+    its lossy spelling, so a project file under a directory whose name is not
+    valid UTF-8 resolves instead of withholding operator authority; a Unix-only
+    case pins it. The startup snapshot redacts the generator version through a
+    filter shared from `test_support::generator_version`, replacing a blanket
+    substitution of the crate version, and the semver property test moved there
+    with the pattern. The ordering test now writes an unparsable manifest, so a
+    regression that compiled it before rejecting `shells` changes the
+    diagnostic rather than passing silently.
+  - [x] 2026-11-16: Restore the `ScopedFileLayer` initializer the rebase left
+    short. `main`'s new blocklist property test builds the struct by hand, and
+    this branch had added the `authority` field; the two hunks touch different
+    regions, so neither Git nor the driver flagged it, and the workspace type
+    check caught it. The generated values declare no `shells` key, so the
+    property's result cannot depend on the authority chosen.
+  - [x] 2026-11-16: Probe the two behavioural repairs. Restoring the lossy
+    normalization fails `non_utf8_project_root_still_resolves` with "an existing
+    project file under a non-UTF-8 directory must resolve". Removing the
+    generator-object anchor fails `another_object_version_stays_visible` and the
+    semver property; re-adding a value-based sweep fails
+    `a_version_quoted_in_a_message_stays_visible` and
+    `text_without_a_generator_object_is_unchanged`. Every restore was compared
+    by SHA-256 and was identical.
+  - [x] 2026-11-16: Clear two gate findings the repairs exposed. The moved
+    version-filter tests asserted inside functions returning `Result`, which
+    `clippy::panic-in-result-fn` rejects; every assertion became `ensure!`. The
+    Whitaker suite then reported `module project_policy spans 422 lines`: 394
+    before the replay, plus the 28 lines `main` contributed, although neither
+    side exceeded 400 on its own. The
+    shell-authority classifier and its `RootAuthority` enum moved to
+    `src/cli/discovery/shell_definitions.rs`, which already owned
+    `declares_shells`, `occurrence_errors`, and `untrusted_shells_error`, and
+    `project_policy.rs` re-exports the enum, so every existing path resolves. A
+    private submodule was tried first; `clippy::self-named-module-files` refuses
+    a file-backed module that gains a non-test child directory, which is why the
+    code went to the sibling instead.
 
 ## Surprises & discoveries
 
@@ -758,6 +805,32 @@ text matched only the machine that produced it. The snapshot now pins the shape
 of the clause and leaves the contents to the dedicated assertion. A snapshot of
 host-supplied text is a record of one machine, and a suite that cancels at the
 first failure can hide a whole class of such tests behind one earlier red one.
+
+A rebase can be textually clean and still be semantically incomplete. Both
+sides of the replay onto `f49104fc4` added to `ScopedFileLayer`: this branch
+added the `authority` field, and `main`'s blocklist property test constructs
+the struct with a literal. The hunks are in different functions, so no conflict
+was reported and the driver had nothing to merge; only the workspace type check
+found the short initializer. A replayed candidate needs a compile before its
+conflict-free status means anything.
+
+A file-size limit is a property of the tree, not of either side of a merge, so
+a clean replay can create one. Before the rebase, `project_policy.rs` was 394
+lines at `142b341fd`, under Whitaker's 400-line module limit and green on every
+gate. `main`'s version was 343. Replaying the branch onto `f49104fc4` added
+`main`'s blocklist validation, 28 lines in different functions from anything
+this branch touched, and the union was 422. Neither side broke the limit; the
+replay did. This is the same failure shape as the short `ScopedFileLayer`
+initializer above, and the same remedy applies: a replayed candidate needs the
+whole-tree gates, not just a conflict-free status and a compile.
+
+The obvious repair was also refused by a second lint. Extracting the classifier
+into `project_policy/shell_authority.rs` compiled and passed the original
+limit, but `clippy::self-named-module-files` requires that any file-backed
+module with a child directory become `mod.rs`, and this module's existing
+children are all `#[cfg(test)]`, which the lint had tolerated. A limit
+satisfied in one file can be re-broken by the layout the fix creates, so the
+fix has to be re-gated against the same oracle rather than a nearby one.
 
 ## Decision log
 
@@ -1032,6 +1105,39 @@ first failure can hide a whole class of such tests behind one earlier red one.
   while breaking redaction. The startup cases now carry both expectations in one
   `Echo` record, so a case declares the value it planted and the wording it
   excludes, and a reader can see what the assertion is protecting.
+- 2026-11-16: Normalize the original `Path` in `ProjectKey::classify` rather
+  than its lossy spelling. The classifier's whole purpose is to separate "is
+  this the project file" from "could that identity be established", and a
+  spelling that names no file on disk answers the second question wrongly: the
+  probe fails for a path that exists, the key turns ambiguous, and authority is
+  withheld from every occurrence in a workspace Unix considers perfectly valid.
+  Falling back to the original path keeps the unresolved key literal, which is
+  what the recorded layers are compared against.
+- 2026-11-16: Move the generator-version filter into
+  `test_support::generator_version` instead of writing a second copy for the
+  integration suite. The library's settings helper is `#[cfg(test)]` code that
+  an integration crate cannot reach, which is the same split
+  `test_support::temp_path_filter` already answers; the pattern is the part
+  whose defect is invisible on the recording platform, so one definition and
+  one set of rows is what keeps the two callers from drifting. The startup
+  snapshot placeholder becomes `[version]`, which is the spelling the snapshots
+  already fed by this filter record.
+- 2026-11-16: Make the ordering test's manifest unparsable rather than
+  harmless. The sentinel proves that Ninja output was not published, which is
+  not the same fact as "compilation never ran": a regression that compiled
+  first and then rejected would leave the sentinel behind only if compilation
+  also succeeded and wrote it. An invalid manifest turns that regression into a
+  different diagnostic, which the shell-authority assertion then refuses.
+- 2026-11-16: Keep `RootAuthority` in `shell_definitions` rather than in a new
+  submodule of `project_policy`. The first attempt extracted the classifier and
+  its enum into `project_policy/shell_authority.rs`, which satisfied the line
+  limit and compiled, but `clippy::self-named-module-files` rejects a
+  file-backed module that acquires a non-test child directory: the module would
+  have to become `mod.rs`, and that rename would move a path recorded in
+  `tools/kani/proof-scope.toml` and in an accepted ADR. `shell_definitions`
+  already classifies and validates the same inspected value, so it is the
+  coherent owner; `project_policy` re-exports the enum, and no call site
+  changes.
 
 ## Outcomes & retrospective
 

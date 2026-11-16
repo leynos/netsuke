@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 use tempfile::{TempDir, tempdir};
 use test_support::fs as test_fs;
+use test_support::generator_version;
 
 /// Name the file `generate` writes only when manifest compilation succeeds.
 pub(super) const SENTINEL: &str = "sentinel.ninja";
@@ -160,13 +161,18 @@ const DECLARING_FILE: &str = "[DECLARING_FILE]";
 /// length differ between hosts, and the renderer bounds it, so the snapshot can
 /// pin the shape of the clause but not its contents;
 /// `a_rejection_names_the_declaring_file` is what pins the contents.
+///
+/// The version is redacted through the shared filter rather than by replacing
+/// every occurrence of the crate version in the text. A blanket replacement
+/// would also hide a version a diagnostic quotes in its message, which is
+/// operator-facing text the snapshot exists to catch.
 pub(super) fn normalised(output: &Output, startup: &Startup) -> Result<String> {
     let path = startup.path().to_string_lossy().into_owned();
     let located = stderr_of(output).replace(&path, "[WORKSPACE]");
     let redacted = DECLARING_CLAUSES
         .iter()
         .fold(located, |text, clause| clause.redact(&text));
-    let versioned = redacted.replace(env!("CARGO_PKG_VERSION"), "[VERSION]");
+    let versioned = generator_version::redact_generator_version(&redacted)?;
     let timestamp =
         regex::Regex::new(TRACE_TIMESTAMP).context("compile the tracing timestamp pattern")?;
     Ok(timestamp

@@ -6,7 +6,6 @@
 //! discovered project chain; fetch requests retain each project occurrence's
 //! provenance.
 
-use camino::Utf8Path;
 use ortho_config::{MergeLayer, OrthoError, OrthoResult};
 use serde::de::DeserializeOwned;
 use std::borrow::Cow;
@@ -16,10 +15,12 @@ use std::sync::Arc;
 use super::super::validation::validation_error;
 use super::json::json_from_value;
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
-use super::shell_definitions::{declares_shells, occurrence_errors, untrusted_shells_error};
+use super::shell_definitions::shells_authority_errors;
 use super::trace::EnvGrantQuarantineTrace;
 use super::{ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
 use crate::host_pattern::HostPattern;
+
+pub(super) use super::shell_definitions::RootAuthority;
 
 /// Identify whether this occurrence belongs to a selected project chain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,21 +29,6 @@ pub(super) enum FileScope {
     Operator,
     /// An occurrence selected through the project configuration file.
     Project,
-}
-
-/// Whether a root may declare executable shell policy.
-///
-/// Root authority answers a different question from [`FileScope`]. Scope
-/// decides which precedence and quarantine rules apply; authority decides
-/// whether an occurrence may grant executable authority at all. Keeping them
-/// separate lets an explicit selector keep operator-scope precedence while
-/// still withholding definition authority.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum RootAuthority {
-    /// A system or user operator root, or a parent it inherited.
-    Operator,
-    /// A project, explicit, or otherwise unproven root, and its parents.
-    Untrusted,
 }
 
 /// Keep a loaded file's authority until quarantine has completed.
@@ -217,33 +203,6 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
             .push(MergeLayer::file(Cow::Owned(value), path));
     }
     resolved
-}
-
-/// Validate one occurrence's executable-authority claim.
-///
-/// This is a step of its own because authority answers a different question
-/// from the precedence and quarantine rules that follow it in the collecting
-/// loop: it decides whether an occurrence may declare executable policy at
-/// all, not where its values rank. Presence is checked before any typed
-/// merging, so a project, explicit, or environment occurrence cannot reach the
-/// schema through an empty or malformed declaration. An operator occurrence is
-/// validated field by field in [`occurrence_errors`], whose diagnosis names
-/// `shells[index].name`, `shells[index].executable`, or `shells[index].args`;
-/// the returned errors become ordinary discovery errors, so startup stops
-/// before any manifest is read. Both paths name the declaring file when the
-/// layer has one, because the same key and index can appear in several layers.
-fn shells_authority_errors(
-    value: &serde_json::Value,
-    source: Option<&Utf8Path>,
-    authority: RootAuthority,
-) -> Vec<Arc<OrthoError>> {
-    if !declares_shells(value) {
-        return Vec::new();
-    }
-    match authority {
-        RootAuthority::Operator => occurrence_errors(value, source),
-        RootAuthority::Untrusted => vec![untrusted_shells_error(source)],
-    }
 }
 
 /// Retain a project-chain budget request or its deferred validation error.

@@ -6,7 +6,7 @@
 //! merge must not conflate: whether a path *is* the project file, and whether
 //! that identity could be established at all.
 
-use super::super::paths::{PathNormalizer, normalized_path_key};
+use super::super::paths::PathNormalizer;
 use camino::Utf8Path;
 use std::path::{Path, PathBuf};
 
@@ -26,12 +26,22 @@ pub(super) struct ProjectKey {
 
 impl ProjectKey {
     /// Build the comparison key while keeping resolution failures observable.
+    ///
+    /// Normalization reads the original path, not its lossy spelling. Passing
+    /// the spelling would fail to resolve a project file that exists under a
+    /// directory whose name is not valid UTF-8, and that failure would mark the
+    /// key ambiguous, withholding authority from every occurrence — including
+    /// valid operator shells. The spelling is therefore kept only for the
+    /// fallback comparison and the diagnostics that need text.
     pub(super) fn classify(normalizer: &impl PathNormalizer, path: &Path) -> Self {
-        let literal = path.to_string_lossy().into_owned();
-        let (key, is_resolved) = normalized_path_key(normalizer, &literal)
-            .map_or_else(|_| (PathBuf::from(&literal), false), |key| (key, true));
+        let (key, is_resolved) = normalizer
+            .normalize(path)
+            .map_or_else(|_| (path.to_path_buf(), false), |key| (key, true));
         Self {
-            lossy: key.to_str().is_none().then_some(literal),
+            lossy: key
+                .to_str()
+                .is_none()
+                .then(|| path.to_string_lossy().into_owned()),
             key,
             unresolved: !is_resolved && may_exist(normalizer, path),
         }

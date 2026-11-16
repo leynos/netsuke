@@ -11595,7 +11595,10 @@ Test commands:
 - `make test` runs the unit, property, and behavioural suites, including
   `tests/cli_tests/shells_authority.rs`, the `tests/cli_tests/shells_startup/`
   module, and the `configured_shells` feature.
-- `make verus` rechecks the refinement proof.
+- `make verus VERUS_FLAGS='--proof-file verus/configured_shells/main.rs'`
+  rechecks the shell-composition proof. The target's default proof file is
+  `verus/canonical_value/main.rs`, so a bare `make verus` does not recheck this
+  one.
 - `make test` runs
   `configured_shell_example_is_accepted_from_an_operator_root`, which loads the
   users' guide example from an operator configuration root, and
