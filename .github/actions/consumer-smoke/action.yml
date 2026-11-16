@@ -319,7 +319,9 @@ runs:
 
     - name: Verify the downloads and the shipped executable
       id: verify
-      if: steps.plan.outcome == 'success'
+      # No condition: the job guard is the only thing allowed to decide whether
+      # the smoke runs, and a skipped plan already fails the default success()
+      # gating this step inherits.
       shell: bash
       env:
         WORK_DIRECTORY: ${{ inputs['work-dir'] }}

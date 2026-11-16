@@ -73,6 +73,14 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     "absorb-consumer-smoke-step-failure": (
         ("static", f"{CONSUMER_SMOKE_JOB}.continue-on-error"),
     ),
+    # A composite step that tolerates its own failure ends the action
+    # successfully, so the job never sees the refusal.
+    "absorb-consumer-smoke-action-failure": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.continue-on-error"),
+    ),
+    # The report step survives, so the run still reads as a complete smoke
+    # while nothing verified the published bytes.
+    "drop-consumer-smoke-verifier": (("static", f"{CONSUMER_SMOKE_JOB}.action"),),
     "compile-in-consumer-smoke-job": (("static", f"{CONSUMER_SMOKE_JOB}.compilation"),),
     "compile-in-consumer-smoke-action": (
         ("static", f"{CONSUMER_SMOKE_JOB}.compilation"),

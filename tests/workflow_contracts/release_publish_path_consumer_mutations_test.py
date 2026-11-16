@@ -23,6 +23,7 @@ from release_publish_path_consumer_mutations import (
 from release_publish_path_consumer_smoke import (
     CONSUMER_SMOKE_ACTION_PATH,
     CONSUMER_SMOKE_JOB,
+    check_smoke_action_commands,
     check_smoke_compilation,
 )
 from release_publish_path_contract import (
@@ -111,4 +112,23 @@ def test_the_compilation_scan_finds_no_build_in_the_shipped_smoke(
 
     assert not violations, (
         f"the shipped smoke must not be reported as compiling; got {violations!r}"
+    )
+
+
+def test_the_cli_shape_check_accepts_the_shipped_action(
+    fixtures: SmokeFixtures,
+) -> None:
+    """Keep the invocation check live by clearing the shipped manifest.
+
+    The mutation that drops the verifier proves the check reacts to a missing
+    invocation; this case proves it reacts to nothing else. Without it a check
+    that reported a violation unconditionally would pass every mutation above
+    while making the action impossible to ship.
+    """
+    violations: list[str] = []
+
+    check_smoke_action_commands(fixtures.action, violations)
+
+    assert not violations, (
+        f"the shipped action must pass the invocation check; got {violations!r}"
     )

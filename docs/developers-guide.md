@@ -3803,7 +3803,7 @@ to a smoke that never began.
 
 `tests/workflow_contracts/release_publish_path_consumer_shape.py` holds the
 job's dependencies, permissions, checkout, environment, artefact selection,
-action inputs, and compilation checks, and
+action inputs, and failure-visibility checks, and
 `release_publish_path_consumer_smoke.py` composes them with the guard's
 reachability oracle, re-exporting the shape names its callers use; the split
 keeps each module inside the 400-line cap. The checkout check is what keeps the
@@ -3811,8 +3811,13 @@ workflow token from being persisted into the job's git config, the one
 credential a read-only job could still acquire. The credential scans live in
 `release_publish_path_consumer_credentials.py`, which reads the composite
 action's step environments as well as the job's, because those steps run in the
-same process but appear nowhere in the workflow; the invocation check refuses a
-step-level `if` on the smoke, so the job guard alone decides whether it runs.
+same process but appear nowhere in the workflow. The failure-visibility check
+reads the job, its invocation step, and every step of the action, because a
+composite step that tolerates its own failure ends the action successfully and
+the job never sees the refusal. What the action's command lines may run is
+asserted in `release_publish_path_consumer_commands.py`: both CLI invocations
+must appear exactly once, carry no `if`, and pass exactly the reviewed
+arguments, and no command line in the job or the action may name a compiler.
 `release_publish_path_consumer_mutations.py` registers one labelled regression
 for each of those properties, each with the violation it must produce stated in
 `release_publish_path_consumer_expectations.py`, and

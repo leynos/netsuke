@@ -11,6 +11,7 @@ Run via ``make test-workflow-contracts``.
 
 import typing as typ
 
+from release_publish_path_consumer_commands import action_cli_invocation
 from release_publish_path_consumer_expectations import (
     CONSUMER_SMOKE_EXPECTED_VIOLATIONS,
     MUTATION_LABELS,
@@ -323,6 +324,50 @@ def _absorb_step_failure(release: Job, _action: Job) -> None:
     _invocation(_smoke_job(release))["continue-on-error"] = True
 
 
+def _cli_invocation(action: Job, phase: str) -> tuple[list[Job], int]:
+    """Return the action's step list and the index of one CLI invocation.
+
+    Returns
+    -------
+    tuple[list[Job], int]
+        The action's own step list — not a copy, so the caller mutates or
+        deletes the step in place — and the index of the step that runs
+        ``consumer_smoke_cli.py <phase>``.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If no step runs that subcommand, so the mutation would change nothing
+        the contract reads.
+    """
+    steps = _steps(action)
+    for index, step in enumerate(steps):
+        tokens = action_cli_invocation(step)
+        if tokens is not None and tokens[1:2] == (phase,):
+            return steps, index
+    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
+
+
+def _absorb_action_failure(_release: Job, action: Job) -> None:
+    """Absorb a failed verification inside the composite action.
+
+    The job and its invocation step stay clean, so only a scan of the action's
+    own steps sees the failure being swallowed.
+    """
+    steps, index = _cli_invocation(action, "verify")
+    steps[index]["continue-on-error"] = True
+
+
+def _drop_verifier(_release: Job, action: Job) -> None:
+    """Remove the action's verify invocation, keeping its report step.
+
+    The report step still emits an outcome for every phase — all ``skipped`` —
+    so the run reads as a completed smoke that verified nothing.
+    """
+    steps, index = _cli_invocation(action, "verify")
+    del steps[index]
+
+
 def _compile_in_job(release: Job, _action: Job) -> None:
     """Append the source build a smoke must never run."""
     _steps(_smoke_job(release)).append(dict(COMPILATION_STEP))
@@ -352,6 +397,8 @@ _MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "drop-consumer-smoke-artifact-download": _drop_artifact_download,
     "absorb-consumer-smoke-job-failure": _absorb_job_failure,
     "absorb-consumer-smoke-step-failure": _absorb_step_failure,
+    "absorb-consumer-smoke-action-failure": _absorb_action_failure,
+    "drop-consumer-smoke-verifier": _drop_verifier,
     "compile-in-consumer-smoke-job": _compile_in_job,
     "compile-in-consumer-smoke-action": _compile_in_action,
 }

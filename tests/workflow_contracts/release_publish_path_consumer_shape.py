@@ -10,9 +10,10 @@ credential or a compiler fails a contract instead of quietly passing.
 
 The credential scans read the job and the action together and live in
 ``release_publish_path_consumer_credentials``, because a token can be defined in
-either document. The scenario-level composition and the reachability oracle
-live in ``release_publish_path_consumer_smoke``, which re-exports everything
-these modules define.
+either document. What the action's command lines may run is asserted in
+``release_publish_path_consumer_commands``. The scenario-level composition and
+the reachability oracle live in ``release_publish_path_consumer_smoke``, which
+re-exports everything these modules define.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -58,16 +59,12 @@ SMOKE_ACTION_INPUTS = {
     "target": SMOKE_ACTION_TARGET,
     "work-dir": "${{ runner.temp }}/release-consumer-smoke",
 }
-#: A whole-word Rust build command. A comment may name the archive format, so
-#: only executable lines are read; a command line naming any of these would let
-#: the smoke build what it is supposed to download.
-COMPILATION_COMMAND = re.compile(r"\b(?:cargo|rustc|rustup)\b")
 #: The expressions that resolve to a credential, whatever name stores them.
 TOKEN_EXPRESSION = re.compile(r"\bgithub\.token\b|\bsecrets\b")
 TOKEN_NAMES = frozenset({"GH_TOKEN", "GITHUB_TOKEN"})
 
 
-def _command_lines(run: object) -> list[str]:
+def command_lines(run: object) -> list[str]:
     """Return a step's executable shell lines, comments and continuations gone.
 
     A comment naming the cargo-binstall archive is documentation, not a build,
@@ -225,21 +222,31 @@ def check_smoke_artifacts(job: dict[str, object], violations: list[str]) -> None
 
 
 def check_smoke_failure_visibility(
-    job: dict[str, object], violations: list[str]
+    job: dict[str, object],
+    action: dict[str, object] | None,
+    violations: list[str],
 ) -> None:
     """Refuse to let a failed smoke be reported as a verified release.
 
     ``continue-on-error`` makes the one job that exercises the published
     artefacts green whatever it finds, so a corrupt or mis-digested release
-    would ship with the refusal absorbed. The job and the step that runs the
-    smoke are both checked, since either swallows the failure.
+    would ship with the refusal absorbed. The job, the step that calls the
+    action, and every step inside the action are checked: a composite step that
+    tolerates its own failure ends the action successfully, so the job never
+    sees the refusal.
     """
-    invocations = (
+    holders: list[tuple[str, dict[str, object]]] = [("the job", job)]
+    holders.extend(
         ("the smoke invocation", step)
         for step in steps_of(job)
         if str(step.get("uses", "")) == LOCAL_SMOKE_ACTION
     )
-    for label, holder in [("the job", job), *invocations]:
+    if action is not None:
+        holders.extend(
+            (f"action step {index}", step)
+            for index, step in enumerate(action_steps(action))
+        )
+    for label, holder in holders:
         if "continue-on-error" in holder:
             violations.append(
                 f"{CONSUMER_SMOKE_JOB}.continue-on-error: {label} must not set "
@@ -342,37 +349,6 @@ def _credential_inputs(names: set[str]) -> list[str]:
     )
 
 
-def check_smoke_compilation(
-    job: dict[str, object],
-    action: dict[str, object] | None,
-    violations: list[str],
-) -> None:
-    """Refuse a build command anywhere in the job or the action it calls.
-
-    The smoke exists to run the bytes a consumer receives. A compiler here
-    would replace the download with a build, and ``cargo install netsuke-build``
-    is the specific substitution this check was written for.
-    """
-    sources: list[tuple[str, object]] = [
-        (f"{CONSUMER_SMOKE_JOB} step {index}", step.get("run"))
-        for index, step in enumerate(steps_of(job))
-    ]
-    if action is not None:
-        sources.extend(
-            (f"{CONSUMER_SMOKE_ACTION_PATH} step {index}", step.get("run"))
-            for index, step in enumerate(action_steps(action))
-        )
-    for label, run in sources:
-        offending = [
-            line for line in _command_lines(run) if COMPILATION_COMMAND.search(line)
-        ]
-        if offending:
-            violations.append(
-                f"{CONSUMER_SMOKE_JOB}.compilation: {label} builds instead of "
-                f"downloading, got {offending[0]!r}"
-            )
-
-
 __all__ = [
     "CANDIDATE_REF",
     "CHECKOUT_PREFIX",
@@ -390,9 +366,9 @@ __all__ = [
     "check_smoke_action_inputs",
     "check_smoke_artifacts",
     "check_smoke_checkout",
-    "check_smoke_compilation",
     "check_smoke_failure_visibility",
     "check_smoke_needs",
+    "command_lines",
     "smoke_job",
     "steps_of",
 ]

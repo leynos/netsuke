@@ -21,6 +21,10 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
+from release_publish_path_consumer_commands import (
+    check_smoke_action_commands,
+    check_smoke_compilation,
+)
 from release_publish_path_consumer_credentials import (
     check_smoke_action_environment,
     check_smoke_privileges,
@@ -42,7 +46,6 @@ from release_publish_path_consumer_shape import (
     check_smoke_action_inputs,
     check_smoke_artifacts,
     check_smoke_checkout,
-    check_smoke_compilation,
     check_smoke_failure_visibility,
     check_smoke_needs,
     smoke_job,
@@ -125,8 +128,9 @@ def check_consumer_smoke(check: ConsumerSmokeCheck) -> None:
     check_smoke_action_inputs(job, check.violations)
     check_smoke_action_declared(check.action, check.violations)
     check_smoke_action_environment(check.action, check.violations)
+    check_smoke_action_commands(check.action, check.violations)
     check_smoke_compilation(job, check.action, check.violations)
-    check_smoke_failure_visibility(job, check.violations)
+    check_smoke_failure_visibility(job, check.action, check.violations)
     contexts: dict[str, object] = {
         "needs": _needs_context(job, check.scenario, check.outputs),
         "status": {"cancelled": check.scenario.cancelled},
@@ -165,6 +169,7 @@ __all__ = [
     "ConsumerSmokeCheck",
     "action_steps",
     "check_consumer_smoke",
+    "check_smoke_action_commands",
     "check_smoke_action_declared",
     "check_smoke_action_environment",
     "check_smoke_action_inputs",
