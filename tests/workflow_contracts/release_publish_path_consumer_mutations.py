@@ -313,6 +313,16 @@ def _drop_artifact_download(release: Job, _action: Job) -> None:
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
 
 
+def _absorb_job_failure(release: Job, _action: Job) -> None:
+    """Absorb a failed smoke at the job level."""
+    _smoke_job(release)["continue-on-error"] = True
+
+
+def _absorb_step_failure(release: Job, _action: Job) -> None:
+    """Absorb a failed smoke on its one invocation step."""
+    _invocation(_smoke_job(release))["continue-on-error"] = True
+
+
 def _compile_in_job(release: Job, _action: Job) -> None:
     """Append the source build a smoke must never run."""
     _steps(_smoke_job(release)).append(dict(COMPILATION_STEP))
@@ -340,6 +350,8 @@ _MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "persist-consumer-smoke-checkout-credentials": _persist_checkout_credentials,
     "select-consumer-smoke-pattern-artifact": _select_pattern_artifact,
     "drop-consumer-smoke-artifact-download": _drop_artifact_download,
+    "absorb-consumer-smoke-job-failure": _absorb_job_failure,
+    "absorb-consumer-smoke-step-failure": _absorb_step_failure,
     "compile-in-consumer-smoke-job": _compile_in_job,
     "compile-in-consumer-smoke-action": _compile_in_action,
 }

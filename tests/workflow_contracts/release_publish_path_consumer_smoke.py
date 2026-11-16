@@ -43,6 +43,7 @@ from release_publish_path_consumer_shape import (
     check_smoke_artifacts,
     check_smoke_checkout,
     check_smoke_compilation,
+    check_smoke_failure_visibility,
     check_smoke_needs,
     smoke_job,
     steps_of,
@@ -125,6 +126,7 @@ def check_consumer_smoke(check: ConsumerSmokeCheck) -> None:
     check_smoke_action_declared(check.action, check.violations)
     check_smoke_action_environment(check.action, check.violations)
     check_smoke_compilation(job, check.action, check.violations)
+    check_smoke_failure_visibility(job, check.violations)
     contexts: dict[str, object] = {
         "needs": _needs_context(job, check.scenario, check.outputs),
         "status": {"cancelled": check.scenario.cancelled},
@@ -169,6 +171,7 @@ __all__ = [
     "check_smoke_artifacts",
     "check_smoke_checkout",
     "check_smoke_compilation",
+    "check_smoke_failure_visibility",
     "check_smoke_needs",
     "check_smoke_privileges",
     "smoke_job",

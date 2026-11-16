@@ -391,6 +391,7 @@ __all__ = [
     "check_smoke_artifacts",
     "check_smoke_checkout",
     "check_smoke_compilation",
+    "check_smoke_failure_visibility",
     "check_smoke_needs",
     "smoke_job",
     "steps_of",

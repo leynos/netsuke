@@ -65,6 +65,14 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     "drop-consumer-smoke-artifact-download": (
         ("static", f"{CONSUMER_SMOKE_JOB}.artifacts"),
     ),
+    # A smoke that cannot fail reports a release whose bytes were never
+    # checked as verified, at the job level or on the one step that runs it.
+    "absorb-consumer-smoke-job-failure": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.continue-on-error"),
+    ),
+    "absorb-consumer-smoke-step-failure": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.continue-on-error"),
+    ),
     "compile-in-consumer-smoke-job": (("static", f"{CONSUMER_SMOKE_JOB}.compilation"),),
     "compile-in-consumer-smoke-action": (
         ("static", f"{CONSUMER_SMOKE_JOB}.compilation"),
