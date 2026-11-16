@@ -1562,7 +1562,7 @@ default, and the project is pre-1.0.
       to run mutants, the hygiene rule, and its reuse policy (one owner; a new
       kernel is discovered automatically);
     - the acceptance rule by reference to the ADR, with no timings;
-    - lines 12975-12980 (the IR cycle architecture): one sentence pointing at
+    - lines 12989-12994 (the IR cycle architecture): one sentence pointing at
       the kernel and the specification tests.
   - `docs/repository-layout.md`:
     - `verus/`, `verus/canonical_value/`, `verus/cycle_canonicalization/`,
@@ -1919,6 +1919,12 @@ These are filled in during implementation:
   workflow) and #1139.
 - [x] 2026-11-15: wrote revision 3, applying the user's D4 decision and the CI
   notes.
+- [x] 2026-11-16: rebased onto `origin/main` `f49104fc4` (#1128, project
+  blocklist policy). The range-diff showed all three commits unchanged. #1128
+  touches no Verus, cycle, Kani, or proof file. It inserted 14 lines into
+  `docs/developers-guide.md` at line 10726, which moved EP-M4's IR cycle
+  architecture reference from lines 12975-12980 to 12989-12994. No other
+  developers' guide reference cited here moved.
 - [ ] User approval.
 - [ ] EP-M0 preflight and baselines.
 - [ ] EP-M1 specification and hygiene tests.
