@@ -182,6 +182,7 @@ SOURCE_MODULES = (
     "scripts/release_consumer_payload.py",
     "scripts/release_binstall_extract.py",
     "scripts/release_binstall_probe.py",
+    "scripts/release_binstall_child.py",
     "scripts/consumer_smoke_evidence.py",
     "scripts/consumer_smoke_ledger.py",
     "scripts/consumer_smoke_cli.py",
@@ -283,6 +284,7 @@ ADAPTER_MODULES = (
     "scripts/release_binstall_sidecar.py",
     "scripts/release_binstall_extract.py",
     "scripts/release_binstall_probe.py",
+    "scripts/release_binstall_child.py",
     "scripts/consumer_smoke_evidence.py",
     "scripts/consumer_smoke_ledger.py",
     "scripts/consumer_smoke_verify.py",
@@ -322,12 +324,13 @@ NETWORK_FREE_MODULES = tuple(
 #: release path belongs to one of those boundaries. A new entry here is a
 #: reviewed decision, not a registration. The finalizer's CLI, operations,
 #: and records modules sit above that boundary and issue no process of
-#: their own. ``release_binstall_probe`` runs the binary the smoke downloaded:
+#: their own. ``release_binstall_child`` runs the binary the smoke downloaded:
 #: the only way to observe what a consumer actually receives. It compiles
 #: nothing, reaches no service of its own, and passes argv with a fixed
-#: environment rather than building a shell command. The smoke's other
-#: adapters — the archive reader, the extractor, the evidence reads, the
-#: ledger, and the phase walk — issue no process of their own.
+#: environment rather than building a shell command. The probe that decides
+#: what the child's answer means holds no process of its own, and neither do
+#: the smoke's other adapters — the archive reader, the extractor, the evidence
+#: reads, the ledger, and the phase walk.
 PROCESS_MODULES = {
     "scripts/ensure_draft_release.py": "runs `gh release create`, the draft boundary",
     "scripts/package_crate_cli.py": "runs `cargo package`, a local build",
@@ -335,7 +338,7 @@ PROCESS_MODULES = {
     "scripts/finalize_github_release_io.py": (
         "runs `gh release view` and `gh release edit`, the publication boundary"
     ),
-    "scripts/release_binstall_probe.py": (
+    "scripts/release_binstall_child.py": (
         "runs the extracted `netsuke --version`, the smoke's execution boundary"
     ),
 }

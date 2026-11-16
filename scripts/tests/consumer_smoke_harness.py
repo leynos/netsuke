@@ -70,21 +70,35 @@ class FakeChild:
     stopped: bool = False
     reads: list[int] = dataclasses.field(default_factory=list)
     reaped: bool = False
+    closed: bool = False
 
     def read_stdout(self, size: int) -> str:
         """Read up to ``size`` characters, recording the bound asked for."""
         self.reads.append(size)
         return self.stream.read(size)
 
-    def is_running(self) -> bool:
-        """Report the child as alive until the probe reaps it."""
-        return not self.reaped
+    def wait_until(self, deadline: float) -> int | None:
+        """Report the child as exited, which a fake does the moment it is asked.
+
+        Returns
+        -------
+        int
+            The status the child exited with. A fake that must stay running
+            overrides this rather than the probe growing a second code path.
+        """
+        _ = deadline
+        self.reaped = True
+        return self.returncode
 
     def stop(self) -> int:
         """Stop and reap the child, reporting the status it exited with."""
         self.stopped = True
         self.reaped = True
         return self.returncode
+
+    def close(self) -> None:
+        """Release the standard output, which nothing else holds."""
+        self.closed = True
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

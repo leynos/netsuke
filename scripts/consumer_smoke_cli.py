@@ -92,6 +92,7 @@ import typing as typ
 
 import consumer_smoke_evidence as evidence
 import consumer_smoke_verify as verify
+import release_binstall_child as child_adapter
 import release_consumer_smoke as smoke
 from consumer_smoke_verify import EXIT_EVIDENCE_REJECTED, EXIT_OK
 
@@ -261,8 +262,9 @@ def main(
         Command-line arguments. Defaults to ``sys.argv[1:]``.
     launcher
         The callable that starts the extracted binary. ``None`` starts a real
-        child; a test supplies its own so the probe boundary is exercised
-        without executing a downloaded file.
+        child, which is why this is the composition root for the probe; a test
+        supplies its own so the probe boundary is exercised without executing a
+        downloaded file.
 
     Returns
     -------
@@ -278,7 +280,8 @@ def main(
     arguments = build_parser().parse_args(argv)
     if arguments.command == "plan":
         return run_plan(arguments)
-    return verify.run_verify(arguments, launcher=launcher)
+    chosen = child_adapter.launch if launcher is None else launcher
+    return verify.run_verify(arguments, launcher=chosen)
 
 
 if __name__ == "__main__":

@@ -51,10 +51,9 @@ EXIT_PROBE_REJECTED = 4
 
 #: Every refusal the phases can report, caught so one table can diagnose them.
 #:
-#: The probe's own refusals subclass :class:`ArchiveRefusedError`, so the
-#: clauses here are grouped rather than ordered; the ordering that matters is
-#: in :data:`_REFUSALS`, where a probe refusal is matched before the archive
-#: refusal it subclasses.
+#: The probe's refusals subclass :class:`ArchiveRefusedError`, so these clauses
+#: are grouped rather than ordered; :data:`_REFUSALS` holds the ordering that
+#: matters.
 _REFUSAL_TYPES = (
     ConsumerSmokeError,
     archive_adapter.ArchiveRefusedError,
@@ -197,7 +196,7 @@ def probe(
     *,
     plan: smoke.SmokePlan,
     extraction: Extraction,
-    launcher: probe_adapter.ProbeLauncher | None,
+    launcher: probe_adapter.ProbeLauncher,
 ) -> None:
     """Extract the shipped binary and require its exact version banner.
 
@@ -228,7 +227,7 @@ def probe(
 def run_verify(
     arguments: argparse.Namespace,
     *,
-    launcher: probe_adapter.ProbeLauncher | None,
+    launcher: probe_adapter.ProbeLauncher,
 ) -> int:
     """Check the saved downloads and the shipped executable against the plan.
 
@@ -256,7 +255,7 @@ def _run_phases(
     arguments: argparse.Namespace,
     plan: smoke.SmokePlan,
     ledger: PhaseLedger,
-    launcher: probe_adapter.ProbeLauncher | None,
+    launcher: probe_adapter.ProbeLauncher,
 ) -> None:
     """Run every smoke phase in order, recording each outcome as it completes.
 

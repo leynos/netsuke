@@ -3731,14 +3731,23 @@ environment that inherits nothing, so the child cannot read the environment
 variables the runner exports. The ceiling is 8 KiB, far more than a one-line
 banner and far less than a buffer worth exhausting: a child that writes past it
 is killed rather than read further, so a download that floods its standard
-output cannot outlive the run that rejected it. The probe drives `subprocess`
-directly rather than through `cuprum`, because the ceiling has to stop the
-child at the byte that passes it, `cuprum` captures whole, and the smoke runs
-under `uv run --no-project`, where `cuprum` is not installed. Replacing the
-child's initial environment is an allowlist, not a sandbox: it does not isolate
-the executable from the runner's filesystem, network, or any other resource.
-Its banner must name the candidate version exactly; a prerelease suffix is
-matched in full, and a banner that merely contains the version is refused.
+output cannot outlive the run that rejected it. The read runs on its own thread
+and is joined against the same deadline that bounds the wait for the child to
+exit, because the child is not the only holder of the pipe: a descendant that
+inherited it keeps a blocking read open after the child itself has exited. The
+child is therefore started in a session of its own, and a refusal kills the
+process group rather than the child alone, which is what releases that pipe. A
+binary that prints its banner, closes its output, and then finishes is waited
+for and reaped; one that stays alive once its output is closed is refused as a
+timeout rather than waited on indefinitely. The process plumbing lives in
+`release_binstall_child.py`, which drives `subprocess` directly rather than
+through `cuprum`, because the ceiling has to stop the child at the byte that
+passes it, `cuprum` captures whole, and the smoke runs under
+`uv run --no-project`, where `cuprum` is not installed. Replacing the child's
+initial environment is an allowlist, not a sandbox: it does not isolate the
+executable from the runner's filesystem, network, or any other resource. Its
+banner must name the candidate version exactly; a prerelease suffix is matched
+in full, and a banner that merely contains the version is refused.
 `consumer_smoke_cli.py` reports the phase that refused:
 
 | Exit | Meaning                                                        |

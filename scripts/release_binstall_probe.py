@@ -4,7 +4,7 @@ This is the smoke's execution boundary and the only place a downloaded file is
 launched. Nothing here decides whether the reported version is the candidate's
 — that is :func:`release_consumer_payload.require_probe` — and nothing here
 touches the archive; this module passes an absolute path, ``--version`` as an
-argument, a wall-clock limit, a ceiling on what it will read back, and a fixed
+argument, a wall-clock budget, a ceiling on what it will read back, and a fixed
 environment, then reports what the child did.
 
 The environment is fixed rather than inherited. The job holds a read-only
@@ -22,13 +22,26 @@ line, so the ceiling never refuses a binary that answered the question it was
 asked, and the read is incremental so the bytes a hostile child writes never
 become the smoke's memory.
 
+The read runs on its own daemon thread and is joined against one deadline,
+because a blocking read cannot be bounded any other way: the child is not the
+only holder of its standard output, so a descendant that inherited the pipe
+keeps the read blocked after the child itself has exited. The child is started
+in its own session, so stopping it stops everything it started and releases the
+pipe that would otherwise stay open. The same deadline then bounds the wait for
+the child to exit: a binary that closes its standard output and then hangs is
+refused as a timeout rather than waited on, and one that closes it and finishes
+is reaped normally rather than killed for having been slow to exit. Every
+refusal stops, reaps, and closes the child, so no path leaves a process behind.
+
 The child is launched through :mod:`subprocess` rather than through ``cuprum``,
 which this repository uses for automation scripts generally. The ceiling and
 the kill are the reason: ``cuprum`` captures whole, and its line stream is
 asynchronous, so bounding the capture there would mean rebuilding this read
 against a cancellation path that is further from the signal that has to stop
 the child. The smoke also runs under ``uv run --no-project``, where ``cuprum``
-is not installed, and this is the only subprocess it starts.
+is not installed, and this is the only subprocess it starts. The real child
+lives in :mod:`release_binstall_child`, so this module holds the seam and the
+decisions rather than the process plumbing.
 
 Run through ``scripts/consumer_smoke_cli.py``; behavioural coverage lives in
 ``scripts/tests/test_release_binstall_probe.py``.
@@ -36,8 +49,8 @@ Run through ``scripts/consumer_smoke_cli.py``; behavioural coverage lives in
 
 import contextlib
 import dataclasses
-import subprocess  # ruff: ignore[suspicious-subprocess-import] - probe boundary.
 import threading
+import time
 import typing as typ
 
 from release_binstall_archive import ArchiveRefusedError
@@ -46,6 +59,9 @@ if typ.TYPE_CHECKING:
     import pathlib
 
 #: Wall-clock seconds the version probe may run before it is killed.
+#:
+#: The budget covers reading the banner and waiting for the child to exit, so a
+#: child cannot extend its run by closing its standard output and staying alive.
 PROBE_TIMEOUT_SECONDS = 60
 
 #: Largest standard output the probe will read before refusing the banner.
@@ -54,6 +70,13 @@ PROBE_TIMEOUT_SECONDS = 60
 #: banner the smoke accepts and far smaller than a buffer worth exhausting, so
 #: it bounds the capture without ever refusing a binary that answered.
 PROBE_OUTPUT_LIMIT = 8192
+
+#: Seconds granted to the reader thread after the deadline stopped the child.
+#:
+#: Killing the child's process group closes the write end of the pipe, so the
+#: blocked read returns at once; this only bounds the wait for the thread to
+#: observe that, and it is not part of the probe's own budget.
+PROBE_DRAIN_SECONDS = 5
 
 #: Environment the probe receives. It inherits nothing, so no credential the
 #: runner exports as an environment variable reaches a file this workflow
@@ -66,20 +89,23 @@ class ProbeProcess(typ.Protocol):
     """The slice of a running child the probe drives.
 
     The surface is kept this small so a test can hand the probe a child that
-    writes past the ceiling, or one that never answers, without launching
-    anything. Reading is a method rather than an exposed stream because the
-    real child's stream is optional at the type level while the probe always
-    captures it.
+    writes past the ceiling, one that never answers, or one that closes its
+    output and then lingers, without launching anything. Reading is a method
+    rather than an exposed stream because the real child's stream is optional
+    at the type level while the probe always captures it.
     """
 
     def read_stdout(self, size: int) -> str:
         """Read at most ``size`` characters, blocking until they arrive."""
 
-    def is_running(self) -> bool:
-        """Report whether the child is still alive."""
+    def wait_until(self, deadline: float) -> int | None:
+        """Wait for the child to exit, reporting ``None`` past ``deadline``."""
 
     def stop(self) -> int:
         """Stop the child, reap it, and report the status it exited with."""
+
+    def close(self) -> None:
+        """Release the captured standard output."""
 
 
 class ProbeLauncher(typ.Protocol):
@@ -123,78 +149,6 @@ class ProbeResult:
     stdout: str
 
 
-@dataclasses.dataclass(frozen=True, slots=True)
-class _SubprocessProcess:
-    """Adapt :class:`subprocess.Popen` to :class:`ProbeProcess`."""
-
-    process: subprocess.Popen[str]
-
-    def read_stdout(self, size: int) -> str:
-        """Read standard output, which the probe always captures as text.
-
-        Returns
-        -------
-        str
-            At most ``size`` characters, decoded.
-
-        Raises
-        ------
-        ProbeOutputError
-            If the launch did not leave a readable stream, which the probe's
-            own launch options make unreachable for a real child.
-        """
-        stream = self.process.stdout
-        if stream is None:
-            msg = "the shipped binary's standard output was not captured"
-            raise ProbeOutputError(msg)
-        return stream.read(size)
-
-    def is_running(self) -> bool:
-        """Report whether the child is still alive."""
-        return self.process.poll() is None
-
-    def stop(self) -> int:
-        """Stop the child, reap it, and report the status it exited with.
-
-        Stopping a child that has already exited is a no-op, so the probe uses
-        this for the ordinary end of a run as well as for a refusal.
-
-        Returns
-        -------
-        int
-            The status the child exited with.
-        """
-        self.process.kill()
-        return self.process.wait()
-
-
-def _launch(command: list[str], *, env: dict[str, str]) -> ProbeProcess:
-    """Start a real child with a captured, decoded standard output.
-
-    Standard input is closed rather than inherited: a ``--version`` child has
-    nothing to read, and leaving the runner's input attached would let it block
-    on a stream this smoke never provides.
-
-    Returns
-    -------
-    ProbeProcess
-        The started child, whose standard output the probe reads.
-    """
-    return _SubprocessProcess(
-        subprocess.Popen(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed argv, no shell.
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            # Standard error goes nowhere rather than into a decoded pipe: a
-            # child that writes a non-UTF-8 diagnostic would otherwise fail the
-            # launch before the banner that decides acceptance is ever read.
-            stderr=subprocess.DEVNULL,
-            text=True,
-            env=env,
-        )
-    )
-
-
 def _launched(launch: ProbeLauncher, binary: pathlib.Path) -> ProbeProcess:
     """Start the child, translating a launch that never happened.
 
@@ -223,37 +177,76 @@ def _stopped(process: ProbeProcess) -> None:
         _ = process.stop()
 
 
-def _watchdog(process: ProbeProcess, expired: threading.Event) -> threading.Timer:
-    """Start the timer that stops a child outliving the wall-clock budget.
+@dataclasses.dataclass(slots=True)
+class _Reading:
+    """Hold what the reader thread observed, for the caller to act on.
 
-    The timer runs in its own thread because the budget has to expire while the
-    probe is blocked reading standard output; killing the child is what ends
-    that read, so the timer cannot wait for it to finish first.
+    Attributes
+    ----------
+    size
+        The number of characters to ask for: one past the ceiling, so
+        "exactly at the ceiling" and "over it" are told apart without reading
+        any further.
+    banner
+        What the child wrote, once the read returned.
+    error
+        What the read raised instead of returning, if it did.
+    """
+
+    size: int
+    banner: str | None = None
+    error: BaseException | None = None
+
+    def run(self, process: ProbeProcess) -> None:
+        """Read the child's standard output, recording the outcome."""
+        try:
+            self.banner = process.read_stdout(self.size)
+        except (UnicodeDecodeError, OSError, ValueError) as error:
+            # ValueError covers a stream the probe closed from the main thread
+            # after the drain budget expired. It is a refusal to report, not a
+            # traceback to leave on a daemon thread nobody is watching.
+            self.error = error
+
+
+def _reader(process: ProbeProcess, reading: _Reading) -> threading.Thread:
+    """Start the daemon thread that performs the blocking read.
 
     Returns
     -------
-    threading.Timer
-        The started timer, which the caller cancels once the read returns.
+    threading.Thread
+        The started reader. The caller joins it against a deadline, because a
+        blocked read cannot be interrupted by anything but end of file.
     """
-
-    def stop() -> None:
-        """Stop the child unless it has already finished on its own."""
-        if not process.is_running():
-            return
-        expired.set()
-        _stopped(process)
-
-    timer = threading.Timer(PROBE_TIMEOUT_SECONDS, stop)
-    timer.daemon = True
-    timer.start()
-    return timer
+    reader = threading.Thread(target=reading.run, args=(process,), daemon=True)
+    reader.start()
+    return reader
 
 
-def _read_banner(process: ProbeProcess) -> str:
-    """Read standard output up to the ceiling, stopping a child that passes it.
+def _drained(reader: threading.Thread) -> None:
+    """Wait briefly for a reader the stopped child has released."""
+    reader.join(PROBE_DRAIN_SECONDS)
 
-    One character past the ceiling is requested, so "exactly at the ceiling"
-    and "over it" are told apart without reading any further.
+
+def _unreadable_message(error: BaseException | None) -> str:
+    """Diagnose standard output the probe could not read as a banner.
+
+    Returns
+    -------
+    str
+        The diagnosis naming why no banner could be read. An ``error`` of
+        ``None`` means the read neither returned nor raised, which is a
+        captured stream this probe cannot use at all; reporting it as empty
+        output would blame the binary for a fault in the adapter.
+    """
+    if isinstance(error, UnicodeDecodeError):
+        return "the shipped binary wrote bytes that are not UTF-8 to standard output"
+    if error is None:
+        return "the shipped binary's standard output could not be read"
+    return f"the shipped binary's standard output could not be read: {error}"
+
+
+def _banner(process: ProbeProcess, deadline: float) -> str:
+    """Read standard output up to the ceiling, bounded by ``deadline``.
 
     Returns
     -------
@@ -262,22 +255,31 @@ def _read_banner(process: ProbeProcess) -> str:
 
     Raises
     ------
-    ProbeOutputLimitError
-        If the child wrote past the ceiling; it is killed before this is
-        raised.
+    ProbeTimeoutError
+        If the read has not returned by ``deadline``; the child's process group
+        is stopped before this is raised, which is what releases the pipe.
     ProbeOutputError
         If the output could not be decoded as UTF-8, or could not be read.
+    ProbeOutputLimitError
+        If the child wrote past the ceiling; it is stopped before this is
+        raised.
     """
-    try:
-        banner = process.read_stdout(PROBE_OUTPUT_LIMIT + 1)
-    except UnicodeDecodeError as error:
-        msg = "the shipped binary wrote bytes that are not UTF-8 to standard output"
-        raise ProbeOutputError(msg) from error
-    except OSError as error:
-        msg = f"the shipped binary's standard output could not be read: {error}"
-        raise ProbeOutputError(msg) from error
-    if len(banner) <= PROBE_OUTPUT_LIMIT:
-        return banner
+    reading = _Reading(size=PROBE_OUTPUT_LIMIT + 1)
+    reader = _reader(process, reading)
+    reader.join(max(0.0, deadline - time.monotonic()))
+    if reader.is_alive():
+        _stopped(process)
+        _drained(reader)
+        msg = (
+            f"the shipped binary did not report its version within "
+            f"{PROBE_TIMEOUT_SECONDS}s and was killed"
+        )
+        raise ProbeTimeoutError(msg)
+    if reading.banner is None:
+        _stopped(process)
+        raise ProbeOutputError(_unreadable_message(reading.error)) from reading.error
+    if len(reading.banner) <= PROBE_OUTPUT_LIMIT:
+        return reading.banner
     _stopped(process)
     msg = (
         f"the shipped binary wrote more than {PROBE_OUTPUT_LIMIT} characters to "
@@ -286,29 +288,32 @@ def _read_banner(process: ProbeProcess) -> str:
     raise ProbeOutputLimitError(msg)
 
 
-def _reaped(process: ProbeProcess) -> int:
-    """Reap the child and return the status it exited with.
+def _observed(process: ProbeProcess, deadline: float) -> tuple[str, int]:
+    """Read the banner, then wait for the child to exit within the budget.
 
     Returns
     -------
-    int
-        The status the child exited with.
+    tuple[str, int]
+        The banner and the status the child exited with.
 
     Raises
     ------
-    ProbeLaunchError
-        If the child could not be reaped.
+    ProbeTimeoutError
+        If the read or the wait has not completed by ``deadline``.
     """
-    try:
-        return process.stop()
-    except OSError as error:
-        msg = f"the shipped binary could not be reaped: {error}"
-        raise ProbeLaunchError(msg) from error
+    banner = _banner(process, deadline)
+    status = process.wait_until(deadline)
+    if status is None:
+        _stopped(process)
+        msg = (
+            f"the shipped binary did not report its version within "
+            f"{PROBE_TIMEOUT_SECONDS}s and was killed"
+        )
+        raise ProbeTimeoutError(msg)
+    return banner, status
 
 
-def probe_version(
-    binary: pathlib.Path, *, launcher: ProbeLauncher | None = None
-) -> ProbeResult:
+def probe_version(binary: pathlib.Path, *, launcher: ProbeLauncher) -> ProbeResult:
     r"""Run ``binary --version`` and return its status and standard output.
 
     Parameters
@@ -316,9 +321,9 @@ def probe_version(
     binary
         Absolute path of the extracted binary.
     launcher
-        The callable that starts it. ``None`` starts a real child; a test
-        supplies its own so the probe boundary is exercised without executing
-        a downloaded file.
+        The callable that starts it. A test supplies its own so the probe
+        boundary is exercised without executing a downloaded file; the CLI
+        supplies :func:`release_binstall_child.launch`.
 
     Returns
     -------
@@ -330,7 +335,7 @@ def probe_version(
     ProbeTimeoutError
         If the probe exceeds :data:`PROBE_TIMEOUT_SECONDS`.
     ProbeLaunchError
-        If the binary could not be started or reaped.
+        If the binary could not be started.
     ProbeOutputError
         If standard output is not UTF-8 text, so no banner can be read from it.
     ProbeOutputLimitError
@@ -343,34 +348,34 @@ def probe_version(
     result so the banner decision can name the exit status in its diagnosis,
     which is a different operational fact from a binary that never ran.
 
+    Every refusal stops and reaps the child, and the captured standard output
+    is released on the way out whether the run was accepted or refused.
+
     Examples
     --------
     >>> import pathlib
     >>> class Child:
     ...     def read_stdout(self, size):
     ...         return "netsuke 1.2.3\n"
-    ...     def is_running(self):
-    ...         return False
+    ...     def wait_until(self, deadline):
+    ...         return 0
     ...     def stop(self):
     ...         return 0
+    ...     def close(self):
+    ...         pass
     >>> def launcher(command, *, env):
     ...     return Child()
     >>> probe_version(pathlib.Path("/tmp/netsuke"), launcher=launcher).stdout
     'netsuke 1.2.3\n'
     """  # ruff: ignore[docstring-extraneous-exception] - raised by the helpers above
-    launch = _launch if launcher is None else launcher
-    process = _launched(launch, binary)
-    expired = threading.Event()
-    watchdog = _watchdog(process, expired)
+    process = _launched(launcher, binary)
+    deadline = time.monotonic() + PROBE_TIMEOUT_SECONDS
     try:
-        banner = _read_banner(process)
+        banner, status = _observed(process, deadline)
     finally:
-        watchdog.cancel()
-    status = _reaped(process)
-    if expired.is_set():
-        msg = (
-            f"the shipped binary did not report its version within "
-            f"{PROBE_TIMEOUT_SECONDS}s and was killed"
-        )
-        raise ProbeTimeoutError(msg)
+        # Closing after the child is gone cannot disturb a live reader, and a
+        # stream that is already closed raises here for no reason worth
+        # reporting.
+        with contextlib.suppress(OSError, ValueError):
+            process.close()
     return ProbeResult(returncode=status, stdout=banner)

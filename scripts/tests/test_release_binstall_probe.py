@@ -11,9 +11,11 @@ Run via ``make test-release-publication``.
 import io
 import sys
 import threading
+import time
 import typing as typ
 
 import pytest
+import release_binstall_child as child_adapter
 import release_binstall_probe as probe
 import release_consumer_archive_policy as policy
 from consumer_smoke_harness import FakeChild
@@ -148,6 +150,46 @@ def test_probe_version_accepts_a_banner_exactly_at_the_ceiling(
         "the probe must still ask for one character past the ceiling"
     )
     assert child.reaped, "a probe that finished inside its budget must reap its child"
+    assert not child.stopped, (
+        "a child that answered must be waited for, not killed for how long it took"
+    )
+    assert child.closed, "the captured standard output must be released on every path"
+
+
+def test_probe_version_stops_a_child_that_answered_then_hung(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a child that closes its output and then stays alive.
+
+    The banner arrives at once, so only the wait can refuse this child. Waiting
+    without a deadline would hang the smoke on a binary that printed the right
+    line and never exited.
+    """
+
+    class _LingeringChild(FakeChild):
+        """A child that answers, then never exits."""
+
+        exit_status: int | None = None
+
+        def wait_until(self, deadline: float) -> int | None:
+            """Report the status the child had reached by ``deadline``.
+
+            Returns
+            -------
+            int | None
+                ``None`` for this child: it never exits, whatever it is asked,
+                so the probe has to stop it once the budget is spent.
+            """
+            _ = deadline
+            return self.exit_status
+
+    child = _LingeringChild(returncode=0, stream=io.StringIO("netsuke 1.2.3\n"))
+
+    with pytest.raises(probe.ProbeTimeoutError):
+        probe.probe_version(tmp_path / "netsuke", launcher=lambda *_, **__: child)
+
+    assert child.stopped, "a child that outlived the budget must be stopped"
+    assert child.closed, "the captured standard output must be released on every path"
 
 
 def test_probe_version_reports_a_launch_failure(tmp_path: pathlib.Path) -> None:
@@ -187,7 +229,7 @@ def test_probe_version_ignores_a_non_utf8_diagnostic(tmp_path: pathlib.Path) -> 
     )
     binary.chmod(0o755)
 
-    result = probe.probe_version(binary)
+    result = probe.probe_version(binary, launcher=child_adapter.launch)
 
     assert result.stdout == "netsuke 1.2.3\n", (
         "a diagnostic on standard error must not decide the banner's verdict"
@@ -215,4 +257,37 @@ def test_probe_version_stops_a_real_child_that_floods_its_output(
     binary.chmod(0o755)
 
     with pytest.raises(probe.ProbeOutputLimitError):
-        probe.probe_version(binary)
+        probe.probe_version(binary, launcher=child_adapter.launch)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="needs a POSIX shell script")
+def test_probe_version_releases_a_pipe_a_descendant_holds(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Refuse promptly when a descendant keeps the captured pipe open.
+
+    The child prints the right banner and exits, so the only thing keeping the
+    read blocked is the ``sleep`` it started, which inherited standard output.
+    Ending the child alone would leave that pipe open and the read waiting for
+    an end of file that never comes. The case bounds the whole call by the
+    drain budget: a probe that released the pipe returns as soon as the group
+    is killed, while one that waited for the reader would spend the entire
+    drain before reporting the same refusal.
+    """
+    monkeypatch.setattr(probe, "PROBE_TIMEOUT_SECONDS", 0.5)
+    binary = tmp_path / policy.BINARY_NAME
+    _ = binary.write_text(
+        "#!/bin/sh\nprintf 'netsuke 1.2.3\\n'\nsleep 5 &\nexit 0\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+
+    started = time.monotonic()
+    with pytest.raises(probe.ProbeTimeoutError):
+        probe.probe_version(binary, launcher=child_adapter.launch)
+    elapsed = time.monotonic() - started
+
+    assert elapsed < probe.PROBE_DRAIN_SECONDS, (
+        "the read must be released by stopping the process group; waiting for "
+        "the drain budget means the descendant kept the pipe open"
+    )
