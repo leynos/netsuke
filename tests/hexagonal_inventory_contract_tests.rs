@@ -21,6 +21,10 @@ mod landed;
 #[path = "hexagonal_inventory_contract/markdown.rs"]
 mod markdown;
 #[cfg(test)]
+#[cfg(test)]
+#[path = "hexagonal_inventory_contract/obligation_property_tests.rs"]
+mod obligation_property_tests;
+#[cfg(test)]
 #[path = "hexagonal_inventory_contract/obligation_tests.rs"]
 mod obligation_tests;
 #[path = "hexagonal_inventory_contract/obligations.rs"]
