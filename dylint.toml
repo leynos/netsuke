@@ -27,6 +27,18 @@
 [bumpy_road_function]
 min_bump_lines = 15
 
+# Cognitive complexity is gated here, not by Clippy. Clippy's
+# `cognitive_complexity` scores code after macro expansion, so `tracing` macros
+# under the `log` bridge inflated it and forced a ceiling of 32. The
+# macro-aware lint skips branching a macro generated, so it holds the ceiling
+# at CodeScene's 9. It is experimental, so the suite loads it only on request.
+# The tracker is https://github.com/leynos/whitaker/issues/504.
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 9
+
 [no_std_fs_operations]
 
 # Modules that need ambient filesystem access, scoped as narrowly as the lint
