@@ -164,13 +164,16 @@ def test_verify_reports_a_download_the_host_did_not_deliver(
         "a refused run must not report a verified verdict"
     )
     failure = read_phase_log(staged)["crate_download"]
+    started = failure["started_ns"]
+    ended = failure["ended_ns"]
     assert failure["outcome"] == "failure", "the phase in flight must be recorded"
-    assert isinstance(failure["ended_ns"], int), (
+    assert isinstance(started, int), (
+        "the refusal must record its start as an integer nanosecond stamp"
+    )
+    assert isinstance(ended, int), (
         "a phase that refused has finished, so it records an end timestamp"
     )
-    assert failure["started_ns"] <= failure["ended_ns"], (
-        "a refusal's end must not precede its start"
-    )
+    assert started <= ended, "a refusal's end must not precede its start"
 
 
 def test_verify_reports_a_saved_download_it_cannot_read(
