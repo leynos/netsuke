@@ -1030,6 +1030,55 @@ conflict in `Decision log`, and escalate.
     describes pre-built packages rather than a source-build support policy, and
     the 64-bit `usize` assumption the oversized witnesses rely on is recorded
     under `External assumptions and residual gaps`.
+  - Assessment repairs round two at `301795aeb` (2026-11-16). The follow-ups
+    above were answered by `EP613-COMPLETE-1D9E958`, which found no runtime
+    defect and four blockers, and `EP613-PROOF-1D9E958`, which found no
+    mathematical defect and five corrections. All five corrections are applied
+    at this head, and no production code changed to make them.
+    - Binomial witnesses. `verification.rs` claimed that
+      `2 * C(n, 2) = n * (n - 1)` lands inside `u64` at `n = 5_000_000_000`. It
+      does not: the step is 24,999,999,995,000,000,000, above `u64::MAX`. What
+      separates the two witnesses is the coefficient, which still fits at the
+      first operand and does not at `2^33` — which is also why the kernel
+      carries the numerator in `u128`. The comment and both assertion messages
+      now say that.
+    - Kani reach. The panic harness said the exactness harness "carries the
+      rest" of the reduced indices. Both symbolic sweeps stop at `r = 2`, so
+      indices 3 to 33 are exercised by the unit tests and the Proptest oracles
+      only, and the comment now states that limit instead of implying coverage.
+    - Falling factorial. `20!` is the largest ordinary factorial that fits in
+      `u64`, not the largest falling factorial: a one-step product of a larger
+      operand is representable and admitted. The witness pair pins the overflow
+      boundary and refusal, not the cap's position: the cap refuses every `r`
+      from 21 upwards, and each of those products overflows on its own, so the
+      two refusals are indistinguishable and `tests/cardinality.rs` already
+      says the cases cannot observe where the cap lies. The harness summary,
+      the doc comment, and the two assertion messages now say exactly that.
+    - Proof attribution. The retrospective and the D-18 amendment attributed
+      the `67 verified, 0 errors` result to bare `make verus`, which selects the
+      canonical-value proof. Both now name
+      `make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'`, and
+      the retrospective adds that bare `make verus` does not reach this proof.
+    - Workflow triggers. The `Proofs` header claimed the job runs when the
+      verified code changes, while the path filters name only `verus/**`,
+      `tools/verus/**`, the Makefile, and the workflow. The header now states
+      what the triggers select and why the kernel is not among them: the
+      resource-bounds proof is a transcription of `kernel.rs`, so a change to
+      that kernel neither invalidates the proof nor is checked by it, and the
+      Kani harnesses narrow that gap rather than closing it. The alternative the
+      assessment offered — adding the kernel path — would run the model without
+      proving anything about correspondence, so it was not taken.
+    - Final-commit gates. The four blockers that remain are the three
+      plan-owner decisions (D-22, D-23, D-25) and the two named gates this
+      record lacked at the previous head. The gates now run at this head:
+      `make check-fmt` 3 s; `make lint` 1,134 s; `make typecheck` 110 s;
+      `make markdownlint` 36 s; `make nixie` 1 s; `make test` 331 s (5,744
+      nextest cases passed, 9 skipped; 218 doctests passed, 63 ignored);
+      `make test-workflow-contracts` 535 s (2,330 passed, 3 skipped, plus 30
+      passed); `make test-rfc-stdlib-coverage` 14 s (282 passed); and
+      `make doc-coverage` 243 s (98.28% aggregate, 6,552 of 6,667 items,
+      against the 80% threshold). The three owner decisions are requested, not
+      assumed; they are the only items left before a whole-plan verdict.
 
 ## Surprises & discoveries
 
@@ -1597,7 +1646,15 @@ conflict in `Decision log`, and escalate.
   the ordinary pull-request gates still never run Verus. This entry records the
   deviation and requests the plan owner's ratification; the change is shipped
   rather than held because leaving the workflow inconsistent with the rule it
-  cites is the worse failure. Date/Author: 2026-11-16.
+  cites is the worse failure. Date/Author: 2026-11-16. Amendment (2026-11-16,
+  second): the proof assessment of `1d9e9582e` observed that the workflow's
+  path filters do not include `src/stdlib/resource_bounds/kernel.rs`, while its
+  header claimed the job runs when the verified code changes. The filters stay
+  as they are and the header now says so. Running the model after an unrelated
+  kernel change would report success for a transcription nothing compared
+  against the new code, which is a weaker claim than no claim at all; the
+  correspondence limit belongs in the design record, where it already is, and
+  the weekly schedule is what catches a proof that stops compiling.
 
 ## Outcomes & retrospective
 
