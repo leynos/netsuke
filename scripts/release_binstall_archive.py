@@ -28,6 +28,7 @@ import tarfile
 import typing as typ
 import zlib
 
+import release_binstall_inflate as inflate
 import release_consumer_archive_policy as policy
 import release_digest
 import release_digest_files
@@ -68,6 +69,14 @@ class ArchiveDigestMismatchError(
 
 class ArchiveCorruptError(ArchiveRefusedError):
     """Report bytes that do not decompress to a well-formed tar archive."""
+
+
+class ArchiveInflationError(ArchiveRefusedError):
+    """Report an archive that expands past the decompressed-byte cap.
+
+    A gzip bomb fits within :data:`MAX_ARCHIVE_BYTES` yet expands without
+    limit, so the bytes read are capped separately.
+    """
 
 
 class ExtractionError(ArchiveRefusedError):
@@ -181,13 +190,14 @@ def verified_archive(
     with handle:
         _require_size(handle, archive_path)
         _require_trusted_digest(handle, archive_path, expected_sha256)
-        archive = _opened_archive(handle)
+        archive, stream = _opened_archive(handle)
         try:
             headers = _scanned_headers(archive)
             layout = _scanned_layout(headers)
             yield ValidatedArchive(archive=archive, headers=headers, layout=layout)
         finally:
             archive.close()
+            stream.close()
 
 
 def _opened_file(archive_path: pathlib.Path) -> typ.IO[bytes]:
@@ -258,13 +268,16 @@ def _require_trusted_digest(
     handle.seek(0)
 
 
-def _opened_archive(handle: typ.IO[bytes]) -> tarfile.TarFile:
-    """Open the downloaded archive, translating a damaged stream.
+def _opened_archive(
+    handle: typ.IO[bytes],
+) -> tuple[tarfile.TarFile, inflate.InflatedStream]:
+    """Open the downloaded archive over a bounded decompressing stream.
 
     Returns
     -------
-    tarfile.TarFile
-        The open archive. The caller owns it and must close it.
+    tuple[tarfile.TarFile, release_binstall_inflate.InflatedStream]
+        The open archive and the stream it reads through. The caller owns both
+        and must close them.
 
     Raises
     ------
@@ -274,12 +287,18 @@ def _opened_archive(handle: typ.IO[bytes]) -> tarfile.TarFile:
     Notes
     -----
     The archive is read through ``handle``, whose position must be its first
-    byte. Closing the tar reader leaves the descriptor to its owner, so the
-    context manager that opened it closes it exactly once.
+    byte, and every decompressed byte is counted against
+    :data:`release_binstall_inflate.MAX_INFLATED_BYTES` before ``tarfile``
+    parses it. Closing the tar reader leaves both ``handle`` and the stream to
+    their owners, so each is closed exactly once.
     """
+    stream = inflate.InflatedStream(
+        handle, limit=inflate.MAX_INFLATED_BYTES, refusal=ArchiveInflationError
+    )
     try:
-        return tarfile.open(fileobj=handle, mode="r:gz")
+        return tarfile.open(fileobj=stream, mode="r:"), stream
     except CORRUPT_STREAM as error:
+        stream.close()
         msg = f"the downloaded archive is not a readable gzip tar file: {error}"
         raise ArchiveCorruptError(msg) from error
 

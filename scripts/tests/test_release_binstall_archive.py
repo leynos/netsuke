@@ -8,6 +8,7 @@ suites.
 Run via ``make test-release-publication``.
 """
 
+import gzip
 import hashlib
 import io
 import tarfile
@@ -15,6 +16,7 @@ import typing as typ
 
 import pytest
 import release_binstall_archive as adapter
+import release_binstall_inflate as inflate
 import release_consumer_archive_policy as policy
 from release_binstall_fixtures import BINARY_BYTES, digest_of, tarball
 
@@ -140,6 +142,56 @@ def _truncated_index(path: pathlib.Path) -> pathlib.Path:
             _ = archive.addfile(entry, io.BytesIO(payload))
     raw = path.read_bytes()
     _ = path.write_bytes(raw[: len(raw) // 2])
+    return path
+
+
+def test_scan_archive_refuses_an_archive_that_expands_past_the_cap(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a stream that inflates further than the budget allows.
+
+    The long member name travels in an extended PAX header, which ``tarfile``
+    decodes before it can produce a member record, so the expansion is measured
+    while the header is read. The cap is placed between the two fixtures: an
+    archive of the shipped shape must still scan under it, so the refusal is
+    the budget rather than the patch itself.
+    """
+    short = tarball(tmp_path / "short.tar.gz")
+    long = _long_named_archive(tmp_path / "long.tar.gz")
+    short_bytes = len(gzip.decompress(short.read_bytes()))
+    long_bytes = len(gzip.decompress(long.read_bytes()))
+    cap = (short_bytes + long_bytes) // 2
+    assert (
+        adapter.scan_archive(long, expected_sha256=digest_of(long)).member_count == 2
+    ), "the fixture must be a valid archive, so only the budget refuses it"
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(inflate, "MAX_INFLATED_BYTES", cap)
+        assert (
+            adapter.scan_archive(short, expected_sha256=digest_of(short)).member_count
+            == 1
+        ), "the budget must admit an archive of the shipped shape"
+        with pytest.raises(adapter.ArchiveInflationError):
+            adapter.scan_archive(long, expected_sha256=digest_of(long))
+
+
+def _long_named_archive(path: pathlib.Path) -> pathlib.Path:
+    """Write a valid archive carrying one member with a very long name.
+
+    Returns
+    -------
+    pathlib.Path
+        The archive, which is the path it was asked to write.
+    """
+    name = f"man/{'netsuke' * 5000}.1"
+    payload = b"page"
+    with tarfile.open(path, "w:gz", format=tarfile.PAX_FORMAT) as archive:
+        entry = tarfile.TarInfo(policy.BINARY_NAME)
+        entry.size = len(BINARY_BYTES)
+        _ = archive.addfile(entry, io.BytesIO(BINARY_BYTES))
+        page = tarfile.TarInfo(name)
+        page.size = len(payload)
+        _ = archive.addfile(page, io.BytesIO(payload))
     return path
 
 
