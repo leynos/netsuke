@@ -5143,6 +5143,31 @@ names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
 must not contain `test_support`: every other module in the crate remains
 subject to the filesystem policy.
 
+## Cognitive complexity: `macro_aware_cognitive_complexity`
+
+Cognitive complexity is gated by Whitaker's experimental
+`macro_aware_cognitive_complexity` at `max_complexity = 9`, CodeScene's
+ceiling. Clippy's `cognitive_complexity` is not enabled and
+`cognitive-complexity-threshold` is not set in either `clippy.toml`. Clippy
+scores after macro expansion, so `tracing` under the `log` bridge inflated it
+(31 against an authored 8) and forced a ceiling of 32. The macro-aware lint
+skips generated branching and scores authored control flow identically.
+
+An experimental lint loads only when the repository asks for it, so both
+`dylint.toml` and `test_support/dylint.toml` carry:
+
+```toml
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 9
+```
+
+The prebuilt suite from Whitaker v0.3.0 onward ships the lint; an older suite
+silently ignores the section, leaving complexity ungated. Fix a finding by
+extracting named helpers, never by raising the threshold.
+
 ## Complexity signals: `bumpy_road_function` and generated expressions
 
 `bumpy_road_function` measures a per-line complexity signal, smooths it with a
@@ -9808,10 +9833,10 @@ lint is told what to do instead, not merely that they may not. `test_support`
 is a workspace member and carries its own Clippy configuration file because
 Clippy configuration is discovered per crate, even when `make lint` invokes
 Clippy once with `--workspace`. The root and `test_support/clippy.toml` files
-therefore intentionally repeat the CodeScene complexity and size ceilings,
-`allow-expect-in-tests`, and the environment-method restrictions. Keep these
-shared settings synchronized: `[workspace.lints]` shares lint levels, but not
-the values in `clippy.toml`.
+therefore intentionally repeat the CodeScene argument-count, length and nesting
+ceilings, `allow-expect-in-tests`, and the environment-method restrictions.
+Keep these shared settings synchronized: `[workspace.lints]` shares lint
+levels, but not the values in `clippy.toml`.
 
 Dylint resolves configuration differently. A workspace member discovers the
 workspace-root configuration, so `test_support` needs the separate Whitaker
