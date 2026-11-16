@@ -5134,10 +5134,9 @@ package name behind the `netsuke` targets; see ADR-0007) and the two fixture
 packages, and disable Dylint dependency checks. They supply the root
 `dylint.toml` contents explicitly through `DYLINT_TOML`, so every invocation
 receives the same capability-boundary policy regardless of how Dylint resolves
-the current crate.
-`test_support` is a workspace member with one sanctioned ambient boundary
-configured per crate. Its scoped invocations (all features, then defaults)
-supply `test_support/dylint.toml` through `DYLINT_TOML`, and use
+the current crate. `test_support` is a workspace member with one sanctioned
+ambient boundary configured per crate. Its scoped invocations (all features,
+then defaults) supply `test_support/dylint.toml` through `DYLINT_TOML`, and use
 `--package test_support` and `--no-deps` because running from a member
 directory alone would otherwise check the parent workspace. That configuration
 names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
