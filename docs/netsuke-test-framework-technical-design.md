@@ -522,7 +522,7 @@ The functions among the refused rows (`glob`, `which`, `fetch`,
 fails with the refusal rather than a substituted answer.
 
 `workspace_root` alone does not achieve that scoping, and the design must not
-pretend otherwise. Three groups of filesystem helpers bypass it today:
+pretend otherwise. Three groups of filesystem helpers do not honour it yet:
 
 - `glob()` is registered in `src/manifest/mod.rs` over
   `glob::expand_glob(&pattern)`, which takes no workspace root. Its matcher
@@ -534,9 +534,13 @@ pretend otherwise. Three groups of filesystem helpers bypass it today:
   `path::file_type_matches`, whose `parent_dir` helper calls
   `Dir::open_ambient_dir(.., ambient_authority())`. `register_file_tests` never
   receives `StdlibConfig` at all.
-- The file-reading filters `contents`, `size`, `linecount`, `hash`, `digest`,
-  and `realpath` (`src/stdlib/path/filters.rs`) resolve their argument against
-  the process working directory rather than the configured workspace root.
+- The file-reading filters `contents`, `linecount`, `hash`, and `digest`
+  resolve through `ReadingRoot`, the workspace capability the build path
+  supplies (see the [design](netsuke-design.md)), so their argument no longer
+  comes from the process working directory; `size` and `realpath`
+  (`src/stdlib/path/filters.rs`) still take that directory. Test mode has no
+  sandbox-rooted equivalent, so the group's confinement in a build does not
+  give a test its own root.
 
 Left unaddressed, a fixture-built project would be globbed from the runner's
 working directory instead of its own sandbox, which is both host-dependent and

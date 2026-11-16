@@ -9,18 +9,19 @@ sections that match the features they use.
 
 ## Impact at a glance
 
-| Priority          | Area                         | What to do                                                          |
-| ----------------- | ---------------------------- | ------------------------------------------------------------------- |
-| Required          | Checkout source builds       | Use the pinned Rust toolchain before building from a checkout.      |
-| Required          | Linux checkout builds        | Install the pinned `mold` linker before building from a checkout.   |
-| Review if enabled | Manifest scheduling          | Opt in only where immediate console output is useful.               |
-| Required          | `Target` literals            | Add `description` and `console` to every literal.                   |
-| Required          | `BuildEdge` literals         | Add `output_visibility` to every literal.                           |
-| Review if enabled | Rust `Action.pool` choices   | Move console scheduling onto the edge; keep custom pools off it.    |
-| Required          | `NinjaGenError` matches      | Add arms for the two new console variants.                          |
-| Optional          | Existing manifests           | Omit `console` to retain ordinary scheduling; it defaults to false. |
-| Optional          | Scripts parsing stdout       | Tolerate the forwarding-failure warning on stdout.                  |
-| Optional          | Configured shell definitions | Declare `[[shells]]` only in operator configuration.                |
+| Priority          | Area                         | What to do                                                              |
+| ----------------- | ---------------------------- | ----------------------------------------------------------------------- |
+| Required          | Checkout source builds       | Use the pinned Rust toolchain before building from a checkout.          |
+| Required          | Linux checkout builds        | Install the pinned `mold` linker before building from a checkout.       |
+| Review if enabled | Manifest scheduling          | Opt in only where immediate console output is useful.                   |
+| Required          | `Target` literals            | Add `description` and `console` to every literal.                       |
+| Required          | `BuildEdge` literals         | Add `output_visibility` to every literal.                               |
+| Review if enabled | Rust `Action.pool` choices   | Move console scheduling onto the edge; keep custom pools off it.        |
+| Required          | `NinjaGenError` matches      | Add arms for the two new console variants.                              |
+| Required          | File-reading filters         | Move reads that leave the workspace into it, or name a path beneath it. |
+| Optional          | Existing manifests           | Omit `console` to retain ordinary scheduling; it defaults to false.     |
+| Optional          | Scripts parsing stdout       | Tolerate the forwarding-failure warning on stdout.                      |
+| Optional          | Configured shell definitions | Declare `[[shells]]` only in operator configuration.                    |
 
 _Table 1: migration obligations for the beta series and console-pool option._
 
@@ -1156,6 +1157,16 @@ for other byte sequences; `hash` and `digest` stay byte-oriented and accept any
 content. See the [users' guide](users-guide.md#configure-file-reading-limits)
 for the full policy and its diagnostics.
 
+The next pre-release also confines these four filters to the configured
+workspace ([#968](https://github.com/leynos/netsuke/issues/968)). Relative
+paths now resolve beneath the workspace root rather than the process working
+directory, an absolute path is accepted only when it lies beneath that root,
+and a request that climbs above the root — at its start or after naming a
+directory — or that reaches outside it through a link in an intermediate
+component is refused before any file is opened. A `..` component keeps the
+meaning the filesystem gives it. A template that reads outside the workspace
+must move that file inside it or name it beneath the root.
+
 ## Release packaging validates its candidate offline
 
 The release workflow no longer uploads a packaged crate before checking it. The
@@ -1305,6 +1316,8 @@ owned sink and completion-ordering contract.
 - [ ] Write project `env_block_var` and `fetch_block_host` values as arrays.
 - [ ] If you declare `[[shells]]`, declare it in system or user configuration,
   not a project file.
+- [ ] Move any `contents`, `linecount`, `hash`, or `digest` read that leaves the
+  workspace into it; those filters no longer resolve outside the root.
 
 ## Common errors and fixes
 
