@@ -254,12 +254,12 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-16 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 52 in the current `main` target and
-thirty-two on this branch. Every one of the thirty-two touches this inventory's
-contract test, adding it, refactoring it, or repairing a hole a review found in
-it; none changes production behaviour. The span floor the `test_support` crate
-shares with the root is no longer among them: `fa06bdb21` landed that setting
-upstream, with a refactor of the one genuine cluster, before this branch was
-rebased onto it. Regenerate the list with
+thirty-three on this branch. Every one of the thirty-three touches this
+inventory's contract test, adding it, refactoring it, or repairing a hole a
+review found in it; none changes production behaviour. The span floor the
+`test_support` crate shares with the root is no longer among them: `fa06bdb21`
+landed that setting upstream, with a refactor of the one genuine cluster,
+before this branch was rebased onto it. Regenerate the list with
 `git log 8a961000..HEAD --format=%h -- src build.rs tests test_support benches`;
 it goes stale whenever a commit touches one of those paths, so treat the
 enumeration below, not a remembered count, as the claim. This list is re-sweep
@@ -270,6 +270,7 @@ context for later consumers; it does not move the inventory pin.
 - `01c7190e1` Reconcile release help with the runtime parser (#1044)
 - `08d0a918d` Add Proptest coverage for deterministic Ninja emission (4.3.1)
   (#700)
+- `094be2906` Bind the harvest to an exact expected prefix
 - `0a28fee38` Prevent lost manifest structure telemetry events (#927) (#943)
 - `0a3104d44` Publish `netsuke-build` through crates.io Trusted Publishing
   (#903)
