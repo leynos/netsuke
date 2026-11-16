@@ -9272,18 +9272,38 @@ test support, justified by new call sites.
 
 ### JSON snapshot version redaction
 
-`src/snapshot_test_support.rs` owns the snapshot settings for versioned JSON
-output. Its private `add_generator_version_filter` helper is composed only by
-`diagnostic_json_snapshot_settings()` and
-`help_targets_json_snapshot_settings()`; individual tests must use those
-specialized builders rather than adding the filter themselves. JSON diagnostic
-snapshots must bind through the diagnostic builder, and JSON help-target
-catalogue snapshots must bind through the help-target builder.
+`test_support::generator_version` (`test_support/src/generator_version.rs`)
+owns the single implementation of the generator-version pattern both snapshot
+trees bind. It publishes `GENERATOR_VERSION_PATTERN`,
+`GENERATOR_VERSION_REPLACEMENT`, and `redact_generator_version`, which applies
+those two to a document.
+
+The pattern is anchored on the enclosing `"generator"` object and its
+`"name": "netsuke"` field, so every other `version` field — and a version
+quoted in a diagnostic message — remains visible and must still be asserted.
+
+The two trees cannot share a settings builder, because the library's
+`#[cfg(test)]` code is not reachable from an integration crate: the unit-test
+settings in `src/snapshot_test_support.rs` compile inside the library, while
+`tests/cli_tests/shells_startup/` links only the library's public surface. Each
+tree therefore binds the shared definition itself:
+
+- `src/snapshot_test_support.rs` binds it in `add_generator_version_filter`,
+  which its two private settings builders compose —
+  `diagnostic_json_snapshot_settings()` and
+  `help_targets_json_snapshot_settings()`; individual tests must use those
+  specialized builders rather than adding the filter themselves. JSON
+  diagnostic snapshots must bind through the diagnostic builder, and JSON
+  help-target catalogue snapshots must bind through the help-target builder.
+- `tests/cli_tests/shells_startup/support.rs` calls
+  `generator_version::redact_generator_version` from `normalised`.
 
 Text catalogue snapshots must continue to use the unfiltered
-`snapshot_settings("help_targets")` builder. The filter is anchored on the
-Netsuke generator object, so unrelated `version` fields remain asserted in
-every snapshot.
+`snapshot_settings("help_targets")` builder.
+
+**Re-use policy:** any generator-version filter must build on the shared
+pattern and apply the shared replacement. Do not restate either in a `Settings`
+builder, a test helper, or another module.
 
 ### The temporary-path snapshot filter
 

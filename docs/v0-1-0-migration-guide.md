@@ -973,8 +973,12 @@ manifest is compiled, so a checked-in Netsukefile cannot widen the shells a
 build may run. The definitions merge by concatenation, and the merged registry
 may not reuse a built-in name or declare a name twice.
 
-Existing manifests and configurations need no change: a configuration that
-declares no `[[shells]]` key keeps the built-in shells. See the
+A configuration that declares no `[[shells]]` key keeps the built-in shells and
+needs no change. One that does declare the key must declare it in system or
+user operator configuration: if a project `.netsuke.toml`, a file selected with
+`--config` or `NETSUKE_CONFIG`, or the environment already carries it, remove
+the key there or move those definitions to operator configuration, because
+startup now fails the authority check before compiling a manifest. See the
 [users' guide](users-guide.md#configure-shell-definitions) for the definition
 fields, the merge rules, and the validation diagnostics.
 
