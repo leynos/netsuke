@@ -4323,6 +4323,20 @@ candidate order `ConfigDiscovery` generates decides only when that pass finds
 nothing. The `-C/--directory` flag anchors the project-scope fallback to the
 specified directory while leaving the user- and system-scope lookups unchanged.
 
+A user candidate that exists but does not load stops discovery instead of
+continuing to a lower-priority file or to system scope. That covers malformed
+TOML, an `extends` parent that does not exist, and a symbolic link whose target
+is missing, and the reported error names the user file. `ortho_config` resolves
+a candidate through its parent directory and reports a target that does not
+resolve as an absent file, so the pass also inspects each candidate entry
+without following a link at its final component: an entry that exists but does
+not resolve is rejected, while a genuinely absent entry is skipped and a link
+whose target loads selects that target. Rejecting the candidate produces an
+`OrthoError::File`, so the existing `netsuke_cli_config_discovery_total` series
+counts the pass under `outcome="error"`, and the discovery span records the
+bounded `error_category="file"` field. A broken user file is thus observable as
+a failed discovery rather than as a silent success that loaded system policy.
+
 #### Manifest resource budget precedence
 
 One `ManifestBudget` spans expansion, `when`, macro invocation, normal field

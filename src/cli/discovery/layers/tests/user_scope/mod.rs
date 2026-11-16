@@ -6,7 +6,7 @@
 //! order is observable as the system layer winning.
 
 use super::super::super::paths::{FsPathNormalizer, normalized_path_key, user_scope_candidates};
-use super::super::super::{discover_file_layers, discovery_env_source};
+use super::super::super::{DiscoveryOutcome, discover_file_layers, discovery_env_source};
 use super::{TestEnv, utf8_directory};
 use crate::cli::Cli;
 use anyhow::{Context, Result, ensure};
@@ -178,9 +178,17 @@ impl Case {
         self.scoped_environment(user_variables)
     }
 
+    /// Run discovery against `env` and return the retained outcome.
+    ///
+    /// The outcome keeps the typed error, which the telemetry assertions in
+    /// `signals` need to record the same value production records.
+    pub(super) fn discover_outcome(&self, env: &TestEnv) -> DiscoveryOutcome {
+        discover_file_layers(&self.cli, env)
+    }
+
     /// Discover from `env`, returning the recorded layer paths and first error.
     pub(super) fn discover(&self, env: &TestEnv) -> (Vec<String>, Option<String>) {
-        let discovered = discover_file_layers(&self.cli, env);
+        let discovered = self.discover_outcome(env);
         let paths = discovered
             .layers()
             .iter()
@@ -379,3 +387,4 @@ fn absent_user_dotfile_falls_through_to_system_scope() -> Result<()> {
 }
 
 mod properties;
+mod signals;
