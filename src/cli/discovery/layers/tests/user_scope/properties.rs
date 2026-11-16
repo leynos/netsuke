@@ -7,12 +7,14 @@
 
 use super::{Case, canonical, write_config};
 use crate::cli::discovery::discovery_env_source;
-use crate::cli::discovery::paths::user_scope_candidates;
+use crate::cli::discovery::layers::config_discovery;
+use crate::cli::discovery::paths::{SanitisedUserBases, user_scope_candidates};
 use crate::cli::test_support::TestEnv;
-use ortho_config::MapEnv;
+use ortho_config::{MapEnv, SharedEnvSource};
 use proptest::prelude::*;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// The user base variables consulted before the home fallbacks, in preference
 /// order, paired with the directory each generated case gives that base.
@@ -214,6 +216,52 @@ proptest! {
                 candidates
             );
         }
+    }
+
+    /// No base value the user pass rejects reaches the fallback scan.
+    ///
+    /// The dependency filters only empty values, so without the sanitised view
+    /// a relative base would still become a working-directory relative
+    /// candidate. Every generated state must therefore yield absolute
+    /// candidates only, while the system candidate keeps its place.
+    #[test]
+    fn sanitised_fallback_admits_only_absolute_bases(
+        xdg_config_home in base_choice(),
+        appdata in base_choice(),
+        localappdata in base_choice(),
+        home in base_choice(),
+        userprofile in base_choice(),
+    ) {
+        let temp = tempfile::tempdir().expect("create temp dir");
+        let root = temp.path();
+        let mut environment = MapEnv::new();
+        for ((key, directory), choice) in BASE_ORDER.iter().zip([
+            xdg_config_home,
+            appdata,
+            localappdata,
+        ]) {
+            insert_base(&mut environment, key, choice, &root.join(directory));
+        }
+        insert_base(&mut environment, "HOME", home, &root.join("home"));
+        insert_base(&mut environment, "USERPROFILE", userprofile, &root.join("profile"));
+        let system = root.join("system");
+        environment.insert("XDG_CONFIG_DIRS", system.as_os_str());
+
+        let sanitised: SharedEnvSource = Arc::new(SanitisedUserBases::new(Arc::new(environment)));
+        let candidates = config_discovery(None, sanitised).candidates();
+
+        for candidate in &candidates {
+            prop_assert!(
+                candidate.is_absolute(),
+                "a rejected base must not yield a fallback candidate: {:?}",
+                candidate
+            );
+        }
+        prop_assert!(
+            candidates.contains(&system.join("netsuke/config.toml")),
+            "the system candidate should survive every base state: {:?}",
+            candidates
+        );
     }
 
     /// Discovery loads exactly the first existing user candidate, ignores every

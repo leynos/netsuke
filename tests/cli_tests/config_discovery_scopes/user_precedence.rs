@@ -276,3 +276,48 @@ fn home_dotfile_acting_as_project_config_keeps_project_quarantine() -> Result<()
     );
     Ok(())
 }
+
+/// A relative `XDG_CONFIG_HOME` names no base in either discovery pass.
+///
+/// The child runs in a working directory that holds
+/// `relative-base/netsuke/config.toml`, so an implementation that resolved the
+/// relative value against the working directory would load that file and its
+/// policy. The system file must supply the merged values instead, because a
+/// relative base is not a user location.
+#[rstest]
+fn relative_xdg_config_home_ignores_the_working_directory() -> Result<()> {
+    let scenario = Scenario::new()?;
+    write_user_config(
+        &scenario
+            .project
+            .path()
+            .join("relative-base/netsuke/config.toml"),
+        "file = \"Relativefile\"\nemoji = \"never\"\ncolor = \"never\"\njobs = 4\n",
+    )?;
+
+    let environment = environment_with_system_scope(
+        scenario.home.path(),
+        scenario.system.path(),
+        &[(
+            OsString::from("XDG_CONFIG_HOME"),
+            OsString::from("relative-base"),
+        )],
+    );
+    let merged = scenario.merge(&environment)?;
+
+    ensure!(
+        merged.file.as_path() == Path::new("Systemfile"),
+        "a working-directory relative base must not supply the manifest path, got {:?}",
+        merged.file
+    );
+    ensure!(
+        merged.emoji == EmojiPolicy::Always,
+        "a working-directory relative base must not supply the emoji policy"
+    );
+    ensure!(
+        merged.jobs == Some(9),
+        "the system layer should supply jobs, got {:?}",
+        merged.jobs
+    );
+    Ok(())
+}

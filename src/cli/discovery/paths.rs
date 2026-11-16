@@ -2,7 +2,9 @@
 
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, Metadata};
-use ortho_config::EnvSource;
+use ortho_config::{EnvSource, SharedEnvSource};
+use std::ffi::{OsStr, OsString};
+use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -89,8 +91,79 @@ fn push_base_candidates(candidates: &mut Vec<PathBuf>, base: &Path) {
 /// process-state dependence the filter exists to exclude, merely anchored at the
 /// current drive instead of the working directory.
 fn absolute_base(env_source: &dyn EnvSource, key: &str) -> Option<PathBuf> {
-    let path = PathBuf::from(env_source.get(key)?);
-    path.is_absolute().then_some(path)
+    env_source
+        .get(key)
+        .filter(|value| is_usable_base(value))
+        .map(PathBuf::from)
+}
+
+/// Report whether `value` may be used as a configuration base directory.
+///
+/// This is the single predicate behind both the candidate derivation above and
+/// the sanitised view handed to the dependency's fallback, so the two cannot
+/// disagree about which bases are usable.
+fn is_usable_base(value: &OsStr) -> bool {
+    Path::new(value).is_absolute()
+}
+
+/// The user base variables whose unusable values must read as unset.
+///
+/// The list mirrors the bases [`user_scope_candidates`] derives from. The
+/// system-scope variable is deliberately absent: its handling stays with the
+/// dependency.
+const USER_BASE_KEYS: [&str; 5] = [
+    "XDG_CONFIG_HOME",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "HOME",
+    "USERPROFILE",
+];
+
+/// An environment view that hides unusable user base values from the fallback.
+///
+/// [`user_scope_candidates`] rejects an empty or non-absolute base, but
+/// `ortho_config` 0.10.0 filters only empty values. Handing the dependency the
+/// raw environment would let its own scan resolve a relative base against the
+/// working directory and load configuration from wherever the tool happened to
+/// run — the hazard the filter exists to remove. This view applies the same
+/// predicate to the dependency's lookups, so a value the user pass rejected
+/// cannot come back through the fallback.
+pub(super) struct SanitisedUserBases {
+    /// The environment whose lookups this view filters.
+    source: SharedEnvSource,
+}
+
+impl SanitisedUserBases {
+    /// Wrap `source` so unusable user base values read as unset.
+    pub(super) fn new(source: SharedEnvSource) -> Self {
+        Self { source }
+    }
+}
+
+impl fmt::Debug for SanitisedUserBases {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SanitisedUserBases")
+            .field("source", &self.source)
+            .finish()
+    }
+}
+
+impl EnvSource for SanitisedUserBases {
+    fn get(&self, key: &str) -> Option<OsString> {
+        let value = self.source.get(key)?;
+        if USER_BASE_KEYS.contains(&key) && !is_usable_base(&value) {
+            return None;
+        }
+        Some(value)
+    }
+
+    fn home_fallback(&self) -> Option<PathBuf> {
+        self.source.home_fallback()
+    }
+
+    fn config_dir_fallback(&self) -> Option<PathBuf> {
+        self.source.config_dir_fallback()
+    }
 }
 
 /// Resolve the home directory from the injected environment.

@@ -5,8 +5,8 @@
 //! a valid system file so a regression that restores the dependency's flat
 //! order is observable as the system layer winning.
 
-use super::super::super::paths::{FsPathNormalizer, normalized_path_key, user_scope_candidates};
-use super::super::super::{DiscoveryOutcome, discover_file_layers, discovery_env_source};
+use super::super::super::paths::{FsPathNormalizer, normalized_path_key};
+use super::super::super::{DiscoveryOutcome, discover_file_layers};
 use super::{TestEnv, utf8_directory};
 use crate::cli::Cli;
 use anyhow::{Context, Result, ensure};
@@ -282,57 +282,6 @@ fn windows_user_roots_outrank_system_scope(
     case.assert_single_layer(&case.scoped_environment(environment), &expected_path)
 }
 
-/// A base value that is not absolute is ignored, so no candidate depends on
-/// process state.
-///
-/// A relative candidate would load configuration from wherever the tool
-/// happened to run rather than from a user location, and its grants would be
-/// merged with operator authority. A drive-relative rooted value such as
-/// `\config` is the same hazard on Windows: it resolves on whichever drive the
-/// process happens to run from. The surviving `USERPROFILE` base keeps the list
-/// non-empty, so a weakened filter shows up as a non-absolute candidate or one
-/// outside the home directory.
-#[rstest]
-#[case::xdg_config_home_empty("XDG_CONFIG_HOME", "")]
-#[case::xdg_config_home_relative("XDG_CONFIG_HOME", "relative-base")]
-#[case::xdg_config_home_drive_relative_root("XDG_CONFIG_HOME", "\\config")]
-#[case::appdata_empty("APPDATA", "")]
-#[case::appdata_relative("APPDATA", "relative-base")]
-#[case::appdata_drive_relative_root("APPDATA", "\\config")]
-#[case::localappdata_empty("LOCALAPPDATA", "")]
-#[case::localappdata_relative("LOCALAPPDATA", "relative-base")]
-#[case::home_empty("HOME", "")]
-#[case::home_relative("HOME", "relative-base")]
-#[case::home_drive_relative_root("HOME", "\\config")]
-fn unusable_base_value_is_ignored(
-    #[case] variable: &'static str,
-    #[case] value: &'static str,
-) -> Result<()> {
-    let temp = tempdir().context("create temp dir")?;
-    let home = temp.path().join("home");
-    let environment = TestEnv::default()
-        .with_var(variable, value)
-        .with_var("USERPROFILE", home.as_os_str());
-
-    let candidates = user_scope_candidates(discovery_env_source(&environment).as_ref());
-
-    ensure!(
-        !candidates.is_empty(),
-        "the surviving user base should still yield candidates"
-    );
-    for candidate in &candidates {
-        ensure!(
-            candidate.is_absolute(),
-            "a candidate must not resolve against the working directory: {candidate:?}"
-        );
-        ensure!(
-            candidate.starts_with(&home),
-            "a candidate should sit beneath the surviving home base: {candidate:?}"
-        );
-    }
-    Ok(())
-}
-
 /// A user file that exists but does not resolve stops discovery instead of
 /// falling through to the system file.
 ///
@@ -386,5 +335,6 @@ fn absent_user_dotfile_falls_through_to_system_scope() -> Result<()> {
     case.assert_single_layer(&environment, &case.system_config())
 }
 
+mod fallback;
 mod properties;
 mod signals;

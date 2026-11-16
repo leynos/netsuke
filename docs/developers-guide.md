@@ -11641,6 +11641,15 @@ immediately, and the first successful chain becomes the base layers. Only when
 no user candidate exists does `compose_layers()` run, which is what still
 reaches system scope and the project roots.
 
+The dependency filters only empty base values, so its own scan would still
+resolve a relative one against the working directory. The fallback therefore
+receives `paths.rs::SanitisedUserBases`, an `EnvSource` view that applies the
+same `is_usable_base` predicate to `XDG_CONFIG_HOME`, `APPDATA`, `LOCALAPPDATA`,
+`HOME`, and `USERPROFILE`. A value the user pass rejected reads as unset for
+the dependency too, so neither pass can load configuration from wherever the
+tool happens to run. `XDG_CONFIG_DIRS` is deliberately outside the view:
+system-scope handling stays the dependency's.
+
 The dependency's own probe resolves a candidate inside a capability on its
 parent directory. A link whose target lies inside that directory and does not
 resolve is reported as `Ok(None)` — the same answer it gives for a file that is
