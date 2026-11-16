@@ -320,22 +320,19 @@ fn close_entry(open: &mut Option<String>, entries: &mut Vec<String>) {
 }
 
 /// Collect finding bullets whose ownership must be recorded.
+///
+/// The entry boundary is `bullet_entries`', shared with the obligation and
+/// landed-work readers: an indented line continues the open entry and any
+/// unindented line closes it. That last part is the whole point. A paragraph
+/// separated from its bullet by a blank line is unindented, and Markdown ends
+/// the list item there, so `validate_findings` must not read an owner out of
+/// it. The earlier reader ended an entry only at a list item or a heading, so
+/// `- OBS-1: no owner.` followed by prose naming a task satisfied the owner
+/// check for a finding that named none. Ending at headings alone would have
+/// left that open however many heading levels were enumerated, because the
+/// paragraph needs no heading at all.
 pub(super) fn finding_entries(findings: &str) -> Vec<String> {
-    let mut entries = Vec::new();
-    let mut current = None::<String>;
-    for line in findings.lines() {
-        if is_finding_start(line) {
-            finish_finding(&mut current, &mut entries);
-            current = Some(line.to_owned());
-        } else if is_finding_boundary(line) {
-            finish_finding(&mut current, &mut entries);
-        } else if let Some(entry) = current.as_mut() {
-            entry.push('\n');
-            entry.push_str(line);
-        }
-    }
-    finish_finding(&mut current, &mut entries);
-    entries
+    bullet_entries(findings, is_finding_start)
 }
 
 /// Identify a heading that starts an owned finding.
@@ -343,23 +340,4 @@ fn is_finding_start(line: &str) -> bool {
     ["- H1:", "- H2:", "- H3:", "- H4:", "- OBS-"]
         .iter()
         .any(|prefix| line.trim_start().starts_with(prefix))
-}
-
-/// Identify a list item or any Markdown heading that ends a finding entry.
-///
-/// Matching only `## ` would let a `### ` subheading and its prose be appended
-/// to the preceding finding, and `validate_findings` reads task identifiers
-/// from the whole entry — so a subheading naming a task would satisfy the
-/// owner check for a finding that names none. Any heading level therefore
-/// ends the entry.
-fn is_finding_boundary(line: &str) -> bool {
-    let content = line.trim_start();
-    content.starts_with("- ") || content.starts_with('#')
-}
-
-/// Move a completed finding into the result list.
-fn finish_finding(current: &mut Option<String>, entries: &mut Vec<String>) {
-    if let Some(entry) = current.take() {
-        entries.push(entry);
-    }
 }

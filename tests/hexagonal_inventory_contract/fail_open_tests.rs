@@ -125,6 +125,48 @@ fn rejects_an_exclusion_that_gives_no_reason() -> Result<()> {
     Ok(())
 }
 
+/// An unindented paragraph must not donate an owner to the finding above it.
+///
+/// `finding_entries` ends an entry at a list item or a heading, so a paragraph
+/// separated from the bullet by a blank line was appended to it. `validate_findings`
+/// reads the owner from the whole entry, so prose naming a task satisfied the
+/// check for a finding that named none — the same fail-open as the subheading
+/// case, reached without a heading. Markdown ends a list item at an unindented
+/// paragraph, so the entry ends there too.
+#[test]
+fn rejects_a_finding_whose_owner_appears_only_in_a_following_paragraph() -> Result<()> {
+    let inventory = VALID_SKELETON.replace(
+        "## Findings\n\nPending EP-M3.",
+        concat!(
+            "## Findings\n\n",
+            "- OBS-1: An observed finding has no owner.\n",
+            "\n",
+            "The task 26.1.1 discusses this finding.\n",
+        ),
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "owning roadmap task")?;
+    Ok(())
+}
+
+/// An indented continuation still belongs to the finding it continues.
+///
+/// The refusal above must not be bought by ending every entry at the first
+/// blank line: a wrapped bullet's owner commonly sits on its continuation, and
+/// dropping that would reject the real inventory. This is the other half of the
+/// same boundary rule.
+#[test]
+fn accepts_a_finding_whose_owner_is_on_an_indented_continuation() -> Result<()> {
+    let inventory = VALID_SKELETON.replace(
+        "## Findings\n\nPending EP-M3.",
+        concat!(
+            "## Findings\n\n",
+            "- OBS-1: An observed finding whose owner is named on the\n",
+            "  continuation line (26.1.1).\n",
+        ),
+    );
+    super::validation::validate_inventory(&inventory, SIMPLE_ROADMAP)
+}
+
 #[test]
 fn rejects_a_finding_whose_owner_appears_only_under_a_subheading() -> Result<()> {
     let inventory = VALID_SKELETON.replace(
