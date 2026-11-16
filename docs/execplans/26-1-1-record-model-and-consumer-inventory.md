@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 63. See `Revision note` at the foot of this document. This plan was
+Revision 64. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -895,8 +895,11 @@ pre-rebase history if an old hash must be inspected.
   reader had stopped in the right place. They now take the headings a region
   must exclude from the generator's metadata, and both fail under that
   mutation. The other properties in the module were checked for the same defect
-  and only this pair had it. The contract target still runs 97 cases; the
-  post-pin sweep advances to 84 identifiers at 52/32.
+  and only this pair had it — until CodeRabbit's follow-up named a third, under
+  a mutation my candidate probes never ran. `094be2906` binds that harvest to
+  an exact expected prefix taken from the generator, and it now fails under it.
+  The contract target still runs 97 cases; the post-pin sweep advances to 85
+  identifiers at 52/33.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -2084,6 +2087,37 @@ pre-rebase history if an old hash must be inspected.
   at 52/31, verified equal to the live `git log` and to its own sorted form. As
   D-44 explains, the chain stops with the documentation commit that records it.
   Date/Author: 2026-11-16, implementation agent, on the pre-merge row.
+
+- Decision D-50 (2026-11-16): closed the third shared-oracle case, which only
+  a mutation I had not run could expose.
+
+  D-49 recorded that I checked the module's other properties and found only the
+  boundary pair defective. That check was sound but incomplete: I probed the
+  harvest property by removing its truncation, which fails it, and concluded
+  the rule was guarded. CodeRabbit's follow-up named a different mutation —
+  making `is_heading` always return false — under which `first_heading_offset`
+  returns the whole region, the heading-free assertion sees nothing, and
+  `region.starts_with(harvest)` holds trivially because the region starts with
+  itself. Passing one mutation does not clear a predicate that the code and the
+  assertion both call; the relevant mutation is the one applied to the shared
+  predicate itself, and I had not applied it here.
+
+  The property is now
+  `harvests_are_exactly_the_region_before_the_first_heading` and asserts that
+  the harvest equals the body the generator wrote beneath the heading. That
+  oracle involves no parser predicate at all, so it holds under every mutation
+  of one. It fails under the always-false mutation and passes against the
+  control. `is_heading` left the test module's imports with the last assertion
+  that used it.
+
+  The general lesson, worth more than the fix: when a property and the code
+  under test share a predicate, enumerate the mutations of *that predicate*
+  rather than mutations of the behaviour around it. D-49 stated the rule and I
+  still applied it too narrowly.
+
+  This is a `tests/` change, so the post-pin sweep advances to 85 identifiers
+  at 52/33, verified equal to the live `git log` and to its own sorted form.
+  Date/Author: 2026-11-16, implementation agent, on CodeRabbit's follow-up.
 
 - Decision D-49 (2026-11-16): confirmed and fixed the shared-oracle defect
   CodeRabbit's pre-merge row reported but had not executed.
@@ -3421,6 +3455,18 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   doctests alongside them, 2,330 plus 30 workflow-contract cases, 227 Markdown
   files linted with 0 issues and 227 unchanged at mdtablefix, every Mermaid
   block validated, and every lint gate green.
+- Revision 64 (2026-11-16): closed the third shared-oracle case, which
+  CodeRabbit's follow-up named and my own probing had missed (D-50). The
+  harvest property still asked `is_heading` — shared with
+  `first_heading_offset` — whether the harvest was heading-free, and a bare
+  `starts_with` passes when the harvest spans the whole region. It now asserts
+  the harvest equals the body the generator wrote beneath the heading, an
+  oracle involving no parser predicate, and fails under the always-false
+  mutation that previously left it green. The statement "only this pair had it"
+  in revision 63 was wrong, and it is corrected here rather than left standing.
+  The contract target still runs 97 cases, and the post-pin sweep advances to
+  85 identifiers, 52 in `main` and 33 on this branch. No proof artefact is
+  affected. A fresh assessment is requested for this candidate.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
