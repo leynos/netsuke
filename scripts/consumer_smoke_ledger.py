@@ -15,6 +15,7 @@ Run through ``scripts/consumer_smoke_cli.py``; behavioural coverage lives in
 ``scripts/tests/test_consumer_smoke_cli.py``.
 """
 
+import contextlib
 import dataclasses
 import time
 import typing as typ
@@ -57,6 +58,21 @@ class PhaseLedger:
     clock: cabc.Callable[[], int] = time.time_ns
     outcomes: dict[str, str] = dataclasses.field(default_factory=dict)
     log: dict[str, dict[str, object]] = dataclasses.field(default_factory=dict)
+
+    def start_fresh(self) -> None:
+        """Remove both artefacts, so nothing a previous run left survives.
+
+        Notes
+        -----
+        A run refused before its first phase writes nothing, so without this it
+        would leave an earlier run's verdict where a consumer expects this
+        run's. A path that cannot be removed is left for the write that follows
+        to report, because an artefact that cannot be deleted is also one this
+        run cannot rewrite.
+        """
+        for path in (self.destination, self.log_path):
+            with contextlib.suppress(OSError):
+                path.unlink(missing_ok=True)
 
     def run[T](self, label: str, action: cabc.Callable[[], T]) -> T:
         """Run one phase under its label and return its result.

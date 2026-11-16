@@ -238,6 +238,7 @@ def run_verify(
         :data:`EXIT_OK` when every phase verified.
     """
     ledger = PhaseLedger(destination=arguments.verdict, log_path=arguments.phase_log)
+    ledger.start_fresh()
     try:
         plan = smoke.plan_smoke(evidence.gather_evidence(arguments))
         evidence.require_saved_plan(arguments.plan, plan)

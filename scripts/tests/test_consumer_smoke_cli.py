@@ -288,6 +288,37 @@ def test_verify_refuses_a_plan_another_run_wrote(tmp_path: pathlib.Path) -> None
     )
 
 
+def test_verify_clears_a_previous_runs_verdict_before_refusing(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Remove an earlier run's artefacts when this run refuses before writing.
+
+    A consumer reads the verdict file, not the run that produced it. Leaving the
+    previous run's success in place would report acceptance for a candidate this
+    run never verified, so a refusal has to be visible as the absence of a
+    verdict rather than as a stale one.
+    """
+    staged = _prepared(tmp_path)
+    assert run_verify(staged, launcher=fake_probe()) == 0, (
+        "the first run must verify, so the artefacts under test are its own"
+    )
+    assert staged.verdict.exists(), "a verified run must leave its verdict"
+    assert staged.phase_log.exists(), "a verified run must leave its phase log"
+    plan = json.loads(staged.plan.read_text(encoding="utf-8"))
+    plan["commit"] = "1" * 40
+    write_json(staged.plan, plan)
+
+    assert run_verify(staged, launcher=fake_probe()) == 1, (
+        "a plan naming another commit must be refused as evidence"
+    )
+    assert not staged.verdict.exists(), (
+        "the refused run must not leave the previous run's verdict behind"
+    )
+    assert not staged.phase_log.exists(), (
+        "the refused run must not leave the previous run's phase log behind"
+    )
+
+
 def test_verify_reports_an_unreadable_trusted_record(tmp_path: pathlib.Path) -> None:
     """Refuse evidence that is not a digest record at all."""
     staged = workspace(tmp_path)
