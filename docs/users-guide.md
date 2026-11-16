@@ -1975,12 +1975,13 @@ project-scoped for fetch and environment allow policy. An unrelated explicit
 configuration chain remains operator-scoped.
 
 When automatic discovery finds no configuration file, Netsuke uses its built-in
-defaults. When it finds a candidate that cannot be loaded, such as malformed
-TOML, a file whose `extends` parent is missing, or a symbolic link whose target
-is missing, Netsuke reports the load error. A broken discovered configuration
-is therefore not treated as absent. A broken user file stops discovery: Netsuke
-does not fall back to a system file, because doing so would silently replace
-the operator's own settings.
+defaults. When a user file exists but cannot be loaded, such as malformed TOML,
+a file whose `extends` parent is missing, or a symbolic link whose target is
+missing, Netsuke reports the load error and stops discovery: it does not fall
+back to a system file, because doing so would silently replace the operator's
+own settings. System files follow `OrthoConfig`'s own scan instead, which
+continues to a later system file and reports a broken one only when no system
+file loads.
 
 ### Resource budgets
 
