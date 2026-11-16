@@ -254,7 +254,7 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-16 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 52 in the current `main` target and
-thirty on this branch. Every one of the thirty touches this inventory's
+thirty-one on this branch. Every one of the thirty-one touches this inventory's
 contract test, adding it, refactoring it, or repairing a hole a review found in
 it; none changes production behaviour. The span floor the `test_support` crate
 shares with the root is no longer among them: `fa06bdb21` landed that setting
@@ -285,6 +285,7 @@ context for later consumers; it does not move the inventory pin.
 - `24081198f` Report decorated findings and keep gapped entries
 - `25c6b9102` Merge the two fail-open tables into one
 - `25da87df9` Repin install-whitaker to the 0.2.12 revision (#1123)
+- `264298c43` Property-test the grammar and coverage relations
 - `2da4eb673` Restore the man page SYNOPSIS fallback suppressed by ortho_config
   0.10.0 (#959) (#1043)
 - `2eacfe469` Replace the register scan's locals with a stateful type
