@@ -101,8 +101,7 @@ fn trace_section(rows: &BTreeMap<String, BTreeSet<String>>) -> String {
     ));
     for (task, named) in rows {
         let cell = list_cell(named);
-        writeln!(text, "| {task} | -- | -- | {cell} |")
-            .expect("writing to a String cannot fail");
+        writeln!(text, "| {task} | -- | -- | {cell} |").expect("writing to a String cannot fail");
     }
     text
 }
