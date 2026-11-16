@@ -5129,14 +5129,14 @@ enumerated integration-test crates. The `test_support` crate uses
 capability-backed fixture helpers and remains linted by Whitaker under its own
 narrow policy.
 
-The root Whitaker invocation selects only the `netsuke-build` package (the
-Cargo package name behind the `netsuke` targets; see ADR-0007) and disables
-Dylint dependency checks. It supplies the root `dylint.toml` contents
-explicitly through `DYLINT_TOML`, so every invocation receives the same
-capability-boundary policy regardless of how Dylint resolves the current crate.
-`test_support` is a workspace member with one sanctioned ambient boundary
-configured per crate. Its second, scoped invocation supplies
-`test_support/dylint.toml` through `DYLINT_TOML`, and uses
+The root Whitaker invocations select the `netsuke-build` package (the Cargo
+package name behind the `netsuke` targets; see ADR-0007) and the two fixture
+packages, and disable Dylint dependency checks. They supply the root
+`dylint.toml` contents explicitly through `DYLINT_TOML`, so every invocation
+receives the same capability-boundary policy regardless of how Dylint resolves
+the current crate. `test_support` is a workspace member with one sanctioned
+ambient boundary configured per crate. Its scoped invocations (all features,
+then defaults) supply `test_support/dylint.toml` through `DYLINT_TOML`, and use
 `--package test_support` and `--no-deps` because running from a member
 directory alone would otherwise check the parent workspace. That configuration
 names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
@@ -5152,6 +5152,12 @@ ceiling. Clippy's `cognitive_complexity` is not enabled and
 scores after macro expansion, so `tracing` under the `log` bridge inflated it
 (31 against an authored 8) and forced a ceiling of 32. The macro-aware lint
 skips generated branching and scores authored control flow identically.
+
+`make lint-whitaker` covers what Clippy's workspace-wide gate covered: four
+passes, run from the repository root over `netsuke-build` and the two fixture
+packages (`netsuke-build-slice-fixture`, `netsuke-public-api-fixture`) and from
+`test_support/`, each with all features and again with the default features.
+The Windows lint job runs the same passes.
 
 An experimental lint loads only when the repository asks for it, so both
 `dylint.toml` and `test_support/dylint.toml` carry:
@@ -11339,10 +11345,18 @@ provisioned and run the following in order:
    ```powershell
    $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
    $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
-   $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
+   Remove-Item Env:CARGO_ENCODED_RUSTFLAGS -ErrorAction SilentlyContinue
+   $env:RUSTFLAGS = "-D warnings"
    $env:DYLINT_TOML = Get-Content dylint.toml -Raw
    $suite = '--lib', 'whitaker_suite', '--fail-on-no-libraries'
-   & $whitaker @suite --no-deps --package netsuke-build '--' --all-targets --all-features
+   $packages = '--package', 'netsuke-build'
+   $packages += '--package', 'netsuke-build-slice-fixture'
+   $packages += '--package', 'netsuke-public-api-fixture'
+   & $whitaker @suite --no-deps @packages '--' --all-targets --all-features
+   if ($LASTEXITCODE -ne 0) {
+     exit $LASTEXITCODE
+   }
+   & $whitaker @suite --no-deps @packages '--' --all-targets
    if ($LASTEXITCODE -ne 0) {
      exit $LASTEXITCODE
    }
@@ -11350,6 +11364,10 @@ provisioned and run the following in order:
    try {
      $env:DYLINT_TOML = Get-Content dylint.toml -Raw
      & $whitaker @suite --no-deps --package test_support '--' --all-targets --all-features
+     if ($LASTEXITCODE -ne 0) {
+       exit $LASTEXITCODE
+     }
+     & $whitaker @suite --no-deps --package test_support '--' --all-targets
      if ($LASTEXITCODE -ne 0) {
        exit $LASTEXITCODE
      }
