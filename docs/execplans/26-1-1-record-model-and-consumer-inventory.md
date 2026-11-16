@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 62. See `Revision note` at the foot of this document. This plan was
+Revision 63. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -888,6 +888,15 @@ pre-rebase history if an old hash must be inspected.
   Four of the first drafts could not fail and were replaced before the commit;
   the details are in D-48. The contract target runs 97 cases and the post-pin
   sweep advances to 83 identifiers at 52/31.
+- [x] (2026-11-16) Confirmed and fixed the shared-oracle defect CodeRabbit's
+  pre-merge row reported without executing it (D-49). A mutation making
+  `is_heading_at_or_above` always return false left both sibling-boundary
+  properties green, because they asked the reader's own predicate whether the
+  reader had stopped in the right place. They now take the headings a region
+  must exclude from the generator's metadata, and both fail under that
+  mutation. The other properties in the module were checked for the same defect
+  and only this pair had it. The contract target still runs 97 cases; the
+  post-pin sweep advances to 84 identifiers at 52/32.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -2074,6 +2083,47 @@ pre-rebase history if an old hash must be inspected.
   This is a `tests/` change, so the post-pin sweep advances to 83 identifiers
   at 52/31, verified equal to the live `git log` and to its own sorted form. As
   D-44 explains, the chain stops with the documentation commit that records it.
+  Date/Author: 2026-11-16, implementation agent, on the pre-merge row.
+
+- Decision D-49 (2026-11-16): confirmed and fixed the shared-oracle defect
+  CodeRabbit's pre-merge row reported but had not executed.
+
+  The row said the two sibling-boundary properties in `property_tests.rs` use
+  `is_heading_at_or_above` both inside `heading_body` and as their own
+  assertion oracle, so a mutation making that predicate always return false
+  would let the reader absorb every later section while the assertions still
+  saw no boundary. It stated plainly that the mutation was not executed. I ran
+  it: both properties passed against the broken reader, and passed again
+  against the control. The finding was correct, and it is the one class of
+  defect a property test cannot report about itself — a property that asks the
+  code under test whether its own answer is right always agrees with it.
+
+  The properties now take the headings a region must exclude from the
+  generator's record of each heading's depth and rendered line, through a new
+  `headings_at_or_above_after`. Under the same always-false mutation both fail,
+  which is the behaviour that makes them worth having. The import of
+  `is_heading_at_or_above` left the test module with the dependency.
+
+  I checked the module's other two properties for the same defect rather than
+  fixing only what was reported.
+  `harvests_are_heading_free_prefixes_of_their_region` does call `is_heading`,
+  and that predicate is shared with `first_heading_offset`, but the shared use
+  is not the defect: removing the truncation entirely fails the property, so
+  the rule it states is genuinely guarded. What makes a shared predicate an
+  oracle defect is that mutating it leaves the property green, and that was
+  true of the two boundary properties and not of this one.
+
+  Two operational notes. The first attempt at the truncation probe would not
+  compile, because removing the only call left `first_heading_offset` dead under
+  `-D warnings`; the probe has to keep the helper referenced to isolate the
+  behaviour. And the failing probe wrote `property_tests.proptest-regressions`,
+  which every later run reads automatically — exactly the trap D-48 recorded.
+  It was deleted before the next probe and is not committed.
+
+  This is a `tests/` change, so the post-pin sweep advances to 84 identifiers
+  at 52/32. `43cd9a7ff` sorts after `4211f22f0`, and placing it by eye beside
+  its `3*` neighbours was wrong twice; the check now compares the enumeration
+  against its own sorted form as well as against the live `git log`.
   Date/Author: 2026-11-16, implementation agent, on the pre-merge row.
 
 ## Outcomes & retrospective
@@ -3353,6 +3403,17 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   doctests alongside them, 2,330 plus 30 workflow-contract cases, 227 Markdown
   files linted with 0 issues and 227 unchanged at mdtablefix, every Mermaid
   block validated, and every lint gate green.
+- Revision 63 (2026-11-16): confirmed and fixed the shared-oracle defect that
+  CodeRabbit's pre-merge row reported without executing (D-49). The two
+  sibling-boundary properties asked `is_heading_at_or_above` — the reader's own
+  predicate — whether the reader had stopped in the right place, so a mutation
+  making it always return false left the reader absorbing every later section
+  while both properties still passed. They now take the excluded headings from
+  the generator's depth and line metadata, and both fail under that mutation.
+  The module's other properties were checked for the same defect; only this
+  pair had it. The contract target still runs 97 cases, and the post-pin sweep
+  advances to 84 identifiers, 52 in `main` and 32 on this branch. No proof
+  artefact is affected. A fresh assessment is requested for this candidate.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
