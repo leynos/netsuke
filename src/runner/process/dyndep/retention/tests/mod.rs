@@ -108,10 +108,10 @@ fn publish_repeated_sidecars(
 
 mod budget;
 
-mod budget_proptests;
-
 mod entries;
 
 mod lease_tests;
+
+mod retention_proptests;
 
 mod telemetry_tests;

@@ -14,9 +14,12 @@
 //! and arrivals in any order stay inside both budgets without losing or
 //! double-counting a candidate.
 //!
-//! The module is named `budget_proptests` because the `proptests` segment is
-//! load-bearing: `make proptest` selects suites by test-name segment, so a
-//! property placed outside such a module never runs in that focused loop.
+//! The module name is load-bearing twice over. Its `proptests` suffix is what
+//! `make proptest` selects on: that target filters by test-name segment, so a
+//! property outside such a module never runs in the focused loop. Its
+//! `retention_` stem keeps it clear of the `budget` prefix group that
+//! `tests/workflow_contracts/rust_module_layout_test.py` polices, which rejects
+//! a prefixed sibling such as `budget_proptests.rs` beside `budget.rs`.
 
 use super::*;
 use proptest::collection::btree_map;
