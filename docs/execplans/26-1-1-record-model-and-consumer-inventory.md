@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 65. See `Revision note` at the foot of this document. This plan was
+Revision 66. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -2203,6 +2203,39 @@ pre-rebase history if an old hash must be inspected.
   branch list, which is 52. Date/Author: 2026-11-16, implementation agent, on
   the pre-merge row.
 
+- Decision D-52 (2026-11-16): closed the two inline findings from the first
+  non-paused review of this head, both confirmed by probe rather than read off
+  the anchor.
+
+  The first named `grammar_property_tests.rs:127` and said the acceptance
+  property's assertions were conditional on the reader, so a reader that
+  refused every identifier asserted nothing. That is right, and I proved it:
+  injecting `if true { return false; }` into `is_well_formed_register_id` left
+  **all eight** grammar properties passing. The property now computes an
+  expectation independently from its own generated parts — a permitted area, a
+  non-empty item carrying no `#`, and either no site or a non-empty symbol
+  before a documented kind — and asserts equality in both directions. Both
+  mutants now die: the always-reject reader fails the new property, and the
+  always-accept reader fails it and the no-area property. Naming the property
+  for the rule it checks rather than for the shape of its input also removed a
+  helper that was only ever meaningful for the accepted branch.
+
+  The second named `obligations.rs:211`, where `parse_trace_row` destructures
+  `[_task, register_items, _findings, obligations]` by position. A header
+  reading `| Task | Findings | Register items | Obligations |` hands the
+  `Findings` cell to `register_items`, and `validate_register` reads that cell
+  as coverage, so a swapped table can trace an item it never named. Nothing
+  validated the order: the canonical string appeared only in fixtures and in
+  the property that renders a table. `trace_rows` now refuses a `Task`-headed
+  table whose header is not the canonical one, which is the repair
+  `non_id_register_headers` already applies to a renamed register table, and a
+  rejection case covers the swap.
+
+  This is a `tests/` change, so the post-pin sweep advances to 88 identifiers
+  at 52/36, recomputed rather than remembered: the total list is 88 and the
+  branch-only range `fa06bdb21..HEAD` is 36, leaving 52 in the `main` target.
+  Date/Author: 2026-11-16, implementation agent, on CodeRabbit's inline review.
+
 ## Outcomes & retrospective
 
 EP-M1 to EP-M3 are complete. On 2026-11-03, the user directed acceptance of
@@ -3537,6 +3570,18 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   files linted with 0 issues and 227 unchanged at mdtablefix, every Mermaid
   block validated, and every lint gate green. The contract target runs the 99
   cases this revision records.
+
+- Revision 66 (2026-11-16): closed the review's two inline findings (D-52),
+  both confirmed before repair. The grammar property's assertions were
+  conditional on the reader, so an always-reject reader passed all eight
+  grammar properties; it now asserts equality against an independently computed
+  expectation, and both the always-reject and always-accept mutants fail it.
+  The trace-row parser trusted column order, so a table headed
+  `| Task | Findings | Register items | Obligations |` fed the `Findings` cell
+  to register coverage; `trace_rows` now refuses a non-canonical `Task`-header,
+  with a swapped-column rejection case. The contract target runs 100 cases, and
+  the post-pin sweep advances to 88 identifiers, 52 in `main` and 36 on this
+  branch. No proof artefact is affected.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

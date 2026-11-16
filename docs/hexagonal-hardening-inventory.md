@@ -254,12 +254,12 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-16 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 52 in the current `main` target and
-thirty-four on this branch. Every one of the thirty-four touches this
-inventory's contract test, adding it, refactoring it, or repairing a hole a
-review found in it; none changes production behaviour. The span floor the
-`test_support` crate shares with the root is no longer among them: `fa06bdb21`
-landed that setting upstream, with a refactor of the one genuine cluster,
-before this branch was rebased onto it. Regenerate the list with
+thirty-six on this branch. Every one of the thirty-six touches this inventory's
+contract test, adding it, refactoring it, or repairing a hole a review found in
+it; none changes production behaviour. The span floor the `test_support` crate
+shares with the root is no longer among them: `fa06bdb21` landed that setting
+upstream, with a refactor of the one genuine cluster, before this branch was
+rebased onto it. Regenerate the list with
 `git log 8a961000..HEAD --format=%h -- src build.rs tests test_support benches`;
 it goes stale whenever a commit touches one of those paths, so treat the
 enumeration below, not a remembered count, as the claim. This list is re-sweep
@@ -302,6 +302,7 @@ context for later consumers; it does not move the inventory pin.
   (#918)
 - `4a48e7a9c` Replace heading wrappers with a level-typed parser
 - `596cf74c2` Place Dependabot pull requests on GitHub-hosted runners (#932)
+- `5afc20003` Format the obligation property module
 - `5c2e5734f` Localize clap TooManyValues errors (#957) (#965)
 - `5ee56f7ec` Introduce the options-carrying manifest loader entry point (7.1.2)
   (#807)
@@ -310,6 +311,7 @@ context for later consumers; it does not move the inventory pin.
 - `5fcca57d7` Adopt shared prover downloads and variadic proof execution (#1063)
 - `6460f01ae` Order the contract test's fixture imports
 - `6b40b1482` Split the inventory contract into feature modules
+- `6c14cc68c` Assert the grammar and validate the trace header
 - `6f650cd58` Isolate the Whitaker route from the development flags (BD-008)
   (#1109)
 - `6ff836603` Fetch once and keep the nested cargo reads offline (DF12-115)
