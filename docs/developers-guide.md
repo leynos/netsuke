@@ -9393,7 +9393,7 @@ test support, justified by new call sites.
 
 ### JSON snapshot version redaction
 
-`test_support::generator_version` (`test_support/src/generator_version.rs`)
+[`test_support::generator_version`](../test_support/src/generator_version.rs)
 owns the single implementation of the generator-version pattern both snapshot
 trees bind. It publishes `GENERATOR_VERSION_PATTERN`,
 `GENERATOR_VERSION_REPLACEMENT`, and `redact_generator_version`, which applies
