@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 61. See `Revision note` at the foot of this document. This plan was
+Revision 62. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -879,6 +879,15 @@ pre-rebase history if an old hash must be inspected.
   again. The four finding cases now share `inventory_with_findings`, clearing
   the duplication CodeScene reported; every changed file scores 10.00. The
   contract target runs 89 cases.
+- [x] (2026-11-16) Added the grammar and coverage property tests the
+  pre-merge `Testing (Property / Proof)` row asked for (D-48). The existing
+  `property_tests.rs` covers the Markdown region readers; nothing held the
+  register grammar's closed sets or the coverage relation over generated input,
+  which is what the row observed. Eight properties now do, in
+  `grammar_property_tests.rs`, and `make proptest` selects and runs all eight.
+  Four of the first drafts could not fail and were replaced before the commit;
+  the details are in D-48. The contract target runs 97 cases and the post-pin
+  sweep advances to 83 identifiers at 52/31.
 - [ ] EP-M4: take the pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
@@ -2019,6 +2028,53 @@ pre-rebase history if an old hash must be inspected.
   directions. As D-44 explains, the chain stops with the documentation commit
   that records it. Date/Author: 2026-11-16, implementation agent, on the
   revision-60 assessment.
+
+- Decision D-48 (2026-11-16): answered the pre-merge
+  `Testing (Property / Proof)` row with the coverage it was asking for, rather
+  than a rebuttal.
+
+  The row has warned since before EP-M4 that no property test covers the
+  register grammar or the claim-binding relations. I checked that against the
+  tree before acting and it was accurate: `property_tests.rs` generates whole
+  inventory documents and asserts about the Markdown region readers, so the
+  closed area and site-kind sets, the wildcard coverage relation, and the
+  trace-row width contract were exercised only by handwritten examples. A row
+  that keeps returning is usually saying something true, and this one was.
+
+  The eight properties are in `grammar_property_tests.rs`, declared from the
+  crate root beside `property_tests`. `make proptest` selects all eight — the
+  recipe's segment anchor matches `grammar_property_tests` as a suffix — and
+  the gate reports 202 run, 202 passed. The count matters because a property
+  suite that nothing selects proves nothing, which is the shape D-33 already
+  had to fix once.
+
+  Four of the first drafts could not fail and were replaced before the commit.
+  `accepted_identifiers_are_canonical` was a tautology: an identifier composed
+  from the generator's own parts always re-composes, so opening the `AREAS` set
+  went undetected — it now asserts the closed set explicitly, and the property
+  is named for both halves. `an_area_wildcard_covers_only_its_own_prefix`
+  asserted `other != prefix` where the code states a *prefix* rule, and failed
+  on `_/*` covering `__/A`, which is correct behaviour; it now excludes targets
+  that start with the prefix. A width probe that changed
+  `let width = cells.len();` to `TRACE_COLUMNS` only altered an error message,
+  so it proved nothing until the probe padded the cells instead. And one
+  handwritten case, which asserted a finding cannot borrow a neighbour's owner
+  across a blank line, passed under every mutation *and* against the pre-repair
+  code; it was reverted rather than committed, because a test that cannot fail
+  is worse than no test — it reports coverage it does not have.
+
+  Two traps cost real time and are worth naming. `reference_covers` takes the
+  identifier first and the references second, and both are `&str`, so a swapped
+  call compiles; five call sites were wrong and only the generated failures
+  revealed it. A `.proptest-regressions` file persisted from a failed probe is
+  re-read automatically by every later run, so a control probe "failed" against
+  unchanged code until the file was deleted; the file is not committed and each
+  probe now removes it first.
+
+  This is a `tests/` change, so the post-pin sweep advances to 83 identifiers
+  at 52/31, verified equal to the live `git log` and to its own sorted form. As
+  D-44 explains, the chain stops with the documentation commit that records it.
+  Date/Author: 2026-11-16, implementation agent, on the pre-merge row.
 
 ## Outcomes & retrospective
 
@@ -3281,6 +3337,15 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   unchanged HEAD and an empty working tree at both ends of the batch: 98.26%
   doc-comment coverage, 5,758 Nextest cases with 9 skipped, 2,330 plus 30
   workflow-contract cases, 227 Markdown files clean, and every lint gate green.
+- Revision 62 (2026-11-16): added the grammar and coverage property tests
+  (D-48), answering the pre-merge `Testing (Property / Proof)` row on its own
+  terms. Eight properties cover the register grammar's closed sets, the
+  wildcard coverage relation in both directions, and the trace-row width
+  contract; `make proptest` selects and passes all eight, 202 run. Four first
+  drafts could not fail and were replaced before the commit. The contract
+  target runs 97 cases and the post-pin sweep advances to 83 identifiers, 52 in
+  `main` and 31 on this branch. No proof artefact is affected. A fresh
+  assessment is requested for this candidate.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
