@@ -84,10 +84,12 @@ fn product_kernel_respects_zero_and_repeat() {
 /// Prove `n choose r` for `r <= 2` matches the closed form on a small domain.
 ///
 /// The quotient is checked where both the numerator and the divisor are small
-/// enough for the solver to bit-blast; two concrete witnesses then carry the
-/// two ends of the `u64` range that the small symbolic domain cannot reach —
-/// one whose intermediate step exceeds `u64::MAX` although its coefficient
-/// still fits, and one whose coefficient does not fit at all.
+/// enough for the solver to bit-blast; three concrete witnesses then carry the
+/// `u64` boundary the small symbolic domain cannot reach — one whose
+/// intermediate step exceeds `u64::MAX` although its coefficient still fits,
+/// one whose coefficient does not fit at all, and one whose coefficient is
+/// exactly `u64::MAX`, which is what stops an off-by-one in the overflow test
+/// from passing.
 #[kani::proof]
 #[kani::solver(kissat)]
 #[kani::unwind(3)]
@@ -102,10 +104,9 @@ fn binomial_kernel_matches_closed_form_for_r_up_to_two() {
         "the binomial kernel matches the u128 closed form on the bounded domain",
     );
 
-    // The `n * (n - 1)` step behind both coefficients exceeds `u64::MAX`, so
-    // neither witness can pass through `u64` arithmetic; what separates them is
-    // the coefficient. `C(5_000_000_000, 2)` still fits and `C(2^33, 2)` does
-    // not, so an off-by-one in the overflow test cannot pass.
+    // The `n * (n - 1)` step behind both large coefficients exceeds `u64::MAX`,
+    // so neither can pass through `u64` arithmetic; what separates them is the
+    // coefficient. `C(5_000_000_000, 2)` still fits and `C(2^33, 2)` does not.
     kani::assert(
         kernel::checked_binomial(5_000_000_000, 2) == Some(12_499_999_997_500_000_000),
         "a step above u64::MAX still yields a representable coefficient",
@@ -113,6 +114,13 @@ fn binomial_kernel_matches_closed_form_for_r_up_to_two() {
     kani::assert(
         kernel::checked_binomial(1 << 33, 2).is_none(),
         "a coefficient above u64::MAX is refused",
+    );
+    // Neither coefficient above equals `u64::MAX`, so both would survive a
+    // guard relaxed from `>` to `>=`. This one does not: its coefficient is
+    // exactly `u64::MAX`, which is representable and must be admitted.
+    kani::assert(
+        kernel::checked_binomial(u64::MAX, 1) == Some(u64::MAX),
+        "a coefficient of exactly u64::MAX is admitted, not refused",
     );
 
     // The plan asks for a cover of each concrete boundary, not only the
@@ -125,6 +133,10 @@ fn binomial_kernel_matches_closed_form_for_r_up_to_two() {
     kani::cover!(
         kernel::checked_binomial(5_000_000_000, 2).is_some(),
         "an intermediate above u64::MAX still yields a representable coefficient"
+    );
+    kani::cover!(
+        kernel::checked_binomial(u64::MAX, 1) == Some(u64::MAX),
+        "a coefficient of exactly u64::MAX is reached"
     );
 
     kani::cover!(
@@ -201,11 +213,13 @@ fn falling_factorial_kernel_matches_checked_product() {
 ///
 /// `20!` is the largest factorial that fits in `u64` and `21!` is the first
 /// that does not, so these two witnesses straddle the overflow boundary. They
-/// pin refusal rather than the cap's position: the cap refuses every `r` from
-/// 21 upwards, and each of those products overflows on its own. Both loops are
-/// concrete — the twenty-step one and the immediate refusal — so the deep
-/// unwind bound costs unrollings rather than symbolic paths, and the unbounded
-/// operand exercises an early `None` on the second step.
+/// pin refusal rather than the cap's position: the cap refuses every `r` of at
+/// least 21 that reaches it, which is every such `r` with `r <= n` because the
+/// `r > n` shortcut answers zero first, and each of those products overflows on
+/// its own. Both loops are concrete — the twenty-step one and the immediate
+/// refusal — so the deep unwind bound costs unrollings rather than symbolic
+/// paths, and the unbounded operand exercises an early `None` on the second
+/// step.
 #[kani::proof]
 #[kani::solver(kissat)]
 #[kani::unwind(21)]
