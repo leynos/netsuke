@@ -12122,12 +12122,13 @@ preference order from the injected `SharedEnvSource`:
 `$XDG_CONFIG_HOME/netsuke/config.toml`, `$XDG_CONFIG_HOME/.netsuke.toml`,
 `%APPDATA%` and `%LOCALAPPDATA%` equivalents, then
 `$HOME/.config/netsuke/config.toml`, `$HOME/.config/.netsuke.toml`, and
-`$HOME/.netsuke.toml`. A value that is empty or not root-anchored counts as
-unset, so no candidate can resolve against the working directory, and `HOME`
-outranks `USERPROFILE`. The pass never reads `XDG_CONFIG_DIRS` or project
-roots, and it does not consult `EnvSource::home_fallback`: Netsuke always
-supplies a `MapEnv`, whose fallback is `None`, so mirroring it would add an
-ambient lookup without changing behaviour.
+`$HOME/.netsuke.toml`. A value that is empty or not absolute counts as unset,
+so no candidate can resolve against the working directory or, on Windows, the
+current drive, and `HOME` outranks `USERPROFILE`. The pass never reads
+`XDG_CONFIG_DIRS` or project roots, and it does not consult
+`EnvSource::home_fallback`: Netsuke always supplies a `MapEnv`, whose fallback
+is `None`, so mirroring it would add an ambient lookup without changing
+behaviour.
 
 `src/cli/discovery/layers/mod.rs` loads those candidates before calling
 `compose_layers()`. An absent candidate is skipped, a load error is returned

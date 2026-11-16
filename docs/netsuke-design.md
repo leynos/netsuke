@@ -4303,10 +4303,12 @@ rejected from environment ingress by its normalized top-level spelling.
 
    Every variable is consulted on every platform, so a host that sets both
    families follows this single order. An undefined variable is skipped, as is
-   one whose value is empty or not root-anchored: a relative base would resolve
+   one whose value is empty or not absolute: a relative base would resolve
    against the working directory and load a file from wherever the tool
-   happened to run. `HOME` supplies the home directory when it is set to a
-   root-anchored value; otherwise `USERPROFILE` does.
+   happened to run. On Windows the same rule excludes a rooted value without a
+   drive, such as `\config`, which would resolve on whichever drive the process
+   runs from. `HOME` supplies the home directory when it is set to an absolute
+   value; otherwise `USERPROFILE` does.
 
 4. **System scope**: System-wide configuration directories, consulted only when
    no user file exists:

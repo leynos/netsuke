@@ -111,7 +111,8 @@
   their fetch and `env_allow_var` policy. A user file that exists but cannot be
   loaded, including a symbolic link whose target is missing, stops discovery
   instead of falling back to a system file. An empty or relative user location
-  value is ignored rather than resolved against the working directory
+  value is ignored rather than resolved against the working directory, as is a
+  Windows drive-relative rooted value such as `\config`
   ([#986](https://github.com/leynos/netsuke/issues/986))
 
 ### Security
