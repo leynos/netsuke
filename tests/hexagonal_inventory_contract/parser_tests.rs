@@ -6,7 +6,7 @@ use anyhow::{Result, ensure};
 use pretty_assertions::assert_eq;
 use rstest::rstest;
 
-use super::fixtures::{HEADING_BLEED_ROADMAP, PIN, TRANSITIVE_ROADMAP};
+use super::fixtures::{HEADING_BLEED_ROADMAP, PIN, SIMPLE_ROADMAP, TRANSITIVE_ROADMAP};
 use super::markdown::{HeadingLevel, harvest_body, heading_body, pins, register_ids, task_ids};
 use super::roadmap::{dependents_of, roadmap_tasks};
 
@@ -72,6 +72,30 @@ fn task_ids_ignore_versions_and_two_part_labels(#[case] source: &str, #[case] ex
     let actual = task_ids(source);
     let expected_set: BTreeSet<String> = expected.iter().map(|value| (*value).to_owned()).collect();
     assert_eq!(actual, expected_set);
+}
+
+/// A roadmap that cannot yield an empty map must never be read as one.
+///
+/// `roadmap_tasks` built its patterns with `Regex::new(...).ok()` and returned
+/// an empty map on failure. That is the silent-absence shape every caller
+/// misreads: `validate_trace_coverage` asks for the tasks depending on
+/// 26.1.1, gets none, and reports success; `real_inventory_is_consistent`'s
+/// dependent-count guard compares 0 against its expected count only because
+/// that count is not zero. The patterns are now compile-time constants whose
+/// failure panics, and this pins the direction that matters: a roadmap that
+/// names tasks produces them.
+#[test]
+fn roadmap_parser_never_reports_an_empty_map_for_a_populated_roadmap() {
+    let tasks = roadmap_tasks(SIMPLE_ROADMAP);
+    assert_eq!(
+        tasks.len(),
+        2,
+        "two-bullet roadmap should yield two tasks, got {tasks:?}"
+    );
+    assert!(
+        tasks.contains_key("26.1.1") && tasks.contains_key("26.1.2"),
+        "both simple-roadmap tasks should be present, got {tasks:?}"
+    );
 }
 
 #[test]

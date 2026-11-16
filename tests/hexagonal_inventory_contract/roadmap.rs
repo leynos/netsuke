@@ -1,25 +1,38 @@
 //! Parse roadmap tasks and compute their dependency relationships.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
 use regex::Regex;
 
+/// The pattern that opens a roadmap task bullet.
+///
+/// Compiled once because every roadmap read asks the same question, and held in
+/// a `LazyLock` rather than compiled per call so the failure mode is stated
+/// where it happens: the pattern is a compile-time constant, so a failure is a
+/// programming error and panics through `expect`. Returning an empty map
+/// instead — the earlier form — turned a broken pattern into "this roadmap has
+/// no tasks", which every caller reads as a roadmap that covers nothing and so
+/// as a vacuous pass.
+static TASK_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^- \[[ x]\] (\d+\.\d+\.\d+)\.").expect("roadmap task pattern should compile")
+});
+
+/// The pattern that recognises a task identifier inside dependency prose.
+static DEPENDENCY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b\d+\.\d+\.\d+\b").expect("task identifier pattern should compile")
+});
+
 /// Parse checked or unchecked roadmap tasks and their dependency bullets.
 pub(super) fn roadmap_tasks(roadmap: &str) -> BTreeMap<String, BTreeSet<String>> {
-    let Some(task_pattern) = Regex::new(r"^- \[[ x]\] (\d+\.\d+\.\d+)\.").ok() else {
-        return BTreeMap::new();
-    };
-    let Some(dependency_pattern) = Regex::new(r"\b\d+\.\d+\.\d+\b").ok() else {
-        return BTreeMap::new();
-    };
     let mut lines = roadmap.lines().peekable();
     let mut tasks = BTreeMap::new();
 
     while let Some(line) = lines.next() {
-        let Some(task) = task_identifier(line, &task_pattern) else {
+        let Some(task) = task_identifier(line, &TASK_PATTERN) else {
             continue;
         };
-        let dependencies = task_dependencies(&mut lines, &task_pattern, &dependency_pattern);
+        let dependencies = task_dependencies(&mut lines, &TASK_PATTERN, &DEPENDENCY_PATTERN);
         tasks.insert(task, dependencies);
     }
 
