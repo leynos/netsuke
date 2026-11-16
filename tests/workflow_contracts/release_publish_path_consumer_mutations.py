@@ -38,7 +38,6 @@ class ConsumerSmokeMutationIssue(enum.StrEnum):
     MISSING_CHECKOUT = f"{CONSUMER_SMOKE_JOB} must check the candidate out"
     MISSING_DOWNLOAD = f"{CONSUMER_SMOKE_JOB} must download at least one artefact"
     MISSING_ACTION_STEP = f"{CONSUMER_SMOKE_JOB} must call {LOCAL_SMOKE_ACTION}"
-    MALFORMED_ENVIRONMENT = "the mutated step must carry an environment mapping"
     UNKNOWN_LABEL = "unknown consumer-smoke mutation"
 
 
@@ -232,36 +231,33 @@ def _add_environment(release: Job, _action: Job) -> None:
 
 
 def _add_token_environment(release: Job, _action: Job) -> None:
-    """Give the smoke a GitHub token in its environment."""
+    """Give the smoke a GitHub token in its job environment."""
     _smoke_job(release)["env"] = {"GH_TOKEN": "${{ github.token }}"}
+
+
+def _add_workflow_token_environment(release: Job, _action: Job) -> None:
+    """Give the whole workflow a token, leaving the smoke job's environment clean.
+
+    A top-level variable reaches every job without appearing in any of them,
+    so a scan of the smoke job alone cannot see it.
+    """
+    release["env"] = {"GH_TOKEN": "${{ github.token }}"}
 
 
 def _add_action_token_environment(_release: Job, action: Job) -> None:
     """Give one of the action's own steps a GitHub token.
 
-    The job's environment stays clean, so only a scan of the action can see
-    this; that separation is what the mutation exists to prove.
+    The job's environment stays clean, so only a scan of the action sees this.
 
     Raises
     ------
     ConsumerSmokeMutationError
-        If no action step carries a command to attach the environment to, or
-        the step it does carry has no environment mapping.
+        If no action step carries a command to attach the environment to.
     """
     for step in _steps(action):
-        if "run" not in step:
-            continue
-        env = step.setdefault("env", {})
-        if not isinstance(env, dict):
-            raise ConsumerSmokeMutationError(
-                ConsumerSmokeMutationIssue.MALFORMED_ENVIRONMENT
-            )
-        # `update` with a mapping, as the verify-inventory mutations write
-        # theirs: the value is a workflow expression this fixture plants, not a
-        # secret, and the mapping form keeps the bandit rule that flags a
-        # credential-named assignment from reading it as one.
-        env.update({"GITHUB_TOKEN": "${{ github.token }}"})
-        return
+        if "run" in step:
+            step["env"] = {"GITHUB_TOKEN": "${{ github.token }}"}
+            return
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
 
 
@@ -347,6 +343,7 @@ _MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "add-consumer-smoke-id-token": _add_id_token,
     "add-consumer-smoke-environment": _add_environment,
     "add-consumer-smoke-token-environment": _add_token_environment,
+    "add-consumer-smoke-workflow-token": _add_workflow_token_environment,
     "add-consumer-smoke-action-token-environment": _add_action_token_environment,
     "add-consumer-smoke-invocation-guard": _guard_invocation,
     "persist-consumer-smoke-checkout-credentials": _persist_checkout_credentials,

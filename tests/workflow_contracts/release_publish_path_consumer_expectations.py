@@ -41,6 +41,9 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     "add-consumer-smoke-token-environment": (
         ("static", f"{CONSUMER_SMOKE_JOB}.token"),
     ),
+    # A variable declared at the workflow's top level reaches the smoke without
+    # appearing in the job, so a job-only scan would leave it unguarded.
+    "add-consumer-smoke-workflow-token": (("static", f"{CONSUMER_SMOKE_JOB}.token"),),
     # The action declares its own step environments, so a credential added
     # there never appears in the job's. The contract must still refuse it.
     "add-consumer-smoke-action-token-environment": (

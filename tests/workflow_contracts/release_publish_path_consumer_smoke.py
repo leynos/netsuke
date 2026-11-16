@@ -118,7 +118,7 @@ def check_consumer_smoke(check: ConsumerSmokeCheck) -> None:
     """Verify the job's shape and its reachability for one scenario."""
     job = smoke_job(check.release, check.violations)
     check_smoke_needs(job, check.violations)
-    check_smoke_privileges(job, check.violations)
+    check_smoke_privileges(check.release, job, check.violations)
     check_smoke_checkout(job, check.violations)
     check_smoke_artifacts(job, check.violations)
     check_smoke_action_inputs(job, check.violations)

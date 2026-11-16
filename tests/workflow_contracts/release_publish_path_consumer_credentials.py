@@ -2,11 +2,11 @@
 
 The smoke reads public bytes and runs one already-built executable, so a token
 in its environment could only widen the blast radius of a compromised smoke.
-Two separate documents can define one: the workflow's own steps, whose
-environment the job-level scan reads, and the composite action the job calls,
-whose steps run in the same process but appear nowhere in the workflow. Both
-are read here, so an edit that reaches for a token fails a contract wherever it
-is made.
+Three separate scopes can define one: the workflow's top-level ``env``, which
+reaches every job; the smoke job and its steps, whose environment the job-level
+scan reads; and the composite action the job calls, whose steps run in the same
+process but appear nowhere in the workflow. All three are read here, so an edit
+that reaches for a token fails a contract wherever it is made.
 
 The rest of the smoke's shape lives in ``release_publish_path_consumer_shape``,
 which owns the low-level readers these checks share and the constants that name
@@ -33,9 +33,20 @@ if typ.TYPE_CHECKING:
 
 
 def _environments(
-    job: dict[str, object],
+    release: dict[str, object], job: dict[str, object]
 ) -> cabc.Iterator[tuple[str, dict[str, object]]]:
-    """Yield the job-level and per-step environment mappings that exist."""
+    """Yield every environment mapping that can reach the smoke, with its scope.
+
+    Yields
+    ------
+    tuple[str, dict[str, object]]
+        Each scope's label and its environment, in the order a variable
+        reaches the child: the workflow's top level, then the job, then its
+        steps. Scopes that declare no environment are skipped.
+    """
+    workflow_env = release.get("env")
+    if isinstance(workflow_env, dict):
+        yield "the workflow environment", workflow_env
     job_env = job.get("env")
     if isinstance(job_env, dict):
         yield "the job environment", job_env
@@ -61,8 +72,18 @@ def _leaked_credentials(scope: cabc.Mapping[str, object]) -> list[str]:
     )
 
 
-def check_smoke_privileges(job: dict[str, object], violations: list[str]) -> None:
-    """Require read-only contents and no token, environment, or OIDC grant."""
+def check_smoke_privileges(
+    release: dict[str, object], job: dict[str, object], violations: list[str]
+) -> None:
+    """Require read-only contents and no token, environment, or OIDC grant.
+
+    Notes
+    -----
+    The workflow's top level is scanned as well as the job, because a variable
+    declared there reaches every job without appearing in any of them. The
+    composite action's steps are a separate scan, in
+    :func:`check_smoke_action_environment`.
+    """
     if job.get("permissions") != CONSUMER_SMOKE_PERMISSIONS:
         violations.append(
             f"{CONSUMER_SMOKE_JOB}.permissions: expected contents: read and "
@@ -73,7 +94,7 @@ def check_smoke_privileges(job: dict[str, object], violations: list[str]) -> Non
             f"{CONSUMER_SMOKE_JOB}.environment: the smoke must not require an "
             "environment's secrets or protection rules"
         )
-    for label, scope in _environments(job):
+    for label, scope in _environments(release, job):
         leaked = _leaked_credentials(scope)
         if leaked:
             violations.append(
