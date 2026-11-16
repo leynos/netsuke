@@ -1,3 +1,8 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.14"
+# dependencies = []
+# ///
 """Plan and verify the public-consumer smoke for one release candidate.
 
 ``plan`` binds the trusted evidence to the exact public downloads a smoke run
