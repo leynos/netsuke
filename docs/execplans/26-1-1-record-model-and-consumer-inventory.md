@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 64. See `Revision note` at the foot of this document. This plan was
+Revision 65. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -2160,6 +2160,49 @@ pre-rebase history if an old hash must be inspected.
   at 52/33, verified equal to the live `git log` and to its own sorted form.
   Date/Author: 2026-11-16, implementation agent, on CodeRabbit's follow-up.
 
+- Decision D-51 (2026-11-16): answered the pre-merge row's request for a
+  property over the obligation binding.
+
+  The `Testing (Property / Proof)` row asked for a generated-input test of
+  obligation binding in `grammar_property_tests.rs` or a new property module. I
+  checked the claim rather than applying it as given. The rule
+  `validate_obligation_tasks` enforces was covered only by the example cases in
+  `obligation_tests.rs`, and it is a relation between two documents, so one
+  direction cannot guard it: a reader that accepted every pair would pass an
+  acceptance property, and a reader that refused every pair would pass a
+  rejection property. The row was right that generated input was missing, and
+  right about the fix.
+
+  The row's named location is wrong, and I did not follow it.
+  `grammar_property_tests.rs` covers the register grammar and the coverage
+  relations; obligation binding is a different rule over different documents.
+  Putting it there would have grown a module past its stated purpose, so the
+  properties went into a new `obligation_property_tests.rs`, declared from the
+  contract crate root like every other module in the target.
+
+  Two properties: `a_complete_binding_is_accepted` and
+  `an_omitted_binding_is_refused`. Both take their expectation from the
+  generator's record of what it wrote, never from the reader's own predicates,
+  which is the rule D-49 and D-50 established. Each has a distinct mutant:
+  making the check always true fails only the rejection property, and making it
+  always false fails both, because only the acceptance property requires a
+  correct document to be accepted. I ran both mutants and the control.
+
+  Three compile-time details cost a round each, and the third is the one worth
+  keeping. Inside a `proptest!` body a bare `return` does not type-check, so
+  the obvious `let ... else` guard with a `prop_assert!` does not compile; the
+  generator has to draw an input that needs no guard. Drawing the omission's
+  pair with `prop::sample::select` over the bindings already computed makes it
+  always in range. The module also keeps `rows` live under a probe by using it,
+  because removing its only use made the probe fail `-D warnings` instead of
+  compiling — the same trap D-49 recorded for `first_heading_offset`.
+
+  This is a `tests/` change, so the post-pin sweep advances to 86 identifiers
+  at 52/34. The count is derived, not remembered: the branch-only range is
+  `fa06bdb21..HEAD` over the same paths, and it equals the total list minus the
+  branch list, which is 52. Date/Author: 2026-11-16, implementation agent, on
+  the pre-merge row.
+
 ## Outcomes & retrospective
 
 EP-M1 to EP-M3 are complete. On 2026-11-03, the user directed acceptance of
@@ -3474,6 +3517,18 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   doctests alongside them, 2,330 plus 30 workflow-contract cases, 227 Markdown
   files linted with 0 issues and 227 unchanged at mdtablefix, every Mermaid
   block validated, and every lint gate green.
+
+- Revision 65 (2026-11-16): answered the pre-merge row's request for generated
+  input over obligation binding (D-51). The rule was covered only by example
+  cases, and as a relation between two documents it needs both directions
+  asserted: an always-accept reader passes an acceptance property and an
+  always-refuse reader passes a rejection property. A new
+  `obligation_property_tests.rs` asserts both, with each mutant killed by the
+  property that owns it. The row named `grammar_property_tests.rs`; that module
+  covers the register grammar, so the properties went to their own module
+  instead. The contract target runs 99 cases, and the post-pin sweep advances
+  to 86 identifiers, 52 in `main` and 34 on this branch. No proof artefact is
+  affected. A fresh assessment is requested for this candidate.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

@@ -254,7 +254,7 @@ helper functions; their sum is the compiler message count.
 The snapshot remains pinned to the commit above. These are the commits between
 that pin and the branch's 2026-11-16 head that changed `src/`, `build.rs`,
 `tests/`, `test_support/`, or `benches/`: 52 in the current `main` target and
-thirty-three on this branch. Every one of the thirty-three touches this
+thirty-four on this branch. Every one of the thirty-four touches this
 inventory's contract test, adding it, refactoring it, or repairing a hole a
 review found in it; none changes production behaviour. The span floor the
 `test_support` crate shares with the root is no longer among them: `fa06bdb21`
@@ -327,6 +327,7 @@ context for later consumers; it does not move the inventory pin.
 - `7e117fdc7` Restrict obligation coverage to the trace tables
 - `83dcb492d` Preserve literal Unix backslashes in glob result paths (#990)
   (#1076)
+- `88e9557ce` Property-test the obligation binding in both directions
 - `88f20d588` Keep compile-time contracts out of timed tests (#942)
 - `8b38ac377` Allow actions to opt into Ninja's console pool for streamed output
   (22.1.2, 22.2.1) (#946)
