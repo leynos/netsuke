@@ -19,7 +19,6 @@ Nothing here reaches the network.
 import dataclasses
 import io
 import json
-import subprocess  # ruff: ignore[suspicious-subprocess-import] - the seam under test.
 import tarfile
 import typing as typ
 
@@ -27,9 +26,9 @@ from consumer_smoke_cli import main
 from release_digest_files import digest_of_file
 
 if typ.TYPE_CHECKING:
-    import collections.abc as cabc
     import pathlib
 
+    from release_binstall_probe import ProbeLauncher
     from release_consumer_payload import VerdictRecord
 
 VERSION = "1.2.3"
@@ -43,9 +42,49 @@ SIDECAR_NAME = f"{ARCHIVE_NAME}.sha256"
 BINARY_BYTES = b"netsuke binary payload"
 BANNER = f"netsuke {VERSION}\n"
 
-#: The shape of ``subprocess.run`` the smoke accepts, so a stub can stand in
-#: for the launch that would otherwise execute a downloaded file.
-type ProbeRunner = cabc.Callable[..., subprocess.CompletedProcess[str]]
+
+@dataclasses.dataclass(slots=True)
+class FakeChild:
+    """Stand in for a launched child, recording how the probe drove it.
+
+    Attributes
+    ----------
+    returncode
+        The status the child reports once it is reaped.
+    stream
+        What the child wrote to standard output, read at the probe's request.
+    stopped
+        Whether the probe stopped the child. A refusal that stops its child
+        before reaping it leaves this true while :attr:`reads` shows the
+        ceiling was reached.
+    reads
+        The size of every read the probe asked for, so a test can prove the
+        ceiling was requested rather than only described.
+    reaped
+        Whether the probe waited for the child, so a test can prove that no
+        refusal left a process behind.
+    """
+
+    returncode: int
+    stream: io.TextIOBase
+    stopped: bool = False
+    reads: list[int] = dataclasses.field(default_factory=list)
+    reaped: bool = False
+
+    def read_stdout(self, size: int) -> str:
+        """Read up to ``size`` characters, recording the bound asked for."""
+        self.reads.append(size)
+        return self.stream.read(size)
+
+    def is_running(self) -> bool:
+        """Report the child as alive until the probe reaps it."""
+        return not self.reaped
+
+    def stop(self) -> int:
+        """Stop and reap the child, reporting the status it exited with."""
+        self.stopped = True
+        self.reaped = True
+        return self.returncode
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -234,7 +273,7 @@ def run_plan(target: Workspace) -> int:
 def run_verify(
     target: Workspace,
     *,
-    runner: ProbeRunner | None = None,
+    launcher: ProbeLauncher | None = None,
     overrides: dict[str, pathlib.Path] | None = None,
 ) -> int:
     """Run the ``verify`` subcommand for the workspace.
@@ -260,25 +299,24 @@ def run_verify(
     arguments = ["verify", *evidence_arguments(target)]
     for flag, path in paths.items():
         arguments.extend([f"--{flag}", str(path)])
-    return main(arguments, runner=runner)
+    return main(arguments, launcher=launcher)
 
 
-def fake_probe(*, returncode: int = 0, stdout: str = BANNER) -> ProbeRunner:
-    """Return a probe runner reporting one fixed outcome.
+def fake_probe(*, returncode: int = 0, stdout: str = BANNER) -> ProbeLauncher:
+    """Return a launcher whose child reports one fixed outcome.
 
     Returns
     -------
-    ProbeRunner
-        A callable that answers as ``subprocess.run`` would.
+    ProbeLauncher
+        A launcher that starts a :class:`FakeChild` instead of a process.
     """
 
-    def runner(
-        command: list[str], **_kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
+    def launcher(command: list[str], **_kwargs: object) -> FakeChild:
         """Answer the version probe without launching anything."""
-        return subprocess.CompletedProcess(command, returncode, stdout, "")
+        _ = command
+        return FakeChild(returncode=returncode, stream=io.StringIO(stdout))
 
-    return runner
+    return launcher
 
 
 def read_verdict(target: Workspace) -> VerdictRecord:

@@ -38,7 +38,6 @@ from release_digest_files import digest_of_file
 
 if typ.TYPE_CHECKING:
     import pathlib
-    import subprocess
 
 PHASES = (
     "crate_download",
@@ -106,7 +105,7 @@ def test_verify_accepts_the_published_candidate(
     """Verify every phase and leave the extracted binary behind."""
     staged = _prepared(tmp_path)
 
-    assert run_verify(staged, runner=fake_probe()) == 0, (
+    assert run_verify(staged, launcher=fake_probe()) == 0, (
         "a matching download and banner must verify"
     )
     assert not capsys.readouterr().out, "a successful verify prints nothing"
@@ -124,7 +123,7 @@ def test_verify_timestamps_every_phase_it_completed(tmp_path: pathlib.Path) -> N
     """Record a start and an end for each phase the run finished."""
     staged = _prepared(tmp_path)
 
-    assert run_verify(staged, runner=fake_probe()) == 0, "the smoke must verify"
+    assert run_verify(staged, launcher=fake_probe()) == 0, "the smoke must verify"
     log = read_phase_log(staged)
     assert set(log) == set(PHASES), "the log must name every contract phase"
     for label in PHASES:
@@ -149,7 +148,8 @@ def test_verify_reports_a_download_the_host_did_not_deliver(
     _ = absent.write_text("404\n", encoding="utf-8")
 
     assert (
-        run_verify(staged, runner=fake_probe(), overrides={"crate-status": absent}) == 2
+        run_verify(staged, launcher=fake_probe(), overrides={"crate-status": absent})
+        == 2
     ), "an undelivered download must be refused"
 
     verdict = read_verdict(staged)
@@ -189,7 +189,7 @@ def test_verify_reports_a_saved_download_it_cannot_read(
 
     monkeypatch.setattr(consumer_smoke_evidence, "payload_facts", unreadable)
 
-    assert run_verify(staged, runner=fake_probe()) == 2, (
+    assert run_verify(staged, launcher=fake_probe()) == 2, (
         "a download the smoke cannot read must be refused as a download"
     )
     verdict = read_verdict(staged)
@@ -209,7 +209,7 @@ def test_verify_reports_bytes_that_are_not_the_published_ones(
     with staged.archive.open("ab") as handle:
         _ = handle.write(b"tampered")
 
-    assert run_verify(staged, runner=fake_probe()) == 2, (
+    assert run_verify(staged, launcher=fake_probe()) == 2, (
         "bytes the trusted record does not name must be refused"
     )
     phases = read_verdict(staged)["phases"]
@@ -225,7 +225,7 @@ def test_verify_reports_an_archive_that_is_unsafe_to_extract(
     """Refuse an archive carrying a symlink instead of a binary."""
     staged = _prepared(tmp_path, symlink=True)
 
-    assert run_verify(staged, runner=fake_probe()) == 3, (
+    assert run_verify(staged, launcher=fake_probe()) == 3, (
         "an archive with an unsafe member must be refused"
     )
     assert read_verdict(staged)["phases"]["archive_verification"] == "failure", (
@@ -248,7 +248,8 @@ def test_verify_reports_an_executable_that_disagrees_with_the_candidate(
     staged = _prepared(tmp_path)
 
     assert (
-        run_verify(staged, runner=fake_probe(returncode=returncode, stdout=stdout)) == 4
+        run_verify(staged, launcher=fake_probe(returncode=returncode, stdout=stdout))
+        == 4
     ), "a binary that is not the candidate must be refused"
     assert read_verdict(staged)["phases"]["executable_probe"] == "failure", (
         "the probe phase must record the refusal"
@@ -258,15 +259,13 @@ def test_verify_reports_an_executable_that_disagrees_with_the_candidate(
 def test_verify_reports_a_probe_that_never_ran(tmp_path: pathlib.Path) -> None:
     """Refuse an executable that could not be launched at all."""
 
-    def runner(
-        command: list[str], **_kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
+    def launcher(command: list[str], **_kwargs: object) -> typ.NoReturn:
         """Fail the launch the way a missing binary would."""
         raise FileNotFoundError(command[0])
 
     staged = _prepared(tmp_path)
 
-    assert run_verify(staged, runner=runner) == 4, (
+    assert run_verify(staged, launcher=launcher) == 4, (
         "an unlaunchable executable is the probe phase's failure"
     )
 
@@ -278,7 +277,7 @@ def test_verify_refuses_a_plan_another_run_wrote(tmp_path: pathlib.Path) -> None
     plan["archive"]["url"] += "?redirected"
     write_json(staged.plan, plan)
 
-    assert run_verify(staged, runner=fake_probe()) == 1, (
+    assert run_verify(staged, launcher=fake_probe()) == 1, (
         "a plan naming other downloads must be refused before anything is read"
     )
     assert not staged.verdict.exists(), (
@@ -294,6 +293,6 @@ def test_verify_reports_an_unreadable_trusted_record(tmp_path: pathlib.Path) -> 
     staged = workspace(tmp_path)
     _ = staged.trusted.write_text('{"assets": []}', encoding="utf-8")
 
-    assert run_verify(staged, runner=fake_probe()) == 1, (
+    assert run_verify(staged, launcher=fake_probe()) == 1, (
         "an unusable trusted record must be refused as evidence"
     )

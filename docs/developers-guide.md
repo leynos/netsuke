@@ -3725,13 +3725,20 @@ different file whose members still match the accepted layout. Extraction still
 compares the layout it was handed with the one its own scan produces, so a
 caller holding a layout from some other archive is refused rather than trusted.
 
-The binary is then run once with `--version` under a wall-clock limit, an
-output bound, and a replaced environment that inherits nothing, so the child
-cannot read the environment variables the runner exports. Replacing the child's
-initial environment is an allowlist, not a sandbox: it does not isolate the
-executable from the runner's filesystem, network, or any other resource. Its
-banner must name the candidate version exactly; a prerelease suffix is matched
-in full, and a banner that merely contains the version is refused.
+The binary is then run once with `--version` under a wall-clock limit, a
+ceiling on how much of its output the smoke will read, and a replaced
+environment that inherits nothing, so the child cannot read the environment
+variables the runner exports. The ceiling is 8 KiB, far more than a one-line
+banner and far less than a buffer worth exhausting: a child that writes past it
+is killed rather than read further, so a download that floods its standard
+output cannot outlive the run that rejected it. The probe drives `subprocess`
+directly rather than through `cuprum`, because the ceiling has to stop the
+child at the byte that passes it, `cuprum` captures whole, and the smoke runs
+under `uv run --no-project`, where `cuprum` is not installed. Replacing the
+child's initial environment is an allowlist, not a sandbox: it does not isolate
+the executable from the runner's filesystem, network, or any other resource.
+Its banner must name the candidate version exactly; a prerelease suffix is
+matched in full, and a banner that merely contains the version is refused.
 `consumer_smoke_cli.py` reports the phase that refused:
 
 | Exit | Meaning                                                        |

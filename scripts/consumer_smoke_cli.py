@@ -251,7 +251,7 @@ def _add_verify_options(verify_command: argparse.ArgumentParser) -> None:
 def main(
     argv: list[str] | None = None,
     *,
-    runner: probe_adapter.SubprocessRunner | None = None,
+    launcher: probe_adapter.ProbeLauncher | None = None,
 ) -> int:
     """Run the requested command and report its outcome.
 
@@ -259,10 +259,10 @@ def main(
     ----------
     argv
         Command-line arguments. Defaults to ``sys.argv[1:]``.
-    runner
-        The callable that launches the extracted binary. ``None`` uses
-        :func:`subprocess.run`; a test supplies its own so the probe boundary
-        is exercised without executing a downloaded file.
+    launcher
+        The callable that starts the extracted binary. ``None`` starts a real
+        child; a test supplies its own so the probe boundary is exercised
+        without executing a downloaded file.
 
     Returns
     -------
@@ -278,7 +278,7 @@ def main(
     arguments = build_parser().parse_args(argv)
     if arguments.command == "plan":
         return run_plan(arguments)
-    return verify.run_verify(arguments, runner=runner)
+    return verify.run_verify(arguments, launcher=launcher)
 
 
 if __name__ == "__main__":

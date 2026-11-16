@@ -74,6 +74,7 @@ _REFUSALS: tuple[tuple[tuple[type[Exception], ...], int, str], ...] = (
             probe_adapter.ProbeLaunchError,
             probe_adapter.ProbeTimeoutError,
             probe_adapter.ProbeOutputError,
+            probe_adapter.ProbeOutputLimitError,
         ),
         EXIT_PROBE_REJECTED,
         "executable rejected",
@@ -196,7 +197,7 @@ def probe(
     *,
     plan: smoke.SmokePlan,
     extraction: Extraction,
-    runner: probe_adapter.SubprocessRunner | None,
+    launcher: probe_adapter.ProbeLauncher | None,
 ) -> None:
     """Extract the shipped binary and require its exact version banner.
 
@@ -218,7 +219,7 @@ def probe(
         extraction.destination,
         expected_sha256=extraction.sha256,
     )
-    result = probe_adapter.probe_version(binary, runner=runner)
+    result = probe_adapter.probe_version(binary, launcher=launcher)
     _ = payload.require_probe(
         returncode=result.returncode, stdout=result.stdout, version=plan.version
     )
@@ -227,7 +228,7 @@ def probe(
 def run_verify(
     arguments: argparse.Namespace,
     *,
-    runner: probe_adapter.SubprocessRunner | None,
+    launcher: probe_adapter.ProbeLauncher | None,
 ) -> int:
     """Check the saved downloads and the shipped executable against the plan.
 
@@ -245,7 +246,7 @@ def run_verify(
         print(f"consumer smoke evidence rejected: {error}", file=sys.stderr)
         return EXIT_EVIDENCE_REJECTED
     try:
-        _run_phases(arguments, plan, ledger, runner)
+        _run_phases(arguments, plan, ledger, launcher)
     except _REFUSAL_TYPES as error:
         return _report_refusal(error)
     return EXIT_OK
@@ -255,7 +256,7 @@ def _run_phases(
     arguments: argparse.Namespace,
     plan: smoke.SmokePlan,
     ledger: PhaseLedger,
-    runner: probe_adapter.SubprocessRunner | None,
+    launcher: probe_adapter.ProbeLauncher | None,
 ) -> None:
     """Run every smoke phase in order, recording each outcome as it completes.
 
@@ -299,7 +300,7 @@ def _run_phases(
                 sha256=plan.archive_sha256,
                 destination=arguments.extract_dir,
             ),
-            runner=runner,
+            launcher=launcher,
         ),
     )
 
