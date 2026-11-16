@@ -87,35 +87,60 @@ macro_rules! prop_assert_ok {
     };
 }
 
-/// Report whether an identifier is exactly the canonical rendering of its parts.
+/// Report whether the documented grammar should accept an identifier.
 ///
-/// An accepted string must re-compose from the parts its own split produces.
-/// This catches a reader that accepts a longer form than it documents, such as
-/// trailing text on a kind, which a prefix check alone would allow.
-fn is_canonical(identifier: &str) -> bool {
-    let Some((area, body)) = identifier.split_once('/') else {
-        return false;
-    };
-    let Some((item, site)) = body.split_once('@') else {
-        return compose(area, body, None) == identifier;
-    };
-    let Some((symbol, kind)) = site.split_once('#') else {
-        return false;
-    };
-    compose(area, item, Some((symbol, kind))) == identifier
+/// The expectation is restated from the published rule — a permitted area, an
+/// item that is non-empty and carries no `#`, and either no site or a non-empty
+/// symbol before a permitted kind — rather than asked of the code under test.
+/// An expectation computed with the reader's own predicate agrees with it
+/// whatever it does, which is how the conditional this replaced came to assert
+/// nothing at all.
+fn should_accept(area: &str, item: &str, site: Option<(&str, &str)>) -> bool {
+    let is_valid_item = !item.is_empty() && !item.contains('#');
+    let is_valid_site = site.is_none_or(|(symbol, kind)| {
+        !symbol.is_empty() && !has_delimiter(symbol) && is_documented_site_kind(kind)
+    });
+    AREAS.contains(&area) && is_valid_item && is_valid_site
+}
+
+/// Report whether a value carries a character that would make a split ambiguous.
+fn has_delimiter(value: &str) -> bool {
+    value
+        .chars()
+        .any(|character| matches!(character, '@' | '#'))
+}
+
+/// Report whether a kind is a permitted site kind, optionally numbered.
+///
+/// The documented rule admits a member of the closed set or that member
+/// followed by `-<digits>`. Restating it rather than reusing the reader's own
+/// `matches_site_kind` keeps the near miss `constructor-x` on the refusal side
+/// of the expectation, so a reader that dropped the digit requirement has to
+/// disagree with this function for the property to reject it.
+fn is_documented_site_kind(kind: &str) -> bool {
+    SITE_KINDS.iter().any(|known| {
+        kind.strip_prefix(known).is_some_and(|suffix| {
+            suffix.is_empty() || suffix.strip_prefix('-').is_some_and(is_all_digits)
+        })
+    })
+}
+
+/// Report whether a numbered suffix is a non-empty run of decimal digits.
+fn is_all_digits(suffix: &str) -> bool {
+    !suffix.is_empty() && suffix.chars().all(|character| character.is_ascii_digit())
 }
 
 proptest! {
-    /// An accepted identifier names a permitted area and is canonical.
+    /// Well-formedness agrees with the documented grammar on generated parts.
     ///
-    /// The area half is what makes this a guard rather than a tautology. An
-    /// identifier built from the generator's own parts re-composes by
-    /// construction, so `is_canonical` alone would pass a reader that accepted
-    /// any area at all — it did, until the closed set was asserted here. The
-    /// canonical half then rejects a reader accepting a longer form than it
-    /// documents, such as trailing text on a kind.
+    /// Both directions are asserted, which is the whole point. An earlier form
+    /// wrapped its assertions in `if is_well_formed_register_id(…)`, so a reader
+    /// that refused an identifier asserted nothing about it: a probe injecting
+    /// an unconditional `false` left all eight grammar properties passing.
+    /// Stating the expectation independently rejects that mutant, and the area
+    /// guard written for a reader that accepted any area at all.
     #[test]
-    fn accepted_identifiers_name_a_permitted_area_and_are_canonical(
+    fn well_formedness_agrees_with_the_documented_grammar(
         area in area(),
         item in item(),
         site in prop::option::of((item(), site_kind())),
@@ -124,16 +149,19 @@ proptest! {
             Some((symbol, kind)) => compose(&area, &item, Some((symbol, kind))),
             None => compose(&area, &item, None),
         };
-        if is_well_formed_register_id(&identifier) {
-            prop_assert!(
-                AREAS.contains(&area.as_str()),
-                "accepted {identifier:?} names area {area:?}, which is not permitted"
-            );
-            prop_assert!(
-                is_canonical(&identifier),
-                "accepted {identifier:?} should re-compose from its parts"
-            );
-        }
+        let parts = site
+            .as_ref()
+            .map(|(symbol, kind)| (symbol.as_str(), kind.as_str()));
+        let expected = should_accept(&area, &item, parts);
+        prop_assert_eq!(
+            is_well_formed_register_id(&identifier),
+            expected,
+            "grammar should answer {} for {:?} built from area {:?} and site {:?}",
+            expected,
+            identifier,
+            area,
+            site
+        );
     }
 
     /// An identifier with no area separator is refused.

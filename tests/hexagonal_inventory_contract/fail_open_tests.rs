@@ -377,3 +377,22 @@ fn rejects_a_register_table_whose_header_is_not_id() -> Result<()> {
     expect_validation_error(&inventory, SIMPLE_ROADMAP, "should be `ID`-headed")?;
     Ok(())
 }
+
+/// Swapping two trace columns must fail, not read the finding as register items.
+///
+/// `parse_trace_row` assigns columns by position, so a header in another order
+/// hands each cell to the wrong name: here the `A1/*` that belongs in
+/// `Register items` would arrive as `Findings` and vice versa. Whichever way the
+/// swap is read, the row's own claims are misreported — and the register item
+/// would be either spuriously traced or spuriously untraced while every check
+/// still answered confidently. The header is the only place the intended order
+/// is written down, so it is validated before its rows are read.
+#[test]
+fn rejects_a_trace_table_whose_columns_are_swapped() -> Result<()> {
+    let inventory = inventory_with_register_item_and_unchanged("None yet.\n").replace(
+        "| Task | Register items | Findings | Obligations |",
+        "| Task | Findings | Register items | Obligations |",
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "trace table header should read")?;
+    Ok(())
+}

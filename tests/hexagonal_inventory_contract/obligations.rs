@@ -168,6 +168,36 @@ fn declared_tasks(entry: &str) -> Result<(String, BTreeSet<String>)> {
 /// trace tables use, so a row of any other width is malformed.
 pub(super) const TRACE_COLUMNS: usize = 4;
 
+/// The first column's name, which is what identifies a trace table.
+///
+/// `task_table_rows` selects a table by this cell, so the row parser and the
+/// header check must agree on it rather than each spelling it out.
+pub(super) const TRACE_TASK_HEADER: &str = "Task";
+
+/// The trace table's header, in the order the reader assigns columns by.
+///
+/// The order is load-bearing: `parse_trace_row` destructures positionally, so a
+/// table headed `| Task | Findings | Register items | Obligations |` would hand
+/// the `Findings` cell to `register_items` and let register coverage read a
+/// column the row never wrote. A header is therefore validated before its rows
+/// are read, the same way `non_id_register_headers` reports a renamed register
+/// table instead of letting its rows drop out of every check.
+pub(super) const TRACE_HEADER: [&str; TRACE_COLUMNS] = [
+    TRACE_TASK_HEADER,
+    "Register items",
+    "Findings",
+    "Obligations",
+];
+
+/// Report whether a line is the canonical trace-table header.
+///
+/// Width and order are checked together because either alone hides the defect:
+/// a four-cell header in another order misassigns columns, and a header of
+/// another width describes a row shape no caller can read.
+pub(super) fn is_canonical_trace_header(line: &str) -> bool {
+    table_cells(line) == TRACE_HEADER
+}
+
 /// The two claim cells of a trace row that a coverage rule reads.
 ///
 /// The row's header is `| Task | Register items | Findings | Obligations |`.

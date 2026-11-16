@@ -14,10 +14,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use super::markdown::{first_cell, harvest_body, is_table_separator, task_ids};
-use super::obligations::{TraceRow, parse_trace_row, row_obligations};
+use super::obligations::{
+    TRACE_TASK_HEADER, TraceRow, is_canonical_trace_header, parse_trace_row, row_obligations,
+};
 use super::register::is_well_formed_register_id;
 
 /// Collect task identifiers from the first column of the trace-matrix tables.
@@ -27,11 +29,16 @@ use super::register::is_well_formed_register_id;
 /// deeper heading inside it, satisfy task coverage even though the exclusion
 /// harvester had already refused that nested content. The register and
 /// obligation readers restrict the same way, so one rule covers all three.
-pub(super) fn trace_table_tasks(trace: &str) -> BTreeSet<String> {
-    trace_subsections(trace)
-        .flat_map(task_table_rows)
+///
+/// # Errors
+///
+/// Returns an error when a `Task`-headed table's header is not the canonical
+/// one, for the reason `is_canonical_trace_header` gives.
+pub(super) fn trace_table_tasks(trace: &str) -> Result<BTreeSet<String>> {
+    Ok(trace_rows(trace)?
+        .into_iter()
         .flat_map(|row| task_ids(first_cell(row).unwrap_or_default()))
-        .collect()
+        .collect())
 }
 
 /// Iterate the `Changes` and `Consumes` harvest bodies of the trace matrix.
@@ -39,6 +46,28 @@ fn trace_subsections(trace: &str) -> impl Iterator<Item = &str> + '_ {
     ["Changes", "Consumes"]
         .into_iter()
         .filter_map(move |heading| harvest_body(trace, heading))
+}
+
+/// Collect the task rows of every `Task`-headed table in the trace matrix.
+///
+/// Every reader that asks a question of a task row goes through this, so they
+/// cannot disagree about which rows are evidence — nor about whether the header
+/// they all read by position is the one they assume.
+///
+/// # Errors
+///
+/// Returns an error when a `Task`-headed table's header is not the canonical
+/// `| Task | Register items | Findings | Obligations |`. The row parser assigns
+/// columns by position, so a header naming the same cells in another order
+/// would hand the `Findings` cell to `Register items` and let coverage read a
+/// column the row never wrote. Refusing the header is what turns that misread
+/// into a failure instead of a silent answer to the wrong question.
+fn trace_rows(trace: &str) -> Result<Vec<&str>> {
+    let mut rows = Vec::new();
+    for subsection in trace_subsections(trace) {
+        rows.extend(task_table_rows(subsection)?);
+    }
+    Ok(rows)
 }
 
 /// Collect the rows of one trace subsection's `Task`-headed tables.
@@ -49,7 +78,12 @@ fn trace_subsections(trace: &str) -> impl Iterator<Item = &str> + '_ {
 /// first condition an isolated pipe-delimited line under `### Changes` becomes a
 /// reference source, and with it a row naming no task would still be read as
 /// one. Both shapes let a row that traces nothing satisfy register coverage.
-fn task_table_rows(subsection: &str) -> Vec<&str> {
+///
+/// # Errors
+///
+/// Returns an error when a line that opens a `Task`-headed table is not the
+/// canonical header, because every later row of that table is read against it.
+fn task_table_rows(subsection: &str) -> Result<Vec<&str>> {
     let mut in_task_table = false;
     let mut rows = Vec::new();
     for line in subsection.lines() {
@@ -57,13 +91,20 @@ fn task_table_rows(subsection: &str) -> Vec<&str> {
             in_task_table = false;
             continue;
         };
-        if cell == "Task" {
+        if cell == TRACE_TASK_HEADER {
+            ensure!(
+                is_canonical_trace_header(line),
+                concat!(
+                    "trace table header should read `| Task | Register items | Findings | ",
+                    "Obligations |`, the order the reader assigns columns by, but found: {line}"
+                )
+            );
             in_task_table = true;
         } else if is_task_row(in_task_table, cell) {
             rows.push(line);
         }
     }
-    rows
+    Ok(rows)
 }
 
 /// Report whether a table row names at least one roadmap task.
@@ -85,8 +126,7 @@ fn is_task_row(in_task_table: bool, cell: &str) -> bool {
 /// because a malformed row cannot be read as evidence for the binding.
 pub(super) fn trace_task_obligations(trace: &str) -> Result<BTreeMap<String, BTreeSet<String>>> {
     let mut by_task = BTreeMap::<String, BTreeSet<String>>::new();
-    let rows = trace_subsections(trace).flat_map(task_table_rows);
-    for row in rows {
+    for row in trace_rows(trace)? {
         let obligations = row_obligations(row)?;
         for task in task_ids(first_cell(row).unwrap_or_default()) {
             by_task
@@ -198,7 +238,7 @@ pub(super) fn trace_obligation_references(trace: &str) -> Result<String> {
 /// Returns an error when a selected row is not the width its header declares.
 fn trace_column(trace: &str, select: impl Fn(&TraceRow) -> &str) -> Result<String> {
     let mut cells = String::new();
-    for row in trace_subsections(trace).flat_map(task_table_rows) {
+    for row in trace_rows(trace)? {
         cells.push_str(select(&parse_trace_row(row)?));
         cells.push('\n');
     }

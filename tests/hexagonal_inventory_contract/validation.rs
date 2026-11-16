@@ -107,7 +107,7 @@ impl InventoryValidation<'_> {
         validate_known_trace_tasks(trace, &tasks)?;
         validate_exclusions(trace, &tasks)?;
 
-        let mut covered = trace_table_tasks(trace);
+        let mut covered = trace_table_tasks(trace)?;
         covered.extend(excluded_tasks(trace).keys().cloned());
         let missing: BTreeSet<String> = dependents_of(&tasks, "26.1.1")
             .difference(&covered)
