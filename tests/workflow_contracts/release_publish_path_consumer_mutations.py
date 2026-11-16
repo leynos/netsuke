@@ -292,6 +292,27 @@ def _invocation(job: Job) -> Job:
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
 
 
+def _drop_artifact_download(release: Job, _action: Job) -> None:
+    """Remove one artefact download, leaving the other exact and in place.
+
+    The surviving download still names its artefact and passes every check made
+    of a download that exists, so only a contract that requires both to be
+    present notices the evidence the smoke no longer receives.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If the job downloads no artefact, so the mutation would change nothing
+        the contract reads.
+    """
+    steps = _steps(_smoke_job(release))
+    for index, step in enumerate(steps):
+        if str(step.get("uses", "")).startswith(DOWNLOAD_PREFIX):
+            del steps[index]
+            return
+    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_DOWNLOAD)
+
+
 def _compile_in_job(release: Job, _action: Job) -> None:
     """Append the source build a smoke must never run."""
     _steps(_smoke_job(release)).append(dict(COMPILATION_STEP))
@@ -318,6 +339,7 @@ _MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "add-consumer-smoke-invocation-guard": _guard_invocation,
     "persist-consumer-smoke-checkout-credentials": _persist_checkout_credentials,
     "select-consumer-smoke-pattern-artifact": _select_pattern_artifact,
+    "drop-consumer-smoke-artifact-download": _drop_artifact_download,
     "compile-in-consumer-smoke-job": _compile_in_job,
     "compile-in-consumer-smoke-action": _compile_in_action,
 }

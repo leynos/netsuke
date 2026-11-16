@@ -202,10 +202,49 @@ def _require_checkout_values(values: dict[str, object], violations: list[str]) -
 
 
 def check_smoke_artifacts(job: dict[str, object], violations: list[str]) -> None:
-    """Require every artefact download to name one permitted artefact exactly."""
+    """Require every permitted artefact to be downloaded by its exact name.
+
+    A download that is present must name its artefact and no pattern. A
+    permitted artefact with no download at all is refused too: the smoke binds
+    the crate and the archive to that evidence, so a run missing half of it
+    would verify less than the release it reports on.
+    """
+    named: set[object] = set()
     for step in steps_of(job):
-        if str(step.get("uses", "")).startswith(DOWNLOAD_ARTIFACT_PREFIX):
-            _require_named_artifact(step, violations)
+        if not str(step.get("uses", "")).startswith(DOWNLOAD_ARTIFACT_PREFIX):
+            continue
+        _require_named_artifact(step, violations)
+        values = step.get("with")
+        if isinstance(values, dict):
+            named.add(values.get("name"))
+    violations.extend(
+        f"{CONSUMER_SMOKE_JOB}.artifacts: nothing downloads {name}, so the "
+        "smoke would run without its evidence"
+        for name in sorted(SMOKE_ARTIFACTS - named)
+    )
+
+
+def check_smoke_failure_visibility(
+    job: dict[str, object], violations: list[str]
+) -> None:
+    """Refuse to let a failed smoke be reported as a verified release.
+
+    ``continue-on-error`` makes the one job that exercises the published
+    artefacts green whatever it finds, so a corrupt or mis-digested release
+    would ship with the refusal absorbed. The job and the step that runs the
+    smoke are both checked, since either swallows the failure.
+    """
+    invocations = (
+        ("the smoke invocation", step)
+        for step in steps_of(job)
+        if str(step.get("uses", "")) == LOCAL_SMOKE_ACTION
+    )
+    for label, holder in [("the job", job), *invocations]:
+        if "continue-on-error" in holder:
+            violations.append(
+                f"{CONSUMER_SMOKE_JOB}.continue-on-error: {label} must not set "
+                f"it, got {holder['continue-on-error']!r}"
+            )
 
 
 def _require_named_artifact(step: dict[str, object], violations: list[str]) -> None:

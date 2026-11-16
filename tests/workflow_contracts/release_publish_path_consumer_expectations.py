@@ -60,6 +60,11 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     "select-consumer-smoke-pattern-artifact": (
         ("static", f"{CONSUMER_SMOKE_JOB}.artifacts"),
     ),
+    # The remaining download still names its artefact exactly, so only a
+    # contract that requires both to be present sees the missing evidence.
+    "drop-consumer-smoke-artifact-download": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.artifacts"),
+    ),
     "compile-in-consumer-smoke-job": (("static", f"{CONSUMER_SMOKE_JOB}.compilation"),),
     "compile-in-consumer-smoke-action": (
         ("static", f"{CONSUMER_SMOKE_JOB}.compilation"),
