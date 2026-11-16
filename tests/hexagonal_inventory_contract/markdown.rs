@@ -1,6 +1,7 @@
 //! Parse the Markdown structures used by the inventory integrity contract.
 
 use std::collections::BTreeSet;
+use std::sync::LazyLock;
 
 use regex::Regex;
 
@@ -273,6 +274,15 @@ pub(super) fn is_table_separator(cell: &str) -> bool {
 /// distinction is why a schema requiring a fact per bullet cannot collect its
 /// identifiers across the section instead — one entry's fact would satisfy its
 /// neighbour's omission.
+///
+/// A blank line does not by itself close the open entry. Markdown allows a
+/// list item to hold several paragraphs, so a blank line followed by an
+/// indented line is still that entry — a continuation whose owner, fact, or
+/// commit is written one line below a gap. Only the line that follows the gap
+/// decides: indented continues, anything else closes and, if it opens a bullet,
+/// opens the next entry. Treating the blank line as the close dropped the
+/// indented line silently, and with it whatever fact the entry was written to
+/// carry.
 pub(super) fn bullet_entries(text: &str, opens: impl Fn(&str) -> bool) -> Vec<String> {
     let mut entries = Vec::new();
     let mut open = None::<String>;
@@ -282,7 +292,7 @@ pub(super) fn bullet_entries(text: &str, opens: impl Fn(&str) -> bool) -> Vec<St
             open = Some(line.trim_start().to_owned());
         } else if is_list_continuation(line) {
             extend_entry(&mut open, line);
-        } else {
+        } else if !line.trim().is_empty() {
             close_entry(&mut open, &mut entries);
         }
     }
@@ -337,7 +347,22 @@ pub(super) fn finding_entries(findings: &str) -> Vec<String> {
 
 /// Identify a heading that starts an owned finding.
 fn is_finding_start(line: &str) -> bool {
-    ["- H1:", "- H2:", "- H3:", "- H4:", "- OBS-"]
-        .iter()
-        .any(|prefix| line.trim_start().starts_with(prefix))
+    let content = line.trim_start();
+    let Some(bullet) = content.strip_prefix("- ") else {
+        return false;
+    };
+    FINDING_LABEL.is_match(bullet)
 }
+
+/// The finding label a bullet may open with, however it is decorated.
+///
+/// A decoration the pattern does not allow would make the bullet look like
+/// prose, and `validate_findings` checks only the entries it collects — so
+/// `- **OBS-1**: no owner.` would bind nothing and still satisfy the
+/// population guard through a neighbour. Matching a short list of readable
+/// prefixes is what let a bold label escape, so the pattern allows any
+/// non-word characters around the identifier and then reports the bullet as an
+/// entry, where the owner check applies to it.
+static FINDING_LABEL: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\W*(?:H[1-4]|OBS-\d+)\W*:").expect("finding label pattern should compile")
+});

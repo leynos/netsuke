@@ -135,15 +135,43 @@ fn rejects_an_exclusion_that_gives_no_reason() -> Result<()> {
 /// paragraph, so the entry ends there too.
 #[test]
 fn rejects_a_finding_whose_owner_appears_only_in_a_following_paragraph() -> Result<()> {
-    let inventory = VALID_SKELETON.replace(
-        "## Findings\n\nPending EP-M3.",
-        concat!(
-            "## Findings\n\n",
-            "- OBS-1: An observed finding has no owner.\n",
-            "\n",
-            "The task 26.1.1 discusses this finding.\n",
-        ),
-    );
+    let inventory = inventory_with_findings(concat!(
+        "- OBS-1: An observed finding has no owner.\n",
+        "\n",
+        "The task 26.1.1 discusses this finding.\n",
+    ));
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "owning roadmap task")?;
+    Ok(())
+}
+
+/// An indented continuation survives a blank line inside the list item.
+///
+/// Markdown lets a list item hold several paragraphs, so `- OBS-1: finding.`
+/// followed by a blank line and an indented `Owned by 26.1.1.` is one entry
+/// whose owner sits after the gap. Closing at the blank line dropped the owner
+/// and rejected a valid document; the line after the gap decides, not the gap.
+#[test]
+fn accepts_a_finding_whose_owner_is_indented_after_a_blank_line() -> Result<()> {
+    let inventory = inventory_with_findings(concat!(
+        "- OBS-1: An observed finding.\n",
+        "\n",
+        "  Owned by 26.1.1.\n",
+    ));
+    super::validation::validate_inventory(&inventory, SIMPLE_ROADMAP)
+}
+
+/// A decorated label is an entry, so its missing owner is reported.
+///
+/// `is_finding_start` matched a short list of bare prefixes, so
+/// `- **OBS-1**: no owner.` read as prose and bound nothing, while the
+/// neighbouring valid finding satisfied the population guard. Matching any
+/// decoration around the label reports the bullet instead of skipping it.
+#[test]
+fn rejects_a_decorated_finding_that_names_no_owner() -> Result<()> {
+    let inventory = inventory_with_findings(concat!(
+        "- H1: An observed finding owned by 26.1.1.\n",
+        "- **OBS-1**: An observed finding without an owner.\n",
+    ));
     expect_validation_error(&inventory, SIMPLE_ROADMAP, "owning roadmap task")?;
     Ok(())
 }
@@ -156,28 +184,33 @@ fn rejects_a_finding_whose_owner_appears_only_in_a_following_paragraph() -> Resu
 /// same boundary rule.
 #[test]
 fn accepts_a_finding_whose_owner_is_on_an_indented_continuation() -> Result<()> {
-    let inventory = VALID_SKELETON.replace(
-        "## Findings\n\nPending EP-M3.",
-        concat!(
-            "## Findings\n\n",
-            "- OBS-1: An observed finding whose owner is named on the\n",
-            "  continuation line (26.1.1).\n",
-        ),
-    );
+    let inventory = inventory_with_findings(concat!(
+        "- OBS-1: An observed finding whose owner is named on the\n",
+        "  continuation line (26.1.1).\n",
+    ));
     super::validation::validate_inventory(&inventory, SIMPLE_ROADMAP)
+}
+
+/// Replace the skeleton's pending `Findings` section with `body`.
+///
+/// Every finding-reader case starts from the same empty section, so the anchor
+/// lives in one place. Four copies of it were what `CodeScene` reported as
+/// duplication, and the copies would also let one case silently stop testing
+/// anything if the anchor drifted out of the skeleton.
+fn inventory_with_findings(body: &str) -> String {
+    VALID_SKELETON.replace(
+        "## Findings\n\nPending EP-M3.",
+        &format!("## Findings\n\n{body}"),
+    )
 }
 
 #[test]
 fn rejects_a_finding_whose_owner_appears_only_under_a_subheading() -> Result<()> {
-    let inventory = VALID_SKELETON.replace(
-        "## Findings\n\nPending EP-M3.",
-        concat!(
-            "## Findings\n\n",
-            "- OBS-1: An observed finding has no owner.\n",
-            "### Notes\n\n",
-            "The task 26.1.1 discusses this finding.\n",
-        ),
-    );
+    let inventory = inventory_with_findings(concat!(
+        "- OBS-1: An observed finding has no owner.\n",
+        "### Notes\n\n",
+        "The task 26.1.1 discusses this finding.\n",
+    ));
     expect_validation_error(&inventory, SIMPLE_ROADMAP, "owning roadmap task")?;
     Ok(())
 }
