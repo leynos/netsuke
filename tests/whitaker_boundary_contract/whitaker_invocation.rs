@@ -154,6 +154,34 @@ fn suite_selection_definition(makefile: &str) -> Result<&str> {
 ///
 /// Returns an error if the number of `--all-features` passes is not one.
 fn ensure_one_all_features_pass(location: &str, lines: &[&str]) -> Result<()> {
+    // Cargo's arguments follow the standalone `--`; a pass that omits
+    // `--all-targets` skips tests, examples and benches.
+    for line in lines {
+        let cargo_arguments: Vec<&str> = line
+            .split_whitespace()
+            .skip_while(|token| *token != "--")
+            .collect();
+        ensure!(
+            cargo_arguments.contains(&"--all-targets"),
+            "every {location} Whitaker pass must pass --all-targets; found {line:?}"
+        );
+        // The default-feature pass must not select features by another route.
+        if !cargo_arguments.contains(&"--all-features") {
+            ensure!(
+                !cargo_arguments.iter().any(|token| {
+                    token.starts_with("--features")
+                        || token.starts_with("--no-default-features")
+                        || *token == "-F"
+                }),
+                concat!(
+                    "the {location} default-feature Whitaker pass must not ",
+                    "select features explicitly; found {line:?}",
+                ),
+                location = location,
+                line = line
+            );
+        }
+    }
     let all_features = lines
         .iter()
         .filter(|line| line.contains("--all-features"))

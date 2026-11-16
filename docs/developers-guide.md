@@ -11316,7 +11316,8 @@ provisioned and run the following in order:
    ```powershell
    $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
    $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
-   $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
+   Remove-Item Env:CARGO_ENCODED_RUSTFLAGS -ErrorAction SilentlyContinue
+   $env:RUSTFLAGS = "-D warnings"
    $env:DYLINT_TOML = Get-Content dylint.toml -Raw
    $suite = '--lib', 'whitaker_suite', '--fail-on-no-libraries'
    $packages = '--package', 'netsuke-build'
