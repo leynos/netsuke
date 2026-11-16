@@ -179,7 +179,8 @@ def test_the_report_step_walks_the_catalogue_phases_in_order(
     skipped, and a label the step invented would be dropped by the reader, so
     the two lists must agree in order as well as in content.
     """
-    assert _report_violations(_report_run(smoke_action)) == [], (
+    violations = _report_violations(_report_run(smoke_action))
+    assert not violations, (
         "the report step must walk the catalogue's phases and emit each outcome"
     )
 
@@ -196,7 +197,7 @@ def test_a_commented_out_report_step_is_refused(
     commented = "\n".join(
         f"# {line}" for line in str(_report_run(smoke_action)).splitlines()
     )
-    assert _report_violations(commented) != [], (
+    assert _report_violations(commented), (
         "a report step whose commands are all comments must not satisfy the contract"
     )
 
