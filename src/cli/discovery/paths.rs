@@ -1,4 +1,21 @@
 //! Path comparison helpers and candidate derivation for configuration discovery.
+//!
+//! `OrthoConfig` derives its own candidate list, but that order places every
+//! system location above the home fallbacks, so a valid system file can
+//! outrank the user's own configuration. This module supplies what a
+//! Netsuke-owned user pass needs to run first: the ordered user-scope
+//! candidates, and the base directories each one resolves beneath.
+//!
+//! Two rules keep the derivation independent of process state. A base variable
+//! that is empty, or that is not absolute, reads as unset, because a relative
+//! value would resolve against the working directory or, on Windows, the
+//! current drive. And a candidate the loader reports as absent is probed
+//! through a directory capability, so a symbolic link whose target is missing
+//! is distinguished from a file that is not installed and fails closed.
+//!
+//! [`SanitisedUserBases`] applies the first rule to the environment view handed
+//! to the dependency's own scan, so neither pass admits a candidate that
+//! depends on where the tool happened to run.
 
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, Metadata};
