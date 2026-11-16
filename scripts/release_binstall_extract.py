@@ -59,6 +59,7 @@ from release_binstall_archive import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     import pathlib
     import tarfile
 
@@ -125,7 +126,7 @@ def extract_binary(
                 "extraction; refusing to write bytes the scan did not accept"
             )
             raise ExtractionError(msg)
-        entry = _binary_entry(validated.archive)
+        entry = _binary_entry(validated.headers)
         return _write_entry(validated.archive, entry, destination, layout)
 
 
@@ -147,7 +148,7 @@ def _require_fresh_directory(destination: pathlib.Path) -> None:
         raise ExtractionError(msg)
 
 
-def _binary_entry(archive: tarfile.TarFile) -> tarfile.TarInfo:
+def _binary_entry(headers: cabc.Sequence[tarfile.TarInfo]) -> tarfile.TarInfo:
     """Return the root binary's header, refusing an ambiguous match.
 
     Returns
@@ -168,7 +169,7 @@ def _binary_entry(archive: tarfile.TarFile) -> tarfile.TarInfo:
     """
     matches = [
         entry
-        for entry in archive.getmembers()
+        for entry in headers
         if policy.normalised_member_name(entry.name) == policy.BINARY_NAME
         and entry.isreg()
     ]

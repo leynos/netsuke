@@ -8,6 +8,9 @@ suites.
 Run via ``make test-release-publication``.
 """
 
+import hashlib
+import io
+import tarfile
 import typing as typ
 
 import pytest
@@ -79,6 +82,65 @@ def test_scan_archive_refuses_a_truncated_archive(tmp_path: pathlib.Path) -> Non
 
     with pytest.raises(adapter.ArchiveCorruptError):
         adapter.scan_archive(truncated, expected_sha256=digest_of(truncated))
+
+
+def _incompressible_payload(size: int) -> bytes:
+    """Return ``size`` bytes that deflate cannot shrink.
+
+    Returns
+    -------
+    bytes
+        Exactly ``size`` bytes, taken from a hash chain rather than a
+        generator, so the fixture is identical on every run.
+    """
+    blocks: list[bytes] = []
+    seed = b"netsuke"
+    while len(blocks) * 32 < size:
+        seed = hashlib.sha256(seed).digest()
+        blocks.append(seed)
+    return b"".join(blocks)[:size]
+
+
+def test_scan_archive_refuses_an_over_long_index_before_reading_it(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse past the member cap without walking the rest of the index.
+
+    The fixture carries more members than the cap allows and its tail is cut
+    off, so a scan that read the whole index would report a corrupt archive.
+    Only a scan that stops once the cap is passed can report the member-count
+    refusal, and the last assertion proves the fixture is damaged enough for
+    that distinction to mean something.
+    """
+    archive = _truncated_index(tmp_path / "archive.tar.gz")
+    digest = digest_of(archive)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(policy, "MAX_MEMBERS", 1)
+        with pytest.raises(policy.ArchiveTooLargeError):
+            adapter.scan_archive(archive, expected_sha256=digest)
+
+    with pytest.raises(adapter.ArchiveCorruptError):
+        adapter.scan_archive(archive, expected_sha256=digest)
+
+
+def _truncated_index(path: pathlib.Path) -> pathlib.Path:
+    """Write an archive of incompressible members and cut its index short.
+
+    Returns
+    -------
+    pathlib.Path
+        The truncated archive, which is the path it was asked to write.
+    """
+    payload = _incompressible_payload(64 * 1024)
+    with tarfile.open(path, "w:gz") as archive:
+        for index in range(4):
+            entry = tarfile.TarInfo(f"member-{index}")
+            entry.size = len(payload)
+            _ = archive.addfile(entry, io.BytesIO(payload))
+    raw = path.read_bytes()
+    _ = path.write_bytes(raw[: len(raw) // 2])
+    return path
 
 
 def test_scan_archive_refuses_a_link_member(tmp_path: pathlib.Path) -> None:

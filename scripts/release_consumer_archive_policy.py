@@ -271,7 +271,7 @@ def require_safe_layout(members: cabc.Sequence[ArchiveMember]) -> ArchiveLayout:
     Raises
     ------
     ArchiveTooLargeError
-        If the archive declares more members than :data:`MAX_MEMBERS`.
+        If the sequence holds more members than :data:`MAX_MEMBERS`.
     DuplicateMemberError
         If two members normalise to one path.
 
@@ -280,7 +280,9 @@ def require_safe_layout(members: cabc.Sequence[ArchiveMember]) -> ArchiveLayout:
     The per-member rules are applied by the helpers below, and report the same
     :class:`ArchiveLayoutError` family: a name that could escape the root, a
     link, device, or FIFO, an over-large member, or the absence of exactly one
-    non-empty root :data:`BINARY_NAME`.
+    non-empty root :data:`BINARY_NAME`. The over-long-index message reports a
+    lower bound, because the scan that builds the sequence may stop one member
+    past the cap rather than read the rest of the index.
 
     Examples
     --------
@@ -293,7 +295,7 @@ def require_safe_layout(members: cabc.Sequence[ArchiveMember]) -> ArchiveLayout:
     """
     if len(members) > MAX_MEMBERS:
         msg = (
-            f"the archive declares {len(members)} members, more than the "
+            f"the archive carries at least {len(members)} members, more than the "
             f"{MAX_MEMBERS} an archive of this shape may carry"
         )
         raise ArchiveTooLargeError(msg)

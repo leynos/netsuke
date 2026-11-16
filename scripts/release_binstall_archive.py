@@ -83,11 +83,17 @@ class ValidatedArchive:
     archive
         The open gzip-compressed tar archive, owned by the context manager
         that yielded this value.
+    headers
+        Every member header, in archive order, as the scan read them.
+        Iterating a tar archive consumes its index, so a later
+        ``getmembers()`` would return nothing; retaining the headers is what
+        lets extraction find the binary without re-reading the index.
     layout
         What the policy decided about every member in the index.
     """
 
     archive: tarfile.TarFile
+    headers: tuple[tarfile.TarInfo, ...]
     layout: policy.ArchiveLayout
 
 
@@ -177,7 +183,9 @@ def verified_archive(
         _require_trusted_digest(handle, archive_path, expected_sha256)
         archive = _opened_archive(handle)
         try:
-            yield ValidatedArchive(archive=archive, layout=_scanned_layout(archive))
+            headers = _scanned_headers(archive)
+            layout = _scanned_layout(headers)
+            yield ValidatedArchive(archive=archive, headers=headers, layout=layout)
         finally:
             archive.close()
 
@@ -276,25 +284,53 @@ def _opened_archive(handle: typ.IO[bytes]) -> tarfile.TarFile:
         raise ArchiveCorruptError(msg) from error
 
 
-def _scanned_layout(archive: tarfile.TarFile) -> policy.ArchiveLayout:
-    """Return the policy's layout for an open archive's member index.
+def _scanned_headers(archive: tarfile.TarFile) -> tuple[tarfile.TarInfo, ...]:
+    """Return the archive's member headers, refusing an over-long index.
 
     Returns
     -------
-    release_consumer_archive_policy.ArchiveLayout
-        The single root binary and the member totals the policy accepted.
+    tuple[tarfile.TarInfo, ...]
+        Every header the walk read, in archive order: the whole index, or one
+        past the cap when the index is longer than that.
 
     Raises
     ------
     ArchiveCorruptError
         If the member index cannot be read to its end.
+
+    Notes
+    -----
+    The headers are walked one at a time rather than through ``getmembers()``,
+    which reads the whole index into memory before anything can refuse it. The
+    walk stops one header past the policy's member cap, so an over-long index
+    costs the cap plus one header rather than every header the archive claims;
+    :func:`_scanned_layout` then refuses those headers as
+    :class:`release_consumer_archive_policy.ArchiveTooLargeError`. The headers
+    are kept because iterating a tar archive consumes its index.
     """
+    headers: list[tarfile.TarInfo] = []
     try:
-        members = tuple(_member(entry) for entry in archive.getmembers())
+        for entry in archive:
+            headers.append(entry)
+            if len(headers) > policy.MAX_MEMBERS:
+                break
     except CORRUPT_STREAM as error:
         msg = f"the archive's member index is corrupt: {error}"
         raise ArchiveCorruptError(msg) from error
-    return policy.require_safe_layout(members)
+    return tuple(headers)
+
+
+def _scanned_layout(
+    headers: cabc.Sequence[tarfile.TarInfo],
+) -> policy.ArchiveLayout:
+    """Return the policy's layout for headers an archive declared.
+
+    Returns
+    -------
+    release_consumer_archive_policy.ArchiveLayout
+        The single root binary and the member totals the policy accepted.
+    """
+    return policy.require_safe_layout([_member(entry) for entry in headers])
 
 
 def _member(entry: tarfile.TarInfo) -> policy.ArchiveMember:
