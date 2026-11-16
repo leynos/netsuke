@@ -1135,7 +1135,7 @@ conflict in `Decision log`, and escalate.
     - Final-commit gates. All nine ran at `cfe95b461` with a clean working tree:
       `make check-fmt` 3 s; `make lint` 34 s; `make typecheck` 1 s;
       `make markdownlint` 31 s; `make nixie` 2 s; `make test` 81 s (5,842
-      nextest cases passed, 9 skipped; 219 doctests passed, 66 ignored);
+      nextest cases passed, 9 skipped; 220 doctests passed, 66 ignored);
       `make test-workflow-contracts` 542 s (2,330 passed, 3 skipped, plus 30
       passed); `make test-rfc-stdlib-coverage` 5 s (282 passed); and
       `make doc-coverage` 16 s (98.29% aggregate, 6,624 of 6,739 items, against
@@ -1146,6 +1146,36 @@ conflict in `Decision log`, and escalate.
       the inserted prose pushed over the limit, which is why the record is
       `cfe95b461`; every other gate in that void batch had passed. The three
       owner decisions are still requested rather than assumed.
+  - Assessment round four at `cd77f225e` (2026-11-16). Both candidate-bound
+    follow-ups were answered against `a4905db73`. `EP613-COMPLETE-A4905DB`
+    found the implementation substantially complete with no runtime
+    correctness defect, and re-derived the 3,380-line tally from the
+    base-to-head diff; `EP613-PROOF-A4905DB` found the proofs substantive
+    within their stated domains, with no proof-soundness defect. D-22, D-23,
+    and D-25 came back as plan-acceptance blockers rather than defects, which
+    is what this branch escalated them as.
+    - Comment correction. The proof verdict's one surviving finding was a claim
+      in `src/stdlib/resource_bounds/tests/cardinality.rs`: the doc comment said
+      `C(67, 33)` and `C(68, 34)` pin the binomial iteration cap from both
+      sides. The first witness does detect a cap set too low. The second
+      returns `None` because its product overflows, so it returns `None` just
+      the same with the cap raised or removed, and cannot pin where the cap
+      lies. `cd77f225e` describes the pair as a representability boundary and
+      states what it does not pin. The cases are unchanged; only the claim was
+      wrong.
+    - Final gates. All nine targets ran again at `cd77f225e` against a clean
+      working tree and every one exited 0: `make check-fmt` 3 s; `make lint`
+      1,245 s, most of it queued behind other agents' compiler work rather
+      than spent linting; `make typecheck` 133 s; `make markdownlint` 31 s
+      (0 issues in 235 files); `make nixie` 1 s; `make test` 201 s (5,842
+      nextest cases passed, 9 skipped; 220 doctests passed, 66 ignored);
+      `make test-workflow-contracts` 623 s (2,330 passed, 3 skipped, plus 30
+      passed); `make test-rfc-stdlib-coverage` 11 s (282 passed); and
+      `make doc-coverage` 102 s (98.29% aggregate against the 80% threshold).
+    - Figure correction. The round-three entry above recorded 219 doctests for
+      `cfe95b461`; every log for that head reports 220, so the count is
+      corrected in place rather than carried forward. Nothing else in that
+      entry changes.
 
 ## Surprises & discoveries
 
