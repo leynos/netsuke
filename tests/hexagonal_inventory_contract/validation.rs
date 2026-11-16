@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, ensure};
 
-use super::landed::validate_landed_work;
+use super::landed::{landed_work_entries, validate_landed_work};
 use super::markdown::{
     HeadingLevel, declared_pin, finding_entries, heading_body, non_id_register_headers, pins,
     regex_values, register_ids, task_ids,
@@ -50,6 +50,10 @@ pub(super) fn validate_populated(inventory: &str) -> Result<()> {
     ensure!(
         !finding_entries(section(inventory, "Findings")).is_empty(),
         "the real inventory should record at least one finding"
+    );
+    ensure!(
+        !landed_work_entries(section(inventory, "Landed work")).is_empty(),
+        "the real inventory should record at least one landed-work entry"
     );
     Ok(())
 }
@@ -312,7 +316,9 @@ mod tests {
         "## Findings\n\n",
         "- H1: An observed finding owned by 26.1.1.\n\n",
         "## Compatibility obligations\n\n",
-        "- CO-1: Preserve the public surface.\n",
+        "- CO-1: Preserve the public surface.\n\n",
+        "## Landed work\n\n",
+        "- PR `#714` (`2c030fd1`) moved edges into an arena.\n",
     );
 
     /// Return a fixture error when the guard accepts the inventory.
@@ -339,6 +345,10 @@ mod tests {
         "at least one compatibility obligation"
     )]
     #[case::no_findings("- H1: An observed finding owned by 26.1.1.\n", "at least one finding")]
+    #[case::no_landed_work(
+        "- PR `#714` (`2c030fd1`) moved edges into an arena.\n",
+        "at least one landed-work entry"
+    )]
     fn rejects_an_inventory_missing_an_iterated_section(
         #[case] removed: &str,
         #[case] expected: &str,

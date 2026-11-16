@@ -31,7 +31,7 @@ const COMMIT_PATTERN: &str = r"`[0-9a-f]{8}`";
 /// Returns an error for the first bullet that omits either, naming the bullet
 /// and which of the two is missing.
 pub(super) fn validate_landed_work(landed: &str) -> Result<()> {
-    for entry in bullet_entries(landed, opens_landed_work) {
+    for entry in landed_work_entries(landed) {
         ensure!(
             !regex_values(PR_PATTERN, &entry).is_empty(),
             "landed-work entry should name the pull request that carried it: {entry}"
@@ -42,6 +42,17 @@ pub(super) fn validate_landed_work(landed: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// Split the section into one entry per landed-work bullet.
+///
+/// Collection is shared with the population guard so both agree on what counts
+/// as an entry. They must: `validate_landed_work` only asks whether each entry
+/// it sees is complete, so an inventory whose entries were all deleted satisfies
+/// it vacuously — the same pass the section check exists to refuse, arrived at
+/// from the other direction.
+pub(super) fn landed_work_entries(landed: &str) -> Vec<String> {
+    bullet_entries(landed, opens_landed_work)
 }
 
 /// Report whether a line opens a landed-work bullet.
