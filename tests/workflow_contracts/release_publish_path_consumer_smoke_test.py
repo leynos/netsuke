@@ -20,6 +20,7 @@ from release_operation_observability_support import (
     assert_summary_environment,
     assert_summary_phase_timings,
 )
+from release_publish_path_consumer_shape import command_lines
 from release_publish_path_consumer_smoke import (
     CONSUMER_SMOKE_ACTION_PATH,
     CONSUMER_SMOKE_JOB,
@@ -128,6 +129,46 @@ def test_the_action_declares_every_phase_output(
     )
 
 
+def _report_run(smoke_action: dict[str, object]) -> object:
+    """Return the report step's script.
+
+    Returns
+    -------
+    object
+        Whatever the step's ``run`` holds, so the checks below judge the
+        document rather than a shape the test has already assumed.
+    """
+    runs = smoke_action.get("runs")
+    assert isinstance(runs, dict), "the smoke action must declare runs"
+    steps = [step for step in runs.get("steps", []) if isinstance(step, dict)]
+    return named_step(steps, REPORT_STEP).get("run")
+
+
+def _report_violations(run: object) -> list[str]:
+    """Return how a report script fails to walk and emit every phase.
+
+    The script is read as bash would run it, so a commented-out loop is
+    documentation rather than a command, and a label list wrapped with
+    continuations is one command rather than several.
+
+    Returns
+    -------
+    list[str]
+        One message per missing construct, or an empty list when the step
+        walks the catalogue's phases in order and emits every suffix.
+    """
+    script = " ".join(" ".join(command_lines(run)).split())
+    violations = []
+    if f"for phase in {' '.join(SMOKE_PHASES)}; do" not in script:
+        violations.append("the report step must walk exactly the catalogue's phases")
+    violations.extend(
+        f"the report step must emit each phase's {suffix}"
+        for suffix in SUFFIXES
+        if f"%s-{suffix}=%s" not in script
+    )
+    return violations
+
+
 def test_the_report_step_walks_the_catalogue_phases_in_order(
     smoke_action: dict[str, object],
 ) -> None:
@@ -138,20 +179,26 @@ def test_the_report_step_walks_the_catalogue_phases_in_order(
     skipped, and a label the step invented would be dropped by the reader, so
     the two lists must agree in order as well as in content.
     """
-    runs = smoke_action.get("runs")
-    assert isinstance(runs, dict), "the smoke action must declare runs"
-    steps = [step for step in runs.get("steps", []) if isinstance(step, dict)]
-    run = str(named_step(steps, REPORT_STEP).get("run", ""))
-    # The label list is a single command wrapped with continuations, so the
-    # indentation of each continued line has to go before it can be compared.
-    flattened = " ".join(run.replace("\\\n", " ").split())
-    assert f"for phase in {' '.join(SMOKE_PHASES)}; do" in flattened, (
-        "the report step must walk exactly the catalogue's phases, in order"
+    assert _report_violations(_report_run(smoke_action)) == [], (
+        "the report step must walk the catalogue's phases and emit each outcome"
     )
-    for suffix in SUFFIXES:
-        assert f"%s-{suffix}=%s" in flattened, (
-            f"the report step must emit each phase's {suffix}"
-        )
+
+
+def test_a_commented_out_report_step_is_refused(
+    smoke_action: dict[str, object],
+) -> None:
+    """Refuse a report step whose loop and output commands are comments.
+
+    Prefixed with ``#`` the whole script is documentation: bash runs none of
+    it, so the step emits nothing. A check reading raw shell text would still
+    find both the loop and the format strings.
+    """
+    commented = "\n".join(
+        f"# {line}" for line in str(_report_run(smoke_action)).splitlines()
+    )
+    assert _report_violations(commented) != [], (
+        "a report step whose commands are all comments must not satisfy the contract"
+    )
 
 
 def test_the_smoke_targets_one_platform_named_by_its_archive() -> None:
