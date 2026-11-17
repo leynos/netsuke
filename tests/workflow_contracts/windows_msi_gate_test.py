@@ -122,6 +122,38 @@ def _msi_fixture_steps() -> dict[str, dict[str, object]]:
     return {name: named_step(steps, name) for name in MSI_FIXTURE_STEPS}
 
 
+def _windows_msi_rows(includes: list[object]) -> dict[object, object]:
+    """Return each Windows release target's MSI architecture.
+
+    A duplicate target is refused rather than merged, because building the
+    mapping directly lets a later row overwrite an earlier one: a target
+    wrongly mapped to ``arm64`` followed by a correct ``x64`` row would read
+    back as exactly the expected mapping.
+
+    Returns
+    -------
+    dict[object, object]
+        Each matrix entry's target mapped to its MSI architecture.
+
+    Raises
+    ------
+    AssertionError
+        When two entries declare the same target.
+    """
+    pairs = [
+        (entry.get("target"), entry.get("msi_arch"))
+        for entry in includes
+        if isinstance(entry, dict)
+    ]
+    targets = [target for target, _ in pairs]
+    if len(targets) != len(set(targets)):
+        message = (
+            f"the release must declare one row per Windows target, got {targets!r}"
+        )
+        raise AssertionError(message)
+    return dict(pairs)
+
+
 def test_msi_gate_exercises_the_release_authoring_and_upgrade_path() -> None:
     """Build and install custom authoring through the dedicated MSI merge gate.
 
@@ -289,11 +321,7 @@ def test_release_maps_windows_targets_to_their_msi_architectures() -> None:
     )
     matrix = require_mapping(strategy.get("matrix"), "jobs.build-windows.matrix")
     includes = require_list(matrix.get("include"), "jobs.build-windows includes")
-    actual = {
-        entry.get("target"): entry.get("msi_arch")
-        for entry in includes
-        if isinstance(entry, dict)
-    }
+    actual = _windows_msi_rows(includes)
     assert actual == EXPECTED_MSI_ARCHITECTURES, (
         "the release must map each Windows target to its MSI architecture, "
         f"got {actual!r} against {EXPECTED_MSI_ARCHITECTURES!r}"
@@ -303,6 +331,20 @@ def test_release_maps_windows_targets_to_their_msi_architectures() -> None:
         "build-windows must pass its matrix entry to build-and-package.yml, "
         f"got {inputs.get('msi-arch')!r}"
     )
+
+
+def test_the_release_reader_refuses_a_duplicate_windows_target() -> None:
+    """A repeated target must fail rather than overwrite an earlier row.
+
+    Building the mapping directly kept only the last row for a target, so a
+    wrongly mapped `x86_64-pc-windows-msvc` entry followed by a correct one
+    produced exactly the expected mapping and the contract passed.
+    """
+    with pytest.raises(AssertionError, match="one row per Windows target"):
+        _windows_msi_rows([
+            {"target": "x86_64-pc-windows-msvc", "msi_arch": "arm64"},
+            {"target": "x86_64-pc-windows-msvc", "msi_arch": "x64"},
+        ])
 
 
 def test_package_workflow_forwards_the_msi_architecture_to_packaging() -> None:
