@@ -307,9 +307,9 @@ PowerShell skip the count. A future release may accept more without a breaking
 change. Balanced author-written command substitutions remain live.
 
 This POSIX manifest is rejected before Ninja runs. Run
-`netsuke --json --locale en-GB` to see the cause
-`Invalid command interpolation:` followed by the offending snippet; the default
-human output may show only the enclosing graph-building failure:
+`netsuke --locale en-GB generate` to see the cause: the default human output
+names `Invalid command interpolation:` followed by the offending snippet.
+`--json` reports the same cause in the structured diagnostic document:
 
 <!-- tested-example: readme-backtick-rejection-manifest -->
 

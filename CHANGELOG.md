@@ -37,6 +37,14 @@
 
 ### Changed
 
+- Render the cause of graph, interpolation, and Ninja-generation failures in
+  default human-readable output. A failure with no selected `miette` diagnostic
+  now prints its ordinary `anyhow` causes beneath the context line,
+  deduplicated against that line and against consecutive repeats, so the
+  default output discloses the same messages JSON mode reports in `causes`.
+  Diagnostic selection, context-line suppression, circular-dependency
+  rendering, and JSON output are unchanged
+  ([#1145](https://github.com/leynos/netsuke/issues/1145)).
 - **Breaking:** `generate` now resolves the Windows Bash compatibility runtime
   and writes its absolute path. When no `bash.exe` is available it fails with a
   missing-runtime diagnostic and writes no plan, instead of emitting the bare

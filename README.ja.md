@@ -255,9 +255,9 @@ NetsukeはPOSIXとBashのバッククォートによるコマンド置換内、�
 記述した対になったコマンド置換は引き続き有効です。
 
 このPOSIXマニフェストはNinjaの実行前に拒否されます。原因を見るには
-`netsuke --json --locale en-GB` を実行します。 `Invalid command interpolation:`
-に続いて問題の箇所が表示されます。
-既定の人間向け出力には、グラフ構築全体の失敗だけが表示される場合が あります。
+`netsuke --locale en-GB generate` を実行します。既定の人間向け出力は
+`Invalid command interpolation:` に続いて問題の箇所を表示します。 `--json`
+は同じ原因を構造化診断ドキュメントで報告します。
 
 ```yaml
 netsuke_version: '1.0.0'

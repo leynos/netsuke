@@ -286,10 +286,10 @@ Eine künftige Version kann ohne inkompatible Änderung mehr akzeptieren.
 Ausgewogene, vom Autor geschriebene Befehlssubstitutionen bleiben aktiv.
 
 Dieses POSIX-Manifest wird zurückgewiesen, bevor Ninja ausgeführt wird. Führen
-Sie `netsuke --json --locale en-GB` aus, um die Ursache zu sehen:
-`Invalid command interpolation:`, gefolgt vom problematischen Ausschnitt. Die
-menschenlesbare Standardausgabe zeigt möglicherweise nur den Fehler beim
-Erstellen des Graphen:
+Sie `netsuke --locale en-GB generate` aus, um die Ursache zu sehen: Die
+menschenlesbare Standardausgabe nennt `Invalid command interpolation:` gefolgt
+vom problematischen Ausschnitt. `--json` meldet dieselbe Ursache im
+strukturierten Diagnosedokument:
 
 ```yaml
 netsuke_version: '1.0.0'

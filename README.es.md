@@ -290,10 +290,10 @@ versión futura puede aceptar más casos sin un cambio incompatible. Las
 sustituciones equilibradas escritas por el autor siguen activas.
 
 Este manifiesto POSIX se rechaza antes de ejecutar Ninja. Ejecute
-`netsuke --json --locale en-GB` para ver la causa:
-`Invalid command interpolation:`, seguida del fragmento problemático; la salida
-legible predeterminada quizá muestre solo el fallo general al construir el
-grafo:
+`netsuke --locale en-GB generate` para ver la causa: la salida legible
+predeterminada indica `Invalid command interpolation:` seguido del fragmento
+problemático. `--json` informa la misma causa en el documento de diagnóstico
+estructurado:
 
 ```yaml
 netsuke_version: '1.0.0'

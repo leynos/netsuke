@@ -2823,12 +2823,33 @@ line depends on whether it can point at a place in the manifest:
 - A schema rejection, such as an unsupported `netsuke_version`, keeps the
   "Failed to load manifest at …" context line, because a schema rejection has
   no source snippet to draw.
-- A failure whose cause carries no diagnostic at all, such as a missing
-  manifest, prints only its context line.
+- A runner failure, such as a missing manifest, prints its own diagnostic: a
+  stable code, the localized summary, and recovery help. There is no context
+  line to repeat, so the diagnostic is the whole report.
 
 The rule is that a diagnostic is self-contained when it names both its source
 and a labelled span within it. Only then does it stand alone as the whole
 report.
+
+### Read an ordinary failure in human mode
+
+Graph, interpolation, and Ninja-synthesis failures carry no diagnostic of their
+own. Human mode prints the context line and, beneath it, the ordinary cause
+chain that names the fault. A missing rule therefore reports both the enclosing
+build step and the failing reference:
+`X Error: Failed to build graph from the manifest.` followed by
+`x Rule 'missing' referenced by target 'hello.o' was not found.`.
+
+A cause is omitted when it repeats the context line or the cause above it, so
+each distinct message appears once. Default and `--verbose` output disclose the
+same causes; verbose mode adds tracing and timing rather than deepening the
+diagnostic. JSON mode reports the same messages in the `causes` array.
+
+YAML parse failures include a line and column and draw a labelled snippet that
+quotes the offending line, so the snippet replaces the context line rather than
+repeating it. Structure failures name the unknown or malformed field but draw
+no snippet, and template failures name the failing operation and the template
+position. Both keep the "Failed to load manifest at …" context line above them.
 
 ### Read a Ninja failure in human and JSON mode
 

@@ -233,9 +233,10 @@ defaults: [output.txt]
 配方和PowerShell不执行此计数。未来版本可能在不造成破坏性
 变更的情况下接受更多内容。作者写入且反引号成对的命令替换仍可使用。
 
-以下POSIX清单会在Ninja运行前被拒绝。运行 `netsuke --json --locale en-GB`
-可查看原因： `Invalid command interpolation:`，后面附有出错片段；默认的人类可读
-输出可能只显示构建图失败这一外层错误：
+以下POSIX清单会在Ninja运行前被拒绝。运行 `netsuke --locale en-GB generate`
+可查看原因：默认的人类可读输出会指出
+`Invalid command interpolation:`，后面附有出错片段。 `--json`
+会在结构化诊断文档中报告同一原因：
 
 ```yaml
 netsuke_version: '1.0.0'
