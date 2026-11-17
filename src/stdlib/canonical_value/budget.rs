@@ -22,7 +22,8 @@
 //! input domain sits far below every default; a caller needing a different
 //! ceiling needs a different API, not a different number.
 
-use super::error::{CanonicalResource, CanonicalValueError, PathRef};
+use super::error::{CanonicalResource, CanonicalValueError};
+use super::path::PathRef;
 
 /// Default maximum distance from the snapshot root to any admitted value.
 ///

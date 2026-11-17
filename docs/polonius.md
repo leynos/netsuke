@@ -73,7 +73,7 @@ well — the owned style was habit, so they carry no toolchain caveat:
 
 ## Cost-driven borrowing
 
-`src/stdlib/canonical_value/error.rs` — `PathRef` is a borrowed chain of
+`src/stdlib/canonical_value/path.rs` — `PathRef` is a borrowed chain of
 snapshot edges that admission extends once per child, with the owned
 `SnapshotPath` materialized only to render a refusal. The owned form compiled;
 this borrow is a cost decision rather than a borrow-checker workaround, so no

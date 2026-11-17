@@ -38,8 +38,9 @@ use std::collections::BTreeMap;
 use minijinja::value::{DynObject, Value, ValueKind};
 
 use super::budget::AdmissionBudget;
-use super::error::{CanonicalValueError, PathRef};
+use super::error::CanonicalValueError;
 use super::node::SnapshotNode;
+use super::path::PathRef;
 
 /// Traverse `value` once and return the snapshot the canonicalizer serializes.
 ///

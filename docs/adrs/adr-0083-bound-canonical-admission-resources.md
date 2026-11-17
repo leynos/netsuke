@@ -158,6 +158,7 @@ preconditions: an infinite enumeration is refused as `Nodes` and a cycle as
 - [`src/stdlib/canonical_value/budget.rs`](../../src/stdlib/canonical_value/budget.rs)
 - [`src/stdlib/canonical_value/admission.rs`](../../src/stdlib/canonical_value/admission.rs)
 - [`src/stdlib/canonical_value/error.rs`](../../src/stdlib/canonical_value/error.rs)
+- [`src/stdlib/canonical_value/path.rs`](../../src/stdlib/canonical_value/path.rs)
 - [`src/stdlib/canonical_value/mod.rs`](../../src/stdlib/canonical_value/mod.rs)
 - [`src/stdlib/canonical_value/tests/budget.rs`](../../src/stdlib/canonical_value/tests/budget.rs)
 - [`src/stdlib/canonical_value/tests/diagnostics.rs`](../../src/stdlib/canonical_value/tests/diagnostics.rs)
