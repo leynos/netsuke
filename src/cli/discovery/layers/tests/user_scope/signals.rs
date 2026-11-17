@@ -8,6 +8,7 @@
 
 use super::{Case, HomeArrangement};
 use crate::cli::DISCOVERY_TOTAL;
+use crate::cli::discovery::event_assertions::{EventAssertion, capture_events, find_event};
 use crate::cli::discovery::{DiscoveryOutcome, record_discovery_outcome};
 use crate::test_tracing_capture::with_test_subscriber;
 use anyhow::{Context, Result, ensure};
@@ -105,8 +106,72 @@ fn dangling_user_candidate_records_a_bounded_error_signal() -> Result<()> {
         "the discovery span should record the failed outcome: {fields:?}"
     );
     ensure!(
-        fields.contains(&"error_category=\"file\"".to_owned()),
-        "the discovery span should record the bounded category: {fields:?}"
+        fields.contains(&"error_category=\"dangling_link\"".to_owned()),
+        "the discovery span should name the fail-closed branch, not the generic file category: {fields:?}"
+    );
+    Ok(())
+}
+
+/// Adopting a user candidate records the scope and skips the dependency scan.
+///
+/// The event is what distinguishes "the user's file won" from "we fell back",
+/// so it must name the scope, the skipped pass, and a correlation hash without
+/// carrying the candidate path.
+#[rstest]
+fn adopted_user_candidate_records_scope_without_a_path() -> Result<()> {
+    let case = Case::new()?;
+    let home_config = case.write_home_dotfile("jobs = 4\n")?;
+    let environment = case.environment(HomeArrangement::EmptyXdgConfigHome);
+
+    let (outcome, events) =
+        capture_events(|| Ok::<_, anyhow::Error>(case.discover_outcome(&environment)))?;
+    ensure!(
+        outcome.first_error().is_none(),
+        "the user file should load without error"
+    );
+
+    let event = find_event(&events, "adopted a user candidate")?;
+    ensure!(
+        event.contains("scope=\"user\""),
+        "adoption should name the user scope: {event}"
+    );
+    ensure!(
+        event.contains("skipped_compose_layers=true"),
+        "adoption should record that the dependency scan was skipped: {event}"
+    );
+    EventAssertion::new(event, &home_config).ensure_bounded_path_fields()?;
+    Ok(())
+}
+
+/// Falling back to the dependency scan records the other scope and no path.
+///
+/// A case with no user file exercises the fallback branch. The event must not
+/// carry any path or path hash: the dependency scan reads several locations and
+/// naming one of them would misreport which file supplied policy.
+#[rstest]
+fn fallback_to_the_dependency_scan_records_scope_without_a_path() -> Result<()> {
+    let case = Case::new()?;
+    let environment = case.environment(HomeArrangement::EmptyXdgConfigHome);
+
+    let (outcome, events) =
+        capture_events(|| Ok::<_, anyhow::Error>(case.discover_outcome(&environment)))?;
+    ensure!(
+        outcome.first_error().is_none(),
+        "the system file should load without error"
+    );
+
+    let event = find_event(&events, "used the dependency scan")?;
+    ensure!(
+        event.contains("scope=\"system_or_project\""),
+        "fallback should name the scope it delegated to: {event}"
+    );
+    ensure!(
+        event.contains("skipped_compose_layers=false"),
+        "fallback should record that the dependency scan ran: {event}"
+    );
+    ensure!(
+        !event.contains("path_hash") && !event.contains("path_present"),
+        "the fallback event must not name a configuration path: {event}"
     );
     Ok(())
 }
