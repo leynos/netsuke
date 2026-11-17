@@ -109,6 +109,11 @@ WRONG_TAG = "wrong-tag"
 WRONG_REPOSITORY = "wrong-repository"
 #: A document reporting a required canary as unsuccessful.
 UNSUCCESSFUL = "unsuccessful"
+#: A document reporting every required canary as successful and one canary this
+#: gate does not yet require as unsuccessful. Issue #598 adds downstream
+#: canaries to the same manifest, and a producer that reports one as failed has
+#: stated an observation admission must not overlook.
+UNREQUIRED_FAILURE = "unrequired-failure"
 #: A document omitting one required canary.
 INCOMPLETE = "incomplete"
 
@@ -177,6 +182,13 @@ def _extended_results() -> dict[str, object]:
     return extended
 
 
+def _failed_downstream_results() -> dict[str, object]:
+    """Return every required result succeeding, plus one that failed."""
+    results = _results(SUCCESS)
+    results[_EXTRA_RESULT_NAME] = _result(FAILURE)
+    return results
+
+
 def _incomplete_results() -> dict[str, object]:
     """Return every required result except the history scan."""
     results = _results(SUCCESS)
@@ -236,6 +248,9 @@ _BUILDERS: cabc.Mapping[str, cabc.Callable[[Candidate], bytes]] = {
     WRONG_TAG: lambda subject: _encoded(subject, tag="v0.0.0"),
     WRONG_REPOSITORY: lambda subject: _encoded(subject, repository="someone/else"),
     UNSUCCESSFUL: lambda subject: _encoded(subject, results=_results(FAILURE)),
+    UNREQUIRED_FAILURE: lambda subject: _encoded(
+        subject, results=_failed_downstream_results()
+    ),
     INCOMPLETE: lambda subject: _encoded(subject, results=_incomplete_results()),
 }
 
@@ -251,6 +266,7 @@ __all__ = (
     "OVERSIZED",
     "STALE",
     "UNKNOWN_SCHEMA",
+    "UNREQUIRED_FAILURE",
     "UNSUCCESSFUL",
     "WRONG_REPOSITORY",
     "WRONG_RUN",

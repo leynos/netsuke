@@ -10,10 +10,13 @@ check runs under, and the variables that configure it.
 The manifest is the whole input. It names the repository, commit, tag and
 workflow run it was produced for, when it was issued, and one result per
 canary. Admission accepts it only when those values name the candidate under
-release, every required result is present and successful, and no timestamp
-lies outside the bounded window. A manifest that fails any check is refused
-with one bounded category rather than an exception, so the caller records
-*why* without publishing a path, a revision, or an API body.
+release, every required result is present, every result the document declares
+reports success, and no timestamp lies outside the bounded window. Treating a
+declared failure in a result the gate does not yet require as invisible would
+let a producer add a downstream canary and have its failure ignored. A manifest
+that fails any check is refused with one bounded category rather than an
+exception, so the caller records *why* without publishing a path, a revision,
+or an API body.
 
 Nothing here performs I/O: the classifiers take the instant the clock adapter
 reported. That keeps the decision reviewable and testable without a filesystem
@@ -110,12 +113,18 @@ def verify(manifest: Manifest, candidate: Candidate) -> policy.Classification:
     canaries. The tag is compared only when the candidate names one, which is
     the rehearsal case where no tag is being published.
 
+    A result the gate does not require is still read: a producer that declares
+    a downstream canary has stated an outcome, and an unsuccessful statement is
+    a refusal even though the name is outside :data:`policy.REQUIRED_RESULTS`.
+    Only the *presence* rule is limited to the required set, so a producer may
+    add canaries without a matching change here.
+
     Returns
     -------
     policy.Classification
-        Success when the manifest names the candidate and reports every
-        required result as successful; otherwise the category of the first
-        refusal.
+        Success when the manifest names the candidate, declares every required
+        result, and declares no unsuccessful one; otherwise the category of the
+        first refusal.
 
     Examples
     --------
@@ -145,16 +154,17 @@ def verify(manifest: Manifest, candidate: Candidate) -> policy.Classification:
         return policy.Classification(
             policy.Outcome.FAILURE, policy.ErrorCategory.CANDIDATE_MISMATCH
         )
-    for name in policy.REQUIRED_RESULTS:
-        observed = manifest.results.get(name)
-        if observed is None:
-            return policy.Classification(
-                policy.Outcome.FAILURE, policy.ErrorCategory.MISSING_EVIDENCE
-            )
-        if observed.outcome != policy.Outcome.SUCCESS:
-            return policy.Classification(
-                policy.Outcome.FAILURE, policy.ErrorCategory.UNKNOWN
-            )
+    if any(name not in manifest.results for name in policy.REQUIRED_RESULTS):
+        return policy.Classification(
+            policy.Outcome.FAILURE, policy.ErrorCategory.MISSING_EVIDENCE
+        )
+    if any(
+        observed.outcome != policy.Outcome.SUCCESS
+        for observed in manifest.results.values()
+    ):
+        return policy.Classification(
+            policy.Outcome.FAILURE, policy.ErrorCategory.UNKNOWN
+        )
     return policy.Classification(policy.Outcome.SUCCESS, policy.ErrorCategory.NONE)
 
 

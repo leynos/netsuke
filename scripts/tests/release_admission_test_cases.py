@@ -10,8 +10,9 @@ Each case maps to one refusal class. ``api_error``, ``fetch_error`` and
 ``stale_evidence``, ``missing_evidence`` and ``malformed_evidence`` are the
 three ways a manifest can fail to arrive; ``candidate_mismatch`` is a manifest
 that arrived and describes another release; ``unknown`` is a manifest whose
-canaries did not all succeed; and ``timeout`` is the bound the gate places on
-its own adapters.
+canaries did not all succeed -- including one the gate does not yet require, so
+a downstream canary's failure cannot be ignored; and ``timeout`` is the bound
+the gate places on its own adapters.
 
 Deferred refusals
 -----------------
@@ -253,6 +254,14 @@ FAILURE_CASES = [
             error_category="unknown",
         ),
         id="unsuccessful-results",
+    ),
+    pytest.param(
+        FailureCase(
+            evidence_state="unrequired-failure",
+            operation="verify_evidence",
+            error_category="unknown",
+        ),
+        id="unrequired-result-failed",
     ),
 ]
 
