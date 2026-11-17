@@ -3688,6 +3688,21 @@ holds a token:
   timing pair per phase, whether verification passed or refused, including
   `skipped` for a phase the log never reached.
 
+The two invocations are thin because no decision lives in the action. The plan
+is derived by `release_consumer_smoke`, which binds one candidate's identity,
+crate record, and declared archive set and refuses evidence naming another;
+`release_consumer_payload` turns a saved download into facts and holds the
+arrival, digest, and banner refusals; `release_consumer_archive_policy` judges
+a member list before anything is written; `consumer_smoke_evidence` reads the
+two records and the HTTP status saved beside each body, then renders and
+re-checks the plan document; `consumer_smoke_verify` walks the five phases and
+owns the exit statuses in Table 5; `consumer_smoke_ledger` keeps the verdict
+and phase log current as each phase completes; and `consumer_smoke_options` is
+where a flag name and the value the stage reads are the same name. The archive
+scan, extraction, sidecar check, and child launch live in the
+`release_binstall_*` adapters, which the cargo-binstall metadata contract
+already owns.
+
 `curl` is pinned rather than merely invoked. `--proto '=https'` and
 `--proto-redir '=https'` keep every hop on TLS even though the release host
 redirects to a CDN, `--max-redirs 5` bounds the chain, `--disable` ignores any
@@ -3840,7 +3855,13 @@ report it.
 `tests/workflow_contracts/release_publish_path_consumer_smoke_test.py` holds
 the telemetry to the catalogue. The adapter behaviour — the downloads, the
 digest checks, the archive refusals, the extraction, and the probe — is covered
-by `make test-release-publication`.
+by `make test-release-publication`. The action's steps themselves are executed
+by `consumer_smoke_action_harness.py`, which takes each `run` body from the
+manifest, stubs `uv` and `curl` at the path boundary, and runs the checked-in
+CLI over bytes a case publishes; `consumer_smoke_action_execution_test.py`
+requires a verified candidate to report every phase successful and each refused
+download, unsafe archive, disagreeing banner, and populated work directory to
+be reported by the phase that refused it.
 
 ### Crate-package operation telemetry
 
