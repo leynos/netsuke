@@ -102,10 +102,10 @@ fn present_entry_without_a_layer_stops_discovery() -> Result<()> {
         .err()
         .context("a present candidate without a layer must fail discovery")?;
 
-    assert_eq!(
-        reason_of(&error),
-        Some(CandidateFailure::PresentWithoutLayer),
-        "the rejection must report a present entry that yielded no layer: {error}"
+    let reason = reason_of(&error);
+    ensure!(
+        reason == Some(CandidateFailure::PresentWithoutLayer),
+        "the rejection must report a present entry that yielded no layer, got {reason:?}: {error}"
     );
     ensure!(
         !probe.probed().is_empty(),
@@ -129,10 +129,10 @@ fn failed_probe_stops_discovery_and_keeps_its_detail() -> Result<()> {
         .err()
         .context("a failed presence probe must fail discovery")?;
 
-    assert_eq!(
-        reason_of(&error),
-        Some(CandidateFailure::ProbeFailed),
-        "the rejection must report a failed probe: {error}"
+    let reason = reason_of(&error);
+    ensure!(
+        reason == Some(CandidateFailure::ProbeFailed),
+        "the rejection must report a failed probe, got {reason:?}: {error}"
     );
     let detail = error
         .source()
@@ -140,10 +140,10 @@ fn failed_probe_stops_discovery_and_keeps_its_detail() -> Result<()> {
     let io_error = detail
         .downcast_ref::<io::Error>()
         .context("the retained cause should be the probe's I/O error")?;
-    assert_eq!(
-        io_error.kind(),
-        io::ErrorKind::NotADirectory,
-        "the probe's error kind must survive the rejection"
+    ensure!(
+        io_error.kind() == io::ErrorKind::NotADirectory,
+        "the probe's error kind must survive the rejection, got {:?}",
+        io_error.kind()
     );
     Ok(())
 }
