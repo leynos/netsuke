@@ -16,6 +16,22 @@
 //! [`SanitisedUserBases`] applies the first rule to the environment view handed
 //! to the dependency's own scan, so neither pass admits a candidate that
 //! depends on where the tool happened to run.
+//!
+//! `crate::cli::discovery::layers` is the only consumer. Its user pass reads
+//! [`user_scope_candidates`] and probes each one with
+//! [`candidate_entry_metadata`]; its fallback hands the dependency's scan a
+//! [`SanitisedUserBases`] view and `ortho_config` then performs that later
+//! discovery pass, which runs only when no user candidate exists. The project
+//! pass uses [`project_scope_file`], and layer comparison uses
+//! [`comparison_key`] over a [`PathNormalizer`], so every helper here answers
+//! one of those three callers rather than being a general-purpose utility.
+//!
+//! [`candidate_entry_metadata`] is the `cap_std` presence probe behind the
+//! fail-closed rule. It inspects the candidate's final path component without
+//! following a link there, so an entry that is absent (no directory, no file)
+//! is distinguished from one that is present but unresolved. That distinction
+//! is what lets a dangling symbolic link be rejected while a genuinely absent
+//! file still falls through to the next candidate.
 
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, Metadata};
