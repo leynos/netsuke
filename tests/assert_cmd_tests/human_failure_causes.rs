@@ -27,6 +27,10 @@ const UNKNOWN_FIELD: &str = concat!(
 );
 
 /// The rejected interpolation shown in the README.
+///
+/// Only the POSIX interpolation test reads it, so the constant shares that
+/// test's gate and does not trip the Windows dead-code denial.
+#[cfg(unix)]
 const BACKTICK_INTERPOLATION: &str = concat!(
     "netsuke_version: '1.0.0'\n",
     "targets:\n",
