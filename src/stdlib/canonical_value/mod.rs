@@ -53,6 +53,7 @@ mod admission;
 mod budget;
 mod error;
 mod node;
+mod path;
 
 #[cfg(test)]
 mod tests;

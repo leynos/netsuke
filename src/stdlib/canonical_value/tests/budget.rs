@@ -23,7 +23,7 @@ use rstest::rstest;
 use super::*;
 
 use crate::stdlib::canonical_value::budget::AdmissionLimits;
-use crate::stdlib::canonical_value::error::PathRef;
+use crate::stdlib::canonical_value::path::PathRef;
 
 /// Depth of the shared graph that exceeds every default ceiling.
 ///
