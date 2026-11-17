@@ -12325,7 +12325,7 @@ sequences is `d + 1` objects but `2^(d + 1) - 1` occurrences. Every public
 operation therefore runs under one `AdmissionBudget` with ceilings of 128 edges
 below the snapshot root, 100,000 snapshot nodes, and 8 MiB of admitted string
 and member-name bytes
-([ADR-0068](adrs/adr-0068-bound-canonical-admission-resources.md)). The root
+([ADR-0083](adrs/adr-0083-bound-canonical-admission-resources.md)). The root
 and every enumerated item or pair are charged one node, string scalars and
 member names are charged their UTF-8 length before the copy, and depth is
 checked before a container enumerates. A charge that lands exactly on a ceiling

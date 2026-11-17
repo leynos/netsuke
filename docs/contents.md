@@ -328,9 +328,6 @@ operator, user, and contributor references are easier to find.
 - [ADR-0061](adrs/adr-0061-select-ninja-console-pool-per-build-edge.md):
   Select Ninja's console pool on individual build edges while preserving action
   identity and rejecting incompatible scheduling annotations.
-- [ADR-0068](adrs/adr-0068-bound-canonical-admission-resources.md):
-  Occurrence-based depth, node, and byte ceilings for canonical admission, so a
-  shared host graph is refused rather than expanded without bound.
 - [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md):
   Include every prerequisite kind in whole-manifest cycle detection while
   keeping output aliases and serial scheduling semantics explicit.
@@ -367,6 +364,9 @@ operator, user, and contributor references are easier to find.
   Optional named contention classes lowered through the existing scheduler.
 - [ADR-0081: Maturity policy schema](adrs/adr-0081-maturity-policy-schema.md):
   Shallow-end policy composition and rule-to-feature requirements.
+- [ADR-0083](adrs/adr-0083-bound-canonical-admission-resources.md):
+  Occurrence-based depth, node, and byte ceilings for canonical admission, so a
+  shared host graph is refused rather than expanded without bound.
 
 ## Proposals
 
