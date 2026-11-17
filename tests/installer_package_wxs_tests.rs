@@ -49,8 +49,8 @@ fn comparable_attributes(node: Node<'_, '_>, omitted: Option<&str>) -> BTreeMap<
 
 /// Compare two authoring trees, allowing only the moved layout to differ.
 ///
-/// The StandardDirectory `Id` names the program files directory the payload is
-/// rooted at, and the BinaryComponent `Guid` changes with the executable's
+/// The `StandardDirectory` `Id` names the program files directory the payload
+/// is rooted at, and the `BinaryComponent` `Guid` changes with the executable's
 /// target location. Every other element, attribute, and child order must match,
 /// so the legacy fixture cannot drift from the release authoring it stands in
 /// for.
