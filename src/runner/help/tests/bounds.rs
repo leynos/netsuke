@@ -243,6 +243,11 @@ fn text_catalogue_does_not_pad_names_above_the_cap() -> Result<()> {
 /// following column is not.
 #[test]
 fn text_catalogue_pads_marker_rows_only() -> Result<()> {
+    // The expected row quotes the default marker, so the locale must be the
+    // same for the expectation and the render. The lock is declared first so
+    // the localizer guard drops before the lock is released.
+    let _lock = localizer_lock();
+    let _localizer = set_localizer_for_tests(Arc::from(build_localizer(Some("en-US"))));
     let prefs = theme_prefs(ThemePreference::Unicode);
     let marker = default_marker(prefs);
     let mut manifest = manifest_with_targets(vec![

@@ -7,6 +7,7 @@
 //! manifest that states it once.
 
 use super::*;
+use netsuke::locale_resolution::{LocaleEnvProvider, SystemEnv};
 use std::fmt::Write as _;
 
 /// Display columns one name may contribute to catalogue alignment, mirroring
@@ -19,6 +20,37 @@ const HELP_FIXED_OVERHEAD_BYTES: usize = 256;
 const HELP_ROW_OVERHEAD_BYTES: usize = 133;
 /// Description carried by the single long-named target.
 const LONG_ROW_DESCRIPTION: &str = "Long row description";
+
+/// Build a `netsuke help targets` command whose child environment this test
+/// alone decides.
+///
+/// An inherited `NETSUKE_JSON` would route the run through the JSON renderer,
+/// and `NETSUKE_FILE` or `NETSUKE_CONFIG` would select another manifest or
+/// user configuration, so either mismatch would describe the ambient shell
+/// rather than the catalogue. Clearing first makes each assertion a statement
+/// about this commit. The locale is pinned on the command line for the same
+/// reason, and `PATH` plus `SystemRoot` are forwarded because they are
+/// platform plumbing: the child still has to start and to locate executables.
+/// Both are read through the environment seam rather than `std::env`.
+fn help_targets_command(temp_path: &Utf8Path, manifest_path: &Utf8Path) -> assert_cmd::Command {
+    let mut command = assert_cmd::cargo::cargo_bin_cmd!("netsuke");
+    command
+        .current_dir(temp_path)
+        .env_clear()
+        .env("NETSUKE_NINJA", "/definitely-not-a-ninja-binary")
+        .args(["--locale", "en-US", "--file"])
+        .arg(manifest_path)
+        .args(["help", "targets"]);
+    if let Some(path) = SystemEnv.var("PATH") {
+        command.env("PATH", path);
+    }
+    if cfg!(windows)
+        && let Some(system_root) = SystemEnv.var("SystemRoot")
+    {
+        command.env("SystemRoot", system_root);
+    }
+    command
+}
 
 /// Derive the maximum catalogue length from the rows a fixture generates.
 fn help_catalogue_upper_bound(
@@ -104,13 +136,8 @@ fn help_targets_bounds_alignment_padding_for_one_long_name() -> Result<()> {
     let fixture = write_long_name_manifest(temp_path)?;
     let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
         .context("open long-name help-targets fixture directory")?;
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp_path)
-        .env("NETSUKE_NINJA", "/definitely-not-a-ninja-binary")
-        .arg("--file")
-        .arg(&fixture.manifest_path)
-        .arg("help")
-        .arg("targets")
+    let mut command = help_targets_command(temp_path, &fixture.manifest_path);
+    let output = command
         .output()
         .context("run help targets against the long-name manifest")?;
     ensure!(
@@ -207,13 +234,8 @@ fn help_targets_renders_one_shared_description_per_name() -> Result<()> {
     let (manifest_path, description) = write_shared_description_manifest(temp_path)?;
     let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
         .context("open shared-description fixture directory")?;
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp_path)
-        .env("NETSUKE_NINJA", "/definitely-not-a-ninja-binary")
-        .arg("--file")
-        .arg(&manifest_path)
-        .arg("help")
-        .arg("targets")
+    let mut command = help_targets_command(temp_path, &manifest_path);
+    let output = command
         .output()
         .context("run help targets against the shared-description manifest")?;
     ensure!(
