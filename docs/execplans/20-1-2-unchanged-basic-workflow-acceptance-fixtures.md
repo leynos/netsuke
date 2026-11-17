@@ -1071,7 +1071,7 @@ updates. Work in `/tmp/shallow-end-spike-20-1-2/`, which is scratch space and
 never a build target. Build once with `cargo build --bin netsuke`, then run the
 quickstart fixture by hand in five ways:
 
-1. With a hand-written recording shim.
+1. With a handwritten recording shim.
 2. Under the D-3 `strace` command with the real Ninja.
 3. With a proxy tripwire and the `fetch` control.
 4. With D-6 defaults, both piped and under a pseudo-terminal
