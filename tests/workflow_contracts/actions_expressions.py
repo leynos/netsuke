@@ -97,11 +97,13 @@ def contains_unquoted_or(expression: str) -> bool:
 
 
 def is_expression_label(value: str) -> bool:
-    """Report whether a value is one whole ``${{ ... }}`` expression.
+    """Report whether a value is exactly one whole ``${{ ... }}`` expression.
 
     A value that merely embeds an expression still names something through its
     literal part, so only a value made up entirely of one names nothing of its
-    own.
+    own. The closing ``}}`` is found outside any string literal, so a brace
+    pair quoted inside the expression does not end it, and any text after that
+    closing pair, another expression included, makes the value mixed.
 
     Parameters
     ----------
@@ -111,17 +113,34 @@ def is_expression_label(value: str) -> bool:
     Returns
     -------
     bool
-        ``True`` when the stripped value opens and closes one expression.
+        ``True`` when the stripped value is one expression and nothing else.
 
     Examples
     --------
     >>> is_expression_label("${{ matrix.runner }}")
     True
+    >>> is_expression_label("${{ '}}' }}")
+    True
     >>> is_expression_label("ubicloud-standard-${{ vars.SIZE }}-ubuntu-2404")
+    False
+    >>> is_expression_label("${{ vars.PREFIX }}-private-${{ vars.SUFFIX }}")
     False
     """
     stripped = value.strip()
-    return stripped.startswith("${{") and stripped.endswith("}}")
+    if not stripped.startswith("${{"):
+        return False
+    body = stripped[3:]
+    # The first `}}` outside a literal closes the expression; text after it
+    # means the value is a mix of literals and expressions, as GitHub allows.
+    close = next(
+        (
+            index
+            for index, _ in _unquoted_positions(body)
+            if body.startswith("}}", index)
+        ),
+        None,
+    )
+    return close is not None and not body[close + 2 :]
 
 
 def top_level_conjuncts(expression: str) -> list[str]:

@@ -61,7 +61,7 @@ def is_self_hosted_label(label: str) -> bool:
 
     By name, not by prefix. A prefix test absorbs any new label that looks
     hosted, so a lane moved onto an unknown image would drop out of "in use"
-    and its registration would go unnoticed. A bare expression names no label.
+    and its registration would go unnoticed. A whole expression names no label.
 
     Returns
     -------

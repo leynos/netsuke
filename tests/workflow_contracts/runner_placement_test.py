@@ -255,6 +255,7 @@ def test_windows_msi_gate_runs_one_leg_per_shipping_architecture() -> None:
         ("${{ matrix.runner }}", True),
         ("  ${{ inputs.runner }}  ", True),
         ("ubicloud-standard-${{ vars.RUNNER_SIZE }}-ubuntu-2404", False),
+        ("${{ vars.PREFIX }}-private-${{ vars.SUFFIX }}", False),
         ("windows-latest", False),
     ],
 )
