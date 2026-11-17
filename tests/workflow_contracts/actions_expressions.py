@@ -96,6 +96,34 @@ def contains_unquoted_or(expression: str) -> bool:
     )
 
 
+def is_expression_label(value: str) -> bool:
+    """Report whether a value is one whole ``${{ ... }}`` expression.
+
+    A value that merely embeds an expression still names something through its
+    literal part, so only a value made up entirely of one names nothing of its
+    own.
+
+    Parameters
+    ----------
+    value : str
+        A scalar read from a workflow, such as a `runs-on` label.
+
+    Returns
+    -------
+    bool
+        ``True`` when the stripped value opens and closes one expression.
+
+    Examples
+    --------
+    >>> is_expression_label("${{ matrix.runner }}")
+    True
+    >>> is_expression_label("ubicloud-standard-${{ vars.SIZE }}-ubuntu-2404")
+    False
+    """
+    stripped = value.strip()
+    return stripped.startswith("${{") and stripped.endswith("}}")
+
+
 def top_level_conjuncts(expression: str) -> list[str]:
     """Return the clauses an expression conjoins at the top level, stripped.
 

@@ -11,6 +11,7 @@ Run via ``make test-workflow-contracts``.
 
 import pytest
 import yaml
+from actions_expressions import is_expression_label
 from fork_fallback import owned_runner, read_placement
 from nextest_budgets import global_timeout
 from runner_placement_invariants import (
@@ -60,15 +61,14 @@ def is_self_hosted_label(label: str) -> bool:
 
     By name, not by prefix. A prefix test absorbs any new label that looks
     hosted, so a lane moved onto an unknown image would drop out of "in use"
-    and its registration would go unnoticed. An expression such as
-    `${{ matrix.runner }}` names no label; `_matrix_runners` reads the legs.
+    and its registration would go unnoticed. A bare expression names no label.
 
     Returns
     -------
     bool
         True when the label names a runner GitHub does not host.
     """
-    return label not in GITHUB_HOSTED_LABELS and "${{" not in label
+    return label not in GITHUB_HOSTED_LABELS and not is_expression_label(label)
 
 
 def _selected_labels(declaration: object) -> list[str]:

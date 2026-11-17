@@ -12,6 +12,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
+from actions_expressions import is_expression_label
 from fork_fallback import owned_runner
 from runner_placement_invariants import (
     CALLEE_SELECTED_RUNNER,
@@ -248,6 +249,29 @@ def test_windows_msi_gate_runs_one_leg_per_shipping_architecture() -> None:
     }, f"unexpected Windows MSI gate matrix: {legs!r}"
 
 
+@pytest.mark.parametrize(
+    ("label", "is_expression"),
+    [
+        ("${{ matrix.runner }}", True),
+        ("  ${{ inputs.runner }}  ", True),
+        ("ubicloud-standard-${{ vars.RUNNER_SIZE }}-ubuntu-2404", False),
+        ("windows-latest", False),
+    ],
+)
+def test_only_a_whole_expression_names_no_label(
+    label: str, *, is_expression: bool
+) -> None:
+    """A literal part keeps a label self-hosted, however it is combined.
+
+    A mixed label still selects a self-hosted runner through its literal
+    prefix, so treating it as an expression would drop that runner from the
+    registry question and leave it unchecked.
+    """
+    assert is_expression_label(label) is is_expression, (
+        f"{label!r} must count as an expression only when it is one whole expression"
+    )
+
+
 def test_checked_in_workflows_satisfy_runner_assignment_contract() -> None:
     """Apply the generated runner-assignment model to checked-in workflows."""
     assignments = _checked_in_runner_assignments()
@@ -284,6 +308,12 @@ def _msi_matrix_legs() -> dict[str, str]:
     strategy = require_mapping(job.get("strategy"), "jobs.windows-msi-upgrade.strategy")
     matrix = require_mapping(
         strategy.get("matrix"), "jobs.windows-msi-upgrade.strategy.matrix"
+    )
+    # An extra axis multiplies the legs GitHub creates without adding a matrix
+    # entry, so only the include list is allowed here.
+    assert set(matrix) == {"include"}, (
+        "the windows-msi-upgrade matrix must declare only its include entries, "
+        f"got {sorted(matrix)!r}"
     )
     includes = require_list(
         matrix.get("include"), "the windows-msi-upgrade matrix include"

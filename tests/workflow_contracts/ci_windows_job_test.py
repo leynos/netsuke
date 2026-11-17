@@ -122,6 +122,9 @@ def test_windows_msi_gate_runs_exactly_the_two_architecture_legs() -> None:
     job = workflow_job(load_workflow(CI_WINDOWS_WORKFLOW_PATH), MSI_JOB)
     strategy = require_mapping(job.get("strategy"), f"{MSI_JOB}.strategy")
     matrix = require_mapping(strategy.get("matrix"), f"{MSI_JOB}.strategy.matrix")
+    assert set(matrix) == {"include"}, (
+        f"{MSI_JOB} must declare only a matrix include, got {sorted(matrix)!r}"
+    )
     includes = matrix.get("include")
     assert isinstance(includes, list), f"{MSI_JOB} must declare a matrix include list"
     # A duplicate architecture would collapse in the dictionary below, so the
