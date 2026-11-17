@@ -32,12 +32,20 @@ const LONG_ROW_DESCRIPTION: &str = "Long row description";
 /// reason, and `PATH` plus `SystemRoot` are forwarded because they are
 /// platform plumbing: the child still has to start and to locate executables.
 /// Both are read through the environment seam rather than `std::env`.
+///
+/// Clearing removes `HOME`, `XDG_CONFIG_HOME`, `APPDATA` and `LOCALAPPDATA`, so
+/// no per-user configuration survives. Unix discovery still falls back to
+/// `/etc/xdg` when `XDG_CONFIG_DIRS` is unset, so that variable names an absent
+/// directory inside the temporary workspace rather than the host's system
+/// configuration.
 fn help_targets_command(temp_path: &Utf8Path, manifest_path: &Utf8Path) -> assert_cmd::Command {
+    let isolated_config_dirs = temp_path.join(".netsuke-absent-xdg-config-dirs");
     let mut command = assert_cmd::cargo::cargo_bin_cmd!("netsuke");
     command
         .current_dir(temp_path)
         .env_clear()
         .env("NETSUKE_NINJA", "/definitely-not-a-ninja-binary")
+        .env("XDG_CONFIG_DIRS", isolated_config_dirs.as_std_path())
         .args(["--locale", "en-US", "--file"])
         .arg(manifest_path)
         .args(["help", "targets"]);
