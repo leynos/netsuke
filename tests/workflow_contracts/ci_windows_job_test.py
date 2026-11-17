@@ -94,9 +94,9 @@ def lane_steps() -> list[dict[str, object]]:
     return [step for name in RUST_WINDOWS_JOBS for step in job_steps(workflow, name)]
 
 
-@pytest.mark.parametrize("job_name", WINDOWS_JOBS)
+@pytest.mark.parametrize("job_name", RUST_WINDOWS_JOBS)
 def test_windows_jobs_run_on_a_github_hosted_runner(job_name: str) -> None:
-    """Both Windows jobs must run on a GitHub-hosted Windows runner.
+    """Both Rust Windows jobs must run on a GitHub-hosted Windows runner.
 
     Ubicloud publishes Ubuntu images only, so `windows-latest` is the durable
     placement for this lane rather than a fallback. Both halves compile the
@@ -107,6 +107,34 @@ def test_windows_jobs_run_on_a_github_hosted_runner(job_name: str) -> None:
     assert job.get("runs-on") == expected_runner, (
         f"{job_name} must run on {expected_runner} so the "
         f"#[cfg(windows)] tree is compiled, got {job.get('runs-on')!r}"
+    )
+
+
+def test_windows_msi_gate_runs_exactly_the_two_architecture_legs() -> None:
+    """The MSI gate installs both shipping architectures, and only those.
+
+    The installer now resolves its program files folder from the package
+    architecture, so one leg cannot prove the other. Each leg must still be a
+    GitHub-hosted Windows runner of the matching platform; a move to a Linux
+    runner would fail to install at all, while an extra leg would multiply the
+    gate's cost without exercising another package.
+    """
+    job = workflow_job(load_workflow(CI_WINDOWS_WORKFLOW_PATH), MSI_JOB)
+    strategy = require_mapping(job.get("strategy"), f"{MSI_JOB}.strategy")
+    matrix = require_mapping(strategy.get("matrix"), f"{MSI_JOB}.strategy.matrix")
+    includes = matrix.get("include")
+    assert isinstance(includes, list), f"{MSI_JOB} must declare a matrix include list"
+    legs = {
+        item.get("architecture"): item.get("runner")
+        for item in includes
+        if isinstance(item, dict)
+    }
+    assert legs == {
+        "x64": "windows-latest",
+        "arm64": "windows-11-arm",
+    }, f"{MSI_JOB} must run x64 and arm64 gate legs, got {legs!r}"
+    assert job.get("runs-on") == "${{ matrix.runner }}", (
+        f"{MSI_JOB} must take its runner from the matrix, got {job.get('runs-on')!r}"
     )
 
 

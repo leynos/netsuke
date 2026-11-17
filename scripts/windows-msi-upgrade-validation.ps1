@@ -45,6 +45,34 @@ function Invoke-MsiInstall {
     return $process.ExitCode
 }
 
+function Assert-PayloadEquals {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [Parameter(Mandatory)]
+        [string]$ExpectedPayload
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Expected installed payload at $Path was not found."
+    }
+    $payload = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($Path))
+    if ($payload -ne $ExpectedPayload) {
+        throw "Expected installed payload $ExpectedPayload at $Path, got $payload."
+    }
+}
+
+function Assert-PathAbsent {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    if (Test-Path -LiteralPath $Path) {
+        throw "Expected $Path to be absent after the upgrade."
+    }
+}
+
 function Assert-InstalledProduct {
     param(
         [Parameter(Mandatory)]
@@ -52,7 +80,9 @@ function Assert-InstalledProduct {
         [Parameter(Mandatory)]
         [int]$ExpectedRank,
         [Parameter(Mandatory)]
-        [string]$ExpectedPayload
+        [string]$ExpectedPayload,
+        [Parameter(Mandatory)]
+        [string]$PayloadPath
     )
 
     $uninstallPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$ProductCode"
@@ -67,12 +97,7 @@ function Assert-InstalledProduct {
     if ($installedRank -ne $ExpectedRank) {
         throw "Expected ReleaseRank $ExpectedRank, got $installedRank."
     }
-    $programFilesX86 = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86)
-    $applicationPath = Join-Path $programFilesX86 'Netsuke MSI Upgrade Validation\netsuke.exe'
-    $payload = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($applicationPath))
-    if ($payload -ne $ExpectedPayload) {
-        throw "Expected installed payload $ExpectedPayload, got $payload."
-    }
+    Assert-PayloadEquals -Path $PayloadPath -ExpectedPayload $ExpectedPayload
 }
 
 function Assert-ProductAbsent {
@@ -101,7 +126,11 @@ function Install-AndAssert {
     if ($exitCode -ne 0) {
         throw "Installing $MsiPath failed with msiexec exit code $exitCode."
     }
-    Assert-InstalledProduct -ProductCode $ProductCode -ExpectedRank $ExpectedInstallation.Rank -ExpectedPayload $ExpectedInstallation.Payload
+    Assert-InstalledProduct `
+        -ProductCode $ProductCode `
+        -ExpectedRank $ExpectedInstallation.Rank `
+        -ExpectedPayload $ExpectedInstallation.Payload `
+        -PayloadPath $ExpectedInstallation.PayloadPath
 }
 
 function Assert-DowngradeIsRejected {
@@ -118,12 +147,40 @@ function Assert-DowngradeIsRejected {
     }
 }
 
+$legacyProgramFiles = ${env:ProgramFiles(x86)}
+if ([string]::IsNullOrWhiteSpace($legacyProgramFiles)) {
+    $legacyProgramFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86)
+}
+$nativeProgramFiles = $env:ProgramW6432
+if ([string]::IsNullOrWhiteSpace($nativeProgramFiles)) {
+    $nativeProgramFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+}
+$legacyDirectory = Join-Path $legacyProgramFiles 'Netsuke MSI Upgrade Validation'
+$nativeDirectory = Join-Path $nativeProgramFiles 'Netsuke MSI Upgrade Validation'
+$legacyApplication = Join-Path $legacyDirectory 'netsuke.exe'
+$nativeApplication = Join-Path $nativeDirectory 'netsuke.exe'
+
 $beta1ProductCode = Get-MsiProperty -MsiPath $Beta1Msi -PropertyName ProductCode
 $beta2ProductCode = Get-MsiProperty -MsiPath $Beta2Msi -PropertyName ProductCode
 $finalProductCode = Get-MsiProperty -MsiPath $FinalMsi -PropertyName ProductCode
-$beta1Installation = @{ Rank = 1; Payload = 'MZbeta1'; LogName = 'beta1-install.log' }
-$beta2Installation = @{ Rank = 2; Payload = 'MZbeta2'; LogName = 'beta2-install.log' }
-$finalInstallation = @{ Rank = 65535; Payload = 'MZfinal'; LogName = 'final-install.log' }
+$beta1Installation = @{
+    Rank = 1
+    Payload = 'MZbeta1'
+    PayloadPath = $legacyApplication
+    LogName = 'beta1-install.log'
+}
+$beta2Installation = @{
+    Rank = 2
+    Payload = 'MZbeta2'
+    PayloadPath = $nativeApplication
+    LogName = 'beta2-install.log'
+}
+$finalInstallation = @{
+    Rank = 65535
+    Payload = 'MZfinal'
+    PayloadPath = $nativeApplication
+    LogName = 'final-install.log'
+}
 if (
     ($beta1ProductCode -eq $beta2ProductCode) -or
     ($beta1ProductCode -eq $finalProductCode) -or
@@ -132,12 +189,34 @@ if (
     throw 'Each MSI fixture must have a generated, distinct ProductCode.'
 }
 
+# beta1 is the frozen beta4 layout, so it proves the starting point really is
+# the 32-bit directory and that nothing already sits in the native one.
 Install-AndAssert -MsiPath $Beta1Msi -ProductCode $beta1ProductCode -ExpectedInstallation $beta1Installation
+Assert-PathAbsent -Path $nativeApplication
+
+# beta2 moves the payload: the old product, executable, and directory must all
+# be gone, and the new payload must be exactly where a native package installs.
 Install-AndAssert -MsiPath $Beta2Msi -ProductCode $beta2ProductCode -ExpectedInstallation $beta2Installation
 Assert-ProductAbsent -ProductCode $beta1ProductCode
+Assert-PathAbsent -Path $legacyApplication
+Assert-PathAbsent -Path $legacyDirectory
+
+# A refused downgrade must leave beta2 registered, ranked, and installed where
+# it was, without resurrecting the legacy layout.
 Assert-DowngradeIsRejected -MsiPath $Beta1Msi -LogName beta1-downgrade.log
-Assert-InstalledProduct -ProductCode $beta2ProductCode -ExpectedRank $beta2Installation.Rank -ExpectedPayload $beta2Installation.Payload
+Assert-InstalledProduct `
+    -ProductCode $beta2ProductCode `
+    -ExpectedRank $beta2Installation.Rank `
+    -ExpectedPayload $beta2Installation.Payload `
+    -PayloadPath $beta2Installation.PayloadPath
+Assert-PathAbsent -Path $legacyApplication
+Assert-PathAbsent -Path $legacyDirectory
+
 Install-AndAssert -MsiPath $FinalMsi -ProductCode $finalProductCode -ExpectedInstallation $finalInstallation
 Assert-ProductAbsent -ProductCode $beta2ProductCode
 Assert-DowngradeIsRejected -MsiPath $Beta2Msi -LogName beta2-downgrade.log
-Assert-InstalledProduct -ProductCode $finalProductCode -ExpectedRank $finalInstallation.Rank -ExpectedPayload $finalInstallation.Payload
+Assert-InstalledProduct `
+    -ProductCode $finalProductCode `
+    -ExpectedRank $finalInstallation.Rank `
+    -ExpectedPayload $finalInstallation.Payload `
+    -PayloadPath $finalInstallation.PayloadPath

@@ -79,6 +79,12 @@ def _selected_labels(declaration: object) -> list[str]:
     if placement is not None:
         return [placement.fork, placement.owned]
     match declaration:
+        case str() as label if label.strip().startswith("${{"):
+            # A matrix expression names whichever runner a leg selects, and
+            # `_matrix_runners` reads those labels from the matrix itself.
+            # actionlint does not check an expression value against its
+            # registration list either, so the expression is not a label.
+            return []
         case str() as label:
             return [label]
         case list() as entries:

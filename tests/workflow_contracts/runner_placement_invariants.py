@@ -60,6 +60,7 @@ GITHUB_HOSTED_LABELS: typ.Final[tuple[str, ...]] = (
     "ubuntu-24.04",
     "ubuntu-22.04",
     "windows-latest",
+    "windows-11-arm",
     "macos-latest",
     "macos-15",
     "macos-15-intel",
@@ -79,13 +80,17 @@ LANE_VCPUS = {
     UBICLOUD_LARGE_LABEL: 4,
     UBICLOUD_COMPAT_LABEL: 2,
     "windows-latest": 4,
+    "windows-11-arm": 4,
 }
 
 REQUIRED_RUNNER_ASSIGNMENTS = {
     "ci.build-test": UBICLOUD_LARGE_LABEL,
     "ci-windows.lint-windows": "windows-latest",
     "ci-windows.build-test-windows": "windows-latest",
-    "ci-windows.windows-msi-upgrade": "windows-latest",
+    # The MSI gate runs one leg per shipping architecture, so its matrix is
+    # expanded into one assignment per leg rather than read as a single label.
+    "ci-windows.windows-msi-upgrade.x64": "windows-latest",
+    "ci-windows.windows-msi-upgrade.arm64": "windows-11-arm",
     "ci.kani-smoke": UBICLOUD_DEFAULT_LABEL,
     "ci-default-features.default-features": UBICLOUD_LARGE_LABEL,
     "coverage-main.coverage-upload": UBICLOUD_LARGE_LABEL,
@@ -114,7 +119,8 @@ UBICLOUD_ASSIGNMENT_KEYS = tuple(
 GITHUB_HOSTED_ONLY_KEYS = (
     "ci-windows.lint-windows",
     "ci-windows.build-test-windows",
-    "ci-windows.windows-msi-upgrade",
+    "ci-windows.windows-msi-upgrade.x64",
+    "ci-windows.windows-msi-upgrade.arm64",
     "delayed-pr-comment.delay_and_comment",
     "release.metadata",
     "release.build-windows",

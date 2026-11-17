@@ -35,14 +35,24 @@
   </Package>
 
   <Fragment>
-    <StandardDirectory Id="ProgramFilesFolder">
+    <!-- ProgramFilesFolder always names the 32-bit program files directory in
+         WiX v4, even for a 64-bit package, so the release installed a 64-bit
+         binary under C:\Program Files (x86). ProgramFiles6432Folder follows
+         the built package: C:\Program Files for the x64 and Arm64 packages the
+         release builds, and the 32-bit directory only for an x86 package. -->
+    <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="$(env.PRODUCT_NAME)" />
     </StandardDirectory>
   </Fragment>
 
   <Fragment>
     <ComponentGroup Id="ProductComponents">
-      <Component Id="BinaryComponent" Guid="{8A7AA941-A8C3-4314-8A7D-3195B4806511}" Directory="INSTALLFOLDER">
+      <!-- Moving the executable changes its target location, which Windows
+           Installer treats as a new component and requires a new GUID for. The
+           GUID that v0.1.0-beta4 shipped must not be reused here. The
+           ReleaseRank value stays at this registry location so an older MSI
+           still finds the rank that refuses its downgrade. -->
+      <Component Id="BinaryComponent" Guid="{C3257D3D-FC15-40C7-A36F-ED6F37025326}" Directory="INSTALLFOLDER">
         <File Id="Executable" Source="$(env.APPLICATION_SPEC)" KeyPath="yes" />
         <RegistryValue
             Root="HKLM"
