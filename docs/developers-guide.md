@@ -11685,10 +11685,10 @@ Re-check the user-path derivation on every `ortho_config` upgrade. The
 dependency's flat candidate order still places system scope before the home
 fallbacks, and `first_automatic_chain` still drops an optional candidate's load
 error when a later candidate succeeds; the user pass is what bounds both
-behaviours. The child-process regression matrix is
-Unix-only because it injects the XDG variables, so the `APPDATA` and
-`LOCALAPPDATA` branches are pinned by unit cases instead: they set the
-variables in the injected `TestEnv` and run on every platform.
+behaviours. The child-process regression matrix is Unix-only because it injects
+the XDG variables, so the `APPDATA` and `LOCALAPPDATA` branches are pinned by
+unit cases instead: they set the variables in the injected `TestEnv` and run on
+every platform.
 
 `explicit_config_path_with_env` is the crate-internal seam for explicit
 config-file selection. It evaluates the precedence chain in this order:

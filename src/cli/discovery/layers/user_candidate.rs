@@ -57,7 +57,7 @@ pub(super) fn automatic_base_layers(
     // relative one against the working directory. Hand it the same view the
     // user pass used, where such a value reads as unset, and neither path can
     // load configuration from wherever the tool happened to run.
-    let fallback_env: SharedEnvSource = Arc::new(SanitisedUserBases::new(Arc::clone(&env_source)));
+    let fallback_env: SharedEnvSource = Arc::new(SanitisedUserBases::new(env_source));
     let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), fallback_env);
     first_automatic_chain(&discovery, project_key)
 }
