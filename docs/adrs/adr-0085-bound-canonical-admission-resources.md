@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0068: Bound canonical admission resources
+# Architectural decision record (ADR) 0085: Bound canonical admission resources
 
 ## Status
 

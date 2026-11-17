@@ -912,7 +912,7 @@ ordinary additions or need individual design passes. See RFC 0006 §§6 and 14.1
     names both the computed cardinality and the ceiling.
   - Canonical admission already applies its own occurrence, depth, and byte
     ceilings for the shared-graph hazard
-    ([ADR-0068](adrs/adr-0068-bound-canonical-admission-resources.md), issue
+    ([ADR-0085](adrs/adr-0085-bound-canonical-admission-resources.md), issue
     #972). That work does not satisfy this task: it bounds one traversal and
     does not provide the shared helper the combinatorial filters need, and it
     carries no localized diagnostic. The checkbox stays open.

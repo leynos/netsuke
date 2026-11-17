@@ -2473,7 +2473,7 @@ is a deliberate limit rather than an oversight:
   Admission therefore charges depth, snapshot nodes, and admitted string bytes
   against one budget per public operation, with defaults of 128 edges, 100,000
   nodes, and 8 MiB
-  ([ADR-0068](adrs/adr-0068-bound-canonical-admission-resources.md)). An input
+  ([ADR-0085](adrs/adr-0085-bound-canonical-admission-resources.md)). An input
   beyond a ceiling is refused with `ResourceLimitExceeded` before the
   overflowing subtree is allocated. Because the budget is per operation,
   `canonical_eq` can refuse two operands that each pass `canonical_key` on
