@@ -213,10 +213,12 @@ Since issue #968 they resolve every request through `ReadingRoot`
 `workspace_root` capability with its optional recorded spelling and refuses a
 request outside that root with one localized diagnostic.
 
-`glob`, the `is <kind>` file tests, and the `size` and `realpath` filters do
-not route through `workspace_root`: they still resolve against the process
-working directory, as they did when this decision was taken. Confining them is
-not claimed here.
+`glob` is not in that group. The manifest loader registers it with the
+workspace root, so a relative pattern is anchored there and falls back to the
+process working directory only when no root is supplied. The `is <kind>` file
+tests and the `size` and `realpath` filters do resolve against the process
+working directory, as they did when this decision was taken, and confining them
+is not claimed here.
 
 The deny-by-default test-mode decision is unaffected. All four reading filters
 remain `TestDisposition::Refused` in the `SURFACE` inventory, so a test load
