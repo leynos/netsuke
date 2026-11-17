@@ -96,14 +96,56 @@ def contains_unquoted_or(expression: str) -> bool:
     )
 
 
-def is_expression_label(value: str) -> bool:
-    """Report whether a value is exactly one whole ``${{ ... }}`` expression.
+#: A whole expression holding exactly one single-quoted string literal.
+_LITERAL_EXPRESSION = re.compile(r"^\$\{\{\s*'(?P<literal>(?:[^']|'')*)'\s*\}\}$")
 
-    A value that merely embeds an expression still names something through its
-    literal part, so only a value made up entirely of one names nothing of its
-    own. The closing ``}}`` is found outside any string literal, so a brace
-    pair quoted inside the expression does not end it, and any text after that
-    closing pair, another expression included, makes the value mixed.
+#: A whole expression reading one value of the matrix context.
+_MATRIX_EXPRESSION = re.compile(r"^\$\{\{\s*matrix\.[A-Za-z_][A-Za-z0-9_-]*\s*\}\}$")
+
+
+def static_label(value: str) -> str | None:
+    """Return the one label a whole literal expression selects, if it does.
+
+    GitHub interpolates an expression anywhere in a string, so
+    ``${{ 'private-runner' }}`` selects exactly what ``private-runner``
+    selects. An expression that computes its value, a value mixing literals
+    and expressions, and a plain literal all return ``None``: only a whole
+    expression holding one quoted literal resolves here.
+
+    Parameters
+    ----------
+    value : str
+        A scalar read from a workflow, such as a `runs-on` label.
+
+    Returns
+    -------
+    str | None
+        The quoted literal, with doubled quotes unescaped, or ``None`` when
+        the value is not one whole literal expression.
+
+    Examples
+    --------
+    >>> static_label("${{ 'private-runner' }}")
+    'private-runner'
+    >>> static_label("${{ 'it''s' }}")
+    "it's"
+    >>> static_label("${{ matrix.runner }}") is None
+    True
+    >>> static_label("${{ 'a' }}-${{ 'b' }}") is None
+    True
+    """
+    match = _LITERAL_EXPRESSION.fullmatch(value.strip())
+    if match is None:
+        return None
+    return match["literal"].replace("''", "'") or None
+
+
+def names_a_matrix_value(value: str) -> bool:
+    """Report whether a whole expression reads one matrix value.
+
+    Such an expression names no label of its own: the matrix legs hold the
+    labels, and a lane that chooses its runner this way has each leg read
+    directly.
 
     Parameters
     ----------
@@ -113,34 +155,18 @@ def is_expression_label(value: str) -> bool:
     Returns
     -------
     bool
-        ``True`` when the stripped value is one expression and nothing else.
+        ``True`` when the value is exactly one ``matrix.<axis>`` expression.
 
     Examples
     --------
-    >>> is_expression_label("${{ matrix.runner }}")
+    >>> names_a_matrix_value("${{ matrix.runner }}")
     True
-    >>> is_expression_label("${{ '}}' }}")
-    True
-    >>> is_expression_label("ubicloud-standard-${{ vars.SIZE }}-ubuntu-2404")
+    >>> names_a_matrix_value("${{ inputs.runner }}")
     False
-    >>> is_expression_label("${{ vars.PREFIX }}-private-${{ vars.SUFFIX }}")
+    >>> names_a_matrix_value("windows-latest")
     False
     """
-    stripped = value.strip()
-    if not stripped.startswith("${{"):
-        return False
-    body = stripped[3:]
-    # The first `}}` outside a literal closes the expression; text after it
-    # means the value is a mix of literals and expressions, as GitHub allows.
-    close = next(
-        (
-            index
-            for index, _ in _unquoted_positions(body)
-            if body.startswith("}}", index)
-        ),
-        None,
-    )
-    return close is not None and not body[close + 2 :]
+    return _MATRIX_EXPRESSION.fullmatch(value.strip()) is not None
 
 
 def top_level_conjuncts(expression: str) -> list[str]:

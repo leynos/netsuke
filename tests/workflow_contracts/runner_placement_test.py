@@ -12,7 +12,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
-from actions_expressions import is_expression_label
+from actions_expressions import names_a_matrix_value, static_label
 from fork_fallback import owned_runner
 from runner_placement_invariants import (
     CALLEE_SELECTED_RUNNER,
@@ -107,8 +107,7 @@ def test_windows_macos_and_administrative_jobs_stay_github_hosted(
     """Keep every job without a Ubicloud option on a GitHub-hosted runner.
 
     Ubicloud publishes Ubuntu images only, so a Windows or macOS job has no
-    Ubicloud placement at all. The remaining jobs here are API-bound or not
-    developer-blocking, so a build shape would buy nothing.
+    placement at all; the rest are API-bound or not developer-blocking.
     """
     runner = REQUIRED_RUNNER_ASSIGNMENTS[assignment_key]
     assert not is_ubicloud_label(runner), (
@@ -230,10 +229,9 @@ def test_package_workflow_exposes_native_windows_tool_profile() -> None:
 def test_windows_msi_gate_runs_one_leg_per_shipping_architecture() -> None:
     """Run the MSI gate on x64 and Arm64, each on a runner of that platform.
 
-    The install location now follows the package architecture, so a gate that
-    exercised only x64 would leave the Arm64 package's program files folder
-    unproven. Two legs, each named explicitly, also stop a later edit from
-    quietly dropping an architecture while the job still passes elsewhere.
+    The install location follows the package architecture, so an x64-only gate
+    would leave the Arm64 program files folder unproven. Two explicitly named
+    legs also stop a later edit from quietly dropping one architecture.
     """
     job = workflow_job(
         load_workflow(WORKFLOW_DIR / "ci-windows.yml"), "windows-msi-upgrade"
@@ -250,26 +248,40 @@ def test_windows_msi_gate_runs_one_leg_per_shipping_architecture() -> None:
 
 
 @pytest.mark.parametrize(
-    ("label", "is_expression"),
+    ("value", "label"),
     [
-        ("${{ matrix.runner }}", True),
-        ("  ${{ inputs.runner }}  ", True),
-        ("ubicloud-standard-${{ vars.RUNNER_SIZE }}-ubuntu-2404", False),
-        ("${{ vars.PREFIX }}-private-${{ vars.SUFFIX }}", False),
-        ("windows-latest", False),
+        ("${{ 'private-runner' }}", "private-runner"),
+        ("${{ matrix.runner }}", None),
+        ("${{ vars.PREFIX }}-private-${{ vars.SUFFIX }}", None),
     ],
 )
-def test_only_a_whole_expression_names_no_label(
-    label: str, *, is_expression: bool
+def test_a_literal_expression_resolves_to_the_label_it_selects(
+    value: str, label: str | None
 ) -> None:
-    """A literal part keeps a label self-hosted, however it is combined.
+    """A fixed label inside an expression must reach the label inventory.
 
-    A mixed label still selects a self-hosted runner through its literal
-    prefix, so treating it as an expression would drop that runner from the
-    registry question and leave it unchecked.
+    GitHub interpolates expressions inside strings, so a label expressed this
+    way selects that runner exactly as the bare literal; unresolved, it would
+    escape the registry comparison.
     """
-    assert is_expression_label(label) is is_expression, (
-        f"{label!r} must count as an expression only when it is one whole expression"
+    assert static_label(value) == label, (
+        f"{value!r} must resolve to {label!r}, got {static_label(value)!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "names_matrix"),
+    [
+        ("${{ matrix.runner }}", True),
+        ("${{ inputs.runner }}", False),
+    ],
+)
+def test_only_a_matrix_expression_names_no_label_here(
+    value: str, *, names_matrix: bool
+) -> None:
+    """The matrix legs hold the labels, so the selector itself names none."""
+    assert names_a_matrix_value(value) is names_matrix, (
+        f"{value!r} must count as a matrix selector only when it is one"
     )
 
 

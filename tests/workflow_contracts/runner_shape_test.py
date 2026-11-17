@@ -11,7 +11,7 @@ Run via ``make test-workflow-contracts``.
 
 import pytest
 import yaml
-from actions_expressions import is_expression_label
+from actions_expressions import names_a_matrix_value, static_label
 from fork_fallback import owned_runner, read_placement
 from nextest_budgets import global_timeout
 from runner_placement_invariants import (
@@ -59,16 +59,17 @@ def _all_jobs() -> list[tuple[str, str, dict[str, object]]]:
 def is_self_hosted_label(label: str) -> bool:
     """Return whether a label names a runner GitHub does not host.
 
-    By name, not by prefix. A prefix test absorbs any new label that looks
-    hosted, so a lane moved onto an unknown image would drop out of "in use"
-    and its registration would go unnoticed. A whole expression names no label.
+    By name, not by prefix: a prefix test absorbs any new label that looks
+    hosted, so a lane moved onto an unknown image would drop out of "in use".
+    A matrix expression names no label of its own, because `_matrix_runners`
+    reads its legs; anything else fails closed as a label.
 
     Returns
     -------
     bool
         True when the label names a runner GitHub does not host.
     """
-    return label not in GITHUB_HOSTED_LABELS and not is_expression_label(label)
+    return label not in GITHUB_HOSTED_LABELS and not names_a_matrix_value(label)
 
 
 def _selected_labels(declaration: object) -> list[str]:
@@ -81,7 +82,8 @@ def _selected_labels(declaration: object) -> list[str]:
         return [placement.fork, placement.owned]
     match declaration:
         case str() as label:
-            return [label]
+            # A whole literal expression selects exactly that label.
+            return [static_label(label) or label]
         case list() as entries:
             return [str(entry) for entry in entries]
         case _:
@@ -90,8 +92,7 @@ def _selected_labels(declaration: object) -> list[str]:
 
 def _matrix_runners(job: dict[str, object]) -> set[str]:
     """Return every runner a job's matrix selects through a `runner` entry."""
-    # The macOS lanes choose their image this way, and a label smuggled into a
-    # matrix is still a label in use.
+    # A label smuggled into a matrix is still a label in use.
     strategy = job.get("strategy")
     matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
     includes = (matrix or {}).get("include") or []
@@ -193,14 +194,12 @@ def test_release_linux_package_job_declares_a_timeout() -> None:
     """Require the caller-selected Linux package job to bound its runtime.
 
     `release.yml`'s `build-linux` job calls the reusable
-    `build-and-package.yml` workflow and passes `runner: UBICLOUD_DEFAULT_LABEL`
-    as its `runner` input, so the reusable job's `runs-on:
-    ${{ inputs.runner }}` resolves to a Ubicloud shape here even though its own
-    YAML names no literal label. The parametrised jobs above only enumerate
-    jobs with a literal Ubicloud label in their own `runs-on`, so this
-    caller-selected placement needs its own contract: without it, deleting
-    `timeout-minutes` from the reusable `build` job would leave a stuck
-    Ubicloud VM billing indefinitely with nothing here to catch it.
+    `build-and-package.yml` workflow with `runner: UBICLOUD_DEFAULT_LABEL`, so
+    the reusable job's `runs-on: ${{ inputs.runner }}` resolves to a Ubicloud
+    shape here although its YAML names no literal label. The parametrised jobs
+    above only enumerate literal labels, so this placement needs its own
+    contract: without it, deleting `timeout-minutes` from the reusable `build`
+    job would leave a stuck Ubicloud VM billing with nothing to catch it.
     """
     release_workflow = load_workflow(WORKFLOW_DIR / "release.yml")
     release_job = workflow_job(release_workflow, "build-linux")
@@ -288,9 +287,8 @@ def test_actionlint_registers_exactly_the_ubicloud_labels_in_use() -> None:
     "In use" is derived from the workflows rather than read from the reviewed
     constant, and the two are compared separately, so a lane that quietly
     stops using a shape fails rather than agreeing with a constant nobody
-    revisited. The previous form asked only whether each registered label
-    appeared anywhere in the concatenated workflow text, which a mention in a
-    comment satisfies.
+    revisited. The previous form asked only whether each label appeared
+    anywhere in the workflow text, which a comment satisfies.
     """
     config = yaml.safe_load(
         (REPO_ROOT / ".github" / "actionlint.yaml").read_text(encoding="utf-8")
@@ -377,14 +375,16 @@ def test_both_instrumented_jobs_share_one_lane_size() -> None:
         pytest.param("ubuntu-latest", False, id="a-named-hosted-label"),
         pytest.param("macos-15-intel", False, id="another-named-one"),
         # The case that separates a named set from a prefix test: a hosted
-        # family, a label this repository does not use, and one that must
-        # therefore be reported rather than silently excused.
+        # family member this repository does not use, which must be reported
+        # rather than silently excused.
         pytest.param("ubuntu-20.04", True, id="a-hosted-family-member-not-named"),
         pytest.param(
             "${{ inputs.runner }}",
             False,
             id="a-caller-supplied-runner-names-no-label-here",
         ),
+        pytest.param("${{ matrix.runner }}", False, id="a-matrix-selector"),
+        pytest.param("${{ vars.RUNNER }}", True, id="an-unresolved-expression"),
     ],
 )
 def test_the_registry_reads_hosted_labels_by_name(
