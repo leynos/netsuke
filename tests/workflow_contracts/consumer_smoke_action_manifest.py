@@ -13,8 +13,9 @@ the three forms the action uses -- an input, a step output, and a step outcome
 expression, so an input added to the manifest shows up here as an explicit
 refusal rather than as an unset variable on a runner.
 
-The harness that runs the bodies and the fixtures it publishes live in
-``consumer_smoke_action_harness.py``.
+The harness that runs the bodies lives in ``consumer_smoke_action_harness.py``,
+and the candidate and host fixtures it serves in
+``consumer_smoke_action_fixtures.py``.
 
 Run via ``make test-workflow-contracts``.
 """

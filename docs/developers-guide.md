@@ -3858,10 +3858,11 @@ digest checks, the archive refusals, the extraction, and the probe — is covere
 by `make test-release-publication`. The action's steps themselves are executed
 by `consumer_smoke_action_harness.py`, which takes each `run` body from the
 manifest, stubs `uv` and `curl` at the path boundary, and runs the checked-in
-CLI over bytes a case publishes; `consumer_smoke_action_execution_test.py`
-requires a verified candidate to report every phase successful and each refused
-download, unsafe archive, disagreeing banner, and populated work directory to
-be reported by the phase that refused it.
+CLI over bytes `consumer_smoke_action_fixtures.py` publishes;
+`consumer_smoke_action_execution_test.py` requires a verified candidate to
+report every phase successful and each refused download, unsafe archive,
+disagreeing banner, and populated work directory to be reported by the phase
+that refused it.
 
 ### Crate-package operation telemetry
 

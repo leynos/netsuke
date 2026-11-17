@@ -1,9 +1,10 @@
 """Execute the consumer-smoke action over a published release.
 
 Each case runs the action's real shell bodies through the checked-in CLI, over
-bytes a stubbed host serves. The harness that stubs ``uv`` and ``curl`` and
-reads the manifest lives in ``consumer_smoke_action_harness.py``; this module
-supplies the candidates and asserts what the run reported.
+bytes a stubbed host serves. The harness that runs the steps lives in
+``consumer_smoke_action_harness.py`` and the candidates and served bytes it
+needs in ``consumer_smoke_action_fixtures.py``; this module names a candidate
+per case and asserts what the run reported.
 
 Read together, the cases hold four properties to account: a published
 candidate verifies and reports every phase successful; a download that never
@@ -19,13 +20,13 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 from composite_action_execution import interpreter_baseline
-from consumer_smoke_action_harness import (
+from consumer_smoke_action_fixtures import (
     ARCHIVE_NAME,
     CRATE_NAME,
     SIDECAR_NAME,
     Smoke,
-    execute,
 )
+from consumer_smoke_action_harness import execute
 
 if typ.TYPE_CHECKING:
     import pathlib
