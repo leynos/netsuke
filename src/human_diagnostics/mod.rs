@@ -2,15 +2,22 @@
 //!
 //! The JSON path already picks the most specific diagnostic out of a failure
 //! chain: a [`runner::RunnerError`], then a [`manifest::ManifestError`], then an
-//! [`miette::Report`]. The human path special-cased only the first of those, so
-//! a manifest rejection printed its contextual summary — "Failed to load
-//! manifest at …" — and dropped the diagnostic saying what was actually wrong.
+//! [`miette::Report`]. The human path selects the same diagnostic, so a
+//! manifest rejection shows what was actually wrong rather than only its
+//! contextual summary.
+//!
+//! A failure that carries none of those diagnostics still has an ordinary cause
+//! chain — a graph rejection, a rejected command interpolation, or a Ninja
+//! synthesis error. That chain is rendered beneath the summary through
+//! [`CauseChain`], so the default output names the fault instead of stopping at
+//! "Failed to build graph from the manifest." The JSON path already discloses
+//! those causes, and both modes now agree at the same depth.
 //!
 //! A rendered diagnostic replaces the contextual summary rather than following
-//! it: the diagnostic already names the manifest path, so printing both repeats
-//! it. A failure carrying no diagnostic keeps its summary line, which is the
-//! whole report for errors such as a missing manifest. Either way a person sees
-//! the same fault the JSON mode reports, at the same depth.
+//! it when it names its own source: the diagnostic then shows the manifest path
+//! itself, so printing both repeats it. Every other failure keeps its summary
+//! line above whatever the rendering adds. Either way a person sees the same
+//! fault the JSON mode reports.
 //!
 //! Nothing here reads the process environment. The glyph and colour theme is
 //! derived from the already-resolved [`DiagnosticStyle`] and the localized
@@ -33,6 +40,9 @@ use netsuke::runner;
 use std::io::{self, Write};
 use std::process::ExitCode;
 
+mod cause_chain;
+use cause_chain::{CauseChain, distinct_causes};
+
 /// Choose the glyph and colour theme that matches the resolved style.
 ///
 /// `miette`'s four predefined themes are the cross product of its two
@@ -54,12 +64,12 @@ pub fn theme_for(style: DiagnosticStyle) -> GraphicalTheme {
     }
 }
 
-/// Render a failure for a person, or `None` when it carries no diagnostic.
+/// Render a failure's selected diagnostic, or `None` when it carries none.
 ///
 /// Selection mirrors the JSON path, so both modes report the same fault. The
 /// graphical layout carries the diagnostic's code, its cause chain, and its
-/// help text. A failure carrying none of these diagnostics returns `None`,
-/// because its context message is the whole report the human path has.
+/// help text. A failure carrying none of these diagnostics returns `None`;
+/// [`failure_report`] then renders its ordinary causes when it has any.
 #[must_use]
 pub fn render_failure(err: &Error, theme: &GraphicalTheme) -> Option<String> {
     Some(render_diagnostic(select_diagnostic(err)?, theme))
@@ -105,10 +115,11 @@ pub fn circular_dependency_cause(error: &Error) -> Option<&IrGenError> {
 
 /// Report a runner failure on stderr and return the failure exit code.
 ///
-/// A rendered diagnostic replaces the context line rather than following it:
-/// the diagnostic already names the path, so printing both repeats it. A
-/// failure with no diagnostic keeps the context line, which is how these
-/// failures have always been reported. A cycle keeps its own branch, because
+/// A rendered diagnostic replaces the context line rather than following it
+/// when it names its own source: the diagnostic already shows the path, so
+/// printing both repeats it. A failure with no selected diagnostic keeps the
+/// context line and adds its ordinary causes beneath it when it has any. A
+/// cycle keeps its own branch, because
 /// its bounded rendering is what keeps manifest target names out of the tracing
 /// event and the diagnostic adds nothing a reader needs.
 ///
@@ -162,9 +173,9 @@ fn is_expected_failure(err: &Error) -> bool {
     err.downcast_ref::<runner::RunnerError>().is_some()
 }
 
-/// Compose the human report for a failure, or `None` when it has no diagnostic.
+/// Compose the human report for a failure, or `None` when it has nothing to add.
 ///
-/// A rendered diagnostic replaces the context line only when it visibly names
+/// A selected diagnostic replaces the context line only when it visibly names
 /// the artefact itself. A schema-version rejection names the declaration and
 /// the supported schema but never which Netsukefile was refused, so it keeps
 /// the context line; a YAML diagnostic draws a labelled snippet of the file and
@@ -175,12 +186,23 @@ fn is_expected_failure(err: &Error) -> bool {
 /// the file never appears. Judging on the source alone would drop the context
 /// line for a diagnostic that never showed the path, and the failure would name
 /// no file at all.
+///
+/// When no diagnostic is selected, the ordinary cause chain is rendered beneath
+/// the context line instead. That is the graph, interpolation, and
+/// Ninja-synthesis case: the outer `anyhow` context is the summary, and the
+/// cause beneath it is the only text that says what went wrong. A failure with
+/// neither a diagnostic nor a distinct cause returns `None` so the caller can
+/// print its context line once.
 fn failure_report(err: &Error, theme: &GraphicalTheme) -> Option<String> {
-    let rendered = render_failure(err, theme)?;
-    let diagnostic = select_diagnostic(err)?;
-    if names_its_own_source(diagnostic) || repeats_the_message(err, diagnostic) {
-        return Some(rendered);
+    if let Some(diagnostic) = select_diagnostic(err) {
+        let rendered = render_failure(err, theme)?;
+        if names_its_own_source(diagnostic) || repeats_the_message(err, diagnostic) {
+            return Some(rendered);
+        }
+        return Some(format!("{err}\n{rendered}"));
     }
+    let diagnostic = CauseChain::from_messages(distinct_causes(err))?;
+    let rendered = render_diagnostic(&diagnostic, theme);
     Some(format!("{err}\n{rendered}"))
 }
 
