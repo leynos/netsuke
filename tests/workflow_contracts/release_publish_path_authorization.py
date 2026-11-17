@@ -13,12 +13,7 @@ import shlex
 import authorize_release_writes as policy
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from workflow_loading import (
-    job_steps,
-    require_mapping,
-    step_index_by_key,
-    workflow_job,
-)
+from workflow_loading import job_steps, require_mapping, workflow_job
 
 AUTHORIZATION_STEP = "release_authorization"
 RESOLVER_STEP = "release_modes"
@@ -61,6 +56,33 @@ _DENIED_BUT_SELECTED = policy.ReleaseContext(
 )
 
 
+def _exact_index(
+    steps: list[dict[str, object]],
+    step_id: str,
+    label: str,
+    violations: list[str],
+) -> int | None:
+    """Return the index of the one step whose id matches exactly.
+
+    Substring matching would let a decoy such as
+    ``release_authorization_unused`` stand in for the real step in an ordering
+    or gate check, so each required id must occur once and only once.
+
+    Returns
+    -------
+    int | None
+        The zero-based index, or ``None`` when the report was made.
+    """
+    matches = [index for index, step in enumerate(steps) if step.get("id") == step_id]
+    if len(matches) != 1:
+        violations.append(
+            f"{label}: metadata must declare exactly one step with id "
+            f"{step_id!r}, found {len(matches)}"
+        )
+        return None
+    return matches[0]
+
+
 def _authorization_step(
     release: dict[str, object], violations: list[str]
 ) -> dict[str, object] | None:
@@ -76,14 +98,8 @@ def _authorization_step(
         The uniquely identified step, or ``None`` when the report was made.
     """
     steps = job_steps(release, "metadata")
-    matches = [step for step in steps if step.get("id") == AUTHORIZATION_STEP]
-    if len(matches) != 1:
-        violations.append(
-            "authorization.step: metadata must declare exactly one step with "
-            f"id {AUTHORIZATION_STEP!r}, found {len(matches)}"
-        )
-        return None
-    return matches[0]
+    index = _exact_index(steps, AUTHORIZATION_STEP, "authorization.step", violations)
+    return None if index is None else steps[index]
 
 
 def _check_condition(step: dict[str, object], violations: list[str]) -> None:
@@ -101,24 +117,21 @@ def _check_condition(step: dict[str, object], violations: list[str]) -> None:
         )
 
 
-def _command_tokens(run: str) -> list[str]:
-    """Split a shell script into command words, dropping comments.
+def _command_tokens(script: str) -> list[str]:
+    """Split one shell command into words, dropping a trailing comment.
 
     ``shlex`` in comment mode treats ``#`` at a word boundary as the start of a
     comment, so a script path that appears only in a comment is not mistaken for
-    the command that runs the policy. A line with unbalanced quotes makes
-    ``shlex`` raise ``ValueError``; the caller reports that as a violation
-    rather than treating the script as authorised.
+    the command that runs the policy. Unbalanced quotes make ``shlex`` raise
+    ``ValueError``; the caller reports that rather than treating the script as
+    authorised.
 
     Returns
     -------
     list[str]
-        The command words of every line, with comments removed.
+        The command words, with any comment removed.
     """
-    tokens: list[str] = []
-    for line in run.splitlines():
-        tokens.extend(shlex.split(line, comments=True))
-    return tokens
+    return shlex.split(script, comments=True)
 
 
 def _check_run(step: dict[str, object], violations: list[str]) -> None:
@@ -127,8 +140,18 @@ def _check_run(step: dict[str, object], violations: list[str]) -> None:
     if not isinstance(run, str):
         violations.append(f"authorization.run: step must run {AUTHORIZATION_SCRIPT}")
         return
+    script = run.strip()
+    if "\n" in script or "\r" in script:
+        # A newline separates commands in the shell. Tokenising it away would
+        # accept two commands whose words happen to concatenate to the expected
+        # invocation, which the runner would fail to execute.
+        violations.append(
+            "authorization.run: the step must be one logical command, not "
+            "several separated by a newline"
+        )
+        return
     try:
-        tokens = _command_tokens(run)
+        tokens = _command_tokens(script)
     except ValueError as error:
         violations.append(f"authorization.run: unparseable command: {error}")
         return
@@ -202,20 +225,18 @@ def _resolver_outputs() -> dict[str, str]:
 def _check_step_order(release: dict[str, object], violations: list[str]) -> None:
     """Require the decision to sit after the resolver and before its gates."""
     steps = job_steps(release, "metadata")
-    try:
-        order = tuple(
-            step_index_by_key(steps, "id", step_id)
-            for step_id in (
-                RESOLVER_STEP,
-                AUTHORIZATION_STEP,
-                "validate_publish_ref",
-                "ensure_version",
-            )
-        )
-    except AssertionError as error:
-        violations.append(f"authorization.order: {error}")
-        return
-    if tuple(sorted(order)) != order:
+    order: list[int] = []
+    for step_id in (
+        RESOLVER_STEP,
+        AUTHORIZATION_STEP,
+        "validate_publish_ref",
+        "ensure_version",
+    ):
+        index = _exact_index(steps, step_id, "authorization.order", violations)
+        if index is None:
+            return
+        order.append(index)
+    if order != sorted(order):
         violations.append(
             "authorization.order: the decision must follow the resolver and "
             "precede the publishing gates"
@@ -244,12 +265,16 @@ def _check_gates(release: dict[str, object], violations: list[str]) -> None:
     """Require the publishing gates to close on a denied-but-selected run."""
     steps = job_steps(release, "metadata")
     context = _gate_context()
-    try:
-        validate = steps[step_index_by_key(steps, "id", "validate_publish_ref")]
-        version = steps[step_index_by_key(steps, "id", "ensure_version")]
-    except AssertionError as error:
-        violations.append(f"authorization.gates: {error}")
+    validate_index = _exact_index(
+        steps, "validate_publish_ref", "authorization.gates", violations
+    )
+    version_index = _exact_index(
+        steps, "ensure_version", "authorization.gates", violations
+    )
+    if validate_index is None or version_index is None:
         return
+    validate = steps[validate_index]
+    version = steps[version_index]
     gate = evaluate_field(
         validate.get("if", True),
         FieldEvaluation(

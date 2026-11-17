@@ -30,7 +30,9 @@ def _metadata_step(release: dict[str, object], step_id: str) -> dict[str, object
 
 
 #: Run bodies that name the policy without executing it. ``comment-only`` hides
-#: it behind ``#``; ``argument-only`` passes it to ``python -c`` as an argument.
+#: it behind ``#``; ``argument-only`` passes it to ``python -c`` as an argument;
+#: ``split-command`` wraps the expected words across two shell commands, which
+#: the runner executes as two separate lines rather than one invocation.
 _UNEXECUTED_RUNS = (
     pytest.param(
         f"uv run --no-project --python 3.14 python -c 'pass'  # {AUTHORIZATION_SCRIPT}",
@@ -40,6 +42,10 @@ _UNEXECUTED_RUNS = (
         f"uv run --no-project --python 3.14 python -c 'pass' {AUTHORIZATION_SCRIPT}",
         id="argument-only",
     ),
+    pytest.param(
+        f"uv run\n--no-project --python 3.14 {AUTHORIZATION_SCRIPT}",
+        id="split-command",
+    ),
 )
 
 
@@ -47,9 +53,10 @@ _UNEXECUTED_RUNS = (
 def test_the_authorization_step_must_execute_the_policy(run: str) -> None:
     """Refuse a run body that names the policy without running it.
 
-    A membership test accepts both a trailing comment and a script handed to
-    ``python -c`` as an argument, so the step would run something else while
-    the policy's name stayed in the workflow.
+    A membership test accepts a trailing comment, a script handed to
+    ``python -c`` as an argument, and words split across two shell commands, so
+    the step would run something else while the policy's name stayed in the
+    workflow.
     """
     release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
     step = _metadata_step(release, AUTHORIZATION_STEP)
@@ -80,6 +87,48 @@ def test_the_authorization_step_id_must_match_exactly() -> None:
 
     assert any(v.startswith("authorization.step") for v in violations), (
         f"a renamed step id must not satisfy the lookup: {violations}"
+    )
+
+
+def test_the_step_order_check_refuses_a_decoy_id() -> None:
+    """Refuse ordering that a merely similar id in the right place satisfies.
+
+    A substring lookup finds ``release_authorization_unused`` where the real
+    step used to sit and reports the order as correct, even though the step that
+    decides writes now runs after the gates it is meant to close.
+    """
+    release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
+    steps = job_steps(release, "metadata")
+    index = step_index_by_key(steps, "id", AUTHORIZATION_STEP)
+    real = steps.pop(index)
+    decoy = copy.deepcopy(real)
+    decoy["id"] = f"{AUTHORIZATION_STEP}_unused"
+    steps.insert(index, decoy)
+    steps.append(real)
+    violations: list[str] = []
+
+    check_authorization_wiring(release, violations)
+
+    assert any(v.startswith("authorization.order") for v in violations), (
+        f"a decoy id before the gates must not satisfy the ordering check: {violations}"
+    )
+
+
+def test_the_authorization_step_id_must_be_unique() -> None:
+    """Refuse two steps sharing the decision's id.
+
+    GitHub cannot bind an output to an id declared twice, and a lookup that took
+    the first match could read a step the runner rejects outright.
+    """
+    release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
+    steps = job_steps(release, "metadata")
+    steps.append(copy.deepcopy(_metadata_step(release, AUTHORIZATION_STEP)))
+    violations: list[str] = []
+
+    check_authorization_wiring(release, violations)
+
+    assert any(v.startswith("authorization.step") for v in violations), (
+        f"a duplicated step id must be reported: {violations}"
     )
 
 
