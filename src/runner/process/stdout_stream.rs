@@ -89,12 +89,36 @@ mod tests {
     //! Pin closed-pipe tolerance and pass-through of other failures.
 
     use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    /// Return a writer that always reports a broken pipe.
-    struct ClosedPipe;
+    /// Return a writer that always reports a broken pipe and counts attempts.
+    ///
+    /// Counting is what distinguishes accepting the rest of the stream after
+    /// the first failure from writing to a closed pipe on every chunk.
+    struct ClosedPipe {
+        /// Number of write attempts the sink has made.
+        writes: Arc<AtomicUsize>,
+    }
+
+    impl ClosedPipe {
+        /// Build the writer with a fresh attempt counter.
+        fn new() -> Self {
+            Self {
+                writes: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+
+        /// Share the counter so a test can read it after the sink takes the
+        /// writer.
+        fn counter(&self) -> Arc<AtomicUsize> {
+            Arc::clone(&self.writes)
+        }
+    }
 
     impl Write for ClosedPipe {
         fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            self.writes.fetch_add(1, Ordering::SeqCst);
             Err(io::Error::from(io::ErrorKind::BrokenPipe))
         }
 
@@ -119,10 +143,19 @@ mod tests {
     /// Accept every chunk after the reader closes the pipe without writing it.
     #[test]
     fn accepts_chunks_after_a_broken_pipe() -> Result<()> {
-        let mut sink = ClosedPipeWriter::new(ClosedPipe);
+        let pipe = ClosedPipe::new();
+        let attempts = pipe.counter();
+        let mut sink = ClosedPipeWriter::new(pipe);
+
         sink.write_all(b"first row")?;
         sink.write_all(b"second row")?;
         sink.flush()?;
+
+        anyhow::ensure!(
+            attempts.load(Ordering::SeqCst) == 1,
+            "only the first chunk should reach the closed writer, saw {} attempts",
+            attempts.load(Ordering::SeqCst)
+        );
         Ok(())
     }
 

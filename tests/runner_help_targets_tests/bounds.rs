@@ -9,6 +9,7 @@
 use super::*;
 use netsuke::locale_resolution::{LocaleEnvProvider, SystemEnv};
 use std::fmt::Write as _;
+use std::io::Read as _;
 
 /// Display columns one name may contribute to catalogue alignment, mirroring
 /// `MAX_HELP_ALIGNMENT_WIDTH` in `src/runner/help/mod.rs`.
@@ -24,6 +25,9 @@ const LONG_ROW_DESCRIPTION: &str = "Long row description";
 /// Build a `netsuke help targets` command whose child environment this test
 /// alone decides.
 ///
+/// A standard command is returned rather than an `assert_cmd` wrapper so a
+/// test can also spawn it with piped streams and inspect the child directly.
+///
 /// An inherited `NETSUKE_JSON` would route the run through the JSON renderer,
 /// and `NETSUKE_FILE` or `NETSUKE_CONFIG` would select another manifest or
 /// user configuration, so either mismatch would describe the ambient shell
@@ -38,9 +42,9 @@ const LONG_ROW_DESCRIPTION: &str = "Long row description";
 /// `/etc/xdg` when `XDG_CONFIG_DIRS` is unset, so that variable names an absent
 /// directory inside the temporary workspace rather than the host's system
 /// configuration.
-fn help_targets_command(temp_path: &Utf8Path, manifest_path: &Utf8Path) -> assert_cmd::Command {
+fn help_targets_command(temp_path: &Utf8Path, manifest_path: &Utf8Path) -> std::process::Command {
     let isolated_config_dirs = temp_path.join(".netsuke-absent-xdg-config-dirs");
-    let mut command = assert_cmd::cargo::cargo_bin_cmd!("netsuke");
+    let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin("netsuke"));
     command
         .current_dir(temp_path)
         .env_clear()
@@ -263,6 +267,57 @@ fn help_targets_renders_one_shared_description_per_name() -> Result<()> {
     ensure!(
         workspace.open("shared-ran").is_err() && workspace.open(".netsuke").is_err(),
         "help targets must not execute recipes or create build output"
+    );
+    Ok(())
+}
+
+/// Bytes read before the reader closes, far below the catalogue size.
+const EARLY_CLOSE_BYTES: u64 = 64;
+
+/// Guard the closed-pipe path end to end: a reader that stops early must not
+/// turn the run into an error.
+///
+/// The long-name fixture's catalogue is far larger than a pipe buffer, so the
+/// child is still writing when the reader is dropped. The resulting broken
+/// pipe must count as a completed write, and the process must still exit
+/// successfully, which is what keeps `netsuke help targets | head` clean.
+#[rstest]
+fn help_targets_survives_an_early_closing_reader() -> Result<()> {
+    let temp = tempfile::tempdir().context("create early-close workspace")?;
+    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+    let fixture = write_long_name_manifest(temp_path)?;
+    let mut command = help_targets_command(temp_path, &fixture.manifest_path);
+    let mut child = command
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context("spawn help targets with a piped catalogue")?;
+    let stdout = child
+        .stdout
+        .take()
+        .context("the catalogue should be captured through a pipe")?;
+    let mut reader = std::io::BufReader::new(stdout);
+    let mut head = Vec::new();
+    reader
+        .by_ref()
+        .take(EARLY_CLOSE_BYTES)
+        .read_to_end(&mut head)
+        .context("read the start of the catalogue")?;
+    ensure!(
+        !head.is_empty(),
+        "the catalogue should start before the reader closes"
+    );
+    drop(reader);
+
+    let output = child
+        .wait_with_output()
+        .context("wait for help targets after the reader closed")?;
+
+    ensure!(
+        output.status.success(),
+        "a closed reader must not fail the run; status {:?}, stderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
     );
     Ok(())
 }

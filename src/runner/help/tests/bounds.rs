@@ -35,7 +35,7 @@ pub(super) fn manifest_with_targets(targets: Vec<Target>) -> NetsukeManifest {
 /// a bounded padding field, the optional two-space description separator, an
 /// optional marker field, and a newline. Localized heading and marker text is
 /// covered by fixed allowances rather than the active locale.
-fn text_output_upper_bound(entries: &[HelpEntry]) -> usize {
+pub(super) fn text_output_upper_bound(entries: &[HelpEntry]) -> usize {
     let name_bytes: usize = entries
         .iter()
         .map(|entry| terminal_safe(&entry.name).len())
@@ -53,6 +53,27 @@ fn text_output_upper_bound(entries: &[HelpEntry]) -> usize {
         + name_bytes
         + description_bytes
         + entries.len() * (MAX_HELP_ALIGNMENT_WIDTH + MARKER_ROW_BYTES + 5)
+}
+
+/// Render a catalogue with the en-US locale pinned and return the output
+/// alongside the default marker that locale produces.
+///
+/// The marker regressions quote the localized default marker, so the locale
+/// must be the same for the expectation and the render. The lock is declared
+/// first so the localizer guard drops before it.
+fn render_with_pinned_marker(manifest: &NetsukeManifest) -> Result<(String, String)> {
+    let _lock = localizer_lock();
+    let _localizer = set_localizer_for_tests(Arc::from(build_localizer(Some("en-US"))));
+    let prefs = theme_prefs(ThemePreference::Unicode);
+    let marker = default_marker(prefs);
+    let rendered = render_text_string(&build_catalogue(manifest), prefs)?;
+    Ok((rendered, marker))
+}
+
+/// Format the row a name occupying `width` columns renders when the default
+/// marker is its only following column.
+fn padded_marker_row(name: &str, width: usize, marker: &str) -> String {
+    format!("  {name}{} {marker}", " ".repeat(width - name.len()))
 }
 
 /// Assert that no rendered line carries trailing whitespace.
@@ -239,42 +260,54 @@ fn text_catalogue_does_not_pad_names_above_the_cap() -> Result<()> {
     Ok(())
 }
 
-/// A row whose only following column is a marker is padded; a row with no
-/// following column is not.
-#[test]
-fn text_catalogue_pads_marker_rows_only() -> Result<()> {
-    // The expected row quotes the default marker, so the locale must be the
-    // same for the expectation and the render. The lock is declared first so
-    // the localizer guard drops before the lock is released.
-    let _lock = localizer_lock();
-    let _localizer = set_localizer_for_tests(Arc::from(build_localizer(Some("en-US"))));
-    let prefs = theme_prefs(ThemePreference::Unicode);
-    let marker = default_marker(prefs);
+/// Assert the padded-marker layout shared by the two description-absence
+/// cases.
+///
+/// The fixture holds a row with no marker, the widest described row that sets
+/// the alignment width, and a default target. `absent` is the description
+/// carried by both the unmarked and the default row, which distinguishes an
+/// omitted description from one that sanitises to the empty string.
+fn assert_marker_alignment(absent: Option<String>) -> Result<()> {
     let mut manifest = manifest_with_targets(vec![
-        catalogue_target(vec!["w".to_owned()], None, false, false),
+        catalogue_target(vec!["bare".to_owned()], absent.clone(), false, false),
         catalogue_target(
             vec!["wide-name".to_owned()],
             Some("described".to_owned()),
             false,
             false,
         ),
-        catalogue_target(vec!["plain".to_owned()], None, false, false),
+        catalogue_target(vec!["marked".to_owned()], absent, false, false),
     ]);
-    manifest.defaults.push("w".to_owned());
+    manifest.defaults.push("marked".to_owned());
 
-    let entries = build_catalogue(&manifest);
-    let rendered = render_text_string(&entries, prefs)?;
-    let padded_marker_row = format!("  w{} {marker}", " ".repeat("wide-name".len() - 1));
+    let (rendered, marker) = render_with_pinned_marker(&manifest)?;
+    let padded = padded_marker_row("marked", "wide-name".len(), &marker);
 
     anyhow::ensure!(
-        rendered.lines().any(|line| line == padded_marker_row),
+        rendered.lines().any(|line| line == "  bare"),
+        "a row whose description is absent must end after its name: {rendered:?}"
+    );
+    anyhow::ensure!(
+        rendered.lines().any(|line| line == padded),
         "a marker-only row must be padded to the alignment width: {rendered:?}"
     );
-    anyhow::ensure!(
-        rendered.lines().any(|line| line == "  plain"),
-        "a row without a description or marker must not be padded: {rendered:?}"
-    );
     assert_no_trailing_whitespace(&rendered)
+}
+
+/// A row whose only following column is a marker is padded; a row with no
+/// following column is not.
+#[test]
+fn text_catalogue_pads_marker_rows_only() -> Result<()> {
+    assert_marker_alignment(None)
+}
+
+/// A description that sanitises to an empty string counts as absent: the row
+/// ends after its name, while a marker-only row is still padded to the
+/// alignment width. Without that filter an empty description would leave
+/// trailing padding on every such row.
+#[test]
+fn text_catalogue_treats_an_empty_description_as_absent() -> Result<()> {
+    assert_marker_alignment(Some(String::new()))
 }
 
 /// JSON output carries names and descriptions verbatim, independent of the

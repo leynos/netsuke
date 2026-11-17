@@ -49,6 +49,22 @@ impl Write for ChunkStats {
     }
 }
 
+/// A writer that reports one fixed failure on every write.
+struct FailingWriter {
+    /// Failure kind reported by every write.
+    kind: std::io::ErrorKind,
+}
+
+impl Write for FailingWriter {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::from(self.kind))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 /// Build a manifest with one target whose names all share a large description.
 fn shared_description_manifest() -> NetsukeManifest {
     let names = (0..SHARED_DESCRIPTION_NAMES)
@@ -100,6 +116,42 @@ fn text_catalogue_streams_rows_for_one_shared_large_description() -> Result<()> 
     render_text(&mut sink, &entries, theme_prefs(ThemePreference::Unicode))?;
 
     assert_streamed(&sink, SHARED_DESCRIPTION_NAMES)
+}
+
+/// A stdout failure must reach the caller instead of being swallowed, and the
+/// error must name the operation that failed.
+#[test]
+fn text_catalogue_propagates_write_failures() {
+    let entries = build_catalogue(&shared_description_manifest());
+    let mut sink = FailingWriter {
+        kind: std::io::ErrorKind::StorageFull,
+    };
+
+    let error = render_text(&mut sink, &entries, theme_prefs(ThemePreference::Unicode))
+        .expect_err("a failing stdout must surface as an error");
+
+    let expected = localization::message(keys::RUNNER_IO_WRITE_STDOUT).to_string();
+    assert!(
+        format!("{error:#}").contains(expected.as_str()),
+        "error should name the stdout operation: {error:#}"
+    );
+}
+
+/// The JSON renderer must report a write failure to the caller as well.
+#[test]
+fn json_catalogue_propagates_write_failures() {
+    let entries = build_catalogue(&shared_description_manifest());
+    let mut sink = FailingWriter {
+        kind: std::io::ErrorKind::StorageFull,
+    };
+
+    let error = render_json(&mut sink, &entries, None)
+        .expect_err("a failing stdout must surface as an error");
+
+    assert!(
+        format!("{error:#}").contains("serialize help targets catalogue"),
+        "error should name the serialization step: {error:#}"
+    );
 }
 
 /// Guard JSON amplification: the same catalogue must be serialized

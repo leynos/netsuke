@@ -26,9 +26,9 @@ use test_support::{localizer::LOCALIZER_TEST_LOCK, localizer_test_lock};
 mod bounds;
 #[path = "../graph_json/tests.rs"]
 mod graph_json_tests;
+mod property;
 mod render_string;
 mod streaming;
-
 use render_string::{render_json_string, render_text_string};
 
 /// Parse the fixed fixture manifest used by the catalogue snapshots.
