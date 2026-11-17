@@ -1575,9 +1575,10 @@ from the `bin-name` field that
   unchanged. `tests/binstall_metadata_tests.rs` and
   `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this contract.
 
-Only the two registry installation commands name `netsuke-build`, and
-`tests/documentation_installation_tests.rs` pins both. When adding a release
-target, a packaging format, or an artefact name, add the target to
+Three registry installation commands name `netsuke-build`: the README and
+users' guide examples, and the pinned v0.1.0-beta1 command in the migration
+guide. `tests/documentation_installation_tests.rs` pins all three. When adding
+a release target, a packaging format, or an artefact name, add the target to
 `.github/release-staging.toml`'s `[targets.*]` table and to the release
 workflow's target matrices; the single `pkg-url` template in `Cargo.toml`
 (`{ name }-{ version }-{ target }.tar.gz`) resolves new targets automatically,
