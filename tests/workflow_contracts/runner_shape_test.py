@@ -60,14 +60,15 @@ def is_self_hosted_label(label: str) -> bool:
 
     By name, not by prefix. A prefix test absorbs any new label that looks
     hosted, so a lane moved onto an unknown image would drop out of "in use"
-    and its registration would go unnoticed.
+    and its registration would go unnoticed. An expression such as
+    `${{ matrix.runner }}` names no label; `_matrix_runners` reads the legs.
 
     Returns
     -------
     bool
-        True when the label is not one of GitHub's own.
+        True when the label names a runner GitHub does not host.
     """
-    return label not in GITHUB_HOSTED_LABELS
+    return label not in GITHUB_HOSTED_LABELS and "${{" not in label
 
 
 def _selected_labels(declaration: object) -> list[str]:
@@ -79,12 +80,6 @@ def _selected_labels(declaration: object) -> list[str]:
     if placement is not None:
         return [placement.fork, placement.owned]
     match declaration:
-        case str() as label if label.strip().startswith("${{"):
-            # A matrix expression names whichever runner a leg selects, and
-            # `_matrix_runners` reads those labels from the matrix itself.
-            # actionlint does not check an expression value against its
-            # registration list either, so the expression is not a label.
-            return []
         case str() as label:
             return [label]
         case list() as entries:
