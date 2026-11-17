@@ -1,4 +1,11 @@
-"""Prove the release-path contract rejects each named regression."""
+"""Prove the release-path contract rejects each named regression.
+
+``test_release_path_contract_rejects_each_regression`` runs the real checks
+against every case in ``release_publish_path_mutations`` and requires the
+diagnostic that case names, so a mutation the contract no longer notices fails
+here. The remaining cases pin the helpers the mutations rely on, so a mutation
+that silently edited nothing cannot pass as a rejection.
+"""
 
 import pytest
 from action_run_sources import action_sources

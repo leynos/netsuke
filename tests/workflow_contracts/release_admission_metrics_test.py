@@ -1,4 +1,12 @@
-"""Pin bounded release-admission metric delivery in the RFC 0005 scaffold."""
+"""Pin bounded release-admission metric delivery in the RFC 0005 scaffold.
+
+These tests read the workflow and its composite action as data. They require
+the admission job to keep its declared permissions, timeout, pinned actions,
+artefact names, and summary fragments, and to export the metric and trace paths
+the gate writes, then check the records the job retains against
+``release_admission_metrics``. A dropped upload or a renamed label therefore
+fails here rather than in a release run.
+"""
 
 from action_references import require_external_action_sha
 from workflow_loading import (

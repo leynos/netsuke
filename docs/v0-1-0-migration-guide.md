@@ -1227,6 +1227,30 @@ passes an abbreviated SHA, an uppercase spelling, a tag, or a branch name is
 refused at the checkout check rather than building bytes it cannot attribute to
 a commit.
 
+## Release publication requires packaging and enforced admission
+
+A publishing run now requires the `package-crate` and
+`release-admission-canaries` jobs to succeed before any job that writes starts.
+The crates.io publisher, the release publisher, inventory verification, and
+finalization each declare both, and each also requires the gate's enforcement
+to be on, its outcome to be `success`, and its `candidate_commit` output to
+name the run's own commit. Enforcement follows the run's mode, so a
+pull-request dry run observes rather than enforces and its rehearsal lane keeps
+running after a failed package or a refused admission.
+
+The gate refuses with `error_category=missing_evidence` while no
+`release-admission-evidence` manifest exists in the run. That refusal is
+deliberate: enforcement lands before a producer does, so the path that
+published without evidence is closed first. A caller of the reusable
+`release.yml` needs no new input, but a caller that expected a publish to
+proceed now sees the admission job fail and every job that writes skipped,
+until a trusted producer supplies the manifest. The producer, its provenance,
+and the downstream canaries are tracked by #598, and publication stays
+unreachable until they land.
+
+See [Install Netsuke](users-guide.md#install-netsuke) for the caller-visible
+rules and the conditions the manifest must satisfy.
+
 ## Tolerate the forwarding-failure warning on stdout
 
 Netsuke counts every child-output forwarding failure in

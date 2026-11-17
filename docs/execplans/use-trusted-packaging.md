@@ -810,14 +810,15 @@ consumer smoke remains:
    ```
 
 3. `verify-release-inventory` —
-   `needs: [metadata, publish-crates-io, publish-release]`; `contents: write`;
-   `if: … should_publish == 'true'`. The mode gate is stated directly rather
-   than inherited. `release` and `publish-release` are mutually exclusive —
-   `release` requires `dry_run == 'true'`, `publish-release` requires
-   `should_publish == 'true'` — and GitHub skips any job that needs a skipped
-   job. Depending on `release` here would make this job unreachable in both
-   lanes: on a tag push `release` is skipped, and on a pull-request dry run
-   `publish-crates-io` is skipped.
+   `needs: [metadata, package-crate, release-admission-canaries,
+   publish-crates-io, publish-release]`;
+   `contents: write`; `if: … should_publish == 'true'`. The mode gate is
+   stated directly rather than inherited. `release` and `publish-release` are
+   mutually exclusive — `release` requires `dry_run == 'true'`,
+   `publish-release` requires `should_publish == 'true'` — and GitHub skips any
+   job that needs a skipped job. Depending on `release` here would make this
+   job unreachable in both lanes: on a tag push `release` is skipped, and on a
+   pull-request dry run `publish-crates-io` is skipped.
 
    The scope is `write` because the assets this job downloads belong to a
    **draft** release, and a token needs write scope to see a draft's assets at
@@ -833,8 +834,8 @@ consumer smoke remains:
    from drifting into "writes". `id-token: write` stays out, so this job
    remains disjoint from the registry-exchange job's credentials.
 4. `finalize-github-release` — delivered by #1068.
-   `needs: [metadata, package-crate, publish-crates-io, publish-release,
-   verify-release-inventory]`;
+   `needs: [metadata, package-crate, release-admission-canaries,
+   publish-crates-io, publish-release, verify-release-inventory]`;
    `contents: write`, no `id-token`; the guard names every dependency's
    `result` explicitly alongside `should_publish == 'true'`, because
    `!cancelled()` is a status function and suppresses the implicit success
@@ -4904,9 +4905,10 @@ and pass, on the final wording.
   and `admission_evidence` and the runtime module list (now twenty) are
   recorded in the developers' guide; and roadmap item 9.4.2 names the
   enforced-on-publish, observed-on-rehearsal split and the `#598` dependency.
-  The migration guide was checked and left unchanged: it is addressed to
-  manifest authors, source-build users, and Rust API callers, and none of them
-  is the reader who needs the pipeline change.
+  The migration guide was left unchanged in that round: its earlier sections
+  address manifest authors, source-build users, and Rust API callers. The next
+  round found the guide already carries release-pipeline notes for
+  reusable-workflow callers, and added one there.
 
 - Observation: **the candidate-bound assessment cleared the gate and named one
   remaining coverage gap, which was reachable only because a prerequisite can
@@ -4929,6 +4931,39 @@ and pass, on the final wording.
   *A stale reference.* The living Stage C section still named `#1065` as a
   follow-up owner though the issue is closed; it now records that registry
   publication arrived with it and that `#598` supplies the producer.
+
+- Observation: **the next assessment cleared the guards again and asked for
+  three documentation repairs and one trust-boundary statement.** The reply to
+  `NETSUKE-1141-R3-20261117` found no bypass and accepted the cancellation
+  scenarios and the two property suites. It named four items, one of them
+  outside this PR's decision authority.
+
+  *The two dependency lists.* The living Stage C section's direct `needs` lists
+  for `verify-release-inventory` and `finalize-github-release` predated
+  packaging and admission, though the gate description beside them and
+  `release.yml` both name those jobs. Both lists now match the workflow, which
+  the contract derives from the same field.
+
+  *The migration note.* The guide already documents release-pipeline changes
+  for reusable-workflow callers, so a section there is the right home after
+  all: it states the packaging and admission prerequisites, the mode-derived
+  enforcement, and the `missing_evidence` refusal a caller now sees, and points
+  at the users' guide.
+
+  *The module docstrings.* Seven workflow-contract modules carried one-line
+  docstrings. They now state what each module checks and how it relates to its
+  neighbours, without a code change. `release_publish_path_scenarios.py` sits
+  three lines below the 400-line ceiling, which is why its docstring is three
+  lines rather than a paragraph.
+
+  *The trust boundary, stated rather than claimed.* The download step resolves
+  the current run, so any artefact under the expected name reaches the
+  verifier, and a reusable-workflow caller defines jobs in that same run. The
+  identity fields show the manifest agrees with the candidate, not who produced
+  it. That is a provenance gap, and closing it -- a named producer job, an
+  admission step that waits for it, and authentication of its output -- belongs
+  to `#598`. The developers' guide, the ADR-0020 addendum, and the users' guide
+  now say so, and publication stays unreachable meanwhile.
 
 ## Surprises & discoveries
 

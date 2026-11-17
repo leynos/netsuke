@@ -1,4 +1,13 @@
-"""Validate the fixed JSON-lines contract for release-admission metrics."""
+"""Validate the fixed JSON-lines contract for release-admission metrics.
+
+The gate writes one metric record per line and one trace record per phase.
+This module parses those lines and refuses a record that names a canary,
+operation, outcome, error category, metric label, trace event, or trace field
+outside the bounded vocabularies defined here, and a metric value that is
+negative or not finite. The same vocabularies are what the artefact checks in
+``release_admission_metrics_test.py`` hold the workflow to, so a label renamed
+on one side fails before a release run reaches the gate.
+"""
 
 import json
 import math

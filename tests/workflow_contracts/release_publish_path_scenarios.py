@@ -1,4 +1,9 @@
-"""Model the finite release modes and dependency outcomes in workflow tests."""
+"""Model the finite release modes and dependency outcomes in workflow tests.
+
+A scenario names its mode, trigger event, each dependency's result, whether the
+run was cancelled, and the gate outputs it would publish; the table is the
+input to the reachability and finalization checks.
+"""
 
 import dataclasses
 import typing as typ

@@ -3104,6 +3104,21 @@ demonstrated end to end alongside the refused one before the step changes.
 Nothing in this repository produces the manifest yet, so publication remains
 deliberately unreachable rather than merely untested.
 
+The download is not a trust boundary, and this guide does not claim one.
+`actions/download-artifact` resolves the current run by default, so any
+artefact named `release-admission-evidence` in that run reaches the verifier.
+The identity fields are then compared with the run, which shows the document
+agrees with the candidate rather than who produced it. A workflow may also call
+`release.yml` and define its own jobs in the same run, so such a caller could
+upload under that name before admission starts; the values it would have to
+match are the run's own commit, tag, and run identifier, all of which that
+caller knows. What the gate closes is therefore the accidental path -- a run
+that publishes without packaging, or with a producer that never ran -- not a
+caller that deliberately supplies evidence of its own. Binding the evidence to
+a named producer job and authenticating that producer is `#598`'s work; until
+it lands, publication stays unreachable and no behaviour described here should
+be read as establishing provenance.
+
 The gate logic is Python, per the estate rule in
 [scripting standards](scripting-standards.md), not shell.
 `.github/scripts/release_admission.py` is the PEP 723 entry point the workflow

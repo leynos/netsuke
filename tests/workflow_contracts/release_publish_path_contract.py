@@ -1,4 +1,14 @@
-"""Prove dry runs reach release staging without publishing a release."""
+"""Prove dry runs reach release staging without publishing a release.
+
+``check_release_publish_path`` combines the caller's trigger and input
+contract, the staging job's needs and step order, the artifact and download
+names, and the publication gate into one list of violations. Each scenario in
+``release_publish_path_scenarios`` is then resolved by
+``release_publish_path_results`` and checked for the reachability it declares,
+so a rehearsal stays reachable after a failed package while no write job
+starts. ``release_publish_path_mutations_test.py`` proves every check reports
+its labelled regression.
+"""
 
 import dataclasses
 

@@ -1,4 +1,13 @@
-"""Build labelled workflow mutations for the release-path contract."""
+"""Build labelled workflow mutations for the release-path contract.
+
+Each mutation edits a copy of the parsed workflows to reintroduce one named
+regression: a dropped dependency, a widened or removed guard, disabled
+enforcement, a publisher that runs without packaging, or a finalizer that can
+never be reached. A case returns the mutated workflow with the diagnostic label
+the contract must report, so
+``release_publish_path_mutations_test.py`` can require every regression to be
+caught by the same checks that run against the committed workflow.
+"""
 
 import copy
 import dataclasses

@@ -396,6 +396,16 @@ The verifier already refuses an unsuccessful result for any declared canary,
 including one it does not yet require, so a producer that reports a downstream
 failure cannot have it ignored while the required set is still being extended.
 
+The download step is not a provenance boundary and must not be cited as one.
+`actions/download-artifact` resolves the current run by default, so any
+artefact under that name reaches the verifier, and a reusable-workflow caller
+defines jobs in the same run. Comparing the manifest's identity fields with the
+run shows that the document agrees with the candidate; it does not show who
+produced it. Establishing a producer-bound trust boundary, and requiring the
+admission job to wait for that producer, belongs to `#598`. Until then this
+decision records a gate that fails closed on absent evidence, not one that
+authenticates its evidence.
+
 The rehearsal lane stays reachable. The `release` job holds no write scope and
 must not depend on either `package-crate` or `release-admission-canaries`, so a
 failure in either cannot skip the read-only lane; the same prohibition applies

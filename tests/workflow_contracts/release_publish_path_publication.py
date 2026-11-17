@@ -1,4 +1,12 @@
-"""Check the isolated write-enabled half of release publication."""
+"""Check the isolated write-enabled half of release publication.
+
+Publication is the part of the graph that mutates a release, so it is checked
+apart from the rest: the job's needs, the step order, the draft guard, the
+upload plan that limits the transfer to declared assets, and the crates.io
+publisher, whose guard must agree with the outcome a scenario derives.
+``check_publication_path`` and ``check_crates_io_publication`` are called from
+the scenario loop in ``release_publish_path_contract``.
+"""
 
 import dataclasses
 import typing as typ

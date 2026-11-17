@@ -111,7 +111,9 @@ with `missing_evidence` and writes nothing until an evidence producer uploads a
 that manifest for the candidate; the producer is tracked by #598. The gate
 admits only evidence that names the repository, commit, tag, and workflow run
 under release, was issued inside its freshness window, and reports every
-required canary as successful.
+required canary as successful. Those fields are compared with the run, which
+shows the manifest agrees with the candidate rather than who produced it;
+binding evidence to a trusted producer is tracked by #598.
 
 When a publication is interrupted, rerun the crates.io publisher job. It
 re-probes the registry before any mutation: an absent version is published from
