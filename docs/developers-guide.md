@@ -8544,9 +8544,11 @@ point itself and rejects every reparse attribute, not only the tags `std`
 reports as symlinks. The `--directory` root itself may still be a symbolic
 link: it is the caller's chosen capability root, not generated state.
 
-`src/runner/process/dyndep/retention/mod.rs` owns the publication lease and
-retention cleanup. The command-boundary module invokes it after materialization
-or successful clean while retaining the lease through bundle consumption.
+`src/runner/process/dyndep/retention/lease.rs` defines
+`DyndepPublicationLease`, the advisory publication lease, and
+`src/runner/process/dyndep/retention/mod.rs` owns retention cleanup. The
+command-boundary module invokes them after materialization or successful clean
+while retaining the lease through bundle consumption.
 
 `DyndepPublicationLease` also coordinates retention. Sidecar-capable `build`,
 `generate`, and `clean` commands hold the capability-scoped exclusive
@@ -9344,6 +9346,18 @@ is not obvious from the name:
   underlying metadata error. Fixture code must use this wrapper for directory
   predicates rather than calling `std::fs::metadata(...).is_dir()` or
   `Path::is_dir` directly.
+- `symlink(target, link)` (Unix only) creates a symbolic link and propagates
+  the creation failure. `is_symlink(path) -> bool` reports whether the path's
+  own directory entry is a symbolic link; unlike `is_dir` and `exists` it does
+  not follow the link, so a dangling link is still a link.
+  `junction(target, link) -> io::Result<bool>` (Windows only) creates a
+  directory junction through the `cmd.exe` `mklink` built-in and returns
+  `Ok(false)` when the host has no `cmd.exe`, so a fixture can report a skip
+  rather than a failure. A junction needs no privilege, so that absence is the
+  only skip: a quoted path, a spawn failure, and a non-zero `mklink` exit are
+  all errors. The three helpers live in `test_support/src/fs_links.rs` and are
+  re-exported here, so fixtures keep a single ambient boundary and the platform
+  split stays out of `fs.rs`.
 - `PathState` and `inspect_path(path) -> io::Result<PathState>` provide a
   fallible target-state probe. `PathState::Absent` means metadata returned
   `NotFound`, `PathState::Directory` means the target is a directory, and
