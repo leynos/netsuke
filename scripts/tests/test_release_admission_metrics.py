@@ -172,6 +172,10 @@ def _mode_environment(*, enforce: bool) -> dict[str, str]:
         return {"NETSUKE_RELEASE_ADMISSION_ENFORCE": "false"}
     return {
         "NETSUKE_RELEASE_ADMISSION_ENFORCE": "true",
+        # The workflow's interim block is exercised by the producer-trust
+        # cases; here an enforcing run states the attribution a bound producer
+        # will report, so this case tests admission rather than the block.
+        "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED": "true",
         "NETSUKE_RELEASE_ADMISSION_TAG": RELEASE_TAG,
     }
 

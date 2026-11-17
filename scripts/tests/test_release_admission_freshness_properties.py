@@ -98,6 +98,11 @@ def _configuration(max_age: int) -> configuration.Configuration:
         "GITHUB_RUN_ID": RUN_ID,
         "RUNNER_TEMP": temporary,
         "NETSUKE_RELEASE_ADMISSION_ENFORCE": policy.ADMISSION_ENFORCEMENT_MODE,
+        # This property is about the window, so it states the producer
+        # attribution an enforcing run will report once #598 lands. The
+        # shipped block that withholds it is pinned separately, by the gate's
+        # own producer-trust case and by the workflow contract.
+        "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED": "true",
         "NETSUKE_RELEASE_ADMISSION_TAG": TAG,
         "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE": f"{temporary}/case.json",
         "NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS": str(max_age),

@@ -1,9 +1,8 @@
 """Resolve the release-admission gate's configuration from the environment.
 
 This module owns everything the gate reads *before* it runs an operation: the
-required variables and their diagnostics, the optional values with their
-documented defaults, the two artefact paths, and the adapter programs and sinks
-the rest of the run is wired from.
+required variables and diagnostics, the optional values and their defaults, the
+artefact paths, and the adapter programs and sinks the run is wired from.
 
 It is separate from :mod:`gate` because the two halves answer different
 questions: this one asks what the gate was *told*, ``gate`` what it then
@@ -64,9 +63,8 @@ DEFAULT_TEMPORARY_DIRECTORY = "/tmp"  # ruff: ignore[hardcoded-temp-file] - the 
 class Configuration:
     """Hold the gate's resolved settings, with the shell's own defaults.
 
-    ``output`` is the one field :func:`resolve_configuration` leaves empty.
-    ``tag`` and ``evidence_file`` are empty only in a rehearsal, which does not
-    admit a release and therefore names neither.
+    ``output`` arrives later; ``tag`` and ``evidence_file`` are empty only in a
+    rehearsal, which does not admit a release and therefore names neither.
     """
 
     repository: str
@@ -78,6 +76,8 @@ class Configuration:
     max_evidence_age_seconds: str
     timeout_seconds: str
     enforcement: str
+    #: Whether this run can attribute the evidence to a producer it trusts.
+    producer_trusted: bool
     programs: commands.Programs
     sinks: telemetry.Sinks
 
@@ -132,6 +132,9 @@ def resolve_configuration(
     *enforcing* run must also name a tag and an evidence file; a rehearsal may
     leave both unset, which keeps the read-only lane reachable with no override.
 
+    ``producer_trusted`` is true only for the exact text ``true``; every other
+    state resolves to false, so the gate refuses evidence it cannot attribute.
+
     Returns
     -------
     Configuration
@@ -148,8 +151,7 @@ def resolve_configuration(
     Notes
     -----
     The artefact spellings reach the sinks here and are never read from the
-    environment again. *destination* is passed in rather than resolved here:
-    resolving it twice would give two steps their own answer to one question.
+    environment again. *destination* is passed in so one step answers once.
     """
     # Required variables are resolved first, and the artefacts are created
     # after them, because that is the order the shell refused them in and the
@@ -185,6 +187,10 @@ def resolve_configuration(
             variables, TIMEOUT_VARIABLE, str(policy.DEFAULT_OPERATION_TIMEOUT_SECONDS)
         ),
         enforcement=enforcement,
+        producer_trusted=environment.optional(
+            variables, evidence.PRODUCER_TRUST_VARIABLE, "false"
+        )
+        == "true",
         programs=commands.Programs.from_environment(variables),
         sinks=telemetry.Sinks(
             metrics_file=destination.metrics_file.configured,
@@ -208,19 +214,16 @@ def prepare_destination(
     """Create both artefact parents, then truncate both files.
 
     The bindings are read from *sinks* because that is where the configured
-    spellings already live: resolution puts them there and reads them from the
-    environment only once, so initialization and the workflow outputs cannot
-    disagree about which file a run wrote.
+    spellings already live: resolution reads the environment once, so
+    initialization and the workflow outputs cannot disagree about which file a
+    run wrote.
 
     *file_system* is required rather than defaulted: an initializer that looked
     one up could only be shown to work by a real refusal, and the choice of
     filesystem would sit inside the effect rather than in the caller that owns
-    the outcome.
-
-    Either effect the operating system refuses reaches the caller as a
-    :class:`ConfigurationError` from :func:`_refusing`, whose message names the
-    configured spelling and keeps the system's own reason, because the shell
-    printed that sentence itself.
+    the outcome. Either effect the operating system refuses reaches the caller
+    as a :class:`ConfigurationError` from :func:`_refusing`, whose message
+    names the configured spelling and keeps the system's own reason.
 
     Notes
     -----
@@ -280,14 +283,12 @@ class OutputPath:
 
     ``configured`` is the string the operator supplied, verbatim, and
     ``directory`` is the parent the shell's ``mkdir -p "$(dirname "$file")"``
-    named for it. They are not interchangeable, and the split is not "one
-    spelling per boundary": the configured string reaches *every* observable
-    boundary -- the argument a sink adapter is named with, the ``metrics-file``
-    and ``trace-file`` workflow outputs, and the open that truncates the file --
-    so ``./observations//metrics.jsonl`` stayed spelled that way everywhere the
-    shell spelled it that way. ``directory`` is the ``mkdir`` operand alone,
-    and :func:`_directory_name` is where its difference from the configured
-    path's :attr:`~pathlib.Path.parent` is set out.
+    named for it. They are not interchangeable: the configured string reaches
+    *every* observable boundary -- the argument a sink adapter is named with,
+    the workflow outputs, and the open that truncates the file -- so a path's
+    original spelling survives wherever the shell preserved it. ``directory``
+    is the ``mkdir`` operand alone, and :func:`_directory_name` is where its
+    difference from :attr:`~pathlib.Path.parent` is set out.
 
     Rendering ``Path`` back to text at any of the configured boundaries would
     rewrite the operator's spelling, and at the truncation open it would change
@@ -368,9 +369,9 @@ def _refusing(lead: str, target: str, operation: cabc.Callable[[], None]) -> Non
     """Perform one filesystem operation on *target*, refusing a rejection.
 
     ``mkdir`` and the redirection each reported their own sentence, and both
-    reach the caller as the same bounded diagnostic, keeping the system's text
+    reach the caller as one bounded diagnostic, keeping the system's text
     through :func:`_reason` so the operator still reads *why* the path was
-    refused. One helper serves both; the failure handling is identical.
+    refused.
 
     Raises
     ------

@@ -426,9 +426,14 @@ jobs:
       # the downstream canaries admission is to require). Failing here would
       # report a missing producer rather than a refused admission, so absence
       # is tolerated: the verifier then records `missing_evidence`, and an
-      # enforcing run fails closed on that category. Publication stays
-      # unreachable until the producer lands, admission waits for its upload,
-      # and both the successful and refused publishing runs are tested.
+      # enforcing run fails closed on that category.
+      #
+      # This download is not a provenance boundary: it resolves the current run,
+      # and a reusable-workflow caller defines jobs in that same run, so a
+      # caller that deliberately uploads under this name arrives here
+      # indistinguishably. The gate therefore stays blocked on the flag below
+      # until the producer attests its upload, which is why publication is
+      # refused even when a matching manifest is present.
       - name: Download the release-admission evidence
         uses: >-
           actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
@@ -447,6 +452,13 @@ jobs:
           # keep observing so the read-only lane stays reachable.
           NETSUKE_RELEASE_ADMISSION_ENFORCE: >-
             ${{ needs.metadata.outputs.should_publish == 'true' }}
+          # The interim publication block. While this literal is not `true`, an
+          # enforcing run refuses every manifest -- including one a same-run
+          # supplier uploaded -- with `untrusted_evidence`, because nothing in
+          # the run authenticates the producer. #598 supplies the producer that
+          # attests the upload; only then does this become derivable from its
+          # output, and only this file can change it, never the caller.
+          NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED: 'false'
           NETSUKE_RELEASE_ADMISSION_TAG: ${{ needs.metadata.outputs.release_tag }}
           NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE: >-
             ${{ runner.temp }}/release-admission-evidence/evidence.json

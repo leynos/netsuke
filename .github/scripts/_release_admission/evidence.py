@@ -42,6 +42,10 @@ EVIDENCE_FILE_DIAGNOSTIC = (
 TAG_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TAG"
 TAG_DIAGNOSTIC = "NETSUKE_RELEASE_ADMISSION_TAG must name the release tag"
 MAX_AGE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS"
+#: Whether the run can attribute the evidence to a producer it trusts. The
+#: workflow sets it, never the caller; an unset, empty, or misspelled value is
+#: not attribution, which is the shipped interim block.
+PRODUCER_TRUST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED"
 
 #: Largest manifest the gate will read. The document is a handful of short
 #: fields, so the bound is generous; what it stops is a misconfigured path
@@ -222,6 +226,7 @@ __all__ = (
     "MAX_EVIDENCE_BYTES",
     "MAX_EVIDENCE_MAX_AGE_SECONDS",
     "MAX_EVIDENCE_SKEW_SECONDS",
+    "PRODUCER_TRUST_VARIABLE",
     "TAG_DIAGNOSTIC",
     "TAG_VARIABLE",
     "Candidate",

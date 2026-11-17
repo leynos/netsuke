@@ -30,6 +30,7 @@ ERROR_CATEGORIES = frozenset({
     "stale_evidence",
     "missing_evidence",
     "malformed_evidence",
+    "untrusted_evidence",
     "candidate_mismatch",
     "mismatch",
     "timeout",

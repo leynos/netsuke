@@ -14,6 +14,16 @@ it adds no way to admit; a refusal at the first check is carried through, so a
 reading that moved back inside the window cannot revive evidence the gate has
 already rejected.
 
+The origin of the document is judged as well as its contents. Identity fields
+are compared with the run, which shows the document agrees with the candidate;
+it does not show who wrote it, because ``actions/download-artifact`` resolves
+the current run and a reusable-workflow caller defines jobs in that run. An
+enforcing run therefore admits only when the configuration reports that the
+evidence can be attributed to a trusted producer, and refuses with
+``untrusted_evidence`` otherwise. That flag is set by this repository's own
+workflow, so the shipped value keeps publication blocked whatever a same-run
+supplier uploads; binding the evidence to a named producer is #598's work.
+
 Nothing here decides policy. Categories come from :mod:`policy`, the schema and
 its classification from :mod:`evidence`, and both effects -- the byte read and
 the wall-clock reading -- arrive as injected collaborators. The gate keeps the
@@ -98,8 +108,13 @@ class AdmissionEvidence:
         """Require the document read at the check to admit the candidate.
 
         Identity and results are judged first, so a mismatch or an unsuccessful
-        canary keeps its own category; the window is then re-read, because the
-        bound has to hold at this decision and not only at the observation.
+        canary keeps its own category. An enforcing run then asks whether the
+        evidence can be attributed to a trusted producer: a document that is
+        readable, fresh, and about this candidate is still refused with
+        ``untrusted_evidence`` when the run cannot show who produced it, because
+        identity fields agree with the candidate rather than establish origin.
+        The window is re-read last, because the bound has to hold at this
+        decision and not only at the observation.
 
         The check's verdict is carried through rather than recomputed: a
         refusal there is final, so only a document the check admitted reaches
@@ -113,7 +128,8 @@ class AdmissionEvidence:
         -------
         policy.Classification
             Success when the document names the candidate, reports every
-            required result as successful, and is still inside its window now;
+            required result as successful, is attributable to a trusted
+            producer on an enforcing run, and is still inside its window now;
             otherwise the category of the first refusal.
         """
         # `admit` is only meaningful once `check_freshness` has judged a
@@ -143,6 +159,11 @@ class AdmissionEvidence:
         )
         if verdict.outcome != policy.Outcome.SUCCESS:
             return verdict
+        if (
+            configuration.enforcement == policy.ADMISSION_ENFORCEMENT_MODE
+            and not configuration.producer_trusted
+        ):
+            return _refusal(policy.ErrorCategory.UNTRUSTED_EVIDENCE)
         return self._classify_freshness(manifest)
 
     def _classify_freshness(self, manifest: evidence.Manifest) -> policy.Classification:

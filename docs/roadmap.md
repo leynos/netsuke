@@ -2227,9 +2227,11 @@ runs prove the failure boundary before any job receives release permissions.
     retain the JSONL metrics file as a workflow artefact, and expose the final
     outcome in the job summary. The workflow now enforces the gate on
     publishing runs and observes it on pull-request dry runs, and every job
-    that writes depends on the gate's success, so publication stays
-    unreachable until a real evidence producer (#598) uploads the manifest the
-    gate verifies. See [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md)
+    that writes depends on the gate's success. Publication is therefore
+    refused until a real evidence producer (#598) both uploads the manifest the
+    gate verifies and attests that upload: an enforcing run reports a missing
+    manifest as `missing_evidence` and an unattributable one as
+    `untrusted_evidence`. See [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md)
     and the
     [release-admission observability
     guidance](developers-guide.md#release-admission-observability).

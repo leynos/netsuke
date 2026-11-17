@@ -46,6 +46,11 @@ ADMISSION_ENVIRONMENT = {
     "NETSUKE_RELEASE_ADMISSION_ENFORCE": (
         "${{ needs.metadata.outputs.should_publish == 'true' }}"
     ),
+    # The interim publication block, pinned as the exact literal the workflow
+    # ships: no producer attests the upload yet, so an enforcing run must refuse
+    # every manifest until #598 supplies one. A change here is a deliberate act
+    # that this contract is meant to require, not an incidental edit.
+    "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED": "false",
     "NETSUKE_RELEASE_ADMISSION_TAG": "${{ needs.metadata.outputs.release_tag }}",
     "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE": f"{EVIDENCE_DIRECTORY}/evidence.json",
     **METRICS_FILE_ENV,

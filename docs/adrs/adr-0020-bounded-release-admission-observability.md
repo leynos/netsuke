@@ -379,9 +379,10 @@ the release mode the metadata job already resolved.
 The ordering is deliberate. Connecting a producer first would leave the
 publishing path able to proceed without evidence for however long the two
 changes landed apart. Until a producer uploads `release-admission-evidence`,
-every publishing run therefore refuses with `error_category=missing_evidence`;
-that is the intended fail-closed state, not a defect to work around by
-loosening the gate. The producer is tracked by
+every publishing run therefore refuses with `error_category=missing_evidence`,
+and it refuses a supplied manifest with `error_category=untrusted_evidence`
+until a producer attests its upload; that is the intended fail-closed state,
+not a defect to work around by loosening the gate. The producer is tracked by
 [#598](https://github.com/leynos/netsuke/issues/598), which also supplies the
 downstream canaries admission is to require; issue
 [#1065](https://github.com/leynos/netsuke/issues/1065), which tracked the
@@ -402,9 +403,20 @@ artefact under that name reaches the verifier, and a reusable-workflow caller
 defines jobs in the same run. Comparing the manifest's identity fields with the
 run shows that the document agrees with the candidate; it does not show who
 produced it. Establishing a producer-bound trust boundary, and requiring the
-admission job to wait for that producer, belongs to `#598`. Until then this
-decision records a gate that fails closed on absent evidence, not one that
-authenticates its evidence.
+admission job to wait for that producer, belongs to `#598`.
+
+The gate therefore carries an interim publication block rather than relying on
+the absence of a producer. `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` is set
+by this repository's workflow and not by a caller, and it ships as `false`.
+While it is not `true`, an enforcing run refuses every manifest with
+`untrusted_evidence`, including a fresh, matching document that a same-run job
+uploaded; observation mode still reports what it finds, so a rehearsal is
+unaffected and the read-only lane stays reachable. Enabling publication means a
+producer that attests its upload, an admission step that derives this value
+from that attestation, the downstream canaries, and an end-to-end demonstration
+of both the successful and the refused publishing run; those requirements
+belong to `#598`. Until they land this decision records a gate that fails
+closed, not one that authenticates its evidence.
 
 The rehearsal lane stays reachable. The `release` job holds no write scope and
 must not depend on either `package-crate` or `release-admission-canaries`, so a
@@ -423,6 +435,13 @@ extend the gate and operation `error_category` vocabularies recorded in the
 accepted decision; an operator fixes them in different places, which is why
 they are not one category. Metric and label names are unchanged, and the
 extension is reviewed as the accepted decision requires.
+
+`untrusted_evidence` extends the same closed vocabulary for a third condition:
+the document is readable, fresh, and about the candidate, but the run cannot
+show that a trusted producer wrote it. It is not a variant of
+`candidate_mismatch`, because every identity field may agree while the origin
+remains unknown; an operator fixes it by connecting the producer, not by
+correcting the document.
 
 The window is read twice, not once. `check_scan_freshness` refuses a document
 whose timestamps lie outside the maximum age, and `verify_evidence` re-reads

@@ -107,13 +107,17 @@ is `true`, the gate outcome is `success`, and the gate's candidate commit is
 the run's own commit. Enforcement follows the run's mode, so a publishing run
 enforces while a pull-request dry run only observes. A publishing run refuses
 with `missing_evidence` and writes nothing until an evidence producer uploads a
-`release-admission-evidence` manifest, so a caller that publishes must supply
-that manifest for the candidate; the producer is tracked by #598. The gate
-admits only evidence that names the repository, commit, tag, and workflow run
-under release, was issued inside its freshness window, and reports every
-required canary as successful. Those fields are compared with the run, which
-shows the manifest agrees with the candidate rather than who produced it;
-binding evidence to a trusted producer is tracked by #598.
+`release-admission-evidence` manifest for the candidate. That producer runs
+inside the release workflow; it is tracked by #598, and a caller supplies no
+new input for it. The gate admits only evidence that names the repository,
+commit, tag, and workflow run under release, was issued inside its freshness
+window, and reports every required canary as successful. Those fields are
+compared with the run, which shows the manifest agrees with the candidate
+rather than who produced it. Until #598 supplies a producer whose upload the
+run can attribute, an enforcing run therefore refuses every supplied manifest
+with `untrusted_evidence` as well, because a file's contents cannot establish
+its origin. Observation mode is unaffected: a pull-request dry run still
+reports the manifest it read.
 
 When a publication is interrupted, rerun the crates.io publisher job. It
 re-probes the registry before any mutation: an absent version is published from

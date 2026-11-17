@@ -4963,7 +4963,57 @@ and pass, on the final wording.
   it. That is a provenance gap, and closing it -- a named producer job, an
   admission step that waits for it, and authentication of its output -- belongs
   to `#598`. The developers' guide, the ADR-0020 addendum, and the users' guide
-  now say so, and publication stays unreachable meanwhile.
+  now say so. That round left the gap open to a same-run supplier and described
+  publication only as waiting for a producer; the round below closes it and
+  corrects the description.
+
+- Observation: **the fourth assessment accepted the repairs but refused to
+  call the rollout fail-closed, because a same-run supplier was still
+  admissible; the interim block closes that path without claiming provenance.**
+  The reply to `NETSUKE-1141-R4-20261117` verified the guard properties, the
+  cancellation scenarios, and the documentation, then named one enforced
+  boundary and three stale rollout claims.
+
+  *The interim block.* `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` is read by
+  `_release_admission.configuration` and shipped as `'false'` in
+  `release.yml`'s admission step environment. The workflow sets it, never the
+  caller, and only this repository's workflow file can change it. An enforcing
+  run refuses any manifest with the new `untrusted_evidence` category unless
+  the value is exactly `true`, so a same-run supplier is excluded as firmly as
+  an absent producer; observation mode ignores it, so the read-only lane still
+  reports what it read. The design is deliberately a maintainer's declaration
+  rather than a synthetic attestation: it asserts that no trusted producer
+  exists, which is the true state, instead of manufacturing a check that would
+  appear to authenticate one.
+
+  *The negative coverage.*
+  `scripts/tests/test_release_admission_producer_trust.py` drives the real gate
+  through cmd-mox and pins five non-attributing spellings (`unset`, `empty`,
+  `false`, `True`, `yes`), each expected to exit 1 with `untrusted_evidence` in
+  both the operation and the gate labels and in the two refusing outputs. It
+  pairs them with a positive control at `true` and an observation-mode control,
+  so the module distinguishes "refused for attribution" from "refused for
+  contents" and from "not enforced". Three existing enforcing-success cases now
+  state `true` explicitly, with a comment saying they test another contract,
+  rather than relying on the shipped default.
+
+  *The corrected claims.* The migration guide, the developers' guide, and the
+  users' guide no longer say publication is unreachable until a producer lands;
+  each now separates the two refusals and says the block is what excludes a
+  same-run supplier. The users' guide's instruction that a caller "must supply"
+  the manifest contradicted the migration guide's "no new caller input", and is
+  replaced by the statement that the producer runs inside the workflow. The
+  workflow contract pins the exact admission environment, so the shipped
+  literal cannot change without a deliberate edit to that test.
+
+  *What `#598` must supply.* Recorded so the next round has acceptance criteria
+  rather than a pointer: a named producer job that uploads the manifest; an
+  admission step that waits for that producer instead of tolerating an absent
+  artefact, so `continue-on-error` comes off the download; an authenticated
+  binding from the upload to that producer job, which is what makes
+  `producer_trusted` derivable rather than declared; the downstream canary
+  results added to `policy.REQUIRED_RESULTS`; and end-to-end demonstration of
+  both a successful publishing run and a refused one before the literal changes.
 
 ## Surprises & discoveries
 

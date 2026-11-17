@@ -59,6 +59,7 @@ METRICS_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_METRICS_FILE"
 TRACE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TRACE_FILE"
 EVIDENCE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE"
 ENFORCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
+PRODUCER_TRUST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED"
 TAG_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TAG"
 
 #: The evidence file the harness writes when a case names no other. It is the
@@ -358,6 +359,10 @@ def test_a_publishing_run_reads_the_configured_evidence_file(
         extra_environment={
             EVIDENCE_FILE_VARIABLE: str(redirect),
             ENFORCE_VARIABLE: "true",
+            # The path contract is the subject here, so the run states the
+            # producer attribution that keeps admission reachable; the shipped
+            # block that withholds it has its own cases.
+            PRODUCER_TRUST_VARIABLE: "true",
             TAG_VARIABLE: RELEASE_TAG,
         },
     )

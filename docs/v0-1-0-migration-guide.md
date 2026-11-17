@@ -1239,14 +1239,17 @@ pull-request dry run observes rather than enforces and its rehearsal lane keeps
 running after a failed package or a refused admission.
 
 The gate refuses with `error_category=missing_evidence` while no
-`release-admission-evidence` manifest exists in the run. That refusal is
-deliberate: enforcement lands before a producer does, so the path that
-published without evidence is closed first. A caller of the reusable
-`release.yml` needs no new input, but a caller that expected a publish to
-proceed now sees the admission job fail and every job that writes skipped,
-until a trusted producer supplies the manifest. The producer, its provenance,
-and the downstream canaries are tracked by #598, and publication stays
-unreachable until they land.
+`release-admission-evidence` manifest exists in the run, and with
+`error_category=untrusted_evidence` when a manifest exists that the run cannot
+attribute to a trusted producer. Both refusals are deliberate: enforcement
+lands before a producer does, so the path that published without evidence is
+closed first, and the interim block closes the path that published on any
+same-run document. A caller of the reusable `release.yml` needs no new input,
+because the producer runs inside the workflow; a caller that expected a publish
+to proceed now sees the admission job fail and every job that writes skipped.
+The producer, its provenance, and the downstream canaries are tracked by #598.
+Publication therefore stays unavailable until #598 lands, and it is refused on
+both counts rather than only on the absence of a document.
 
 See [Install Netsuke](users-guide.md#install-netsuke) for the caller-visible
 rules and the conditions the manifest must satisfy.

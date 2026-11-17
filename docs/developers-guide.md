@@ -3003,14 +3003,15 @@ The gate has two modes, and the workflow derives which one applies rather than
 configuring it. `NETSUKE_RELEASE_ADMISSION_ENFORCE` is set from
 `needs.metadata.outputs.should_publish`: `false` (observation) on a rehearsal,
 `true` (enforcement) on a publishing run. Observation records the same
-fail-closed decision — including `outcome=failure` and
-`error_category=missing_evidence` when no producer has supplied evidence —
-writes the gate outputs and summary, and then exits successfully, so a missing
-producer cannot make the read-only lane unreachable. Enforcement exits non-zero
-after recording the same bounded result. Both modes run the gate; only the exit
-status differs. An environment value such as `fresh` is not evidence and must
-never substitute for a real evidence producer, and any value that is neither
-`true` nor `false` fails closed as an unknown gate result.
+fail-closed decision — including `outcome=failure` and a refusing
+`error_category` when no producer has supplied evidence, or when the supplied
+document cannot be attributed to a trusted producer — writes the gate outputs
+and summary, and then exits successfully, so a missing producer cannot make the
+read-only lane unreachable. Enforcement exits non-zero after recording the same
+bounded result. Both modes run the gate; only the exit status differs. An
+environment value such as `fresh` is not evidence and must never substitute for
+a real evidence producer, and any value that is neither `true` nor `false`
+fails closed as an unknown gate result.
 
 The four jobs that hold `contents: write`, `packages: write`, or
 `id-token: write` require the gate explicitly. Each declares
@@ -3055,6 +3056,19 @@ repository, commit, run, or tag. The workflow downloads the producer's
 download tolerates the artefact's absence, so a missing producer reaches the
 verifier as `missing_evidence` rather than as an anonymous job failure.
 
+Whether the run can attribute the evidence to a producer it trusts is a
+separate input, `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`. The workflow sets
+it, never the caller: only this repository's workflow file can change it, and
+the shipped literal is `false`. That is the interim publication block. An
+enforcing run therefore refuses every manifest with `untrusted_evidence` unless
+the variable is exactly `true`; anything unset, empty, or misspelled leaves the
+gate unable to attribute the evidence, which is the intended state until #598
+supplies a producer whose upload attests itself. Observation mode ignores the
+variable, so a rehearsal still reports the manifest it read and the read-only
+lane stays reachable. `scripts/tests/test_release_admission_producer_trust.py`
+pins the refusal across five spellings of a non-attributing value, the
+admitting case for `true`, and the observation-mode control.
+
 Freshness is bounded at both ends. Every recorded instant must lie within
 `NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS`, which defaults to 86,400
 seconds and may not exceed one week, and no instant may sit more than five
@@ -3068,23 +3082,27 @@ Refusals are reported as one category, never as a message body, path, or
 identifier. `missing_evidence` says no document was supplied,
 `malformed_evidence` says the document could not be read as schema 1,
 `candidate_mismatch` says it read perfectly well and describes a different
-release, `stale_evidence` says a timestamp fell outside the bounded window, and
-`unknown` says a result reported a non-success outcome. Presence is required
-only for the two canary names in `policy.REQUIRED_RESULTS`; success is required
-of every result the manifest declares, so a producer that adds a downstream
-canary can report it without a change here, while a reported failure is refused
-rather than ignored. The earlier operations add `api_error`, `fetch_error`,
-`timeout`, and `mismatch`. An operator fixes each in a different place, which
-is why they are separate words rather than one failure. The gate publishes six
-outputs — `gate-outcome`, `gate-error-category`, `enforcement`,
+release, `untrusted_evidence` says the run cannot attribute it to a trusted
+producer, `stale_evidence` says a timestamp fell outside the bounded window, and
+`unknown` says a result reported a non-success outcome. Those two refuse
+different things: a mismatched document can be corrected, while an
+unattributable one has to be replaced by a producer the run trusts. Presence is
+required only for the two canary names in `policy.REQUIRED_RESULTS`; success is
+required of every result the manifest declares, so a producer that adds a
+downstream canary can report it without a change here, while a reported failure
+is refused rather than ignored. The earlier operations add `api_error`,
+`fetch_error`, `timeout`, and `mismatch`. An operator fixes each in a different
+place, which is why they are separate words rather than one failure. The gate
+publishes six outputs — `gate-outcome`, `gate-error-category`, `enforcement`,
 `candidate-commit`, `metrics-file`, and `trace-file` — so a refused publication
 records why in the job that refused it.
 
-Publishing therefore fails with `missing_evidence` until a producer uploads
-`release-admission-evidence`, and that is the intended state. Enforcement lands
-before any producer exists, so the path that would publish without evidence is
-closed first; connecting a producer first would leave that path open for
-however long the two changes landed apart. The producer is tracked by
+Publishing therefore fails until a producer uploads
+`release-admission-evidence` *and* the run can attribute that upload to it, and
+that is the intended state. Enforcement lands before any producer exists, so
+the path that would publish without evidence is closed first; connecting a
+producer first would leave that path open for however long the two changes
+landed apart. The producer is tracked by
 [#598](https://github.com/leynos/netsuke/issues/598), which also supplies the
 downstream canaries admission is to require. Publishing is now gated on
 packaging and on an enforced, successful admission (`#1070`); issue `#1065`,
@@ -3099,10 +3117,12 @@ admission job has to wait for that producer's upload rather than tolerating an
 absent artefact, and the required result set has to name the downstream
 canaries. Until then the download step keeps `continue-on-error: true` so an
 absent artefact is reported as `missing_evidence` -- a refused admission --
-rather than as a missing producer, and a successful publishing run has to be
-demonstrated end to end alongside the refused one before the step changes.
-Nothing in this repository produces the manifest yet, so publication remains
-deliberately unreachable rather than merely untested.
+rather than as a missing producer, the workflow keeps
+`NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` at `false` so a supplied document
+is reported as `untrusted_evidence`, and a successful publishing run has to be
+demonstrated end to end alongside the refused one before either changes.
+Nothing in this repository produces the manifest yet, so publication is
+deliberately blocked on both counts rather than merely untested.
 
 The download is not a trust boundary, and this guide does not claim one.
 `actions/download-artifact` resolves the current run by default, so any
@@ -3114,10 +3134,15 @@ upload under that name before admission starts; the values it would have to
 match are the run's own commit, tag, and run identifier, all of which that
 caller knows. What the gate closes is therefore the accidental path -- a run
 that publishes without packaging, or with a producer that never ran -- not a
-caller that deliberately supplies evidence of its own. Binding the evidence to
-a named producer job and authenticating that producer is `#598`'s work; until
-it lands, publication stays unreachable and no behaviour described here should
-be read as establishing provenance.
+caller that deliberately supplies evidence of its own. That second path is
+closed by the interim block rather than by the identity fields: because
+`NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` ships `false`, an enforcing run
+refuses a same-run supplier's manifest with `untrusted_evidence` just as it
+refuses an absent one. The block is a maintainer's declaration that no trusted
+producer exists yet, not an authentication of one, so it does not establish
+provenance either; binding the evidence to a named producer job and
+authenticating that producer remains `#598`'s work, and flipping the literal
+before that lands would reopen the path this block closes.
 
 The gate logic is Python, per the estate rule in
 [scripting standards](scripting-standards.md), not shell.
@@ -3255,7 +3280,8 @@ The metric contract is deliberately closed. The only label names are `canary`,
   `check_scan_freshness|verify_evidence`;
 - `outcome=success|failure|unknown`; and
 - `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|`
-  `mismatch|timeout|unknown`.
+  `malformed_evidence|candidate_mismatch|untrusted_evidence|mismatch|timeout|`
+  `unknown`.
 
 The duration instrument carries only the fixed `operation` label. Never add a
 revision, run ID, path, URL, workflow content, or other identifier-derived
@@ -3292,8 +3318,9 @@ Instruments emitted by the gate are:
 
 - `netsuke_release_admission_gate_total` — counter. Records the final canary
   outcome with `outcome` and `error_category` labels. Operators use it to
-  identify a successful, failed, or unknown canary result. It does not gate
-  publication until a real evidence producer is connected.
+  identify a successful, failed, or unknown canary result. The record is what
+  an operator reads after a refusal; the gate's own outputs, not this counter,
+  are what the write jobs condition on.
 - `netsuke_release_admission_operation_total` — counter. Records one result
   for each fixed GitHub API request or Git fetch, with `canary`, `operation`,
   `outcome`, and `error_category` labels. Operators use it to locate the
@@ -5710,6 +5737,7 @@ pytest configuration and cache state:
 - `scripts/tests/test_release_admission_evidence_reading.py`
 - `scripts/tests/test_release_admission_freshness_recheck.py`
 - `scripts/tests/test_release_admission_freshness_properties.py`
+- `scripts/tests/test_release_admission_producer_trust.py`
 - `scripts/tests/test_release_admission_sink_persistence.py`
 - `scripts/tests/test_release_admission_harness_isolation.py`
 

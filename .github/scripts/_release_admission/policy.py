@@ -116,14 +116,13 @@ class ErrorCategory(Vocabulary):
     """Record why an operation or the gate did not succeed.
 
     The categories are deliberately coarse: they say which decision failed, so
-    an operator reads the same set of words on every run and never sees a
-    message body, a path, or an identifier in the published artefacts.
-
-    ``malformed_evidence`` and ``candidate_mismatch`` split the two ways a
-    supplied manifest can be unusable. The first says the document could not be
-    read as the schema at all; the second says it read perfectly well and
-    describes a different release. An operator fixes those in different places,
-    so they are not one category.
+    an operator reads the same words on every run and never sees a message
+    body, a path, or an identifier in the published artefacts. Three evidence
+    categories split what a manifest can get wrong: unreadable
+    (``malformed_evidence``), about another release (``candidate_mismatch``),
+    or unattributable to a trusted producer (``untrusted_evidence``). An
+    operator fixes each in a different place, and the last one refuses the
+    document's origin while every identity field may still agree.
     """
 
     NONE = "none"
@@ -132,6 +131,7 @@ class ErrorCategory(Vocabulary):
     STALE_EVIDENCE = "stale_evidence"
     MISSING_EVIDENCE = "missing_evidence"
     MALFORMED_EVIDENCE = "malformed_evidence"
+    UNTRUSTED_EVIDENCE = "untrusted_evidence"
     CANDIDATE_MISMATCH = "candidate_mismatch"
     MISMATCH = "mismatch"
     TIMEOUT = "timeout"
