@@ -1,25 +1,117 @@
 //! Retention budget and selection-order tests.
 
 use super::*;
+
+/// Write `sidecars` as `x`-filled `.dd` files under the generated-state directory.
+///
+/// Each entry's size is its content length, which is what retention reads from
+/// metadata, so a caller states the budget arithmetic directly instead of
+/// spelling out file contents.
+fn write_sidecars(dir: &Dir, sidecars: &[(&str, usize)]) -> Result<()> {
+    for (name, length) in sidecars {
+        dir.write(format!("{DYNDEP_DIR}/{name}"), "x".repeat(*length))?;
+    }
+    Ok(())
+}
+
+/// Return the directory's `.dd` entries in ascending path order.
+fn dd_entries(dir: &Dir) -> Result<Vec<Utf8PathBuf>> {
+    let mut entries = sidecar_names(dir)?
+        .into_iter()
+        .filter(|path| has_extension(path, "dd"))
+        .collect::<Vec<_>>();
+    entries.sort();
+    Ok(entries)
+}
+
+/// Assert that `dir` retains exactly `expected` across its `.dd` entries.
+fn assert_retained(dir: &Dir, expected: &[&str], message: &str) -> Result<()> {
+    let retained = dd_entries(dir)?;
+    let wanted = expected
+        .iter()
+        .map(|name| Utf8PathBuf::from(format!("{DYNDEP_DIR}/{name}")))
+        .collect::<Vec<_>>();
+    ensure!(retained == wanted, "{message}");
+    Ok(())
+}
+
+/// Prune the workspace through the published bundle's lease with `policy`.
+fn prune(published: &PublishedCurrentSidecar, policy: RetentionPolicy) -> Result<RetentionSummary> {
+    prune_dyndep_sidecars(
+        &published.dir,
+        &published.lease,
+        std::slice::from_ref(&published.current),
+        policy,
+    )
+}
+
+/// Which obsolete-retention budget a repeated-publication case exercises.
+///
+/// The two budgets measure different quantities but assert the same shape, so
+/// one case table covers both instead of duplicating the publication loop.
+#[derive(Clone, Copy, Debug)]
+enum ObsoleteBudget {
+    /// The number of `.dd` entries, including the current bundle.
+    Files,
+    /// The bytes of `.dd` entries, including the current bundle.
+    Bytes,
+}
+
+impl ObsoleteBudget {
+    /// Return how much retention used, and the allowance that bounds it.
+    ///
+    /// Both totals count the current bundle, which retention never removes, so
+    /// a case compares an inclusive measurement with an inclusive allowance
+    /// rather than mixing it with an obsolete-only budget.
+    fn usage(
+        self,
+        dir: &Dir,
+        current: &GeneratedDyndep,
+        policy: RetentionPolicy,
+    ) -> Result<(u64, u64)> {
+        match self {
+            Self::Files => {
+                let used = u64::try_from(dd_entries(dir)?.len())
+                    .expect("a directory holds fewer entries than u64 can count");
+                let allowed = u64::try_from(policy.max_files)
+                    .expect("a retention budget fits in u64")
+                    .saturating_add(1);
+                Ok((used, allowed))
+            }
+            Self::Bytes => {
+                let current_bytes = current.content().len() as u64;
+                Ok((
+                    retained_sidecar_bytes(dir)?,
+                    policy.max_bytes.saturating_add(current_bytes),
+                ))
+            }
+        }
+    }
+}
+
 #[rstest]
-fn repeated_publication_respects_the_obsolete_file_count_budget(
+#[case::file_count(
+    ObsoleteBudget::Files,
+    SidecarSeries::new("count", "content", 6),
+    RetentionPolicy::new(2, 1_024)
+)]
+#[case::byte_total(
+    ObsoleteBudget::Bytes,
+    SidecarSeries::new("bytes", "12345678", 6),
+    RetentionPolicy::new(8, 12)
+)]
+fn repeated_publication_respects_the_obsolete_budget(
     dyndep_workspace: Result<(tempfile::TempDir, Dir)>,
+    #[case] budget: ObsoleteBudget,
+    #[case] series: SidecarSeries<'_>,
+    #[case] policy: RetentionPolicy,
 ) -> Result<()> {
     let (_workspace, dir) = dyndep_workspace?;
-    let policy = RetentionPolicy::new(2, 1024);
-    let latest =
-        publish_repeated_sidecars(&dir, SidecarSeries::new("count", "content", 6), policy)?;
-    let count = sidecar_names(&dir)?
-        .iter()
-        .filter(|path| has_extension(path, "dd"))
-        .count();
+    let latest = publish_repeated_sidecars(&dir, series, policy)?;
+    let (used, allowed) = budget.usage(&dir, &latest, policy)?;
     ensure!(
-        count <= policy.max_files + 1,
-        "the current bundle plus obsolete sidecars must fit the count policy"
-    );
-    ensure!(
-        dir.open(latest.relative_path()).is_ok(),
-        "retention must preserve the latest bundle's sidecar"
+        used <= allowed,
+        "repeated publication kept {used} under the {budget:?} budget, above its allowance of {allowed}"
     );
     Ok(())
 }
@@ -28,38 +120,22 @@ fn repeated_publication_respects_the_obsolete_file_count_budget(
 fn retention_scans_a_large_directory_in_deterministic_path_order(
     published_current_sidecar: Result<PublishedCurrentSidecar>,
 ) -> Result<()> {
-    let PublishedCurrentSidecar {
-        _workspace,
-        dir,
-        current,
-        lease,
-    } = published_current_sidecar?;
+    let published = published_current_sidecar?;
     for index in 0..1_000 {
-        let path = format!(".netsuke/dyndep/stale-{index:04}.dd");
-        dir.write(path, "x")?;
+        published
+            .dir
+            .write(format!("{DYNDEP_DIR}/stale-{index:04}.dd"), "x")?;
     }
-    prune_dyndep_sidecars(
-        &dir,
-        &lease,
-        std::slice::from_ref(&current),
-        RetentionPolicy::new(2, 1_024),
+
+    prune(&published, RetentionPolicy::new(2, 1_024))?;
+
+    assert_retained(
+        &published.dir,
+        &["current.dd", "stale-0000.dd", "stale-0001.dd"],
+        "retention must keep the current sidecar and first two obsolete paths",
     )?;
-    let mut retained = sidecar_names(&dir)?
-        .into_iter()
-        .filter(|path| has_extension(path, "dd"))
-        .collect::<Vec<_>>();
-    retained.sort();
-    ensure!(
-        retained
-            == [
-                Utf8PathBuf::from(".netsuke/dyndep/current.dd"),
-                Utf8PathBuf::from(".netsuke/dyndep/stale-0000.dd"),
-                Utf8PathBuf::from(".netsuke/dyndep/stale-0001.dd"),
-            ],
-        "retention must keep the current sidecar and first two obsolete paths"
-    );
-    ensure!(dir.open(".netsuke/dyndep/stale-0002.dd").is_err());
-    ensure!(dir.open(".netsuke/dyndep/stale-0999.dd").is_err());
+    ensure!(published.dir.open(".netsuke/dyndep/stale-0002.dd").is_err());
+    ensure!(published.dir.open(".netsuke/dyndep/stale-0999.dd").is_err());
     Ok(())
 }
 
@@ -67,31 +143,39 @@ fn retention_scans_a_large_directory_in_deterministic_path_order(
 fn retention_reclaims_many_sidecars_larger_than_the_remaining_budget(
     published_current_sidecar: Result<PublishedCurrentSidecar>,
 ) -> Result<()> {
-    let PublishedCurrentSidecar {
-        _workspace,
-        dir,
-        current,
-        lease,
-    } = published_current_sidecar?;
+    let published = published_current_sidecar?;
     for index in 0..1_000 {
-        dir.write(format!(".netsuke/dyndep/oversized-{index:04}.dd"), "xx")?;
+        published
+            .dir
+            .write(format!("{DYNDEP_DIR}/oversized-{index:04}.dd"), "xx")?;
     }
 
-    prune_dyndep_sidecars(
-        &dir,
-        &lease,
-        std::slice::from_ref(&current),
-        RetentionPolicy::new(2, 1),
-    )?;
+    prune(&published, RetentionPolicy::new(2, 1))?;
 
-    let sidecars = sidecar_names(&dir)?
-        .into_iter()
-        .filter(|path| has_extension(path, "dd"))
-        .count();
-    ensure!(dir.open(current.relative_path()).is_ok());
-    ensure!(sidecars == 1, "only the current sidecar must remain");
-    ensure!(dir.open(".netsuke/dyndep/oversized-0000.dd").is_err());
-    ensure!(dir.open(".netsuke/dyndep/oversized-0999.dd").is_err());
+    ensure!(
+        published
+            .dir
+            .open(published.current.relative_path())
+            .is_ok(),
+        "retention must preserve the current bundle's sidecar"
+    );
+    assert_retained(
+        &published.dir,
+        &["current.dd"],
+        "only the current sidecar must survive an exhausted byte budget",
+    )?;
+    ensure!(
+        published
+            .dir
+            .open(".netsuke/dyndep/oversized-0000.dd")
+            .is_err()
+    );
+    ensure!(
+        published
+            .dir
+            .open(".netsuke/dyndep/oversized-0999.dd")
+            .is_err()
+    );
     Ok(())
 }
 
@@ -99,19 +183,12 @@ fn retention_reclaims_many_sidecars_larger_than_the_remaining_budget(
 fn retention_uses_lexical_selection_when_directory_entries_are_nonlexical(
     published_current_sidecar: Result<PublishedCurrentSidecar>,
 ) -> Result<()> {
-    let PublishedCurrentSidecar {
-        _workspace,
-        dir,
-        current,
-        ..
-    } = published_current_sidecar?;
-    let earliest = Utf8PathBuf::from(".netsuke/dyndep/a-large.dd");
-    let later_first = Utf8PathBuf::from(".netsuke/dyndep/b-small.dd");
-    let later_second = Utf8PathBuf::from(".netsuke/dyndep/c-small.dd");
-    dir.write(&earliest, "0123456789")?;
-    dir.write(&later_first, "12345")?;
-    dir.write(&later_second, "67890")?;
-    let dyndep = dir.open_dir(DYNDEP_DIR)?;
+    let published = published_current_sidecar?;
+    write_sidecars(
+        &published.dir,
+        &[("a-large.dd", 10), ("b-small.dd", 5), ("c-small.dd", 5)],
+    )?;
+    let dyndep = published.dir.open_dir(DYNDEP_DIR)?;
 
     let current_names = HashSet::new();
     let mut summary = RetentionSummary::default();
@@ -125,10 +202,11 @@ fn retention_uses_lexical_selection_when_directory_entries_are_nonlexical(
     retain_or_remove_sidecar(&dyndep, "c-small.dd", 5, &mut pass)?;
     retain_or_remove_sidecar(&dyndep, "a-large.dd", 10, &mut pass)?;
 
-    ensure!(dir.open(current.relative_path()).is_ok());
-    ensure!(dir.open(&earliest).is_ok());
-    ensure!(dir.open(".netsuke/dyndep/b-small.dd").is_err());
-    ensure!(dir.open(".netsuke/dyndep/c-small.dd").is_err());
+    assert_retained(
+        &published.dir,
+        &["a-large.dd", "current.dd"],
+        "lexical selection must keep the earliest path and reclaim the later two",
+    )?;
     Ok(())
 }
 
@@ -142,13 +220,18 @@ fn retention_uses_lexical_selection_when_directory_entries_are_nonlexical(
 fn retention_orders_directory_entries_by_path(
     published_current_sidecar: Result<PublishedCurrentSidecar>,
 ) -> Result<()> {
-    let PublishedCurrentSidecar {
-        _workspace, dir, ..
-    } = published_current_sidecar?;
-    for name in ["m.dd", "c.dd", "z.dd", "a.dd", "q.dd"] {
-        dir.write(format!(".netsuke/dyndep/{name}"), "x")?;
-    }
-    let dyndep = dir.open_dir(DYNDEP_DIR)?;
+    let published = published_current_sidecar?;
+    write_sidecars(
+        &published.dir,
+        &[
+            ("m.dd", 1),
+            ("c.dd", 1),
+            ("z.dd", 1),
+            ("a.dd", 1),
+            ("q.dd", 1),
+        ],
+    )?;
+    let dyndep = published.dir.open_dir(DYNDEP_DIR)?;
 
     let names = entry_names(&dyndep)?;
     let mut expected = names.clone();
@@ -177,41 +260,26 @@ fn retention_orders_directory_entries_by_path(
 fn retention_follows_path_order_under_the_standard_budget(
     published_current_sidecar: Result<PublishedCurrentSidecar>,
 ) -> Result<()> {
-    let PublishedCurrentSidecar {
-        _workspace,
-        dir,
-        current,
-        lease,
-    } = published_current_sidecar?;
+    let published = published_current_sidecar?;
     let full_budget =
         usize::try_from(MAX_RETAINED_DYNDEP_BYTES).expect("the standard byte budget fits a usize");
-    dir.write(".netsuke/dyndep/zz-full-budget.dd", "x".repeat(full_budget))?;
-    for name in ["a-first.dd", "b-second.dd", "c-third.dd"] {
-        dir.write(format!(".netsuke/dyndep/{name}"), "x")?;
-    }
-
-    prune_dyndep_sidecars(
-        &dir,
-        &lease,
-        std::slice::from_ref(&current),
-        RetentionPolicy::standard(),
+    write_sidecars(
+        &published.dir,
+        &[
+            ("zz-full-budget.dd", full_budget),
+            ("a-first.dd", 1),
+            ("b-second.dd", 1),
+            ("c-third.dd", 1),
+        ],
     )?;
 
-    let mut retained = sidecar_names(&dir)?
-        .into_iter()
-        .filter(|path| has_extension(path, "dd"))
-        .filter(|path| path.file_name() != Some("current.dd"))
-        .collect::<Vec<_>>();
-    retained.sort();
-    ensure!(
-        retained
-            == [
-                Utf8PathBuf::from(".netsuke/dyndep/a-first.dd"),
-                Utf8PathBuf::from(".netsuke/dyndep/b-second.dd"),
-                Utf8PathBuf::from(".netsuke/dyndep/c-third.dd"),
-            ],
-        "the standard budget must retain the small paths and reclaim the full-budget one"
-    );
+    prune(&published, RetentionPolicy::standard())?;
+
+    assert_retained(
+        &published.dir,
+        &["a-first.dd", "b-second.dd", "c-third.dd", "current.dd"],
+        "the standard budget must retain the small paths and reclaim the full-budget one",
+    )?;
     Ok(())
 }
 
@@ -227,63 +295,26 @@ fn retention_follows_path_order_under_the_standard_budget(
 fn retention_selects_sidecars_by_path_not_by_creation_order(
     published_current_sidecar: Result<PublishedCurrentSidecar>,
 ) -> Result<()> {
-    let PublishedCurrentSidecar {
-        _workspace,
-        dir,
-        current,
-        lease,
-    } = published_current_sidecar?;
+    let published = published_current_sidecar?;
     // Sizes follow the CR regression: with max_files 4 and max_bytes 14 only
     // `a.dd` and `f.dd` fit, and `b.dd` alone would exhaust the byte budget.
-    for (name, len) in [
-        ("b.dd", 14),
-        ("d.dd", 32),
-        ("c.dd", 19),
-        ("f.dd", 3),
-        ("a.dd", 3),
-    ] {
-        dir.write(format!(".netsuke/dyndep/{name}"), "x".repeat(len))?;
-    }
-
-    prune_dyndep_sidecars(
-        &dir,
-        &lease,
-        std::slice::from_ref(&current),
-        RetentionPolicy::new(4, 14),
+    write_sidecars(
+        &published.dir,
+        &[
+            ("b.dd", 14),
+            ("d.dd", 32),
+            ("c.dd", 19),
+            ("f.dd", 3),
+            ("a.dd", 3),
+        ],
     )?;
 
-    let mut retained = sidecar_names(&dir)?
-        .into_iter()
-        .filter(|path| has_extension(path, "dd"))
-        .collect::<Vec<_>>();
-    retained.sort();
-    ensure!(
-        retained
-            == [
-                Utf8PathBuf::from(".netsuke/dyndep/a.dd"),
-                Utf8PathBuf::from(".netsuke/dyndep/current.dd"),
-                Utf8PathBuf::from(".netsuke/dyndep/f.dd"),
-            ],
-        "retention must apply the lexical greedy rule, not the creation order"
-    );
-    Ok(())
-}
+    prune(&published, RetentionPolicy::new(4, 14))?;
 
-#[rstest]
-fn repeated_publication_respects_the_obsolete_byte_budget(
-    dyndep_workspace: Result<(tempfile::TempDir, Dir)>,
-) -> Result<()> {
-    let (_workspace, dir) = dyndep_workspace?;
-    let policy = RetentionPolicy::new(8, 12);
-    let latest =
-        publish_repeated_sidecars(&dir, SidecarSeries::new("bytes", "12345678", 6), policy)?;
-    ensure!(
-        retained_sidecar_bytes(&dir)? <= policy.max_bytes + latest.content().len() as u64,
-        "the current bundle plus obsolete sidecars must fit the byte policy"
-    );
-    ensure!(
-        dir.open(latest.relative_path()).is_ok(),
-        "retention must preserve the latest bundle's sidecar"
-    );
+    assert_retained(
+        &published.dir,
+        &["a.dd", "current.dd", "f.dd"],
+        "retention must apply the lexical greedy rule, not the creation order",
+    )?;
     Ok(())
 }

@@ -87,6 +87,11 @@ impl<'a> SidecarSeries<'a> {
     }
 }
 
+/// Publish `series` repeatedly under `policy` and return the final bundle.
+///
+/// Every publication prunes under the same policy, so the loop also checks the
+/// invariant every caller shares: the bundle published last is still readable
+/// afterwards. Callers then measure the single bound they are responsible for.
 fn publish_repeated_sidecars(
     dir: &Dir,
     series: SidecarSeries<'_>,
@@ -103,7 +108,12 @@ fn publish_repeated_sidecars(
         drop(lease);
     }
 
-    latest_sidecar.context("loop must publish a current sidecar")
+    let latest = latest_sidecar.context("loop must publish a current sidecar")?;
+    ensure!(
+        dir.open(latest.relative_path()).is_ok(),
+        "retention must preserve the latest bundle's sidecar"
+    );
+    Ok(latest)
 }
 
 mod budget;
