@@ -1525,6 +1525,10 @@ are not evaluated and do not make discovery fail. Metadata such as `vars`,
 names, dependencies, and descriptions is still rendered; structural rule
 selectors are rendered as needed for graph validation.
 
+The catalogue is written out as each row is rendered. A description shared by
+many target names is therefore repeated in the output without being accumulated
+in memory, so a catalogue can be much larger than the manifest that defines it.
+
 Queries reject direct use of `env()` and `glob()`, file tests, filesystem
 metadata filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
 `realpath`, and `expanduser`, executable discovery through `which` and
@@ -1551,11 +1555,11 @@ could not resolve the entry's `when` expression, while `false` means no such
 uncertainty was recorded. Integrations should therefore preserve conditional
 entries rather than treating them as confirmed selections. The alignment and
 padding rules above apply only to the human-readable text forms; `--json` emits
-names and descriptions verbatim and unchanged. The command honours the usual
-manifest-selection options (`--file`, `-C/--directory`) and the normal colour,
-accessibility, locale, and JSON-output conventions; with `--json` the catalogue
-is emitted as a versioned JSON document whose `result.command` is
-`help-targets`.
+names and descriptions verbatim and unchanged, and is likewise written as it is
+serialized. The command honours the usual manifest-selection options (`--file`,
+`-C/--directory`) and the normal colour, accessibility, locale, and JSON-output
+conventions; with `--json` the catalogue is emitted as a versioned JSON
+document whose `result.command` is `help-targets`.
 
 The standard-library reference describes the full helper set available while
 rendering a normal build manifest. The query allowlist above is the deliberate

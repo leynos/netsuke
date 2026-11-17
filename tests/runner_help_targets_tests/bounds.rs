@@ -2,8 +2,9 @@
 //!
 //! The text catalogue aligns descriptions to a name column. These scenarios
 //! pin the rule that one manifest-controlled name cannot widen that column for
-//! every other row, so the rendered output stays linear in the manifest's own
-//! text plus a fixed per-row allowance.
+//! every other row, and that a description shared by a target's name list is
+//! repeated in the output once per name rather than being bounded by the
+//! manifest that states it once.
 
 use super::*;
 use std::fmt::Write as _;
@@ -162,6 +163,75 @@ fn help_targets_bounds_alignment_padding_for_one_long_name() -> Result<()> {
         workspace.open("long-row-ran").is_err()
             && workspace.open("row0000-ran").is_err()
             && workspace.open(".netsuke").is_err(),
+        "help targets must not execute recipes or create build output"
+    );
+    Ok(())
+}
+
+/// Bytes in the description shared by every name in the amplification fixture.
+const SHARED_DESCRIPTION_BYTES: usize = 8 * 1024;
+/// Names that share that one description.
+const SHARED_DESCRIPTION_NAMES: usize = 500;
+
+/// Write a manifest whose one target declares every name in its name list.
+///
+/// The manifest states the description once and lists the names, while the
+/// catalogue repeats that description once per name. The rendered output is
+/// therefore many times the size of the manifest that defines it, and stays
+/// inside the manifest budgets, which charge the description once.
+fn write_shared_description_manifest(temp_path: &Utf8Path) -> Result<(Utf8PathBuf, String)> {
+    let description = "D".repeat(SHARED_DESCRIPTION_BYTES);
+    let mut manifest = String::from("netsuke_version: \"1.0.0\"\ntargets:\n  - name:\n");
+    for index in 0..SHARED_DESCRIPTION_NAMES {
+        writeln!(manifest, "      - shared{index:04}")?;
+    }
+    writeln!(manifest, "    description: {description}")?;
+    writeln!(manifest, "    command: touch shared-ran")?;
+
+    let manifest_path = temp_path.join("Netsukefile");
+    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
+        .context("open shared-description help-targets fixture directory")?;
+    workspace
+        .write("Netsukefile", &manifest)
+        .with_context(|| format!("write manifest to {}", manifest_path.as_str()))?;
+    Ok((manifest_path, description))
+}
+
+/// Guard the accumulated-catalogue amplification end to end: one target whose
+/// name list shares a long description must render that description once per
+/// name, with no recipe executed and no row left carrying trailing padding.
+#[rstest]
+fn help_targets_renders_one_shared_description_per_name() -> Result<()> {
+    let temp = tempfile::tempdir().context("create shared-description workspace")?;
+    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+    let (manifest_path, description) = write_shared_description_manifest(temp_path)?;
+    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
+        .context("open shared-description fixture directory")?;
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp_path)
+        .env("NETSUKE_NINJA", "/definitely-not-a-ninja-binary")
+        .arg("--file")
+        .arg(&manifest_path)
+        .arg("help")
+        .arg("targets")
+        .output()
+        .context("run help targets against the shared-description manifest")?;
+    ensure!(
+        output.status.success(),
+        "help targets should succeed without starting Ninja; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
+    ensure!(
+        stdout.matches(description.as_str()).count() == SHARED_DESCRIPTION_NAMES,
+        "every name should render the shared description once"
+    );
+    ensure!(
+        stdout.lines().all(|line| !line.ends_with(' ')),
+        "catalogue rows must not end in padding whitespace"
+    );
+    ensure!(
+        workspace.open("shared-ran").is_err() && workspace.open(".netsuke").is_err(),
         "help targets must not execute recipes or create build output"
     );
     Ok(())

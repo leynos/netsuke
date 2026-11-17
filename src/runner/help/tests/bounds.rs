@@ -17,7 +17,7 @@ const LOCALIZED_OVERHEAD_BYTES: usize = 256;
 const MARKER_ROW_BYTES: usize = 128;
 
 /// Build a manifest whose only entries are the supplied build targets.
-fn manifest_with_targets(targets: Vec<Target>) -> NetsukeManifest {
+pub(super) fn manifest_with_targets(targets: Vec<Target>) -> NetsukeManifest {
     NetsukeManifest {
         netsuke_version: Version::new(1, 0, 0),
         vars: crate::ast::Vars::default(),
@@ -67,7 +67,7 @@ fn assert_no_trailing_whitespace(rendered: &str) -> Result<()> {
 /// Render a section and return its lines, rejecting output above the bound.
 fn render_bounded_lines(manifest: &NetsukeManifest) -> Result<(String, Vec<String>)> {
     let entries = build_catalogue(manifest);
-    let rendered = render_text(&entries, theme_prefs(ThemePreference::Unicode));
+    let rendered = render_text_string(&entries, theme_prefs(ThemePreference::Unicode))?;
     anyhow::ensure!(
         rendered.len() <= text_output_upper_bound(&entries),
         "catalogue length {} exceeds bounded allocation {} for {} rows",
@@ -258,7 +258,7 @@ fn text_catalogue_pads_marker_rows_only() -> Result<()> {
     manifest.defaults.push("w".to_owned());
 
     let entries = build_catalogue(&manifest);
-    let rendered = render_text(&entries, prefs);
+    let rendered = render_text_string(&entries, prefs)?;
     let padded_marker_row = format!("  w{} {marker}", " ".repeat("wide-name".len() - 1));
 
     anyhow::ensure!(
@@ -283,7 +283,7 @@ fn json_catalogue_preserves_long_names() -> Result<()> {
         false,
         false,
     )]);
-    let rendered = render_json(&build_catalogue(&manifest), None)?;
+    let rendered = render_json_string(&build_catalogue(&manifest), None)?;
     let document: serde_json::Value =
         serde_json::from_str(&rendered).context("parse rendered JSON catalogue")?;
 
