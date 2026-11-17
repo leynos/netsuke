@@ -24,8 +24,6 @@ fixtures in ``consumer_smoke_action_fixtures.py``, and the cases in
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import json
 import sys
@@ -41,7 +39,6 @@ from composite_action_stubs import UV_STUB
 from consumer_smoke_action_fixtures import (
     COMMIT,
     CURL_STUB,
-    TARGET,
     VERIFIED,
     Published,
     Smoke,
@@ -54,11 +51,12 @@ from consumer_smoke_action_manifest import (
     smoke_steps,
     step_environment,
 )
+from release_publish_path_consumer_shape import SMOKE_ACTION_TARGET
 from workflow_loading import REPO_ROOT
 
 if typ.TYPE_CHECKING:
-    import pathlib
     import subprocess
+    from pathlib import Path
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -80,11 +78,11 @@ class Sandbox:
         Every interpreter the ``uv`` stand-in was told to use.
     """
 
-    stubs: pathlib.Path
-    scratch: pathlib.Path
-    outputs_directory: pathlib.Path
-    curl_log: pathlib.Path
-    baseline_log: pathlib.Path
+    stubs: Path
+    scratch: Path
+    outputs_directory: Path
+    curl_log: Path
+    baseline_log: Path
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -109,7 +107,7 @@ class ActionRun:
 
     completed: tuple[subprocess.CompletedProcess[str], ...]
     step_outputs: dict[str, dict[str, str]]
-    work_dir: pathlib.Path
+    work_dir: Path
     curl_log: tuple[str, ...]
     baselines: tuple[str, ...]
 
@@ -123,14 +121,14 @@ class ActionRun:
         return _read_json(self.work_dir / "verdict.json")
 
 
-def _read_json(path: pathlib.Path) -> dict[str, object] | None:
+def _read_json(path: Path) -> dict[str, object] | None:
     """Return a JSON object a run wrote, or ``None`` when it is absent."""
     if not path.is_file():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _sandbox(root: pathlib.Path) -> Sandbox:
+def _sandbox(root: Path) -> Sandbox:
     """Create the stubs and logs one run needs.
 
     Returns
@@ -195,7 +193,7 @@ def _default_inputs(published: Published) -> dict[str, str]:
         "asset-digest-record": str(published.trusted),
         "repository": "leynos/netsuke",
         "commit": COMMIT,
-        "target": TARGET,
+        "target": SMOKE_ACTION_TARGET,
         "work-dir": str(published.work_dir),
     }
 
@@ -208,7 +206,7 @@ class _Attempt:
     published: Published
     inputs: dict[str, str]
     base_environment: dict[str, str]
-    steps_dir: pathlib.Path
+    steps_dir: Path
     outputs: dict[str, dict[str, str]] = dataclasses.field(default_factory=dict)
     outcomes: dict[str, str] = dataclasses.field(default_factory=dict)
     completed: list[subprocess.CompletedProcess[str]] = dataclasses.field(
@@ -240,7 +238,7 @@ def _start_step(step: dict[str, object], number: int, attempt: _Attempt) -> None
     attempt.outputs = read_step_outputs(attempt.sandbox.outputs_directory)
 
 
-def execute(tmp_path: pathlib.Path, *, smoke: Smoke = VERIFIED) -> ActionRun:
+def execute(tmp_path: Path, *, smoke: Smoke = VERIFIED) -> ActionRun:
     """Run the action's steps in order, stopping where a runner would.
 
     Parameters
@@ -290,7 +288,6 @@ def execute(tmp_path: pathlib.Path, *, smoke: Smoke = VERIFIED) -> ActionRun:
 
 
 __all__ = [
-    "TARGET",
     "ActionRun",
     "Sandbox",
     "execute",

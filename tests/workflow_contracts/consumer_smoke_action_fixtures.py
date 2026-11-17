@@ -15,8 +15,6 @@ The harness that executes the action's steps lives in
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import hashlib
 import io
@@ -28,20 +26,19 @@ from release_publish_path_consumer_shape import SMOKE_ACTION_TARGET
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
-    import pathlib
+    from pathlib import Path
 
-    type BeforeStep = cabc.Callable[[int, pathlib.Path], None]
+    type BeforeStep = cabc.Callable[[int, Path], None]
 
 #: The candidate version every fixture describes unless a case says otherwise.
 VERSION = "1.2.3"
 #: The crate whose package record is the smoke's identity evidence.
 PACKAGE = "netsuke-build"
-#: The target the action exercises, read from the job's contract rather than
-#: restated, so a workflow that changes its matrix target changes this too.
-TARGET = SMOKE_ACTION_TARGET
-#: The published names the plan must derive for this candidate.
+#: The published names the plan must derive for this candidate. The target is
+#: read from the job's contract rather than restated, so a workflow that
+#: changes its matrix target changes this too.
 CRATE_NAME = f"{PACKAGE}-{VERSION}.crate"
-ARCHIVE_NAME = f"{PACKAGE}-{VERSION}-{TARGET}.tar.gz"
+ARCHIVE_NAME = f"{PACKAGE}-{VERSION}-{SMOKE_ACTION_TARGET}.tar.gz"
 SIDECAR_NAME = f"{ARCHIVE_NAME}.sha256"
 #: The banner the extracted binary prints when it is the candidate's.
 BANNER = f"netsuke {VERSION}"
@@ -188,13 +185,13 @@ class Published:
         The directory the action is told to keep its records in.
     """
 
-    identity: pathlib.Path
-    trusted: pathlib.Path
-    fixtures: pathlib.Path
-    work_dir: pathlib.Path
+    identity: Path
+    trusted: Path
+    fixtures: Path
+    work_dir: Path
 
 
-def publish(root: pathlib.Path, smoke: Smoke) -> Published:
+def publish(root: Path, smoke: Smoke) -> Published:
     """Write the evidence records and the bytes a run publishes.
 
     Returns
@@ -250,9 +247,7 @@ def publish(root: pathlib.Path, smoke: Smoke) -> Published:
     )
 
 
-def _stage_fixture(
-    fixtures: pathlib.Path, name: str, body: bytes, smoke: Smoke
-) -> None:
+def _stage_fixture(fixtures: Path, name: str, body: bytes, smoke: Smoke) -> None:
     """Write one asset's bytes, or the marker that stands in for a refusal."""
     if name in smoke.refused:
         (fixtures / f"{name}{ABSENT}").touch()
@@ -273,7 +268,6 @@ __all__ = [
     "HTTP404",
     "PACKAGE",
     "SIDECAR_NAME",
-    "TARGET",
     "VERIFIED",
     "VERSION",
     "Published",

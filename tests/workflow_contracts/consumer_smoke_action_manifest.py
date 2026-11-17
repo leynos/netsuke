@@ -20,8 +20,6 @@ and the candidate and host fixtures it serves in
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import re
 import typing as typ
 
