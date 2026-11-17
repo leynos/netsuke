@@ -1,0 +1,398 @@
+//! Guard the checks that must reject coverage claimed by prose alone.
+//!
+//! Each case here was written to fail against a parser that accepted prose as
+//! evidence: an identifier named only in a subheading, an introduction, or a
+//! reason clause must not satisfy a coverage check. Reverting the corresponding
+//! parser rule makes these cases fail, so each one is a regression guard rather
+//! than an assertion that happens to hold.
+
+use anyhow::Result;
+use rstest::rstest;
+
+use super::fixtures::{
+    SIMPLE_ROADMAP, VALID_SKELETON, expect_validation_error, inventory_with_one_register_item,
+    inventory_with_register_item_and_unchanged,
+};
+use super::validation::validate_inventory;
+
+/// Removing a required section must fail, not leave its checks unvisited.
+///
+/// `heading_body` returning `None` is what a missing heading looks like, and
+/// several checks read a section through `unwrap_or_default`. Without
+/// `validate_required_sections` those checks would read an empty string and
+/// report success, so each required heading earns its own failing case.
+#[rstest]
+#[case::scope(
+    "## Scope and definitions\n\nDefinitions pending.\n\n",
+    "Scope and definitions"
+)]
+#[case::method("## Method\n\nMethod pending.\n\n", "Method")]
+#[case::register("## Register\n\n", "Register")]
+#[case::landed_work("## Landed work\n\nPending EP-M3.\n\n", "Landed work")]
+#[case::compatibility_obligations(
+    "## Compatibility obligations\n\nPending EP-M3.\n\n",
+    "Compatibility obligations"
+)]
+#[case::refreshing(
+    "## Refreshing this inventory\n\nPending.\n",
+    "Refreshing this inventory"
+)]
+fn rejects_an_inventory_missing_a_required_heading(
+    #[case] removed: &str,
+    #[case] expected_heading: &str,
+) -> Result<()> {
+    let inventory = VALID_SKELETON.replace(removed, "");
+    expect_validation_error(
+        &inventory,
+        SIMPLE_ROADMAP,
+        &format!("should contain the `## {expected_heading}` section"),
+    )
+}
+
+#[test]
+fn rejects_an_obligation_traced_only_under_a_deeper_subheading() -> Result<()> {
+    let inventory = VALID_SKELETON
+        .replace(
+            "## Compatibility obligations\n\nPending EP-M3.",
+            "## Compatibility obligations\n\n- CO-1: Preserve an obligation.",
+        )
+        .replace(
+            "| -- | -- | -- | -- |\n\n### Consumes",
+            concat!(
+                "| -- | -- | -- | -- |\n\n",
+                "#### Notes\n\n",
+                "Task 26.1.1 honours `CO-1`.\n\n",
+                "### Consumes",
+            ),
+        );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "CO-1 has no trace-matrix")?;
+    Ok(())
+}
+
+#[test]
+fn rejects_an_unchanged_entry_under_a_deeper_subheading() -> Result<()> {
+    let inventory = inventory_with_register_item_and_unchanged(concat!(
+        "#### Notes\n\n",
+        "- A1/ast::Rule: appears only under a deeper subheading.\n",
+    ));
+    expect_validation_error(
+        &inventory,
+        SIMPLE_ROADMAP,
+        "neither traced nor listed unchanged",
+    )?;
+    Ok(())
+}
+
+#[test]
+fn rejects_an_exclusion_under_a_deeper_subheading() -> Result<()> {
+    let inventory = VALID_SKELETON.replace(
+        "### Excluded\n\n- 26.1.2: pending EP-M3.\n",
+        concat!(
+            "### Excluded\n\n",
+            "#### Notes\n\n",
+            "- 26.1.2: named only under a deeper subheading.\n",
+        ),
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "missing: {\"26.1.2\"}")?;
+    Ok(())
+}
+
+/// A finding may name a task that exists but is still the wrong owner.
+///
+/// `validate_findings` checks two different things: that a finding names an
+/// owner at all, and that each named task appears in the pinned roadmap. Only
+/// the first is covered by the ownerless case, so an owner naming a plausible
+/// but absent task would otherwise pass.
+#[test]
+fn rejects_a_finding_owned_by_a_task_absent_from_the_roadmap() -> Result<()> {
+    let inventory = VALID_SKELETON.replace(
+        "## Findings\n\nPending EP-M3.",
+        "## Findings\n\n- H1: Owned by 29.9.9.\n",
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "finding owner 29.9.9")?;
+    Ok(())
+}
+
+/// An exclusion must carry a reason, not merely name its task.
+///
+/// `exclusion_identifier` accepts `- 26.1.2: reason`, so a bullet ending at the
+/// colon still parses as an exclusion. Coverage then looks satisfied while the
+/// reader is told nothing about why the task is out of scope.
+#[test]
+fn rejects_an_exclusion_that_gives_no_reason() -> Result<()> {
+    let inventory = VALID_SKELETON.replace("- 26.1.2: pending EP-M3.\n", "- 26.1.2:\n");
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "should give a reason")?;
+    Ok(())
+}
+
+/// An unindented paragraph must not donate an owner to the finding above it.
+///
+/// `finding_entries` ends an entry at a list item or a heading, so a paragraph
+/// separated from the bullet by a blank line was appended to it. `validate_findings`
+/// reads the owner from the whole entry, so prose naming a task satisfied the
+/// check for a finding that named none — the same fail-open as the subheading
+/// case, reached without a heading. Markdown ends a list item at an unindented
+/// paragraph, so the entry ends there too.
+#[test]
+fn rejects_a_finding_whose_owner_appears_only_in_a_following_paragraph() -> Result<()> {
+    let inventory = inventory_with_findings(concat!(
+        "- OBS-1: An observed finding has no owner.\n",
+        "\n",
+        "The task 26.1.1 discusses this finding.\n",
+    ));
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "owning roadmap task")?;
+    Ok(())
+}
+
+/// An indented continuation survives a blank line inside the list item.
+///
+/// Markdown lets a list item hold several paragraphs, so `- OBS-1: finding.`
+/// followed by a blank line and an indented `Owned by 26.1.1.` is one entry
+/// whose owner sits after the gap. Closing at the blank line dropped the owner
+/// and rejected a valid document; the line after the gap decides, not the gap.
+#[test]
+fn accepts_a_finding_whose_owner_is_indented_after_a_blank_line() -> Result<()> {
+    let inventory = inventory_with_findings(concat!(
+        "- OBS-1: An observed finding.\n",
+        "\n",
+        "  Owned by 26.1.1.\n",
+    ));
+    super::validation::validate_inventory(&inventory, SIMPLE_ROADMAP)
+}
+
+/// A decorated label is an entry, so its missing owner is reported.
+///
+/// `is_finding_start` matched a short list of bare prefixes, so
+/// `- **OBS-1**: no owner.` read as prose and bound nothing, while the
+/// neighbouring valid finding satisfied the population guard. Matching any
+/// decoration around the label reports the bullet instead of skipping it.
+#[test]
+fn rejects_a_decorated_finding_that_names_no_owner() -> Result<()> {
+    let inventory = inventory_with_findings(concat!(
+        "- H1: An observed finding owned by 26.1.1.\n",
+        "- **OBS-1**: An observed finding without an owner.\n",
+    ));
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "owning roadmap task")?;
+    Ok(())
+}
+
+/// An indented continuation still belongs to the finding it continues.
+///
+/// The refusal above must not be bought by ending every entry at the first
+/// blank line: a wrapped bullet's owner commonly sits on its continuation, and
+/// dropping that would reject the real inventory. This is the other half of the
+/// same boundary rule.
+#[test]
+fn accepts_a_finding_whose_owner_is_on_an_indented_continuation() -> Result<()> {
+    let inventory = inventory_with_findings(concat!(
+        "- OBS-1: An observed finding whose owner is named on the\n",
+        "  continuation line (26.1.1).\n",
+    ));
+    super::validation::validate_inventory(&inventory, SIMPLE_ROADMAP)
+}
+
+/// Replace the skeleton's pending `Findings` section with `body`.
+///
+/// Every finding-reader case starts from the same empty section, so the anchor
+/// lives in one place. Four copies of it were what `CodeScene` reported as
+/// duplication, and the copies would also let one case silently stop testing
+/// anything if the anchor drifted out of the skeleton.
+fn inventory_with_findings(body: &str) -> String {
+    VALID_SKELETON.replace(
+        "## Findings\n\nPending EP-M3.",
+        &format!("## Findings\n\n{body}"),
+    )
+}
+
+#[test]
+fn rejects_a_finding_whose_owner_appears_only_under_a_subheading() -> Result<()> {
+    let inventory = inventory_with_findings(concat!(
+        "- OBS-1: An observed finding has no owner.\n",
+        "### Notes\n\n",
+        "The task 26.1.1 discusses this finding.\n",
+    ));
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "owning roadmap task")?;
+    Ok(())
+}
+
+#[test]
+fn rejects_an_exclusion_bullet_naming_a_task_only_in_its_reason() -> Result<()> {
+    let inventory = VALID_SKELETON.replace(
+        "- 26.1.2: pending EP-M3.\n",
+        "- 26.1.1: pending EP-M3 and blocked-by-26.1.2.\n",
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "missing: {\"26.1.2\"}")?;
+    Ok(())
+}
+
+#[test]
+fn rejects_an_obligation_matched_only_by_a_longer_identifier() -> Result<()> {
+    let inventory = VALID_SKELETON
+        .replace(
+            "## Compatibility obligations\n\nPending EP-M3.",
+            "## Compatibility obligations\n\n- CO-1: Preserve one.\n- CO-10: Preserve ten.",
+        )
+        .replace(
+            "| -- | -- | -- | -- |\n\n### Excluded",
+            "| -- | -- | -- | -- |\n| 26.1.2 | -- | -- | CO-10 |\n\n### Excluded",
+        );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "CO-1 has no trace-matrix")?;
+    Ok(())
+}
+
+/// A register item counts as traced only when a real task row names it.
+///
+/// Every case is a claim that must not satisfy coverage, and each one satisfies
+/// part of the rule while breaking the rest. The prose cases name the
+/// identifier and nothing else; a sentence ending in a full stop would not
+/// prove them, because `reference_covers` tokenises on whitespace and the stray
+/// punctuation leaves the token unequal to the identifier, so the rule would
+/// look live while only the punctuation was doing the work. The row cases are
+/// the pipe-delimited shapes: the first is a well-formed wildcard on a line
+/// that belongs to no `Task`-headed table, the second is a real task in a row
+/// of the skeleton's own `Task` table whose reference cell is a wildcard with
+/// no area name, and the third is such a row whose first cell names no task at
+/// all. Accepting any of them would let something that traces nothing cover a
+/// register item.
+#[rstest]
+#[case::prose_under_changes("### Changes\n\n", "### Changes\n\nA1/ast::Rule\n\n")]
+#[case::prose_under_the_trace_introduction(
+    "## Trace matrix\n\n",
+    "## Trace matrix\n\nA wildcard such as `A1/*` covers the area.\n\n"
+)]
+#[case::row_outside_a_task_table(
+    "### Changes\n\n",
+    "### Changes\n\n| not-a-task | A1/* | -- | -- |\n\n"
+)]
+#[case::area_wildcard_with_no_area(
+    "| -- | -- | -- | -- |\n\n### Consumes",
+    "| -- | -- | -- | -- |\n| 26.1.2 | /* | -- | -- |\n\n### Consumes"
+)]
+#[case::task_row_naming_no_task(
+    "| -- | -- | -- | -- |\n\n### Consumes",
+    "| -- | -- | -- | -- |\n| nobody | A1/* | -- | -- |\n\n### Consumes"
+)]
+fn rejects_register_coverage_claimed_by_something_other_than_a_task_row(
+    #[case] anchor: &str,
+    #[case] replacement: &str,
+) -> Result<()> {
+    let inventory = inventory_with_one_register_item().replace(anchor, replacement);
+    expect_validation_error(
+        &inventory,
+        SIMPLE_ROADMAP,
+        "neither traced nor listed unchanged",
+    )?;
+    Ok(())
+}
+
+/// Only the `Register items` cell of a task row names what the task changes.
+///
+/// A row carries four kinds of claim side by side, so reading it as text lets
+/// any column answer for any other. The listed cases put the identifier in each
+/// of the row's other cells in turn: a row that changes nothing but mentions
+/// the item under `Findings` or `Obligations` covers nothing, and accepting it
+/// would let an identifier pasted one cell too far right stand in for a change
+/// no task makes. The row is otherwise well formed, so the width check cannot
+/// be what rejects it.
+#[rstest]
+#[case::in_the_findings_cell("| 26.1.2 | -- | A1/ast::Rule | -- |")]
+#[case::in_the_obligations_cell("| 26.1.2 | -- | -- | A1/ast::Rule |")]
+fn rejects_register_coverage_claimed_from_another_column(#[case] row: &str) -> Result<()> {
+    let inventory = inventory_with_one_register_item().replace(
+        "| -- | -- | -- | -- |\n\n### Consumes",
+        &format!("| -- | -- | -- | -- |\n{row}\n\n### Consumes"),
+    );
+    expect_validation_error(
+        &inventory,
+        SIMPLE_ROADMAP,
+        "neither traced nor listed unchanged",
+    )?;
+    Ok(())
+}
+
+#[test]
+fn rejects_an_obligation_claimed_only_by_prose_under_consumes() -> Result<()> {
+    let inventory = VALID_SKELETON
+        .replace(
+            "## Compatibility obligations\n\nPending EP-M3.",
+            "## Compatibility obligations\n\n- CO-1: Preserve an obligation.",
+        )
+        .replace("### Consumes\n\n", "### Consumes\n\n`CO-1`\n\n");
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "CO-1 has no trace-matrix")?;
+    Ok(())
+}
+
+#[test]
+fn rejects_task_coverage_claimed_by_a_table_under_a_deeper_excluded_heading() -> Result<()> {
+    let inventory = VALID_SKELETON.replace(
+        "### Excluded\n\n- 26.1.2: pending EP-M3.\n",
+        concat!(
+            "### Excluded\n\n",
+            "#### Notes\n\n",
+            "| Task | Register items | Findings | Obligations |\n",
+            "| -- | -- | -- | -- |\n",
+            "| 26.1.2 | -- | -- | -- |\n",
+        ),
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "missing: {\"26.1.2\"}")?;
+    Ok(())
+}
+
+#[test]
+fn accepts_a_register_item_listed_as_unchanged() -> Result<()> {
+    let inventory =
+        inventory_with_register_item_and_unchanged("- A1/ast::Rule: no task changes it.\n");
+    validate_inventory(&inventory, SIMPLE_ROADMAP)
+}
+
+#[rstest]
+#[case::no_entry("None yet.\n", "neither traced nor listed unchanged")]
+#[case::unnamed_identifier_in_prose(
+    "No task changes A1/ast::Rule.\n",
+    "neither traced nor listed unchanged"
+)]
+#[case::malformed_identifier("- A1: no task changes it.\n", "neither traced nor listed unchanged")]
+fn rejects_a_register_item_without_a_trace_or_unchanged_entry(
+    #[case] unchanged: &str,
+    #[case] expected: &str,
+) -> Result<()> {
+    let inventory = inventory_with_register_item_and_unchanged(unchanged);
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, expected)?;
+    Ok(())
+}
+
+/// Renaming one register table's header must not exempt its rows.
+///
+/// The renamed table still holds `A1/ast::Rule`, but `register_ids` reads only
+/// `ID`-headed tables, so its row would drop out of uniqueness, well-formedness,
+/// and coverage while the untouched site table kept `validate_populated`
+/// non-empty. The case therefore covers a hole a section-level emptiness check
+/// cannot reach, and reports the header that opens it.
+#[test]
+fn rejects_a_register_table_whose_header_is_not_id() -> Result<()> {
+    let inventory = inventory_with_register_item_and_unchanged("None yet.\n").replace(
+        "| ID | Item | Visibility | Derives | Location |",
+        "| Identifier | Item | Visibility | Derives | Location |",
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "should be `ID`-headed")?;
+    Ok(())
+}
+
+/// Swapping two trace columns must fail, not read the finding as register items.
+///
+/// `parse_trace_row` assigns columns by position, so a header in another order
+/// hands each cell to the wrong name: here the `A1/*` that belongs in
+/// `Register items` would arrive as `Findings` and vice versa. Whichever way the
+/// swap is read, the row's own claims are misreported — and the register item
+/// would be either spuriously traced or spuriously untraced while every check
+/// still answered confidently. The header is the only place the intended order
+/// is written down, so it is validated before its rows are read.
+#[test]
+fn rejects_a_trace_table_whose_columns_are_swapped() -> Result<()> {
+    let inventory = inventory_with_register_item_and_unchanged("None yet.\n").replace(
+        "| Task | Register items | Findings | Obligations |",
+        "| Task | Findings | Register items | Obligations |",
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "trace table header should read")?;
+    Ok(())
+}

@@ -30,7 +30,9 @@ repository-wide layer reorganization is a prerequisite for this hardening.
 
 The implementation baseline is Netsuke commit
 `79545e124b4a13dbe8352fd23df97619a91a0b5c`, inspected on 2026-09-19. The audit
-identifiers H1 to H6 are local finding identifiers, not issue numbers.
+identifiers H1 to H6 are local finding identifiers, not issue numbers. Roadmap
+item 26.1.1 records the model and consumer baseline in the
+[source-pinned inventory](../hexagonal-hardening-inventory.md) at `8a961000`.
 
 - H1: [`ir::Action`](../../src/ir/graph/mod.rs) still stores `ast::Recipe`.
   Successful lowering should instead yield a domain operation that cannot

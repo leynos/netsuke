@@ -116,7 +116,9 @@ before execution, a critical requirement for compatibility with Ninja.
    [ADR-0035](adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md)
    owns this resolution boundary: its requirement that successful compilation
    exclude unresolved executable states is the gap that backend-only
-   enforcement leaves open.
+   enforcement leaves open. The
+   [26.1.1 inventory](hexagonal-hardening-inventory.md) records the pinned H1
+   evidence and the lowering and backend sites that later changes must trace.
 
 - Stage 6: Ninja Synthesis & Execution
 

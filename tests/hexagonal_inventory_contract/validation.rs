@@ -1,0 +1,358 @@
+//! Check inventory claims against the pinned roadmap and related sections.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use anyhow::{Context, Result, ensure};
+
+use super::landed::{landed_work_entries, validate_landed_work};
+use super::markdown::{
+    HeadingLevel, declared_pin, finding_entries, heading_body, non_id_register_headers, pins,
+    regex_values, register_ids, task_ids,
+};
+use super::obligations::{OBLIGATION_PATTERN, validate_obligation_tasks};
+use super::register::is_well_formed_register_id;
+use super::roadmap::{dependents_of, roadmap_tasks};
+use super::trace::{
+    excluded_tasks, reference_covers, trace_obligation_references, trace_register_references,
+    trace_table_tasks, unchanged_ids,
+};
+
+/// Require the real inventory to populate the sections whose checks iterate.
+///
+/// # Errors
+///
+/// Returns an error when the register, obligations, or findings section parses
+/// to no entries.
+///
+/// `validate_inventory` must accept the skeleton fixture's empty sections, so a
+/// changed identifier format would leave its loops with nothing to visit and
+/// turn every check into a silent pass. Holding the real document to
+/// non-emptiness keeps those loops live.
+///
+/// The register requirement is deliberately about the section as a whole: it
+/// says the inventory registers at least one identifier, not that any
+/// particular table does. A table whose header is not `ID` is caught by
+/// `validate_register` instead, which reports the header rather than relying on
+/// the section's other tables to keep the check non-empty.
+pub(super) fn validate_populated(inventory: &str) -> Result<()> {
+    ensure!(
+        !register_ids(inventory).is_empty(),
+        "the real inventory should register at least one item"
+    );
+    ensure!(
+        !regex_values(
+            OBLIGATION_PATTERN,
+            section(inventory, "Compatibility obligations")
+        )
+        .is_empty(),
+        "the real inventory should record at least one compatibility obligation"
+    );
+    ensure!(
+        !finding_entries(section(inventory, "Findings")).is_empty(),
+        "the real inventory should record at least one finding"
+    );
+    ensure!(
+        !landed_work_entries(section(inventory, "Landed work")).is_empty(),
+        "the real inventory should record at least one landed-work entry"
+    );
+    Ok(())
+}
+
+/// Return a required second-level section body, or an empty string.
+fn section<'text>(inventory: &'text str, heading: &str) -> &'text str {
+    heading_body(inventory, heading, HeadingLevel::Section).unwrap_or_default()
+}
+
+/// Validate the inventory's pin, register, trace matrix, and finding owners.
+///
+/// # Errors
+///
+/// Returns an error when the inventory disagrees with its roadmap or omits a
+/// required structural relationship.
+pub(super) fn validate_inventory(inventory: &str, roadmap: &str) -> Result<()> {
+    let validation = InventoryValidation { inventory, roadmap };
+    validate_pin(inventory)?;
+    validate_required_sections(inventory)?;
+    validation.validate_trace_coverage()?;
+    validate_register(inventory)?;
+    validate_obligations(inventory)?;
+    validate_obligation_tasks(
+        section(inventory, "Compatibility obligations"),
+        section(inventory, "Trace matrix"),
+    )?;
+    validate_landed_work(section(inventory, "Landed work"))?;
+    validation.validate_findings()
+}
+
+/// Carry the two documents whose claims must be checked together.
+struct InventoryValidation<'text> {
+    inventory: &'text str,
+    roadmap: &'text str,
+}
+
+impl InventoryValidation<'_> {
+    /// Check that the trace covers every roadmap task that depends on the inventory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for unknown roadmap tasks, reasonless exclusions, or a
+    /// missing transitive dependent.
+    fn validate_trace_coverage(&self) -> Result<()> {
+        let tasks = roadmap_tasks(self.roadmap);
+        ensure!(
+            tasks.contains_key("26.1.1"),
+            "roadmap should contain task 26.1.1"
+        );
+        let trace = section(self.inventory, "Trace matrix");
+        validate_known_trace_tasks(trace, &tasks)?;
+        validate_exclusions(trace, &tasks)?;
+
+        let mut covered = trace_table_tasks(trace)?;
+        covered.extend(excluded_tasks(trace).keys().cloned());
+        let missing: BTreeSet<String> = dependents_of(&tasks, "26.1.1")
+            .difference(&covered)
+            .cloned()
+            .collect();
+        ensure!(
+            missing.is_empty(),
+            "trace matrix should cover every dependent task; missing: {missing:?}"
+        );
+        Ok(())
+    }
+
+    /// Check that every finding names an existing owning roadmap task.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a finding has no owner or names an unknown task.
+    fn validate_findings(&self) -> Result<()> {
+        let tasks = roadmap_tasks(self.roadmap);
+        for entry in finding_entries(section(self.inventory, "Findings")) {
+            let owners = task_ids(&entry);
+            ensure!(
+                !owners.is_empty(),
+                "finding should name an owning roadmap task: {entry}"
+            );
+            for owner in owners {
+                ensure!(
+                    tasks.contains_key(&owner),
+                    "finding owner {owner} is absent from the roadmap"
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Confirm the inventory declares exactly one valid revision pin.
+///
+/// # Errors
+///
+/// Returns an error when the pin is absent, duplicated, malformed, or mixed
+/// with another hexadecimal revision.
+fn validate_pin(inventory: &str) -> Result<()> {
+    let pin_lines = inventory
+        .lines()
+        .filter(|line| line.starts_with("Pin:"))
+        .count();
+    ensure!(
+        pin_lines == 1,
+        "inventory should declare exactly one `Pin:` line"
+    );
+    let pin = declared_pin(inventory).context("inventory should declare a non-empty Pin:")?;
+    ensure!(
+        pins(inventory) == BTreeSet::from([pin]),
+        "inventory should contain only its declared lowercase 40-character pin"
+    );
+    Ok(())
+}
+
+/// Require the structural sections used by later inventory consumers.
+///
+/// # Errors
+///
+/// Returns an error when a required second-level heading is absent.
+fn validate_required_sections(inventory: &str) -> Result<()> {
+    for heading in [
+        "Scope and definitions",
+        "Method",
+        "Register",
+        "Landed work",
+        "Findings",
+        "Compatibility obligations",
+        "Trace matrix",
+        "Consuming this inventory",
+        "Refreshing this inventory",
+    ] {
+        ensure!(
+            heading_body(inventory, heading, HeadingLevel::Section).is_some(),
+            "inventory should contain the `## {heading}` section"
+        );
+    }
+    Ok(())
+}
+
+/// Reject trace references that do not identify tasks in the pinned roadmap.
+///
+/// # Errors
+///
+/// Returns an error when a trace reference does not identify a roadmap task.
+fn validate_known_trace_tasks(
+    trace: &str,
+    tasks: &BTreeMap<String, BTreeSet<String>>,
+) -> Result<()> {
+    for identifier in task_ids(trace) {
+        ensure!(
+            tasks.contains_key(&identifier),
+            "trace matrix refers to task {identifier}, which is absent from the roadmap"
+        );
+    }
+    Ok(())
+}
+
+/// Require every excluded roadmap task to have a non-empty explanation.
+///
+/// # Errors
+///
+/// Returns an error when an exclusion is unknown or has no explanation.
+fn validate_exclusions(trace: &str, tasks: &BTreeMap<String, BTreeSet<String>>) -> Result<()> {
+    for (identifier, reason) in excluded_tasks(trace) {
+        ensure!(
+            tasks.contains_key(&identifier),
+            "excluded task {identifier} is absent from the roadmap"
+        );
+        ensure!(
+            !reason.is_empty(),
+            "excluded task {identifier} should give a reason"
+        );
+    }
+    Ok(())
+}
+
+/// Check register identifiers and their trace references.
+///
+/// # Errors
+///
+/// Returns an error when a register table is not `ID`-headed, or when
+/// identifiers are duplicated, malformed, or untraced.
+///
+/// A register item is covered by a `Changes` or `Consumes` row that names it in
+/// that row's `Register items` cell, or by an `Unchanged` bullet that opens
+/// with the identifier. Reading the cell rather than the row keeps the column's
+/// meaning: an identifier pasted into `Findings` or `Obligations` names no
+/// change, so it must not cover the item it mentions. Requiring the bullet form
+/// keeps the two sources symmetrical: neither the trace introduction nor a
+/// sentence in `Unchanged` can satisfy coverage by merely mentioning an
+/// identifier.
+fn validate_register(inventory: &str) -> Result<()> {
+    let register = heading_body(inventory, "Register", HeadingLevel::Section).unwrap_or_default();
+    ensure!(
+        non_id_register_headers(register).is_empty(),
+        "every register table should be `ID`-headed; found {:?}",
+        non_id_register_headers(register)
+    );
+    let register_document = format!("## Register\n{register}");
+    let register_identifiers = register_ids(&register_document);
+    let unique: BTreeSet<&str> = register_identifiers.iter().map(String::as_str).collect();
+    ensure!(
+        unique.len() == register_identifiers.len(),
+        "register identifiers should be unique"
+    );
+    let trace = section(inventory, "Trace matrix");
+    let references = trace_register_references(trace)?;
+    let unchanged = unchanged_ids(trace);
+    for identifier in &register_identifiers {
+        ensure!(
+            is_well_formed_register_id(identifier),
+            "register identifier {identifier:?} is malformed"
+        );
+        ensure!(
+            reference_covers(identifier, &references) || unchanged.contains(identifier),
+            "register identifier {identifier} is neither traced nor listed unchanged"
+        );
+    }
+    Ok(())
+}
+
+/// Check that every compatibility obligation appears in the trace matrix.
+///
+/// # Errors
+///
+/// Returns an error when an obligation identifier is missing from the trace.
+///
+/// Only the `Obligations` cells of the `Changes` and `Consumes` tables count,
+/// exactly as register coverage reads only `Register items`: the introduction,
+/// the other columns, the exclusion reasons, and the `Unchanged` prose would
+/// otherwise satisfy an obligation without any row having to reference it.
+fn validate_obligations(inventory: &str) -> Result<()> {
+    let obligations = section(inventory, "Compatibility obligations");
+    let trace = trace_obligation_references(section(inventory, "Trace matrix"))?;
+    let traced = regex_values(OBLIGATION_PATTERN, &trace);
+    for obligation in regex_values(OBLIGATION_PATTERN, obligations) {
+        ensure!(
+            traced.contains(&obligation),
+            "compatibility obligation {obligation} has no trace-matrix reference"
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    //! Pin the vacuous-pass guard against inventories that omit each section.
+
+    use anyhow::{Result, bail, ensure};
+    use rstest::rstest;
+
+    use super::validate_populated;
+
+    const POPULATED: &str = concat!(
+        "# Inventory\n\n",
+        "## Register\n\n",
+        "### Type rows\n\n",
+        "| ID | Item |\n",
+        "| -- | -- |\n",
+        "| A1/ast::Rule | Rule |\n\n",
+        "## Findings\n\n",
+        "- H1: An observed finding owned by 26.1.1.\n\n",
+        "## Compatibility obligations\n\n",
+        "- CO-1: Preserve the public surface.\n\n",
+        "## Landed work\n\n",
+        "- PR `#714` (`2c030fd1`) moved edges into an arena.\n",
+    );
+
+    /// Return a fixture error when the guard accepts the inventory.
+    fn expect_rejection(inventory: &str, expected: &str) -> Result<()> {
+        match validate_populated(inventory) {
+            Ok(()) => bail!("fixture should have been rejected for {expected:?}"),
+            Err(error) => ensure!(
+                format!("{error:#}").contains(expected),
+                "expected error containing {expected:?}, found {error:#}"
+            ),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn accepts_an_inventory_populating_every_iterated_section() -> Result<()> {
+        validate_populated(POPULATED)
+    }
+
+    #[rstest]
+    #[case::no_register_rows("| A1/ast::Rule | Rule |\n", "should register at least one item")]
+    #[case::no_obligations(
+        "- CO-1: Preserve the public surface.\n",
+        "at least one compatibility obligation"
+    )]
+    #[case::no_findings("- H1: An observed finding owned by 26.1.1.\n", "at least one finding")]
+    #[case::no_landed_work(
+        "- PR `#714` (`2c030fd1`) moved edges into an arena.\n",
+        "at least one landed-work entry"
+    )]
+    fn rejects_an_inventory_missing_an_iterated_section(
+        #[case] removed: &str,
+        #[case] expected: &str,
+    ) -> Result<()> {
+        expect_rejection(&POPULATED.replace(removed, "Pending.\n"), expected)
+    }
+}

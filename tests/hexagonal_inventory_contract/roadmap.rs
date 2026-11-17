@@ -1,0 +1,147 @@
+//! Parse roadmap tasks and compute their dependency relationships.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
+
+use regex::Regex;
+
+/// The pattern that opens a roadmap task bullet.
+///
+/// Compiled once because every roadmap read asks the same question, and held in
+/// a `LazyLock` rather than compiled per call so the failure mode is stated
+/// where it happens: the pattern is a compile-time constant, so a failure is a
+/// programming error and panics through `expect`. Returning an empty map
+/// instead — the earlier form — turned a broken pattern into "this roadmap has
+/// no tasks", which every caller reads as a roadmap that covers nothing and so
+/// as a vacuous pass.
+static TASK_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^- \[[ x]\] (\d+\.\d+\.\d+)\.").expect("roadmap task pattern should compile")
+});
+
+/// The pattern that recognises a task identifier inside dependency prose.
+static DEPENDENCY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b\d+\.\d+\.\d+\b").expect("task identifier pattern should compile")
+});
+
+/// Parse checked or unchecked roadmap tasks and their dependency bullets.
+pub(super) fn roadmap_tasks(roadmap: &str) -> BTreeMap<String, BTreeSet<String>> {
+    let mut lines = roadmap.lines().peekable();
+    let mut tasks = BTreeMap::new();
+
+    while let Some(line) = lines.next() {
+        let Some(task) = task_identifier(line, &TASK_PATTERN) else {
+            continue;
+        };
+        let dependencies = task_dependencies(&mut lines, &TASK_PATTERN, &DEPENDENCY_PATTERN);
+        tasks.insert(task, dependencies);
+    }
+
+    tasks
+}
+
+/// Extract a task identifier from a roadmap task line.
+fn task_identifier(line: &str, task_pattern: &Regex) -> Option<String> {
+    task_pattern
+        .captures(line)
+        .and_then(|captures| captures.get(1))
+        .map(|capture| capture.as_str().to_owned())
+}
+
+/// Collect dependency references until the next roadmap task.
+fn task_dependencies(
+    lines: &mut std::iter::Peekable<std::str::Lines<'_>>,
+    task_pattern: &Regex,
+    dependency_pattern: &Regex,
+) -> BTreeSet<String> {
+    let mut dependencies = BTreeSet::new();
+    while let Some(next_line) = lines.peek().copied() {
+        if task_pattern.is_match(next_line) {
+            break;
+        }
+        let Some(consumed_line) = lines.next() else {
+            break;
+        };
+        let Some(mut dependency_text) = dependency_text(consumed_line) else {
+            continue;
+        };
+        append_dependency_continuations(lines, &mut dependency_text);
+        dependencies.extend(
+            dependency_pattern
+                .find_iter(&dependency_text)
+                .map(|matched| matched.as_str().to_owned()),
+        );
+    }
+    dependencies
+}
+
+/// Return the inline text of a two-space-indented dependency bullet.
+fn dependency_text(line: &str) -> Option<String> {
+    let indentation = line.len() - line.trim_start().len();
+    (indentation == 2)
+        .then(|| line.trim_start().strip_prefix("- Dependencies:"))
+        .flatten()
+        .map(str::to_owned)
+}
+
+/// Append indented continuation prose without consuming the next list item.
+fn append_dependency_continuations(
+    lines: &mut std::iter::Peekable<std::str::Lines<'_>>,
+    dependency_text: &mut String,
+) {
+    while let Some(next_line) = lines.peek().copied() {
+        if ends_dependency_continuation(next_line) {
+            break;
+        }
+        let Some(consumed_line) = lines.next() else {
+            break;
+        };
+        append_nonempty_line(dependency_text, consumed_line);
+    }
+}
+
+/// Identify a line that ends a dependency continuation because it is neither
+/// blank nor indented continuation prose.
+///
+/// Roadmap bullets sit at two spaces and their continuations at four, so any
+/// non-blank line indented by two spaces or fewer starts new content. Stopping
+/// there keeps a heading, a sibling bullet, or unindented prose from donating
+/// its task identifiers to the preceding `Dependencies:` value.
+fn ends_dependency_continuation(line: &str) -> bool {
+    let content = line.trim_start();
+    !content.is_empty() && line.len() - content.len() <= 2
+}
+
+/// Append nonblank continuation text to its inline dependency value.
+fn append_nonempty_line(dependency_text: &mut String, line: &str) {
+    let continuation = line.trim();
+    if !continuation.is_empty() {
+        dependency_text.push(' ');
+        dependency_text.push_str(continuation);
+    }
+}
+
+/// Compute the transitive set of tasks whose dependencies reach `root`.
+pub(super) fn dependents_of(
+    tasks: &BTreeMap<String, BTreeSet<String>>,
+    root: &str,
+) -> BTreeSet<String> {
+    let mut dependents = BTreeSet::new();
+    loop {
+        let additions: BTreeSet<String> = tasks
+            .iter()
+            .filter(|(task, dependencies)| {
+                !dependents.contains(*task)
+                    && (dependencies.contains(root)
+                        || dependencies
+                            .iter()
+                            .any(|dependency| dependents.contains(dependency)))
+            })
+            .map(|(task, _)| task.clone())
+            .collect();
+        if additions.is_empty() {
+            break;
+        }
+        dependents.extend(additions);
+    }
+    dependents
+}
