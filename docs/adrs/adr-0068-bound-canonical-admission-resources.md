@@ -79,6 +79,11 @@ one budget through every admission traversal.
   child admission in sorted name order. A mapping therefore refuses a
   non-string key, a repeated name, or an over-budget member name before any
   member value is admitted.
+- Traversal carries a borrowed chain of snapshot edges and materializes the
+  owned path only when it renders a refusal. An owned path extended once per
+  child would copy every ancestor name once per descendant, so admission's
+  bookkeeping would scale with the product of the node and byte ceilings rather
+  than with the work each ceiling bounds.
 
 ## Rationale
 
@@ -95,12 +100,14 @@ duplicated, and it makes member names part of the same allowance as values.
 
 The limits are not configurable because they are a safety bound on a library
 surface rather than operator policy. The supported input domain sits far below
-every default — the property generator reaches depth 3 and the deepest fixture
-that is expected to be admitted reaches depth 12 — so no supported input
-changes behaviour. A caller needing a different ceiling needs a different API,
-not a different number, and making the ceiling configurable would require the
-policy ownership, validation, and localization that roadmap 6.1.4 and the CLI
-policy layer own.
+every default: the property generator reaches depth 3, and the deepest fixture
+a test expects to be admitted is the wide-leaf path fixture in
+[`tests/budget.rs`](../../src/stdlib/canonical_value/tests/budget.rs), whose
+items sit five edges below the root. Fixtures that go deeper exist to provoke a
+refusal, so no supported input changes behaviour. A caller needing a different
+ceiling needs a different API, not a different number, and making the ceiling
+configurable would require the policy ownership, validation, and localization
+that roadmap 6.1.4 and the CLI policy layer own.
 
 ## Consequences
 

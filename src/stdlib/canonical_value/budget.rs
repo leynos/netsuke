@@ -22,7 +22,7 @@
 //! input domain sits far below every default; a caller needing a different
 //! ceiling needs a different API, not a different number.
 
-use super::error::{CanonicalResource, CanonicalValueError, SnapshotPath};
+use super::error::{CanonicalResource, CanonicalValueError, PathRef};
 
 /// Default maximum distance from the snapshot root to any admitted value.
 ///
@@ -65,7 +65,12 @@ impl Default for AdmissionLimits {
 }
 
 /// Consumed and remaining accounting for one admission traversal.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+///
+/// Deliberately neither `Clone` nor `Copy`: a copy would silently duplicate the
+/// consumed counters, and a traversal that charged a copy would report a spent
+/// allowance that the real budget still holds. The budget is threaded by
+/// mutable reference precisely so there is one accounting for one operation.
+#[derive(Debug, Eq, PartialEq)]
 pub(super) struct AdmissionBudget {
     /// Ceilings this budget enforces.
     limits: AdmissionLimits,
@@ -101,7 +106,7 @@ impl AdmissionBudget {
     pub(super) fn check_depth(
         &self,
         depth: usize,
-        path: &SnapshotPath,
+        path: &PathRef<'_>,
     ) -> Result<(), CanonicalValueError> {
         if depth > self.limits.depth {
             return Err(CanonicalValueError::resource_limit(
@@ -117,7 +122,7 @@ impl AdmissionBudget {
     ///
     /// A charge that lands exactly on the ceiling succeeds; only the next one
     /// is refused, which keeps the limit an inclusive allowance.
-    pub(super) fn charge_node(&mut self, path: &SnapshotPath) -> Result<(), CanonicalValueError> {
+    pub(super) fn charge_node(&mut self, path: &PathRef<'_>) -> Result<(), CanonicalValueError> {
         Allowance {
             used: &mut self.used_nodes,
             limit: self.limits.nodes,
@@ -130,7 +135,7 @@ impl AdmissionBudget {
     pub(super) fn charge_bytes(
         &mut self,
         bytes: usize,
-        path: &SnapshotPath,
+        path: &PathRef<'_>,
     ) -> Result<(), CanonicalValueError> {
         Allowance {
             used: &mut self.used_bytes,
@@ -168,7 +173,7 @@ impl Allowance<'_> {
     /// A charge that lands exactly on the ceiling succeeds. The counter is left
     /// untouched on refusal, so a caller that recovers from one refusal sees the
     /// same remaining allowance it saw before the attempt.
-    fn charge(&mut self, amount: usize, path: &SnapshotPath) -> Result<(), CanonicalValueError> {
+    fn charge(&mut self, amount: usize, path: &PathRef<'_>) -> Result<(), CanonicalValueError> {
         let Some(next) = self.used.checked_add(amount) else {
             return Err(self.refusal(path));
         };
@@ -180,7 +185,7 @@ impl Allowance<'_> {
     }
 
     /// Build the refusal this allowance reports at `path`.
-    fn refusal(&self, path: &SnapshotPath) -> CanonicalValueError {
+    fn refusal(&self, path: &PathRef<'_>) -> CanonicalValueError {
         CanonicalValueError::resource_limit(self.resource, self.limit, path)
     }
 }

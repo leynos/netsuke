@@ -38,7 +38,7 @@ use std::collections::BTreeMap;
 use minijinja::value::{DynObject, Value, ValueKind};
 
 use super::budget::AdmissionBudget;
-use super::error::{CanonicalValueError, SnapshotPath};
+use super::error::{CanonicalValueError, PathRef};
 use super::node::SnapshotNode;
 
 /// Traverse `value` once and return the snapshot the canonicalizer serializes.
@@ -49,7 +49,7 @@ pub(super) fn snapshot(
     value: &Value,
     budget: &mut AdmissionBudget,
 ) -> Result<SnapshotNode, CanonicalValueError> {
-    let path = SnapshotPath::root();
+    let path = PathRef::root();
     budget.charge_node(&path)?;
     admit(value, &path, 0, budget)
 }
@@ -62,7 +62,7 @@ pub(super) fn snapshot(
 /// though the adapter cannot see the cycle.
 fn admit(
     value: &Value,
-    path: &SnapshotPath,
+    path: &PathRef<'_>,
     depth: usize,
     budget: &mut AdmissionBudget,
 ) -> Result<SnapshotNode, CanonicalValueError> {
@@ -87,7 +87,7 @@ fn admit(
 /// refused string is never copied.
 fn admit_string(
     value: &Value,
-    path: &SnapshotPath,
+    path: &PathRef<'_>,
     budget: &mut AdmissionBudget,
 ) -> Result<SnapshotNode, CanonicalValueError> {
     let text = value
@@ -103,7 +103,7 @@ fn admit_string(
 /// primitive conversions carry a boolean arm, so an ungated integer read makes
 /// `true` indistinguishable from `1`. Every integer width and the binary64
 /// case share [`ValueKind::Number`], so the kind alone does not select an arm.
-fn admit_number(value: &Value, path: &SnapshotPath) -> Result<SnapshotNode, CanonicalValueError> {
+fn admit_number(value: &Value, path: &PathRef<'_>) -> Result<SnapshotNode, CanonicalValueError> {
     if value.is_integer() {
         return admit_integer(value, path);
     }
@@ -121,7 +121,7 @@ fn admit_number(value: &Value, path: &SnapshotPath) -> Result<SnapshotNode, Cano
 /// No integer width is narrowed here. The canonicalizer renders every width as
 /// a binary64, so this preserves fidelity for a future serializer rather than
 /// making the key injective over the integers; it does not.
-fn admit_integer(value: &Value, path: &SnapshotPath) -> Result<SnapshotNode, CanonicalValueError> {
+fn admit_integer(value: &Value, path: &PathRef<'_>) -> Result<SnapshotNode, CanonicalValueError> {
     if let Ok(signed) = i128::try_from(value.clone()) {
         return Ok(SnapshotNode::I128(signed));
     }
@@ -133,7 +133,7 @@ fn admit_integer(value: &Value, path: &SnapshotPath) -> Result<SnapshotNode, Can
 /// Admit a sequence representation into an ordered list of snapshots.
 fn admit_sequence(
     value: &Value,
-    path: &SnapshotPath,
+    path: &PathRef<'_>,
     depth: usize,
     budget: &mut AdmissionBudget,
 ) -> Result<SnapshotNode, CanonicalValueError> {
@@ -159,7 +159,7 @@ fn admit_sequence(
 /// exists so `sort_members` refuses a non-string key on its own terms.
 fn admit_mapping(
     value: &Value,
-    path: &SnapshotPath,
+    path: &PathRef<'_>,
     depth: usize,
     budget: &mut AdmissionBudget,
 ) -> Result<SnapshotNode, CanonicalValueError> {
@@ -171,7 +171,7 @@ fn admit_mapping(
         // rather than cloned to outlive the borrow.
         let node = admit(
             &item,
-            &path.with_member(&key),
+            &path.with_member(key.as_str()),
             depth.saturating_add(1),
             budget,
         )?;
@@ -188,7 +188,7 @@ fn admit_mapping(
 /// shared through [`collect_stably`], so the two cannot drift apart.
 fn collect_members(
     value: &Value,
-    path: &SnapshotPath,
+    path: &PathRef<'_>,
     budget: &mut AdmissionBudget,
 ) -> Result<Vec<(Value, Value)>, CanonicalValueError> {
     collect_stably(value, path, budget, DynObject::try_iter_pairs)
@@ -201,7 +201,7 @@ fn collect_members(
 /// rule are shared with it through [`collect_stably`].
 fn collect_items(
     value: &Value,
-    path: &SnapshotPath,
+    path: &PathRef<'_>,
     budget: &mut AdmissionBudget,
 ) -> Result<Vec<Value>, CanonicalValueError> {
     collect_stably(value, path, budget, DynObject::try_iter)
@@ -225,7 +225,7 @@ fn collect_items(
 /// the budget.
 fn collect_stably<T>(
     value: &Value,
-    path: &SnapshotPath,
+    path: &PathRef<'_>,
     budget: &mut AdmissionBudget,
     enumerate: fn(&DynObject) -> Option<Box<dyn Iterator<Item = T> + Send + Sync>>,
 ) -> Result<Vec<T>, CanonicalValueError> {
@@ -257,7 +257,7 @@ fn has_stable_length(value: &Value, collected: usize) -> bool {
 /// which keeps the reported kind independent of host enumeration order.
 fn refute_non_string_key(
     members: &[(Value, Value)],
-    path: &SnapshotPath,
+    path: &PathRef<'_>,
 ) -> Result<(), CanonicalValueError> {
     members
         .iter()
@@ -282,7 +282,7 @@ fn refute_non_string_key(
 /// copied, and a refused budget therefore leaves no partially built map behind.
 fn sort_members(
     members: Vec<(Value, Value)>,
-    path: &SnapshotPath,
+    path: &PathRef<'_>,
     budget: &mut AdmissionBudget,
 ) -> Result<Vec<(String, Value)>, CanonicalValueError> {
     let mut sorted = BTreeMap::new();
