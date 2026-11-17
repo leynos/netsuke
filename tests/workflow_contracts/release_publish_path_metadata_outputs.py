@@ -43,6 +43,12 @@ def _step_contexts(scenario: Scenario) -> dict[str, object]:
 def resolved_repo_name(release: dict[str, object], violations: list[str]) -> str:
     """Resolve the metadata ``repo_name`` output, which no mode changes.
 
+    The artefact-name and download-pattern checks compare against the value this
+    function returns, so a declaration that resolves to some other name would
+    agree with itself and pass while publishing artefacts under a name no job
+    can find. The resolved name is therefore checked against this repository,
+    and the value is still returned so the later checks report it in context.
+
     Returns
     -------
     str
@@ -64,7 +70,17 @@ def resolved_repo_name(release: dict[str, object], violations: list[str]) -> str
             label=label,
         ),
     )
-    return value if isinstance(value, str) else REPO_ROOT.name
+    if value is MISSING:
+        # The evaluator has already recorded why the expression was refused.
+        return REPO_ROOT.name
+    if not isinstance(value, str):
+        violations.append(f"{label}: resolved to {value!r}, expected a string")
+        return REPO_ROOT.name
+    if value != REPO_ROOT.name:
+        violations.append(
+            f"{label}: resolved to {value!r}, expected {REPO_ROOT.name!r}"
+        )
+    return value
 
 
 def metadata_outputs(

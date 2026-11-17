@@ -204,13 +204,16 @@ def _check_gates(release: dict[str, object], violations: list[str]) -> None:
 
 
 def _check_publish_job_veto(release: dict[str, object], violations: list[str]) -> None:
-    """Require the write job to name the dry-run output in its guard.
+    """Require the write job to refuse a run whose metadata says dry run.
 
-    The policy never emits ``should_publish: true`` with ``dry_run: true``, so
-    the veto cannot be proved load-bearing by evaluation alone. Requiring the
-    guard to name the output keeps the defence in depth that the requested
-    change adds, and the behavioural check that follows proves the guard closes
-    for a dry-run run whose dependencies all succeeded.
+    The policy never emits ``should_publish: true`` beside ``dry_run: true``, so
+    this pair is unreachable from the authorization step. That unreachability is
+    what makes the context decisive: with ``should_publish`` already true, the
+    job stays closed only through its own dry-run clause, so a guard whose veto
+    is missing, inverted, or vacuous is reported here rather than hiding behind
+    a false ``should_publish``. The structural check below keeps the output
+    named in the guard, and the publication scenarios prove the guard still
+    opens for a real publishing run.
     """
     job = workflow_job(release, "publish-release")
     guard = job.get("if", True)
@@ -220,7 +223,7 @@ def _check_publish_job_veto(release: dict[str, object], violations: list[str]) -
             "needs.metadata.outputs.dry_run"
         )
     outputs = {
-        "should_publish": "false",
+        "should_publish": "true",
         "dry_run": "true",
         "should_upload_workflow_artifacts": "false",
         "should_upload_package_artifacts": "false",
