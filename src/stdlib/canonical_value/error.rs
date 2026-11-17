@@ -121,14 +121,14 @@ pub(super) enum PathRef<'a> {
     /// A sequence member of `parent`, addressed by its index.
     Item {
         /// Path of the sequence this item belongs to.
-        parent: &'a PathRef<'a>,
+        parent: &'a Self,
         /// Index of the item in that sequence.
         index: usize,
     },
     /// A mapping member of `parent`, addressed by its key.
     Member {
         /// Path of the mapping this member belongs to.
-        parent: &'a PathRef<'a>,
+        parent: &'a Self,
         /// Name of the member in that mapping.
         key: &'a str,
     },
@@ -168,9 +168,9 @@ impl<'a> PathRef<'a> {
     }
 
     /// Materialize the owned path, walking from the refused value to the root.
-    fn to_snapshot_path(&self) -> SnapshotPath {
+    fn to_snapshot_path(self) -> SnapshotPath {
         let mut reversed = Vec::new();
-        let mut cursor: &PathRef<'_> = self;
+        let mut cursor: &Self = &self;
         loop {
             match cursor {
                 Self::Root => break,
