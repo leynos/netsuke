@@ -10,6 +10,7 @@
 use super::create_netsuke_command;
 use anyhow::{Context, Result, ensure};
 use insta::Settings;
+use rstest::rstest;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::{TempDir, tempdir};
@@ -139,76 +140,73 @@ fn assert_failure_snapshot(name: &str, manifest: &str, expected: &[&str]) -> Res
     Ok(())
 }
 
-/// A YAML syntax failure reports its line, column, and a labelled snippet.
-#[test]
-fn yaml_syntax_failure_snapshot() -> Result<()> {
-    assert_failure_snapshot(
-        "yaml_syntax_failure",
-        UNCLOSED_BRACKET,
-        &[
-            "netsuke::yaml::parse",
-            "line 2, column 10",
-            "Netsukefile:2:10",
-            "invalid YAML",
-        ],
-    )
-}
-
-/// An unknown manifest field is named, with no snippet to point into.
-#[test]
-fn unknown_manifest_field_snapshot() -> Result<()> {
-    assert_failure_snapshot(
-        "unknown_manifest_field",
-        UNKNOWN_FIELD,
-        &["netsuke::manifest::structure", "unknown field `comand`"],
-    )
-}
-
-/// An undefined template variable names the operation and the template line.
-#[test]
-fn undefined_template_variable_snapshot() -> Result<()> {
-    assert_failure_snapshot(
-        "undefined_template_variable",
-        include_str!("../data/jinja_undefined.yml"),
-        &["render target command", "undefined value (in <string>:1)"],
-    )
-}
-
-/// A target naming both a rule and a command is a structure failure.
-#[test]
-fn rule_and_command_conflict_snapshot() -> Result<()> {
-    assert_failure_snapshot(
-        "rule_and_command_conflict",
-        include_str!("../data/rule_command_conflict.yml"),
-        &["netsuke::manifest::structure", "mutually exclusive"],
-    )
-}
-
-/// A missing rule is a graph failure and must name both ends of the reference.
-#[test]
-fn missing_rule_snapshot() -> Result<()> {
-    assert_failure_snapshot(
-        "missing_rule",
-        include_str!("../data/missing_rule.yml"),
-        &[
-            "Failed to build graph from the manifest.",
-            "Rule 'missing' referenced by target 'hello.o' was not found.",
-        ],
-    )
-}
-
-/// A duplicate output is a graph failure and must name the repeated output.
-#[test]
-fn duplicate_outputs_snapshot() -> Result<()> {
-    assert_failure_snapshot(
-        "duplicate_outputs",
-        include_str!("../data/duplicate_outputs.yml"),
-        &[
-            "Failed to build graph from the manifest.",
-            "Duplicate outputs detected",
-            "hello.o",
-        ],
-    )
+/// Snapshot each portable failure and assert the cause it exists to disclose.
+///
+/// The YAML case also pins the line, column, and labelled snippet. The
+/// structure and template cases pin that no snippet is drawn, and the graph
+/// and Ninja cases pin the cause that the default output must name.
+#[rstest]
+#[case::yaml_syntax_failure(
+    "yaml_syntax_failure",
+    UNCLOSED_BRACKET,
+    &[
+        "netsuke::yaml::parse",
+        "line 2, column 10",
+        "Netsukefile:2:10",
+        "invalid YAML",
+    ],
+)]
+#[case::unknown_manifest_field(
+    "unknown_manifest_field",
+    UNKNOWN_FIELD,
+    &["netsuke::manifest::structure", "unknown field `comand`"],
+)]
+#[case::undefined_template_variable(
+    "undefined_template_variable",
+    include_str!("../data/jinja_undefined.yml"),
+    &["render target command", "undefined value (in <string>:1)"],
+)]
+#[case::rule_and_command_conflict(
+    "rule_and_command_conflict",
+    include_str!("../data/rule_command_conflict.yml"),
+    &["netsuke::manifest::structure", "mutually exclusive"],
+)]
+#[case::missing_rule(
+    "missing_rule",
+    include_str!("../data/missing_rule.yml"),
+    &[
+        "Failed to build graph from the manifest.",
+        "Rule 'missing' referenced by target 'hello.o' was not found.",
+    ],
+)]
+#[case::duplicate_outputs(
+    "duplicate_outputs",
+    include_str!("../data/duplicate_outputs.yml"),
+    &[
+        "Failed to build graph from the manifest.",
+        "Duplicate outputs detected",
+        "hello.o",
+    ],
+)]
+#[case::carriage_return_script(
+    "carriage_return_script",
+    CARRIAGE_RETURN_SCRIPT,
+    &[
+        "Failed to generate the Ninja manifest.",
+        "unsafe Ninja control character",
+    ],
+)]
+#[case::circular_dependency(
+    "circular_dependency",
+    CIRCULAR_DEPENDENCY,
+    &["Circular dependency detected", "a.txt", "b.txt"],
+)]
+fn portable_failure_snapshot(
+    #[case] name: &str,
+    #[case] manifest: &str,
+    #[case] expected: &[&str],
+) -> Result<()> {
+    assert_failure_snapshot(name, manifest, expected)
 }
 
 /// The README's rejected backtick command renders through the default output.
@@ -224,19 +222,6 @@ fn readme_backtick_interpolation_snapshot() -> Result<()> {
         &[
             "Failed to build graph from the manifest.",
             "Invalid command interpolation:",
-        ],
-    )
-}
-
-/// A carriage return in a script is refused while Ninja text is synthesized.
-#[test]
-fn carriage_return_script_snapshot() -> Result<()> {
-    assert_failure_snapshot(
-        "carriage_return_script",
-        CARRIAGE_RETURN_SCRIPT,
-        &[
-            "Failed to generate the Ninja manifest.",
-            "unsafe Ninja control character",
         ],
     )
 }
@@ -258,14 +243,4 @@ fn missing_manifest_snapshot() -> Result<()> {
     }
     assert_snapshot("missing_manifest", &rendered);
     Ok(())
-}
-
-/// A cycle keeps its bounded rendering and names both targets.
-#[test]
-fn circular_dependency_snapshot() -> Result<()> {
-    assert_failure_snapshot(
-        "circular_dependency",
-        CIRCULAR_DEPENDENCY,
-        &["Circular dependency detected", "a.txt", "b.txt"],
-    )
 }
