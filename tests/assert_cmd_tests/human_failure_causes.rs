@@ -5,7 +5,9 @@
 //! the failure is decided before any tool runs. The snapshots pin the wording
 //! and layout a person sees by default; the semantic assertions pin the cause
 //! each case exists to disclose, so a snapshot that churns cannot hide a lost
-//! cause.
+//! cause. The README backtick rejection and the carriage-return script are
+//! decided only on the POSIX shell path, so those two cases carry a platform
+//! gate instead of asserting one outcome for both transports.
 
 use super::create_netsuke_command;
 use anyhow::{Context, Result, ensure};
@@ -42,6 +44,10 @@ const BACKTICK_INTERPOLATION: &str = concat!(
 );
 
 /// A script whose YAML double-quoted value contains a literal carriage return.
+///
+/// Only the POSIX shell path rejects it, so the constant shares that test's
+/// gate and does not trip the Windows dead-code denial.
+#[cfg(not(windows))]
 const CARRIAGE_RETURN_SCRIPT: &str = r#"netsuke_version: "1.0.0"
 targets:
   - name: out.txt
@@ -144,7 +150,7 @@ fn assert_failure_snapshot(name: &str, manifest: &str, expected: &[&str]) -> Res
 ///
 /// The YAML case also pins the line, column, and labelled snippet. The
 /// structure and template cases pin that no snippet is drawn, and the graph
-/// and Ninja cases pin the cause that the default output must name.
+/// cases pin the cause that the default output must name.
 #[rstest]
 #[case::yaml_syntax_failure(
     "yaml_syntax_failure",
@@ -188,14 +194,6 @@ fn assert_failure_snapshot(name: &str, manifest: &str, expected: &[&str]) -> Res
         "hello.o",
     ],
 )]
-#[case::carriage_return_script(
-    "carriage_return_script",
-    CARRIAGE_RETURN_SCRIPT,
-    &[
-        "Failed to generate the Ninja manifest.",
-        "unsafe Ninja control character",
-    ],
-)]
 #[case::circular_dependency(
     "circular_dependency",
     CIRCULAR_DEPENDENCY,
@@ -207,6 +205,25 @@ fn portable_failure_snapshot(
     #[case] expected: &[&str],
 ) -> Result<()> {
     assert_failure_snapshot(name, manifest, expected)
+}
+
+/// A carriage return in a script is refused only where Ninja text is literal.
+///
+/// Windows renders `script:` recipes through the encoded PowerShell transport,
+/// whose Base64 payload carries a carriage return intact, so the rejection
+/// belongs to the POSIX shell path. Gating the case keeps the portable table
+/// from asserting different behaviour on each platform.
+#[cfg(not(windows))]
+#[test]
+fn carriage_return_script_snapshot() -> Result<()> {
+    assert_failure_snapshot(
+        "carriage_return_script",
+        CARRIAGE_RETURN_SCRIPT,
+        &[
+            "Failed to generate the Ninja manifest.",
+            "unsafe Ninja control character",
+        ],
+    )
 }
 
 /// The README's rejected backtick command renders through the default output.
