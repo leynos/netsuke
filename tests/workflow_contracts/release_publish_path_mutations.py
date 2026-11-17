@@ -55,6 +55,8 @@ EXPECTED_VIOLATIONS = {
         ("reusable-push-publish-false", "metadata.should_publish"),
     ),
     "remove-authorization-step": (("static", "authorization.step"),),
+    "rename-authorization-step": (("static", "authorization.step"),),
+    "disable-authorization-step": (("static", "authorization.condition"),),
     "validate-ref-reads-resolver": (("static", "authorization.validate-ref-gate"),),
     "version-tag-reads-resolver": (("static", "authorization.version-tag-gate"),),
     "authorization-ignores-workflow-ref": (
@@ -221,6 +223,20 @@ def _remove_authorization_step(release: dict[str, object]) -> None:
     steps.pop(step_index_by_key(steps, "id", AUTHORIZATION_STEP))
 
 
+def _rename_authorization_step(release: dict[str, object]) -> None:
+    """Rename the decision step so no consumer can read its outputs."""
+    steps = job_steps(release, "metadata")
+    step = steps[step_index_by_key(steps, "id", AUTHORIZATION_STEP)]
+    step["id"] = f"{AUTHORIZATION_STEP}_unused"
+
+
+def _disable_authorization_step(release: dict[str, object]) -> None:
+    """Guard the decision step so a run can skip it entirely."""
+    steps = job_steps(release, "metadata")
+    step = steps[step_index_by_key(steps, "id", AUTHORIZATION_STEP)]
+    step["if"] = "${{ false }}"
+
+
 def _validate_ref_reads_resolver(release: dict[str, object]) -> None:
     """Let the ref gate follow the resolver instead of the decision."""
     steps = job_steps(release, "metadata")
@@ -347,6 +363,12 @@ _MUTATION_APPLIERS: dict[
         release
     ),
     "remove-authorization-step": lambda release, caller: _remove_authorization_step(
+        release
+    ),
+    "rename-authorization-step": lambda release, caller: _rename_authorization_step(
+        release
+    ),
+    "disable-authorization-step": lambda release, caller: _disable_authorization_step(
         release
     ),
     "validate-ref-reads-resolver": lambda release, caller: _validate_ref_reads_resolver(

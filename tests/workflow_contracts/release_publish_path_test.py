@@ -29,25 +29,75 @@ def _metadata_step(release: dict[str, object], step_id: str) -> dict[str, object
     return steps[step_index_by_key(steps, "id", step_id)]
 
 
-def test_the_authorization_step_must_execute_the_policy() -> None:
-    """Refuse a run body that only names the policy inside a shell comment.
+#: Run bodies that name the policy without executing it. ``comment-only`` hides
+#: it behind ``#``; ``argument-only`` passes it to ``python -c`` as an argument.
+_UNEXECUTED_RUNS = (
+    pytest.param(
+        f"uv run --no-project --python 3.14 python -c 'pass'  # {AUTHORIZATION_SCRIPT}",
+        id="comment-only",
+    ),
+    pytest.param(
+        f"uv run --no-project --python 3.14 python -c 'pass' {AUTHORIZATION_SCRIPT}",
+        id="argument-only",
+    ),
+)
 
-    A substring test would accept a command that does nothing and mentions the
-    script in a trailing comment, which removes the authorization decision from
-    the workflow while leaving its name in place for a reader to find.
+
+@pytest.mark.parametrize("run", _UNEXECUTED_RUNS)
+def test_the_authorization_step_must_execute_the_policy(run: str) -> None:
+    """Refuse a run body that names the policy without running it.
+
+    A membership test accepts both a trailing comment and a script handed to
+    ``python -c`` as an argument, so the step would run something else while
+    the policy's name stayed in the workflow.
     """
     release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
     step = _metadata_step(release, AUTHORIZATION_STEP)
-    step["run"] = (
-        f"uv run --no-project --python 3.14 python -c 'pass'  # {AUTHORIZATION_SCRIPT}"
-    )
+    step["run"] = run
     violations: list[str] = []
 
     check_authorization_wiring(release, violations)
 
     assert any(v.startswith("authorization.run") for v in violations), (
-        "a comment-only mention must not satisfy the authorization run check: "
-        f"{violations}"
+        "a mention that never executes the policy must not satisfy the "
+        f"authorization run check: {violations}"
+    )
+
+
+def test_the_authorization_step_id_must_match_exactly() -> None:
+    """Refuse an id that merely contains the expected one.
+
+    GitHub binds a step's outputs to its own id, so a step renamed to
+    ``release_authorization_unused`` still looks wired to a substring lookup
+    while no consumer reads its outputs.
+    """
+    release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
+    step = _metadata_step(release, AUTHORIZATION_STEP)
+    step["id"] = f"{AUTHORIZATION_STEP}_unused"
+    violations: list[str] = []
+
+    check_authorization_wiring(release, violations)
+
+    assert any(v.startswith("authorization.step") for v in violations), (
+        f"a renamed step id must not satisfy the lookup: {violations}"
+    )
+
+
+def test_the_authorization_step_must_run_unconditionally() -> None:
+    """Refuse a decision step that a condition can skip.
+
+    The gates are checked against synthetic outputs, so a step guarded by
+    ``${{ false }}`` would pass every other check while never writing them.
+    """
+    release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
+    step = _metadata_step(release, AUTHORIZATION_STEP)
+    step["if"] = "${{ false }}"
+    violations: list[str] = []
+
+    check_authorization_wiring(release, violations)
+
+    assert any(v.startswith("authorization.condition") for v in violations), (
+        f"a conditional decision step must be reported: {violations}"
     )
 
 

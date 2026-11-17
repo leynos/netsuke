@@ -23,10 +23,9 @@ from workflow_loading import (
 AUTHORIZATION_STEP = "release_authorization"
 RESOLVER_STEP = "release_modes"
 AUTHORIZATION_SCRIPT = "scripts/authorize_release_writes.py"
-_UV_PREFIX = "uv run --no-project --python 3.14"
-#: The pinned interpreter invocation, as the command words that must lead the
-#: step's script. Tokenised so the check cannot be satisfied by a comment.
-_UV_TOKENS = tuple(_UV_PREFIX.split())
+#: The pinned interpreter invocation that must lead the step's script. Held as
+#: command words so the check compares the executed command, not a text match.
+_UV_TOKENS = ("uv", "run", "--no-project", "--python", "3.14")
 #: The raw inputs the policy decides over. Each is passed through ``env`` so no
 #: caller-controlled value is interpolated into the script text.
 EXPECTED_INPUTS = {
@@ -65,15 +64,41 @@ _DENIED_BUT_SELECTED = policy.ReleaseContext(
 def _authorization_step(
     release: dict[str, object], violations: list[str]
 ) -> dict[str, object] | None:
-    """Return the metadata job's authorization step, or report it missing."""
-    try:
-        index = step_index_by_key(
-            job_steps(release, "metadata"), "id", AUTHORIZATION_STEP
+    """Return the metadata job's authorization step, or report it missing.
+
+    The id must match exactly. GitHub binds a step's outputs to its own id, so a
+    step renamed to ``release_authorization_unused`` would still satisfy a
+    substring lookup while no consumer could read the outputs it writes.
+
+    Returns
+    -------
+    dict[str, object] | None
+        The uniquely identified step, or ``None`` when the report was made.
+    """
+    steps = job_steps(release, "metadata")
+    matches = [step for step in steps if step.get("id") == AUTHORIZATION_STEP]
+    if len(matches) != 1:
+        violations.append(
+            "authorization.step: metadata must declare exactly one step with "
+            f"id {AUTHORIZATION_STEP!r}, found {len(matches)}"
         )
-    except AssertionError as error:
-        violations.append(f"authorization.step: {error}")
         return None
-    return job_steps(release, "metadata")[index]
+    return matches[0]
+
+
+def _check_condition(step: dict[str, object], violations: list[str]) -> None:
+    """Require the decision to run for every invocation.
+
+    The later checks read synthetic outputs, so a conditional step would let
+    them confirm wiring for outputs a skipped step never writes. The policy is
+    required exactly so that every run reaches a decision; an ``if`` can only
+    narrow that.
+    """
+    if "if" in step:
+        violations.append(
+            "authorization.condition: the decision must run unconditionally, "
+            f"found {step['if']!r}"
+        )
 
 
 def _command_tokens(run: str) -> list[str]:
@@ -107,16 +132,14 @@ def _check_run(step: dict[str, object], violations: list[str]) -> None:
     except ValueError as error:
         violations.append(f"authorization.run: unparseable command: {error}")
         return
-    if AUTHORIZATION_SCRIPT not in tokens:
+    if tokens != [*_UV_TOKENS, AUTHORIZATION_SCRIPT]:
+        # Comparing the whole command rejects every position but the executed
+        # one: a trailing `# mention` is a comment, and a script passed after
+        # `python -c` is an argument Python never runs.
         violations.append(
-            f"authorization.run: step must run {AUTHORIZATION_SCRIPT} as a "
-            "command word rather than mention it in a comment or a string"
-        )
-        return
-    if tuple(tokens[: len(_UV_TOKENS)]) != _UV_TOKENS:
-        violations.append(
-            f"authorization.run: step must start with {_UV_PREFIX!r} so the "
-            "script runs on the pinned Python baseline"
+            "authorization.run: step must be exactly "
+            f"{' '.join([*_UV_TOKENS, AUTHORIZATION_SCRIPT])!r} so the policy "
+            "is the script that runs"
         )
     if "${{" in run:
         violations.append(
@@ -310,6 +333,7 @@ def check_authorization_wiring(
     """Check the authorization step, the gates it feeds, and the job veto."""
     step = _authorization_step(release, violations)
     if step is not None:
+        _check_condition(step, violations)
         _check_run(step, violations)
         _check_env(step, violations)
         _check_step_order(release, violations)
