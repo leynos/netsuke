@@ -94,6 +94,23 @@ def _tag_publish() -> Scenario:
     return next(scenario for scenario in SCENARIOS if scenario.name == "tag-publish")
 
 
+def _tag_publish_results() -> dict[str, str]:
+    """Return every job's result on a publishing run, independent of the document.
+
+    The map is built from the scenario rather than derived from the workflow
+    under test: deriving it would let a mutation change the result the
+    reachability check compares against, which is the answer it exists to
+    challenge. The rehearsal is skipped on a publish run, so a guard that
+    depended on it would leave verification unreachable.
+
+    Returns
+    -------
+    dict[str, str]
+        Each job's result as a publishing run reports it.
+    """
+    return {**dict(_tag_publish().needs_results), "release": "skipped"}
+
+
 def _assert_gh_api_calls(steps: list[dict[str, object]]) -> None:
     """Require read-only, GET-only API calls, and only on the network steps."""
     found = 0
@@ -308,7 +325,9 @@ def _assert_complete_contract(
     _assert_job_contract(workflow)
     _assert_publisher_records_the_artifact_name(workflow)
     violations: list[str] = []
-    check_verify_inventory(workflow, _tag_publish(), PUBLISH_OUTPUTS, violations)
+    check_verify_inventory(
+        workflow, _tag_publish(), PUBLISH_OUTPUTS, _tag_publish_results(), violations
+    )
     assert not violations, f"verify-job reachability contract: {violations}"
 
 

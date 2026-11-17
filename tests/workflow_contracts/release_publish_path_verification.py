@@ -13,12 +13,8 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_scenarios import (
-    GITHUB_SHA,
-    VERIFY_NEEDS,
-    admits_candidate,
-    needs_context,
-)
+from release_publish_path_context import needs_context
+from release_publish_path_scenarios import GITHUB_SHA, VERIFY_NEEDS, admits_candidate
 from workflow_loading import workflow_job
 
 if typ.TYPE_CHECKING:
@@ -71,19 +67,24 @@ def check_verification_permissions(
 
 
 def _verification_needs_context(
-    job: dict[str, object], scenario: Scenario, outputs: dict[str, str]
+    job: dict[str, object],
+    scenario: Scenario,
+    outputs: dict[str, str],
+    results: dict[str, str],
 ) -> dict[str, object]:
     """Build the needs context from the job's declared dependencies."""
-    return needs_context(job_names(job.get("needs", [])) or [], scenario, outputs)
+    return needs_context(
+        job_names(job.get("needs", [])) or [], scenario, outputs, results
+    )
 
 
-def _should_verify(scenario: Scenario) -> bool:
+def _should_verify(scenario: Scenario, results: dict[str, str]) -> bool:
     """Compute the independent reachability oracle for inventory verification."""
     return (
         scenario.mode == "publish"
         and not scenario.cancelled
         and admits_candidate(scenario)
-        and all(scenario.needs_results.get(name) == "success" for name in VERIFY_NEEDS)
+        and all(results.get(name) == "success" for name in VERIFY_NEEDS)
     )
 
 
@@ -91,6 +92,7 @@ def check_verify_inventory(
     release: dict[str, object],
     scenario: Scenario,
     outputs: dict[str, str],
+    results: dict[str, str],
     violations: list[str],
 ) -> None:
     """Verify the job's shape and its reachability for one scenario."""
@@ -98,7 +100,7 @@ def check_verify_inventory(
     check_verification_needs(job, violations)
     check_verification_permissions(job, violations)
     contexts: dict[str, object] = {
-        "needs": _verification_needs_context(job, scenario, outputs),
+        "needs": _verification_needs_context(job, scenario, outputs, results),
         "status": {"cancelled": scenario.cancelled},
         "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
     }
@@ -111,7 +113,7 @@ def check_verify_inventory(
             job_level=True,
         ),
     )
-    expected = _should_verify(scenario)
+    expected = _should_verify(scenario, results)
     runs = actual is not MISSING and bool(actual)
     if runs != expected:
         violations.append(

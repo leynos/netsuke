@@ -64,6 +64,10 @@ STAGING_NEEDS = {
 #: failure make the read-only lane unreachable.
 STAGING_FORBIDDEN_NEEDS = {"package-crate", "release-admission-canaries"}
 PUBLISHER_NEEDS = {"publish-crates-io", "publish-release"}
+#: The two terminal write jobs. A scenario declares their own outcomes
+#: directly, because no later job's result is derived from them.
+VERIFY_JOB = "verify-release-inventory"
+FINALIZE_JOB = "finalize-github-release"
 #: Verification holds write scope, so it carries publication's gate: packaging,
 #: enforcement, and both publishers, because it verifies what they produced. A
 #: failed, skipped, or report-only prerequisite leaves it unverified.
@@ -111,36 +115,6 @@ def admits_candidate(scenario: Scenario) -> bool:
     )
 
 
-def needs_context(
-    names: cabc.Iterable[str],
-    scenario: Scenario,
-    metadata_outputs: cabc.Mapping[str, str],
-) -> dict[str, object]:
-    """Build one ``needs`` entry per job, carrying the outputs its guard reads.
-
-    The names come from the job's own declaration rather than a required set,
-    so a mutated dependency list is evaluated as written.
-
-    Returns
-    -------
-    dict[str, object]
-        A ``needs`` mapping with each dependency's scenario result, plus the
-        metadata and admission outputs their guards compare.
-    """
-    needs: dict[str, object] = {}
-    for name in names:
-        dependency: dict[str, object] = {
-            "result": scenario.needs_results.get(name, "skipped")
-        }
-        match name:
-            case "metadata":
-                dependency["outputs"] = dict(metadata_outputs)
-            case "release-admission-canaries":
-                dependency["outputs"] = admission_outputs(scenario)
-        needs[name] = dependency
-    return needs
-
-
 def _needs_results(
     *,
     smoke: str = "success",
@@ -162,7 +136,9 @@ def _needs_results(
         If ``outcomes`` names a job the release scenarios do not model, whose
         result would otherwise land beside the one the scenario meant to change.
     """
-    results = dict.fromkeys(CRATES_IO_NEEDS | PUBLISHER_NEEDS, "success")
+    results = dict.fromkeys(
+        CRATES_IO_NEEDS | PUBLISHER_NEEDS | {VERIFY_JOB, FINALIZE_JOB}, "success"
+    )
     results["windows-native-recipe-smoke"] = smoke
     if outcomes is not None:
         # A mistyped name would add a result no job declares, leaving the
@@ -367,6 +343,24 @@ SCENARIOS = (
         "publish",
         "",
         _needs_results(outcomes={"publish-release": "skipped"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        # Both publishers succeeded, so only the verifier's own outcome stands
+        # between this run and an un-drafted release.
+        "verify-release-inventory-failure",
+        "publish",
+        "",
+        _needs_results(outcomes={VERIFY_JOB: "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "verify-release-inventory-skipped",
+        "publish",
+        "",
+        _needs_results(outcomes={VERIFY_JOB: "skipped"}),
         cancelled=False,
         release_runs=False,
     ),

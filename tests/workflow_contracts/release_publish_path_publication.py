@@ -5,12 +5,12 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
+from release_publish_path_context import needs_context
 from release_publish_path_scenarios import (
     CRATES_IO_NEEDS,
     GITHUB_SHA,
     REQUIRED_NEEDS,
     admits_candidate,
-    needs_context,
 )
 from workflow_loading import (
     job_steps,
@@ -113,6 +113,7 @@ def _check_publication_step_order(
 def _publication_needs(
     job: dict[str, object],
     check: PublicationCheck,
+    results: dict[str, str],
 ) -> dict[str, object]:
     """Resolve the packaging, build, smoke and admission jobs publication needs."""
     declared = job_names(job.get("needs", []))
@@ -127,12 +128,15 @@ def _publication_needs(
             "admission dependencies"
         )
     return needs_context(
-        sorted(required & declared_needs), check.scenario, check.outputs
+        sorted(required & declared_needs), check.scenario, check.outputs, results
     )
 
 
 def _check_publication_job(
-    job: dict[str, object], check: PublicationCheck, contexts: dict[str, object]
+    job: dict[str, object],
+    check: PublicationCheck,
+    contexts: dict[str, object],
+    results: dict[str, str],
 ) -> bool:
     """Evaluate publication-job reachability and report a mismatched guard."""
     scenario = check.scenario
@@ -146,7 +150,7 @@ def _check_publication_job(
         ),
     )
     all_dependencies_succeeded = all(
-        scenario.needs_results[name] == "success" for name in REQUIRED_NEEDS
+        results.get(name) == "success" for name in REQUIRED_NEEDS
     )
     expected_job = (
         scenario.mode == "publish"
@@ -216,16 +220,16 @@ def _check_publication_steps(
     _check_publication_step_order(steps, check.violations)
 
 
-def check_publication_path(check: PublicationCheck) -> None:
+def check_publication_path(check: PublicationCheck, results: dict[str, str]) -> None:
     """Verify publish-job reachability and the draft and asset upload guards."""
     scenario = check.scenario
     job = workflow_job(check.release, "publish-release")
     contexts: dict[str, object] = {
-        "needs": _publication_needs(job, check),
+        "needs": _publication_needs(job, check, results),
         "status": {"cancelled": scenario.cancelled},
         "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
     }
-    publication_runs = _check_publication_job(job, check, contexts)
+    publication_runs = _check_publication_job(job, check, contexts, results)
     steps = job_steps(check.release, "publish-release")
     _check_draft_guard(steps, check, contexts)
     if publication_runs:
@@ -247,7 +251,7 @@ def _check_crates_io_needs(job: dict[str, object], check: PublicationCheck) -> b
     return True
 
 
-def _crates_io_should_run(check: PublicationCheck) -> bool:
+def _crates_io_should_run(check: PublicationCheck, results: dict[str, str]) -> bool:
     """Compute the independent publishing oracle from the scenario prerequisites."""
     scenario = check.scenario
     return (
@@ -255,7 +259,7 @@ def _crates_io_should_run(check: PublicationCheck) -> bool:
         and not scenario.cancelled
         and check.outputs.get("should_publish") == "true"
         and admits_candidate(scenario)
-        and all(scenario.needs_results[name] == "success" for name in CRATES_IO_NEEDS)
+        and all(results.get(name) == "success" for name in CRATES_IO_NEEDS)
     )
 
 
@@ -263,6 +267,7 @@ def check_crates_io_publication(
     job: dict[str, object],
     check: PublicationCheck,
     contexts: dict[str, object],
+    results: dict[str, str],
 ) -> None:
     """Require the OIDC publisher's seven dependencies and gated reachability."""
     if not _check_crates_io_needs(job, check):
@@ -278,7 +283,7 @@ def check_crates_io_publication(
             job_level=True,
         ),
     )
-    expected = _crates_io_should_run(check)
+    expected = _crates_io_should_run(check, results)
     runs = actual is not MISSING and bool(actual)
     if runs != expected:
         check.violations.append(

@@ -30,6 +30,7 @@ if typ.TYPE_CHECKING:
 
 PUBLICATION_JOB = "publish-release"
 REGISTRY_JOB = "publish-crates-io"
+FINALIZE_JOB = "finalize-github-release"
 STAGING_JOB = "release"
 #: Names the two added-job mutations give the publisher they introduce.
 WRITE_ALL_JOB = "publish-packages"
@@ -74,6 +75,13 @@ GATE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     "remove-finalize-package-need": (
         ("static", "write-authority.finalize-github-release.needs"),
+    ),
+    "remove-finalize-verify-result-check": (
+        ("verify-release-inventory-failure", "finalize-job"),
+    ),
+    "finalize-adopts-rehearsal": (
+        ("static", "finalize-github-release.needs"),
+        ("tag-publish", "finalize-job"),
     ),
     "force-observation-enforcement": (("tag-publish", "admission.enforcement"),),
     "force-enforced-rehearsal": (("opened", "admission.enforcement"),),
@@ -237,7 +245,24 @@ CLAUSE_REMOVALS: dict[str, tuple[str, str]] = {
         REGISTRY_JOB,
         "needs.release-admission-canaries.outputs.enforcement == 'true'",
     ),
+    "remove-finalize-verify-result-check": (
+        FINALIZE_JOB,
+        "needs.verify-release-inventory.result == 'success'",
+    ),
 }
+
+
+def _finalize_adopts_rehearsal(release: dict[str, object]) -> None:
+    """Make finalization wait on the rehearsal job, which a dry run alone runs.
+
+    The guard keeps every clause it needs and gains one more, so a clause-set
+    reader sees nothing wrong. What it cannot see is that the rehearsal is
+    skipped on every publishing run, which leaves finalization permanently
+    unreachable -- a release that publishes and is never un-drafted.
+    """
+    _needs_of(release, FINALIZE_JOB).append(STAGING_JOB)
+    job = workflow_job(release, FINALIZE_JOB)
+    job["if"] = f"{job.get('if', '')} && needs.release.result == 'success'"
 
 
 def _drop_clause_for(label: str, release: dict[str, object]) -> None:
@@ -254,8 +279,9 @@ GATE_MUTATIONS: dict[str, cabc.Callable[[dict[str, object]], None]] = {
         release, PUBLICATION_JOB, ADMISSION_JOB
     ),
     "remove-finalize-package-need": lambda release: _drop_need(
-        release, "finalize-github-release", "package-crate"
+        release, FINALIZE_JOB, "package-crate"
     ),
+    "finalize-adopts-rehearsal": _finalize_adopts_rehearsal,
     "force-observation-enforcement": lambda release: _set_enforcement(release, "false"),
     "force-enforced-rehearsal": lambda release: _set_enforcement(release, "true"),
     "always-publication-guard": _always_publication_guard,

@@ -20,6 +20,8 @@ from release_publish_path_artifacts import (
     check_download_pattern,
     evaluate_field,
 )
+from release_publish_path_context import needs_context
+from release_publish_path_finalization import check_finalize_release
 from release_publish_path_publication import (
     PublicationCheck,
     UploadPlanCheck,
@@ -28,6 +30,7 @@ from release_publish_path_publication import (
     check_upload_plan,
     step_runs,
 )
+from release_publish_path_results import resolve_results
 from release_publish_path_scenarios import (
     GITHUB_SHA,
     MODE_OUTPUTS,
@@ -37,8 +40,8 @@ from release_publish_path_scenarios import (
     STAGING_FORBIDDEN_NEEDS,
     STAGING_NEEDS,
     Scenario,
-    needs_context,
 )
+from release_publish_path_smoke import check_smoke_job
 from release_publish_path_verification import check_verify_inventory
 from release_write_authority_contract import check_publication_gate
 from workflow_loading import (
@@ -120,50 +123,15 @@ def _metadata_outputs(
 
 
 def _stage_needs(
-    release_job: dict[str, object], scenario: Scenario, outputs: dict[str, str]
+    release_job: dict[str, object],
+    scenario: Scenario,
+    outputs: dict[str, str],
+    results: dict[str, str],
 ) -> dict[str, object]:
     """Build the declared needs context for one staging or publishing job."""
     return needs_context(
-        job_names(release_job.get("needs", [])) or [], scenario, outputs
+        job_names(release_job.get("needs", [])) or [], scenario, outputs, results
     )
-
-
-def _check_smoke_job(
-    release: dict[str, object],
-    scenario: Scenario,
-    outputs: dict[str, str],
-    violations: list[str],
-) -> None:
-    """Check smoke-job reachability for each mode and event."""
-    smoke_job = workflow_job(release, "windows-native-recipe-smoke")
-    context: dict[str, object] = {
-        "needs": {
-            "metadata": {
-                "result": scenario.needs_results["metadata"],
-                "outputs": outputs,
-            }
-        },
-        # A cancelled release scenario cancels after every dependency passed.
-        "status": {"cancelled": False},
-        "github": {"event": {"action": scenario.event_action}},
-    }
-    value = evaluate_field(
-        smoke_job.get("if", True),
-        FieldEvaluation(
-            contexts=context,
-            violations=violations,
-            label=f"{scenario.name}.smoke-job.guard",
-            job_level=True,
-        ),
-    )
-    metadata_succeeded = scenario.needs_results["metadata"] == "success"
-    should_run = metadata_succeeded and (
-        scenario.mode != "dry-run" or scenario.event_action == "ready_for_review"
-    )
-    if value is MISSING or bool(value) != should_run:
-        violations.append(
-            f"{scenario.name}.smoke-job: guard did not resolve to {should_run!r}"
-        )
 
 
 def _check_caller(
@@ -273,10 +241,16 @@ def _check_release_step_order(
 
 
 def _check_scenario(check: ScenarioCheck) -> None:
-    """Evaluate dependency results, package uploads, and release staging."""
+    """Evaluate dependency results, package uploads, and release staging.
+
+    The scenario's declared outcomes are propagated through the graph first, so
+    every guard below is evaluated against a run the workflow could produce
+    rather than against independently supplied results.
+    """
     scenario = check.scenario
     outputs = check.outputs_by_mode[scenario.mode]
-    _check_smoke_job(check.release, scenario, outputs, check.violations)
+    results = resolve_results(check.release, scenario, outputs, check.violations)
+    check_smoke_job(check.release, scenario, outputs, results, check.violations)
     check_admission_enforcement(check.release, scenario, outputs, check.violations)
     check_build_uploads(
         check.release,
@@ -286,7 +260,7 @@ def _check_scenario(check: ScenarioCheck) -> None:
     )
     release_job = workflow_job(check.release, "release")
     contexts: dict[str, object] = {
-        "needs": _stage_needs(release_job, scenario, outputs),
+        "needs": _stage_needs(release_job, scenario, outputs, results),
         "status": {"cancelled": scenario.cancelled},
         "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
     }
@@ -313,15 +287,18 @@ def _check_scenario(check: ScenarioCheck) -> None:
         outputs=outputs,
         violations=check.violations,
     )
-    check_publication_path(publication_check)
+    check_publication_path(publication_check, results)
     publisher_job = workflow_job(check.release, "publish-crates-io")
     publisher_contexts: dict[str, object] = {
-        "needs": _stage_needs(publisher_job, scenario, outputs),
+        "needs": _stage_needs(publisher_job, scenario, outputs, results),
         "status": {"cancelled": scenario.cancelled},
         "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
     }
-    check_crates_io_publication(publisher_job, publication_check, publisher_contexts)
-    check_verify_inventory(check.release, scenario, outputs, check.violations)
+    check_crates_io_publication(
+        publisher_job, publication_check, publisher_contexts, results
+    )
+    check_verify_inventory(check.release, scenario, outputs, results, check.violations)
+    check_finalize_release(check.release, scenario, outputs, results, check.violations)
 
 
 def _check_publisher_action(
