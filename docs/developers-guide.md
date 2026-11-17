@@ -12162,6 +12162,20 @@ configuration keeps its existing project quarantine instead of gaining operator
 authority. Reading the user scope first changes which candidates are
 considered, not how a loaded file is trusted.
 
+Discovery reports that decision through bounded telemetry. Adopting a user
+candidate emits a `debug!` event with `scope = "user"`,
+`skipped_compose_layers = true`, a `path_hash` correlation identifier, and the
+message `automatic configuration discovery adopted a user candidate`. Falling
+back to the dependency's scan emits the same event shape with
+`scope = "system_or_project"` and `skipped_compose_layers = false`. Neither
+event carries a path; the hash is the run-local identifier described in
+`src/cli/discovery/diagnostics.rs`. The three fail-closed branches of
+`load_user_candidate` attach a `CandidateFailure` marker to the file error's
+source, so `record_discovery_outcome` reports `dangling_link`,
+`present_without_layer`, or `probe_failed` as the span's `error_category`
+instead of collapsing them into `file`. The marker is a typed payload rather
+than message text, and the `DISCOVERY_TOTAL` label set remains `outcome` alone.
+
 Re-check the user-path derivation on every `ortho_config` upgrade. The
 dependency's flat candidate order still places system scope before the home
 fallbacks, and Netsuke's aggregation of `compose_layers()` still drops an

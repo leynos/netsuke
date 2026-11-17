@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::diagnostics::{
-    BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
+    BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields, path_hash,
 };
 use super::paths::{
     PathNormalizer, SanitisedUserBases, candidate_entry_metadata, project_scope_file,
@@ -31,10 +31,11 @@ use super::project_policy::scope_project_chain;
 pub(super) use super::project_policy::{
     ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
 };
+use std::fmt;
+use tracing::debug;
 
 mod project_key;
 use project_key::ProjectKey;
-
 
 /// Project-scope outcome retained for a later trace replay.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -245,6 +246,13 @@ fn automatic_base_layers(
     if let Some(layers) = user_scope_base_layers(env_source.as_ref())? {
         return Ok((layers, true));
     }
+    // Name the winning scope even when it is not the user scope, so an
+    // operator can tell a fallback from an adopted user file without a path.
+    debug!(
+        scope = "system_or_project",
+        skipped_compose_layers = false,
+        "automatic configuration discovery used the dependency scan"
+    );
     // The dependency filters only empty base values, so its scan would resolve a
     // relative one against the working directory. Hand it the same view the
     // user pass used, where such a value reads as unset, and neither path can
@@ -252,7 +260,6 @@ fn automatic_base_layers(
     let fallback_env: SharedEnvSource = Arc::new(SanitisedUserBases::new(Arc::clone(&env_source)));
     let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), fallback_env);
     first_automatic_chain(&discovery, project_key)
-}
 }
 
 /// Load the first user-scope configuration file, if one exists.
@@ -269,11 +276,28 @@ fn user_scope_base_layers(
     user_scope_candidates(env_source)
         .into_iter()
         .find_map(|candidate| match load_user_candidate(&candidate) {
-            Ok(Some(chain)) => Some(Ok(chain_layers(chain))),
+            Ok(Some(chain)) => {
+                emit_user_candidate_adopted(&candidate);
+                Some(Ok(chain_layers(chain)))
+            }
             Ok(None) => None,
             Err(error) => Some(Err(error)),
         })
         .transpose()
+}
+
+/// Emit the bounded adoption event for the user candidate that supplied policy.
+///
+/// The event records the scope and the skipped dependency scan plus a
+/// run-local correlation hash, so an operator can tell that a user file won
+/// without the event carrying the candidate's path.
+fn emit_user_candidate_adopted(candidate: &Path) {
+    debug!(
+        scope = "user",
+        skipped_compose_layers = true,
+        path_hash = %path_hash(candidate),
+        "automatic configuration discovery adopted a user candidate"
+    );
 }
 
 /// Load one user-scope candidate, distinguishing absence from a broken link.
@@ -293,27 +317,115 @@ fn load_user_candidate(path: &Path) -> OrthoResult<Option<FileLayerChain>> {
         return Ok(Some(chain));
     }
     match candidate_entry_metadata(path) {
-        Ok(Some(metadata)) if metadata.file_type().is_symlink() => Err(unloadable_candidate(
+        Ok(Some(metadata)) if metadata.file_type().is_symlink() => {
+            Err(unloadable_candidate(path, CandidateFailure::DanglingLink))
+        }
+        Ok(Some(_)) => Err(unloadable_candidate(
             path,
-            "symbolic link target is missing",
+            CandidateFailure::PresentWithoutLayer,
         )),
-        Ok(Some(_)) => Err(unloadable_candidate(path, "present entry yielded no layer")),
         Ok(None) => Ok(None),
-        Err(error) => Err(Arc::new(OrthoError::File {
-            path: path.to_path_buf(),
-            source: Box::new(error),
-        })),
+        Err(error) => Err(probe_failure(path, error)),
+    }
+}
+
+/// Closed reason a user-scope candidate could not supply configuration.
+///
+/// The reason travels with the error as a typed payload rather than as part of
+/// its message, so the discovery telemetry can report which fail-closed branch
+/// fired without reading free text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CandidateFailure {
+    /// The candidate is a symbolic link whose target does not resolve.
+    DanglingLink,
+    /// The entry exists yet the loader produced no layer for it.
+    PresentWithoutLayer,
+    /// Inspecting the candidate entry itself failed.
+    ProbeFailed,
+}
+
+impl CandidateFailure {
+    /// Return the fixed diagnostic text shown to the user for this reason.
+    const fn description(self) -> &'static str {
+        match self {
+            Self::DanglingLink => "symbolic link target is missing",
+            Self::PresentWithoutLayer => "present entry yielded no layer",
+            Self::ProbeFailed => "candidate entry could not be inspected",
+        }
+    }
+
+    /// Return the closed telemetry label for this reason.
+    pub(super) const fn label(self) -> &'static str {
+        match self {
+            Self::DanglingLink => "dangling_link",
+            Self::PresentWithoutLayer => "present_without_layer",
+            Self::ProbeFailed => "probe_failed",
+        }
+    }
+}
+
+/// Error payload carrying a candidate failure's closed reason.
+///
+/// The original probe error, when there is one, is retained as the source so
+/// the user-visible message keeps its diagnostic detail.
+#[derive(Debug)]
+pub(super) struct UnloadableCandidate {
+    /// Closed reason the candidate was rejected.
+    reason: CandidateFailure,
+    /// Original probe error, present only for [`CandidateFailure::ProbeFailed`].
+    detail: Option<io::Error>,
+}
+
+impl UnloadableCandidate {
+    /// Return the closed reason recorded when this candidate failed.
+    pub(super) const fn reason(&self) -> CandidateFailure {
+        self.reason
+    }
+}
+
+impl fmt::Display for UnloadableCandidate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.detail {
+            Some(detail) => write!(f, "{detail}"),
+            None => f.write_str(self.reason.description()),
+        }
+    }
+}
+
+impl std::error::Error for UnloadableCandidate {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.detail
+            .as_ref()
+            .map(|detail| detail as &(dyn std::error::Error + 'static))
     }
 }
 
 /// Build the error for a candidate that exists but cannot supply configuration.
-fn unloadable_candidate(path: &Path, reason: &str) -> Arc<OrthoError> {
+fn unloadable_candidate(path: &Path, reason: CandidateFailure) -> Arc<OrthoError> {
+    candidate_failure_error(path, reason, None)
+}
+
+/// Build the error for a candidate whose presence probe itself failed.
+fn probe_failure(path: &Path, error: io::Error) -> Arc<OrthoError> {
+    candidate_failure_error(path, CandidateFailure::ProbeFailed, Some(error))
+}
+
+/// Build a file error whose source carries a closed candidate-failure reason.
+///
+/// The marker is nested inside an [`io::Error`] so any consumer that expects a
+/// file error's source to be an I/O error still finds one, while
+/// [`CandidateFailure`] stays available to telemetry through a downcast.
+pub(super) fn candidate_failure_error(
+    path: &Path,
+    reason: CandidateFailure,
+    detail: Option<io::Error>,
+) -> Arc<OrthoError> {
+    let kind = detail
+        .as_ref()
+        .map_or(io::ErrorKind::InvalidInput, io::Error::kind);
     Arc::new(OrthoError::File {
         path: path.to_path_buf(),
-        source: Box::new(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            reason.to_owned(),
-        )),
+        source: Box::new(io::Error::new(kind, UnloadableCandidate { reason, detail })),
     })
 }
 
@@ -461,6 +573,7 @@ mod selector_tests;
 
 #[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
 // weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
 // weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
 // weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
