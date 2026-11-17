@@ -6197,13 +6197,16 @@ dead code: an unused `pub` item in `src/cli/config/mod.rs` is reported by the
 build-script crate but not by the library because the library exports that
 module publicly.
 
-The inline `cli` module and `shell_selection` are `pub`, matching `src/lib.rs`,
-while their remaining siblings stay private. The schema slice re-exports the
-shell vocabulary through `cli::config`, and a re-export inside a private module
-is unreachable, so rustc would report those vocabulary imports as unused even
-though the library consumes them. Declaring the two modules as the library does
-keeps the unused-item analysis about this compilation unit's real reachability
-rather than about a visibility the production source never had.
+Four of the six declarations are `pub`: the inline `cli` module,
+`shell_selection`, `locale_catalogues`, and `localization`. `cli_localization`
+and `host_pattern` stay private. `locale_catalogues` and `localization` are
+public because `localization` re-exports the registry from a public path, and a
+private module cannot be re-exported. The inline `cli` module and
+`shell_selection` became public with the shell schema for the same reason: the
+slice re-exports that vocabulary through `cli::config`, so declaring them as
+the library does keeps the unused-item analysis about this compilation unit's
+real reachability rather than about a visibility the production source never
+had.
 
 A dependency added outside the slice surfaces as a build-script compile error.
 Prefer moving the new code into a sibling module over widening the slice.
