@@ -96,9 +96,76 @@ Ninja or output consumption.
   [`src/runner/dyndep/publication.rs`](../../src/runner/dyndep/publication.rs)
 - Atomic sidecar materialization:
   [`src/runner/process/dyndep/files/mod.rs`](../../src/runner/process/dyndep/files/mod.rs)
+- Verified generated-state directory:
+  [`src/runner/process/dyndep/directory/mod.rs`](../../src/runner/process/dyndep/directory/mod.rs)
 - Retention and lease implementation:
   [retention implementation](../../src/runner/process/dyndep/retention/mod.rs)
 - User contract:
   [user's guide](../users-guide.md#run-direct-dependencies-serially)
 - Serial dyndep architecture:
   [ADR-0011](adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md)
+
+## Amendments
+
+Two amendments are recorded below. The first tightens how the generated-state
+directory is established; the second makes the traversal honour the path order
+this record already promised. Neither changes the retention decision itself. No
+separate ADR amends this record, so the Status section carries no
+`Amended by ADR-nnnn` banner; the dated entries here are the record.
+
+### Amendment 1: reject generated-state aliases (2026-11-12)
+
+The original decision assumed `.netsuke` and `.netsuke/dyndep` were ordinary
+directories. They are project-controlled state, so a manifest can ship either
+component as a symbolic link or a Windows junction. A capability rooted at the
+workspace resolves such an alias, and retention would then treat unrelated
+workspace files as disposable cache entries and delete them.
+
+Netsuke now establishes the generated-state directory through
+`src/runner/process/dyndep/directory/mod.rs`. The module walks `.netsuke` and
+`.netsuke/dyndep` one component at a time, refuses any entry that is a symbolic
+link, junction, other reparse point, or non-directory, and returns a verified
+handle. Publication, locking, and retention address bare entry names through
+that handle. The refusal is checked on the entry before it is opened, so the
+diagnostic names the aliased component, and again on the opened handle, so an
+entry swapped in between cannot smuggle an alias past the check. Unix opens with
+`O_NOFOLLOW`; Windows opens the reparse point itself and rejects every reparse
+attribute, not only the tags `std` reports as symlinks.
+
+The lease remains advisory: it coordinates cooperating Netsuke processes and
+does not defend against a process that ignores it. The `--directory` root may
+itself be a symbolic link, because it is the caller's chosen capability root
+rather than generated state. A project that previously relied on an aliased
+`.netsuke` directory must replace it with a real directory; the command now
+fails with a localized error. The refusal precedes any retention deletion, but
+it is not always the first thing a command does: a bundle with no dyndep
+sidecars opens the directory only when retention runs, and `clean` runs
+`ninja -t clean` before that, so a sidecar-free `clean` may report the alias
+after its declared build outputs have already been removed.
+
+### Amendment 2: select obsolete sidecars in sorted path order (2026-11-16)
+
+The retention decision said obsolete sidecars are considered in deterministic
+path order, and the developers' guide repeats that as a 32-file, 1 MiB
+retention budget applied in path order. The traversal did not honour it: it fed
+selection the order `Dir::entries` reported, so the retained set depended on
+how a filesystem happened to list the directory. Two hosts holding the same
+cache could therefore retain different sidecars, and a directory that listed a
+later path first could reclaim a lexically earlier one permanently, because
+bounded selection never reconsiders a reclaimed path.
+
+`src/runner/process/dyndep/retention/mod.rs` now collects the entry names,
+sorts them, and only then runs selection over them. The retained set after a
+retention pass is therefore a function of the path set and the policy alone.
+The pass buffers one entry name per directory entry, which is a bounded,
+transient allocation proportional to the cache size rather than to the
+retention budget; each entry's metadata is still read during the traversal, and
+the selection state itself still holds at most `max_files + 1` candidates. A
+selection state that receives an out-of-order feed still re-applies the greedy
+rule over its retained set, which keeps its arithmetic correct for that caller.
+
+Coverage records the promise in three places: a unit test asserts the traversal
+presents names in ascending path order, a pass-level regression keeps selection
+under a four-file, fourteen-byte budget independent of creation order, and a
+property test compares the whole pruning pass against an independently written
+whole-set greedy oracle under shuffled creation orders and generated policies.

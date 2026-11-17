@@ -8765,9 +8765,25 @@ content, then uses a same-directory temporary file plus atomic rename. Keep
 generated sidecars content-addressed and idempotent; corruption is an error,
 not a reason to overwrite an unknown file.
 
-`src/runner/process/dyndep/retention/mod.rs` owns the publication lease and
-retention cleanup. The command-boundary module invokes it after materialization
-or successful clean while retaining the lease through bundle consumption.
+`src/runner/process/dyndep/directory/mod.rs` establishes the generated-state
+directory. `.netsuke` and `.netsuke/dyndep` are project-controlled, so a
+manifest can ship either as a symbolic link or a Windows junction. The module
+walks the two components one at a time, refuses any entry that is not a real
+directory, and returns a verified handle. Publication, locking, and retention
+then address bare entry names through that handle, so no operation can resolve
+a component outside the directory it verified. The refusal is checked on the
+entry before it is opened, so the diagnostic names the aliased component, and
+again on the opened handle, so an entry swapped in between cannot smuggle an
+alias past the check. Unix opens with `O_NOFOLLOW`; Windows opens the reparse
+point itself and rejects every reparse attribute, not only the tags `std`
+reports as symlinks. The `--directory` root itself may still be a symbolic
+link: it is the caller's chosen capability root, not generated state.
+
+`src/runner/process/dyndep/retention/lease.rs` defines
+`DyndepPublicationLease`, the advisory publication lease, and
+`src/runner/process/dyndep/retention/mod.rs` owns retention cleanup. The
+command-boundary module invokes them after materialization or successful clean
+while retaining the lease through bundle consumption.
 
 `DyndepPublicationLease` also coordinates retention. Sidecar-capable `build`,
 `generate`, and `clean` commands hold the capability-scoped exclusive
@@ -8777,7 +8793,9 @@ obsolete `.dd` files are retained in deterministic path order up to 32 files
 and 1 MiB. The current bundle is always retained. `build` and `generate` prune
 after materialization; `clean` prunes only after successful `ninja -t clean`,
 never after a failed clean. Do not introduce age-based cleanup or mutate an
-existing content-addressed sidecar. See
+existing content-addressed sidecar. The lease is an advisory lock: it
+coordinates cooperating Netsuke processes and does not defend against a process
+that ignores it. See
 [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md) for the durable
 policy.
 
@@ -9587,6 +9605,18 @@ is not obvious from the name:
   underlying metadata error. Fixture code must use this wrapper for directory
   predicates rather than calling `std::fs::metadata(...).is_dir()` or
   `Path::is_dir` directly.
+- `symlink(target, link)` (Unix only) creates a symbolic link and propagates
+  the creation failure. `is_symlink(path) -> bool` reports whether the path's
+  own directory entry is a symbolic link; unlike `is_dir` and `exists` it does
+  not follow the link, so a dangling link is still a link.
+  `junction(target, link) -> io::Result<bool>` (Windows only) creates a
+  directory junction through the `cmd.exe` `mklink` built-in and returns
+  `Ok(false)` when the host has no `cmd.exe`, so a fixture can report a skip
+  rather than a failure. A junction needs no privilege, so that absence is the
+  only skip: a quoted path, a spawn failure, and a non-zero `mklink` exit are
+  all errors. The three helpers live in `test_support/src/fs_links.rs` and are
+  re-exported here, so fixtures keep a single ambient boundary and the platform
+  split stays out of `fs.rs`.
 - `PathState` and `inspect_path(path) -> io::Result<PathState>` provide a
   fallible target-state probe. `PathState::Absent` means metadata returned
   `NotFound`, `PathState::Directory` means the target is a directory, and

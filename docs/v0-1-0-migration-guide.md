@@ -1070,6 +1070,24 @@ sidecars. See [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md). The
 [users' guide](users-guide.md#run-direct-dependencies-serially) documents the
 execution scope and the independent-reachability boundary.
 
+### Refuse an aliased generated-state directory
+
+The next pre-release (`v0.1.0-beta5`) also refuses to use `.netsuke` or
+`.netsuke/dyndep` when either part of the generated-state directory is a
+symbolic link, a Windows junction, or not a directory. `build`, `clean`, and
+`generate` report a localized error naming the offending path. Retention
+resolved both parts through the workspace before this change, so a
+project-supplied alias could make unrelated files look like disposable sidecar
+entries.
+
+Replace the alias with a real directory before retrying. A command carrying
+sidecars refuses before it does any work. A bundle with no sidecars checks the
+directory only at retention, and `clean` prunes after `ninja -t clean`, so a
+sidecar-free `clean` can remove its declared build outputs before it reports
+the alias. See
+[Run direct dependencies serially](users-guide.md#run-direct-dependencies-serially)
+and [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md).
+
 ## Discover targets and actions
 
 Target and action `description` values are optional discovery metadata. Adding

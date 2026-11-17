@@ -1,6 +1,8 @@
 # Sumber daya pelokalan untuk antarmuka baris perintah Netsuke.
 
 runner.io.dyndep.retention = Gagal menerapkan retensi dyndep yang dibuat di bawah { $path }.
+runner.io.dyndep.alias = Jalur dyndep yang dihasilkan { $path } adalah tautan simbolis, persimpangan, atau bukan direktori; ganti dengan direktori sungguhan.
+runner.io.dyndep.open = Gagal membuka direktori dyndep yang dihasilkan { $path }.
 cli.about = Netsuke mengompilasi manifes YAML + Jinja menjadi rencana build Ninja.
 cli.long_about = Netsuke mengubah manifes YAML + Jinja menjadi graf Ninja yang dapat direproduksi dan menjalankan Ninja dengan nilai bawaan yang aman.
 cli.usage = { $usage }

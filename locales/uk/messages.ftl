@@ -1,6 +1,8 @@
 # Ресурси локалізації командного рядка Netsuke.
 
 runner.io.dyndep.retention = Не вдалося застосувати правила зберігання згенерованого файлу dyndep (шлях: { $path }).
+runner.io.dyndep.alias = Створений шлях dyndep { $path } є символічним посиланням, точкою з'єднання або не є каталогом; замініть його справжнім каталогом.
+runner.io.dyndep.open = Не вдалося відкрити створений каталог dyndep { $path }.
 cli.about = Netsuke компілює маніфести YAML + Jinja у плани збирання Ninja.
 cli.long_about = Netsuke перетворює маніфести YAML + Jinja на відтворювані графи Ninja й запускає Ninja з безпечними типовими значеннями.
 cli.usage = { $usage }
