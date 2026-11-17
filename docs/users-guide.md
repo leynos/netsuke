@@ -67,7 +67,8 @@ manual page and declare `ninja-build` as a dependency. The macOS packages
 install the binary under `/usr/local/bin`, along with the manual page and
 licence. Ninja must be installed separately when using the macOS or Windows
 installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
-update `PATH`.
+update `PATH`. The v0.1.0-beta4 MSI predates that layout and installed the
+payload under `C:\Program Files (x86)\netsuke`; upgrading replaces it.
 
 Linux package metadata comes from `[package]` in `Cargo.toml`: the first
 `authors` entry supplies the maintainer, while `homepage`, `license`, and
@@ -334,7 +335,10 @@ The MSI does not add its installation directory to `PATH`. Add the native
 `C:\Program Files\netsuke` directory to the current user's persistent `PATH`,
 update the current PowerShell session, then verify that the command resolves.
 The script stops before changing `PATH` when the MSI has not installed
-`netsuke.exe` at that location.
+`netsuke.exe` at that location. Run it after installing a release whose MSI
+uses that layout: a v0.1.0-beta4 installation must be upgraded first, because
+its MSI placed the payload in the 32-bit program files directory that the
+script does not search.
 
 <!-- tested-example: guide-windows-path -->
 
