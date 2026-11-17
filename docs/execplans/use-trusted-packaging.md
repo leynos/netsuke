@@ -980,13 +980,15 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   already 688 lines on `main`. The extraction follows the repository's
   documented composite-action convention
   ([cache ownership and bounded CI resources](../developers-guide.md#cache-ownership-and-bounded-ci-resources)).)
-- Requirements: INV-1, LEM-5, and LEM-6 are assigned here. The
-  `publish-crates-io` job and its permission, prerequisite-reachability, and
-  dry-run contracts have landed; the remaining workflow sequence and the
-  separately planned LEM-5 suite remain open.
+- Requirements: INV-1, LEM-5, and LEM-6 are assigned here. The whole sequence
+  has landed, from `package-crate` through `publish-crates-io`,
+  `verify-release-inventory`, `finalize-github-release`, `publish-release`, and
+  `consumer-smoke`, each with its contract; the separately planned LEM-5 suite
+  remains open.
 - Acceptance evidence: `make test-workflow-contracts` covers the delivered
-  publisher permission, reachability, and mode-matrix contracts. The separate
-  LEM-5 permission suite and remaining publication jobs have not landed.
+  publisher permission, reachability, and mode-matrix contracts, the inventory
+  verifier, the finalizer, and the consumer smoke. The separate LEM-5
+  permission suite has not landed.
 - Conformance check: the six existing outputs are unchanged; the three
   `workflow_call` inputs are unchanged.
 - Recovery: the sequence is additive after `release`; a revert restores the
@@ -4315,6 +4317,14 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `04528ef3e`, which added the policy, adapters, and CLI. No release, tag,
   registry credential, or GitHub setting was touched, and the smoke has not run
   against a real release: a tagged run is still what would exercise it.
+
+  **Later revisions.** This entry records the delivery as it stood then. Review
+  then split the contract across six modules to stay inside the 400-line cap
+  and grew the labelled mutation set from thirteen regressions to thirty, as
+  the credential, command, artefact, and script-shape properties were added.
+  The current inventory is the developers' guide section on smoke-testing the
+  published release, and `CONSUMER_SMOKE_EXPECTED_VIOLATIONS` is the count's
+  source.
 
 ## Surprises & discoveries
 
