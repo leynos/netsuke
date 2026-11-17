@@ -43,7 +43,28 @@ pub(super) fn automatic_base_layers(
     env_source: SharedEnvSource,
     project_key: Option<&ProjectKey>,
 ) -> OrthoResult<(Vec<MergeLayer<'static>>, bool)> {
-    if let Some(layers) = user_scope_base_layers(env_source.as_ref())? {
+    automatic_base_layers_with_probe(&FsCandidateProbe, directory, env_source, project_key)
+}
+
+/// Load the automatic discovery chain, consulting `probe` about user candidates.
+///
+/// The presence check is a parameter rather than a direct filesystem call so the
+/// two rare fail-closed branches — an entry that exists yet yields no layer, and
+/// a probe that itself fails — can be driven from a test. Both are races against
+/// the loader's own view of the directory, so a real filesystem fixture cannot
+/// reproduce them on demand.
+///
+/// # Errors
+///
+/// Returns an error when a present user candidate cannot be loaded, or when the
+/// dependency's scan reports a required or optional failure with no chain.
+pub(super) fn automatic_base_layers_with_probe(
+    probe: &dyn CandidateProbe,
+    directory: Option<&Path>,
+    env_source: SharedEnvSource,
+    project_key: Option<&ProjectKey>,
+) -> OrthoResult<(Vec<MergeLayer<'static>>, bool)> {
+    if let Some(layers) = user_scope_base_layers(probe, env_source.as_ref())? {
         return Ok((layers, true));
     }
     // Name the winning scope even when it is not the user scope, so an
@@ -71,11 +92,12 @@ pub(super) fn automatic_base_layers(
 /// would silently substitute another scope, letting a broken user file re-enable
 /// the system policy it was meant to override.
 fn user_scope_base_layers(
+    probe: &dyn CandidateProbe,
     env_source: &dyn EnvSource,
 ) -> OrthoResult<Option<Vec<MergeLayer<'static>>>> {
     user_scope_candidates(env_source)
         .into_iter()
-        .find_map(|candidate| match load_user_candidate(&candidate) {
+        .find_map(|candidate| match load_user_candidate(probe, &candidate) {
             Ok(Some(chain)) => {
                 emit_user_candidate_adopted(&candidate);
                 Some(Ok(chain_layers(chain)))
@@ -112,20 +134,64 @@ fn emit_user_candidate_adopted(candidate: &Path) {
 /// Returns the loader error when the candidate exists but cannot be read,
 /// parsed, or resolved through its `extends` chain, and an error naming the
 /// candidate when the loader reported it as absent although the entry exists.
-fn load_user_candidate(path: &Path) -> OrthoResult<Option<FileLayerChain>> {
+fn load_user_candidate(
+    probe: &dyn CandidateProbe,
+    path: &Path,
+) -> OrthoResult<Option<FileLayerChain>> {
     if let Some(chain) = load_config_file_as_chain(path)? {
         return Ok(Some(chain));
     }
-    match candidate_entry_metadata(path) {
-        Ok(Some(metadata)) if metadata.file_type().is_symlink() => {
+    match probe.probe(path) {
+        Ok(CandidateEntry::Symlink) => {
             Err(unloadable_candidate(path, CandidateFailure::DanglingLink))
         }
-        Ok(Some(_)) => Err(unloadable_candidate(
+        Ok(CandidateEntry::Present) => Err(unloadable_candidate(
             path,
             CandidateFailure::PresentWithoutLayer,
         )),
-        Ok(None) => Ok(None),
+        Ok(CandidateEntry::Absent) => Ok(None),
         Err(error) => Err(probe_failure(path, error)),
+    }
+}
+
+/// What a [`CandidateProbe`] found at a user candidate path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CandidateEntry {
+    /// Nothing exists at the path.
+    Absent,
+    /// The entry is a symbolic link whose target did not resolve.
+    Symlink,
+    /// An entry exists and is not a symbolic link.
+    Present,
+}
+
+/// Presence probe for one user-scope candidate.
+///
+/// The loader reports an unreadable candidate exactly as it reports an absent
+/// one, so the fail-closed rule needs a second look at the directory entry
+/// itself. Keeping that look behind a trait lets a test drive the three
+/// answers, and the probe's own failure, without staging a directory that
+/// happens to break the loader first.
+pub(super) trait CandidateProbe {
+    /// Report what the filesystem holds at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the inspection error when the entry cannot be examined, for
+    /// example because a parent component is not a directory.
+    fn probe(&self, path: &Path) -> io::Result<CandidateEntry>;
+}
+
+/// The filesystem-backed probe production discovery uses.
+struct FsCandidateProbe;
+
+impl CandidateProbe for FsCandidateProbe {
+    fn probe(&self, path: &Path) -> io::Result<CandidateEntry> {
+        candidate_entry_metadata(path).map(|found| match found {
+            Some(metadata) if metadata.file_type().is_symlink() => CandidateEntry::Symlink,
+            Some(_) => CandidateEntry::Present,
+            None => CandidateEntry::Absent,
+        })
     }
 }
 

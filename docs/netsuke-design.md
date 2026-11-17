@@ -4244,6 +4244,16 @@ through its `extends` chain fails discovery instead of falling through to a
 later candidate, so a broken user file cannot silently re-enable the system
 policy it was meant to override.
 
+OrthoConfig resolves a candidate through a capability on its parent directory,
+so it reports a link whose target does not resolve exactly as it reports a file
+that is not installed. Netsuke therefore inspects the candidate entry itself,
+without following a link at its final component: an absent entry continues to
+the next candidate, while a dangling link, or an entry the loader produced no
+layer for, fails discovery. That inspection is the only part of the rule that
+reads the directory entry directly, and it is reached through a narrow probe
+seam so both fail-closed branches, and a probe that itself errors, can be
+exercised without staging a filesystem that happens to break the loader first.
+
 Definition authority is recorded per occurrence at discovery time, before any
 flattening, so it survives quarantine and cached replay. A candidate root is
 trusted only when it is a system, XDG, or home location and is not the
