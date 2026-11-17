@@ -39,12 +39,12 @@ pub(super) fn inert_field_metadata(name: String) -> FieldMetadata {
     }
 }
 
-/// Return generated names for configuration fields with declared Fluent keys.
+/// Return generated names for configuration fields release help describes.
 pub(super) fn recognised_configuration_field_names() -> Vec<String> {
     CliConfig::get_doc_metadata()
         .fields
         .into_iter()
-        .filter(|field| field.name != "cmds")
+        .filter(|field| is_published_configuration_field(&field.name))
         .map(|field| field.name)
         .collect()
 }
@@ -152,10 +152,11 @@ fn release_help_metadata_composes_every_parser_only_selector() -> Result<()> {
     Ok(())
 }
 
-/// Verify that known fields resolve and the structural field is omitted.
+/// Verify that known fields resolve and fields without a flag are omitted.
 #[rstest]
 #[case::known("file", Some(keys::CLI_FLAG_FILE_HELP))]
 #[case::structural("cmds", None)]
+#[case::file_only("shells", None)]
 fn config_metadata_localization_handles_known_and_structural_fields(
     #[case] field_name: &str,
     #[case] expected_help_id: Option<&str>,
@@ -185,7 +186,7 @@ fn config_metadata_localization_handles_known_and_structural_fields(
         }
         None => ensure!(
             localized_fields.is_empty(),
-            "the structural cmds field should be omitted from release-help metadata"
+            "{field_name} has no command-line surface and should be omitted"
         ),
     }
     Ok(())

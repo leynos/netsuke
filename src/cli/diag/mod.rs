@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use super::command::Cli;
 use super::discovery::{
-    DiscoveryOutcome, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env,
+    DiscoveryOutcome, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env, is_shells_key,
 };
 
 /// Environment variable carrying an explicit JSON-output preference.
@@ -99,21 +99,29 @@ fn resolve_json_preference(
     json_from_env(env)?.map_or_else(|| Ok(json_from_layers(outcome)), Ok)
 }
 
-/// Defer quarantined-policy errors until the resolved diagnostic mode is installed.
+/// Defer quarantined-policy and shell-definition errors until the mode is installed.
 ///
 /// Discovery retains these errors beside the file layers, so the cached merge
 /// still rejects the malformed input. Unlike a file-loading error, they do not
 /// prevent discovery from reading the effective file JSON preference.
 fn is_quarantined_policy_validation(error: &OrthoError) -> bool {
+    matches!(error, OrthoError::Validation { key, .. } if is_quarantined_policy_key(key))
+}
+
+/// Report whether a validation key defers to the resolved diagnostic mode.
+fn is_quarantined_policy_key(key: &str) -> bool {
+    is_quarantined_scalar_policy_key(key) || is_shells_key(key)
+}
+
+/// Report whether `key` names a quarantined project or environment policy field.
+fn is_quarantined_scalar_policy_key(key: &str) -> bool {
     matches!(
-        error,
-        OrthoError::Validation { key, .. }
-            if matches!(key.as_str(),
-                "fetch_default_deny"
-                    | "fetch_allow_scheme"
-                    | "fetch_allow_host"
-                    | "env_allow_var"
-                    | "trust_project_fetch_policy")
+        key,
+        "fetch_default_deny"
+            | "fetch_allow_scheme"
+            | "fetch_allow_host"
+            | "env_allow_var"
+            | "trust_project_fetch_policy"
     )
 }
 

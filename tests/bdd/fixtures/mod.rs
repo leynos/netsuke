@@ -48,6 +48,14 @@ pub struct TestWorld {
     pub shell_selector_yaml: Slot<String>,
     /// Result of decoding the current shell-selection behaviour input.
     pub shell_selection_outcome: Slot<Result<ShellSelection, String>>,
+    /// Selected operator configuration file whose chain the scenario merges.
+    pub shell_chain: Slot<PathBuf>,
+    /// File that declares a definition without operator authority.
+    pub shell_untrusted_file: Slot<PathBuf>,
+    /// Outcome of merging the scenario's operator configuration chain.
+    pub shell_merge: Slot<Result<Vec<netsuke::cli::config::shells::ShellDefinition>, String>>,
+    /// Shell names recorded in the order the scenario declared them.
+    pub shell_order: RefCell<Vec<String>>,
     /// Resource ceilings injected for manifest parsing scenarios.
     pub manifest_budget_limits: Slot<netsuke::manifest::ManifestBudgetLimits>,
     /// Environment access policy applied while parsing the current manifest.

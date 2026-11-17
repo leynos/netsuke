@@ -6159,7 +6159,10 @@ three as one key set
 ([ADR-0069](adrs/adr-0069-split-the-localization-key-tables.md)). Rather than
 declaring `src/cli/mod.rs` and inheriting the whole subtree, it declares an
 inline `cli` module naming exactly four files — `src/cli/command.rs`,
-`src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`.
+`src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs` —
+beside five path-imported siblings: `src/cli/localization/mod.rs`,
+`src/host/pattern.rs`, `src/shell_selection/mod.rs`,
+`src/locale/catalogues.rs`, and `src/localization/mod.rs`.
 
 That slice is a maintained boundary, not an accident:
 
@@ -6178,6 +6181,12 @@ That slice is a maintained boundary, not an accident:
 - `src/host/pattern.rs` covers pattern syntax; matching a concrete hostname
   against a parsed pattern lives in `src/host/matching.rs`, which the build
   script does not compile.
+- `src/shell_selection/mod.rs` supplies the trusted shell vocabulary the CLI
+  schema names in its `shells` definitions. `ShellDefinition` stores a validated
+  `ShellName` and classifies its executable by `HostFamily`, so the schema
+  cannot be described without `BuiltInShell`, `ShellName`, and `HostFamily`.
+  Only that vocabulary is compiled: resolving an executable and running a
+  configured shell stay outside the build script.
 
 Keeping the slice narrow is what lets rustc's unused-item analysis run normally
 inside the build-script crate. Widening it — for example by making
@@ -6188,6 +6197,17 @@ dead code: an unused `pub` item in `src/cli/config/mod.rs` is reported by the
 build-script crate but not by the library because the library exports that
 module publicly.
 
+Four of the six declarations are `pub`: the inline `cli` module,
+`shell_selection`, `locale_catalogues`, and `localization`. `cli_localization`
+and `host_pattern` stay private. `locale_catalogues` and `localization` are
+public because `localization` re-exports the registry from a public path, and a
+private module cannot be re-exported. The inline `cli` module and
+`shell_selection` became public with the shell schema for the same reason: the
+slice re-exports that vocabulary through `cli::config`, so declaring them as
+the library does keeps the unused-item analysis about this compilation unit's
+real reachability rather than about a visibility the production source never
+had.
+
 A dependency added outside the slice surfaces as a build-script compile error.
 Prefer moving the new code into a sibling module over widening the slice.
 
@@ -6195,8 +6215,8 @@ Manifest resource-budget code remains on the runtime side of this boundary.
 `src/cli/command.rs` and the private `config::budget` submodule included through
 `src/cli/config/mod.rs` contribute the CLI schema, defaults, and validation
 needed by the build script's generated help artefacts. `build.rs` directly
-declares only the four root files named above; the budget-config path is an
-included submodule of `config/mod.rs`, not a fifth directly declared
+declares only the CLI files and sibling sources named above; the budget-config
+path is an included submodule of `config/mod.rs`, not a directly declared
 build-script source. The runtime `ManifestBudgetLimits`, `ManifestBudget`, and
 manifest-loading adapters are library code and are deliberately not imported by
 `build.rs`; adding a runtime budget dependency must not widen the build
@@ -6210,14 +6230,15 @@ checks the package boundary and that dependency equality. `slice.rs` mirrors
 `build.rs`'s whole declaration boundary, not just the inline `cli` module: the
 four CLI declarations and the two `pub use` re-exports, then the path imports
 for `src/cli/localization/mod.rs`, `src/host/pattern.rs`,
-`src/locale/catalogues.rs`, and `src/localization/mod.rs`. The source contract
-compares every one of those declarations in order after normalizing the
-fixture's `../src/` prefix, so a reordered path attribute fails even when the
-same modules are still named. `build_l10n_audit` is the one declaration
-`build.rs` keeps to itself — it lives beside the build script, declares no
-path, and audits generated catalogues rather than exposing production source —
-and a test asserts both its presence there and its absence from `slice.rs`, so
-the exclusion reads as a decision rather than an omission.
+`src/shell_selection/mod.rs`, `src/locale/catalogues.rs`, and
+`src/localization/mod.rs`. The source contract compares every one of those
+declarations in order after normalizing the fixture's `../src/` prefix, so a
+reordered path attribute fails even when the same modules are still named.
+`build_l10n_audit` is the one declaration `build.rs` keeps to itself — it lives
+beside the build script, declares no path, and audits generated catalogues
+rather than exposing production source — and a test asserts both its presence
+there and its absence from `slice.rs`, so the exclusion reads as a decision
+rather than an omission.
 
 The fixture uses `cfg(not(any(test, doctest)))` around those production module
 imports. This keeps unrelated production unit tests out of the fixture and
@@ -7610,12 +7631,17 @@ Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
 optional, proof-kernel-only, and not installed or run by default; any Verus
 work must stay outside ordinary Cargo and is limited to small, self-contained
-kernels. Two are accepted: the cycle canonicalization model derived from
-`src/ir/cycle/mod.rs`, and the canonical value key and equality relation
-(`src/stdlib/canonical_value/`, proved in `verus/canonical_value/main.rs`).
-Verus remains outside `formal-pr`, which runs Kani only, and outside every
-routine gate. Stateright is deferred entirely until Netsuke gains an accepted
-stateful concurrent subsystem such as a daemon, watch service, remote-execution
+kernels. Three are accepted: the cycle canonicalization model derived from
+`src/ir/cycle/mod.rs`, which is not yet committed; the canonical value key and
+equality relation (`src/stdlib/canonical_value/`, proved in
+`verus/canonical_value/main.rs`); and the configured-shell name-sequence rule
+(`verus/configured_shells/main.rs`, described under
+[Configured shell definitions](#configured-shell-definitions) below).
+`make verus` proves `verus/canonical_value/main.rs` by default, so select any
+other kernel by repeating `--proof-file` through `VERUS_FLAGS`. Verus remains
+outside `formal-pr`, which runs Kani only, and outside every routine gate.
+Stateright is deferred entirely until Netsuke gains an accepted stateful
+concurrent subsystem such as a daemon, watch service, remote-execution
 coordinator, actor protocol, or internal scheduler with long-lived mutable
 control-plane state. See
 [`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
@@ -9476,18 +9502,42 @@ test support, justified by new call sites.
 
 ### JSON snapshot version redaction
 
-`src/snapshot_test_support.rs` owns the snapshot settings for versioned JSON
-output. Its private `add_generator_version_filter` helper is composed only by
-`diagnostic_json_snapshot_settings()` and
-`help_targets_json_snapshot_settings()`; individual tests must use those
-specialized builders rather than adding the filter themselves. JSON diagnostic
-snapshots must bind through the diagnostic builder, and JSON help-target
-catalogue snapshots must bind through the help-target builder.
+[`test_support::generator_version`](../test_support/src/generator_version.rs)
+owns the single implementation of the generator-version pattern both snapshot
+trees bind. It publishes `GENERATOR_VERSION_PATTERN`,
+`GENERATOR_VERSION_REPLACEMENT`, and `redact_generator_version`, which applies
+those two to a document.
+
+The pattern is anchored on the enclosing `"generator"` object and its
+`"name": "netsuke"` field, so every other `version` field — and a version
+quoted in a diagnostic message — remains visible and must still be asserted.
+
+The two trees cannot share a settings builder, because the library's
+`#[cfg(test)]` code is not reachable from an integration crate: the unit-test
+settings in `src/snapshot_test_support.rs` compile inside the library, while
+`tests/cli_tests/shells_startup/` links only the library's public surface. Each
+tree therefore binds the shared definition itself:
+
+- `src/snapshot_test_support.rs` binds it in `add_generator_version_filter`,
+  which three specialized builders compose —
+  `diagnostic_json_snapshot_settings()`,
+  `help_targets_json_snapshot_settings()`, and the lint-gated
+  `check_json_snapshot_settings()`. The newer
+  `schema_admission_diagnostic_snapshot_settings()` extends the diagnostic
+  builder rather than binding the filter again. Individual tests must use the
+  matching builder rather than adding the filter themselves: JSON diagnostic
+  snapshots bind through the diagnostic builder, JSON help-target catalogues
+  through the help-target builder, lint-result documents through the check
+  builder, and schema-admission documents through the schema-admission builder.
+- `tests/cli_tests/shells_startup/support.rs` calls
+  `generator_version::redact_generator_version` from `normalised`.
 
 Text catalogue snapshots must continue to use the unfiltered
-`snapshot_settings("help_targets")` builder. The filter is anchored on the
-Netsuke generator object, so unrelated `version` fields remain asserted in
-every snapshot.
+`snapshot_settings("help_targets")` builder.
+
+**Re-use policy:** any generator-version filter must build on the shared
+pattern and apply the shared replacement. Do not restate either in a `Settings`
+builder, a test helper, or another module.
 
 ### The temporary-path snapshot filter
 
@@ -11699,9 +11749,27 @@ comparison, and tests alongside the main discovery flow:
   unresolved path fatal. `FsPathNormalizer` uses `dunce::canonicalize` to
   mirror OrthoConfig's native Windows identity (without UNC-prefix or
   short-name divergence); on other platforms it follows
-  `std::fs::canonicalize`. Keep it confined to this comparison boundary:
-  selectors remain pure path queries, OrthoConfig supplies the layer path, and
-  tracing remains at the orchestration boundary.
+  `std::fs::canonicalize`. The `PathNormalizer` seam also answers `exists` with
+  an `io::Result<bool>`, because the caller has to distinguish an absent
+  project file from an unreadable one and `Path::exists` collapses every error
+  into `false`. Keep the seam confined to this comparison boundary: selectors
+  remain pure path queries, OrthoConfig supplies the layer path, and tracing
+  remains at the orchestration boundary.
+- `discovery/layers/` — the collection pass that keeps each root's authority
+  attached to the layer it loaded. It runs the `OrthoConfig` scan and the
+  project-scope second pass, and returns `ScopedFileLayer` values rather than
+  bare `MergeLayer`s. Each occurrence carries `RootAuthority::Operator` when a
+  system or user root loaded it, and `RootAuthority::Untrusted` when a project,
+  explicit, or environment root did, or when an untrusted root appears anywhere
+  in its chain. Authority is separate from `FileScope`: scope decides
+  precedence and quarantine, authority decides whether the occurrence may
+  declare executable policy at all. `layers/project_key.rs` classifies the
+  project `.netsuke.toml` once per scan so the second pass can compare recorded
+  layer paths against it without re-normalizing each one, and it fails closed:
+  a project file that exists but cannot be normalized leaves its identity
+  unproven, and every occurrence is then treated as possibly that file. An
+  existence query that fails is classified the same way, because absence cannot
+  be concluded from a failed probe.
 - `discovery/event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`
@@ -11719,6 +11787,95 @@ Both test modules import `capture_events`, `find_event`, and `EventAssertion`
 from `discovery::event_assertions` rather than duplicating them. The `insta`
 snapshot calls themselves stay in the test modules because snapshot names bind
 to the test module's path, not to a shared helper module.
+
+### Configured shell definitions
+
+`src/cli/config/shells/` owns the trusted `shells` schema. `ShellDefinition`
+groups a `ShellName`, a `ShellExecutable`, and `ShellArguments`, and
+`validate_composition` applies the two registry rules. Field types validate as
+they deserialize, so a `ShellDefinition` that exists is already locally valid.
+That is what lets the same deserializers check a single occurrence during
+discovery and the merged vector after merging, without duplicating a rule.
+
+Ownership boundary: `src/shell_selection/` supplies the `ShellName`,
+`BuiltInShell`, and `HostFamily` vocabulary and must not depend on CLI
+configuration; the schema depends on it, not the reverse. `SHELLS_KEY` lives in
+the schema module rather than `cli::constants` so the build script's compiled
+slice can carry the key without pulling in the modules that share the constants
+file. The build script compiles `src/shell_selection/` as part of that slice,
+whose boundary and public declarations are described in
+[the build script's module slice](#the-build-scripts-module-slice).
+
+`ShellExecutable` spelling rules live in `src/cli/config/shells/spelling.rs`
+and take the host family as a parameter, so both families' rules run on either
+build host. Both reject an empty value, an embedded NUL, and the `.` and `..`
+directory references. Beyond that, a Unix-like host accepts a rooted path or a
+spelling with no separator at all, and rejects every other relative path. A
+Windows host accepts a bare name, a drive letter with a root (`C:\tools\dash` or
+`C:/tools/dash`), or a complete UNC share (`\\server\share`); `C:dash` names a
+drive without a root and is rejected as drive-relative, a rooted path such as
+`/bin/dash` or `\bin\dash` is rejected because it names no drive, and anything
+else carrying either separator is relative. Neither family probes the
+filesystem, so an uninstalled program is accepted at configuration time.
+
+Configuration deserialization is the one caller that cannot be handed a family:
+serde's `Deserialize` signature carries no context, and the configuration tree
+is parsed before any per-host value could be threaded through it.
+`ShellExecutable`'s `Deserialize` therefore uses `HostFamily::current()`, the
+build host, and the impl documents that compile-time dependency. A definition
+spelled for the other family is rejected while the file is read rather than
+accepted and refused later; callers that must choose a family explicitly use
+`ShellExecutable::parse`.
+
+Source-label handling: discovery records the root that loaded each occurrence
+before merging. `src/cli/discovery/shell_definitions.rs` checks `shells`
+presence before any typed merge and reports either an untrusted-source error
+for a project, explicit, or unproven root, or `shells[index].field` errors for
+an operator root. `project_policy::shells_authority_errors` is a step of its
+own rather than part of the collecting loop: authority answers a different
+question from the precedence and quarantine rules beside it, so the step
+returns its errors and `retain_layers_and_resolve_json` joins them into
+`ResolvedFileLayers.errors`. It runs before the JSON preference is read, so a
+malformed declaration still lets a later `json = true` select JSON diagnostics.
+The environment layer rejects the key outright rather than stripping it.
+
+Validation and rendering are separate in that module. A check yields an
+`OccurrenceDiagnostic` holding the field key and the rule it broke;
+`OccurrenceDiagnostic::render` is the one place that appends the declaring file
+and bounds the quoted path. A unit test can therefore assert the exact key and
+rule text without creating a file, and a new check cannot forget to name the
+source.
+
+Proof scope: `verus/configured_shells/main.rs` proves that its model walk,
+`walk`, accepts exactly the pairwise specification — no reserved name and no
+two positions equal — at every sequence length. The proof does not cover the
+production traversal or the internals of the production `HashMap` seen-set: the
+model abstracts a name as its UTF-8 bytes and models "already seen" as
+membership in the accepted prefix. Production correspondence is bounded test
+evidence rather than proof: `src/cli/config/shells/tests/oracle.rs`, an
+independent quadratic Rust oracle, checks `validate_composition` against the
+same pairwise statement over generated sequences of validated names. The proof
+carries non-vacuity witnesses: the empty registry, two distinct names, a
+reserved name, and a duplicate in the last position.
+
+Test commands:
+
+- `make test` runs the unit, property, and behavioural suites, including
+  `tests/cli_tests/shells_authority.rs`, the `tests/cli_tests/shells_startup/`
+  module, and the `configured_shells` feature.
+- `make verus VERUS_FLAGS='--proof-file verus/configured_shells/main.rs'`
+  rechecks the shell-composition proof. The target's default proof file is
+  `verus/canonical_value/main.rs`, so a bare `make verus` does not recheck this
+  one.
+- `make test` runs
+  `configured_shell_example_is_accepted_from_an_operator_root`, which loads the
+  users' guide example from an operator configuration root, and
+  `every_documented_fence_has_a_known_unique_identifier`, which pins the
+  example's registry entry.
+- `make test-documentation-contracts` validates the loader and the exact
+  example registry.
+- Focused run:
+  `cargo nextest run --workspace --all-targets --all-features -E 'test(configured_shell)'`.
 
 ### Configuration-load observability
 

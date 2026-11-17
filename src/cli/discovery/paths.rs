@@ -26,6 +26,15 @@ pub(super) fn comparison_key(normalizer: &impl PathNormalizer, path: &str) -> Pa
 pub(super) trait PathNormalizer {
     /// Resolve `path`, propagating any I/O error to the caller.
     fn normalize(&self, path: &Path) -> io::Result<PathBuf>;
+
+    /// Report whether `path` names an existing filesystem entry.
+    ///
+    /// Callers use this only to decide what an *unresolvable* path means, so the
+    /// query stays on this seam rather than reaching for `Path::exists`. That
+    /// inherent method collapses every I/O error into `false`, which would let
+    /// an unreadable directory entry masquerade as an absent file; reporting the
+    /// error instead keeps that distinction available to the caller.
+    fn exists(&self, path: &Path) -> io::Result<bool>;
 }
 
 /// Production normalizer that exactly mirrors `OrthoConfig`'s canonical paths.
@@ -41,6 +50,10 @@ impl PathNormalizer for FsPathNormalizer {
         // path. On other platforms `dunce` is a thin wrapper over
         // `std::fs::canonicalize`, so the behaviour is unchanged.
         dunce::canonicalize(path)
+    }
+
+    fn exists(&self, path: &Path) -> io::Result<bool> {
+        path.try_exists()
     }
 }
 
@@ -76,6 +89,42 @@ impl PathNormalizer for FailingPathNormalizer {
         Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "normalization refused for test",
+        ))
+    }
+
+    /// Defer existence to the real filesystem, which the fixture controls.
+    ///
+    /// This double models a path that will not *resolve*; the cases that use it
+    /// distinguish a missing project file from an existing one, so the
+    /// existence answer must still be genuine.
+    fn exists(&self, path: &Path) -> io::Result<bool> {
+        FsPathNormalizer.exists(path)
+    }
+}
+
+/// A normalizer that cannot resolve a path or report whether it exists.
+///
+/// An unreadable directory entry is not the same fact as a missing file, and
+/// discovery must be able to tell the two apart. The real filesystem produces
+/// this state for the agent's own tests only if permissions are arranged just
+/// so, which a test cannot do portably.
+#[cfg(test)]
+#[derive(Debug, Default, Clone, Copy)]
+pub(super) struct UnreadablePathNormalizer;
+
+#[cfg(test)]
+impl PathNormalizer for UnreadablePathNormalizer {
+    fn normalize(&self, _path: &Path) -> io::Result<PathBuf> {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "normalization refused for test",
+        ))
+    }
+
+    fn exists(&self, _path: &Path) -> io::Result<bool> {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "existence query refused for test",
         ))
     }
 }

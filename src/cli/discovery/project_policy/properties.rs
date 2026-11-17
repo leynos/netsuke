@@ -145,6 +145,9 @@ proptest! {
                 layer: MergeLayer::file(Cow::Owned(value), Some("shared.toml".into())),
                 scope,
                 project_chain,
+                // The generated values declare no `shells` key, so the authority
+                // input to shell validation cannot change this property's result.
+                authority: RootAuthority::Operator,
             });
         }
 
@@ -220,6 +223,7 @@ proptest! {
                 ),
                 scope,
                 project_chain,
+                authority: RootAuthority::Operator,
             });
         }
 
