@@ -3110,15 +3110,20 @@ The gate logic is Python, per the estate rule in
 runs with `uv run --script`, which resolves its declared dependencies at
 invocation. Its implementation is split across
 `.github/scripts/_release_admission/`: `policy` owns the pure bounded
-classifications, `records` owns the metric and trace shapes, `delivery` owns
-the metric, output, and trace sinks, `bounding` owns the process-group command
-bound and the stream wiring, `commands` owns the bounded external command
-runner, `statuses` translates an exit status, an elapsed bound, or a refused
-launch into the gate's own command result, `telemetry` owns the emitted records,
-`environment` reads a variable in one of Bash's two default forms,
-`filesystem` performs the two start-up effects that create the artefact parents
-and truncate the artefacts, `configuration` resolves the environment the gate
-is told, and `gate` composes the operations and reporting. The workflow's
+classifications, `manifest` owns the candidate-bound evidence document, its
+schema version, field readers, and its single refusal, `evidence` owns the
+freshness and admission decisions over a parsed manifest, the bounded maximum
+age, and the variables that set it, `admission_evidence` owns the shared read
+and the two evidence decisions, including the window re-read before admission,
+`records` owns the metric and trace shapes, `delivery` owns the metric, output,
+and trace sinks, `bounding` owns the process-group command bound and the stream
+wiring, `commands` owns the bounded external command runner, `statuses`
+translates an exit status, an elapsed bound, or a refused launch into the
+gate's own command result, `telemetry` owns the emitted records, `environment`
+reads a variable in one of Bash's two default forms, `filesystem` performs the
+two start-up effects that create the artefact parents and truncate the
+artefacts, `configuration` resolves the environment the gate is told, and
+`gate` composes the operations and reporting. The workflow's
 `astral-sh/setup-uv` step provisions the interpreter; `uv` reads the entry
 point's own `requires-python` and dependency pins rather than the workflow
 restating them.
@@ -5668,9 +5673,9 @@ Python gate. It uses the repository's Python 3.14 baseline and provisions
 `pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
 `cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
 `cyclopts==4.25.3` for the entry point the tests import. The target runs the
-eighteen runtime modules with `python -m pytest`, `-c /dev/null`,
-`--rootdir=.`, and `-p no:cacheprovider`, so the test run is isolated from
-repository-local pytest configuration and cache state:
+twenty runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`,
+and `-p no:cacheprovider`, so the test run is isolated from repository-local
+pytest configuration and cache state:
 
 - `scripts/tests/test_release_admission_metrics.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
@@ -5689,6 +5694,7 @@ repository-local pytest configuration and cache state:
 - `scripts/tests/test_release_admission_manifest_parsing.py`
 - `scripts/tests/test_release_admission_evidence_reading.py`
 - `scripts/tests/test_release_admission_freshness_recheck.py`
+- `scripts/tests/test_release_admission_freshness_properties.py`
 - `scripts/tests/test_release_admission_sink_persistence.py`
 - `scripts/tests/test_release_admission_harness_isolation.py`
 
@@ -5717,6 +5723,15 @@ the double answers them in that order, leaving the monotonic reads to a rising
 counter so no duration decides a case about freshness. Each case also asserts
 which readings it was actually served, so a gate that stopped re-reading the
 window fails there instead of passing for want of a second reading.
+
+`..._freshness_properties.py` states the same relation over generated windows
+rather than at the named edges. It draws the issue instant, the window length,
+and both readings, then requires the check to admit exactly the readings inside
+the window, admission to require both readings inside it, and a refusal at the
+check never to be converted into an admission. It reaches the production
+decisions through the injected clock and filesystem ports, so both edges of the
+window, and a clock that moves backwards between the readings, are exercised
+without a child process.
 
 The runtime modules drive the gate as a real process and intercept its external
 commands with cmd-mox doubles registered under the gate's own adapter names.

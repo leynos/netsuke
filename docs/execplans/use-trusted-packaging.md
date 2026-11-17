@@ -4862,6 +4862,52 @@ and pass, on the final wording.
   remaining gates for the round run as the batch this document's commit is
   gated on, and their results are recorded in the pull request.
 
+- Observation: **the code review asked for two properties the scenario table
+  could not state, and writing them exposed one local hole.** The review found
+  that the scenario table derives prerequisite results but never evaluates a
+  write job's guard across arbitrary result combinations, and that the
+  freshness recheck was pinned only at named boundaries. Two Hypothesis modules
+  now state those relations.
+
+  *The guard property.*
+  `tests/workflow_contracts/release_publish_path_guard_properties_test.py`
+  derives the write-authority jobs from the workflow's own permissions, draws
+  every dependency's result plus the admission outputs, the mode, and
+  cancellation, and evaluates each job's `if` through the production field
+  evaluator. The expected answer is computed in Python, so a guard that drifts
+  from the admission rule is a generated counterexample. A deliberate mutation
+  removing the `should_publish` conjunct from `publish-crates-io` failed the
+  property, which is the evidence that it is not vacuous.
+
+  *The freshness property.*
+  `scripts/tests/test_release_admission_freshness_properties.py` draws the
+  issue instant, the window length, and both clock readings. Offsets are drawn
+  with one branch exactly inside the window and one naming the four offsets
+  just outside either edge, because a uniform draw over a week-wide window
+  almost never reaches a refusal. Applying the same offset strategy to a
+  uniform range made the finality mutation below pass, which is why the
+  generator is biased rather than uniform.
+
+  *The local hole.* `AdmissionEvidence.admit` re-judged identity and results
+  and re-read the window, so calling it after a refused `check_freshness` could
+  return success for a document whose timestamps moved back inside the window.
+  The gate never calls it there -- `run_operations` stops at the first failure
+  -- so the hole was unreachable, but the module's own claim that the recheck
+  "can only replace that success with a refusal" was not locally true. The
+  check's classification is now carried in `_checked`, and `admit` returns it
+  unchanged when it is not a success. Two mutations were run in each direction:
+  removing the recheck and removing the finality check both fail the property,
+  and the restored sources pass.
+
+  *Documentation.* Publication gating and the evidence producer's role are
+  recorded in the users' guide; the module ownership of `manifest`, `evidence`,
+  and `admission_evidence` and the runtime module list (now twenty) are
+  recorded in the developers' guide; and roadmap item 9.4.2 names the
+  enforced-on-publish, observed-on-rehearsal split and the `#598` dependency.
+  The migration guide was checked and left unchanged: it is addressed to
+  manifest authors, source-build users, and Rust API callers, and none of them
+  is the reader who needs the pipeline change.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

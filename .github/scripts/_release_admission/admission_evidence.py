@@ -10,7 +10,9 @@ document observed a moment inside its window can be outside it by the time the
 gate would admit on it. Admitting on the earlier reading would let the evidence
 outlive the bound the gate publishes. The recheck runs only after the identity
 and result checks passed, and can only replace that success with a refusal, so
-it adds no way to admit.
+it adds no way to admit; a refusal at the first check is carried through, so a
+reading that moved back inside the window cannot revive evidence the gate has
+already rejected.
 
 Nothing here decides policy. Categories come from :mod:`policy`, the schema and
 its classification from :mod:`evidence`, and both effects -- the byte read and
@@ -54,6 +56,7 @@ class AdmissionEvidence:
         self._file_system = file_system
         self._read_wall_clock = read_wall_clock
         self._manifest: evidence.Manifest | None = None
+        self._checked: policy.Classification | None = None
 
     def check_freshness(self) -> policy.Classification:
         """Read the manifest and refuse every unbounded timestamp.
@@ -85,9 +88,11 @@ class AdmissionEvidence:
             return _refusal(policy.ErrorCategory.MALFORMED_EVIDENCE)
         parsed = evidence.parse_manifest(raw)
         if parsed.manifest is None:
-            return _refusal(parsed.error_category)
+            self._checked = _refusal(parsed.error_category)
+            return self._checked
         self._manifest = parsed.manifest
-        return self._classify_freshness(parsed.manifest)
+        self._checked = self._classify_freshness(parsed.manifest)
+        return self._checked
 
     def admit(self) -> policy.Classification:
         """Require the document read at the check to admit the candidate.
@@ -96,9 +101,13 @@ class AdmissionEvidence:
         canary keeps its own category; the window is then re-read, because the
         bound has to hold at this decision and not only at the observation.
 
-        The guard reports ``missing_evidence`` rather than assuming a document:
-        a future reordering that skipped :meth:`check_freshness` would then fail
-        closed instead of admitting on no document at all.
+        The check's verdict is carried through rather than recomputed: a
+        refusal there is final, so only a document the check admitted reaches
+        the identity and result checks, and a reading that moved back inside
+        the window afterwards cannot revive it. The guard reports
+        ``missing_evidence`` rather than assuming a document: a future
+        reordering that skipped :meth:`check_freshness` would then fail closed
+        instead of admitting on no document at all.
 
         Returns
         -------
@@ -107,10 +116,18 @@ class AdmissionEvidence:
             required result as successful, and is still inside its window now;
             otherwise the category of the first refusal.
         """
-        # `admit` is only meaningful once `check_freshness` has stored a
-        # document, and the gate runs them in that order. Reaching this method
-        # without one is a defect in the caller, so it is refused rather than
-        # raised: an admission gate must fail closed on a state it cannot judge.
+        # `admit` is only meaningful once `check_freshness` has judged a
+        # document, and the gate runs them in that order. A refusal from that
+        # check is final, so only its success is judged further: a wall clock
+        # that moved back inside the window cannot revive evidence the gate has
+        # already rejected. Reaching this method before the check is a defect
+        # in the caller, refused rather than raised, because an admission gate
+        # must fail closed on a state it cannot judge.
+        checked = self._checked
+        if checked is None:
+            return _refusal(policy.ErrorCategory.MISSING_EVIDENCE)
+        if checked.outcome != policy.Outcome.SUCCESS:
+            return checked
         manifest = self._manifest
         if manifest is None:
             return _refusal(policy.ErrorCategory.MISSING_EVIDENCE)
