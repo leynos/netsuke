@@ -1,0 +1,18 @@
+---
+source: tests/assert_cmd_tests/human_failure_causes.rs
+expression: rendered
+---
+X Error: netsuke::manifest::parse
+
+  x Manifest parse failed.
+  |-> netsuke::yaml::parse
+  |   
+  |     x YAML parse error at line 2, column 10: unclosed bracket '[' at line 2, column 10
+  |      ,-[Netsukefile:2:10]
+  |    1 | netsuke_version: "1.0.0"
+  |    2 | targets: [
+  |      :          |
+  |      :          `-- invalid YAML
+  |      `----
+  |   
+  `-> unclosed bracket '[' at line 2, column 10

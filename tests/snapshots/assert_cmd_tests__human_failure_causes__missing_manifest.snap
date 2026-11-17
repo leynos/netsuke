@@ -1,0 +1,8 @@
+---
+source: tests/assert_cmd_tests/human_failure_causes.rs
+expression: rendered
+---
+X Error: netsuke::runner::manifest_not_found
+
+  x Manifest 'Netsukefile' not found in the current directory.
+  help: Ensure the manifest exists or pass `--file` with the correct path.

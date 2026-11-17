@@ -152,6 +152,10 @@ mod schema_version;
 #[path = "assert_cmd_tests/runner_diagnostics.rs"]
 mod runner_diagnostics;
 
+/// Snapshot the human-readable causes of manifest, graph, and Ninja failures.
+#[path = "assert_cmd_tests/human_failure_causes.rs"]
+mod human_failure_causes;
+
 /// Cover launch diagnostics for every subcommand and rendering mode.
 #[path = "assert_cmd_tests/launch_diagnostics.rs"]
 mod launch_diagnostics;
@@ -163,6 +167,7 @@ mod ninja_exit_diagnostics;
 /// Detect the temporary build file the diagnostics must not name.
 #[path = "assert_cmd_tests/generated_build_file.rs"]
 mod generated_build_file;
+
 
 #[rstest]
 fn generate_streams_to_stdout_by_default() -> Result<()> {

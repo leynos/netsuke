@@ -1,0 +1,7 @@
+---
+source: tests/assert_cmd_tests/human_failure_causes.rs
+expression: rendered
+---
+X Error: Failed to load manifest at Netsukefile.
+  x render target command
+  `-> undefined value (in <string>:1)

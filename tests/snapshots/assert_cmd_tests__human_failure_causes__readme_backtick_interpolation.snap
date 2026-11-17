@@ -1,0 +1,6 @@
+---
+source: tests/assert_cmd_tests/human_failure_causes.rs
+expression: rendered
+---
+X Error: Failed to build graph from the manifest.
+  x Invalid command interpolation: echo `cat __NETSUKE_INS_PLACEHOLDER__` > __NETSUKE_OUTS_PLACEHOLDER__.

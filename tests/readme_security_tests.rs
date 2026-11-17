@@ -273,6 +273,48 @@ fn documented_backtick_manifest_is_rejected() -> Result<()> {
     Ok(())
 }
 
+/// The README example's default human output must name the rejected cause.
+///
+/// The JSON assertion above cannot show what a person sees, and the README
+/// promises the cause is visible without `--json`. Running the same documented
+/// manifest on the human path is what binds that promise to the example.
+#[rstest]
+fn documented_backtick_manifest_default_output_names_the_cause() -> Result<()> {
+    let workspace = manifest_workspace("readme-backtick-rejection-manifest")?;
+    let run = run_netsuke_in_with_env(
+        workspace.path(),
+        &[
+            "--locale",
+            "en-GB",
+            "--color",
+            "never",
+            "--emoji",
+            "never",
+            "--progress",
+            "never",
+            "generate",
+        ],
+        &[
+            ("NETSUKE_NINJA", "/no-such-readme-ninja"),
+            ("LANG", "en_GB.UTF-8"),
+        ],
+    )?;
+    assert_eq!(
+        run.success, false,
+        "the documented backtick manifest must be rejected"
+    );
+    assert_eq!(run.stdout, "", "a failing generate must leave stdout empty");
+    assert_that!(
+        run.stderr,
+        contains_substring("Failed to build graph from the manifest.")
+    );
+    assert_that!(
+        run.stderr,
+        contains_substring("Invalid command interpolation:")
+    );
+    Ok(())
+}
+
 #[rstest]
 fn balanced_author_backticks_are_accepted(safe_manifest: Result<String>) -> Result<()> {
     let source = safe_manifest?.replace("cat {{ ins }}", "echo `printf authored`");
