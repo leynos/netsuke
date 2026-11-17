@@ -412,11 +412,21 @@ jobs:
       enforcement: ${{ steps.release_admission.outputs.enforcement }}
       candidate_commit: ${{ steps.release_admission.outputs.candidate-commit }}
     steps:
+      # The gate must run the implementation that ships with this workflow, not
+      # one from the caller's checkout. In a reusable workflow the default
+      # checkout resolves the *caller's* repository, so an unpinned checkout
+      # would let a caller supply an older or modified gate that emits the mode,
+      # outcome and candidate the write guards consume. `job.workflow_sha` is
+      # the commit of the workflow file that defines this job, which is a commit
+      # of this repository both for a reusable-workflow call and for a directly
+      # triggered run; no caller-named commit is ever selected.
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
           persist-credentials: false
+          repository: leynos/netsuke
+          ref: ${{ job.workflow_sha }}
       - name: Install Python for admission timings
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
@@ -433,7 +443,9 @@ jobs:
       # caller that deliberately uploads under this name arrives here
       # indistinguishably. The gate therefore stays blocked on the flag below
       # until the producer attests its upload, which is why publication is
-      # refused even when a matching manifest is present.
+      # refused even when a matching manifest is present. The checkout above is
+      # what keeps that refusal out of the caller's hands: the gate that reads
+      # this file is the one from this repository's own commit.
       - name: Download the release-admission evidence
         uses: >-
           actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333

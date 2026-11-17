@@ -8,3 +8,15 @@ self-hosted-runner:
     - ubicloud-standard-2-ubuntu-2404
     - ubicloud-standard-4-ubuntu-2404
     - ubicloud-standard-2-ubuntu-2204
+
+# Path-specific exemptions. Each one is a gap in actionlint's vendored context
+# types, not a defect in the workflow, so the exemption is scoped to the single
+# expression that needs it.
+paths:
+  .github/workflows/release.yml:
+    ignore:
+      # The release admission job checks the gate out at `job.workflow_sha`, the
+      # commit of the workflow file that defines the job. GitHub documents that
+      # property in the contexts reference; actionlint 1.7.12's schema predates
+      # it and reports the property as undefined.
+      - 'property "workflow_sha" is not defined in object type'

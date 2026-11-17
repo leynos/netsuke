@@ -1247,9 +1247,12 @@ closed first, and the interim block closes the path that published on any
 same-run document. A caller of the reusable `release.yml` needs no new input,
 because the producer runs inside the workflow; a caller that expected a publish
 to proceed now sees the admission job fail and every job that writes skipped.
-The producer, its provenance, and the downstream canaries are tracked by #598.
-Publication therefore stays unavailable until #598 lands, and it is refused on
-both counts rather than only on the absence of a document.
+The admission job also runs the gate from this repository's own workflow
+commit, so a calling workflow cannot supply an older or modified gate that
+reports a more favourable decision. The producer, its provenance, and the
+downstream canaries are tracked by #598. Publication therefore stays
+unavailable until #598 lands, and it is refused on both counts rather than only
+on the absence of a document.
 
 See [Install Netsuke](users-guide.md#install-netsuke) for the caller-visible
 rules and the conditions the manifest must satisfy.

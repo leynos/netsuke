@@ -109,10 +109,12 @@ enforces while a pull-request dry run only observes. A publishing run refuses
 with `missing_evidence` and writes nothing until an evidence producer uploads a
 `release-admission-evidence` manifest for the candidate. That producer runs
 inside the release workflow; it is tracked by #598, and a caller supplies no
-new input for it. The gate admits only evidence that names the repository,
-commit, tag, and workflow run under release, was issued inside its freshness
-window, and reports every required canary as successful. Those fields are
-compared with the run, which shows the manifest agrees with the candidate
+new input for it. The admission job runs the gate from this repository's own
+workflow commit, so a calling workflow cannot substitute a gate that reports a
+more favourable decision. The gate admits only evidence that names the
+repository, commit, tag, and workflow run under release, was issued inside its
+freshness window, and reports every required canary as successful. Those fields
+are compared with the run, which shows the manifest agrees with the candidate
 rather than who produced it. Until #598 supplies a producer whose upload the
 run can attribute, an enforcing run therefore refuses every supplied manifest
 with `untrusted_evidence` as well, because a file's contents cannot establish

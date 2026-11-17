@@ -478,3 +478,36 @@ that must notice it. Effective scopes and the conjunction requirement are read
 by the same module, so a job's permissions and its guard are judged from what
 GitHub would actually honour rather than from the spelling the workflow
 happened to use.
+
+## Addendum (2026-11-17): The gate runs from this repository's own commit
+
+This addendum extends the 2026-11-15 addendum: the interim producer-trust block
+is a boundary only if the code that reads it is the code this repository
+shipped.
+
+`release.yml` is a reusable workflow, and a called workflow's default
+`actions/checkout` resolves the *caller's* repository. The admission job
+therefore read the caller's candidate, so a caller could run an older or
+modified `release_admission.py` that reported the mode, outcome, and candidate
+the write guards consume while ignoring the `false` literal. The job now checks
+out `leynos/netsuke` at `${{ job.workflow_sha }}` with
+`persist-credentials: false`. `job.workflow_sha` is the commit of the workflow
+file that defines the job, so the gate, the literal in its step environment,
+and the summary scripts come from the same commit as the guards that trust
+them, for a reusable-workflow call and for a directly triggered run alike.
+`github.sha` would not serve: on a call it is the caller's candidate, which is
+the commit the pin exists to refuse. The property postdates actionlint's
+vendored context types, so `.github/actionlint.yaml` exempts that one
+expression from the undefined-property check.
+
+The pin removes the caller's choice of implementation. It is not producer
+authentication: a caller that replaces the whole workflow also replaces the
+guards, and attributing an upload to a named producer remains
+[#598](https://github.com/leynos/netsuke/issues/598)'s work.
+`check_admission_source_pin` in
+`tests/workflow_contracts/release_admission_gate_contract.py` holds the
+repository, the ref, and the ordering of the checkout before the gate step.
+`tests/workflow_contracts/release_publication_gate_mutations.py` gains three
+cases -- the checkout unpinned, pointed at `${{ github.repository }}`, and
+reduced to `${{ github.sha }}` -- bringing its stated regressions to
+twenty-four.

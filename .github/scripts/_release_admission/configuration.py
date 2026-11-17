@@ -195,17 +195,16 @@ def resolve_configuration(
         sinks=telemetry.Sinks(
             metrics_file=destination.metrics_file.configured,
             trace_file=destination.trace_file.configured,
-            metrics_sink=environment.optional(
-                variables, commands.METRICS_SINK_VARIABLE, ""
-            ),
-            output_sink=environment.optional(
-                variables, commands.OUTPUT_SINK_VARIABLE, ""
-            ),
-            trace_sink=environment.optional(
-                variables, commands.TRACE_SINK_VARIABLE, ""
-            ),
+            metrics_sink=_adapter(variables, commands.METRICS_SINK_VARIABLE),
+            output_sink=_adapter(variables, commands.OUTPUT_SINK_VARIABLE),
+            trace_sink=_adapter(variables, commands.TRACE_SINK_VARIABLE),
         ),
     )
+
+
+def _adapter(variables: cabc.Mapping[str, str], variable: str) -> str:
+    """Return a sink adapter's configured name, empty when unset."""
+    return environment.optional(variables, variable, "")
 
 
 def prepare_destination(

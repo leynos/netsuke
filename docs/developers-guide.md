@@ -3058,7 +3058,8 @@ verifier as `missing_evidence` rather than as an anonymous job failure.
 
 Whether the run can attribute the evidence to a producer it trusts is a
 separate input, `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`. The workflow sets
-it, never the caller: only this repository's workflow file can change it, and
+it, never the caller: only this repository's workflow file can change it, the
+admission job checks the gate out from the commit that defines that file, and
 the shipped literal is `false`. That is the interim publication block. An
 enforcing run therefore refuses every manifest with `untrusted_evidence` unless
 the variable is exactly `true`; anything unset, empty, or misspelled leaves the
@@ -3143,6 +3144,29 @@ producer exists yet, not an authentication of one, so it does not establish
 provenance either; binding the evidence to a named producer job and
 authenticating that producer remains `#598`'s work, and flipping the literal
 before that lands would reopen the path this block closes.
+
+The gate itself is pinned to this repository's own commit, which is what keeps
+that block out of a caller's reach. `release.yml` is reusable, and a called
+workflow's default checkout resolves the *caller's* repository, so an unpinned
+admission job would run whatever `release_admission.py` the caller's candidate
+contains -- including an older gate written before the producer-trust refusal,
+which would report the mode, outcome, and candidate every write job consumes
+while ignoring the literal. The job therefore checks out `leynos/netsuke` at
+`${{ job.workflow_sha }}` before the gate step. `job.workflow_sha` is the
+commit of the workflow file that defines the job, so the gate, the literal in
+its step environment, and the summary scripts all come from the same commit as
+the guards that trust them, for a reusable-workflow call and for a directly
+triggered run alike; `github.sha` would not do, because on a call it is the
+caller's candidate. `job.workflow_sha` postdates actionlint's vendored context
+types, so `.github/actionlint.yaml` exempts that one expression from the
+undefined-property check and says why. `check_admission_source_pin` in
+`tests/workflow_contracts/release_admission_gate_contract.py` holds the
+repository and ref and requires exactly one checkout before the gate step, and
+`release_publication_gate_mutations.py` proves the rule fires when the checkout
+is unpinned, pointed at `${{ github.repository }}`, or reduced to
+`${{ github.sha }}`. This pin removes the caller's choice of implementation; it
+does not authenticate a producer, because a caller that replaces the whole
+workflow also replaces the guards. Provenance remains `#598`'s work.
 
 The gate logic is Python, per the estate rule in
 [scripting standards](scripting-standards.md), not shell.
@@ -3584,11 +3608,57 @@ text could not check: a command word built from a variable, including one
 reached through nested wrappers; a `gh` subcommand outside the two the contract
 has a rule for, whether built from a variable or quoted, which hides the call
 the `gh api` check looks for; and any command that would hand a run-time string
-to an interpreter. The job's reachability is computed independently in
-`release_publish_path_verification.py`, from the scenario table in
-`release_publish_path_scenarios.py`; that table includes a publisher failure
-and a publisher skip for each publisher, plus the realistic dry run in which
-both are skipped while the rehearsal job runs.
+to an interpreter. The job's reachability is computed independently of its
+guard, from the scenario table in `release_publish_path_scenarios.py`, and
+evaluated by `release_publish_path_verification.py`. The table varies each of
+the seven prerequisites through `failure`, `skipped`, and `cancelled`, adds the
+two `verify-release-inventory` outcomes, and keeps the realistic dry run in
+which both publishers are skipped while the rehearsal job runs.
+
+A scenario no longer names a downstream job's result directly.
+`release_publish_path_results.py` derives every result from the workflow's own
+`needs` and `if` edges, in dependency order, and reports a dependency cycle
+rather than looping. A job with no guard keeps GitHub's implicit rule and runs
+only when every dependency succeeded; a job with a guard is evaluated as
+written, which is how the rehearsal survives a failed package or admission. A
+cancelled run is modelled through `status.cancelled` while the results stay as
+the graph resolved them, so `!cancelled()` is the only clause that stops those
+scenarios; a dependency may still report `cancelled` on a run that continues,
+and that propagates as an ordinary non-successful result. Folding cancellation
+into every result instead would make all guards false for one reason and hide a
+guard that tested `!= 'failure'` rather than `== 'success'`.
+
+`release_publish_path_finalization.py` evaluates the job whose effect cannot be
+undone. Un-drafting is irreversible, so finalization has its own per-scenario
+oracle, computed from the scenario rather than read off the guard: it must run
+exactly when the run publishes, was not cancelled, `should_publish` is `true`,
+admission admits the candidate, and every one of its six declared dependencies
+succeeded. A guard that keeps every required clause and also names the
+rehearsal -- skipped on every publishing run -- is exact and permanently
+unreachable, and the oracle reports it by name, as it reports a guard that
+would finalize a run that should not.
+`release_publish_path_guard_properties_test.py` complements the table with
+generated runs: for any combination of prerequisite results, admission outputs,
+`should_publish`, and cancellation, every write job's guard must start exactly
+when the rule holds, and the write jobs are derived from the workflow's
+declared permissions.
+
+Three modules hold the mutation scaffolding.
+`release_admission_gate_contract.py` evaluates the gate's enforcement
+expression in every scenario, so a mode hard-coded in either direction is
+reported for the case that exposes it, and `check_admission_source_pin` holds
+the pinned checkout described under release-admission observability.
+`release_mutation_support.py` shares the failure vocabulary and `replace_once`,
+which refuses a mutation pattern that matches other than exactly once, so a
+stale rule cannot report success without editing anything.
+`release_publication_gate_mutations.py` states each way to reopen the
+publication bypass -- a dropped need, a dropped guard clause, a hard-coded
+mode, an `always()` or disjunction, a write scope outside the model, or an
+unpinned gate checkout -- beside the diagnostics it must provoke, and
+`release_publish_path_mutations.py` merges those cases with the core
+release-path mutations for `release_publish_path_mutations_test.py`, which
+applies each to a fresh copy of the workflow and requires the named diagnostic
+to fire.
 
 ### Release-inventory verifier telemetry
 

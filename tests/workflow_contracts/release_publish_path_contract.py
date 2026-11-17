@@ -13,7 +13,10 @@ its labelled regression.
 import dataclasses
 
 from action_run_sources import action_sources
-from release_admission_gate_contract import check_admission_enforcement
+from release_admission_gate_contract import (
+    check_admission_enforcement,
+    check_admission_source_pin,
+)
 from release_publish_crates_io_contracts import (
     ACTION_PATH as CRATES_IO_ACTION_PATH,
 )
@@ -353,6 +356,7 @@ def check_release_publish_path(
     violations: list[str] = []
     _check_caller(release, caller, violations)
     check_publication_gate(release, caller, violations)
+    check_admission_source_pin(release, violations)
     outputs_by_mode = {
         mode: _metadata_outputs(release, mode, violations) for mode in MODE_OUTPUTS
     }

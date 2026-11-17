@@ -5015,6 +5015,70 @@ and pass, on the final wording.
   results added to `policy.REQUIRED_RESULTS`; and end-to-end demonstration of
   both a successful publishing run and a refused one before the literal changes.
 
+- Observation: **the fifth assessment found the interim block bypassable
+  through the gate's own source, because a reusable workflow's default checkout
+  resolves the caller; the admission job now runs this repository's gate, and
+  the six undocumented modules are recorded.** The reply to
+  `NETSUKE-1141-R5-20261117` confirmed the producer-trust refusal and the
+  derived scenario table, then named one blocking finding, one documentation
+  warning, and one code-health failure.
+
+  *The bypass.* `release.yml` is reusable, and in a called workflow the default
+  `actions/checkout` resolves the *caller's* repository. The admission job
+  relied on that default, so a caller could keep an older
+  `release_admission.py` that emitted the mode, outcome, and candidate the
+  write guards consume while ignoring the `'false'` literal, and the interim
+  block would not apply. A workflow-inlined deny keyed on the gate's outputs
+  cannot close this: those outputs are what the untrusted gate produces. The
+  job now checks out `leynos/netsuke` at `${{ job.workflow_sha }}` with
+  `persist-credentials: false` before the gate step, so the gate, the literal,
+  and the summary scripts come from the same commit as the guards that trust
+  them. `job.workflow_sha` is the commit of the workflow file that defines the
+  job, for a call and for a directly triggered run alike; `github.sha` would
+  not do, because on a call it is the caller's candidate. A caller that
+  replaces the whole workflow also replaces the guards, so the pin removes the
+  choice of implementation without claiming to authenticate a producer.
+
+  *The negative coverage.* `check_admission_source_pin` requires exactly one
+  checkout, requires it before the gate step, and pins both inputs.
+  `release_publication_gate_mutations.py` gained three cases -- both inputs
+  removed, `repository` set to `${{ github.repository }}`, and `ref` reduced to
+  `${{ github.sha }}` -- and each reports the
+  `release-admission-canaries.checkout` diagnostic. That brings the stated gate
+  regressions to twenty-four, which the new ADR addendum records.
+
+  *The correction.* The first pin named the ref through
+  `${{ github.job_workflow_sha || github.sha }}`, and the GitHub Actions lint
+  gate refused it: `job_workflow_sha` is not a `github` context property. The
+  workflows contexts reference names the per-job identity properties on the
+  `job` context, and its own reusable-workflow example checks out
+  `repository: ${{ job.workflow_repository }}` and
+  `ref: ${{ job.workflow_sha }}`. Had the gate not fired, the mistyped property
+  would have expanded empty, the `|| github.sha` fallback would have selected
+  the caller's candidate, and the pin would have been absent while looking
+  present. The ref is now `${{ job.workflow_sha }}`, the fallback is gone
+  because on a call `github.sha` is exactly the commit the pin refuses, and
+  actionlint 1.7.12's vendored context types still predate the property, so
+  `.github/actionlint.yaml` exempts that one expression and records why.
+
+  *The code-health failure.* CodeScene refused `resolve_configuration` at 74
+  lines against a 70-line threshold. Extracting the sink construction first
+  traded that finding for a 402-line file, above the 400-line limit, so the
+  adapter reads are extracted instead and the `Sinks` construction stays in
+  place: `resolve_configuration` is 67 lines, `configuration.py` is 398, and
+  `cs delta 4984c7f2f` reports no issues across 62 eligible files.
+
+  *The documentation.* The developers' guide now states the result-derivation
+  rule, the finalization oracle, the generated guard properties, the
+  seven-prerequisite failure, skip, and cancellation matrix, the two verifier
+  scenarios, and the purpose of `release_admission_gate_contract.py`,
+  `release_mutation_support.py`, and `release_publication_gate_mutations.py`;
+  the stale claim that the table merely pairs a failure and a skip with each
+  publisher is replaced. It also records the pinned checkout under
+  release-admission observability, and the users' guide and migration guide
+  state what the pin means for a caller. The ADR gains a 2026-11-17 addendum
+  rather than editing the accepted 2026-11-15 text.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
