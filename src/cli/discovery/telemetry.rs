@@ -11,7 +11,7 @@
 //! coarse pass outcome, never selectors, paths, or error text.
 
 use super::DiscoveryOutcome;
-use super::layers::{CandidateFailure, UnloadableCandidate};
+use super::layers::user_candidate::{CandidateFailure, UnloadableCandidate};
 use crate::cli::{DISCOVERY_DURATION, DISCOVERY_TOTAL};
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use monotony::MonotonicClock;
@@ -307,7 +307,7 @@ mod tests {
     ) {
         let detail = (reason == CandidateFailure::ProbeFailed)
             .then(|| io::Error::new(io::ErrorKind::PermissionDenied, "probe refused"));
-        let error = super::super::layers::candidate_failure_error(
+        let error = super::super::layers::user_candidate::candidate_failure_error(
             Path::new("candidate.toml"),
             reason,
             detail,

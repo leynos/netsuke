@@ -11635,11 +11635,11 @@ current drive, and `HOME` outranks `USERPROFILE`. The pass never reads
 is `None`, so mirroring it would add an ambient lookup without changing
 behaviour.
 
-`src/cli/discovery/layers/mod.rs` loads those candidates before calling
-`compose_layers()`. An absent candidate is skipped, a load error is returned
+`src/cli/discovery/layers/user_candidate.rs` loads those candidates before the
+dependency's own walk. An absent candidate is skipped, a load error is returned
 immediately, and the first successful chain becomes the base layers. Only when
-no user candidate exists does `compose_layers()` run, which is what still
-reaches system scope and the project roots.
+no user candidate exists does `layers/mod.rs::first_automatic_chain` run, which
+is what still reaches system scope and the project roots.
 
 The dependency filters only empty base values, so its own scan would still
 resolve a relative one against the working directory. The fallback therefore
@@ -11683,9 +11683,9 @@ than message text, and the `DISCOVERY_TOTAL` label set remains `outcome` alone.
 
 Re-check the user-path derivation on every `ortho_config` upgrade. The
 dependency's flat candidate order still places system scope before the home
-fallbacks, and Netsuke's aggregation of `compose_layers()` still drops an
-optional candidate's load error when a later candidate succeeds; the user pass
-is what bounds both behaviours. The child-process regression matrix is
+fallbacks, and `first_automatic_chain` still drops an optional candidate's load
+error when a later candidate succeeds; the user pass is what bounds both
+behaviours. The child-process regression matrix is
 Unix-only because it injects the XDG variables, so the `APPDATA` and
 `LOCALAPPDATA` branches are pinned by unit cases instead: they set the
 variables in the injected `TestEnv` and run on every platform.

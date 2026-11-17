@@ -17,7 +17,8 @@
 //! to the dependency's own scan, so neither pass admits a candidate that
 //! depends on where the tool happened to run.
 //!
-//! `crate::cli::discovery::layers` is the only consumer. Its user pass reads
+//! `crate::cli::discovery::layers::user_candidate` is the only consumer. Its
+//! user pass reads
 //! [`user_scope_candidates`] and probes each one with
 //! [`candidate_entry_metadata`]; its fallback hands the dependency's scan a
 //! [`SanitisedUserBases`] view and `ortho_config` then performs that later
