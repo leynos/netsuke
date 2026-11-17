@@ -435,17 +435,29 @@ package resolves to those bytes, and it exercises one target,
 `x86_64-unknown-linux-gnu` — a second target needs its own runner rather than
 another matrix row.
 
-**Status.** Implemented, with the job and action contract split between
+**Status.** Implemented, with the job and action contract split across
 `tests/workflow_contracts/release_publish_path_consumer_shape.py`, which holds
-the dependency, permission, checkout, environment, artefact, action-input, and
-compilation checks, and
-`tests/workflow_contracts/release_publish_path_consumer_smoke.py`, which
-composes them with the guard's reachability oracle; thirteen labelled
-regressions in `release_publish_path_consumer_mutations.py`; telemetry wiring in
-`release_publish_path_consumer_smoke_test.py`; and record-driven suites beside
-the policy, archive, probe, and command-line modules under `scripts/tests/`.
-The two contract modules are split because together they exceeded the 400-line
-cap. Not yet exercised by a live release or tag. This addendum supersedes the
-sentence in the 2026-11-12 *the downloaded inventory verifier implemented*
-addendum's **Status** that names the consumer smoke as open; that addendum
-records the state before this job existed and is left as it was written.
+the job's dependencies, grant, checkout, artefact names, action inputs, and
+compilation control; `release_publish_path_consumer_credentials.py`, which
+scans the job, the workflow environment, and the action's own step environments
+for a credential; `release_publish_path_consumer_commands.py` together with
+`release_publish_path_consumer_script.py`, which read what each command line
+may run and judge the script around the invocation as a shape, so an
+unreachable verifier or an absorbed refusal is refused; and
+`release_publish_path_consumer_artifacts.py`, which requires the two evidence
+downloads by exact name, destination, condition, and order.
+`release_publish_path_consumer_smoke.py` composes those checks with the guard's
+reachability oracle and re-exports them, because it is the module the
+release-path contract and the mutation suite import. Thirty labelled
+regressions across `release_publish_path_consumer_mutations.py`,
+`release_publish_path_consumer_artifact_mutations.py`, and the reviewed claims
+in `release_publish_path_consumer_expectations.py` state the violation each
+must produce. Telemetry wiring lives in
+`release_publish_path_consumer_smoke_test.py`, and record-driven suites sit
+beside the policy, archive, probe, and command-line modules under
+`scripts/tests/`. The contract is split across modules because one module
+holding all of it exceeded the 400-line cap. Not yet exercised by a live
+release or tag. This addendum supersedes the sentence in the 2026-11-12 *the
+downloaded inventory verifier implemented* addendum's **Status** that names the
+consumer smoke as open; that addendum records the state before this job existed
+and is left as it was written.
