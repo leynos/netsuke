@@ -422,11 +422,13 @@ jobs:
         with:
           python-version: '3.14'
           enable-cache: false
-      # No producer uploads this artefact yet (#598 adds the downstream
-      # canaries and #1065 the release pipeline). Failing here would report a
-      # missing producer rather than a refused admission, so absence is
-      # tolerated: the verifier then records `missing_evidence`, and an
-      # enforcing run fails closed on that category.
+      # No producer uploads this artefact yet (#598 supplies it, together with
+      # the downstream canaries admission is to require). Failing here would
+      # report a missing producer rather than a refused admission, so absence
+      # is tolerated: the verifier then records `missing_evidence`, and an
+      # enforcing run fails closed on that category. Publication stays
+      # unreachable until the producer lands, admission waits for its upload,
+      # and both the successful and refused publishing runs are tested.
       - name: Download the release-admission evidence
         uses: >-
           actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333

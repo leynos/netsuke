@@ -3069,23 +3069,40 @@ identifier. `missing_evidence` says no document was supplied,
 `malformed_evidence` says the document could not be read as schema 1,
 `candidate_mismatch` says it read perfectly well and describes a different
 release, `stale_evidence` says a timestamp fell outside the bounded window, and
-`unknown` says a required result reported a non-success outcome. The earlier
-operations add `api_error`, `fetch_error`, `timeout`, and `mismatch`. An
-operator fixes each in a different place, which is why they are separate words
-rather than one failure. The gate publishes six outputs — `gate-outcome`,
-`gate-error-category`, `enforcement`, `candidate-commit`, `metrics-file`, and
-`trace-file` — so a refused publication records why in the job that refused it.
+`unknown` says a result reported a non-success outcome. Presence is required
+only for the two canary names in `policy.REQUIRED_RESULTS`; success is required
+of every result the manifest declares, so a producer that adds a downstream
+canary can report it without a change here, while a reported failure is refused
+rather than ignored. The earlier operations add `api_error`, `fetch_error`,
+`timeout`, and `mismatch`. An operator fixes each in a different place, which
+is why they are separate words rather than one failure. The gate publishes six
+outputs — `gate-outcome`, `gate-error-category`, `enforcement`,
+`candidate-commit`, `metrics-file`, and `trace-file` — so a refused publication
+records why in the job that refused it.
 
 Publishing therefore fails with `missing_evidence` until a producer uploads
 `release-admission-evidence`, and that is the intended state. Enforcement lands
 before any producer exists, so the path that would publish without evidence is
 closed first; connecting a producer first would leave that path open for
 however long the two changes landed apart. The producer is tracked by
-[#598](https://github.com/leynos/netsuke/issues/598) and registry publication by
-[#1065](https://github.com/leynos/netsuke/issues/1065). No override exists: no
-input, environment variable, or workflow-dispatch field can request enforcement
-on a rehearsal or observation on a publishing run, because the mode is derived
-from the release mode the metadata job already resolved.
+[#598](https://github.com/leynos/netsuke/issues/598), which also supplies the
+downstream canaries admission is to require. Publishing is now gated on
+packaging and on an enforced, successful admission (`#1070`); issue `#1065`,
+which tracked the release pipeline, is closed. No override exists: no input,
+environment variable, or workflow-dispatch field can request enforcement on a
+rehearsal or observation on a publishing run, because the mode is derived from
+the release mode the metadata job already resolved.
+
+Enabling publication is a further step, not a flip of this gate. Before a
+publishing run can succeed, `#598` has to supply a trusted producer, the
+admission job has to wait for that producer's upload rather than tolerating an
+absent artefact, and the required result set has to name the downstream
+canaries. Until then the download step keeps `continue-on-error: true` so an
+absent artefact is reported as `missing_evidence` -- a refused admission --
+rather than as a missing producer, and a successful publishing run has to be
+demonstrated end to end alongside the refused one before the step changes.
+Nothing in this repository produces the manifest yet, so publication remains
+deliberately unreachable rather than merely untested.
 
 The gate logic is Python, per the estate rule in
 [scripting standards](scripting-standards.md), not shell.

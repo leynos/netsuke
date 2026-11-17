@@ -382,8 +382,19 @@ changes landed apart. Until a producer uploads `release-admission-evidence`,
 every publishing run therefore refuses with `error_category=missing_evidence`;
 that is the intended fail-closed state, not a defect to work around by
 loosening the gate. The producer is tracked by
-[#598](https://github.com/leynos/netsuke/issues/598) and registry publication by
-[#1065](https://github.com/leynos/netsuke/issues/1065).
+[#598](https://github.com/leynos/netsuke/issues/598), which also supplies the
+downstream canaries admission is to require; issue
+[#1065](https://github.com/leynos/netsuke/issues/1065), which tracked the
+release pipeline, is closed, and publication is now gated on packaging and on
+an enforced, successful admission by `#1070`.
+
+Enabling publication remains a separate step. It requires the trusted producer,
+an admission job that waits for the producer's upload instead of tolerating an
+absent artefact, a required set naming the downstream canaries, and an
+end-to-end demonstration of both the successful and the refused publishing run.
+The verifier already refuses an unsuccessful result for any declared canary,
+including one it does not yet require, so a producer that reports a downstream
+failure cannot have it ignored while the required set is still being extended.
 
 The rehearsal lane stays reachable. The `release` job holds no write scope and
 must not depend on either `package-crate` or `release-admission-canaries`, so a
@@ -418,14 +429,23 @@ is attributed to `verify_evidence`, which is the operation that decided it.
 
 `tests/workflow_contracts/release_admission_gate_contract.py` evaluates the
 enforcement expression in every modelled scenario rather than matching its
-text, so either hard-coded mode is reported for the run that exposes it.
+text, so either hard-coded mode is reported for the run that exposes it. Each
+scenario declares only the leaf outcomes whose failure it exists to exercise;
+`release_publish_path_results.py` derives every other job's result from the
+workflow's own dependency edges and guards, in dependency order, so a scenario
+cannot pair a successful publisher with the failed build it publishes. The
+derived results then drive one evaluation per job: the staging guard, the
+publication guard, the registry publisher, the inventory verifier, and
+`finalize-github-release`, whose six-job dependency set and guard are checked
+against an independent expectation rather than against their own wording.
 `tests/workflow_contracts/release_publication_gate_mutations.py` states
-seventeen regressions — a removed dependency, a removed result or output check,
-either hard-coded mode, an `always()` publication bypass, an appended
+twenty-one regressions — a removed dependency, a removed result or output
+check, either hard-coded mode, an `always()` publication bypass, an appended
 always-true disjunct that keeps every clause as a conjunct, a publisher
 declared with the `write-all` shorthand, a publisher inheriting write from the
-workflow, and the gate and rehearsal adopting each other — each with the
-diagnostics that must notice it. Effective scopes and the conjunction
-requirement are read by the same module, so a job's permissions and its guard
-are judged from what GitHub would actually honour rather than from the spelling
-the workflow happened to use.
+workflow, the gate and rehearsal adopting each other, and finalization adopting
+the rehearsal or dropping its verifier dependency — each with the diagnostics
+that must notice it. Effective scopes and the conjunction requirement are read
+by the same module, so a job's permissions and its guard are judged from what
+GitHub would actually honour rather than from the spelling the workflow
+happened to use.

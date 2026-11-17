@@ -4794,6 +4794,74 @@ and pass, on the final wording.
   full eight-gate batch passes on the rebased head with the working-tree
   fingerprint unchanged; its results are recorded in the pull request.
 
+- **2026-11-17: the scenario table now derives its results and evaluates
+  finalization, and the verifier refuses any declared failure (completed).**
+
+  *The gap.* The scenario table named every downstream job's result itself, so
+  a case could assert that a publisher succeeded while the build it publishes
+  had failed -- a combination GitHub cannot produce, because a job does not
+  start once a dependency it needs has not succeeded. Finalization was held to
+  a separate exact-clause contract, and a clause set cannot see that the job is
+  unreachable: a guard that keeps every required clause and also names the
+  rehearsal job -- skipped on every publishing run -- satisfies the clause
+  contract and leaves the release permanently a draft.
+
+  *The propagation.* `tests/workflow_contracts/release_publish_path_results.py`
+  derives one result per job in dependency order from the workflow's own
+  `needs` and job-level `if`. A job with no guard keeps GitHub's implicit
+  all-succeeded rule; a job with one is evaluated as written, which is why the
+  rehearsal still runs after packaging or admission fails. A scenario now
+  declares only the leaf outcomes it exists to exercise. Cancellation is
+  modelled through `status`, not through each result: folding it into the
+  results made every guard false for the wrong reason, and the three
+  cancellation mutations passed until the model was corrected, because the
+  missing `!cancelled()` was masked by results that had all become unsuccessful.
+
+  *The finalization evaluation.*
+  `tests/workflow_contracts/release_publish_path_finalization.py` compares the
+  job's guard with an oracle computed from the scenario -- publish mode, not
+  cancelled, `should_publish`, admitted candidate, and six successful
+  dependencies -- and then requires the un-drafting step to run when the job
+  does. Two scenarios were added (`verify-release-inventory-failure` and
+  `verify-release-inventory-skipped`) so the verifier's own outcome, which no
+  later result depends on, is what stands between a published release and an
+  un-drafted one. Two mutations pair with them:
+  `remove-finalize-verify-result-check` and `finalize-adopts-rehearsal`, the
+  second of which the exact-clause contract accepts.
+
+  *A false expectation, corrected.* `remove-finalize-verify-result-check` was
+  first paired with a static `write-authority` violation. No such violation
+  exists: the verify-result clause is not in `REQUIRED_GUARD_CLAUSES`, so the
+  only diagnostics are the two scenario reachability findings. The pairing was
+  corrected rather than the contract widened, because the clause is
+  finalization's own gate and the scenario evaluation is where it is checked.
+
+  *The rollout dependency.* The verifier required presence only of
+  `history_scan` and `release_candidate` and ignored every other name, so a
+  producer that added a downstream canary and reported it as failed would have
+  been admitted. `evidence.verify` still requires presence only of the
+  configured set, but now requires success of every result the document
+  declares, refusing with `unknown`. The new child-process case
+  `unrequired-result-failed` reports the required canaries as successful and
+  `licence_scan` as failed, and the gate exits 1 in enforcing mode. The forward
+  compatibility case -- an extra result reporting success -- still admits the
+  release, so adding a canary is not a breaking change.
+
+  *What publication still waits for.* Issue `#1065` is closed, so the documents
+  no longer name it as the owner of registry publication. The ADR-0020 addendum
+  and the developers' guide now record the remaining rollout: `#598` supplies a
+  trusted producer, the admission job must wait for that upload instead of
+  tolerating an absent artefact, the required set must name the downstream
+  canaries, and both the successful and the refused publishing run need an
+  end-to-end demonstration before the gate can admit anything.
+
+  **Verification for this round.** `make test-release-admission` passes 144
+  cases, including the new refusal; the mutation, permission, artefact and
+  derivation modules pass 66 cases together; and the full
+  `make test-workflow-contracts` passes 2,367 cases with 3 skipped. The
+  remaining gates for the round run as the batch this document's commit is
+  gated on, and their results are recorded in the pull request.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
