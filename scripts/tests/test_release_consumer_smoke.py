@@ -18,6 +18,8 @@ import release_candidate
 import release_consumer_payload as payload
 import release_consumer_smoke as smoke
 import release_digest_record
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 
 COMMIT = "0" * 40
 TARGET = "x86_64-unknown-linux-gnu"
@@ -307,3 +309,33 @@ def test_verdict_refuses_an_unregistered_outcome() -> None:
     """Refuse an outcome the artefact's consumers do not know."""
     with pytest.raises(smoke.ConsumerSmokeError):
         payload.verdict_record({"crate_download": "maybe"})
+
+
+#: One outcome a phase may report, so a generated table can name any of them.
+_OUTCOME = st.sampled_from(sorted(payload.PHASE_OUTCOMES))
+#: A phase table naming any subset of the labels. An absent label is a phase
+#: that never ran, so this draw covers every assignment the record renders.
+_PHASE_TABLE = st.dictionaries(st.sampled_from(payload.SMOKE_PHASES), _OUTCOME)
+
+
+@settings(max_examples=100, deadline=None, derandomize=True)
+@given(phases=_PHASE_TABLE)
+@example(phases=dict.fromkeys(payload.SMOKE_PHASES, "success"))
+def test_verdict_renders_every_phase_assignment(phases: dict[str, str]) -> None:
+    """Render every outcome assignment, with an absent label as skipped."""
+    record = payload.verdict_record(phases)
+
+    assert set(record) == {"phases", "verdict"}, (
+        "the artefact carries exactly its phases and its verdict"
+    )
+    assert set(record["phases"]) == set(payload.SMOKE_PHASES), (
+        "every label is recorded once, whether the caller named it or not"
+    )
+    for label in payload.SMOKE_PHASES:
+        assert record["phases"][label] == phases.get(label, "skipped"), (
+            f"{label} must record the observed outcome, or skipped when absent"
+        )
+    expected = "verified" if set(record["phases"].values()) == {"success"} else "failed"
+    assert record["verdict"] == expected, (
+        "an all-success assignment is the only verified run"
+    )

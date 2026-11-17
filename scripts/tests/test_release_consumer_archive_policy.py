@@ -7,8 +7,12 @@ without building a tarball. Reading real archives is covered in
 Run via ``make test-release-publication``.
 """
 
+import string
+
 import pytest
 import release_consumer_archive_policy as policy
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from release_consumer_archive_policy import (
     ArchiveMember,
     ArchiveTooLargeError,
@@ -62,6 +66,48 @@ def test_normalised_member_name_refuses_a_name_that_could_escape(name: str) -> N
     """Refuse every name that is absolute, rooted, or traverses upward."""
     with pytest.raises(UnsafeMemberNameError):
         policy.normalised_member_name(name)
+
+
+#: One path segment an honest archive may carry. It begins with a letter or a
+#: digit, so it is never ``.`` or ``..``, and the alphabet excludes the
+#: separator, a NUL byte, and a backslash.
+_SEGMENT = st.text(
+    alphabet=string.ascii_letters + string.digits + "._-", min_size=1, max_size=8
+).filter(lambda part: part[0].isalnum())
+#: A relative member path of one to four such segments.
+_MEMBER_PATH = st.lists(_SEGMENT, min_size=1, max_size=4).map("/".join)
+
+
+@settings(max_examples=100, deadline=None, derandomize=True)
+@given(name=_MEMBER_PATH)
+def test_a_safe_member_path_is_already_normal(name: str) -> None:
+    """Return a safe relative path unchanged, however deeply it nests."""
+    assert policy.normalised_member_name(name) == name, (
+        "a name with no empty, dot, or traversal component is already normal"
+    )
+
+
+@settings(max_examples=100, deadline=None, derandomize=True)
+@given(name=_MEMBER_PATH)
+def test_a_traversal_component_is_refused_wherever_it_sits(name: str) -> None:
+    """Refuse every ``..`` component, not only the one that escapes the root."""
+    parts = name.split("/")
+    for position in range(len(parts) + 1):
+        traversing = "/".join([*parts[:position], "..", *parts[position:]])
+        with pytest.raises(UnsafeMemberNameError):
+            policy.normalised_member_name(traversing)
+
+
+@settings(max_examples=100, deadline=None, derandomize=True)
+@given(name=_MEMBER_PATH)
+def test_a_dot_component_cannot_change_the_path(name: str) -> None:
+    """Drop ``.`` components, so a decorated path names the same member."""
+    parts = name.split("/")
+    decorated = "/".join([".", *parts[:1], ".", *parts[1:]])
+
+    assert policy.normalised_member_name(decorated) == name, (
+        "a dot component names the directory already in force"
+    )
 
 
 def test_require_safe_layout_accepts_a_binary_beside_other_files() -> None:
