@@ -6159,7 +6159,10 @@ three as one key set
 ([ADR-0069](adrs/adr-0069-split-the-localization-key-tables.md)). Rather than
 declaring `src/cli/mod.rs` and inheriting the whole subtree, it declares an
 inline `cli` module naming exactly four files — `src/cli/command.rs`,
-`src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`.
+`src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs` —
+beside five path-imported siblings: `src/cli/localization/mod.rs`,
+`src/host/pattern.rs`, `src/shell_selection/mod.rs`,
+`src/locale/catalogues.rs`, and `src/localization/mod.rs`.
 
 That slice is a maintained boundary, not an accident:
 
@@ -6178,6 +6181,12 @@ That slice is a maintained boundary, not an accident:
 - `src/host/pattern.rs` covers pattern syntax; matching a concrete hostname
   against a parsed pattern lives in `src/host/matching.rs`, which the build
   script does not compile.
+- `src/shell_selection/mod.rs` supplies the trusted shell vocabulary the CLI
+  schema names in its `shells` definitions. `ShellDefinition` stores a validated
+  `ShellName` and classifies its executable by `HostFamily`, so the schema
+  cannot be described without `BuiltInShell`, `ShellName`, and `HostFamily`.
+  Only that vocabulary is compiled: resolving an executable and running a
+  configured shell stay outside the build script.
 
 Keeping the slice narrow is what lets rustc's unused-item analysis run normally
 inside the build-script crate. Widening it — for example by making
@@ -6188,6 +6197,14 @@ dead code: an unused `pub` item in `src/cli/config/mod.rs` is reported by the
 build-script crate but not by the library because the library exports that
 module publicly.
 
+The inline `cli` module and `shell_selection` are `pub`, matching `src/lib.rs`,
+while their remaining siblings stay private. The schema slice re-exports the
+shell vocabulary through `cli::config`, and a re-export inside a private module
+is unreachable, so rustc would report those vocabulary imports as unused even
+though the library consumes them. Declaring the two modules as the library does
+keeps the unused-item analysis about this compilation unit's real reachability
+rather than about a visibility the production source never had.
+
 A dependency added outside the slice surfaces as a build-script compile error.
 Prefer moving the new code into a sibling module over widening the slice.
 
@@ -6195,8 +6212,8 @@ Manifest resource-budget code remains on the runtime side of this boundary.
 `src/cli/command.rs` and the private `config::budget` submodule included through
 `src/cli/config/mod.rs` contribute the CLI schema, defaults, and validation
 needed by the build script's generated help artefacts. `build.rs` directly
-declares only the four root files named above; the budget-config path is an
-included submodule of `config/mod.rs`, not a fifth directly declared
+declares only the CLI files and sibling sources named above; the budget-config
+path is an included submodule of `config/mod.rs`, not a directly declared
 build-script source. The runtime `ManifestBudgetLimits`, `ManifestBudget`, and
 manifest-loading adapters are library code and are deliberately not imported by
 `build.rs`; adding a runtime budget dependency must not widen the build
@@ -6210,14 +6227,15 @@ checks the package boundary and that dependency equality. `slice.rs` mirrors
 `build.rs`'s whole declaration boundary, not just the inline `cli` module: the
 four CLI declarations and the two `pub use` re-exports, then the path imports
 for `src/cli/localization/mod.rs`, `src/host/pattern.rs`,
-`src/locale/catalogues.rs`, and `src/localization/mod.rs`. The source contract
-compares every one of those declarations in order after normalizing the
-fixture's `../src/` prefix, so a reordered path attribute fails even when the
-same modules are still named. `build_l10n_audit` is the one declaration
-`build.rs` keeps to itself — it lives beside the build script, declares no
-path, and audits generated catalogues rather than exposing production source —
-and a test asserts both its presence there and its absence from `slice.rs`, so
-the exclusion reads as a decision rather than an omission.
+`src/shell_selection/mod.rs`, `src/locale/catalogues.rs`, and
+`src/localization/mod.rs`. The source contract compares every one of those
+declarations in order after normalizing the fixture's `../src/` prefix, so a
+reordered path attribute fails even when the same modules are still named.
+`build_l10n_audit` is the one declaration `build.rs` keeps to itself — it lives
+beside the build script, declares no path, and audits generated catalogues
+rather than exposing production source — and a test asserts both its presence
+there and its absence from `slice.rs`, so the exclusion reads as a decision
+rather than an omission.
 
 The fixture uses `cfg(not(any(test, doctest)))` around those production module
 imports. This keeps unrelated production unit tests out of the fixture and
@@ -11699,7 +11717,9 @@ Ownership boundary: `src/shell_selection/` supplies the `ShellName`,
 configuration; the schema depends on it, not the reverse. `SHELLS_KEY` lives in
 the schema module rather than `cli::constants` so the build script's compiled
 slice can carry the key without pulling in the modules that share the constants
-file.
+file. The build script compiles `src/shell_selection/` as part of that slice,
+whose boundary and public declarations are described in
+[the build script's module slice](#the-build-scripts-module-slice).
 
 `ShellExecutable` spelling rules live in `src/cli/config/shells/spelling.rs`
 and take the host family as a parameter, so both families' rules run on either
