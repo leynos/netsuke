@@ -27,7 +27,7 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_context import needs_context
+from release_publish_path_context import ScenarioRun, needs_context
 from release_publish_path_scenarios import GITHUB_SHA
 from workflow_loading import require_mapping
 
@@ -42,8 +42,8 @@ def resolve_results(
     scenario: Scenario,
     metadata_outputs: dict[str, str],
     violations: list[str],
-) -> dict[str, str]:
-    """Return one result per release job, propagated through the graph.
+) -> ScenarioRun:
+    """Return the scenario run with every job's result propagated.
 
     Parameters
     ----------
@@ -58,20 +58,19 @@ def resolve_results(
 
     Returns
     -------
-    dict[str, str]
-        Each job's result as the runner would report it for this scenario.
+    ScenarioRun
+        The scenario, its outputs, and each job's result as the runner would
+        report it for this scenario.
     """
     jobs = require_mapping(release.get("jobs"), "release.jobs")
-    results: dict[str, str] = {}
+    run = ScenarioRun(scenario, metadata_outputs, {})
     for name in dependency_order(jobs, violations):
         job = jobs[name]
         if not isinstance(job, dict):
             violations.append(f"release.jobs.{name}: job must be a mapping")
             continue
-        results[name] = _job_result(
-            name, job, scenario, metadata_outputs, results, violations
-        )
-    return results
+        run.results[name] = _job_result(run, name, job, violations)
+    return run
 
 
 def dependency_order(
@@ -111,43 +110,42 @@ def _declared_needs(job: object) -> set[str]:
 
 
 def _job_result(
+    run: ScenarioRun,
     name: str,
     job: dict[str, object],
-    scenario: Scenario,
-    metadata_outputs: dict[str, str],
-    results: dict[str, str],
     violations: list[str],
 ) -> str:
     """Return one job's result, deriving whether it runs at all."""
-    if not _runs(name, job, scenario, metadata_outputs, results, violations):
+    if not _runs(run, name, job, violations):
         return "skipped"
-    return scenario.needs_results.get(name, "success")
+    return run.scenario.needs_results.get(name, "success")
 
 
 def _runs(
+    run: ScenarioRun,
     name: str,
     job: dict[str, object],
-    scenario: Scenario,
-    metadata_outputs: dict[str, str],
-    results: dict[str, str],
     violations: list[str],
 ) -> bool:
     """Return whether the job starts, given the results of its dependencies."""
     needs = job_names(job.get("needs", [])) or []
     guard = job.get("if")
     if guard is None:
-        return all(results.get(need, "success") == "success" for need in needs)
+        return all(run.results.get(need, "success") == "success" for need in needs)
     contexts: dict[str, object] = {
-        "needs": needs_context(needs, scenario, metadata_outputs, results),
+        "needs": needs_context(needs, run),
         "status": {"cancelled": False},
-        "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
+        "github": {
+            "event": {"action": run.scenario.event_action},
+            "sha": GITHUB_SHA,
+        },
     }
     value = evaluate_field(
         guard,
         FieldEvaluation(
             contexts=contexts,
             violations=violations,
-            label=f"{scenario.name}.{name}.result-guard",
+            label=f"{run.scenario.name}.{name}.result-guard",
             job_level=True,
         ),
     )

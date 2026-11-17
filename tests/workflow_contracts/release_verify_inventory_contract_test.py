@@ -15,6 +15,7 @@ import re
 import typing as typ
 
 import pytest
+from release_publish_path_context import ScenarioRun
 from release_publish_path_scenarios import SCENARIOS
 from release_publish_path_verification import check_verify_inventory
 from release_verify_inventory_command_words import (
@@ -326,7 +327,9 @@ def _assert_complete_contract(
     _assert_publisher_records_the_artifact_name(workflow)
     violations: list[str] = []
     check_verify_inventory(
-        workflow, _tag_publish(), PUBLISH_OUTPUTS, _tag_publish_results(), violations
+        workflow,
+        ScenarioRun(_tag_publish(), PUBLISH_OUTPUTS, _tag_publish_results()),
+        violations,
     )
     assert not violations, f"verify-job reachability contract: {violations}"
 

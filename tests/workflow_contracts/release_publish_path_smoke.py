@@ -15,16 +15,14 @@ from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_fi
 from workflow_loading import workflow_job
 
 if typ.TYPE_CHECKING:
-    from release_publish_path_scenarios import Scenario
+    from release_publish_path_context import ScenarioRun
 
 SMOKE_JOB = "windows-native-recipe-smoke"
 
 
 def check_smoke_job(
     release: dict[str, object],
-    scenario: Scenario,
-    outputs: dict[str, str],
-    results: dict[str, str],
+    run: ScenarioRun,
     violations: list[str],
 ) -> None:
     """Check smoke-job reachability for each mode and event.
@@ -33,20 +31,17 @@ def check_smoke_job(
     ----------
     release
         Parsed release workflow.
-    scenario
+    run
         The release mode, event and resolved dependency results under test.
-    outputs
-        The metadata outputs the guard reads.
-    results
-        Every job's resolved result for the scenario.
     violations
         Collector for the scenario's findings.
     """
+    scenario = run.scenario
     smoke_job = workflow_job(release, SMOKE_JOB)
-    metadata_result = results.get("metadata", "skipped")
+    metadata_result = run.results.get("metadata", "skipped")
     context: dict[str, object] = {
         "needs": {
-            "metadata": {"result": metadata_result, "outputs": outputs},
+            "metadata": {"result": metadata_result, "outputs": run.outputs},
         },
         # A cancelled release scenario cancels after every dependency passed.
         "status": {"cancelled": False},

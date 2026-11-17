@@ -85,12 +85,9 @@ class Canary(Vocabulary):
 
 
 #: The canaries an evidence manifest must report before admission is granted.
-#: A manifest may carry further results -- #598 adds downstream canaries -- and
-#: their names need no change here, so this tuple is the closed set of
-#: *required* results rather than the whole vocabulary a producer may write.
-#: Presence is required only for these names; success is required of every
-#: result the manifest declares, because a producer that reports a downstream
-#: canary as failed has stated an observation admission must not overlook.
+#: #598 adds downstream canaries whose names need no change here, so this is
+#: the closed set of *required* results, not the whole producer vocabulary:
+#: presence is required here, success of every declared result.
 REQUIRED_RESULTS: typ.Final[tuple[Canary, ...]] = (
     Canary.HISTORY_SCAN,
     Canary.RELEASE_CANDIDATE,

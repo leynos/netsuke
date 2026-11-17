@@ -41,7 +41,7 @@ def _outputs(release: dict[str, object], mode: str) -> dict[str, str]:
     """Resolve the metadata outputs the guards read for *mode*."""
     violations: list[str] = []
     outputs = _metadata_outputs(release, mode, violations)
-    assert violations == [], f"metadata outputs should resolve; got {violations!r}"
+    assert not violations, f"metadata outputs should resolve; got {violations!r}"
     return outputs
 
 
@@ -51,12 +51,13 @@ def test_a_failed_build_leaves_every_dependent_job_skipped(
     """Refuse to model a publisher succeeding when the build it publishes failed."""
     violations: list[str] = []
 
-    results = resolve_results(
+    run = resolve_results(
         release,
         _scenario("publish", {"build-linux": "failure"}),
         _outputs(release, "publish"),
         violations,
     )
+    results = run.results
 
     assert results["build-linux"] == "failure", "the declared outcome must survive"
     for name in (
@@ -68,7 +69,7 @@ def test_a_failed_build_leaves_every_dependent_job_skipped(
         assert results[name] == "skipped", (
             f"{name} cannot succeed once build-linux failed; got {results[name]!r}"
         )
-    assert violations == [], f"derivation should report nothing, got {violations!r}"
+    assert not violations, f"derivation should report nothing, got {violations!r}"
 
 
 def test_a_declared_failure_survives_when_its_own_needs_succeeded(
@@ -80,7 +81,7 @@ def test_a_declared_failure_survives_when_its_own_needs_succeeded(
         _scenario("publish", {"publish-crates-io": "failure"}),
         _outputs(release, "publish"),
         [],
-    )
+    ).results
 
     assert results["publish-crates-io"] == "failure", (
         "a publisher whose own prerequisites succeeded can still fail"
@@ -99,7 +100,7 @@ def test_the_rehearsal_outlives_a_failure_it_does_not_need(
         _scenario("dry-run", {"package-crate": "failure"}),
         _outputs(release, "dry-run"),
         [],
-    )
+    ).results
 
     assert results["release"] == "success", (
         "the rehearsal does not depend on packaging and must still run"

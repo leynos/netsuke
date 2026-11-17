@@ -20,7 +20,7 @@ from release_publish_path_artifacts import (
     check_download_pattern,
     evaluate_field,
 )
-from release_publish_path_context import needs_context
+from release_publish_path_context import ScenarioRun, needs_context
 from release_publish_path_finalization import check_finalize_release
 from release_publish_path_publication import (
     PublicationCheck,
@@ -130,7 +130,8 @@ def _stage_needs(
 ) -> dict[str, object]:
     """Build the declared needs context for one staging or publishing job."""
     return needs_context(
-        job_names(release_job.get("needs", [])) or [], scenario, outputs, results
+        job_names(release_job.get("needs", [])) or [],
+        ScenarioRun(scenario, outputs, results),
     )
 
 
@@ -249,8 +250,8 @@ def _check_scenario(check: ScenarioCheck) -> None:
     """
     scenario = check.scenario
     outputs = check.outputs_by_mode[scenario.mode]
-    results = resolve_results(check.release, scenario, outputs, check.violations)
-    check_smoke_job(check.release, scenario, outputs, results, check.violations)
+    run = resolve_results(check.release, scenario, outputs, check.violations)
+    check_smoke_job(check.release, run, check.violations)
     check_admission_enforcement(check.release, scenario, outputs, check.violations)
     check_build_uploads(
         check.release,
@@ -260,7 +261,7 @@ def _check_scenario(check: ScenarioCheck) -> None:
     )
     release_job = workflow_job(check.release, "release")
     contexts: dict[str, object] = {
-        "needs": _stage_needs(release_job, scenario, outputs, results),
+        "needs": _stage_needs(release_job, scenario, outputs, run.results),
         "status": {"cancelled": scenario.cancelled},
         "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
     }
@@ -287,18 +288,18 @@ def _check_scenario(check: ScenarioCheck) -> None:
         outputs=outputs,
         violations=check.violations,
     )
-    check_publication_path(publication_check, results)
+    check_publication_path(publication_check, run.results)
     publisher_job = workflow_job(check.release, "publish-crates-io")
     publisher_contexts: dict[str, object] = {
-        "needs": _stage_needs(publisher_job, scenario, outputs, results),
+        "needs": _stage_needs(publisher_job, scenario, outputs, run.results),
         "status": {"cancelled": scenario.cancelled},
         "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
     }
     check_crates_io_publication(
-        publisher_job, publication_check, publisher_contexts, results
+        publisher_job, publication_check, publisher_contexts, run.results
     )
-    check_verify_inventory(check.release, scenario, outputs, results, check.violations)
-    check_finalize_release(check.release, scenario, outputs, results, check.violations)
+    check_verify_inventory(check.release, run, check.violations)
+    check_finalize_release(check.release, run, check.violations)
 
 
 def _check_publisher_action(

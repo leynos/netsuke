@@ -20,7 +20,7 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_context import needs_context
+from release_publish_path_context import ScenarioRun, needs_context
 from release_publish_path_publication import step_runs
 from release_publish_path_scenarios import (
     FINALIZE_JOB,
@@ -69,32 +69,23 @@ def check_finalization_needs(job: dict[str, object], violations: list[str]) -> N
         )
 
 
-def _should_finalize(
-    scenario: Scenario,
-    outputs: dict[str, str],
-    results: dict[str, str],
-) -> bool:
+def _should_finalize(run: ScenarioRun) -> bool:
     """Compute the independent reachability oracle for finalization."""
+    scenario = run.scenario
     return (
         scenario.mode == "publish"
         and not scenario.cancelled
-        and outputs.get("should_publish") == "true"
+        and run.outputs.get("should_publish") == "true"
         and admits_candidate(scenario)
-        and all(results.get(name) == "success" for name in FINALIZE_NEEDS)
+        and all(run.results.get(name) == "success" for name in FINALIZE_NEEDS)
     )
 
 
-def _finalize_contexts(
-    job: dict[str, object],
-    scenario: Scenario,
-    outputs: dict[str, str],
-    results: dict[str, str],
-) -> dict[str, object]:
+def _finalize_contexts(job: dict[str, object], run: ScenarioRun) -> dict[str, object]:
     """Build the guard context from the job's own declared dependencies."""
+    scenario = run.scenario
     return {
-        "needs": needs_context(
-            job_names(job.get("needs", [])) or [], scenario, outputs, results
-        ),
+        "needs": needs_context(job_names(job.get("needs", [])) or [], run),
         "status": {"cancelled": scenario.cancelled},
         "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
     }
@@ -102,15 +93,14 @@ def _finalize_contexts(
 
 def check_finalize_release(
     release: dict[str, object],
-    scenario: Scenario,
-    outputs: dict[str, str],
-    results: dict[str, str],
+    run: ScenarioRun,
     violations: list[str],
 ) -> None:
     """Verify the job's shape and its reachability for one scenario."""
+    scenario = run.scenario
     job = workflow_job(release, FINALIZE_JOB)
     check_finalization_needs(job, violations)
-    contexts = _finalize_contexts(job, scenario, outputs, results)
+    contexts = _finalize_contexts(job, run)
     actual = evaluate_field(
         job.get("if", True),
         FieldEvaluation(
@@ -120,7 +110,7 @@ def check_finalize_release(
             job_level=True,
         ),
     )
-    expected = _should_finalize(scenario, outputs, results)
+    expected = _should_finalize(run)
     runs = actual is not MISSING and bool(actual)
     if runs != expected:
         violations.append(

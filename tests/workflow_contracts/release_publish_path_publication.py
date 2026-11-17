@@ -5,7 +5,7 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_context import needs_context
+from release_publish_path_context import ScenarioRun, needs_context
 from release_publish_path_scenarios import (
     CRATES_IO_NEEDS,
     GITHUB_SHA,
@@ -128,7 +128,8 @@ def _publication_needs(
             "admission dependencies"
         )
     return needs_context(
-        sorted(required & declared_needs), check.scenario, check.outputs, results
+        sorted(required & declared_needs),
+        ScenarioRun(check.scenario, check.outputs, results),
     )
 
 
