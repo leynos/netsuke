@@ -102,12 +102,12 @@ The limits are not configurable because they are a safety bound on a library
 surface rather than operator policy. The supported input domain sits far below
 every default: the property generator reaches depth 3, and the deepest fixture
 a test expects to be admitted is the wide-leaf path fixture in
-[`tests/budget.rs`](../../src/stdlib/canonical_value/tests/budget.rs), whose
-items sit five edges below the root. Fixtures that go deeper exist to provoke a
-refusal, so no supported input changes behaviour. A caller needing a different
-ceiling needs a different API, not a different number, and making the ceiling
-configurable would require the policy ownership, validation, and localization
-that roadmap 6.1.4 and the CLI policy layer own.
+[`tests/path_bookkeeping.rs`](../../src/stdlib/canonical_value/tests/path_bookkeeping.rs),
+whose items sit five edges below the root. Fixtures that go deeper exist to
+provoke a refusal, so no supported input changes behaviour. A caller needing a
+different ceiling needs a different API, not a different number, and making the
+ceiling configurable would require the policy ownership, validation, and
+localization that roadmap 6.1.4 and the CLI policy layer own.
 
 ## Consequences
 
@@ -161,6 +161,7 @@ preconditions: an infinite enumeration is refused as `Nodes` and a cycle as
 - [`src/stdlib/canonical_value/path.rs`](../../src/stdlib/canonical_value/path.rs)
 - [`src/stdlib/canonical_value/mod.rs`](../../src/stdlib/canonical_value/mod.rs)
 - [`src/stdlib/canonical_value/tests/budget.rs`](../../src/stdlib/canonical_value/tests/budget.rs)
+- [`src/stdlib/canonical_value/tests/path_bookkeeping.rs`](../../src/stdlib/canonical_value/tests/path_bookkeeping.rs)
 - [`src/stdlib/canonical_value/tests/diagnostics.rs`](../../src/stdlib/canonical_value/tests/diagnostics.rs)
 - [`tests/features/canonical_value.feature`](../../tests/features/canonical_value.feature)
 
