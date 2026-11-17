@@ -12350,6 +12350,15 @@ finally the member values in sorted name order. A mapping therefore refuses a
 non-string key, a repeated name, or an over-budget member name before any
 member value is admitted.
 
+Location bookkeeping is borrowed rather than owned: traversal extends a
+borrowed chain of edges and materializes the owned path only when it renders a
+refusal, so a child's path costs the same whether its ancestors' names are one
+byte or a megabyte. An owned path extended once per child would copy every
+ancestor name once per descendant, making that bookkeeping scale with the
+product of the node and byte ceilings instead of with the work each ceiling
+bounds. A rendered refusal retains only the names admission already charged
+against its byte ceiling.
+
 Admitted nodes and bytes, together with JSON escaping expansion, transitively
 bound the canonicalizer's output, so no separate output cap is added. Internal
 buffering inside `serde_json_canonicalizer` 0.3.2 and MiniJinja fuel governance

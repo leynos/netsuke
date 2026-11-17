@@ -24,9 +24,11 @@ use thiserror::Error;
 /// Positions count snapshot edges rather than host traversal steps, so a
 /// location stays meaningful even when a mapping key is refused before its
 /// value is visited. The rendering is abbreviated in the middle once the path
-/// is long, so a deeply nested input cannot produce a message longer than most
-/// terminals; the number of omitted edges is stated, so an elided path is
-/// never mistaken for an adjacent one.
+/// has more than a handful of edges, so a deeply nested input cannot produce a
+/// message that repeats the whole path; the number of omitted edges is stated,
+/// so an elided path is never mistaken for an adjacent one. Elision bounds the
+/// edge count, not the bytes: the member names a path retains are names
+/// admission already charged against its byte ceiling.
 ///
 /// A path is rendered once, when the refusal is constructed, and the refusal
 /// then carries only that text. Keeping the type module-private is deliberate:
@@ -34,6 +36,11 @@ use thiserror::Error;
 /// field would either widen the public surface or warn as a private type in a
 /// public interface. Callers branch on [`CanonicalValueError::kind`]; the
 /// location reaches them as prose.
+///
+/// Traversal does not carry this type. It carries [`PathRef`], a borrowed
+/// chain of edges, and builds this owned path only when a refusal is
+/// constructed, because extending an owned path once per child would copy
+/// every ancestor member name once per descendant.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct SnapshotPath {
     /// Edge steps from the snapshot root to the refused value.
@@ -57,25 +64,8 @@ impl SnapshotPath {
     /// Location rendered in place of the empty path of the snapshot root.
     const ROOT_MARKER: &str = "<root>";
 
-    /// Return the path of the root value.
-    pub(super) const fn root() -> Self {
-        Self { steps: Vec::new() }
-    }
-
-    /// Return a copy of this path extended by one sequence index.
-    pub(super) fn with_item(&self, index: usize) -> Self {
-        self.extended(PathStep::Item(index))
-    }
-
-    /// Return a copy of this path extended by one mapping key.
-    pub(super) fn with_member(&self, key: &str) -> Self {
-        self.extended(PathStep::Member(key.to_owned()))
-    }
-
-    /// Return a copy of this path with `step` appended.
-    fn extended(&self, step: PathStep) -> Self {
-        let mut steps = self.steps.clone();
-        steps.push(step);
+    /// Wrap already-ordered steps as a path.
+    const fn from_steps(steps: Vec<PathStep>) -> Self {
         Self { steps }
     }
 
@@ -113,6 +103,89 @@ impl SnapshotPath {
 impl fmt::Display for SnapshotPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.render_abbreviated())
+    }
+}
+
+/// A borrowed snapshot path, extended once per child during traversal.
+///
+/// An owned path would copy every ancestor member name once per descendant, so
+/// the work would scale with the product of the node ceiling and the byte
+/// ceiling rather than with their sum: a wide collection beneath long member
+/// names would copy megabytes for every item while every individual charge
+/// stayed inside its own ceiling. A refusal is rare, so the borrowed chain is
+/// walked and copied only when a refusal is constructed.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum PathRef<'a> {
+    /// The path of the snapshot root.
+    Root,
+    /// A sequence member of `parent`, addressed by its index.
+    Item {
+        /// Path of the sequence this item belongs to.
+        parent: &'a PathRef<'a>,
+        /// Index of the item in that sequence.
+        index: usize,
+    },
+    /// A mapping member of `parent`, addressed by its key.
+    Member {
+        /// Path of the mapping this member belongs to.
+        parent: &'a PathRef<'a>,
+        /// Name of the member in that mapping.
+        key: &'a str,
+    },
+}
+
+impl<'a> PathRef<'a> {
+    /// Return the path of the root value.
+    pub(super) const fn root() -> Self {
+        Self::Root
+    }
+
+    /// Return this path extended by one sequence index.
+    pub(super) const fn with_item<'b>(&'b self, index: usize) -> PathRef<'b>
+    where
+        'a: 'b,
+    {
+        PathRef::Item {
+            parent: self,
+            index,
+        }
+    }
+
+    /// Return this path extended by one mapping key.
+    pub(super) const fn with_member<'b>(&'b self, key: &'b str) -> PathRef<'b>
+    where
+        'a: 'b,
+    {
+        PathRef::Member { parent: self, key }
+    }
+
+    /// Render this path for a refusal message.
+    ///
+    /// This is the only place the borrowed chain is copied, so the traversal
+    /// pays for a path only when it has something to report.
+    pub(super) fn render(&self) -> String {
+        self.to_snapshot_path().to_string()
+    }
+
+    /// Materialize the owned path, walking from the refused value to the root.
+    fn to_snapshot_path(&self) -> SnapshotPath {
+        let mut reversed = Vec::new();
+        let mut cursor: &PathRef<'_> = self;
+        loop {
+            match cursor {
+                Self::Root => break,
+                Self::Item { parent, index } => {
+                    reversed.push(PathStep::Item(*index));
+                    cursor = parent;
+                }
+                Self::Member { parent, key } => {
+                    reversed.push(PathStep::Member((*key).to_owned()));
+                    cursor = parent;
+                }
+            }
+        }
+        reversed.reverse();
+        SnapshotPath::from_steps(reversed)
     }
 }
 
@@ -286,32 +359,32 @@ impl CanonicalValueError {
     }
 
     /// Construct an unsupported-kind refusal at `path`.
-    pub(super) fn unsupported(kind: ValueKind, path: &SnapshotPath) -> Self {
+    pub(super) fn unsupported(kind: ValueKind, path: &PathRef<'_>) -> Self {
         Self::UnsupportedKind {
             kind,
-            path: path.to_string(),
+            path: path.render(),
         }
     }
 
     /// Construct a non-string mapping key refusal at `path`.
-    pub(super) fn non_string_key(kind: ValueKind, path: &SnapshotPath) -> Self {
+    pub(super) fn non_string_key(kind: ValueKind, path: &PathRef<'_>) -> Self {
         Self::NonStringKey {
             kind,
-            path: path.to_string(),
+            path: path.render(),
         }
     }
 
     /// Construct a non-finite number refusal at `path`.
-    pub(super) fn non_finite(path: &SnapshotPath) -> Self {
+    pub(super) fn non_finite(path: &PathRef<'_>) -> Self {
         Self::NonFiniteNumber {
-            path: path.to_string(),
+            path: path.render(),
         }
     }
 
     /// Construct an untraversable-host-value refusal at `path`.
-    pub(super) fn invalid_traversal(path: &SnapshotPath) -> Self {
+    pub(super) fn invalid_traversal(path: &PathRef<'_>) -> Self {
         Self::IncompatibleRepresentation {
-            path: path.to_string(),
+            path: path.render(),
         }
     }
 
@@ -323,12 +396,12 @@ impl CanonicalValueError {
     pub(super) fn resource_limit(
         resource: CanonicalResource,
         limit: usize,
-        path: &SnapshotPath,
+        path: &PathRef<'_>,
     ) -> Self {
         Self::ResourceLimitExceeded {
             resource,
             limit,
-            path: path.to_string(),
+            path: path.render(),
         }
     }
 }

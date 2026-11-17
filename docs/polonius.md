@@ -71,6 +71,16 @@ well — the owned style was habit, so they carry no toolchain caveat:
   `TestSurface` payload is owned and boxed so the loader consumes it without
   borrowing from the caller, and the variants stay close in size.
 
+## Cost-driven borrowing
+
+`src/stdlib/canonical_value/error.rs` — `PathRef` is a borrowed chain of
+snapshot edges that admission extends once per child, with the owned
+`SnapshotPath` materialized only to render a refusal. The owned form compiled;
+this borrow is a cost decision rather than a borrow-checker workaround, so no
+NLL comparison applies. Extending an owned path per child copies every ancestor
+member name for every descendant, which would scale with the product of the
+node and byte ceilings instead of with the work each bounds.
+
 ## Refusals
 
 Owned style retained deliberately. The constraint, not the borrow checker, is
