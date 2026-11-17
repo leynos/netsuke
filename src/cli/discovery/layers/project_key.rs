@@ -11,7 +11,7 @@ use camino::Utf8Path;
 use std::path::{Path, PathBuf};
 
 /// Normalized comparison key for the project configuration file.
-pub(super) struct ProjectKey {
+pub(in crate::cli::discovery) struct ProjectKey {
     /// Normalized key, or the literal spelling when resolution failed.
     key: PathBuf,
     /// Literal spelling, retained only when the key is not valid UTF-8.
