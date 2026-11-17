@@ -318,6 +318,17 @@ _If you are upgrading: see the
   of truth for the compiler contract
   ([#465](https://github.com/leynos/netsuke/issues/465))
 
+<!-- markdownlint-disable-next-line MD024 -->
+### Fixed
+
+- Correct the v0.1.0-beta1 installation record: the release published no
+  prebuilt binaries or installer packages, so `cargo binstall` and the `.deb`,
+  `.rpm`, `.pkg`, and `.msi` instructions in the guide tagged with that release
+  do not apply; compiling `netsuke-build` from crates.io with the pinned
+  command in the
+  [beta1 installation notice](docs/v0-1-0-migration-guide.md#published-beta1-installation)
+  is the only available path.
+
 [0.1.0-beta4]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4
 [0.1.0-beta3]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3
 [0.1.0-beta2]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta2

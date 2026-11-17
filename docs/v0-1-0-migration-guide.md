@@ -119,6 +119,41 @@ rustup toolchain install nightly-2026-10-22
 cargo +nightly-2026-10-22 install netsuke-build
 ```
 
+### Published beta1 installation
+
+The v0.1.0-beta1 release has no uploaded prebuilt artefacts.
+`cargo binstall netsuke-build` therefore cannot fetch a prebuilt beta1 binary,
+and no beta1 Debian (`.deb`), RPM (`.rpm`), macOS (`.pkg`), or Windows (`.msi`)
+package exists. The users' guide tagged with that release described planned
+packaging, not published artefacts.
+
+For beta1, compiling `netsuke-build` from crates.io is the only available
+installation path:
+
+```sh
+rustup toolchain install nightly-2026-06-25
+RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build --version 0.1.0-beta1 --locked
+```
+
+PowerShell cannot use that `RUSTFLAGS=...` prefix, so set the variable in the
+environment before running `cargo`:
+
+```powershell
+rustup toolchain install nightly-2026-06-25
+$env:RUSTFLAGS = "-Zpolonius=next"
+cargo +nightly-2026-06-25 install netsuke-build --version 0.1.0-beta1 --locked
+```
+
+`--version 0.1.0-beta1` selects the beta1 crate. `--locked` uses the
+`Cargo.lock` shipped in the published crate. `nightly-2026-06-25` is the
+compiler contract recorded for beta1, and `-Zpolonius=next` is required because
+that nightly predates 2026-08-04; nightlies from that date enable Polonius by
+default.
+
+Do not mix this command with the current `nightly-2026-10-22` command above:
+each selects the toolchain its release was built with. The command installs the
+`netsuke` executable, and Ninja must be on `PATH` when it runs.
+
 ## Install the linker the build standard uses
 
 Builds that run inside a checkout now take a committed build standard, because
