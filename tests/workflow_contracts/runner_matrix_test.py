@@ -65,7 +65,9 @@ def test_a_selector_resolves_against_its_own_axis_only(
     A `runner` include read for any selector would let a matrix label in on an
     axis the job never reads; reading nothing would drop the label entirely.
     """
-    job = {"strategy": {"matrix": matrix}}
+    # Annotated because a nested literal infers a narrower mapping, and a dict
+    # is invariant in its value type, so the call would not typecheck.
+    job: dict[str, object] = {"strategy": {"matrix": matrix}}
     assert selected_labels(UNRESOLVABLE, job) == expected, (
         f"a selector over {matrix!r} must resolve to {expected!r}, "
         f"got {selected_labels(UNRESOLVABLE, job)!r}"
