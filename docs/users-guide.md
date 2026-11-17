@@ -81,6 +81,13 @@ releases share that numeric version, installing a later beta or final MSI
 replaces the existing installation for that version series rather than
 installing alongside it.
 
+Upgrading a v0.1.0-beta4 installation also moves the payload from
+`C:\Program Files (x86)\netsuke` to `C:\Program Files\netsuke` and removes the
+old directory. The MSI does not edit `PATH`, so remove any entry that still
+names the old directory. The beta2 and beta3 MSIs were built from generated
+authoring with a different upgrade identity, so this release does not replace
+them; uninstall those versions from Installed apps by hand.
+
 Repositories that call Netsuke's reusable release workflow can select the
 `WixToolset.UI.wixext` version with the `wix-extension-version` input in the
 caller job's `with:` block:
@@ -323,14 +330,21 @@ crates.io commands earlier in this section.
 
 ### Complete Windows setup
 
-The MSI does not add its installation directory to `PATH`. Add it to the
-current user's persistent `PATH`, update the current PowerShell session, then
-verify that the command resolves:
+The MSI does not add its installation directory to `PATH`. Add the native
+`C:\Program Files\netsuke` directory to the current user's persistent `PATH`,
+update the current PowerShell session, then verify that the command resolves.
+The script stops before changing `PATH` when the MSI has not installed
+`netsuke.exe` at that location.
 
 <!-- tested-example: guide-windows-path -->
 
 ```powershell
-$netsukeDirectory = Join-Path $env:ProgramFiles 'netsuke'
+$programFiles = if ($env:ProgramW6432) { $env:ProgramW6432 } else { $env:ProgramFiles }
+$netsukeDirectory = Join-Path $programFiles 'netsuke'
+$netsukeExecutable = Join-Path $netsukeDirectory 'netsuke.exe'
+if (-not (Test-Path -LiteralPath $netsukeExecutable -PathType Leaf)) {
+    throw "Netsuke is not installed at $netsukeExecutable."
+}
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $userEntries = @($userPath -split ';' | Where-Object { $_ })
 if ($userEntries -notcontains $netsukeDirectory) {

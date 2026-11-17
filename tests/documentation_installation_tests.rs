@@ -12,6 +12,24 @@ use anyhow::{Context, Result, ensure};
 use documentation_examples::{documented_example, load_documented_examples};
 use test_support::fs as test_fs;
 
+/// Every README that repeats the Windows install location.
+const READMES: [&str; 7] = [
+    "README.md",
+    "README.de.md",
+    "README.es.md",
+    "README.fr.md",
+    "README.ja.md",
+    "README.pt-BR.md",
+    "README.zh-CN.md",
+];
+
+/// The native directory the x64 and Arm64 MSIs install to.
+const WINDOWS_INSTALL_LOCATION: &str = "`C:\\Program Files\\netsuke`";
+
+/// The 32-bit directory earlier releases used, which only the upgrade note may
+/// name.
+const LEGACY_WINDOWS_INSTALL_LOCATION: &str = "C:\\Program Files (x86)\\netsuke";
+
 /// Verify that installation examples and release details retain their user contract.
 #[test]
 fn installation_examples_match_source_and_release_contracts() -> Result<()> {
@@ -197,6 +215,7 @@ fn assert_release_installation_contract() -> Result<()> {
             );
         }
     }
+    assert_every_document_names_the_native_windows_location()?;
     let users_guide =
         test_fs::read_to_string("docs/users-guide.md").context("read docs/users-guide.md")?;
     let expected_msi_replacement_fragments = [
@@ -209,6 +228,41 @@ fn assert_release_installation_contract() -> Result<()> {
             .all(|fragment| users_guide.contains(fragment)),
         "users' guide should document MSI replacement within a version series"
     );
+    let expected_upgrade_fragments = [
+        LEGACY_WINDOWS_INSTALL_LOCATION,
+        "The MSI does not edit `PATH`",
+        "uninstall those versions from Installed apps",
+    ];
+    ensure!(
+        expected_upgrade_fragments
+            .into_iter()
+            .all(|fragment| users_guide.contains(fragment)),
+        "users' guide should explain the move out of the legacy install directory"
+    );
+    Ok(())
+}
+
+/// Check that every README and the guide name the native installation directory.
+///
+/// The location follows the package architecture, so a translated README that
+/// still names the 32-bit directory would send Windows users to a directory the
+/// installer no longer populates. Only the location statement is held to the
+/// native path: the users' guide's upgrade note must be able to name the old
+/// directory.
+fn assert_every_document_names_the_native_windows_location() -> Result<()> {
+    for path in READMES.into_iter().chain(["docs/users-guide.md"]) {
+        let document = test_fs::read_to_string(path).with_context(|| format!("read {path}"))?;
+        let location_sentence = document
+            .lines()
+            .find(|line| line.contains(WINDOWS_INSTALL_LOCATION))
+            .with_context(|| {
+                format!("{path} should state the Windows MSI install location {WINDOWS_INSTALL_LOCATION}")
+            })?;
+        ensure!(
+            !location_sentence.contains("Program Files (x86)"),
+            "{path} location statement must not name the 32-bit directory: {location_sentence}"
+        );
+    }
     Ok(())
 }
 
@@ -218,7 +272,10 @@ fn assert_windows_setup_examples() -> Result<()> {
     ensure!(windows.body == "Get-Help Netsuke -Full\n", "help drifted");
     let windows_path = documented_example("guide-windows-path")?;
     let windows_path_fragments = [
-        "SetEnvironmentVariable",
+        "$programFiles = if ($env:ProgramW6432) { $env:ProgramW6432 } else { $env:ProgramFiles }",
+        "$netsukeDirectory = Join-Path $programFiles 'netsuke'",
+        "$netsukeExecutable = Join-Path $netsukeDirectory 'netsuke.exe'",
+        "Test-Path -LiteralPath $netsukeExecutable -PathType Leaf",
         "$netsukeDirectory",
         "SetEnvironmentVariable('Path', $newUserPath, 'User')",
     ];
@@ -226,7 +283,31 @@ fn assert_windows_setup_examples() -> Result<()> {
         windows_path_fragments
             .into_iter()
             .all(|fragment| windows_path.body.contains(fragment)),
-        "Windows PATH setup should persist the MSI installation directory"
+        "Windows PATH setup should resolve the native MSI directory and persist it"
+    );
+    // The x64 and Arm64 packages install into the native directory. A script
+    // that read the 32-bit directory would add a path the MSI never populates,
+    // and `netsuke --version` would then fail for a correctly installed user.
+    let legacy_fragments = ["ProgramFilesX86", "Program Files (x86)"];
+    ensure!(
+        !legacy_fragments
+            .iter()
+            .any(|fragment| windows_path.body.contains(fragment)),
+        "Windows PATH setup must not resolve the 32-bit program files directory"
+    );
+    // Checking for the executable before changing PATH keeps a missing MSI an
+    // immediate, legible failure rather than a stale entry discovered later.
+    let existence_check = windows_path
+        .body
+        .find("Test-Path -LiteralPath $netsukeExecutable")
+        .context("the Windows PATH setup must test for netsuke.exe")?;
+    let path_persistence = windows_path
+        .body
+        .find("SetEnvironmentVariable('Path'")
+        .context("the Windows PATH setup must persist the directory")?;
+    ensure!(
+        existence_check < path_persistence,
+        "Windows PATH setup must verify netsuke.exe before changing PATH"
     );
     let windows_help_install = documented_example("guide-windows-help-install")?;
     let windows_help_fragments = [

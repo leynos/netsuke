@@ -2134,17 +2134,36 @@ values containing carriage returns or line feeds. The metadata job exposes the
 resolved value as `wix_extension_version`; `build-windows` passes that output to
 `build-and-package.yml` as `wix-extension-version`.
 
-The merge gate's dedicated `windows-msi-upgrade` job runs on `windows-latest`.
-It uses the local `.github/actions/windows-msi-upgrade-validation` adapter for
-fixture creation, package builds, and the install-transition checks. Keep the
-adapter scoped to this repository's deterministic MSI fixtures; it must not
-replace or rewrite caller-provided WiX authoring.
+The merge gate's dedicated `windows-msi-upgrade` job runs one leg per shipping
+architecture: `windows-latest` builds and installs the x64 package, and
+`windows-11-arm` does the same for Arm64. It uses the local
+`.github/actions/windows-msi-upgrade-validation` adapter for fixture creation,
+package builds, architecture forwarding, and the install-transition checks.
+Keep the adapter scoped to this repository's deterministic MSI fixtures; it
+must not replace or rewrite caller-provided WiX authoring. An architecture the
+gate does not exercise is not proven, and because the payload directory follows
+the package architecture, one leg cannot stand in for the other.
 
 The MSI `UpgradeCode` in `installer/Package.wxs` is a stable upgrade-family
 identifier and must not change between releases. The `ProductCode` is not
 authored explicitly; WiX generates a new product identity for each package
 build. This combination lets Windows Installer treat a new package as a major
 upgrade while retaining one upgrade family.
+
+`INSTALLFOLDER` is rooted at `ProgramFiles6432Folder`, not
+`ProgramFilesFolder`. In WiX v4 the latter always names the 32-bit directory,
+even for a 64-bit package, which placed the x64 and Arm64 payloads under
+`C:\Program Files (x86)`. `ProgramFiles6432Folder` follows the built package:
+`C:\Program Files` for the x64 and Arm64 packages the release builds, and the
+32-bit directory only for an x86 package.
+
+Moving the executable to a different target location makes it a new Windows
+Installer component, so `BinaryComponent` carries a new GUID. The GUID that
+v0.1.0-beta4 shipped must not be reused: Windows Installer would keep the old
+component pointed at the 32-bit directory while the package claimed to place
+its key path elsewhere. The `ReleaseRank` registry value keeps its registry
+location and remains in the component that carries the executable, so an older
+MSI still finds the rank that refuses its downgrade.
 
 The packaging workflow derives `NETSUKE_RELEASE_RANK` with the repository's
 release-rank helper before invoking the action. The accepted version formats are
@@ -2171,13 +2190,18 @@ Validation has deliberately separate responsibilities:
   parser without GitHub Actions or Windows environment state.
 - The `windows-msi-upgrade` job and its local adapter compile
   `installer/Package.wxs` with the pinned WiX CLI and UI extension while
-  building beta1, beta2, and final fixtures. They use temporary executable and
-  RTF fixtures and do not compile the Rust application, so WiX schema or
-  extension incompatibilities fail the merge gate.
+  building the beta2 and final fixtures. The beta1 fixture is built from
+  `.github/actions/windows-msi-upgrade-validation/fixtures/legacy-program-files-x86.wxs`,
+  a frozen copy of the v0.1.0-beta4 authoring that keeps its
+  `ProgramFilesFolder` root and legacy component GUID; do not update that file
+  with the release authoring. The fixtures use temporary executable and RTF
+  files and do not compile the Rust application, so WiX schema or extension
+  incompatibilities fail the merge gate.
 - The same adapter then uses quiet `msiexec` installs and preserved logs to
-  verify replacement, registry `ReleaseRank`, product identity, and refused
-  downgrades. An unconditional cleanup step removes every fixture installation,
-  including the final release.
+  verify the move from the 32-bit directory to `C:\Program Files`, replacement,
+  registry `ReleaseRank`, product identity, and refused downgrades. An
+  unconditional cleanup step removes every fixture installation, including the
+  final release.
 
 Only the `msiexec` phase exercises Windows Installer's actual install,
 replacement, and downgrade behaviour; passing the XML and compiler checks alone
