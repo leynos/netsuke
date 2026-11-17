@@ -112,8 +112,8 @@ def test_the_action_verifies_a_published_candidate(tmp_path: pathlib.Path) -> No
         for name in (CRATE_NAME, ARCHIVE_NAME, SIDECAR_NAME)
     ), "each published name must be downloaded once"
     assert set(run.baselines) == {interpreter_baseline()}, run.baselines
-    extracted = run.work_dir / "verdict.json"
-    assert extracted.is_file(), "the verdict belongs in the work directory"
+    verdict_path = run.work_dir / "verdict.json"
+    assert verdict_path.is_file(), "the verdict belongs in the work directory"
 
 
 def test_a_download_the_host_never_delivered_refuses_the_crate_phase(
@@ -126,8 +126,9 @@ def test_a_download_the_host_never_delivered_refuses_the_crate_phase(
     assert len(run.completed) == 5, "the report step must run after a refusal"
     assert run.completed[-1].returncode == 0, run.completed[-1].stderr
     _require_phases(run, "crate_download")
-    assert run.verdict() is not None, "a refused smoke must still publish a verdict"
-    assert run.verdict()["verdict"] == "failed", run.verdict()
+    verdict = run.verdict()
+    assert verdict is not None, "a refused smoke must still publish a verdict"
+    assert verdict["verdict"] == "failed", verdict
 
 
 def test_an_empty_download_refuses_the_archive_phase(tmp_path: pathlib.Path) -> None:
