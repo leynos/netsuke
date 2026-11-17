@@ -800,8 +800,8 @@ non-vacuity, so the stricter rule cannot pass by having nothing to check.
 The intended end-state in `.github/workflows/release.yml` adds the sequence
 below after the existing `metadata`, `build-*`, `windows-native-recipe-smoke`,
 and `release-admission-canaries` jobs. `package-crate`, `publish-crates-io`,
-`verify-release-inventory`, and `finalize-github-release` are delivered;
-consumer smoke remains:
+`verify-release-inventory`, `finalize-github-release`, and `consumer-smoke` are
+all delivered; no live release has exercised the sequence yet:
 
 1. `package-crate` — `needs: metadata`; `contents: read`; ubuntu-latest. The
    order is: resolve candidate -> package -> verify.
@@ -851,9 +851,17 @@ consumer smoke remains:
    check. The rehearsal job `release` is absent: a dry run never creates a
    draft. Named `finalize-` rather than `publish-github-` to keep it distinct
    from the existing `publish-release`, which it follows rather than replaces.
-5. `consumer-smoke` — `needs: [finalize-github-release]`; verifies the
-   published bytes without compiling anything (see `Surprises & discoveries`:
-   `cargo install` is forbidden in CI by policy). It fetches
+5. `consumer-smoke` — delivered by #1069.
+   `needs: [metadata, package-crate, finalize-github-release]`; verification
+   runs against the published bytes without compiling anything (see
+   `Surprises & discoveries`: `cargo install` is forbidden in CI by policy).
+   `metadata` is named for the candidate version and commit the plan is bound
+   to, `package-crate` for the staged crate digest the download is compared
+   with, and `finalize-github-release` because an asset attached to a draft
+   release is not downloadable without a token this job deliberately holds none
+   of. Every dependency's `result` is named in the guard alongside
+   `should_publish == 'true'`, for the same status-function reason as
+   `finalize-github-release`. It fetches
    `https://static.crates.io/crates/netsuke-build/netsuke-build-<version>.crate`,
    checks its SHA-256 against the staged digest, then downloads the published
    cargo-binstall archive by its public release URL, verifies it against its
@@ -986,14 +994,14 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 - Remaining gaps: `package-crate`, `publish-crates-io`,
   `verify-release-inventory`, `finalize-github-release`, and
   `upload-declared-assets` (called by `publish-release`) are in the workflow
-  graph. One job-matched action and job remains (`consumer-smoke`), together
-  with the separate LEM-5 suite. The retained `trusted.json` has both of its
-  consumers: #1066 produces and retains that record, #1067 verifies it against
-  the downloaded assets, and #1068 un-drafts the release only on that result.
-  No live exchange or release has exercised the publisher, and
-  trusted-publisher registration and account settings remain maintainer
-  actions. The package already exists on crates.io (`0.1.0-beta1` through
-  `beta4`), so no initial publication is outstanding.
+  graph, and `consumer-smoke` with its checked-in action completes the
+  job-matched set. The separate LEM-5 suite remains. The retained
+  `trusted.json` has both of its consumers: #1066 produces and retains that
+  record, #1067 verifies it against the downloaded assets, and #1068 un-drafts
+  the release only on that result. No live exchange or release has exercised
+  the publisher, and trusted-publisher registration and account settings remain
+  maintainer actions. The package already exists on crates.io (`0.1.0-beta1`
+  through `beta4`), so no initial publication is outstanding.
 - Compatibility decision: the reusable interface is preserved because
   `release-dry-run.yml` and the repository's release runbook depend on it.
 
@@ -1025,8 +1033,8 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   version that was published before the interruption classifies as `identical`,
   so the rerun skips the upload and verifies the public bytes.
 - Remaining gaps: no live exchange or release has exercised the action; the
-  package archive file list and the consumer smoke remain open. The inventory
-  verifier (#1067) and the release finalizer (#1068) are delivered.
+  package archive file list remains open. The inventory verifier (#1067), the
+  release finalizer (#1068), and the consumer smoke (#1069) are delivered.
 - Compatibility decision: none.
 
 **EP-M5 — recoverability and reconciliation.**
@@ -1045,8 +1053,8 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   `--clobber` is used for reconciliation.
 - Recovery: a failed run leaves the draft and the published version intact
   and is safe to re-run.
-- Remaining gaps: the consumer smoke test and a live exercise of the release
-  path. No cross-service atomicity is claimed.
+- Remaining gaps: a live exercise of the release path, now that the consumer
+  smoke is delivered. No cross-service atomicity is claimed.
 - Compatibility decision: none.
 
 **EP-M6 — gates, guards, and documentation.**
