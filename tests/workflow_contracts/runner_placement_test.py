@@ -288,6 +288,12 @@ def _msi_matrix_legs() -> dict[str, str]:
     includes = require_list(
         matrix.get("include"), "the windows-msi-upgrade matrix include"
     )
+    # A duplicate architecture would collapse in the dictionary below and hide
+    # its leg from every caller, so the entry count is checked first.
+    assert len(includes) == 2, (
+        "the windows-msi-upgrade matrix must declare exactly two legs, "
+        f"got {includes!r}"
+    )
     return {
         str(item["architecture"]): str(item["runner"])
         for item in includes

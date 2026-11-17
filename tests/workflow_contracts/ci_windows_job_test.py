@@ -124,6 +124,11 @@ def test_windows_msi_gate_runs_exactly_the_two_architecture_legs() -> None:
     matrix = require_mapping(strategy.get("matrix"), f"{MSI_JOB}.strategy.matrix")
     includes = matrix.get("include")
     assert isinstance(includes, list), f"{MSI_JOB} must declare a matrix include list"
+    # A duplicate architecture would collapse in the dictionary below, so the
+    # entry count is checked first; otherwise a third leg could run unnoticed.
+    assert len(includes) == 2, (
+        f"{MSI_JOB} must declare exactly two matrix legs, got {includes!r}"
+    )
     legs = {
         item.get("architecture"): item.get("runner")
         for item in includes
