@@ -11,9 +11,9 @@ Run via ``make test-workflow-contracts``.
 
 import pytest
 import yaml
-from actions_expressions import names_a_matrix_value, static_label
 from fork_fallback import owned_runner, read_placement
 from nextest_budgets import global_timeout
+from runner_matrix import selected_labels
 from runner_placement_invariants import (
     GITHUB_HOSTED_LABELS,
     INSTRUMENTED_BUILD_JOBS,
@@ -61,18 +61,20 @@ def is_self_hosted_label(label: str) -> bool:
 
     By name, not by prefix: a prefix test absorbs any new label that looks
     hosted, so a lane moved onto an unknown image would drop out of "in use".
-    A matrix expression names no label of its own, because `_matrix_runners`
-    reads its legs; anything else fails closed as a label.
+    A matrix selector is resolved against its job's matrix before this
+    question; one that could not be resolved arrives here as itself and so
+    counts, because an unread label must fail the comparison rather than
+    excuse the runner it hides.
 
     Returns
     -------
     bool
         True when the label names a runner GitHub does not host.
     """
-    return label not in GITHUB_HOSTED_LABELS and not names_a_matrix_value(label)
+    return label not in GITHUB_HOSTED_LABELS
 
 
-def _selected_labels(declaration: object) -> list[str]:
+def _selected_labels(declaration: object, job: dict[str, object]) -> list[str]:
     """Return the labels one `runs-on` value can select."""
     # Both arms of a conditional count: a job that falls back for forks may
     # run on either, and reading only the declaration would take the whole
@@ -82,35 +84,20 @@ def _selected_labels(declaration: object) -> list[str]:
         return [placement.fork, placement.owned]
     match declaration:
         case str() as label:
-            # A whole literal expression selects exactly that label.
-            return [static_label(label) or label]
+            return selected_labels(label, job)
         case list() as entries:
             return [str(entry) for entry in entries]
         case _:
             return []
 
 
-def _matrix_runners(job: dict[str, object]) -> set[str]:
-    """Return every runner a job's matrix selects through a `runner` entry."""
-    # A label smuggled into a matrix is still a label in use.
-    strategy = job.get("strategy")
-    matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
-    includes = (matrix or {}).get("include") or []
-    return {
-        str(item["runner"])
-        for item in includes
-        if isinstance(item, dict) and "runner" in item
-    }
-
-
 def _self_hosted_labels_in_use() -> set[str]:
     """Return every label the workflows select that GitHub does not host."""
-    # A matrix `runner` value counts too, because the macOS lanes select their
-    # image that way and a label smuggled into a matrix is still one in use.
+    # A matrix selector resolves against the job's own matrix here, so a label
+    # chosen that way reaches this inventory exactly as a bare one does.
     found: set[str] = set()
     for _, _, job in _all_jobs():
-        found.update(_selected_labels(job.get("runs-on")))
-        found.update(_matrix_runners(job))
+        found.update(_selected_labels(job.get("runs-on"), job))
     return {label for label in found if is_self_hosted_label(label)}
 
 
@@ -383,7 +370,9 @@ def test_both_instrumented_jobs_share_one_lane_size() -> None:
             False,
             id="a-caller-supplied-runner-names-no-label-here",
         ),
-        pytest.param("${{ matrix.runner }}", False, id="a-matrix-selector"),
+        # A selector no job could resolve reaches this question as itself, so
+        # it counts: otherwise a label nobody registers escapes the comparison.
+        pytest.param("${{ matrix.runner }}", True, id="an-unresolved-selector"),
         pytest.param("${{ vars.RUNNER }}", True, id="an-unresolved-expression"),
     ],
 )

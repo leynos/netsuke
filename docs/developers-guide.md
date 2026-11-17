@@ -4979,6 +4979,14 @@ unregistered self-hosted label, so a typo or an unreviewed shape fails the lint
 gate rather than queueing forever. The contract tests hold the registered set
 equal to the set actually in use.
 
+That set is derived from the workflows rather than read back from the
+registration. A lane that selects its runner with `${{ matrix.os }}` is
+resolved against that job's own matrix, in
+`tests/workflow_contracts/runner_matrix.py`, which reads both a plain axis list
+and the `include` entries that name the axis. A selector the job does not
+declare is counted as a label, so an unreadable selector fails the comparison
+instead of excusing whatever runner it hides.
+
 Runner labels appear in no job name, so the required status-check contexts
 `build-test`, `kani-smoke`, `netsukefile`, and `release / metadata` are
 unaffected by placement changes. Audit the repository ruleset whenever a runner

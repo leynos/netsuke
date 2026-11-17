@@ -12,7 +12,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
-from actions_expressions import names_a_matrix_value, static_label
+from actions_expressions import static_label
 from fork_fallback import owned_runner
 from runner_placement_invariants import (
     CALLEE_SELECTED_RUNNER,
@@ -262,26 +262,11 @@ def test_a_literal_expression_resolves_to_the_label_it_selects(
 
     GitHub interpolates expressions inside strings, so a label expressed this
     way selects that runner exactly as the bare literal; unresolved, it would
-    escape the registry comparison.
+    escape the registry comparison. A matrix selector is resolved against its
+    job's own matrix in `runner_matrix`, which `runner_matrix_test` covers.
     """
     assert static_label(value) == label, (
         f"{value!r} must resolve to {label!r}, got {static_label(value)!r}"
-    )
-
-
-@pytest.mark.parametrize(
-    ("value", "names_matrix"),
-    [
-        ("${{ matrix.runner }}", True),
-        ("${{ inputs.runner }}", False),
-    ],
-)
-def test_only_a_matrix_expression_names_no_label_here(
-    value: str, *, names_matrix: bool
-) -> None:
-    """The matrix legs hold the labels, so the selector itself names none."""
-    assert names_a_matrix_value(value) is names_matrix, (
-        f"{value!r} must count as a matrix selector only when it is one"
     )
 
 

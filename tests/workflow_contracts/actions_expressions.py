@@ -100,7 +100,9 @@ def contains_unquoted_or(expression: str) -> bool:
 _LITERAL_EXPRESSION = re.compile(r"^\$\{\{\s*'(?P<literal>(?:[^']|'')*)'\s*\}\}$")
 
 #: A whole expression reading one value of the matrix context.
-_MATRIX_EXPRESSION = re.compile(r"^\$\{\{\s*matrix\.[A-Za-z_][A-Za-z0-9_-]*\s*\}\}$")
+_MATRIX_EXPRESSION = re.compile(
+    r"^\$\{\{\s*matrix\.(?P<axis>[A-Za-z_][A-Za-z0-9_-]*)\s*\}\}$"
+)
 
 
 def static_label(value: str) -> str | None:
@@ -140,12 +142,12 @@ def static_label(value: str) -> str | None:
     return match["literal"].replace("''", "'") or None
 
 
-def names_a_matrix_value(value: str) -> bool:
-    """Report whether a whole expression reads one matrix value.
+def matrix_axis(value: str) -> str | None:
+    """Return the matrix axis a whole expression reads, if it reads one.
 
     Such an expression names no label of its own: the matrix legs hold the
-    labels, and a lane that chooses its runner this way has each leg read
-    directly.
+    labels, so a caller resolves the axis against the job that declares it
+    rather than reading the expression as a runner label.
 
     Parameters
     ----------
@@ -154,19 +156,23 @@ def names_a_matrix_value(value: str) -> bool:
 
     Returns
     -------
-    bool
-        ``True`` when the value is exactly one ``matrix.<axis>`` expression.
+    str | None
+        The axis name, or ``None`` when the value is not exactly one whole
+        ``matrix.<axis>`` expression.
 
     Examples
     --------
-    >>> names_a_matrix_value("${{ matrix.runner }}")
+    >>> matrix_axis("${{ matrix.os }}")
+    'os'
+    >>> matrix_axis("${{ matrix.runner }}")
+    'runner'
+    >>> matrix_axis("${{ inputs.runner }}") is None
     True
-    >>> names_a_matrix_value("${{ inputs.runner }}")
-    False
-    >>> names_a_matrix_value("windows-latest")
-    False
+    >>> matrix_axis("windows-latest") is None
+    True
     """
-    return _MATRIX_EXPRESSION.fullmatch(value.strip()) is not None
+    match = _MATRIX_EXPRESSION.fullmatch(value.strip())
+    return match["axis"] if match is not None else None
 
 
 def top_level_conjuncts(expression: str) -> list[str]:
