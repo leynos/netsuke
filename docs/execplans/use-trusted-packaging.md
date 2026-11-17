@@ -925,9 +925,9 @@ results and unknown fields are accepted because #598 adds downstream canaries;
 a schema version the verifier does not know is refused rather than interpreted
 under the wrong rules. Freshness is bounded by a one-day default maximum age,
 provisional until a real producer's cadence is known and capped at one week,
-plus a five-minute allowance for clock skew. The follow-ups are therefore #598
-for the producer and #1065 for registry publication, in that order; the runbook
-records what an operator sees in the meantime.
+plus a five-minute allowance for clock skew. The remaining follow-up is
+therefore #598 for the producer; registry publication arrived with #1065, which
+is closed, and the runbook records what an operator sees in the meantime.
 
 `concurrency.cancel-in-progress` stays **`false`** and is **not** made a
 function of the event. `pr_concurrency_test.py:275-278` pins
@@ -4907,6 +4907,28 @@ and pass, on the final wording.
   The migration guide was checked and left unchanged: it is addressed to
   manifest authors, source-build users, and Rust API callers, and none of them
   is the reader who needs the pipeline change.
+
+- Observation: **the candidate-bound assessment cleared the gate and named one
+  remaining coverage gap, which was reachable only because a prerequisite can
+  be cancelled without the run being cancelled.** The reply to
+  `NETSUKE-1141-R2-20261117` found no remaining publication bypass and accepted
+  the finalization, ignored-result, and documentation repairs. It still asked
+  for a `cancelled` result per prerequisite, which the table had covered only
+  as a cancelled run.
+
+  *Why the two cancellations are not the same case.* A cancelled run sets
+  `status.cancelled`, so every guard is false for the same reason and a guard
+  that dropped `!cancelled()` is the defect. A single job can also report
+  `cancelled` while the run continues -- a job-level concurrency rule
+  cancelling a pending job does exactly that -- and then the other guards
+  decide on merit. `_prerequisite_scenarios("cancelled")` now builds one
+  publishing scenario for each of the seven prerequisites, and a guard that
+  tested `!= 'failure'` instead of `== 'success'` starts a publisher in each of
+  them.
+
+  *A stale reference.* The living Stage C section still named `#1065` as a
+  follow-up owner though the issue is closed; it now records that registry
+  publication arrived with it and that `#598` supplies the producer.
 
 ## Surprises & discoveries
 

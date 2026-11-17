@@ -153,7 +153,7 @@ def _needs_results(
 
 
 def _prerequisite_scenarios(outcome: str) -> tuple[Scenario, ...]:
-    """Create one publishing scenario for each failed or skipped prerequisite."""
+    """Create one publishing scenario per prerequisite carrying *outcome*."""
     return tuple(
         Scenario(
             f"publish-{need}-{outcome}",
@@ -390,4 +390,5 @@ SCENARIOS = (
     ),
     *_prerequisite_scenarios("failure"),
     *_prerequisite_scenarios("skipped"),
+    *_prerequisite_scenarios("cancelled"),
 )

@@ -18,7 +18,13 @@ results: the cancellation scenarios cancel after every dependency passed, so
 the results stay as the graph resolved them and only ``!cancelled()`` stops a
 job. Folding the cancellation into each result instead would make every guard
 false for the wrong reason, and a guard that dropped ``!cancelled()`` would
-then look correct.
+then look correct. One dependency may still report ``cancelled`` while the run
+continues, as a job-level concurrency rule cancelling a pending job does; that
+is an ordinary non-successful result here and propagates through the rule above.
+The scenario table therefore varies each prerequisite's result through
+``failure``, ``skipped``, and ``cancelled``, rather than modelling cancellation
+only as a cancelled run, which would make every guard false for one reason and
+hide a guard that tested ``!= 'failure'`` instead of ``== 'success'``.
 
 Run via ``make test-workflow-contracts``.
 """
