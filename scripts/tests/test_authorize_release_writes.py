@@ -266,7 +266,18 @@ def test_reusable_without_publish_true_always_denies_writes(
 def _run_cli(
     monkeypatch: pytest.MonkeyPatch, output: Path, **inputs: str
 ) -> dict[str, str]:
-    """Run the CLI against the given environment and return its step outputs."""
+    """Run the CLI against the given environment and return its step outputs.
+
+    ``monkeypatch`` is the seam the scripting standards prescribe for a script
+    that reads its inputs from the environment, and pytest restores every
+    variable when the test ends. The policy itself is tested purely; only this
+    adapter test needs the environment of the process it runs in.
+
+    Returns
+    -------
+    dict[str, str]
+        The step outputs the adapter wrote, keyed by their declared names.
+    """
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     for name, value in inputs.items():
         monkeypatch.setenv(f"INPUT_{name.upper()}", value)

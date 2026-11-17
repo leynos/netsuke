@@ -8,6 +8,8 @@ answer. These checks pin that wiring: the step's raw inputs, its position, the
 gates it feeds, and the job-level dry-run veto.
 """
 
+import shlex
+
 import authorize_release_writes as policy
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
@@ -22,6 +24,9 @@ AUTHORIZATION_STEP = "release_authorization"
 RESOLVER_STEP = "release_modes"
 AUTHORIZATION_SCRIPT = "scripts/authorize_release_writes.py"
 _UV_PREFIX = "uv run --no-project --python 3.14"
+#: The pinned interpreter invocation, as the command words that must lead the
+#: step's script. Tokenised so the check cannot be satisfied by a comment.
+_UV_TOKENS = tuple(_UV_PREFIX.split())
 #: The raw inputs the policy decides over. Each is passed through ``env`` so no
 #: caller-controlled value is interpolated into the script text.
 EXPECTED_INPUTS = {
@@ -71,13 +76,44 @@ def _authorization_step(
     return job_steps(release, "metadata")[index]
 
 
+def _command_tokens(run: str) -> list[str]:
+    """Split a shell script into command words, dropping comments.
+
+    ``shlex`` in comment mode treats ``#`` at a word boundary as the start of a
+    comment, so a script path that appears only in a comment is not mistaken for
+    the command that runs the policy. A line with unbalanced quotes makes
+    ``shlex`` raise ``ValueError``; the caller reports that as a violation
+    rather than treating the script as authorised.
+
+    Returns
+    -------
+    list[str]
+        The command words of every line, with comments removed.
+    """
+    tokens: list[str] = []
+    for line in run.splitlines():
+        tokens.extend(shlex.split(line, comments=True))
+    return tokens
+
+
 def _check_run(step: dict[str, object], violations: list[str]) -> None:
     """Require the step to run the policy script without interpolation."""
     run = step.get("run")
-    if not isinstance(run, str) or AUTHORIZATION_SCRIPT not in run:
+    if not isinstance(run, str):
         violations.append(f"authorization.run: step must run {AUTHORIZATION_SCRIPT}")
         return
-    if not run.lstrip().startswith(_UV_PREFIX):
+    try:
+        tokens = _command_tokens(run)
+    except ValueError as error:
+        violations.append(f"authorization.run: unparseable command: {error}")
+        return
+    if AUTHORIZATION_SCRIPT not in tokens:
+        violations.append(
+            f"authorization.run: step must run {AUTHORIZATION_SCRIPT} as a "
+            "command word rather than mention it in a comment or a string"
+        )
+        return
+    if tuple(tokens[: len(_UV_TOKENS)]) != _UV_TOKENS:
         violations.append(
             f"authorization.run: step must start with {_UV_PREFIX!r} so the "
             "script runs on the pinned Python baseline"
@@ -163,6 +199,24 @@ def _check_step_order(release: dict[str, object], violations: list[str]) -> None
         )
 
 
+def _is_enabled(value: object) -> bool:
+    """Report whether a workflow field switches its gated behaviour on.
+
+    GitHub Actions passes ``with:`` values to an action as strings, so a
+    ``check-tag`` that resolves to ``"true"`` enables version checking exactly
+    as the boolean ``true`` does. Comparing against ``True`` alone would accept
+    the string and leave the gate open for a denied run.
+
+    Returns
+    -------
+    bool
+        Whether the field switches the gated behaviour on.
+    """
+    if isinstance(value, bool):
+        return value
+    return isinstance(value, str) and value.strip().lower() == "true"
+
+
 def _check_gates(release: dict[str, object], violations: list[str]) -> None:
     """Require the publishing gates to close on a denied-but-selected run."""
     steps = job_steps(release, "metadata")
@@ -196,7 +250,7 @@ def _check_gates(release: dict[str, object], violations: list[str]) -> None:
             label="authorization.version-tag-gate",
         ),
     )
-    if check_tag is MISSING or check_tag is True:
+    if check_tag is MISSING or _is_enabled(check_tag):
         violations.append(
             "authorization.version-tag-gate: version checking stayed enabled for "
             "a denied reusable push"
