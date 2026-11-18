@@ -364,6 +364,9 @@ operator, user, and contributor references are easier to find.
   Optional named contention classes lowered through the existing scheduler.
 - [ADR-0081: Maturity policy schema](adrs/adr-0081-maturity-policy-schema.md):
   Shallow-end policy composition and rule-to-feature requirements.
+- [ADR-0083](adrs/adr-0083-bound-canonical-admission-resources.md):
+  Occurrence-based depth, node, and byte ceilings for canonical admission, so a
+  shared host graph is refused rather than expanded without bound.
 
 ## Proposals
 

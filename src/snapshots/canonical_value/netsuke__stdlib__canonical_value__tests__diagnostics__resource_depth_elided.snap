@@ -1,0 +1,5 @@
+---
+source: src/stdlib/canonical_value/tests/diagnostics.rs
+expression: rendered
+---
+canonical admission exceeded the depth limit of 128 at ["m128"]["m127"]["m126"] … (123 more) … ["m02"]["m01"]["m00"]

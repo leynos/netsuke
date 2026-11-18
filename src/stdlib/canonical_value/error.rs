@@ -19,116 +19,33 @@ use std::fmt;
 use minijinja::value::ValueKind;
 use thiserror::Error;
 
-/// Location of the value refused while building a canonical snapshot.
+use super::path::PathRef;
+
+/// The bounded resource a canonical admission can exhaust.
 ///
-/// Positions count snapshot edges rather than host traversal steps, so a
-/// location stays meaningful even when a mapping key is refused before its
-/// value is visited. The rendering is abbreviated in the middle once the path
-/// is long, so a deeply nested input cannot produce a message longer than most
-/// terminals; the number of omitted edges is stated, so an elided path is
-/// never mistaken for an adjacent one.
-///
-/// A path is rendered once, when the refusal is constructed, and the refusal
-/// then carries only that text. Keeping the type module-private is deliberate:
-/// a variant field of a public enum is itself public, so a `SnapshotPath`
-/// field would either widen the public surface or warn as a private type in a
-/// public interface. Callers branch on [`CanonicalValueError::kind`]; the
-/// location reaches them as prose.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct SnapshotPath {
-    /// Edge steps from the snapshot root to the refused value.
-    steps: Vec<PathStep>,
+/// Admission expands a shared host graph into one owned subtree per
+/// occurrence, so the work is bounded by the *expanded* size of the input
+/// rather than by its object count. Each variant names one ceiling that keeps
+/// that expansion finite; a refusal reports which ceiling was reached and the
+/// location that would have exceeded it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CanonicalResource {
+    /// Distance below the snapshot root.
+    Depth,
+    /// Snapshot nodes, counted once per collection occurrence.
+    Nodes,
+    /// Bytes of admitted strings and member names.
+    Bytes,
 }
 
-/// One edge of a [`SnapshotPath`].
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum PathStep {
-    /// A member of a sequence, addressed by its index.
-    Item(usize),
-    /// A member of a string-keyed mapping, addressed by its key.
-    Member(String),
-}
-
-impl SnapshotPath {
-    /// Edge count beyond which the middle of a path is elided.
-    const RENDER_LIMIT: usize = 8;
-    /// Edge count kept at each end of an elided path.
-    const RENDER_EDGE: usize = 3;
-    /// Location rendered in place of the empty path of the snapshot root.
-    const ROOT_MARKER: &str = "<root>";
-
-    /// Return the path of the root value.
-    pub(super) const fn root() -> Self {
-        Self { steps: Vec::new() }
-    }
-
-    /// Return a copy of this path extended by one sequence index.
-    pub(super) fn with_item(&self, index: usize) -> Self {
-        self.extended(PathStep::Item(index))
-    }
-
-    /// Return a copy of this path extended by one mapping key.
-    pub(super) fn with_member(&self, key: &str) -> Self {
-        self.extended(PathStep::Member(key.to_owned()))
-    }
-
-    /// Return a copy of this path with `step` appended.
-    fn extended(&self, step: PathStep) -> Self {
-        let mut steps = self.steps.clone();
-        steps.push(step);
-        Self { steps }
-    }
-
-    /// Render the path for a diagnostic message, eliding its middle if long.
-    ///
-    /// An empty path names the root, which is the most common refusal site and
-    /// the one every other path is written relative to. It therefore renders as
-    /// [`Self::ROOT_MARKER`] rather than as nothing: every refusal message
-    /// places this rendering after a preposition, so an empty one would leave
-    /// the message trailing off exactly where the caller needs the location.
-    ///
-    /// The elision fires only past [`Self::RENDER_LIMIT`] edges, which is more
-    /// than twice [`Self::RENDER_EDGE`], so both ends of an abbreviated path are
-    /// always present. The slice accessors still report absence rather than
-    /// panicking, because a `Display` implementation must not abort a render.
-    fn render_abbreviated(&self) -> String {
-        let count = self.steps.len();
-        if count == 0 {
-            return Self::ROOT_MARKER.to_owned();
-        }
-        if count <= Self::RENDER_LIMIT {
-            return render_steps(&self.steps);
-        }
-        let head = render_steps(self.steps.get(..Self::RENDER_EDGE).unwrap_or_default());
-        let tail = render_steps(
-            self.steps
-                .get(count - Self::RENDER_EDGE..)
-                .unwrap_or_default(),
-        );
-        let elided = count - 2 * Self::RENDER_EDGE;
-        format!("{head} … ({elided} more) … {tail}")
-    }
-}
-
-impl fmt::Display for SnapshotPath {
+impl fmt::Display for CanonicalResource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.render_abbreviated())
+        f.write_str(match self {
+            Self::Depth => "depth",
+            Self::Nodes => "nodes",
+            Self::Bytes => "bytes",
+        })
     }
-}
-
-impl PathStep {
-    /// Render this step as a JSON-pointer-like suffix.
-    fn render(&self) -> String {
-        match self {
-            Self::Item(index) => format!("[{index}]"),
-            Self::Member(key) => format!("[{key:?}]"),
-        }
-    }
-}
-
-/// Render `steps` as a concatenation of JSON-pointer-like suffixes.
-fn render_steps(steps: &[PathStep]) -> String {
-    steps.iter().map(PathStep::render).collect()
 }
 
 /// Reason a candidate value was refused admission to the canonical domain.
@@ -196,6 +113,23 @@ pub enum CanonicalValueError {
         /// Rendered location of the untraversable value in the snapshot tree.
         path: String,
     },
+    /// The value would exceed a bound on the work admission may perform.
+    ///
+    /// A compact acyclic graph with shared descendants expands to many more
+    /// occurrences than it holds objects, so admission charges each occurrence
+    /// against shared depth, node, and byte ceilings. This variant reports the
+    /// first ceiling a traversal would cross, before the subtree that crosses
+    /// it is allocated. Values inside the supported domain under the default
+    /// ceilings are unaffected.
+    #[error("canonical admission exceeded the {resource} limit of {limit} at {path}")]
+    ResourceLimitExceeded {
+        /// The ceiling that was exceeded.
+        resource: CanonicalResource,
+        /// The configured ceiling, in the resource's own unit.
+        limit: usize,
+        /// Rendered location of the value that would have exceeded it.
+        path: String,
+    },
     /// The canonicalizer refused the snapshot.
     ///
     /// The snapshot tree admits nothing the canonicalizer rejects, and holds
@@ -214,9 +148,12 @@ impl CanonicalValueError {
     /// kind names it.
     ///
     /// Returns `None` for [`Self::NonFiniteNumber`] and [`Self::Serialization`],
-    /// whose refusal is not a kind decision, and for
+    /// whose refusal is not a kind decision, for
     /// [`Self::IncompatibleRepresentation`], where the reported kind is one the
-    /// value failed to traverse as rather than a kind that was refused.
+    /// value failed to traverse as rather than a kind that was refused, and for
+    /// [`Self::ResourceLimitExceeded`], where the value was in the supported
+    /// domain but the traversal needed more of a shared resource than the
+    /// ceiling allows.
     ///
     /// # Examples
     ///
@@ -233,37 +170,55 @@ impl CanonicalValueError {
             Self::UnsupportedKind { kind, .. } | Self::NonStringKey { kind, .. } => Some(*kind),
             Self::NonFiniteNumber { .. }
             | Self::IncompatibleRepresentation { .. }
+            | Self::ResourceLimitExceeded { .. }
             | Self::Serialization { .. } => None,
         }
     }
 
     /// Construct an unsupported-kind refusal at `path`.
-    pub(super) fn unsupported(kind: ValueKind, path: &SnapshotPath) -> Self {
+    pub(super) fn unsupported(kind: ValueKind, path: &PathRef<'_>) -> Self {
         Self::UnsupportedKind {
             kind,
-            path: path.to_string(),
+            path: path.render(),
         }
     }
 
     /// Construct a non-string mapping key refusal at `path`.
-    pub(super) fn non_string_key(kind: ValueKind, path: &SnapshotPath) -> Self {
+    pub(super) fn non_string_key(kind: ValueKind, path: &PathRef<'_>) -> Self {
         Self::NonStringKey {
             kind,
-            path: path.to_string(),
+            path: path.render(),
         }
     }
 
     /// Construct a non-finite number refusal at `path`.
-    pub(super) fn non_finite(path: &SnapshotPath) -> Self {
+    pub(super) fn non_finite(path: &PathRef<'_>) -> Self {
         Self::NonFiniteNumber {
-            path: path.to_string(),
+            path: path.render(),
         }
     }
 
     /// Construct an untraversable-host-value refusal at `path`.
-    pub(super) fn invalid_traversal(path: &SnapshotPath) -> Self {
+    pub(super) fn invalid_traversal(path: &PathRef<'_>) -> Self {
         Self::IncompatibleRepresentation {
-            path: path.to_string(),
+            path: path.render(),
+        }
+    }
+
+    /// Construct a resource-limit refusal at `path`.
+    ///
+    /// The ceiling is copied from the budget rather than read back from the
+    /// host value, so the message names configured policy and never caller
+    /// data beyond the location.
+    pub(super) fn resource_limit(
+        resource: CanonicalResource,
+        limit: usize,
+        path: &PathRef<'_>,
+    ) -> Self {
+        Self::ResourceLimitExceeded {
+            resource,
+            limit,
+            path: path.render(),
         }
     }
 }
