@@ -52,6 +52,22 @@ impl ProjectKey {
         self.matches_path(path.as_std_path())
     }
 
+    /// Report whether a candidate root is the project configuration file.
+    ///
+    /// Candidate paths arrive in the spelling their scope produced, while the
+    /// key holds a resolved path. Resolving the candidate the same way keeps a
+    /// differently-cased or short-name spelling from looking distinct on a
+    /// case-insensitive filesystem, and resolves a link to the project file so
+    /// it cannot be mistaken for an independent user file. A candidate that
+    /// cannot be resolved is compared literally, which is the only evidence
+    /// left and still identifies an exactly-spelled project path.
+    pub(super) fn matches_candidate(&self, normalizer: &impl PathNormalizer, path: &Path) -> bool {
+        normalizer.normalize(path).map_or_else(
+            |_| self.matches_path(path),
+            |resolved| self.matches_path(&resolved),
+        )
+    }
+
     /// Report whether a plain path is literally the project configuration file.
     ///
     /// Identification stays literal even when normalization failed, so the
