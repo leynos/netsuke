@@ -17,9 +17,8 @@ every release write on successful packaging and enforced, candidate-bound
 admission. Stage C's sequence is now fully declared, but no tagged run has
 exercised it, so its roadmap entry stays open; publishing now refuses with
 `missing_evidence` until #598 supplies a producer, by design. Stage D is in
-progress. No release, tag, registry
-publication, live credential exchange, GitHub Release, or account setting has
-been changed by this work.
+progress. No release, tag, registry publication, live credential exchange,
+GitHub Release, or account setting has been changed by this work.
 
 ## Purpose / big picture
 
