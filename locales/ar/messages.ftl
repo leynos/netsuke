@@ -107,7 +107,7 @@ runner.context.generate_ninja = تعذّر توليد ملف بيانات Ninja.
 runner.context.render_graph = تعذّر عرض مخرج الرسم.
 runner.help.targets_edges_require_json = يتطلب الخيار --edges وجود --json على المستوى الأعلى.
 runner.ninja.spawn_failed = تعذّر تشغيل برنامج Ninja `{ $program }`.
-runner.ninja.spawn_failed.help = ثبّت Ninja وتأكد من وجود `{ $program }` في PATH وأنه قابل للتنفيذ، أو اضبط NETSUKE_NINJA على مسار ملف Ninja قابل للتنفيذ.
+runner.ninja.spawn_failed.help = ثبّت Ninja وتأكد من وجود `{ $program }` في ‎PATH وأنه قابل للتنفيذ، أو اضبط ‎NETSUKE_NINJA على مسار ملف Ninja قابل للتنفيذ.
 runner.ninja.build_failed = أبلغ Ninja عن فشل في البناء ({ $status }).
 runner.ninja.tool_failed = أبلغت أداة Ninja `{ $tool }` عن فشل ({ $status }).
 

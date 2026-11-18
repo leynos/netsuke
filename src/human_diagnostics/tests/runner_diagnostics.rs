@@ -198,19 +198,23 @@ fn ninja_exit_failure() -> anyhow::Error {
 }
 
 /// Report an exit status without spawning a process.
+///
+/// Unix stores the exit code in the high byte of a raw wait status while
+/// Windows stores it directly. Taking a `u8` keeps the caller's value
+/// identical on both platforms, so only this adapter differs.
 #[cfg(unix)]
-fn exit_status(code: i32) -> std::process::ExitStatus {
+fn exit_status(code: u8) -> std::process::ExitStatus {
     use std::os::unix::process::ExitStatusExt;
 
-    std::process::ExitStatus::from_raw(code << 8)
+    std::process::ExitStatus::from_raw(i32::from(code) << 8)
 }
 
 /// Report an exit status without spawning a process.
 #[cfg(windows)]
-fn exit_status(code: u32) -> std::process::ExitStatus {
+fn exit_status(code: u8) -> std::process::ExitStatus {
     use std::os::windows::process::ExitStatusExt;
 
-    std::process::ExitStatus::from_raw(code)
+    std::process::ExitStatus::from_raw(u32::from(code))
 }
 
 /// A launch failure names the program, offers remedies, and keeps the OS cause.
@@ -268,8 +272,10 @@ fn ninja_exit_failures_render_status_and_attribution(en_localizer: EnLocalizer) 
         flattened.contains("netsuke::runner::ninja_failed"),
         "the rendered diagnostic must carry the exit failure's stable code: {rendered}"
     );
+    // Unix renders `exit status: 7`; Windows renders `exit code: 7`.
+    let expected_summary = format!("Ninja reported a build failure ({})", exit_status(7));
     ensure!(
-        flattened.contains("Ninja reported a build failure (exit status: 7)"),
+        flattened.contains(&expected_summary),
         "the rendered diagnostic must report Ninja's status: {rendered}"
     );
     ensure!(

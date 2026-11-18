@@ -2793,8 +2793,10 @@ Netsuke reports failures at the earliest stage that can identify them:
 - A Ninja program that cannot be started reports its own diagnostic, naming the
   program Netsuke tried to run and offering the installation and
   `NETSUKE_NINJA` remedies.
-- Ninja failures retain the subprocess exit status and output, and the summary
-  reports the status Ninja returned.
+- Ninja failures retain the subprocess exit status, and the summary reports the
+  status Ninja returned. Human mode forwards Ninja's output as the build runs;
+  JSON mode drains it so stderr stays one machine-readable document, leaving
+  only the command-list attribution Netsuke recovers from the output tail.
 
 Human diagnostics include remediation hints where one is available. JSON mode
 exposes the same information as fields. Neither Ninja diagnostic names the

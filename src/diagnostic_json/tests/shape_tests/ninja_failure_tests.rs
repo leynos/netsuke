@@ -14,19 +14,23 @@ use std::process::ExitStatus;
 use test_support::{EnLocalizer, en_localizer};
 
 /// Report an exit status without spawning a process.
+///
+/// Unix stores the exit code in the high byte of a raw wait status while
+/// Windows stores it directly. Taking a `u8` keeps the caller's value
+/// identical on both platforms, so only this adapter differs.
 #[cfg(unix)]
-fn exit_status(code: i32) -> ExitStatus {
+fn exit_status(code: u8) -> ExitStatus {
     use std::os::unix::process::ExitStatusExt;
 
-    ExitStatus::from_raw(code << 8)
+    ExitStatus::from_raw(i32::from(code) << 8)
 }
 
 /// Report an exit status without spawning a process.
 #[cfg(windows)]
-fn exit_status(code: u32) -> ExitStatus {
+fn exit_status(code: u8) -> ExitStatus {
     use std::os::windows::process::ExitStatusExt;
 
-    ExitStatus::from_raw(code)
+    ExitStatus::from_raw(u32::from(code))
 }
 
 /// Build a launch failure for a Ninja that is not installed.
@@ -145,12 +149,17 @@ fn exit_failure_json_reports_status_and_attribution(en_localizer: EnLocalizer) -
         "the exit failure's code should be stable: {document}"
     );
     let message = without_isolation(string_field(diagnostic, "message")?);
+    // The status wording is platform-defined: Unix renders `exit status: 7`
+    // and Windows `exit code: 7`, so both expectations derive from the same
+    // value the fixture passed to the message rather than restating one form.
+    let status = exit_status(7);
     ensure!(
-        message == "Ninja reported a build failure (exit status: 7).",
+        message == format!("Ninja reported a build failure ({status})."),
         "the summary should report Ninja's status: {message:?} in {document}"
     );
+    let expected_cause = format!("ninja exited with {status}: action 0123, entry 2");
     ensure!(
-        causes(diagnostic)? == ["ninja exited with exit status: 7: action 0123, entry 2"],
+        causes(diagnostic)? == [expected_cause.as_str()],
         "the cause should keep the legacy text and its attribution: {document}"
     );
     ensure!(

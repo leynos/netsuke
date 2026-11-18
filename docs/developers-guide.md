@@ -13689,14 +13689,15 @@ invocation context only for the unclassified `Io` case. Both `Display` and
 `std::error::Error` delegate to the underlying failure, so the type can travel
 through `anyhow` when a `?` seam needs it.
 
-The public process helpers keep their `io::Result` contracts through
-`From<NinjaInvocationError> for io::Error`. A spawn failure returns its
-original error, preserving `kind()` and `raw_os_error()`; an exit failure wraps
-`NinjaExitError`, preserving the legacy `ninja exited with …` text.
-`NinjaExitError::new` is public so a caller reporting a recorded failure, and
-an integration test naming a specific status, can construct the source without
-running a process. Its accessors expose the status and operation label, which
-the runner uses to choose between the build and tool summaries.
+The public process helpers keep their `io::Result` contracts through the
+inherent `NinjaInvocationError::into_io_error` method, which each helper
+applies with `map_err`. A spawn failure returns its original error, preserving
+`kind()` and `raw_os_error()`; an exit failure wraps `NinjaExitError`,
+preserving the legacy `ninja exited with …` text. `NinjaExitError::new` is
+public so a caller reporting a recorded failure, and an integration test naming
+a specific status, can construct the source without running a process. Its
+accessors expose the status and operation label, which the runner uses to
+choose between the build and tool summaries.
 
 ### Module: `runner::process::redaction`
 

@@ -199,6 +199,13 @@ differently, set `NETSUKE_NINJA` to its full path:
 NETSUKE_NINJA=/opt/ninja/bin/ninja netsuke build
 ```
 
+PowerShell sets the variable for the current session instead:
+
+```powershell
+$env:NETSUKE_NINJA = 'C:\tools\ninja\ninja.exe'
+netsuke build
+```
+
 ### "Ninja reported a build failure"
 
 When Ninja runs but a recipe fails, the summary reports Ninja's exit status:

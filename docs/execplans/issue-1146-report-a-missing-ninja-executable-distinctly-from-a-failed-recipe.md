@@ -50,9 +50,25 @@ temporary build file.
   - [x] `make test` was run far enough to expose one regression in the bounded
     legacy-recipe telemetry classifier; both new `RunnerError` variants now map
     to the existing `ninja_io` category, with a unit test for each.
-  - [ ] Re-run `make test` in full, then the workflow, documentation, and
-    Markdown gates.
-  - [ ] Push and open the draft pull request; run `coderabbit review --agent`.
+  - [x] `make test`, the workflow, documentation, and Markdown gates, and
+    `make typecheck` pass on the complete change (6041 tests).
+  - [x] CodeRabbit reported six findings and one unverified finding; all seven
+    are applied:
+    - the JSON and human diagnostic tests derive the platform-defined
+      `ExitStatus` wording (`exit status` on Unix, `exit code` on Windows)
+      from the status value instead of hard-coding one form;
+    - the developers' guide describes `into_io_error` accurately, and the
+      users' guide describes how each mode handles Ninja's output;
+    - the Arabic help isolates the literal `PATH` and `NETSUKE_NINJA` with
+      U+200E, the mark the catalogue already uses for embedded Latin tokens;
+    - the Vietnamese summary names a general build failure rather than a
+      compilation failure;
+    - the quick start shows the PowerShell `$env:NETSUKE_NINJA` form beside
+      the POSIX one;
+    - the `exit_status` test helpers take one `u8`, so only the platform
+      adapter differs between the `cfg` branches.
+  - [ ] Re-run the gates for these review fixes.
+  - [ ] Push and open the draft pull request.
 
 ## Plan of work
 
@@ -102,6 +118,12 @@ gate set.
   distinguishes them without overstating the diagnosis.
 - Record the decision in `docs/netsuke-design.md` rather than a new ADR,
   because it applies existing ADR-0035 and ADR-0046 direction.
+- Derive the expected status text from `ExitStatus` in tests. Its `Display`
+  implementation is platform-defined, so a hard-coded `exit status: 7` would
+  pass on Unix and fail on Windows without naming the real cause.
+- Mark embedded Latin identifiers in Arabic text with U+200E rather than
+  restating them in a separate clause; the catalogue already uses that mark for
+  `--rule` and `--limit`.
 
 ## Surprises & discoveries
 
