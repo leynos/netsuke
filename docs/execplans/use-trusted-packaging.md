@@ -5331,6 +5331,59 @@ and pass, on the final wording.
   mutation, runtime-gate, metrics, and publish-path modules, and 18 runtime
   metric-failure tests. Date/Author: 2026-11-18, implementation agent.
 
+- [x] (2026-11-18) Brought the branch up to `origin/main` after #1150 landed,
+  and closed the two reds the first full gate batch reported.
+
+  *Merge rather than rebase.* `338ff4ac4` restructures the same release-path
+  contract modules this branch does, and the repository's merge driver is
+  Weave; replaying those commits one at a time would have re-run the driver
+  over files both sides had already rewritten. Merging records the resolution
+  once, in `eb9def366`, and keeps the branch's history readable as "the
+  pr-babysitting branch, then main brought underneath it". `557614003` repaired
+  the one resolution defect the merge left: the mutations suite carried the
+  module docstring twice, once above and once below its imports.
+
+  *Duplicate module.* Main's new `release_publish_path_native_smoke.py` was a
+  second copy of the check this branch already owns in
+  `release_publish_path_smoke.py`. Both resolve the same job's guard against the
+  `metadata` need with the same label, the same `MISSING` refusal, and the
+  same predicate — a dry run runs the smoke only on `ready_for_review`, and a
+  publication run runs it after a successful metadata job. The merge therefore
+  kept this branch's module and dropped main's, having first confirmed that the
+  two `_mutate_smoke_tolerance` mutations arriving from main are present
+  unchanged in this branch's mutation table, so no mutation or scenario was
+  lost with the file.
+
+  *Batch #2.* Eleven of the thirteen targets exited zero. `lint-python` failed
+  with four DOC501 findings: functions that raise for a precondition the
+  docstring did not state. Each now carries a `Raises` section naming the
+  condition rather than restating the code. `markdownlint` failed on one
+  spelling: a progress entry wrote the British `-ise` form of "normalize",
+  which this repository's en-GB-oxendict dictionary rejects in favour of the
+  `-ize` spelling. Both fixes are in `38e90c618`.
+
+  *The lint cascade the fix exposed.* With Ruff satisfied, pylint surfaced: it
+  exits 16 at a stated 10.00/10, so the score alone said nothing. One C1804
+  compared a string-returning validator to `""` where `not` states the same
+  test, and three modules exceeded the 400-line limit — the scenario table, the
+  metadata-output derivation, and the metric-failure suite. `58cc7bb29` moves
+  the table to `release_publish_path_scenario_table.py` and the derivation to
+  `release_publish_path_metadata.py`, both along seams the modules already had,
+  and splits the invalid-configuration cases out as
+  `scripts/tests/test_release_admission_invalid_configuration.py`. That module
+  is pinned in the `test-release-admission` recipe *and* in
+  `release_admission_runtime_gate_test.py`, which asserts the recipe runs
+  exactly the modules it lists, so the target now names twenty-four; the
+  developers' guide records the new module.
+
+  *Verification after the fixes.* 267 workflow-contract tests and 44
+  release-admission tests pass, and `make lint-python`, `make markdownlint`, and
+  `make check-fmt` each exit zero on `58cc7bb29`. The lesson carried into the
+  next batch: a batch is only worth starting on a green `check-fmt`, because a
+  red first target voids it, so the cheap gates are preflighted before a
+  multi-hour run is launched. A fresh batch over all thirteen targets runs on
+  this head. Date/Author: 2026-11-18, implementation agent.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
