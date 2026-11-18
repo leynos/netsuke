@@ -11,7 +11,9 @@
 //! This module runs an ignored child copy of the test binary under `strace`,
 //! injects `EPERM` for `openat2`, and correlates the trace with the fixtures
 //! the child reads. The parent never mutates its own environment: the marker
-//! that lets the child run is set on the child `Command` only.
+//! that lets the child run is set on the child `Command` only. The child's own
+//! assertions live in `resolver_child_tests`, so this module holds only the
+//! harness: the spawn, the availability probe and the trace correlation.
 //!
 //! `strace` is a Linux tracing tool, and the injected fault is a Linux syscall
 //! fault, so the module is compiled on Linux alone. macOS always uses the
@@ -20,32 +22,27 @@
 use std::{path::Path, process::Command, time::Duration};
 
 use anyhow::{Context, Result, ensure};
-use camino::Utf8Path;
 use cap_std::{ambient_authority, fs::Dir};
-use minijinja::ErrorKind;
 use tempfile::tempdir;
-use test_support::{bounded_process::output_within, fluent::normalize_fluent_isolates};
+use test_support::bounded_process::output_within;
 
-use super::{
-    CONTENTS, DIGEST, FilterCase, HASH, LINECOUNT, Policy, ReadTarget, create_symlink, fallible,
-    rejection, render_case, require_real_symlink, write_fixture,
-};
+use super::{CONTENTS, DIGEST, FilterCase, HASH, LINECOUNT, Policy};
 
 /// The file-reading filters, in the order the fixture table exercises them.
-const CASES: [FilterCase; 4] = [CONTENTS, LINECOUNT, HASH, DIGEST];
+pub(super) const CASES: [FilterCase; 4] = [CONTENTS, LINECOUNT, HASH, DIGEST];
 
 /// Environment variable that lets the ignored child run.
 ///
 /// The child is `#[ignore]`d so an ordinary test run never renders outside the
 /// parent's trace; the parent sets this marker on the child `Command` only.
-const CHILD_MARKER: &str = "NETSUKE_READ_POLICY_RESOLVER_CHILD";
+pub(super) const CHILD_MARKER: &str = "NETSUKE_READ_POLICY_RESOLVER_CHILD";
 
 /// Environment variable that turns an unavailable tracer into a failure.
 const STRICT_ENV: &str = "NETSUKE_READ_POLICY_RESOLVER_STRICT";
 
 /// The exact libtest name of the child, as `--exact` must spell it.
 const CHILD_TEST: &str =
-    "read_policy_filters::resolver_fallback_tests::manual_resolver_child_renders_every_policy";
+    "read_policy_filters::resolver_child_tests::manual_resolver_child_renders_every_policy";
 
 /// How long the traced child may run before the test fails.
 ///
@@ -96,12 +93,12 @@ impl TraceExpectation {
 }
 
 /// The basename of the symlink fixture for `case` under `policy`.
-fn link_fixture_name(case: FilterCase, policy: Policy) -> String {
+pub(super) fn link_fixture_name(case: FilterCase, policy: Policy) -> String {
     format!("link_{}_{}", case.name, policy.suffix())
 }
 
 /// The basename of the regular-file control for `case`.
-fn control_fixture_name(case: FilterCase) -> String {
+pub(super) fn control_fixture_name(case: FilterCase) -> String {
     format!("control_{}", case.name)
 }
 
@@ -307,98 +304,5 @@ fn skip(reason: &str) -> Result<()> {
          (strict mode requires the fallback test to run for real)"
     );
     eprintln!("skipped: read-policy manual resolver — {reason}");
-    Ok(())
-}
-
-/// Whether the parent asked this process to run as its traced child.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the marker is set on the child Command because the trace claims the whole process; there is no injected environment in an integration-test binary"
-)]
-fn is_requested_child() -> bool {
-    std::env::var_os(CHILD_MARKER).is_some()
-}
-
-/// The child: render every filter under every policy under the manual resolver.
-///
-/// Run only by [`manual_resolver_enforces_the_no_follow_policy`], through
-/// `strace` with `openat2` faulted. It asserts the policy itself; the parent
-/// asserts that the manual path was taken.
-#[test]
-#[ignore = "spawned by manual_resolver_enforces_the_no_follow_policy under strace"]
-fn manual_resolver_child_renders_every_policy() -> Result<()> {
-    if !is_requested_child() {
-        return Ok(());
-    }
-
-    let (_temp, root) = fallible::filter_workspace()?;
-    for case in CASES {
-        let control = write_fixture(&root, &control_fixture_name(case), b"data")?;
-        let rendered = render_case(
-            case,
-            "resolver_control",
-            ReadTarget::new(&root, &control, 1024),
-            &case.template(),
-        )?
-        .with_context(|| format!("{}: regular-file control", case.name))?;
-        ensure!(
-            rendered == case.followed,
-            "{}: expected {} for the regular-file control but rendered {rendered}",
-            case.name,
-            case.followed
-        );
-
-        for policy in Policy::ALL {
-            let link = create_symlink(&root, &link_fixture_name(case, policy), "file")
-                .with_context(|| format!("{}: create the {:?} link", case.name, policy))?;
-            require_real_symlink(&root, &link)?;
-            render_policy_case(&root, case, policy, &link)?;
-        }
-    }
-    Ok(())
-}
-
-/// Render one symlink case under `policy` and assert the documented outcome.
-fn render_policy_case(
-    root: &Utf8Path,
-    case: FilterCase,
-    policy: Policy,
-    link: &Utf8Path,
-) -> Result<()> {
-    let rendered = render_case(
-        case,
-        &format!("resolver_{}", policy.suffix()),
-        ReadTarget::new(root, link, 1024),
-        &policy.template(case),
-    )?;
-
-    if policy.follows() {
-        let output =
-            rendered.with_context(|| format!("{}: render under {:?}", case.name, policy))?;
-        ensure!(
-            output == case.followed,
-            "{}: the opt-in should read the link target under the manual resolver; \
-             expected {} but rendered {output}",
-            case.name,
-            case.followed
-        );
-        return Ok(());
-    }
-
-    let err = rejection(case, rendered)?;
-    ensure!(
-        err.kind() == ErrorKind::InvalidOperation,
-        "{}: should report InvalidOperation under {:?} but was {:?}",
-        case.name,
-        policy,
-        err.kind()
-    );
-    let message = normalize_fluent_isolates(&err.to_string());
-    ensure!(
-        message.contains("not a regular file") || message.contains("symbolic links"),
-        "{}: error should explain the rejection under {:?}: {message}",
-        case.name,
-        policy
-    );
     Ok(())
 }

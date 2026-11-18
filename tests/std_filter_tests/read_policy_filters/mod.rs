@@ -359,6 +359,9 @@ mod fifo_tests;
 mod file_type_tests;
 
 #[cfg(target_os = "linux")]
+mod resolver_child_tests;
+
+#[cfg(target_os = "linux")]
 mod resolver_fallback_tests;
 
 mod unknown_kwargs_tests;
