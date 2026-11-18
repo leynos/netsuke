@@ -152,6 +152,10 @@ list form.
 - [x] (2026-11-18) CodeRabbit's second pass raised the same
   `NETSUKE_NO_INPUT=0` omission in the migration guide and the CLI design
   document; both now state the exception beside the accepted spellings.
+- [x] (2026-11-18) Second batch on `debbf370a`, the Markdown-only delta that
+  carries the two guide fixes and these records: `make check-fmt` (4s),
+  `make markdownlint` (35s, 238 files, 0 issues), and `make nixie` (1s, 239
+  files), all green.
 - [x] (2026-11-18) Rebased onto `origin/main` at `8daa9143`, which adds
   `338ff4ac4` (public-consumer release smoke) and `8daa91431` (stdlib
   file-reading filters within the workspace capability). No conflicts: all ten
@@ -547,3 +551,5 @@ removing the workaround once it lands is tracked in
 - 2026-11-18: Recorded the CI `build-test` failure and the Kani scope fix, and
   the CodeRabbit finding about `NETSUKE_NO_INPUT=0` with the documentation
   change that answers it.
+- 2026-11-18: Recorded the second CodeRabbit pass, the migration-guide and
+  CLI-design fixes it asked for, and the gate batches that validated each delta.
