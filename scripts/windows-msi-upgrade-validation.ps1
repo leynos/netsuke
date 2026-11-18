@@ -13,6 +13,37 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# The package refuses a downgrade through a launch condition, and Windows
+# Installer reports a failed launch condition as ERROR_INSTALL_FAILURE. Treating
+# every non-zero code as a refusal would also accept 1618 (another installation
+# in progress), 1619 or 1620 (unreadable package) and 1602 (cancelled), none of
+# which says anything about downgrade handling.
+$downgradeRefusalExitCode = 1603
+
+function Get-MsiColumnValue {
+    param(
+        [Parameter(Mandatory)]
+        [string]$MsiPath,
+        [Parameter(Mandatory)]
+        [string]$Query,
+        [Parameter(Mandatory)]
+        [string]$MissingMessage
+    )
+
+    # The database and view stay inside this function: the caller gets a plain
+    # string, so nothing depends on a COM view outliving the database that owns
+    # it.
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($MsiPath, 0)
+    $view = $database.OpenView($Query)
+    [void]$view.Execute()
+    $record = $view.Fetch()
+    if ($null -eq $record) {
+        throw "MSI $MsiPath $MissingMessage"
+    }
+    return [string]$record.StringData(1)
+}
+
 function Get-MsiProperty {
     param(
         [Parameter(Mandatory)]
@@ -21,15 +52,28 @@ function Get-MsiProperty {
         [string]$PropertyName
     )
 
-    $installer = New-Object -ComObject WindowsInstaller.Installer
-    $database = $installer.OpenDatabase($MsiPath, 0)
-    $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='$PropertyName'")
-    [void]$view.Execute()
-    $record = $view.Fetch()
-    if ($null -eq $record) {
-        throw "MSI $MsiPath does not define ProductCode."
-    }
-    return [string]$record.StringData(1)
+    return Get-MsiColumnValue `
+        -MsiPath $MsiPath `
+        -Query "SELECT `Value` FROM `Property` WHERE `Property`='$PropertyName'" `
+        -MissingMessage "does not define $PropertyName."
+}
+
+function Get-DowngradeRefusalMessage {
+    param(
+        [Parameter(Mandatory)]
+        [string]$MsiPath
+    )
+
+    # The package authors the refusal text itself, so read it from the built
+    # MSI rather than copying it here: a copy would drift from
+    # installer/Package.wxs, and the log must carry exactly this sentence for
+    # the attempt to count as a refusal.
+    $template = Get-MsiColumnValue `
+        -MsiPath $MsiPath `
+        -Query "SELECT `Description` FROM `LaunchCondition` WHERE `Condition` LIKE '%DOWNGRADE%'" `
+        -MissingMessage 'declares no downgrade launch condition.'
+    $productName = Get-MsiProperty -MsiPath $MsiPath -PropertyName ProductName
+    return $template.Replace('[ProductName]', $productName)
 }
 
 function Invoke-MsiExec {
@@ -75,7 +119,7 @@ function Assert-PathAbsent {
     )
 
     if (Test-Path -LiteralPath $Path) {
-        throw "Expected $Path to be absent after the upgrade."
+        throw "Expected $Path to be absent."
     }
 }
 
@@ -118,6 +162,24 @@ function Assert-ProductAbsent {
     }
 }
 
+function Assert-NoRelatedProductInstalled {
+    param(
+        [Parameter(Mandatory)]
+        [string]$UpgradeCode
+    )
+
+    # A leftover installation from an earlier run of this fixture family has a
+    # different ProductCode but the same UpgradeCode, so the final package
+    # would upgrade it and the checks labelled clean install would still pass.
+    # RelatedProducts returns a StringList, which PowerShell enumerates with
+    # foreach.
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $relatedProducts = @($installer.RelatedProducts($UpgradeCode))
+    foreach ($productCode in $relatedProducts) {
+        throw "Product $productCode related to upgrade code $UpgradeCode is already installed."
+    }
+}
+
 function Install-AndAssert {
     param(
         [Parameter(Mandatory)]
@@ -147,12 +209,21 @@ function Assert-DowngradeIsRejected {
         [Parameter(Mandatory)]
         [string]$MsiPath,
         [Parameter(Mandatory)]
-        [string]$LogName
+        [string]$LogName,
+        [Parameter(Mandatory)]
+        [string]$ExpectedRefusalMessage
     )
 
+    $logPath = Join-Path $LogDirectory $LogName
     $exitCode = Invoke-MsiExec -Operation Install -Target $MsiPath -LogName $LogName
-    if ($exitCode -eq 0) {
-        throw "Downgrade MSI $MsiPath installed successfully."
+    if ($exitCode -ne $downgradeRefusalExitCode) {
+        throw "Downgrade MSI $MsiPath returned msiexec exit code $exitCode rather than the refusal code $downgradeRefusalExitCode."
+    }
+    # The code alone only says the install failed. The package's own refusal
+    # sentence in this attempt's log is what distinguishes a downgrade the
+    # package rejected from an unrelated failure that happened to abort it.
+    if (-not (Select-String -LiteralPath $logPath -SimpleMatch -Pattern $ExpectedRefusalMessage -Quiet)) {
+        throw "Downgrade attempt with $MsiPath did not record '$ExpectedRefusalMessage' in $logPath."
     }
 }
 
@@ -172,6 +243,11 @@ $nativeApplication = Join-Path $nativeDirectory 'netsuke.exe'
 $beta1ProductCode = Get-MsiProperty -MsiPath $Beta1Msi -PropertyName ProductCode
 $beta2ProductCode = Get-MsiProperty -MsiPath $Beta2Msi -PropertyName ProductCode
 $finalProductCode = Get-MsiProperty -MsiPath $FinalMsi -PropertyName ProductCode
+$beta1UpgradeCode = Get-MsiProperty -MsiPath $Beta1Msi -PropertyName UpgradeCode
+$beta2UpgradeCode = Get-MsiProperty -MsiPath $Beta2Msi -PropertyName UpgradeCode
+$finalUpgradeCode = Get-MsiProperty -MsiPath $FinalMsi -PropertyName UpgradeCode
+$beta1RefusalMessage = Get-DowngradeRefusalMessage -MsiPath $Beta1Msi
+$beta2RefusalMessage = Get-DowngradeRefusalMessage -MsiPath $Beta2Msi
 $beta1Installation = @{
     Rank = 1
     Payload = 'MZbeta1'
@@ -190,12 +266,8 @@ $finalInstallation = @{
     PayloadPath = $nativeApplication
     LogName = 'final-install.log'
 }
-$cleanInstallation = @{
-    Rank = 65535
-    Payload = 'MZfinal'
-    PayloadPath = $nativeApplication
-    LogName = 'final-clean-install.log'
-}
+$cleanInstallation = $finalInstallation.Clone()
+$cleanInstallation.LogName = 'final-clean-install.log'
 if (
     ($beta1ProductCode -eq $beta2ProductCode) -or
     ($beta1ProductCode -eq $finalProductCode) -or
@@ -203,15 +275,27 @@ if (
 ) {
     throw 'Each MSI fixture must have a generated, distinct ProductCode.'
 }
+if (
+    ($beta1UpgradeCode -ne $beta2UpgradeCode) -or
+    ($beta1UpgradeCode -ne $finalUpgradeCode)
+) {
+    throw 'Each MSI fixture must share the same UpgradeCode for the upgrade sequence.'
+}
 
 # A clean install is the case issue #1143 reported: with no earlier
 # installation, the package must populate only the native directory. The
 # upgrade sequence cannot show that on its own, because its first fixture
 # deliberately installs the legacy layout. Refusing a dirty runner keeps a
-# leftover installation from being misreported as a clean install.
+# leftover installation, including one from an earlier run of this fixture
+# family, from being misreported as a clean install.
 Assert-ProductAbsent -ProductCode $beta1ProductCode
 Assert-ProductAbsent -ProductCode $beta2ProductCode
 Assert-ProductAbsent -ProductCode $finalProductCode
+Assert-NoRelatedProductInstalled -UpgradeCode $finalUpgradeCode
+Assert-PathAbsent -Path $legacyApplication
+Assert-PathAbsent -Path $legacyDirectory
+Assert-PathAbsent -Path $nativeApplication
+Assert-PathAbsent -Path $nativeDirectory
 Install-AndAssert `
     -MsiPath $FinalMsi `
     -ProductCode $finalProductCode `
@@ -241,7 +325,10 @@ Assert-PathAbsent -Path $legacyDirectory
 
 # A refused downgrade must leave beta2 registered, ranked, and installed where
 # it was, without resurrecting the legacy layout.
-Assert-DowngradeIsRejected -MsiPath $Beta1Msi -LogName beta1-downgrade.log
+Assert-DowngradeIsRejected `
+    -MsiPath $Beta1Msi `
+    -LogName beta1-downgrade.log `
+    -ExpectedRefusalMessage $beta1RefusalMessage
 Assert-InstalledProduct `
     -ProductCode $beta2ProductCode `
     -ExpectedRank $beta2Installation.Rank `
@@ -252,7 +339,10 @@ Assert-PathAbsent -Path $legacyDirectory
 
 Install-AndAssert -MsiPath $FinalMsi -ProductCode $finalProductCode -ExpectedInstallation $finalInstallation
 Assert-ProductAbsent -ProductCode $beta2ProductCode
-Assert-DowngradeIsRejected -MsiPath $Beta2Msi -LogName beta2-downgrade.log
+Assert-DowngradeIsRejected `
+    -MsiPath $Beta2Msi `
+    -LogName beta2-downgrade.log `
+    -ExpectedRefusalMessage $beta2RefusalMessage
 Assert-InstalledProduct `
     -ProductCode $finalProductCode `
     -ExpectedRank $finalInstallation.Rank `
