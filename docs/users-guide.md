@@ -2676,24 +2676,49 @@ through a shared byte budget so a checkout entry cannot exhaust Netsuke's
 memory or CPU. The default budget is 8 MiB per read, matching the `fetch()`
 response limit.
 
+Every request resolves through the workspace capability rather than the process
+working directory. A relative path is read beneath the configured workspace
+root, and an absolute path is accepted only when it lies beneath that root. A
+`..` component keeps the meaning the filesystem gives it: `sub/../file` reads
+the root's `file`, because `..` steps back out of the ordinary directory `sub`,
+while `alias/../file` reads `file` beside whatever directory the link `alias`
+points at. A request that climbs above the root — at its start or after naming
+a directory — or that reaches outside it through a link in an intermediate
+component is refused with a diagnostic naming the path and the workspace
+boundary. The refusal never reads the file first, so it cannot disclose
+contents.
+
 The reading filters also refuse to follow a symlink as the final path component
 and reject anything that is not a regular file once opened, including FIFOs and
-device nodes. A symlinked directory used *inside* a path is unaffected; only
-the final entry is checked. On Windows the same refusal covers every reparse
-point, not only symlinks: junctions, volume mount points, and other tags such
-as deduplication or cloud placeholders are all rejected, including tags Windows
-may add later.
+device nodes. A symlinked directory used *inside* a path is followed only when
+its target is written as a relative path and stays within the workspace: a
+target that leads outside is refused like any other escape, and a target
+written as an absolute path is refused even when it resolves inside, because
+the capability cannot tell where an absolute target points. On Windows that
+final-component refusal covers every reparse point, not only symlinks:
+junctions, volume mount points, and other tags such as deduplication or cloud
+placeholders are all rejected, including tags Windows may add later. Only the
+final component is judged that way: a directory link earlier in the path is
+resolved as described above, so a reparse point there is followed when its
+target is written as a relative path and stays within the workspace.
 
 `follow_symlinks=true` waives that final-component refusal, and only that. The
-capability that anchors every read in the workspace is unaffected, so a link
-whose target is written as an absolute path is still refused with a diagnostic
-reporting that a path led outside the filesystem — even when the target is in
-fact inside the workspace. Relativity of the *link target*, not containment of
-the resolved path, is what the resolver tests. A template that reads through a
-relative-target link is the supported case; on Windows a junction cannot be
-one, because `mklink` records an absolute target and so is always refused under
-either policy. Templates that deliberately read through a final symlink can
-pass the opt-in to accept it:
+capability that anchors every read in the workspace is unaffected, so the
+absolute-target rule above still applies: such a link is refused with a
+diagnostic reporting that a path led outside the filesystem, even when the
+target is in fact inside the workspace. Relativity of the *link target*, not
+containment of the resolved path, is what that check tests.
+
+A relative-target link is the supported form, but it is resolved from the
+capability opened for the requested file's own parent directory rather than
+from the workspace root. A link such as `../outside/secret` is therefore
+refused when the parent is opened, and so is `sub/link -> ../file` even though
+`file` sits inside the workspace: `..` would leave the `sub` capability the
+read was anchored at. Either name the target directly or place the link where
+its target stays beneath the same parent. On Windows a junction cannot be a
+relative-target link at all, because `mklink` records an absolute target, so a
+junction is always refused under either policy. Templates that deliberately
+read through a final symlink can pass the opt-in to accept it:
 
 <!-- tested-example: guide-file-follow-symlinks-expression -->
 

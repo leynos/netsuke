@@ -10,7 +10,7 @@ use camino::Utf8Path;
 use cap_std::fs_utf8::File;
 use minijinja::Error;
 
-use super::fs_utils::{FileReadLimits, open_file_checked};
+use super::fs_utils::{ReadScope, open_file_checked};
 use crate::localization::{self, keys};
 use crate::stdlib::io_helpers::io_to_error;
 
@@ -102,9 +102,9 @@ fn invalid_utf8_error(path: &Utf8Path) -> Error {
 /// Returns a template error when the parent directory cannot be opened, the
 /// file cannot be read, its contents are not valid UTF-8, or the read exceeds
 /// the configured byte budget.
-pub(crate) fn read_utf8(path: &Utf8Path, limits: &FileReadLimits) -> Result<String, Error> {
-    let mut file = open_file_checked(path, limits)?;
-    read_utf8_from(&mut file, path, limits.max_bytes)
+pub(crate) fn read_utf8(path: &Utf8Path, scope: ReadScope<'_>) -> Result<String, Error> {
+    let mut file = open_file_checked(path, scope)?;
+    read_utf8_from(&mut file, path, scope.limits.max_bytes)
 }
 
 /// Read the already-opened `file` as UTF-8 text under a `max_bytes` budget.
@@ -199,9 +199,9 @@ impl Utf8Validator {
 /// Returns a template error when the file cannot be opened or read, when its
 /// contents are not valid UTF-8, or when the read exceeds the configured byte
 /// budget.
-pub(crate) fn linecount(path: &Utf8Path, limits: &FileReadLimits) -> Result<usize, Error> {
-    let mut file = open_file_checked(path, limits)?;
-    linecount_from(&mut file, path, limits.max_bytes)
+pub(crate) fn linecount(path: &Utf8Path, scope: ReadScope<'_>) -> Result<usize, Error> {
+    let mut file = open_file_checked(path, scope)?;
+    linecount_from(&mut file, path, scope.limits.max_bytes)
 }
 
 /// Count the lines of the already-opened `file` under a `max_bytes` budget.

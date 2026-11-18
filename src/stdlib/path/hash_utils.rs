@@ -13,7 +13,7 @@ use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
 use super::bounded_read::{BoundedRead, read_bounded_chunk};
-use super::fs_utils::{self, FileReadLimits};
+use super::fs_utils::{self, ReadScope};
 use crate::hex::to_lower_hex;
 use crate::localization::{self, keys};
 
@@ -26,16 +26,16 @@ use crate::localization::{self, keys};
 pub(super) fn compute_hash(
     path: &Utf8Path,
     alg: &str,
-    limits: &FileReadLimits,
+    scope: ReadScope<'_>,
 ) -> Result<String, Error> {
     if alg.eq_ignore_ascii_case("sha256") {
-        hash_stream::<Sha256>(path, limits)
+        hash_stream::<Sha256>(path, scope)
     } else if alg.eq_ignore_ascii_case("sha512") {
-        hash_stream::<Sha512>(path, limits)
+        hash_stream::<Sha512>(path, scope)
     } else if alg.eq_ignore_ascii_case("sha1") {
         #[cfg(feature = "legacy-digests")]
         {
-            hash_stream::<Sha1>(path, limits)
+            hash_stream::<Sha1>(path, scope)
         }
         #[cfg(not(feature = "legacy-digests"))]
         {
@@ -50,7 +50,7 @@ pub(super) fn compute_hash(
     } else if alg.eq_ignore_ascii_case("md5") {
         #[cfg(feature = "legacy-digests")]
         {
-            hash_stream::<Md5>(path, limits)
+            hash_stream::<Md5>(path, scope)
         }
         #[cfg(not(feature = "legacy-digests"))]
         {
@@ -82,9 +82,9 @@ pub(super) fn compute_digest(
     path: &Utf8Path,
     len: usize,
     alg: &str,
-    limits: &FileReadLimits,
+    scope: ReadScope<'_>,
 ) -> Result<String, Error> {
-    let mut hash = compute_hash(path, alg, limits)?;
+    let mut hash = compute_hash(path, alg, scope)?;
     if len < hash.len() {
         hash.truncate(len);
     }
@@ -97,14 +97,14 @@ pub(super) fn compute_digest(
 ///
 /// Returns a template error when the file cannot be opened or a chunk cannot
 /// be read, or when the file exceeds the configured byte budget.
-fn hash_stream<H>(path: &Utf8Path, limits: &FileReadLimits) -> Result<String, Error>
+fn hash_stream<H>(path: &Utf8Path, scope: ReadScope<'_>) -> Result<String, Error>
 where
     H: Digest,
 {
-    let mut file = fs_utils::open_file_checked(path, limits)?;
+    let mut file = fs_utils::open_file_checked(path, scope)?;
     let mut hasher = H::new();
     let mut buffer = [0_u8; 8192];
-    let mut state = BoundedRead::new(limits.max_bytes);
+    let mut state = BoundedRead::new(scope.limits.max_bytes);
     loop {
         let Some(chunk) = read_bounded_chunk(&mut state, &mut file, &mut buffer, path)? else {
             break;
@@ -131,7 +131,8 @@ mod tests {
     use sha2::{Digest, Sha256};
     use tempfile::TempDir;
 
-    use super::super::fs_utils::FileReadLimits;
+    use super::super::fs_utils::{FileReadLimits, ReadScope};
+    use super::super::reading_root::ReadingRoot;
     use super::{compute_hash, to_lower_hex};
 
     /// Name of the fixture file staged inside the temporary directory.
@@ -174,10 +175,13 @@ mod tests {
         let streamed = compute_hash(
             &file,
             "sha256",
-            &FileReadLimits {
-                max_bytes: u64::MAX,
-                follow_symlinks: false,
-            },
+            ReadScope::new(
+                &FileReadLimits {
+                    max_bytes: u64::MAX,
+                    follow_symlinks: false,
+                },
+                &ReadingRoot::for_fixture(&file)?,
+            ),
         )?;
         let one_shot = to_lower_hex(&Sha256::digest(&payload));
 
@@ -200,10 +204,13 @@ mod tests {
         let digest = compute_hash(
             &file,
             "sha256",
-            &FileReadLimits {
-                max_bytes: u64::MAX,
-                follow_symlinks: false,
-            },
+            ReadScope::new(
+                &FileReadLimits {
+                    max_bytes: u64::MAX,
+                    follow_symlinks: false,
+                },
+                &ReadingRoot::for_fixture(&file)?,
+            ),
         )?;
         ensure!(
             digest == expected,
@@ -225,8 +232,9 @@ mod tests {
         use proptest::prelude::*;
         use sha2::{Digest, Sha256};
 
-        use super::super::fs_utils::FileReadLimits;
+        use super::super::fs_utils::{FileReadLimits, ReadScope};
         use super::{compute_hash, fixture, to_lower_hex};
+        use crate::stdlib::path::reading_root::ReadingRoot;
 
         proptest! {
             /// Streaming a payload of any length agrees with a one-shot digest.
@@ -239,10 +247,14 @@ mod tests {
             ) {
                 let (_dir, file) = fixture(&payload).expect("stage the payload");
 
+                let root = ReadingRoot::for_fixture(&file).expect("open the fixture root");
                 let streamed = compute_hash(
                     &file,
                     "sha256",
-                    &FileReadLimits { max_bytes: u64::MAX, follow_symlinks: false },
+                    ReadScope::new(
+                        &FileReadLimits { max_bytes: u64::MAX, follow_symlinks: false },
+                        &root,
+                    ),
                 ).expect("hash the payload");
                 let one_shot = to_lower_hex(&Sha256::digest(&payload));
 

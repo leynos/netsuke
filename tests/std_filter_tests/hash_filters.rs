@@ -53,7 +53,7 @@ fn hash_and_digest_filters(
     #[case] expected_digest: &str,
 ) -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
-    let mut env = fallible::stdlib_env()?;
+    let mut env = fallible::stdlib_env_for_workspace(&root)?;
     let dir = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open workspace root for hashing tests")?;
 
@@ -98,7 +98,7 @@ fn hash_and_digest_filters(
 #[rstest]
 fn hash_filter_legacy_algorithms_disabled() -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
-    let mut env = fallible::stdlib_env()?;
+    let mut env = fallible::stdlib_env_for_workspace(&root)?;
 
     fallible::register_template(&mut env, "hash_sha1", "{{ path | hash('sha1') }}")?;
     let template = env
@@ -126,7 +126,7 @@ fn hash_filter_legacy_algorithms_disabled() -> Result<()> {
 #[rstest]
 fn hash_filter_rejects_unknown_algorithm() -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
-    let mut env = fallible::stdlib_env()?;
+    let mut env = fallible::stdlib_env_for_workspace(&root)?;
     let file = root.join("file");
 
     fallible::register_template(&mut env, "hash_unknown", "{{ path | hash('whirlpool') }}")?;

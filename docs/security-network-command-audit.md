@@ -157,6 +157,20 @@ introduces, and concrete remediation tasks that would harden the helpers.
     rejections name the path and the applicable limit, and file-type
     rejections name only the path; neither discloses file contents.
 
+- [x] **File-reading filters escaped the workspace capability.** *(Status:
+  remediated; issue #968.)* The four filters opened the caller-selected parent
+  directory with ambient authority, so an absolute path or a `..` path could
+  read any file the process could reach, whatever workspace `StdlibConfig`
+  described. A link in an intermediate component had the same effect even when
+  the final component was checked. *Remediation:* every request now resolves
+  through the workspace capability. A relative request is read beneath the
+  workspace root, an absolute request is accepted only when lexically beneath
+  that root, and a `..` escape or a capability escape is refused before any
+  read with one localized diagnostic naming the path and the boundary. See
+  [Configure file reading limits](users-guide.md#configure-file-reading-limits)
+  and
+  [File-reading filter boundary](developers-guide.md#file-reading-filter-boundary).
+
 ## Next steps
 
 The remaining command-helper hardening tasks can be implemented incrementally.
