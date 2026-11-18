@@ -214,8 +214,10 @@ When Ninja runs but a recipe fails, the summary reports Ninja's exit status:
 Ninja reported a build failure (exit status: 1).
 ```
 
-Ninja's own output, including the failing command, appears above the summary.
-For a tool subcommand the summary names the tool instead:
+In human mode Ninja's own output, including the failing command, appears above
+the summary. JSON mode drains that output so stderr stays one machine-readable
+document, keeping only the command-list attribution Netsuke recovers from the
+output tail. For a tool subcommand the summary names the tool instead:
 
 ```text
 Ninja tool `clean` reported a failure (exit status: 1).
