@@ -13,10 +13,10 @@ use std::ffi::{OsStr, OsString};
 fn parse(key: &str, value: &str) -> Value {
     let parsed = parse_entry(OsStr::new(key), OsStr::new(value))
         .unwrap_or_else(|error| panic!("{key:?} should parse: {error}"));
-    let Some((_, value)) = parsed else {
+    let Some((_, parsed_value)) = parsed else {
         panic!("{key:?} should be a Netsuke configuration key");
     };
-    value
+    parsed_value
 }
 
 /// Every Boolean path accepts exactly the four strict spellings.
@@ -136,7 +136,7 @@ fn provider_emits_booleans_only_for_boolean_paths() {
         "json should be emitted as a Boolean",
     );
     assert_eq!(
-        defaults.get("jobs").and_then(|value| value.to_u128()),
+        defaults.get("jobs").and_then(Value::to_u128),
         Some(1),
         "jobs should keep its numeric value",
     );

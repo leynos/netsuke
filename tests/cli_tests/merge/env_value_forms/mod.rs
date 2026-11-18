@@ -67,15 +67,18 @@ fn merge_with_file_and_environment_error(
     error
 }
 
-/// Write `toml_content` and build the sandbox environment selecting it.
-fn file_environment(
-    toml_content: &str,
-    pairs: &[(&str, &str)],
-) -> Result<(
+/// The sandbox directories and overrides one file-backed merge needs.
+///
+/// The two directories must outlive the child process, so they travel with the
+/// environment rather than being dropped inside the helper.
+type FileEnvironment = (
     tempfile::TempDir,
     tempfile::TempDir,
     Vec<(OsString, OsString)>,
-)> {
+);
+
+/// Write `toml_content` and build the sandbox environment selecting it.
+fn file_environment(toml_content: &str, pairs: &[(&str, &str)]) -> Result<FileEnvironment> {
     let home = tempdir().context("create temporary home")?;
     let config_path = home.path().join("netsuke.toml");
     std::fs::write(&config_path, toml_content).context("write netsuke.toml")?;

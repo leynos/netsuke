@@ -135,6 +135,13 @@ list form.
   new `non_boolean_string_values_are_trimmed` unit test pins it. Impact: the
   guide, migration guide, and ADR state the trim as environment parser
   behaviour rather than claiming whitespace is rejected everywhere.
+- Observation: the workspace denies `clippy::self-named-module-files`, so a
+  module that gains submodules must use the directory form. Adding
+  `src/cli/environment/tests/boolean_values.rs` and
+  `tests/cli_tests/merge/env_value_forms/*` made the existing sibling files
+  `tests.rs` and `env_value_forms.rs` lint errors; both became `mod.rs` files.
+  Impact: the ExecPlan's artefact paths follow the new layout, and a future
+  test file added beside one of these modules belongs in the directory.
 
 ## Decision log
 
@@ -204,10 +211,11 @@ Their `Deserialize` is derived with `rename_all = "kebab-case"`, which is
 case-sensitive. The same enums are serialized into the CLI override layer, so
 canonical lowercase output matters.
 
-Relevant tests are `src/cli/environment/tests.rs`, `src/cli/config/tests.rs`,
-`src/cli/diag/mod.rs`'s test module, `tests/cli_tests/merge/mod.rs`,
-`tests/cli_tests/merge_diag.rs`, `tests/cli_tests/merge_diag_proptests.rs`, and
-the binary-level `tests/logging_stderr/json.rs`.
+Relevant tests are `src/cli/environment/tests/mod.rs`,
+`src/cli/config/tests.rs`, `src/cli/diag/mod.rs`'s test module,
+`tests/cli_tests/merge/mod.rs`, `tests/cli_tests/merge_diag.rs`,
+`tests/cli_tests/merge_diag_proptests.rs`, and the binary-level
+`tests/logging_stderr/json.rs`.
 
 Existing test infrastructure: `tests/cli_tests/merge_probe.rs` runs the real
 merge in a child process with an injected environment via
@@ -250,10 +258,10 @@ Named requirements:
 Trace chain:
 
 ```plaintext
-REQ-bool-env -> EP-M1 -> tests/cli_tests/merge/env_value_forms.rs
+REQ-bool-env -> EP-M1 -> tests/cli_tests/merge/env_value_forms/mod.rs
 REQ-bool-agree -> EP-M1/EP-M3 -> tests/cli_tests/merge_diag.rs
-REQ-policy-case -> EP-M2/EP-M3 -> tests/cli_tests/merge/env_value_forms.rs
-REQ-indexed-reject -> EP-M3 -> tests/cli_tests/merge/env_value_forms.rs
+REQ-policy-case -> EP-M2/EP-M3 -> tests/cli_tests/merge/env_value_forms/mod.rs
+REQ-indexed-reject -> EP-M3 -> tests/cli_tests/merge/env_value_forms/mod.rs
 REQ-tests -> EP-M3 -> tests/logging_stderr/json.rs
 ```
 
@@ -296,7 +304,7 @@ rejected otherwise.
   Method: parameterized `rstest` cases over all five paths and all accepted and
   rejected spellings. Rationale: the input domain is finite and normative.
   Domain: `true`, `false`, `1`, `0`, `True`, `yes`, `2`, empty, and whitespace.
-  Artefact: `src/cli/environment/tests.rs`. Evidence:
+  Artefact: `src/cli/environment/tests/mod.rs`. Evidence:
   `cargo test -p netsuke cli::environment` passes; a test fails if the
   normalization is removed. Non-vacuity: both accepted and rejected values are
   asserted, and a non-Boolean path keeps its numeric value.
@@ -323,9 +331,9 @@ rejected otherwise.
 - Obligation: `INV-indexed`.
   Method: fixed integration test in the child merge process. Domain:
   `NETSUKE_DEFAULT_TARGETS__0=hello.txt` and the scalar form. Artefact:
-  `tests/cli_tests/merge/env_value_forms.rs`. Evidence: the indexed form fails
-  with `invalid type: map`, the scalar form succeeds. Non-vacuity: the scalar
-  control succeeds.
+  `tests/cli_tests/merge/env_value_forms/mod.rs`. Evidence: the indexed form
+  fails with `invalid type: map`, the scalar form succeeds. Non-vacuity: the
+  scalar control succeeds.
 
 ### Formal verification decision
 
@@ -364,12 +372,12 @@ with TOML and `serde_json` cases and a serialization test.
 
 ### `EP-M3` End-to-end regression tests
 
-Add `tests/cli_tests/merge/env_value_forms.rs` with per-form submodules, and
-register it in `tests/cli_tests/merge/mod.rs`. Cover Boolean spellings, policy
-casing and precedence, file-layer strictness, and the indexed-list rejection.
-Extend `tests/cli_tests/merge_diag.rs` and `merge_diag_proptests.rs` with a
-coherent map-backed provider whose `get` and `entries` share a snapshot. Add
-`tests/logging_stderr/json_env.rs` — registered in
+Add `tests/cli_tests/merge/env_value_forms/mod.rs` with per-form submodules,
+and register it in `tests/cli_tests/merge/mod.rs`. Cover Boolean spellings,
+policy casing and precedence, file-layer strictness, and the indexed-list
+rejection. Extend `tests/cli_tests/merge_diag.rs` and `merge_diag_proptests.rs`
+with a coherent map-backed provider whose `get` and `entries` share a snapshot.
+Add `tests/logging_stderr/json_env.rs` — registered in
 `tests/logging_stderr_tests.rs` so the existing file stays under the size cap —
 with `NETSUKE_JSON=1` and `NETSUKE_JSON=0` child runs.
 
