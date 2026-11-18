@@ -144,6 +144,14 @@ list form.
 - [x] (2026-11-18) Answered the CodeRabbit finding in all three documents:
   `NETSUKE_NO_INPUT=0` parses to `false` and is then rejected by the no-input
   policy, so only `true` and `1` are usable. Commit `338687099`.
+- [x] (2026-11-18) Five-gate delta run on `76b98be0d` green: `make check-fmt`
+  (5s), `make markdownlint` (48s, 238 files, 0 issues), `make nixie` (2s, 239
+  files), `make test-documentation-contracts` (15 passed), and
+  `make test-workflow-contracts` (2440 passed, 3 skipped). The last is the
+  decisive check for the proof-scope entry.
+- [x] (2026-11-18) CodeRabbit's second pass raised the same
+  `NETSUKE_NO_INPUT=0` omission in the migration guide and the CLI design
+  document; both now state the exception beside the accepted spellings.
 - [x] (2026-11-18) Rebased onto `origin/main` at `8daa9143`, which adds
   `338ff4ac4` (public-consumer release smoke) and `8daa91431` (stdlib
   file-reading filters within the workspace capability). No conflicts: all ten
