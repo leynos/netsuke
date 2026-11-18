@@ -94,7 +94,7 @@ configuration paths and otherwise keeps Figment's ordinary scalar parsing, so
 `jobs=1` stays a number. A spelling outside the four is kept as raw text, which
 makes the full merge fail deserialization rather than coercing the value.
 
-`src/cli/config/mod.rs` implements `Deserialize` for `ColourPolicy`,
+`src/cli/config/policies.rs` implements `Deserialize` for `ColourPolicy`,
 `EmojiPolicy`, `ProgressPolicy`, and `AccessibilityPolicy` by reading a string
 and delegating to `FromStr`. The error names the accepted spellings, and
 serialization continues to emit the canonical lowercase spelling. The

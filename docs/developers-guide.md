@@ -6516,6 +6516,10 @@ That slice is a maintained boundary, not an accident:
 - `src/cli/config/no_input.rs` owns the existing `NoInput` configuration value;
   `src/cli/config/mod.rs` re-exports it so the public configuration shape and
   the build-script schema remain unchanged.
+- `src/cli/config/policies.rs` owns the four display-policy enums and their
+  `FromStr`-delegating `Deserialize` implementations, which
+  `src/cli/config/mod.rs` re-exports. It is an included submodule of
+  `config/mod.rs`, so the slice above did not need to name it.
 - `src/cli/validation.rs` holds the shared limits and error constructor that
   `src/cli/config/mod.rs` needs, so neither file has to reach up into
   `src/cli/mod.rs`.

@@ -178,6 +178,12 @@ list form.
   `NETSUKE_COLOR=" always "`. Accepting the trim keeps one rule for all
   environment strings, and the file layer still rejects whitespace.
   Date/Author: 2026-11-18, agent.
+- D7. Move the four policy enums into `src/cli/config/policies.rs`.
+  Rationale: the manual `Deserialize` implementations pushed
+  `src/cli/config/mod.rs` from 352 to 413 lines, past the 400-line file cap.
+  The enums and their shared deserializer form one coherent unit, and `mod.rs`
+  re-exports the types so every existing path, including
+  `src/cli/policy/values.rs`, keeps working. Date/Author: 2026-11-18, agent.
 
 ## Outcomes & retrospective
 
@@ -362,13 +368,15 @@ decide whether the explicit `--json` short circuit stays.
 
 ### `EP-M2` Case-insensitive policy deserialization
 
-In `src/cli/config/mod.rs`, replace the derived `Deserialize` on `ColourPolicy`,
-`EmojiPolicy`, `ProgressPolicy`, and `AccessibilityPolicy` with a manual
-implementation delegating to `FromStr`, retaining derived `Serialize` and
-`rename_all = "kebab-case"`. Add a private generic helper that deserializes a
-string and maps `FromStr` failure with `serde::de::Error::custom`, including
-the canonical expected values in the message. Extend `src/cli/config/tests.rs`
-with TOML and `serde_json` cases and a serialization test.
+In `src/cli/config/policies.rs` (the enums moved there from `mod.rs` to keep
+that file under the 400-line cap; see `D7`), replace the derived `Deserialize`
+on `ColourPolicy`, `EmojiPolicy`, `ProgressPolicy`, and `AccessibilityPolicy`
+with a manual implementation delegating to `FromStr`, retaining derived
+`Serialize` and `rename_all = "kebab-case"`. Add a private generic helper that
+deserializes a string and maps `FromStr` failure with
+`serde::de::Error::custom`, including the canonical expected values in the
+message. Extend `src/cli/config/tests.rs` with TOML and `serde_json` cases and
+a serialization test.
 
 ### `EP-M3` End-to-end regression tests
 

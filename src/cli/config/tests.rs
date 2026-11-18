@@ -6,7 +6,10 @@
 //! and JSON configuration layers. Serialization stays canonical lowercase, and
 //! invalid values carry the policy-specific error.
 
-use super::policy_definitions::PolicyDefinition;
+use super::policy_definitions::{
+    ACCESSIBILITY_POLICY_DEFINITIONS, COLOUR_POLICY_DEFINITIONS, EMOJI_POLICY_DEFINITIONS,
+    PROGRESS_POLICY_DEFINITIONS, PolicyDefinition,
+};
 use super::*;
 use proptest::prelude::*;
 use rstest::rstest;
