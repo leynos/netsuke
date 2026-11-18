@@ -157,34 +157,42 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
-    /// Every successful join is the per-member encodings in order and fits the
-    /// ceiling; a refusal names a member that exists.
+    /// Every successful join is the per-member encodings in order; a join is
+    /// refused exactly when that reference encoding exceeds the ceiling, and
+    /// the refusal names a member that exists.
     #[test]
     fn the_ceiling_bounds_every_join(
         dialect in prop_oneof![Just(SH), Just(POWERSHELL)],
         values in prop::collection::vec(budgeted_member(), 0..4),
     ) {
         let subject = Value::from_serialize(&values);
+        let mut expected = Vec::with_capacity(values.len());
+        for member in &values {
+            expected.push(
+                quote_value(member, dialect)
+                    .map_err(|error| TestCaseError::fail(format!("{error:#}")))?,
+            );
+        }
+        let reference = expected.join(" ");
         match render_with("{{ values | shell_join }}", dialect, &subject) {
             Ok(joined) => {
                 prop_assert!(
-                    joined.len() <= LIMIT,
-                    "a successful {dialect} join is {} bytes",
+                    reference.len() <= LIMIT,
+                    "a join of {} bytes fits the ceiling and must render; it produced {} bytes",
+                    reference.len(),
                     joined.len()
                 );
-                let mut expected = Vec::with_capacity(values.len());
-                for member in &values {
-                    expected.push(
-                        quote_value(member, dialect)
-                            .map_err(|error| TestCaseError::fail(format!("{error:#}")))?,
-                    );
-                }
                 prop_assert!(
-                    joined == expected.join(" "),
+                    joined == reference,
                     "the {dialect} join should be the per-member encodings"
                 );
             }
             Err(error) => {
+                prop_assert!(
+                    reference.len() > LIMIT,
+                    "a join of {} bytes fits the ceiling and must not be refused: {error:#}",
+                    reference.len()
+                );
                 let message = format!("{error:#}");
                 prop_assert!(
                     message.contains(LIMIT_CODE),
