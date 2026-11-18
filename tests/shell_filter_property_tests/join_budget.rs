@@ -6,12 +6,19 @@
 //! that fed it, so these cases drive the registered filter directly for both
 //! dialects and include an iterable that never ends: an unbounded input must be
 //! stopped by the budget rather than by exhausting memory.
+//!
+//! The fixed tables pin the ceiling arithmetic and are the readable statement of
+//! the contract. The generated property at the end checks the same contract
+//! over member counts, lengths, and contents drawn on and around the boundary,
+//! where the pre-check and the post-encode check can disagree about a member.
 
 use anyhow::{Result, ensure};
 use minijinja::value::Value;
+use proptest::prelude::*;
+use proptest::test_runner::FileFailurePersistence;
 use rstest::rstest;
 
-use super::property_support::{POWERSHELL, SH, render_with};
+use super::property_support::{ALPHABET, POWERSHELL, SH, quote_value, render_with};
 
 /// The stable diagnostic code the ceiling error carries.
 const LIMIT_CODE: &str = "[netsuke::jinja::shell::join_limit]";
@@ -77,8 +84,10 @@ fn a_join_within_the_ceiling_still_renders(
 
 /// An endless iterable of oversized members is stopped by the ceiling.
 ///
-/// Without the pre-check the filter would encode and retain one member after
-/// another forever; the test's own completion is part of the assertion.
+/// The post-encode check alone would also stop this input, so what the test
+/// asserts is that the ceiling ends the sequence rather than the input: the
+/// test's own completion is part of the assertion. The pre-check's separate
+/// guarantee — that the member is never encoded — is pinned by the unit suite.
 #[test]
 fn an_endless_iterable_of_large_members_is_stopped() -> Result<()> {
     let endless = Value::make_iterable(|| std::iter::repeat("a".repeat(400_000)));
@@ -103,4 +112,77 @@ fn an_endless_iterable_of_small_members_is_stopped() -> Result<()> {
         "the endless iterable should fail on the ceiling: {error:#}"
     );
     Ok(())
+}
+
+/// A member length that mostly stays small but seeds the boundary.
+///
+/// A fixed mebibyte ceiling is only exercised by large members, so the seeded
+/// arms sit on the half-ceiling — where two members plus the separating space
+/// cross it — and on the ceiling itself. The small arm keeps most cases cheap.
+fn budgeted_length() -> impl Strategy<Value = usize> {
+    prop_oneof![
+        8 => 0..24_usize,
+        2 => (LIMIT / 2 - 1)..=(LIMIT / 2 + 1),
+        1 => Just(LIMIT),
+        1 => Just(LIMIT + 1),
+    ]
+}
+
+/// One word of a generated length, using only characters a recipe may carry.
+fn budgeted_member() -> impl Strategy<Value = String> {
+    (budgeted_length(), prop::sample::select(ALPHABET))
+        .prop_map(|(length, character)| std::iter::repeat_n(character, length).collect())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 24,
+        failure_persistence: Some(Box::new(FileFailurePersistence::Direct(
+            "tests/shell_filter_property_tests.proptest-regressions",
+        ))),
+        ..ProptestConfig::default()
+    })]
+
+    /// Every successful join is the per-member encodings in order and fits the
+    /// ceiling; a refusal names a member that exists.
+    #[test]
+    fn the_ceiling_bounds_every_join(
+        dialect in prop_oneof![Just(SH), Just(POWERSHELL)],
+        values in prop::collection::vec(budgeted_member(), 0..4),
+    ) {
+        let subject = Value::from_serialize(&values);
+        match render_with("{{ values | shell_join }}", dialect, &subject) {
+            Ok(joined) => {
+                prop_assert!(
+                    joined.len() <= LIMIT,
+                    "a successful {dialect} join is {} bytes",
+                    joined.len()
+                );
+                let mut expected = Vec::with_capacity(values.len());
+                for member in &values {
+                    expected.push(
+                        quote_value(member, dialect)
+                            .map_err(|error| TestCaseError::fail(format!("{error:#}")))?,
+                    );
+                }
+                prop_assert!(
+                    joined == expected.join(" "),
+                    "the {dialect} join should be the per-member encodings"
+                );
+            }
+            Err(error) => {
+                let message = format!("{error:#}");
+                prop_assert!(
+                    message.contains(LIMIT_CODE),
+                    "a refusal should carry the stable code: {message}"
+                );
+                prop_assert!(
+                    (0..values.len()).any(|index| {
+                        message.contains(&format!("item \u{2068}{index}\u{2069}"))
+                    }),
+                    "the refusal should name a member index within the input: {message}"
+                );
+            }
+        }
+    }
 }

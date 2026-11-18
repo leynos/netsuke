@@ -10,7 +10,7 @@ use minijinja::value::Value;
 use rstest::rstest;
 use test_support::{EnLocalizer, en_localizer};
 
-use super::{SHELL_JOIN_MAX_ENCODED_BYTES, join_sequence};
+use super::{SHELL_JOIN_MAX_ENCODED_BYTES, append_encoded, join_sequence};
 use crate::shell_word::ShellDialect;
 
 /// Join `values` under `dialect`, as the filter would.
@@ -75,7 +75,11 @@ fn a_word_of_exactly_the_ceiling_is_accepted() {
     );
 }
 
-/// One byte past the ceiling is rejected before the word is encoded.
+/// One byte past the ceiling is rejected, naming the member index.
+///
+/// This asserts the outcome only; that the rejection happens before encoding is
+/// proven separately by [`an_oversized_member_is_rejected_before_encoding`],
+/// because the post-encode check would produce the same message.
 #[rstest]
 fn a_word_past_the_ceiling_is_rejected(en_localizer: EnLocalizer) {
     let _localizer = en_localizer;
@@ -98,6 +102,68 @@ fn a_word_past_the_ceiling_is_rejected(en_localizer: EnLocalizer) {
     assert!(
         !message.contains("aaaa"),
         "the rejection must not echo the content it refused: {message}"
+    );
+}
+
+/// The pre-check rejects a member that cannot fit before the encoder runs.
+///
+/// The post-encode check would reject the same member with the same message, so
+/// an outcome-only assertion cannot tell the two checks apart. What the
+/// pre-check buys is that the member is never encoded: the buffer keeps the
+/// length and capacity it had. An untouched, empty buffer is therefore the
+/// observable difference, and removing the pre-check turns this test red.
+#[rstest]
+#[case::sh(ShellDialect::Sh)]
+#[case::power_shell(ShellDialect::PowerShell)]
+fn an_oversized_member_is_rejected_before_encoding(
+    #[case] dialect: ShellDialect,
+    en_localizer: EnLocalizer,
+) {
+    let _localizer = en_localizer;
+    let mut joined = Vec::new();
+    let member = inert_word(SHELL_JOIN_MAX_ENCODED_BYTES + 1);
+    let error = append_encoded(dialect, &member, 0, &mut joined)
+        .expect_err("a member larger than the ceiling must be rejected");
+    assert!(
+        error.to_string().contains(&format!("item {}", isolated(0))),
+        "the single member should be named: {error}"
+    );
+    assert!(
+        joined.is_empty(),
+        "the pre-check should leave the buffer untouched, not truncate it afterwards"
+    );
+    assert_eq!(
+        joined.capacity(),
+        0,
+        "the encoder must not run, so the buffer must not grow"
+    );
+}
+
+/// The PowerShell pre-check is exact, not merely a lower bound.
+///
+/// Half a ceiling of quotes fits the input-length budget but doubles when
+/// encoded, so a pre-check that used the input length would pass the member to
+/// the encoder and only object afterwards, after the buffer had grown past the
+/// ceiling. The untouched buffer shows the exact length refused it first.
+#[rstest]
+fn the_power_shell_pre_check_is_exact(en_localizer: EnLocalizer) {
+    let _localizer = en_localizer;
+    let quotes = "'".repeat(HALF_CEILING + 1);
+    assert!(
+        quotes.len() <= SHELL_JOIN_MAX_ENCODED_BYTES,
+        "the control is load-bearing: the raw input fits the ceiling"
+    );
+    let mut joined = Vec::new();
+    let error = append_encoded(ShellDialect::PowerShell, &quotes, 0, &mut joined)
+        .expect_err("the doubled encoding exceeds the ceiling");
+    assert!(
+        error.to_string().contains(&format!("item {}", isolated(0))),
+        "the single member should be named: {error}"
+    );
+    assert_eq!(
+        joined.capacity(),
+        0,
+        "the exact length should reject the member before it is encoded"
     );
 }
 
@@ -140,26 +206,20 @@ fn repeated_references_stop_at_the_member_that_cannot_fit(en_localizer: EnLocali
     );
 }
 
-/// A word that doubles when encoded is rejected by both dialects, each through
-/// a different check.
+/// A `Sh` word that doubles when encoded is rejected by the post-encode check.
 ///
-/// Every quote becomes `\'` in `Sh` and a doubled quote in PowerShell, so the
-/// input is half a ceiling of quotes in both cases. PowerShell's length is
-/// computed exactly, so the pre-check rejects the word before it is encoded; a
-/// check that used the input length would let it through and only discover the
-/// overshoot afterwards. `Sh`'s pre-check is a lower bound that this input
-/// passes, so only the post-encode check can reject it — which is what proves
-/// that second check exists.
+/// Every quote becomes `\'`, so half a ceiling of quotes fits the input-length
+/// lower bound and only the post-encode check can reject it — which is what
+/// proves that second check exists. PowerShell's exact pre-check is proven by
+/// [`the_power_shell_pre_check_is_exact`], and its inclusive boundary by
+/// [`a_word_that_fills_the_ceiling_exactly_is_accepted`].
 #[rstest]
-#[case::power_shell_pre_check(ShellDialect::PowerShell)]
-#[case::sh_post_encode_check(ShellDialect::Sh)]
-fn a_word_that_doubles_past_the_ceiling_is_rejected(
-    #[case] dialect: ShellDialect,
+fn a_sh_word_that_doubles_past_the_ceiling_is_rejected_by_the_post_encode_check(
     en_localizer: EnLocalizer,
 ) {
     let _localizer = en_localizer;
     let quotes = "'".repeat(HALF_CEILING + 1);
-    let error = join(&[quotes], dialect)
+    let error = join(&[quotes], ShellDialect::Sh)
         .expect_err("a word that doubles when encoded must not pass the ceiling");
     assert!(
         error.to_string().contains(&format!("item {}", isolated(0))),
@@ -170,11 +230,13 @@ fn a_word_that_doubles_past_the_ceiling_is_rejected(
 /// A doubled word that lands exactly on the ceiling is accepted, in both
 /// dialects.
 ///
-/// The controls for [`a_word_that_doubles_past_the_ceiling_is_rejected`]: the
-/// same input shapes one quote shorter fit exactly, so the rejections above are
-/// about the ceiling and not about quotes being refused. `Sh` fills the ceiling
-/// from half a ceiling of quotes. PowerShell spends two bytes on its
-/// delimiters, so it needs one quote fewer.
+/// The controls for
+/// [`a_sh_word_that_doubles_past_the_ceiling_is_rejected_by_the_post_encode_check`]
+/// and [`the_power_shell_pre_check_is_exact`]: the same input shapes one quote
+/// shorter fit exactly, so the rejections above are about the ceiling and not
+/// about quotes being refused. `Sh` fills the ceiling from half a ceiling of
+/// quotes. PowerShell spends two bytes on its delimiters, so it needs one quote
+/// fewer.
 #[rstest]
 #[case::sh_post_encode_check(ShellDialect::Sh, HALF_CEILING)]
 #[case::power_shell_inclusive(ShellDialect::PowerShell, HALF_CEILING - 1)]

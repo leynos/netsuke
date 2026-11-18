@@ -204,8 +204,11 @@ pub(crate) const fn is_power_shell_double_quote(character: char) -> bool {
 #[cfg(test)]
 mod tests {
     //! Tests for the dialect mapping, the admissibility rule, and encoding.
-    use super::{ShellDialect, is_recipe_admissible, quote_word};
+    use super::{
+        ShellDialect, encode_into, encoded_len_lower_bound, is_recipe_admissible, quote_word,
+    };
     use crate::recipe_shell::RecipeShell;
+    use proptest::prelude::*;
     use rstest::rstest;
 
     /// `Posix` and `Bash` differ in transport, not in lexis, so both map to
@@ -340,5 +343,53 @@ mod tests {
     #[case::empty("", "''")]
     fn power_shell_quoting_doubles_quotes(#[case] value: &str, #[case] expected: &str) {
         assert_eq!(quote_word(ShellDialect::PowerShell, value), expected);
+    }
+
+    /// A short string over arbitrary Unicode.
+    ///
+    /// `any::<char>()` reaches the empty word, quotes, backslashes, control
+    /// characters, and multi-byte characters, so the length claims are checked
+    /// where escaping is densest rather than only on the fixed tables above.
+    fn arbitrary_word() -> impl Strategy<Value = String> {
+        prop::collection::vec(any::<char>(), 0..24)
+            .prop_map(|chars| chars.into_iter().collect::<String>())
+    }
+
+    proptest! {
+        /// The pre-check's bound never exceeds the encoder, and is exact where
+        /// the encoder is fixed-shape.
+        ///
+        /// `shell_join` decides whether to encode a member from this value, so
+        /// a bound that over-reported would refuse joins that fit, and one that
+        /// under-reported would let the encoder grow the buffer past the
+        /// ceiling. The `Sh` factor is the transient overshoot the ADR records.
+        #[test]
+        fn the_lower_bound_brackets_the_encoding(value in arbitrary_word()) {
+            let mut sha = Vec::new();
+            encode_into(ShellDialect::Sh, &value, &mut sha);
+            prop_assert!(
+                encoded_len_lower_bound(ShellDialect::Sh, &value) <= sha.len(),
+                "the Sh lower bound exceeds the {} bytes encoded from {:?}",
+                sha.len(),
+                value
+            );
+            if !value.is_empty() {
+                prop_assert!(
+                    sha.len() <= 3 * value.len() + 1,
+                    "the Sh encoding of a {}-byte input is {} bytes",
+                    value.len(),
+                    sha.len()
+                );
+            }
+
+            let mut power_shell = Vec::new();
+            encode_into(ShellDialect::PowerShell, &value, &mut power_shell);
+            prop_assert_eq!(
+                encoded_len_lower_bound(ShellDialect::PowerShell, &value),
+                power_shell.len(),
+                "the PowerShell bound should be exact for {:?}",
+                value
+            );
+        }
     }
 }
