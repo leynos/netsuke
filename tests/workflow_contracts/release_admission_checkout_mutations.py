@@ -7,9 +7,9 @@ subdirectory, which is what keeps the gate implementation out of the caller's
 hands. Each mutation here states a plausible way to lose one of those
 properties -- collapse the pair into one checkout, let the verifier replace the
 candidate, point either checkout at the other's repository or ref, run the
-wrong copy of the entry point, or move the gate step out of the workspace root
--- so the mutation test shows each pin assertion fires rather than merely
-passing.
+wrong copy of the entry point, drop uv's isolation from the candidate's
+configuration, or move the gate step out of the workspace root -- so the
+mutation test shows each pin assertion fires rather than merely passing.
 
 The mutations are exported as :data:`CHECKOUT_MUTATIONS` and merged into the
 publication gate's mutation set in :mod:`release_publication_gate_mutations`.
@@ -26,6 +26,7 @@ from release_admission_gate_contract import (
     GATE_REF,
     GATE_REPOSITORY,
     GATE_SCRIPT,
+    UV_ISOLATION_FLAGS,
 )
 from release_mutation_support import MutationError, MutationIssue
 from workflow_loading import job_steps, require_mapping, workflow_job
@@ -168,6 +169,27 @@ def _job_default_moves_gate(release: dict[str, object]) -> None:
     }
 
 
+def _gate_without_uv_isolation(release: dict[str, object]) -> None:
+    """Run uv over the candidate checkout's configuration and project files.
+
+    The gate keeps the candidate checkout as its working directory, and uv
+    reads `uv.toml` and `pyproject.toml` from there and its parents. Without
+    the isolation flags a candidate can name the index the gate's own pinned
+    dependencies come from, and the code those dependencies run has the job's
+    `GH_TOKEN`.
+
+    Raises
+    ------
+    MutationError
+        If the gate step no longer carries the flags this mutation removes.
+    """
+    step = _gate_step(release)
+    run = str(step.get("run", ""))
+    if UV_ISOLATION_FLAGS not in run:
+        raise MutationError(MutationIssue.PATTERN_MISMATCH, UV_ISOLATION_FLAGS)
+    step["run"] = run.replace(f" {UV_ISOLATION_FLAGS}", "")
+
+
 #: Each mutation that breaks the candidate/verifier split, keyed by its label.
 CHECKOUT_MUTATIONS: dict[str, cabc.Callable[[dict[str, object]], None]] = {
     "caller-selects-gate-implementation": _caller_selects_gate,
@@ -179,6 +201,7 @@ CHECKOUT_MUTATIONS: dict[str, cabc.Callable[[dict[str, object]], None]] = {
     "gate-runs-candidate-script": _gate_runs_candidate_script,
     "gate-step-leaves-candidate": _gate_step_leaves_candidate,
     "job-default-moves-gate": _job_default_moves_gate,
+    "gate-run-without-uv-isolation": _gate_without_uv_isolation,
 }
 
 __all__ = ("CHECKOUT_MUTATIONS",)

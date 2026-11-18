@@ -3166,9 +3166,19 @@ that checkout is executed. The second checkout is the verifier,
 replace the candidate checkout and re-point `origin` here, which is exactly how
 the candidate fetch stops working, so the subdirectory is a safety property
 rather than a layout preference. The gate step runs
-`uv run --script gate/.github/scripts/release_admission.py` with the candidate
-checkout as its working directory, which is what leaves `origin` naming the
-caller while the code being run comes from this repository.
+`uv run --no-config --no-project --script
+gate/.github/scripts/release_admission.py`
+with the candidate checkout as its working directory, which is what leaves
+`origin` naming the caller while the code being run comes from this repository.
+
+Those two uv flags exist because that working directory is untrusted content.
+uv reads `uv.toml` and `pyproject.toml` from the working directory and its
+parents, so a candidate that supplied either could redirect the index the
+gate's own pinned dependencies come from and run its code inside the admission
+job, where `GH_TOKEN` is available. `--no-config` refuses the configuration
+files and `--no-project` refuses project discovery; neither suppresses the
+entry point's PEP 723 block, so uv still resolves and installs the verifier's
+declared dependencies.
 
 `job.workflow_sha` is the commit of the workflow file that defines the job, so
 the gate and the literal in its step environment come from the same commit as
@@ -3180,13 +3190,16 @@ context types, so `.github/actionlint.yaml` exempts that diagnostic. The
 exemption matches on file and message text rather than on an expression, so it
 silences the message anywhere in `release.yml`; `release_admission_source_pin`
 in `tests/workflow_contracts/release_admission_source_pin.py` is what holds the
-repository, ref, checkout order, subdirectory, and gate step of the expression
-the exemption exists for. `release_publication_gate_mutations.py` and
-`release_admission_checkout_mutations.py` prove the rule fires when the pair is
-collapsed into one checkout, when the verifier replaces the candidate, when
-either checkout names the other's repository or ref, when the gate runs the
-candidate's copy of the entry point, and when a step or job default moves the
-working directory into the verifier -- thirty stated regressions in all.
+checkout order, subdirectory, and gate step of the expression the exemption
+exists for, with the repository and ref each checkout must name in
+`release_admission_checkout_inputs.py`. `release_publication_gate_mutations.py`
+and `release_admission_checkout_mutations.py` prove the rule fires when the
+pair is collapsed into one checkout, when the verifier replaces the candidate,
+when either checkout names the other's repository or ref, when the gate runs
+the candidate's copy of the entry point, when the gate's uv run stops refusing
+the candidate's configuration and project files, and when a step or job default
+moves the working directory into the verifier -- thirty-one stated regressions
+in all.
 
 Two limits follow from the mechanism and are recorded rather than worked
 around. GitHub documents `job.workflow_sha` as unavailable on GitHub Enterprise
@@ -3201,26 +3214,26 @@ workflow also replaces the guards. Provenance remains `#598`'s work.
 The gate logic is Python, per the estate rule in
 [scripting standards](scripting-standards.md), not shell.
 `.github/scripts/release_admission.py` is the PEP 723 entry point the workflow
-runs with `uv run --script`, which resolves its declared dependencies at
-invocation. Its implementation is split across
-`.github/scripts/_release_admission/`: `policy` owns the pure bounded
-classifications, `manifest` owns the candidate-bound evidence document, its
-schema version, field readers, and its single refusal, `evidence` owns the
-freshness and admission decisions over a parsed manifest, the bounded maximum
-age, and the variables that set it, `admission_evidence` owns the shared read
-and the two evidence decisions, including the window re-read before admission,
-`records` owns the metric and trace shapes, `delivery` owns the metric, output,
-and trace sinks, `bounding` owns the process-group command bound and the stream
-wiring, `commands` owns the bounded external command runner, `statuses`
-translates an exit status, an elapsed bound, or a refused launch into the
-gate's own command result, `telemetry` owns the emitted records, `environment`
-reads a variable in one of Bash's two default forms, `filesystem` performs the
-two start-up effects that create the artefact parents and truncate the
-artefacts, `configuration` resolves the environment the gate is told, and
-`gate` composes the operations and reporting. The workflow's
-`astral-sh/setup-uv` step provisions the interpreter; `uv` reads the entry
-point's own `requires-python` and dependency pins rather than the workflow
-restating them.
+runs with `uv run`, with configuration and project discovery disabled as
+described above, which resolves its declared dependencies at invocation. Its
+implementation is split across `.github/scripts/_release_admission/`: `policy`
+owns the pure bounded classifications, `manifest` owns the candidate-bound
+evidence document, its schema version, field readers, and its single refusal,
+`evidence` owns the freshness and admission decisions over a parsed manifest,
+the bounded maximum age, and the variables that set it, `admission_evidence`
+owns the shared read and the two evidence decisions, including the window
+re-read before admission, `records` owns the metric and trace shapes,
+`delivery` owns the metric, output, and trace sinks, `bounding` owns the
+process-group command bound and the stream wiring, `commands` owns the bounded
+external command runner, `statuses` translates an exit status, an elapsed
+bound, or a refused launch into the gate's own command result, `telemetry` owns
+the emitted records, `environment` reads a variable in one of Bash's two
+default forms, `filesystem` performs the two start-up effects that create the
+artefact parents and truncate the artefacts, `configuration` resolves the
+environment the gate is told, and `gate` composes the operations and reporting.
+The workflow's `astral-sh/setup-uv` step provisions the interpreter; `uv` reads
+the entry point's own `requires-python` and dependency pins rather than the
+workflow restating them.
 
 The gate keeps fallible boundaries behind explicit adapters. Set
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,

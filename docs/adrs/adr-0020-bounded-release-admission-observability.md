@@ -511,10 +511,16 @@ checkout sits at the workspace root, keeps the default credential persistence
 so the fetch can read a private caller's repository, and is never executed. The
 verifier checkout is written into a subdirectory with
 `persist-credentials: false`, and the gate step runs
-`uv run --script gate/.github/scripts/release_admission.py` from the workspace
-root. The subdirectory is a safety property rather than a layout preference: a
-verifier checkout at the root would replace the candidate checkout and re-point
-`origin` here.
+`uv run --no-config --no-project --script gate/.github/scripts/release_admission.py`
+from the workspace root. The subdirectory is a safety property rather than a
+layout preference: a verifier checkout at the root would replace the candidate
+checkout and re-point `origin` here. The working directory is also untrusted
+content, and uv reads `uv.toml` and `pyproject.toml` from it and its parents,
+so the run refuses both: a candidate could otherwise name the index the gate's
+own pinned dependencies come from, and that code runs with the job's
+`GH_TOKEN`. PEP 723 dependencies still install, because the refusal is of
+project and configuration discovery rather than of the entry point's declared
+metadata.
 
 The pin removes the caller's choice of implementation. It is not producer
 authentication: a caller that replaces the whole workflow also replaces the
@@ -528,16 +534,18 @@ with this repository's gate at this repository's commit until it changes the
 repository input.
 
 `check_admission_source_pin` in
-`tests/workflow_contracts/release_admission_source_pin.py` holds the
-repository, the ref, the checkout order, the subdirectory, and the gate step,
-and derives the expected gate command from the verifier checkout so the two
-cannot drift apart.
-`tests/workflow_contracts/release_admission_checkout_mutations.py` states nine
+`tests/workflow_contracts/release_admission_source_pin.py` holds the checkout
+order, the subdirectory, and the gate step, and derives the expected gate
+command from the verifier checkout so the two cannot drift apart; the
+repository and ref each role must name, with the reason for each, live in
+`tests/workflow_contracts/release_admission_checkout_inputs.py`.
+`tests/workflow_contracts/release_admission_checkout_mutations.py` states ten
 regressions of that shape: the pair collapsed into one pinned checkout, the
 verifier replacing the candidate, either checkout naming the other's repository
-or ref, the gate running the candidate's copy of the entry point, and a step or
-job default moving the working directory into the verifier. With those nine,
-the two mutation modules state thirty regressions in all.
+or ref, the gate running the candidate's copy of the entry point, the gate's
+`uv run` ceasing to refuse the candidate's configuration and project files, and
+a step or job default moving the working directory into the verifier. With
+those ten, the two mutation modules state thirty-one regressions in all.
 `scripts/tests/test_release_admission_cross_repository.py` settles the fetch
 question by execution rather than argument: it builds two real Git
 repositories, runs the gate from the candidate checkout and from the verifier

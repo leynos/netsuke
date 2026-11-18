@@ -46,11 +46,15 @@ ENFORCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
 TIMEOUT_VARIABLE = "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS"
 METRICS_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_METRICS_FILE"
 
-#: An unrelated variable, which must survive: the harness drops one prefix
+#: An unrelated variable, which must survive: the harness drops two prefixes
 #: rather than emptying the environment a case inherits.
 KEPT_VARIABLE = "NETSUKE_HARNESS_TEST_KEPT"
 INHERITED_TAG = "v1.2.3-inherited"
 CASE_TAG = "v9.9.9-case"
+
+#: The Git variables a hook-run suite exports for the repository that started
+#: it, which name a repository the case never chose.
+GIT_LOCATION_VARIABLES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
 
 
 def test_inherited_admission_controls_do_not_reach_the_child(
@@ -102,3 +106,35 @@ def test_inherited_admission_controls_do_not_reach_the_child(
     assert environment["PATH"].split(os.pathsep)[0] == str(shim_dir), (
         "the controller's shims must still lead the child's PATH"
     )
+
+
+def test_an_inherited_git_repository_location_does_not_reach_the_child(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify the child resolves Git from its working directory alone.
+
+    Notes
+    -----
+    These cases are the ones that choose a working directory, and Git resolves
+    ``GIT_DIR`` and its companions before it looks at one. A hook-run suite
+    exports them for the repository that started the run, so an inherited value
+    would decide which repository the gate's fetch reads while every assertion
+    in the case still named the checkout it had chosen.
+    """
+    inherited = {"PATH": os.environ["PATH"]}
+    inherited.update(dict.fromkeys(GIT_LOCATION_VARIABLES, "/inherited/elsewhere"))
+    paths = gate_paths(tmp_path)
+    environment = gate_environment(
+        cmd_mox,
+        GateInputs(tmp_path, MISSING, None, paths),
+        inherited,
+    )
+
+    surviving = [name for name in GIT_LOCATION_VARIABLES if name in environment]
+    assert not surviving, (
+        f"an inherited Git repository location must not reach the child: {surviving}"
+    )
+    assert environment["PATH"].split(os.pathsep)[0] == str(
+        cmd_mox.environment.shim_dir
+    ), "the controller's shims must still lead the child's PATH"

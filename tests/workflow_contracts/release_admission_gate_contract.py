@@ -27,6 +27,7 @@ from release_admission_source_pin import (
     GATE_REF,
     GATE_REPOSITORY,
     GATE_SCRIPT,
+    UV_ISOLATION_FLAGS,
     check_admission_source_pin,
     verifier_gate_command,
 )
@@ -144,6 +145,7 @@ __all__ = (
     "GATE_REF",
     "GATE_REPOSITORY",
     "GATE_SCRIPT",
+    "UV_ISOLATION_FLAGS",
     "check_admission_enforcement",
     "check_admission_source_pin",
     "verifier_gate_command",

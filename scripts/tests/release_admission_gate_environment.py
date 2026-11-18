@@ -11,7 +11,9 @@ The isolation is the point. Every admission variable the parent exported is
 dropped rather than inherited, because a developer with
 ``NETSUKE_RELEASE_ADMISSION_TAG`` exported would otherwise turn the default
 rehearsal into a tagged run, and the resulting failure would read as a defect in
-the gate rather than as a contaminated environment.
+the gate rather than as a contaminated environment. Inherited ``GIT_*`` names
+are dropped for the same reason: they name a repository explicitly, so they
+would override the working directory a case chose.
 """
 
 import dataclasses
@@ -36,6 +38,14 @@ EVIDENCE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE"
 #: declared scenario, and a developer's exported tag, mode, bound, or adapter
 #: would otherwise decide what a case exercises.
 ADMISSION_VARIABLE_PREFIX = "NETSUKE_RELEASE_ADMISSION_"
+
+#: The prefix Git reads repository location from. These cases may run under a
+#: Git hook, which exports ``GIT_DIR`` and ``GIT_INDEX_FILE`` for the repository
+#: that started the test run; Git resolves them before it looks at the working
+#: directory, so an inherited value would redirect the gate's own fetch away
+#: from the checkout the case chose. The layout helper strips the same prefix
+#: from its setup commands, and the child must see no more than they do.
+GIT_VARIABLE_PREFIX = "GIT_"
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -72,7 +82,10 @@ def gate_environment(
     sinks from this harness and from the case itself: a developer with
     ``NETSUKE_RELEASE_ADMISSION_TAG`` exported would otherwise turn the default
     rehearsal into a tagged run, and the resulting failure would read as a
-    defect in the gate.
+    defect in the gate. Inherited ``GIT_*`` names are dropped for the same
+    reason: a hook-run suite exports the location of the repository that
+    started it, which would decide which repository the child's fetch reads
+    regardless of the working directory the case chose.
 
     Parameters
     ----------
@@ -105,10 +118,9 @@ def gate_environment(
     # than being stored: the returned mapping therefore holds only ``str``
     # values, and the annotation is what says so rather than a narrowed view a
     # reader would have to reconstruct.
+    dropped = (ADMISSION_VARIABLE_PREFIX, GIT_VARIABLE_PREFIX)
     environment: dict[str, str] = {
-        name: value
-        for name, value in base.items()
-        if not name.startswith(ADMISSION_VARIABLE_PREFIX)
+        name: value for name, value in base.items() if not name.startswith(dropped)
     }
     environment.update({
         "GITHUB_OUTPUT": str(paths["output"]),

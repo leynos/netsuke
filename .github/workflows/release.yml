@@ -502,8 +502,15 @@ jobs:
             ${{ runner.temp }}/release-admission-traces.jsonl
         # The verifier's own script, run from the workspace root: the working
         # directory stays the candidate checkout, which is where `origin`
-        # points at the caller's repository.
-        run: uv run --script gate/.github/scripts/release_admission.py
+        # points at the caller's repository. That directory is also untrusted
+        # content, and uv reads `uv.toml` and `pyproject.toml` from it and its
+        # parents, so the run refuses both: without the flags a candidate
+        # could redirect the index its dependencies come from and run code
+        # here, where `GH_TOKEN` is available. The PEP 723 block still
+        # installs the verifier's pinned dependencies.
+        run: >-
+          uv run --no-config --no-project --script
+          gate/.github/scripts/release_admission.py
       - name: Summarise release-admission metrics
         if: always()
         shell: bash

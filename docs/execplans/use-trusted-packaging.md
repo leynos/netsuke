@@ -5097,12 +5097,13 @@ and pass, on the final wording.
   read a private caller's repository, and is never executed. The verifier
   checkout is `leynos/netsuke` at `${{ job.workflow_sha }}`, written into a
   subdirectory with `persist-credentials: false`. The gate step runs
-  `uv run --script gate/.github/scripts/release_admission.py` from the
-  workspace root, so the working directory leaves `origin` naming the caller
-  while the code being run comes from this repository. A verifier checkout at
-  the root would have replaced the candidate checkout and re-pointed `origin`
-  here, so the subdirectory is the property that keeps the fetch working, not a
-  layout preference.
+  `uv run --no-config --no-project --script
+  gate/.github/scripts/release_admission.py`
+  from the workspace root, so the working directory leaves `origin` naming the
+  caller while the code being run comes from this repository. A verifier
+  checkout at the root would have replaced the candidate checkout and re-pointed
+  `origin` here, so the subdirectory is the property that keeps the fetch
+  working, not a layout preference.
 
   *The coverage.* The source-pin contract moved to
   `release_admission_source_pin.py`, which holds the repository, ref, checkout
@@ -5120,6 +5121,48 @@ and pass, on the final wording.
   observation-mode fetch-failure case, because the fetch precedes the
   enforcement decision and must not be masked by it. Date/Author: 2026-11-18,
   implementation agent.
+
+- Observation: **the seventh assessment's review found four defects in the
+  two-checkout repair, and one of the four proposed remedies was itself
+  insufficient.** On head `382e174db`, CodeRabbit filed `CHANGES_REQUESTED`
+  with two major and two minor findings. Each was verified against the source
+  before repair.
+
+  *Evidence parsing.* `json.loads` keeps the last of two identical object
+  members, so a manifest could record a failing result and then overwrite it
+  with a passing one while remaining valid JSON. `parse_manifest` now decodes
+  with an `object_pairs_hook` that refuses a repeated name at any nesting
+  level, and the refusal class derives from `ValueError` so the existing
+  handler maps it to `malformed_evidence`. Four cases cover it: a positive
+  control, a repeated result name, a repeated `outcome` inside one result, and
+  a repeated top-level member.
+
+  *Inherited Git location.* A gate run from a `pre-commit` hook inherits
+  `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE` for the repository that
+  started it, and `gate_environment` passed them to the child, which then
+  fetched into the wrong repository. The harness now drops the whole `GIT_`
+  prefix beside the admission variables, and a case asserts that none of the
+  three reaches the child while the shim directory still leads `PATH`.
+
+  *Relative evidence path.* The child resolved
+  `NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE` against its own working directory
+  while the test looked for the default path, so a relative value wrote outside
+  the layout the test inspected. `_evidence_path` now takes the child's `cwd`
+  and a regression test sets a relative file name, runs from the candidate
+  checkout, and asserts the file is written where the child reads it.
+
+  *uv isolation.* The gate's working directory is the candidate checkout, and
+  uv reads `uv.toml` and `pyproject.toml` from it and its parents, so a
+  candidate could name the index the gate's pinned dependencies come from; that
+  code then runs with the job's `GH_TOKEN`. The finding proposed `--no-config`.
+  A local probe showed the remedy insufficient: a malformed `pyproject.toml`
+  still failed under `--no-config` alone (`rc=2`), while
+  `--no-config --no-project` succeeded and still installed PEP 723
+  dependencies, proved with `six==1.17.0`. Both flags are therefore shipped,
+  held as `UV_ISOLATION_FLAGS` in `release_admission_source_pin.py`, derived
+  into the expected command, and regression-tested by the
+  `gate-run-without-uv-isolation` mutation, which takes the stated total to
+  thirty-one. Date/Author: 2026-11-18, implementation agent.
 
 ## Surprises & discoveries
 

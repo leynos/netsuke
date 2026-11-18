@@ -18,16 +18,23 @@ script from the workspace root so `origin` keeps naming the caller.
 :func:`check_admission_source_pin` holds that shape: two checkouts, each with
 its own repository and ref, the verifier confined to a relative subdirectory,
 and a gate step whose command names the verifier's script while leaving the
-working directory alone. The enforcement mode that the write jobs consume is
-checked separately in :mod:`release_admission_gate_contract`.
+working directory alone. What each checkout must name, and the subdirectory
+rule, live in :mod:`release_admission_checkout_inputs`; this module composes
+them with the order and gate-step rules. The enforcement mode that the write
+jobs consume is checked separately in :mod:`release_admission_gate_contract`.
 
 Run via ``make test-workflow-contracts``.
 """
 
-import dataclasses
-import typing as typ
-from pathlib import PurePosixPath
-
+from release_admission_checkout_inputs import (
+    CANDIDATE_REF,
+    CANDIDATE_REPOSITORY,
+    GATE_REF,
+    GATE_REPOSITORY,
+    Report,
+    check_candidate_inputs,
+    check_verifier_inputs,
+)
 from workflow_loading import job_steps, workflow_job
 
 ADMISSION_JOB = "release-admission-canaries"
@@ -37,75 +44,16 @@ CHECKOUT_ACTION = "actions/checkout"
 #: it. The gate step must name the pinned verifier's copy of this path.
 GATE_SCRIPT = ".github/scripts/release_admission.py"
 
-#: The candidate checkout names the caller's own repository and commit. It is
-#: what leaves `origin` pointing at the repository the candidate belongs to, so
-#: the gate's fetch of the candidate revision reaches a commit this repository
-#: may not contain; nothing in it is executed.
-CANDIDATE_REPOSITORY = "${{ github.repository }}"
-CANDIDATE_REF = "${{ github.sha }}"
-
-#: The verifier checkout names the repository whose commit defines the gate
-#: implementation. It must not be the caller's: a reusable workflow's default
-#: checkout resolves the caller, so an unpinned job runs whatever gate the
-#: caller's candidate contains.
-GATE_REPOSITORY = "leynos/netsuke"
-#: The ref that names the workflow's own commit. `job.workflow_sha` is the
-#: commit of the workflow file that defines this job, which is a commit of this
-#: repository both for a reusable-workflow call and for a directly triggered
-#: run. A fallback to `github.sha` would not do: on a call it is the caller's
-#: candidate, which is the commit the pin exists to refuse.
-GATE_REF = "${{ job.workflow_sha }}"
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class _Report:
-    """Collect one role's findings under the label they are reported for.
-
-    Every rule below reports against a single role -- the candidate checkout,
-    the verifier checkout, or the gate step -- so the role label and the
-    collector travel together rather than being repeated at each call.
-    """
-
-    label: str
-    violations: list[str]
-
-    def add(self, message: str) -> None:
-        """Record one finding, attributed to this report's role."""
-        self.violations.append(f"{self.label}: {message}")
-
-
-class _ExpectedInput(typ.NamedTuple):
-    """Name one checkout input and the value the role requires of it.
-
-    The rationale travels with the expectation because it is what tells an
-    operator *why* the value is required.
-    """
-
-    key: str
-    expected: str
-    rationale: str
-
-
-_REQUIRES_CALLER_REPOSITORY = _ExpectedInput(
-    "repository",
-    CANDIDATE_REPOSITORY,
-    "so `origin` is the repository the candidate belongs to",
-)
-_REQUIRES_CALLER_COMMIT = _ExpectedInput(
-    "ref",
-    CANDIDATE_REF,
-    "so the checkout is this run's candidate",
-)
-_REQUIRES_VERIFIER_REPOSITORY = _ExpectedInput(
-    "repository",
-    GATE_REPOSITORY,
-    "so the gate is this repository's, not the caller's",
-)
-_REQUIRES_WORKFLOW_COMMIT = _ExpectedInput(
-    "ref",
-    GATE_REF,
-    "so the gate comes from the workflow's own commit",
-)
+#: The flags that keep uv's configuration and project discovery out of the
+#: candidate checkout. The gate has to run from the workspace root so the
+#: candidate fetch keeps the caller's `origin`, and that root is untrusted
+#: content: uv reads `uv.toml` and `pyproject.toml` from the working directory
+#: and its parents, so without these a candidate could redirect the package
+#: index that supplies the gate's own pinned dependencies and run its code
+#: inside the admission job. `--no-config` refuses the configuration files and
+#: `--no-project` refuses project discovery; neither suppresses the script's
+#: own PEP 723 dependencies, which uv still resolves and installs.
+UV_ISOLATION_FLAGS = "--no-config --no-project"
 
 
 def check_admission_source_pin(
@@ -139,11 +87,11 @@ def check_admission_source_pin(
             f"the pinned verifier -- found {len(checkouts)}"
         )
         return
-    candidate_report = _Report(f"{label}.candidate", violations)
+    candidate_report = Report(f"{label}.candidate", violations)
     candidate = _role_checkout(
         steps, checkouts, has_path=False, report=candidate_report
     )
-    verifier_report = _Report(f"{label}.verifier", violations)
+    verifier_report = Report(f"{label}.verifier", violations)
     verifier = _role_checkout(steps, checkouts, has_path=True, report=verifier_report)
     if candidate is None or verifier is None:
         return
@@ -156,13 +104,13 @@ def check_admission_source_pin(
                 f"{label}.{role}: the checkout must precede the "
                 f"{ADMISSION_STEP_ID!r} step"
             )
-    _check_candidate_inputs(steps[candidate], candidate_report)
-    gate_path = _check_verifier_inputs(steps[verifier], verifier_report)
+    check_candidate_inputs(steps[candidate], candidate_report)
+    gate_path = check_verifier_inputs(steps[verifier], verifier_report)
     _check_gate_step(
         release,
         steps[gate_index],
         gate_path,
-        _Report(f"{label}.gate", violations),
+        Report(f"{label}.gate", violations),
     )
 
 
@@ -180,7 +128,7 @@ def _role_checkout(
     checkouts: list[int],
     *,
     has_path: bool,
-    report: _Report,
+    report: Report,
 ) -> int | None:
     """Return the one checkout with, or without, a ``path`` input.
 
@@ -226,86 +174,20 @@ def _gate_index(steps: list[dict[str, object]], violations: list[str]) -> int | 
     return index
 
 
-def _inputs(step: dict[str, object], report: _Report) -> dict[str, object] | None:
-    """Return the checkout's declared inputs, reporting a malformed shape."""
-    declared = step.get("with")
-    if not isinstance(declared, dict):
-        report.add("the checkout must declare its inputs")
-        return None
-    return declared
-
-
-def _check_candidate_inputs(step: dict[str, object], report: _Report) -> None:
-    """Require the candidate checkout to select the caller's own commit."""
-    declared = _inputs(step, report)
-    if declared is None:
-        return
-    _check_input(declared, _REQUIRES_CALLER_REPOSITORY, report)
-    _check_input(declared, _REQUIRES_CALLER_COMMIT, report)
-
-
-def _check_verifier_inputs(step: dict[str, object], report: _Report) -> str | None:
-    """Require the verifier checkout to select this job's defining commit.
-
-    Returns
-    -------
-    str | None
-        The verifier's checkout path, which the gate step must run its script
-        from, or ``None`` when the path itself is unusable.
-    """
-    declared = _inputs(step, report)
-    if declared is None:
-        return None
-    _check_input(declared, _REQUIRES_VERIFIER_REPOSITORY, report)
-    _check_input(declared, _REQUIRES_WORKFLOW_COMMIT, report)
-    return _check_gate_path(declared, report)
-
-
-def _check_gate_path(declared: dict[str, object], report: _Report) -> str | None:
-    """Require a verifier checkout path that stays inside the workspace.
-
-    Returns
-    -------
-    str | None
-        The normalised relative path, or ``None`` when the declared value is
-        absent, absolute, or escapes the workspace with ``..``.
-    """
-    raw = declared.get("path")
-    if not isinstance(raw, str) or not raw.strip():
-        report.add(
-            f"path must name a subdirectory below the workspace root, got {raw!r}"
-        )
-        return None
-    path = PurePosixPath(raw.strip())
-    if _escapes_workspace(path):
-        report.add(
-            "path must be a relative subdirectory that cannot replace the "
-            f"candidate checkout, got {raw!r}"
-        )
-        return None
-    return str(path)
-
-
-def _escapes_workspace(path: PurePosixPath) -> bool:
-    """Return whether a checkout path could write outside its subdirectory."""
-    return path.is_absolute() or ".." in path.parts or str(path) == "."
-
-
-def _check_input(
-    declared: dict[str, object], requirement: _ExpectedInput, report: _Report
-) -> None:
-    """Require one checkout input to resolve to the value the role needs."""
-    actual = " ".join(str(declared.get(requirement.key, "")).split())
-    if actual != requirement.expected:
-        report.add(
-            f"{requirement.key} must be {requirement.expected!r} "
-            f"{requirement.rationale}, got {declared.get(requirement.key)!r}"
-        )
-
-
 def _gate_command(gate_path: str) -> str:
-    """Return the command that runs the gate script from ``gate_path``."""
-    return f"uv run --script {gate_path}/{GATE_SCRIPT}"
+    """Return the command that runs the gate script from ``gate_path``.
+
+    The isolation flags are part of the command rather than an optional
+    addition: the working directory this command keeps is the untrusted
+    candidate checkout, so a gate run without them would let that checkout
+    decide which packages the verifier imports.
+
+    Returns
+    -------
+    str
+        The uv invocation, naming the verifier's copy of the entry point.
+    """
+    return f"uv run {UV_ISOLATION_FLAGS} --script {gate_path}/{GATE_SCRIPT}"
 
 
 def verifier_gate_command(steps: list[dict[str, object]]) -> str:
@@ -347,7 +229,7 @@ def _check_gate_step(
     release: dict[str, object],
     step: dict[str, object],
     gate_path: str | None,
-    report: _Report,
+    report: Report,
 ) -> None:
     """Require the gate step to run the verifier's script from the candidate.
 
@@ -367,7 +249,7 @@ def _check_gate_step(
 def _check_working_directory(
     release: dict[str, object],
     step: dict[str, object],
-    report: _Report,
+    report: Report,
 ) -> None:
     """Require the gate step to keep the candidate checkout as its directory."""
     declared = step.get("working-directory")
@@ -394,6 +276,7 @@ __all__ = (
     "GATE_REF",
     "GATE_REPOSITORY",
     "GATE_SCRIPT",
+    "UV_ISOLATION_FLAGS",
     "check_admission_source_pin",
     "verifier_gate_command",
 )

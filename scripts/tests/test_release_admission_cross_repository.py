@@ -45,6 +45,7 @@ from release_admission_cross_repository_layout import (
     build_layout,
     git_binary,
 )
+from release_admission_test_harness import EVIDENCE_FILE_VARIABLE
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
     METRICS_VALIDATOR,
@@ -214,3 +215,59 @@ def test_candidate_fetch_follows_the_working_directory(
         _assert_fetch_refused(run, enforce=enforce)
     else:
         _assert_fetch_succeeded(run, enforce=enforce)
+
+
+#: An evidence file named relative to the working directory, which is the form
+#: that tells a fixture resolving it from the harness's own directory apart
+#: from one resolving it where the child reads it.
+RELATIVE_EVIDENCE_FILE = "relative-evidence.json"
+
+
+def test_a_relative_evidence_file_is_written_where_the_child_reads_it(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify the fixture writes a relative evidence file into the child's cwd.
+
+    Notes
+    -----
+    The child resolves a relative value against the directory it starts in, so
+    the fixture has to write it there. Writing it from the harness's own
+    directory instead would leave the child with no evidence at all, and the
+    case would read as a refused admission rather than as a fixture defect;
+    this is the shape the two-checkout cases make reachable, because they are
+    the ones that choose a working directory other than the harness's.
+    """
+    repositories = build_layout(tmp_path)
+    adapted = install_adapted(cmd_mox)
+    environment = {
+        **adapted.variables(cmd_mox),
+        GIT_ADAPTER_VARIABLE: git_binary(),
+        ENFORCEMENT_VARIABLE: "true",
+        PRODUCER_TRUST_VARIABLE: "true",
+        TAG_VARIABLE: RELEASE_TAG,
+        EVIDENCE_FILE_VARIABLE: RELATIVE_EVIDENCE_FILE,
+        "GITHUB_SHA": repositories.candidate,
+    }
+    workspace = repositories.working_directory(at_verifier=False)
+    run = run_gate_request(
+        cmd_mox,
+        GateRunRequest(
+            tmp_path,
+            evidence_state=ADMITTABLE_EVIDENCE,
+            extra_environment=environment,
+            cwd=workspace,
+        ),
+    )
+
+    assert (workspace / RELATIVE_EVIDENCE_FILE).is_file(), (
+        "the fixture must write the evidence file into the directory the child "
+        "resolves the relative path against"
+    )
+    assert run.result.returncode == 0, (
+        f"a relative evidence path must reach the child as evidence, not as an "
+        f"absence; {run.result.stderr}"
+    )
+    assert run.outputs["gate-outcome"] == "success", (
+        "the run must admit the candidate its evidence names"
+    )

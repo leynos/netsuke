@@ -153,7 +153,7 @@ def run_gate_request(cmd_mox: CmdMox, request: GateRunRequest) -> GateRun:
         ),
     )
     write_evidence(
-        _evidence_path(environment, paths),
+        _evidence_path(environment, paths, request.cwd),
         request.evidence_state,
         candidate_for(environment),
     )
@@ -171,7 +171,11 @@ def run_gate_request(cmd_mox: CmdMox, request: GateRunRequest) -> GateRun:
     return GateRun(result, metrics, traces, outputs, paths)
 
 
-def _evidence_path(environment: dict[str, str], paths: dict[str, Path]) -> Path:
+def _evidence_path(
+    environment: dict[str, str],
+    paths: dict[str, Path],
+    cwd: Path | None,
+) -> Path:
     """Return the evidence path the child under test will actually read.
 
     A case may redirect the child's evidence file, and the fixture has to be
@@ -186,6 +190,10 @@ def _evidence_path(environment: dict[str, str], paths: dict[str, Path]) -> Path:
         The merged child environment, after the case's overrides.
     paths
         Named output paths returned by :func:`gate_paths`.
+    cwd
+        The working directory the child starts in, or ``None`` when it
+        inherits this process's. A relative configured value is resolved
+        against it, because that is where the child resolves it.
 
     Returns
     -------
@@ -200,7 +208,9 @@ def _evidence_path(environment: dict[str, str], paths: dict[str, Path]) -> Path:
     and a rehearsal reads no evidence at all.
     """
     configured = environment.get(EVIDENCE_FILE_VARIABLE, "")
-    return Path(configured) if configured else paths["evidence"]
+    if not configured:
+        return paths["evidence"]
+    return Path.cwd() / configured if cwd is None else cwd / configured
 
 
 def _read_workflow_outputs(paths: dict[str, Path]) -> dict[str, str]:

@@ -123,6 +123,7 @@ GATE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "gate-runs-candidate-script": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
     "gate-step-leaves-candidate": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
     "job-default-moves-gate": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
+    "gate-run-without-uv-isolation": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
 }
 
 

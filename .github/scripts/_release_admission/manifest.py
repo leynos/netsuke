@@ -22,6 +22,11 @@ interpreted under the wrong rules. Unknown *extra* fields and unknown *result
 names* are accepted, because #598 adds downstream canaries and a verifier that
 rejected every name it had not been taught would make each one a breaking
 change.
+
+A member declared twice in one object is refused as malformed. The decoder
+keeps only the last, so accepting the document would let a producer hide an
+earlier declaration -- a failing result behind a passing one -- from every rule
+below.
 """
 
 import dataclasses
@@ -41,6 +46,38 @@ SCHEMA_VERSION = 1
 #: A commit is compared, and reported, as the full lowercase hexadecimal form
 #: the workflow's metadata job already validated.
 _COMMIT = re.compile(r"[0-9a-f]{40}")
+
+
+class _DuplicateMemberError(ValueError):
+    """Signal one JSON object that declares the same member name twice.
+
+    ``json`` keeps the last of two identical members, so a document can record
+    a failing result and then overwrite it with a passing one while remaining
+    valid JSON. The decoder would hand that document on with the failure gone,
+    and no later rule could tell it had been there. Refusing the document is
+    the only reading under which this verifier sees the producer's actual
+    declarations rather than the winner of an unstated overwrite.
+    """
+
+
+def _unique_members(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Build one decoded JSON object, refusing a name that repeats within it.
+
+    Returns
+    -------
+    dict[str, object]
+        The object the decoder would have produced.
+
+    Raises
+    ------
+    _DuplicateMemberError
+        If two members of this object share a name, at any nesting level: the
+        decoder calls this hook for every object it builds.
+    """
+    document = dict(pairs)
+    if len(document) != len(pairs):
+        raise _DuplicateMemberError
+    return document
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -88,8 +125,9 @@ def parse_manifest(raw: bytes) -> Parsed:
     """Parse manifest bytes into a manifest, or into a refusal category.
 
     Every way the document can be unusable -- not UTF-8, not JSON, not an
-    object, a missing or mistyped field, an unknown schema version -- collapses
-    to :attr:`policy.ErrorCategory.MALFORMED_EVIDENCE`. They are one operator
+    object, a member declared twice, a missing or mistyped field, an unknown
+    schema version -- collapses to
+    :attr:`policy.ErrorCategory.MALFORMED_EVIDENCE`. They are one operator
     problem: a producer wrote something this verifier cannot read, and the run
     needs a corrected document rather than a finer diagnosis of the old one.
 
@@ -107,14 +145,17 @@ def parse_manifest(raw: bytes) -> Parsed:
     True
     """
     try:
-        document = json.loads(raw)
+        document = json.loads(raw, object_pairs_hook=_unique_members)
     except ValueError, RecursionError:
         # `json.loads` reports both a UTF-8 failure and a syntax error as a
         # `ValueError`, and admits nothing else here. A decoder that refuses a
         # deeply nested document raises `RecursionError` instead, which is not
         # a `ValueError`; it is the same operator problem -- a document this
         # verifier cannot read -- so it takes the same refusal rather than
-        # escaping as an unclassified failure of the gate.
+        # escaping as an unclassified failure of the gate. `_DuplicateMemberError`
+        # is a `ValueError` for the same reason: a repeated member leaves the
+        # document ambiguous, which is unreadable rather than a distinct kind
+        # of failure.
         return _refused()
     manifest = _manifest(document)
     if manifest is None:
