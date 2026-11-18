@@ -130,7 +130,8 @@ def _decide(
         _ManifestPort(_document(issued_at)),
         read_wall_clock,
     )
-    return gate.check_freshness(), gate.admit()
+    observation = gate.check_freshness()
+    return observation.verdict, gate.admit(observation)
 
 
 def _inside_window(delta: float, max_age: int) -> bool:

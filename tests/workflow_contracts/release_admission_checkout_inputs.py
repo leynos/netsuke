@@ -19,6 +19,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import dataclasses
+import re
 import typing as typ
 from pathlib import PurePosixPath
 
@@ -92,6 +93,24 @@ _REQUIRES_WORKFLOW_COMMIT = _ExpectedInput(
     "so the gate comes from the workflow's own commit",
 )
 
+#: The keys a checkout must not declare at all. Both accept expressions, so no
+#: declared value can be judged: `if: false` skips the verifier while the gate
+#: step still runs, and `continue-on-error: true` lets a failed checkout leave a
+#: partial workspace the gate then reads. Either way the gate would run whatever
+#: the candidate checkout holds at its own script path.
+_FORBIDDEN_CHECKOUT_KEYS = ("if", "continue-on-error")
+
+#: The input that keeps the verifier checkout's credential out of the workspace
+#: the candidate's content occupies. Only the verifier is held to it: the
+#: candidate checkout keeps its default so the gate can fetch a private
+#: caller's repository, and nothing from that checkout is executed.
+_REQUIRES_NO_PERSISTED_CREDENTIALS = "persist-credentials"
+
+#: The characters a checkout path's components may use. Each component reaches
+#: the gate command as one shell word, so a component the shell would split,
+#: expand, or quote is refused: `gate files` would arrive as two arguments.
+_SHELL_SAFE_COMPONENT = re.compile(r"[A-Za-z0-9._-]+")
+
 
 def _inputs(step: dict[str, object], report: Report) -> dict[str, object] | None:
     """Return the checkout's declared inputs, reporting a malformed shape."""
@@ -115,7 +134,16 @@ def _check_input(
 
 
 def check_candidate_inputs(step: dict[str, object], report: Report) -> None:
-    """Require the candidate checkout to select the caller's own commit."""
+    """Require the candidate checkout to select the caller's own commit.
+
+    Parameters
+    ----------
+    step
+        The one checkout declared at the workspace root.
+    report
+        Collector the findings are attributed to.
+    """
+    _check_unconditional(step, report)
     declared = _inputs(step, report)
     if declared is None:
         return
@@ -126,28 +154,95 @@ def check_candidate_inputs(step: dict[str, object], report: Report) -> None:
 def check_verifier_inputs(step: dict[str, object], report: Report) -> str | None:
     """Require the verifier checkout to select this job's defining commit.
 
+    Parameters
+    ----------
+    step
+        The one checkout that declares a ``path`` input.
+    report
+        Collector the findings are attributed to. A returned path does not
+        mean the checkout passed: a wrong repository or ref is recorded here
+        rather than raised, so the caller reads ``report`` to decide.
+
     Returns
     -------
     str | None
         The verifier's checkout path, which the gate step must run its script
         from, or ``None`` when the path itself is unusable.
     """
+    _check_unconditional(step, report)
     declared = _inputs(step, report)
     if declared is None:
         return None
     _check_input(declared, _REQUIRES_VERIFIER_REPOSITORY, report)
     _check_input(declared, _REQUIRES_WORKFLOW_COMMIT, report)
+    _check_no_persisted_credentials(declared, report)
     return _check_gate_path(declared, report)
+
+
+def _check_unconditional(step: dict[str, object], report: Report) -> None:
+    """Require a checkout the job runs unconditionally and cannot tolerate failing.
+
+    A skipped or tolerated checkout leaves the gate step with no verifier, and
+    the gate then runs the script path from whatever the candidate checkout
+    holds there -- which is candidate-supplied code with the job's token.
+    """
+    for key in _FORBIDDEN_CHECKOUT_KEYS:
+        if key in step:
+            report.add(
+                f"the checkout must not declare {key!r}, which can skip it or "
+                "tolerate its failure and leave the gate running the "
+                "candidate's own script"
+            )
+
+
+def _check_no_persisted_credentials(
+    declared: dict[str, object], report: Report
+) -> None:
+    """Require the verifier checkout to leave its credential out of the workspace."""
+    actual = declared.get(_REQUIRES_NO_PERSISTED_CREDENTIALS)
+    if actual is not False:
+        report.add(
+            f"{_REQUIRES_NO_PERSISTED_CREDENTIALS} must be false so the "
+            f"verifier's credential is not left beside the candidate's content, "
+            f"got {actual!r}"
+        )
+
+
+def normalise_gate_path(path: str) -> str:
+    """Return a declared checkout path in the form every contract compares.
+
+    One validator reads the path from the checkout inputs and another rebuilds
+    the expected gate command from the same declaration. Comparing the raw
+    spelling in one place and the normalised spelling in the other makes
+    ``./gate`` fail both, so both go through this function.
+
+    Parameters
+    ----------
+    path
+        The declared ``path`` input, as the workflow spells it.
+
+    Returns
+    -------
+    str
+        The path with surrounding whitespace removed and ``.`` components
+        dropped, so ``./gate`` and ``gate`` compare equal.
+    """
+    return str(PurePosixPath(path.strip()))
 
 
 def _check_gate_path(declared: dict[str, object], report: Report) -> str | None:
     """Require a verifier checkout path that stays inside the workspace.
 
+    The path reaches the gate command as one unquoted shell word, so it must
+    also be one: a directory named ``gate files`` would be split into two
+    arguments and the gate would not run at all.
+
     Returns
     -------
     str | None
         The normalised relative path, or ``None`` when the declared value is
-        absent, absolute, or escapes the workspace with ``..``.
+        absent, absolute, escapes the workspace with ``..``, or names a
+        component the shell would not take literally.
     """
     raw = declared.get("path")
     if not isinstance(raw, str) or not raw.strip():
@@ -155,11 +250,17 @@ def _check_gate_path(declared: dict[str, object], report: Report) -> str | None:
             f"path must name a subdirectory below the workspace root, got {raw!r}"
         )
         return None
-    path = PurePosixPath(raw.strip())
+    path = PurePosixPath(normalise_gate_path(raw))
     if _escapes_workspace(path):
         report.add(
             "path must be a relative subdirectory that cannot replace the "
             f"candidate checkout, got {raw!r}"
+        )
+        return None
+    if not all(_SHELL_SAFE_COMPONENT.fullmatch(part) for part in path.parts):
+        report.add(
+            "path must name components the gate command can pass as one shell "
+            f"argument each, got {raw!r}"
         )
         return None
     return str(path)
@@ -178,4 +279,5 @@ __all__ = (
     "Report",
     "check_candidate_inputs",
     "check_verifier_inputs",
+    "normalise_gate_path",
 )

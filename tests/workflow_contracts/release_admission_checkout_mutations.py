@@ -6,10 +6,14 @@ the repository the candidate belongs to, and the pinned verifier in a
 subdirectory, which is what keeps the gate implementation out of the caller's
 hands. Each mutation here states a plausible way to lose one of those
 properties -- collapse the pair into one checkout, let the verifier replace the
-candidate, point either checkout at the other's repository or ref, run the
-wrong copy of the entry point, drop uv's isolation from the candidate's
-configuration, or move the gate step out of the workspace root -- so the
-mutation test shows each pin assertion fires rather than merely passing.
+candidate, point either checkout at the other's repository or ref, make a
+checkout conditional or failure-tolerant, let the verifier keep its credential,
+give the verifier a path the shell would split, write the verifier first, run
+the wrong copy of the entry point, split the gate command at a shell command
+boundary, drop uv's isolation from the candidate's configuration, or move the
+gate step out of the workspace root -- at the step, the job, or the workflow
+level -- so the mutation test shows each pin assertion fires rather than merely
+passing.
 
 The mutations are exported as :data:`CHECKOUT_MUTATIONS` and merged into the
 publication gate's mutation set in :mod:`release_publication_gate_mutations`.
@@ -17,6 +21,7 @@ publication gate's mutation set in :mod:`release_publication_gate_mutations`.
 Run via ``make test-workflow-contracts``.
 """
 
+import re
 import typing as typ
 
 from release_admission_gate_contract import (
@@ -33,6 +38,15 @@ from workflow_loading import job_steps, require_mapping, workflow_job
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
+
+#: The two isolation flags as one adjacent span, separated by whatever
+#: whitespace the command uses. Matching the pair rather than the literal
+#: string means a reflowed command is still mutated, and requiring the pair
+#: keeps the mutation from removing one flag and leaving the other.
+_CONFIG_FLAG, _PROJECT_FLAG = UV_ISOLATION_FLAGS.split()
+_UV_ISOLATION_SPAN = re.compile(
+    rf"(?<=\s){re.escape(_CONFIG_FLAG)}[ \t]+{re.escape(_PROJECT_FLAG)}(?=\s|$)"
+)
 
 
 def _checkout_with_path(
@@ -72,6 +86,26 @@ def _checkout_inputs(
     """Return one checkout's inputs, refusing a malformed declaration."""
     step = _checkout_with_path(release, has_path=has_path)
     return require_mapping(step.get("with"), f"{ADMISSION_JOB} checkout inputs")
+
+
+def _make_conditional(release: dict[str, object], *, has_path: bool) -> None:
+    """Give one checkout an ``if`` that can skip it.
+
+    The key is the defect, not the value: an ``if`` accepts an expression, so
+    no literal proves the step always runs. A skipped checkout leaves the gate
+    step looking for its script in whatever remains of the workspace.
+    """
+    _checkout_with_path(release, has_path=has_path)["if"] = "false"
+
+
+def _tolerate_checkout_failure(release: dict[str, object], *, has_path: bool) -> None:
+    """Let one checkout fail without stopping the job.
+
+    The failure is tolerated rather than reported, so the gate step runs on
+    whatever the checkout left behind -- which for a failed checkout is the
+    other role's content, or none at all.
+    """
+    _checkout_with_path(release, has_path=has_path)["continue-on-error"] = True
 
 
 def _gate_step(release: dict[str, object]) -> dict[str, object]:
@@ -150,9 +184,127 @@ def _candidate_checkout_names_verifier(release: dict[str, object]) -> None:
     declared["ref"] = GATE_REF
 
 
+def _candidate_checkout_conditional(release: dict[str, object]) -> None:
+    """Let the candidate checkout be skipped.
+
+    Without it the workspace root is not a checkout of the caller at all, so
+    the gate's fetch of the candidate revision has no `origin` that names the
+    caller's repository, and a caller whose commit this repository does not
+    have can never be fetched.
+    """
+    _make_conditional(release, has_path=False)
+
+
+def _candidate_checkout_tolerates_failure(release: dict[str, object]) -> None:
+    """Let a failed candidate checkout pass unnoticed.
+
+    The job continues with a partial workspace whose `origin` may not be the
+    caller's, so the fetch the gate reports on is not the fetch the candidate
+    requires.
+    """
+    _tolerate_checkout_failure(release, has_path=False)
+
+
+def _verifier_checkout_conditional(release: dict[str, object]) -> None:
+    """Let the verifier checkout be skipped.
+
+    The gate command still names ``<path>/.github/scripts/release_admission.py``
+    relative to the workspace root, and the candidate checkout owns that root:
+    a candidate commit can carry the same path and supply the verifier the pin
+    exists to refuse.
+    """
+    _make_conditional(release, has_path=True)
+
+
+def _verifier_checkout_tolerates_failure(release: dict[str, object]) -> None:
+    """Let a failed verifier checkout pass unnoticed.
+
+    A checkout that failed may have written nothing at the verifier's path, and
+    the candidate's own content can occupy it, which is the same substitution a
+    skipped verifier allows.
+    """
+    _tolerate_checkout_failure(release, has_path=True)
+
+
+def _verifier_persists_credentials(release: dict[str, object]) -> None:
+    """Leave the verifier checkout's credential in the candidate's workspace.
+
+    The verifier's token would then sit inside the tree the candidate's content
+    occupies, where any process the gate runs from the workspace root can read
+    it.
+    """
+    declared = _checkout_inputs(release, has_path=True)
+    if declared.get("persist-credentials") is not False:
+        raise MutationError(
+            MutationIssue.PATTERN_MISMATCH, "persist-credentials: false"
+        )
+    declared["persist-credentials"] = True
+
+
+def _verifier_path_needs_quoting(release: dict[str, object]) -> None:
+    """Move the verifier to a directory the gate command cannot pass as one word.
+
+    The gate command interpolates the path unquoted, so a space splits it into
+    two arguments and the gate never starts -- a job that reports success
+    without judging anything.
+    """
+    declared = _checkout_inputs(release, has_path=True)
+    path = declared.get("path")
+    if not isinstance(path, str) or not path:
+        raise MutationError(MutationIssue.PATTERN_MISMATCH, "path")
+    declared["path"] = f"{path} files"
+
+
 def _gate_runs_candidate_script(release: dict[str, object]) -> None:
     """Run the entry point from the candidate checkout instead of the verifier."""
     _gate_step(release)["run"] = f"uv run --script {GATE_SCRIPT}"
+
+
+def _checkouts_swapped(release: dict[str, object]) -> None:
+    """Write the verifier checkout before the candidate checkout.
+
+    Both still precede the gate step, so a position check that only compares
+    each checkout with the gate accepts them. On a fresh runner the candidate
+    checkout then prepares the workspace root and removes the verifier's
+    directory, so the gate loses its script.
+    """
+    steps = job_steps(release, ADMISSION_JOB)
+    candidate = _checkout_with_path(release, has_path=False)
+    verifier = _checkout_with_path(release, has_path=True)
+    first, second = steps.index(candidate), steps.index(verifier)
+    steps[first], steps[second] = steps[second], steps[first]
+
+
+def _workflow_default_moves_gate(release: dict[str, object]) -> None:
+    """Move every run step of the whole workflow into the verifier checkout.
+
+    The job and the step set no working directory, so a reader that checks only
+    those two sees nothing wrong. A workflow-level default applies to every job
+    all the same, and this gate would then resolve its script below
+    ``<path>/<path>/``.
+    """
+    declared = _checkout_inputs(release, has_path=True)
+    path = declared.get("path")
+    if not isinstance(path, str) or not path:
+        raise MutationError(MutationIssue.PATTERN_MISMATCH, "path")
+    release["defaults"] = {"run": {"working-directory": path}}
+
+
+def _gate_run_splits_the_command(release: dict[str, object]) -> None:
+    """Break the gate command at a shell command boundary.
+
+    This is the shape a literal ``|-`` scalar produces: the newline before
+    ``--script`` is preserved, so Bash runs ``uv run --no-config
+    --no-project`` and then looks for a program called ``--script``. A
+    comparison that folds the newline into a space accepts the command as
+    written.
+    """
+    step = _gate_step(release)
+    run = str(step.get("run", ""))
+    marker = " --script "
+    if run.count(marker) != 1:
+        raise MutationError(MutationIssue.PATTERN_MISMATCH, marker)
+    step["run"] = run.replace(marker, "\n--script ")
 
 
 def _gate_step_leaves_candidate(release: dict[str, object]) -> None:
@@ -181,13 +333,17 @@ def _gate_without_uv_isolation(release: dict[str, object]) -> None:
     Raises
     ------
     MutationError
-        If the gate step no longer carries the flags this mutation removes.
+        If the gate step no longer carries the flags as one adjacent pair. The
+        match is by pattern rather than by literal text so a reflowed command
+        is still mutated, and exactly one span is required so a command that
+        carries the pair twice is not silently left half-isolated.
     """
     step = _gate_step(release)
     run = str(step.get("run", ""))
-    if UV_ISOLATION_FLAGS not in run:
+    stripped, removals = _UV_ISOLATION_SPAN.subn("", run)
+    if removals != 1:
         raise MutationError(MutationIssue.PATTERN_MISMATCH, UV_ISOLATION_FLAGS)
-    step["run"] = run.replace(f" {UV_ISOLATION_FLAGS}", "")
+    step["run"] = stripped
 
 
 #: Each mutation that breaks the candidate/verifier split, keyed by its label.
@@ -198,9 +354,18 @@ CHECKOUT_MUTATIONS: dict[str, cabc.Callable[[dict[str, object]], None]] = {
     "single-pinned-checkout": _single_pinned_checkout,
     "gate-checkout-replaces-candidate": _gate_checkout_replaces_candidate,
     "candidate-checkout-names-verifier": _candidate_checkout_names_verifier,
+    "candidate-checkout-conditional": _candidate_checkout_conditional,
+    "candidate-checkout-tolerates-failure": _candidate_checkout_tolerates_failure,
+    "verifier-checkout-conditional": _verifier_checkout_conditional,
+    "verifier-checkout-tolerates-failure": _verifier_checkout_tolerates_failure,
+    "verifier-persists-credentials": _verifier_persists_credentials,
+    "verifier-path-needs-quoting": _verifier_path_needs_quoting,
+    "checkouts-swapped": _checkouts_swapped,
     "gate-runs-candidate-script": _gate_runs_candidate_script,
     "gate-step-leaves-candidate": _gate_step_leaves_candidate,
     "job-default-moves-gate": _job_default_moves_gate,
+    "workflow-default-moves-gate": _workflow_default_moves_gate,
+    "gate-run-splits-the-command": _gate_run_splits_the_command,
     "gate-run-without-uv-isolation": _gate_without_uv_isolation,
 }
 

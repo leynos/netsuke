@@ -24,8 +24,8 @@ freeze them:
 
 Evidence arrives through the :class:`~.filesystem.FileSystem` port rather than
 being opened here, so the byte bound and the decoding are observable without a
-real file, and the wall clock arrives through the same adapter the durations
-already use.
+real file, and the wall clock arrives as an injected reading function rather
+than being read here, so a case can script the moments the window is judged at.
 
 Bounding is native. The shell wrapped each command in GNU ``timeout``, which
 reported ``124`` when the command accepted ``SIGTERM`` and ``137`` when it had
@@ -36,7 +36,6 @@ vocabulary as a timeout and the killed variant is not one a bound produces.
 """
 
 import dataclasses
-import math
 import typing as typ
 
 from . import admission_evidence, commands, evidence, policy, records, telemetry
@@ -76,21 +75,24 @@ class Gate:
     """Run the admission once, accumulating the record the shell produced."""
 
     def __init__(
-        self, configuration: Configuration, file_system: filesystem.FileSystem
+        self,
+        configuration: Configuration,
+        file_system: filesystem.FileSystem,
+        read_wall_clock: admission_evidence.WallClock,
     ) -> None:
-        """Bind the resolved configuration, the filesystem port, and the record.
+        """Bind the configuration, the read port, and the clock the window uses.
 
-        The port is a parameter rather than a lookup so that the evidence read
-        can be observed, and so a test can hand in a manifest without arranging
-        a directory tree. It reaches the evidence decisions through
-        :class:`~.admission_evidence.AdmissionEvidence`, which also takes this
-        gate's own wall-clock reader so the window is measured where the record
-        is written.
+        Both ports are parameters rather than lookups: the filesystem reader and
+        the wall clock are the two effects the evidence decisions make, so a
+        test can observe the first and script the second. Neither is built
+        here, which keeps the composition root the one place that knows which
+        adapter supplies them.
         """
         self._configuration = configuration
         self._evidence = admission_evidence.AdmissionEvidence(
-            configuration, file_system, self._read_wall_clock
+            configuration, file_system, read_wall_clock
         )
+        self._observation = admission_evidence.MISSING_OBSERVATION
         self._outcome = policy.Outcome.UNKNOWN
         self._error_category = policy.ErrorCategory.UNKNOWN
         self._trace_sink_failed = False
@@ -212,27 +214,6 @@ class Gate:
         result = commands.read_monotonic_seconds(self._configuration.programs)
         return result.output, result.outcome != policy.CommandOutcome.SUCCEEDED
 
-    def _read_wall_clock(self) -> tuple[float, bool]:
-        """Read the wall clock once, reporting an exit or reading it cannot use.
-
-        A reading that is not a finite number is refused rather than compared:
-        ``nan`` makes every comparison false, so accepting it would turn a
-        broken adapter into a manifest that is always fresh.
-
-        Returns
-        -------
-        tuple
-            The seconds since the epoch, and whether the reading is unusable.
-        """
-        result = commands.read_wall_clock_seconds(self._configuration.programs)
-        if result.outcome != policy.CommandOutcome.SUCCEEDED:
-            return 0.0, True
-        try:
-            reading = float(result.output)
-        except ValueError:
-            return 0.0, True
-        return (reading, False) if math.isfinite(reading) else (0.0, True)
-
     def _dispatch(self, operation: policy.Operation) -> None:
         """Run the named operation and adopt its policy classification.
 
@@ -250,9 +231,10 @@ class Gate:
             case policy.Operation.FETCH_WORKFLOW_RUN:
                 self._fetch_workflow_run()
             case policy.Operation.CHECK_SCAN_FRESHNESS:
-                self._apply(self._evidence.check_freshness())
+                self._observation = self._evidence.check_freshness()
+                self._apply(self._observation.verdict)
             case _:
-                self._apply(self._evidence.admit())
+                self._apply(self._evidence.admit(self._observation))
 
     def _resolve_tag_commit(self) -> None:
         """Resolve the candidate through the API and compare it with ``GITHUB_SHA``.

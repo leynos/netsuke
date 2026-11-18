@@ -34,6 +34,7 @@ from release_admission_checkout_inputs import (
     Report,
     check_candidate_inputs,
     check_verifier_inputs,
+    normalise_gate_path,
 )
 from workflow_loading import job_steps, workflow_job
 
@@ -98,6 +99,12 @@ def check_admission_source_pin(
     gate_index = _gate_index(steps, violations)
     if gate_index is None:
         return
+    if candidate > verifier:
+        violations.append(
+            f"{label}.candidate: the candidate checkout must precede the "
+            "verifier checkout, because the candidate prepares the workspace "
+            "root and removes the verifier's directory when it is written first"
+        )
     for index, role in ((candidate, "candidate"), (verifier, "verifier")):
         if index > gate_index:
             violations.append(
@@ -222,7 +229,7 @@ def verifier_gate_command(steps: list[dict[str, object]]) -> str:
     assert isinstance(declared, dict), (
         "the verifier checkout's inputs must be a mapping"
     )
-    return _gate_command(str(declared["path"]))
+    return _gate_command(normalise_gate_path(str(declared["path"])))
 
 
 def _check_gate_step(
@@ -240,7 +247,12 @@ def _check_gate_step(
     """
     if gate_path is not None:
         expected = _gate_command(gate_path)
-        run = " ".join(str(step.get("run", "")).split())
+        # Only the outer whitespace a YAML block scalar leaves behind is
+        # trimmed. An internal newline is a shell command boundary, so a `|-`
+        # scalar that splits `--script` onto its own line runs something else
+        # entirely; normalising it to a space would report that broken command
+        # as the expected one.
+        run = str(step.get("run", "")).strip()
         if run != expected:
             report.add(f"the gate must run {expected!r}, got {run!r}")
     _check_working_directory(release, step, report)
@@ -251,18 +263,35 @@ def _check_working_directory(
     step: dict[str, object],
     report: Report,
 ) -> None:
-    """Require the gate step to keep the candidate checkout as its directory."""
+    """Require the gate step to keep the candidate checkout as its directory.
+
+    Three settings can move a step, and the narrower one wins: the step's own
+    ``working-directory``, the job's ``defaults.run``, and the workflow's
+    ``defaults.run`` at the document root. A workflow-level default applies to
+    every job, so a value the job never repeats still moves this gate -- and
+    with the verifier's directory it would resolve the script below
+    ``<path>/<path>/`` instead.
+    """
     declared = step.get("working-directory")
     if declared is not None:
         report.add(
             "the gate must keep the candidate checkout as its working "
             f"directory, got {declared!r}"
         )
-    defaults = workflow_job(release, ADMISSION_JOB).get("defaults")
+    _check_default_working_directory(release.get("defaults"), "workflow", report)
+    _check_default_working_directory(
+        workflow_job(release, ADMISSION_JOB).get("defaults"), "job", report
+    )
+
+
+def _check_default_working_directory(
+    defaults: object, where: str, report: Report
+) -> None:
+    """Report a ``defaults.run.working-directory`` that would move the gate."""
     run_defaults = defaults.get("run") if isinstance(defaults, dict) else None
     if isinstance(run_defaults, dict) and "working-directory" in run_defaults:
         report.add(
-            "the job must not set a default run working directory, which "
+            f"the {where} must not set a default run working directory, which "
             "would move the gate out of the candidate checkout"
         )
 

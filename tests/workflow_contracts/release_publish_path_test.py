@@ -1,6 +1,12 @@
 """Prove dry runs reach release staging without publishing."""
 
 import pytest
+from release_admission_gate_contract import (
+    CHECKOUT_ACTION,
+    GATE_SCRIPT,
+    UV_ISOLATION_FLAGS,
+    verifier_gate_command,
+)
 from release_publish_path_contract import (
     CALLER_WORKFLOW_PATH,
     check_release_publish_path,
@@ -23,6 +29,21 @@ def test_a_scenario_cannot_name_an_unmodelled_dependency() -> None:
     """
     with pytest.raises(ValueError, match="unknown dependenc"):
         _needs_results(outcomes={"build-linx": "failure"})
+
+
+def test_a_relative_verifier_path_names_the_same_gate_command() -> None:
+    """Read ``./gate`` as the same verifier directory as ``gate``.
+
+    One rule validates the checkout's ``path`` and another rebuilds the gate
+    command from the same declaration. Comparing the raw spelling in one place
+    and the normalised spelling in the other made a correct workflow that
+    spelled the path ``./gate`` fail both, so the expectation is derived
+    through the same normalisation the validator applies.
+    """
+    steps = [{"uses": f"{CHECKOUT_ACTION}@v4", "with": {"path": "./gate"}}]
+    assert verifier_gate_command(steps) == (
+        f"uv run {UV_ISOLATION_FLAGS} --script gate/{GATE_SCRIPT}"
+    ), "a leading './' in the checkout path must not change the gate command"
 
 
 def test_release_dry_run_reaches_the_staging_path() -> None:

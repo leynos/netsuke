@@ -194,3 +194,39 @@ def test_a_member_declared_twice_is_refused_as_malformed_evidence(
         f"{label}: a repeated member leaves the document ambiguous, so it must "
         "be refused as malformed evidence"
     )
+
+
+@pytest.mark.parametrize(
+    "encoding",
+    [
+        pytest.param("utf-16", id="utf-16-with-bom"),
+        pytest.param("utf-32", id="utf-32-with-bom"),
+    ],
+)
+def test_a_document_in_a_wide_encoding_is_refused(encoding: str) -> None:
+    """Refuse a document the JSON decoder would read in UTF-16 or UTF-32.
+
+    Notes
+    -----
+    ``json.loads`` detects the encoding of a bytes argument and accepts UTF-16
+    and UTF-32 as well as UTF-8, so a reader that handed it the raw bytes would
+    admit a document this contract does not describe. The premise is asserted
+    alongside the verdict: the decoder accepts these same bytes, so the refusal
+    is attributable to the module's own UTF-8 contract rather than to a
+    document that never parsed at all.
+    """
+    raw = _manifest_text(results=_HISTORY_SCAN).decode("utf-8").encode(encoding)
+
+    assert manifest.json.loads(raw)["schema_version"] == 1, (
+        "the decoder must accept the wide encoding, or this case proves nothing "
+        "about the contract the module enforces"
+    )
+
+    parsed = manifest.parse_manifest(raw)
+
+    assert parsed.manifest is None, (
+        f"{encoding}: a document outside the UTF-8 contract must yield no manifest"
+    )
+    assert parsed.error_category is policy.ErrorCategory.MALFORMED_EVIDENCE, (
+        f"{encoding}: an undecodable document must be refused as malformed evidence"
+    )

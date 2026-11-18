@@ -96,6 +96,29 @@ class RunLayout:
     enforce: bool
 
 
+def _git_isolated_environment(repositories: Repositories) -> dict[str, str]:
+    """Return the overrides that keep the child's Git off the host's config.
+
+    The child inherits the test process's environment, and Git reads
+    ``$HOME/.gitconfig``, ``$XDG_CONFIG_HOME/git/config`` and the system
+    configuration from it. A developer's ``url.*.insteadOf`` rewrite, credential
+    helper, or ``protocol.file.allow`` setting would then decide whether the
+    layout's ``file://`` remote is reachable, which is the variable these cases
+    exist to hold fixed. The private home and the system-configuration refusal
+    are the same isolation the layout's own Git commands run under.
+
+    Returns
+    -------
+    dict[str, str]
+        The environment overrides the gate run must carry.
+    """
+    return {
+        "HOME": str(repositories.home),
+        "XDG_CONFIG_HOME": str(repositories.home / ".config"),
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+
+
 def _run(
     cmd_mox: CmdMox,
     tmp_path: pathlib.Path,
@@ -112,6 +135,7 @@ def _run(
     adapted = install_adapted(cmd_mox)
     environment = {
         **adapted.variables(cmd_mox),
+        **_git_isolated_environment(repositories),
         GIT_ADAPTER_VARIABLE: git_binary(),
         ENFORCEMENT_VARIABLE: str(layout.enforce).lower(),
         PRODUCER_TRUST_VARIABLE: "true",
@@ -242,6 +266,7 @@ def test_a_relative_evidence_file_is_written_where_the_child_reads_it(
     adapted = install_adapted(cmd_mox)
     environment = {
         **adapted.variables(cmd_mox),
+        **_git_isolated_environment(repositories),
         GIT_ADAPTER_VARIABLE: git_binary(),
         ENFORCEMENT_VARIABLE: "true",
         PRODUCER_TRUST_VARIABLE: "true",

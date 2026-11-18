@@ -31,6 +31,7 @@ Sink delivery has no cuprum equivalent and lives in :mod:`delivery`.
 """
 
 import dataclasses
+import math
 import typing as typ
 
 from cuprum import (
@@ -251,6 +252,30 @@ def read_wall_clock_seconds(programs: Programs) -> policy.CommandResult:
         failed.
     """
     return read_clock_seconds(programs, WALL_CLOCK_ARGUMENTS)
+
+
+def read_wall_clock(programs: Programs) -> tuple[float, bool]:
+    """Read the wall clock once and parse it into seconds since the epoch.
+
+    The reading is the input to a freshness comparison, so a reading the
+    comparison cannot use is reported rather than replaced by a number. A
+    non-finite value is unusable for the same reason: ``nan`` makes every
+    comparison false, which would turn a broken adapter into a manifest that is
+    always fresh.
+
+    Returns
+    -------
+    tuple[float, bool]
+        The reading in seconds, and whether it is unusable.
+    """
+    result = read_wall_clock_seconds(programs)
+    if result.outcome != policy.CommandOutcome.SUCCEEDED:
+        return 0.0, True
+    try:
+        reading = float(result.output)
+    except ValueError:
+        return 0.0, True
+    return (reading, False) if math.isfinite(reading) else (0.0, True)
 
 
 def read_clock_seconds(

@@ -5164,6 +5164,60 @@ and pass, on the final wording.
   `gate-run-without-uv-isolation` mutation, which takes the stated total to
   thirty-one. Date/Author: 2026-11-18, implementation agent.
 
+- [x] (2026-11-18) Answered the eighth assessment: the review of `ecd854350`
+  filed seven inline findings, four outside-diff findings, and two failed
+  pre-merge rows. All thirteen were verified against the source and repaired;
+  none was declined.
+
+  *Evidence decoding.* `parse_manifest` read the document as text before
+  parsing, so a wide encoding could slip past the documented UTF-8 contract. It
+  now decodes `raw` as UTF-8 inside the existing handler, which maps a
+  `UnicodeDecodeError` to `malformed_evidence` through the same `ValueError`
+  arm as invalid JSON, and `_unique_members` still refuses a repeated member. A
+  UTF-16 and a UTF-32 document are each witnessed refused, with the successful
+  `json.loads` of the same bytes asserted first so the case cannot pass
+  vacuously.
+
+  *Bounded guards.* `evidence.is_evidence_max_age` and
+  `policy.publishable_revision` are the two validators that decide whether a
+  claimed window and a published revision are in contract, and neither had a
+  test of its own refusals. `test_release_admission_bounded_guards.py` now
+  states both sides: ASCII digits with no leading zero and at most six of them
+  up to `604800`, and a full lowercase SHA-1 or SHA-256 object ID. Refusals
+  include the empty string, `"00"`, a leading zero, one past the maximum,
+  surrounding whitespace, a trailing newline, signs, exponent notation, and a
+  non-ASCII digit; and for the revision, both wrong widths and an uppercase
+  spelling. The module is wired into `make test-release-admission` and the
+  runtime-gate contract, taking that target to twenty-three modules.
+
+  *Runtime refusal.* A dedicated enforcing-mode case sets
+  `NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS` to `0` and to `604801`
+  and asserts exit status `1`, a `failure`/`unknown` gate record as the only
+  metric, the matching workflow outputs, and that no canary, adapter, or clock
+  call ran. Supplying enforcement exposed a precondition the observation-mode
+  cases never needed: an enforcing run must also name its tag, or configuration
+  resolution refuses it before the bound is consulted.
+
+  *Checkout contract.* Four outside-diff findings tightened the same module.
+  The order rule is now `candidate < verifier < gate < ...`, so a job that
+  writes the verifier first is reported even though both checkouts still
+  precede the gate step. The `run` comparison trims only the outer whitespace a
+  block scalar leaves, because an internal newline is a shell command boundary.
+  `verifier_gate_command` normalises the declared path through the same
+  `normalise_gate_path` the validator uses, and a regression case proves
+  `./gate` and `gate` name one command. The working-directory rule now also
+  reads the workflow-level `defaults.run`, which applies to this job even when
+  neither the job nor the step repeats it.
+
+  *Coverage.* Six mutations were added: a conditional and a failure-tolerant
+  checkout for each role, a persisted verifier credential, a verifier path the
+  shell would split, the two checkouts swapped, and a gate command split at a
+  shell boundary, plus a workflow-level default that moves the gate. The
+  checkout module now states nineteen regressions and the two mutation modules
+  forty in all. Targeted runs pass: 71 workflow-contract tests across the
+  mutation, runtime-gate, metrics, and publish-path modules, and 18 runtime
+  metric-failure tests. Date/Author: 2026-11-18, implementation agent.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

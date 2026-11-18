@@ -2,9 +2,13 @@
 
 This module owns the two evidence decisions and the read they both rest on.
 ``check_freshness`` reads the document through the supplied port, parses it, and
-refuses any timestamp outside the window; ``admit`` then requires the document
-just read to name the candidate and report both required results as successful,
-and re-reads the window before it answers. The second reading is not redundant:
+refuses any timestamp outside the window, returning an :class:`Observation` of
+the document it read and the verdict it reached; ``admit`` takes that
+observation and requires its document to name the candidate and report both
+required results as successful, then re-reads the window before it answers. The
+document a decision is made on is therefore an argument at the call site rather
+than state this object carries from one call to the next. The second reading is
+not redundant:
 two clock commands and the telemetry writes separate the two decisions, so a
 document observed a moment inside its window can be outside it by the time the
 gate would admit on it. Admitting on the earlier reading would let the evidence
@@ -32,17 +36,44 @@ record, so a change to what admission *means* is a change here and a change to
 what the gate *does* is a change there.
 """
 
+import collections.abc as cabc
 import typing as typ
 
 from . import evidence, policy
 
 if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
     from . import filesystem
     from .configuration import Configuration
 
-    type WallClock = cabc.Callable[[], tuple[float, bool]]
+#: A reading of the wall clock in seconds since the epoch, paired with whether
+#: the reading is usable. The pair travels as one value because the number
+#: alone cannot report an unusable reading: zero is a real instant.
+type WallClock = cabc.Callable[[], tuple[float, bool]]
+
+
+class Observation(typ.NamedTuple):
+    """Hold the document the freshness check read and the verdict it reached.
+
+    The two travel together because the later admission decision is defined
+    over both: identity and results are judged only for a document the check
+    admitted, and a refusal keeps the category the check chose. Passing the
+    observation into :meth:`AdmissionEvidence.admit` makes that dependency an
+    argument rather than state this object carries between calls.
+    """
+
+    manifest: evidence.Manifest | None
+    verdict: policy.Classification
+
+
+#: The observation a gate holds before it has checked anything. It carries the
+#: refusal a skipped check must produce, so a gate that reordered its
+#: operations fails closed instead of admitting on no document at all.
+MISSING_OBSERVATION = Observation(
+    None,
+    policy.Classification(
+        policy.Outcome.FAILURE, policy.ErrorCategory.MISSING_EVIDENCE
+    ),
+)
 
 
 class AdmissionEvidence:
@@ -65,10 +96,8 @@ class AdmissionEvidence:
         self._configuration = configuration
         self._file_system = file_system
         self._read_wall_clock = read_wall_clock
-        self._manifest: evidence.Manifest | None = None
-        self._checked: policy.Classification | None = None
 
-    def check_freshness(self) -> policy.Classification:
+    def check_freshness(self) -> Observation:
         """Read the manifest and refuse every unbounded timestamp.
 
         The three ways the document can fail to arrive are told apart because an
@@ -81,31 +110,28 @@ class AdmissionEvidence:
 
         Returns
         -------
-        policy.Classification
-            Success when a document arrived and every moment is inside the
-            window, otherwise the category of the first refusal.
+        Observation
+            The document read, with success when every moment is inside the
+            window, or no document and the category of the first refusal.
         """
         try:
             raw = self._file_system.read_bytes(
                 self._configuration.evidence_file, evidence.MAX_EVIDENCE_BYTES
             )
         except FileNotFoundError:
-            return _refusal(policy.ErrorCategory.MISSING_EVIDENCE)
+            return Observation(None, _refusal(policy.ErrorCategory.MISSING_EVIDENCE))
         except OSError:
             # Includes `filesystem.EvidenceTooLargeError` and
             # `filesystem.NotRegularFileError`: something is at the path, but it
             # cannot be read as the manifest.
-            return _refusal(policy.ErrorCategory.MALFORMED_EVIDENCE)
+            return Observation(None, _refusal(policy.ErrorCategory.MALFORMED_EVIDENCE))
         parsed = evidence.parse_manifest(raw)
         if parsed.manifest is None:
-            self._checked = _refusal(parsed.error_category)
-            return self._checked
-        self._manifest = parsed.manifest
-        self._checked = self._classify_freshness(parsed.manifest)
-        return self._checked
+            return Observation(None, _refusal(parsed.error_category))
+        return Observation(parsed.manifest, self._classify_freshness(parsed.manifest))
 
-    def admit(self) -> policy.Classification:
-        """Require the document read at the check to admit the candidate.
+    def admit(self, observation: Observation) -> policy.Classification:
+        """Require the document the check observed to admit the candidate.
 
         Identity and results are judged first, so a mismatch or an unsuccessful
         canary keeps its own category. An enforcing run then asks whether the
@@ -117,12 +143,18 @@ class AdmissionEvidence:
         decision and not only at the observation.
 
         The check's verdict is carried through rather than recomputed: a
-        refusal there is final, so only a document the check admitted reaches
-        the identity and result checks, and a reading that moved back inside
-        the window afterwards cannot revive it. The guard reports
-        ``missing_evidence`` rather than assuming a document: a future
-        reordering that skipped :meth:`check_freshness` would then fail closed
-        instead of admitting on no document at all.
+        refusal in the observation is final, so only a document the check
+        admitted reaches the identity and result checks, and a reading that
+        moved back inside the window afterwards cannot revive it. An
+        observation with no document reports ``missing_evidence`` rather than
+        assuming one: a caller that skipped :meth:`check_freshness` holds
+        :data:`MISSING_OBSERVATION`, whose verdict is that refusal, so a
+        reordering fails closed instead of admitting on no document at all.
+
+        Parameters
+        ----------
+        observation
+            The document the freshness check read and the verdict it reached.
 
         Returns
         -------
@@ -132,19 +164,10 @@ class AdmissionEvidence:
             producer on an enforcing run, and is still inside its window now;
             otherwise the category of the first refusal.
         """
-        # `admit` is only meaningful once `check_freshness` has judged a
-        # document, and the gate runs them in that order. A refusal from that
-        # check is final, so only its success is judged further: a wall clock
-        # that moved back inside the window cannot revive evidence the gate has
-        # already rejected. Reaching this method before the check is a defect
-        # in the caller, refused rather than raised, because an admission gate
-        # must fail closed on a state it cannot judge.
-        checked = self._checked
-        if checked is None:
-            return _refusal(policy.ErrorCategory.MISSING_EVIDENCE)
+        checked = observation.verdict
         if checked.outcome != policy.Outcome.SUCCESS:
             return checked
-        manifest = self._manifest
+        manifest = observation.manifest
         if manifest is None:
             return _refusal(policy.ErrorCategory.MISSING_EVIDENCE)
         configuration = self._configuration

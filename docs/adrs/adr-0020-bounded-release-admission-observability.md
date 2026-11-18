@@ -539,13 +539,16 @@ order, the subdirectory, and the gate step, and derives the expected gate
 command from the verifier checkout so the two cannot drift apart; the
 repository and ref each role must name, with the reason for each, live in
 `tests/workflow_contracts/release_admission_checkout_inputs.py`.
-`tests/workflow_contracts/release_admission_checkout_mutations.py` states ten
-regressions of that shape: the pair collapsed into one pinned checkout, the
-verifier replacing the candidate, either checkout naming the other's repository
-or ref, the gate running the candidate's copy of the entry point, the gate's
-`uv run` ceasing to refuse the candidate's configuration and project files, and
-a step or job default moving the working directory into the verifier. With
-those ten, the two mutation modules state thirty-one regressions in all.
+`tests/workflow_contracts/release_admission_checkout_mutations.py` states
+nineteen regressions of that shape: the pair collapsed into one pinned
+checkout, the verifier replacing the candidate, either checkout naming the
+other's repository or ref, a checkout made conditional or failure-tolerant, the
+verifier keeping its credential or being given a path the shell would split,
+the checkouts written in the wrong order, the gate running the candidate's copy
+of the entry point, splitting its command at a shell boundary, ceasing to
+refuse the candidate's configuration and project files, or being moved into the
+verifier by a step, job, or workflow default. With those nineteen, the two
+mutation modules state forty regressions in all.
 `scripts/tests/test_release_admission_cross_repository.py` settles the fetch
 question by execution rather than argument: it builds two real Git
 repositories, runs the gate from the candidate checkout and from the verifier

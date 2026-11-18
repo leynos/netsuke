@@ -14,7 +14,9 @@ split also keeps each module inside the repository's module-length ceiling.
 
 Nothing here performs I/O. :func:`parse_manifest` takes bytes another module
 read through the filesystem port, so the schema is reviewable and testable
-without a filesystem or a child process.
+without a filesystem or a child process. The bytes are UTF-8 and are decoded
+here rather than by the JSON decoder, whose own encoding detection would also
+read UTF-16 and UTF-32 and so admit a document this contract does not describe.
 
 The schema is versioned rather than merely shaped. A document carrying a
 version this module does not know is refused as malformed instead of being
@@ -145,10 +147,17 @@ def parse_manifest(raw: bytes) -> Parsed:
     True
     """
     try:
-        document = json.loads(raw, object_pairs_hook=_unique_members)
+        # The bytes are decoded here rather than handed to `json.loads`, which
+        # detects the encoding of a bytes argument and accepts UTF-16 and
+        # UTF-32 as well as UTF-8. A producer writing one of those would then
+        # be read by a verifier whose published contract says the document is
+        # UTF-8, so the document that reached the decision would not be the
+        # document the contract describes.
+        document = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_members)
     except ValueError, RecursionError:
-        # `json.loads` reports both a UTF-8 failure and a syntax error as a
-        # `ValueError`, and admits nothing else here. A decoder that refuses a
+        # `raw.decode` reports a non-UTF-8 document as a `UnicodeDecodeError`,
+        # and `json.loads` reports a syntax error, both as `ValueError`; the
+        # pair is the whole vocabulary refused here. A decoder that refuses a
         # deeply nested document raises `RecursionError` instead, which is not
         # a `ValueError`; it is the same operator problem -- a document this
         # verifier cannot read -- so it takes the same refusal rather than

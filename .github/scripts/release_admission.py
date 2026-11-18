@@ -50,6 +50,7 @@ uv run --script .github/scripts/release_admission.py
 """
 
 import dataclasses
+import functools
 import os
 import sys
 import typing as typ
@@ -91,6 +92,7 @@ def run() -> int:
         enforced failure, and otherwise the failing sink's own status.
     """
     from _release_admission import (
+        commands,
         configuration,
         gate,
     )
@@ -134,7 +136,11 @@ def run() -> int:
         except configuration.ConfigurationError as error:
             print(error, file=sys.stderr)
             return CONFIGURATION_FAILURE
-        admission = gate.Gate(settings, file_system)
+        admission = gate.Gate(
+            settings,
+            file_system,
+            functools.partial(commands.read_wall_clock, settings.programs),
+        )
         if not admission.should_stop():
             admission.run_operations()
         return admission.finish()

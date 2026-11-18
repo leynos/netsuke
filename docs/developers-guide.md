@@ -3195,11 +3195,13 @@ exists for, with the repository and ref each checkout must name in
 `release_admission_checkout_inputs.py`. `release_publication_gate_mutations.py`
 and `release_admission_checkout_mutations.py` prove the rule fires when the
 pair is collapsed into one checkout, when the verifier replaces the candidate,
-when either checkout names the other's repository or ref, when the gate runs
-the candidate's copy of the entry point, when the gate's uv run stops refusing
-the candidate's configuration and project files, and when a step or job default
-moves the working directory into the verifier -- thirty-one stated regressions
-in all.
+when either checkout names the other's repository or ref, when a checkout is
+made conditional or failure-tolerant, when the verifier keeps its credential or
+is given a path the shell would split, when the two checkouts are written in
+the wrong order, when the gate runs the candidate's copy of the entry point,
+splits its command at a shell boundary, stops refusing the candidate's
+configuration and project files, or is moved into the verifier by a step, job,
+or workflow default -- forty stated regressions in all.
 
 Two limits follow from the mechanism and are recorded rather than worked
 around. GitHub documents `job.workflow_sha` as unavailable on GitHub Enterprise
@@ -3217,28 +3219,36 @@ The gate logic is Python, per the estate rule in
 runs with `uv run`, with configuration and project discovery disabled as
 described above, which resolves its declared dependencies at invocation. Its
 implementation is split across `.github/scripts/_release_admission/`: `policy`
-owns the pure bounded classifications, `manifest` owns the candidate-bound
-evidence document, its schema version, field readers, and its single refusal,
-`evidence` owns the freshness and admission decisions over a parsed manifest,
-the bounded maximum age, and the variables that set it, `admission_evidence`
-owns the shared read and the two evidence decisions, including the window
-re-read before admission, `records` owns the metric and trace shapes,
-`delivery` owns the metric, output, and trace sinks, `bounding` owns the
-process-group command bound and the stream wiring, `commands` owns the bounded
-external command runner, `statuses` translates an exit status, an elapsed
-bound, or a refused launch into the gate's own command result, `telemetry` owns
-the emitted records, `environment` reads a variable in one of Bash's two
-default forms, `filesystem` performs the two start-up effects that create the
-artefact parents and truncate the artefacts, `configuration` resolves the
-environment the gate is told, and `gate` composes the operations and reporting.
-The workflow's `astral-sh/setup-uv` step provisions the interpreter; `uv` reads
-the entry point's own `requires-python` and dependency pins rather than the
-workflow restating them.
+owns the pure bounded classifications, including `classify_run_head` for the
+run a lookup reported, `publishable_revision` for the narrower value written to
+`GITHUB_OUTPUT`, and `enforcement_label` for the mode the write jobs compare
+with `'true'`, `manifest` owns the candidate-bound evidence document, its
+schema version, field readers, and its single refusal, `evidence` owns the
+freshness and admission decisions over a parsed manifest, the bounded maximum
+age, and the variables that set it, `admission_evidence` owns the shared read
+and the two evidence decisions, including the window re-read before admission,
+`records` owns the metric and trace shapes, `delivery` owns the metric, output,
+and trace sinks, `bounding` owns the process-group command bound and the stream
+wiring, `commands` owns the bounded external command runner, `statuses`
+translates an exit status, an elapsed bound, or a refused launch into the
+gate's own command result, `telemetry` owns the emitted records, `environment`
+reads a variable in one of Bash's two default forms, `filesystem` creates the
+artefact parents, truncates the artefacts, and performs the bounded evidence
+read with `read_bytes`, which refuses a document past its byte bound with
+`EvidenceTooLargeError` and a path that is not a regular file with
+`NotRegularFileError`, `configuration` resolves the environment the gate is
+told, and `gate` composes the operations and reporting. The workflow's
+`astral-sh/setup-uv` step provisions the interpreter; `uv` reads the entry
+point's own `requires-python` and dependency pins rather than the workflow
+restating them.
 
 The gate keeps fallible boundaries behind explicit adapters. Set
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
 `NETSUKE_RELEASE_ADMISSION_GIT_ADAPTER` for Git fetches,
-`NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` for monotonic clock readings,
+`NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` for both clock readings — the
+monotonic readings that measure an elapsed bound and the wall-clock reading
+(`time.time()`, via `WALL_CLOCK_ARGUMENTS`) the freshness checks compare
+against the evidence's own timestamp — and
 `NETSUKE_RELEASE_ADMISSION_METRICS_SINK` for metric records,
 `NETSUKE_RELEASE_ADMISSION_OUTPUT_SINK` for `GITHUB_OUTPUT`, or
 `NETSUKE_RELEASE_ADMISSION_TRACE_SINK` for trace records. The defaults are `gh`,
@@ -5828,9 +5838,9 @@ Python gate. It uses the repository's Python 3.14 baseline and provisions
 `pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
 `cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
 `cyclopts==4.25.3` for the entry point the tests import. The target runs the
-twenty runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`,
-and `-p no:cacheprovider`, so the test run is isolated from repository-local
-pytest configuration and cache state:
+twenty-three runtime modules with `python -m pytest`, `-c /dev/null`,
+`--rootdir=.`, and `-p no:cacheprovider`, so the test run is isolated from
+repository-local pytest configuration and cache state:
 
 - `scripts/tests/test_release_admission_metrics.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
@@ -5850,7 +5860,9 @@ pytest configuration and cache state:
 - `scripts/tests/test_release_admission_evidence_reading.py`
 - `scripts/tests/test_release_admission_freshness_recheck.py`
 - `scripts/tests/test_release_admission_freshness_properties.py`
+- `scripts/tests/test_release_admission_bounded_guards.py`
 - `scripts/tests/test_release_admission_producer_trust.py`
+- `scripts/tests/test_release_admission_cross_repository.py`
 - `scripts/tests/test_release_admission_sink_persistence.py`
 - `scripts/tests/test_release_admission_harness_isolation.py`
 
@@ -5888,6 +5900,14 @@ check never to be converted into an admission. It reaches the production
 decisions through the injected clock and filesystem ports, so both edges of the
 window, and a clock that moves backwards between the readings, are exercised
 without a child process.
+
+`..._bounded_guards.py` pins the two refusals that narrow a value before
+anything is published on it. The maximum evidence age must be plain bounded
+decimal digits, because a mistyped bound must not widen the window, and the
+revision that reaches `GITHUB_OUTPUT` must be a full lowercase object ID,
+because a newline there would forge a second `key=value` line. Both tables
+carry the spellings that a reader which merely tried `int`, or merely checked
+the width, would accept.
 
 The runtime modules drive the gate as a real process and intercept its external
 commands with cmd-mox doubles registered under the gate's own adapter names.

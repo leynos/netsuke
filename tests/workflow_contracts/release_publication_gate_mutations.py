@@ -120,9 +120,28 @@ GATE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "candidate-checkout-names-verifier": (
         ("static", f"{ADMISSION_JOB}.checkout.candidate"),
     ),
+    "candidate-checkout-conditional": (
+        ("static", f"{ADMISSION_JOB}.checkout.candidate"),
+    ),
+    "candidate-checkout-tolerates-failure": (
+        ("static", f"{ADMISSION_JOB}.checkout.candidate"),
+    ),
+    "verifier-checkout-conditional": (
+        ("static", f"{ADMISSION_JOB}.checkout.verifier"),
+    ),
+    "verifier-checkout-tolerates-failure": (
+        ("static", f"{ADMISSION_JOB}.checkout.verifier"),
+    ),
+    "verifier-persists-credentials": (
+        ("static", f"{ADMISSION_JOB}.checkout.verifier"),
+    ),
+    "verifier-path-needs-quoting": (("static", f"{ADMISSION_JOB}.checkout.verifier"),),
+    "checkouts-swapped": (("static", f"{ADMISSION_JOB}.checkout.candidate"),),
     "gate-runs-candidate-script": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
     "gate-step-leaves-candidate": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
     "job-default-moves-gate": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
+    "workflow-default-moves-gate": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
+    "gate-run-splits-the-command": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
     "gate-run-without-uv-isolation": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
 }
 
