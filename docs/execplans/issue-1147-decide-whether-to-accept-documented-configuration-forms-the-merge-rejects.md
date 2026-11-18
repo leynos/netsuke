@@ -121,6 +121,16 @@ list form.
   `make doc-coverage` (98.29% against the 80% bar), `make test` (6125 nextest
   tests and the doctest pass), `make markdownlint`, `make nixie`, and
   `make test-documentation-contracts` (15 passed).
+- [x] (2026-11-18) Advisory CodeScene follow-up: the full-merge helpers gained
+  a declarative `MergeCase`, and the four per-key Boolean merges and the two
+  mixed-case policy merges became `rstest` tables. CodeScene reported code
+  duplication in `env_value_forms/mod.rs`, `boolean_values.rs`, and
+  `policy_values.rs` (scores 9.10 and 9.39); `cs check` now scores all four
+  files 10.00 with no warnings. That check is not in the required set, so the
+  refactor is a separate commit after the functional one.
+- [ ] (2026-11-18) CodeRabbit agent review re-run once the refactor lands. The
+  first attempt ended with `Connection failed: WebSocket closed`, which the
+  tool reports as recoverable.
 
 ## Surprises & discoveries
 
@@ -193,6 +203,14 @@ list form.
   The enums and their shared deserializer form one coherent unit, and `mod.rs`
   re-exports the types so every existing path, including
   `src/cli/policy/values.rs`, keeps working. Date/Author: 2026-11-18, agent.
+- D8. Replace the repeated merge-test bodies with declarative cases.
+  Rationale: `AGENTS.md` asks for duplicated tests to become parameterized
+  cases, and CodeScene flags the four near-identical Boolean merges and the two
+  mixed-case policy merges. A `MergeCase` value names the file, the environment
+  above it, and the command line, so the success and failure adapters share one
+  sandbox preparation and each test states only what makes it distinct. The
+  masking case stays a named `rstest` row rather than a merged body, so the
+  layering contract remains visible. Date/Author: 2026-11-18, agent.
 
 ## Outcomes & retrospective
 

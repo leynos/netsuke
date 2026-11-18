@@ -2,20 +2,10 @@
 
 use super::*;
 use netsuke::cli::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
+use rstest::rstest;
 
-/// Mixed-case policy values merge from a configuration file.
-#[test]
-fn configuration_file_accepts_mixed_case_policies() -> Result<()> {
-    let merged = merge_with_file_and_environment(
-        concat!(
-            "color = \"AlWaYs\"\n",
-            "emoji = \"ALWAYS\"\n",
-            "progress = \"nEvEr\"\n",
-            "accessibility = \"oN\"\n",
-        ),
-        &[],
-        &["netsuke"],
-    )?;
+/// Assert every policy carries the variant its mixed-case spelling names.
+fn assert_mixed_case_policies(merged: &Cli) -> Result<()> {
     ensure!(
         merged.color == ColourPolicy::Always,
         "mixed-case color should merge as always, got {:?}",
@@ -27,8 +17,8 @@ fn configuration_file_accepts_mixed_case_policies() -> Result<()> {
         merged.emoji,
     );
     ensure!(
-        merged.progress == ProgressPolicy::Never,
-        "mixed-case progress should merge as never, got {:?}",
+        merged.progress == ProgressPolicy::Always,
+        "mixed-case progress should merge as always, got {:?}",
         merged.progress,
     );
     ensure!(
@@ -39,52 +29,44 @@ fn configuration_file_accepts_mixed_case_policies() -> Result<()> {
     Ok(())
 }
 
+/// Mixed-case policy values merge from a configuration file.
+#[test]
+fn configuration_file_accepts_mixed_case_policies() -> Result<()> {
+    let merged = merge(&MergeCase::file(concat!(
+        "color = \"AlWaYs\"\n",
+        "emoji = \"ALWAYS\"\n",
+        "progress = \"aLwAyS\"\n",
+        "accessibility = \"oN\"\n",
+    )))?;
+    assert_mixed_case_policies(&merged)
+}
+
 /// Mixed-case policy values merge from the environment.
 #[test]
 fn environment_accepts_mixed_case_policies() -> Result<()> {
-    let merged = merge_with_environment(
-        &[
-            ("NETSUKE_COLOR", "AlWaYs"),
-            ("NETSUKE_EMOJI", "aLwAyS"),
-            ("NETSUKE_PROGRESS", "ALWAYS"),
-            ("NETSUKE_ACCESSIBILITY", "On"),
-        ],
-        &["netsuke"],
-    )?;
-    ensure!(
-        merged.color == ColourPolicy::Always,
-        "mixed-case NETSUKE_COLOR should merge as always, got {:?}",
-        merged.color,
-    );
-    ensure!(
-        merged.emoji == EmojiPolicy::Always,
-        "mixed-case NETSUKE_EMOJI should merge as always, got {:?}",
-        merged.emoji,
-    );
-    ensure!(
-        merged.progress == ProgressPolicy::Always,
-        "mixed-case NETSUKE_PROGRESS should merge as always, got {:?}",
-        merged.progress,
-    );
-    ensure!(
-        merged.accessibility == AccessibilityPolicy::On,
-        "mixed-case NETSUKE_ACCESSIBILITY should merge as on, got {:?}",
-        merged.accessibility,
-    );
-    Ok(())
+    let merged = merge(&MergeCase::environment(&[
+        ("NETSUKE_COLOR", "aLwAyS"),
+        ("NETSUKE_EMOJI", "aLwAyS"),
+        ("NETSUKE_PROGRESS", "ALWAYS"),
+        ("NETSUKE_ACCESSIBILITY", "On"),
+    ]))?;
+    assert_mixed_case_policies(&merged)
 }
 
 /// The environment layer wins over the file layer regardless of casing.
-#[test]
-fn environment_policy_overrides_file_policy() -> Result<()> {
-    let merged = merge_with_file_and_environment(
-        "progress = \"never\"\n",
-        &[("NETSUKE_PROGRESS", "ALWAYS")],
-        &["netsuke"],
-    )?;
+///
+/// A valid environment value also masks an invalid file value: the merge
+/// deserializes the masked JSON once, so the file's `bogus` never reaches the
+/// policy deserializer. That layering contract is why `--json` may
+/// short-circuit the early resolver.
+#[rstest]
+#[case::overrides_valid_file("progress = \"never\"\n")]
+#[case::masks_invalid_file("progress = \"bogus\"\n")]
+fn environment_policy_wins_over_file_policy(#[case] file: &str) -> Result<()> {
+    let merged = merge(&MergeCase::file(file).with_overrides(&[("NETSUKE_PROGRESS", "ALWAYS")]))?;
     ensure!(
         merged.progress == ProgressPolicy::Always,
-        "the environment's ALWAYS should override the file's never, got {:?}",
+        "the environment's ALWAYS should win over the file's value, got {:?}",
         merged.progress,
     );
     Ok(())
@@ -93,9 +75,12 @@ fn environment_policy_overrides_file_policy() -> Result<()> {
 /// An explicit command-line policy wins over the environment.
 #[test]
 fn command_line_policy_overrides_environment_policy() -> Result<()> {
-    let merged = merge_with_environment(
-        &[("NETSUKE_PROGRESS", "NEVER")],
-        &["netsuke", "--progress", "always"],
+    let merged = merge(
+        &MergeCase::environment(&[("NETSUKE_PROGRESS", "NEVER")]).with_cli(&[
+            "netsuke",
+            "--progress",
+            "always",
+        ]),
     )?;
     ensure!(
         merged.progress == ProgressPolicy::Always,
@@ -108,10 +93,9 @@ fn command_line_policy_overrides_environment_policy() -> Result<()> {
 /// An invalid winning value is rejected with the policy's error text.
 #[test]
 fn invalid_environment_policy_over_file_policy_is_rejected() -> Result<()> {
-    let error = merge_with_file_and_environment_error(
-        "progress = \"always\"\n",
-        &[("NETSUKE_PROGRESS", "bogus")],
-        &["netsuke"],
+    let error = merge_error(
+        &MergeCase::file("progress = \"always\"\n")
+            .with_overrides(&[("NETSUKE_PROGRESS", "bogus")]),
     )?;
     ensure!(
         error.contains("invalid progress policy 'bogus'"),
@@ -124,26 +108,6 @@ fn invalid_environment_policy_over_file_policy_is_rejected() -> Result<()> {
     Ok(())
 }
 
-/// A valid higher layer masks an invalid lower-layer policy value.
-///
-/// The merge deserializes the masked JSON once, so the file's `bogus` value
-/// never reaches the policy deserializer. This is the documented layering
-/// contract, and it is why `--json` may short-circuit the early resolver.
-#[test]
-fn valid_environment_policy_masks_invalid_file_policy() -> Result<()> {
-    let merged = merge_with_file_and_environment(
-        "progress = \"bogus\"\n",
-        &[("NETSUKE_PROGRESS", "ALWAYS")],
-        &["netsuke"],
-    )?;
-    ensure!(
-        merged.progress == ProgressPolicy::Always,
-        "the valid environment policy should mask the invalid file value, got {:?}",
-        merged.progress,
-    );
-    Ok(())
-}
-
 /// The environment value parser trims surrounding whitespace before parsing.
 ///
 /// Environment values are unquoted scalars, so Figment's text parser trims
@@ -151,7 +115,7 @@ fn valid_environment_policy_masks_invalid_file_policy() -> Result<()> {
 /// the same spelling is rejected there; see the companion test below.
 #[test]
 fn surrounding_whitespace_in_environment_policy_is_trimmed() -> Result<()> {
-    let merged = merge_with_environment(&[("NETSUKE_COLOR", " AlWaYs ")], &["netsuke"])?;
+    let merged = merge(&MergeCase::environment(&[("NETSUKE_COLOR", " AlWaYs ")]))?;
     ensure!(
         merged.color == ColourPolicy::Always,
         "the environment parser should trim and accept ' AlWaYs ', got {:?}",
@@ -163,7 +127,7 @@ fn surrounding_whitespace_in_environment_policy_is_trimmed() -> Result<()> {
 /// A configuration-file policy string keeps its surrounding whitespace.
 #[test]
 fn surrounding_whitespace_in_file_policy_is_rejected() -> Result<()> {
-    let error = merge_with_file_and_environment_error("color = \" AlWaYs \"\n", &[], &["netsuke"])?;
+    let error = merge_error(&MergeCase::file("color = \" AlWaYs \"\n"))?;
     ensure!(
         error.contains("invalid color policy ' AlWaYs '"),
         "a quoted file value keeps its whitespace, so it should be rejected, got: {error}",
