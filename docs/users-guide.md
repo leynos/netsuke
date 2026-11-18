@@ -80,16 +80,19 @@ The MSI installer supports pre-release SemVer versions such as `0.1.0-beta4`:
 the pre-release suffix cannot be represented in an MSI product version, so the
 installer carries the numeric release triple (`0.1.0`) while the full version
 remains in the package and release names. Because successive beta and final
-releases share that numeric version, installing a later beta or final MSI
-replaces the existing installation for that version series rather than
-installing alongside it.
+releases share that numeric version, an MSI replaces an existing installation
+only when the two share the matching upgrade identity. Within one upgrade
+identity, installing a later beta or final MSI replaces the existing
+installation for that version series rather than installing alongside it.
 
 Upgrading a v0.1.0-beta4 installation also moves the payload from
-`C:\Program Files (x86)\netsuke` to `C:\Program Files\netsuke` and removes the
-old directory. The MSI does not edit `PATH`, so remove any entry that still
-names the old directory. The beta2 and beta3 MSIs were built from generated
-authoring with a different upgrade identity, so this release does not replace
-them; uninstall those versions from Installed apps by hand.
+`C:\Program Files (x86)\netsuke` to `C:\Program Files\netsuke`. Windows
+Installer removes the components it owns, so the old directory disappears only
+when nothing else remains in it; files another program placed there are left
+behind. The MSI does not edit `PATH`, so remove any entry that still names the
+old directory. The beta2 and beta3 MSIs were built from generated authoring
+with a different upgrade identity, so this release does not replace them;
+uninstall those versions from Installed apps by hand.
 
 Repositories that call Netsuke's reusable release workflow can select the
 `WixToolset.UI.wixext` version with the `wix-extension-version` input in the
@@ -337,7 +340,10 @@ The MSI does not add its installation directory to `PATH`, and which directory
 to add depends on the MSI. Each script below stops before changing `PATH` when
 `netsuke.exe` is not installed at the location it resolves, so choosing the
 wrong one fails immediately instead of adding a directory the installer never
-populates.
+populates. Both scripts write the user `PATH` through its registry key and
+preserve the value's type, so an expandable `PATH` holding `%VAR%` entries
+keeps expanding. Windows reads the stored value at the next sign-in; each
+script also extends this session's `PATH` so `netsuke` works straight away.
 
 The v0.1.0-beta4 MSI linked above places the payload in the 32-bit program
 files directory. Run this script once for that release:
@@ -354,22 +360,36 @@ $netsukeExecutable = Join-Path $netsukeDirectory 'netsuke.exe'
 if (-not (Test-Path -LiteralPath $netsukeExecutable -PathType Leaf)) {
     throw "Netsuke is not installed at $netsukeExecutable."
 }
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$environmentKey = Get-Item -LiteralPath 'HKCU:\Environment'
+$userPathKind = if ($environmentKey.GetValueNames() -contains 'Path') {
+    $environmentKey.GetValueKind('Path')
+} else {
+    [Microsoft.Win32.RegistryValueKind]::ExpandString
+}
+$userPath = [string]$environmentKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
 $userEntries = @($userPath -split ';' | Where-Object { $_ })
 if ($userEntries -notcontains $netsukeDirectory) {
     $newUserPath = (($userEntries + $netsukeDirectory) -join ';')
-    [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
+    $environmentKey.SetValue('Path', $newUserPath, $userPathKind)
 }
 if (($env:Path -split ';') -notcontains $netsukeDirectory) {
     $env:Path = "$env:Path;$netsukeDirectory"
+}
+$resolved = Get-Command netsuke -CommandType Application -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+if ($null -eq $resolved -or $resolved.Source -ne $netsukeExecutable) {
+    $competing = if ($null -eq $resolved) { 'nothing' } else { $resolved.Source }
+    throw "netsuke resolves to $competing, not $netsukeExecutable."
 }
 netsuke --version
 ```
 
 The beta5 and later MSIs place the payload in the native
 `C:\Program Files\netsuke` directory and upgrade a beta4 installation in place.
-That leaves the beta4 `PATH` entry naming a directory that no longer exists, so
-remove it by hand, then run the matching script:
+Windows Installer removes the installed payload, and the old
+`C:\Program Files (x86)\netsuke` directory disappears only when nothing else
+remains in it. Remove the beta4 `PATH` entry by hand, then run the matching
+script:
 
 <!-- tested-example: guide-windows-path -->
 
@@ -380,14 +400,26 @@ $netsukeExecutable = Join-Path $netsukeDirectory 'netsuke.exe'
 if (-not (Test-Path -LiteralPath $netsukeExecutable -PathType Leaf)) {
     throw "Netsuke is not installed at $netsukeExecutable."
 }
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$environmentKey = Get-Item -LiteralPath 'HKCU:\Environment'
+$userPathKind = if ($environmentKey.GetValueNames() -contains 'Path') {
+    $environmentKey.GetValueKind('Path')
+} else {
+    [Microsoft.Win32.RegistryValueKind]::ExpandString
+}
+$userPath = [string]$environmentKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
 $userEntries = @($userPath -split ';' | Where-Object { $_ })
 if ($userEntries -notcontains $netsukeDirectory) {
     $newUserPath = (($userEntries + $netsukeDirectory) -join ';')
-    [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
+    $environmentKey.SetValue('Path', $newUserPath, $userPathKind)
 }
 if (($env:Path -split ';') -notcontains $netsukeDirectory) {
     $env:Path = "$env:Path;$netsukeDirectory"
+}
+$resolved = Get-Command netsuke -CommandType Application -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+if ($null -eq $resolved -or $resolved.Source -ne $netsukeExecutable) {
+    $competing = if ($null -eq $resolved) { 'nothing' } else { $resolved.Source }
+    throw "netsuke resolves to $competing, not $netsukeExecutable."
 }
 netsuke --version
 ```
@@ -397,13 +429,16 @@ The following script downloads the matching module script, manifest, Microsoft
 Assistance Markup Language (MAML) help, and about-help file. It then restores
 the versioned module layout under the current user's standard PowerShell module
 directory and imports the module. Set `$architecture` to match the downloaded
-MSI:
+MSI and `$releaseVersion` to the version of the release that published it, such
+as `0.1.0-beta4` or `0.1.0-beta5`; the release tag and the module directory are
+both derived from that value:
 
 <!-- tested-example: guide-windows-help-install -->
 
 ```powershell
 $architecture = 'amd64' # Use 'arm64' for the Arm64 MSI.
-$releaseUri = 'https://api.github.com/repos/leynos/netsuke/releases/tags/v0.1.0-beta4'
+$releaseVersion = '0.1.0-beta4' # Match the version of the installed MSI.
+$releaseUri = "https://api.github.com/repos/leynos/netsuke/releases/tags/v$releaseVersion"
 $release = Invoke-RestMethod -Uri $releaseUri
 
 $documents = [Environment]::GetFolderPath('MyDocuments')
@@ -413,7 +448,7 @@ $editionDirectory = if ($PSVersionTable.PSEdition -eq 'Desktop') {
     'PowerShell'
 }
 $moduleRoot = Join-Path $documents "$editionDirectory\Modules"
-$moduleDirectory = Join-Path $moduleRoot 'Netsuke\0.1.0-beta4'
+$moduleDirectory = Join-Path $moduleRoot "Netsuke\$releaseVersion"
 $helpDirectory = Join-Path $moduleDirectory 'en-US'
 New-Item -ItemType Directory -Path $helpDirectory -Force | Out-Null
 

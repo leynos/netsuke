@@ -2124,7 +2124,7 @@ The Windows packaging workflow passes the repository-owned authoring file as
 `wxs-path: installer/Package.wxs` to the pinned
 `leynos/shared-actions/.github/actions/windows-package` action. Keep that input
 when changing the packaging action: the caller owns the WiX v4 authoring and
-the shared action passes it to the pinned WiX compiler unchanged.
+the shared action passes it to the WiX compiler it installs unchanged.
 
 Callers of `.github/workflows/release.yml` may set the `wix-extension-version`
 `workflow_call` input to select the `WixToolset.UI.wixext` version. The input
@@ -2189,8 +2189,11 @@ Validation has deliberately separate responsibilities:
 - The release-rank example and property tests execute the repository-owned
   parser without GitHub Actions or Windows environment state.
 - The `windows-msi-upgrade` job and its local adapter compile
-  `installer/Package.wxs` with the pinned WiX CLI and UI extension while
-  building the beta2 and final fixtures. The beta1 fixture is built from
+  `installer/Package.wxs` with the UI extension pinned to version `7` while
+  building the beta2 and final fixtures. The adapter pins the packaging action
+  to a commit, but passes no WiX tool version, so this repository does not
+  constrain the CLI version and the action installs or updates it. The beta1
+  fixture is built from
   `.github/actions/windows-msi-upgrade-validation/fixtures/legacy-program-files-x86.wxs`,
   a frozen copy of the v0.1.0-beta4 authoring that keeps its
   `ProgramFilesFolder` root and legacy component GUID; do not update that file

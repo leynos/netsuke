@@ -1,7 +1,8 @@
 //! Executable contracts for the installation and release examples in the
 //! public user documentation.
 //!
-//! Split from `documentation_examples_tests.rs` to keep that file within the
+//! The Windows install-location, migration, and PATH setup contracts live in
+//! `documentation_windows_installation_tests.rs` so both files stay within the
 //! repository's 400-line cap; the shared fixtures live in the
 //! `documentation_examples` directory module, which every documentation test
 //! binary declares independently.
@@ -11,24 +12,6 @@ pub mod documentation_examples;
 use anyhow::{Context, Result, ensure};
 use documentation_examples::{documented_example, load_documented_examples};
 use test_support::fs as test_fs;
-
-/// Every README that repeats the Windows install location.
-const READMES: [&str; 7] = [
-    "README.md",
-    "README.de.md",
-    "README.es.md",
-    "README.fr.md",
-    "README.ja.md",
-    "README.pt-BR.md",
-    "README.zh-CN.md",
-];
-
-/// The native directory the x64 and Arm64 MSIs install to.
-const WINDOWS_INSTALL_LOCATION: &str = "`C:\\Program Files\\netsuke`";
-
-/// The 32-bit directory the v0.1.0-beta4 MSI uses, which each document may
-/// name only as a statement about that release.
-const LEGACY_WINDOWS_INSTALL_LOCATION: &str = "C:\\Program Files (x86)\\netsuke";
 
 /// Verify that installation examples and release details retain their user contract.
 #[test]
@@ -43,7 +26,7 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
     );
     ensure!(readme.body == expected, "README source install drifted");
     ensure!(guide.body == expected, "user guide source install drifted");
-    assert_windows_setup_examples()
+    Ok(())
 }
 
 #[test]
@@ -145,35 +128,6 @@ fn beta1_installation_notice_pins_version_toolchain_and_polonius() -> Result<()>
     Ok(())
 }
 
-/// Verify the beta5 migration note covers the move and its manual steps.
-#[test]
-fn beta5_migration_note_covers_the_windows_msi_move() -> Result<()> {
-    // The note is the only migration advice a beta4 Windows user receives, so
-    // each manual step has to be named: the directory change, the PATH cleanup
-    // the MSI cannot perform, and the beta2/beta3 uninstall that the upgrade
-    // identity does not cover.
-    let guide = test_fs::read_to_string("docs/v0-1-0-migration-guide.md")
-        .context("read docs/v0-1-0-migration-guide.md")?;
-    let required_fragments = [
-        "## Install Windows MSIs under the native program files directory",
-        "Windows MSI installations",
-        "ProgramFiles6432Folder",
-        "Installing beta5 over a beta4 installation",
-        LEGACY_WINDOWS_INSTALL_LOCATION,
-        "C:\\Program Files\\netsuke",
-        "The MSI does not edit `PATH`",
-        "uninstall beta2 and beta3",
-        "Installed apps",
-    ];
-    for fragment in required_fragments {
-        ensure!(
-            guide.contains(fragment),
-            "the beta5 migration note should state: {fragment}"
-        );
-    }
-    Ok(())
-}
-
 /// Whether a toolchain name is `nightly-YYYY-MM-DD`.
 fn is_dated_nightly(name: &str) -> bool {
     let Some(date) = name.strip_prefix("nightly-") else {
@@ -244,210 +198,5 @@ fn assert_release_installation_contract() -> Result<()> {
             );
         }
     }
-    assert_every_document_names_the_windows_install_locations()?;
-    let users_guide =
-        test_fs::read_to_string("docs/users-guide.md").context("read docs/users-guide.md")?;
-    let expected_msi_replacement_fragments = [
-        "installing a later beta or final MSI",
-        "replaces the existing installation",
-    ];
-    ensure!(
-        expected_msi_replacement_fragments
-            .into_iter()
-            .all(|fragment| users_guide.contains(fragment)),
-        "users' guide should document MSI replacement within a version series"
-    );
-    let expected_upgrade_fragments = [
-        LEGACY_WINDOWS_INSTALL_LOCATION,
-        "The MSI does not edit `PATH`",
-        "uninstall those versions from Installed apps",
-    ];
-    ensure!(
-        expected_upgrade_fragments
-            .into_iter()
-            .all(|fragment| users_guide.contains(fragment)),
-        "users' guide should explain the move out of the legacy install directory"
-    );
-    Ok(())
-}
-
-/// Check that every README and the guide name both Windows install locations.
-///
-/// The linked package and the next release install to different directories,
-/// so a document that names only one of them tells half the story: the native
-/// path is a statement about MSIs built from the release authoring, and the
-/// 32-bit path is a statement about the v0.1.0-beta4 MSI. The 32-bit path is
-/// correct only in that second role, so its paragraph must name the release it
-/// describes.
-fn assert_every_document_names_the_windows_install_locations() -> Result<()> {
-    for path in READMES.into_iter().chain(["docs/users-guide.md"]) {
-        let document = test_fs::read_to_string(path).with_context(|| format!("read {path}"))?;
-        ensure!(
-            document.contains(WINDOWS_INSTALL_LOCATION),
-            "{path} should state the native Windows MSI install location {WINDOWS_INSTALL_LOCATION}"
-        );
-        let legacy_paragraph = paragraph_naming(&document, LEGACY_WINDOWS_INSTALL_LOCATION)
-            .with_context(|| {
-                format!(
-                    "{path} should state the v0.1.0-beta4 Windows MSI install location \
-                     {LEGACY_WINDOWS_INSTALL_LOCATION}"
-                )
-            })?;
-        ensure!(
-            legacy_paragraph.contains("v0.1.0-beta4"),
-            "{path} must attribute the 32-bit directory to v0.1.0-beta4: {legacy_paragraph}"
-        );
-    }
-    Ok(())
-}
-
-/// Return the Markdown paragraph holding the first line that names `needle`.
-///
-/// The release attribution and the directory it explains can sit on different
-/// lines of one wrapped paragraph, so a line-scoped search would reject prose
-/// that reads correctly.
-fn paragraph_naming(document: &str, needle: &str) -> Option<String> {
-    let lines: Vec<&str> = document.lines().collect();
-    let index = lines.iter().position(|line| line.contains(needle))?;
-    let start = lines
-        .get(..index)?
-        .iter()
-        .rposition(|line| line.trim().is_empty())
-        .map_or(0, |blank| blank + 1);
-    let end = lines
-        .get(index..)?
-        .iter()
-        .position(|line| line.trim().is_empty())
-        .map_or(lines.len(), |offset| index + offset);
-    lines.get(start..end).map(|paragraph| paragraph.join("\n"))
-}
-
-/// Check the documented Windows help, PATH, and staging contracts.
-fn assert_windows_setup_examples() -> Result<()> {
-    assert_native_windows_path_example()?;
-    assert_legacy_windows_path_example()?;
-    assert_windows_help_examples()
-}
-
-/// Assert that `body` contains every fragment in `fragments`, naming `expectation`
-/// when one is missing.
-fn ensure_contains_all(body: &str, fragments: &[&str], expectation: &str) -> Result<()> {
-    ensure!(
-        fragments.iter().all(|fragment| body.contains(fragment)),
-        "{expectation}"
-    );
-    Ok(())
-}
-
-/// Assert the documented PATH setup for an MSI that uses the native directory.
-fn assert_native_windows_path_example() -> Result<()> {
-    let windows_path = documented_example("guide-windows-path")?;
-    let windows_path_fragments = [
-        "$programFiles = if ($env:ProgramW6432) { $env:ProgramW6432 } else { $env:ProgramFiles }",
-        "$netsukeDirectory = Join-Path $programFiles 'netsuke'",
-        "$netsukeExecutable = Join-Path $netsukeDirectory 'netsuke.exe'",
-        "Test-Path -LiteralPath $netsukeExecutable -PathType Leaf",
-        "$netsukeDirectory",
-        "SetEnvironmentVariable('Path', $newUserPath, 'User')",
-    ];
-    ensure_contains_all(
-        &windows_path.body,
-        &windows_path_fragments,
-        "Windows PATH setup should resolve the native MSI directory and persist it",
-    )?;
-    // The x64 and Arm64 packages install into the native directory. A script
-    // that read the 32-bit directory would add a path the MSI never populates,
-    // and `netsuke --version` would then fail for a correctly installed user.
-    let legacy_fragments = ["ProgramFilesX86", "Program Files (x86)"];
-    ensure!(
-        !legacy_fragments
-            .iter()
-            .any(|fragment| windows_path.body.contains(fragment)),
-        "Windows PATH setup must not resolve the 32-bit program files directory"
-    );
-    assert_path_setup_checks_before_persisting(&windows_path.body, "the Windows PATH setup")
-}
-
-/// Assert the beta4 PATH setup that resolves the 32-bit program files directory.
-fn assert_legacy_windows_path_example() -> Result<()> {
-    // The linked beta4 MSI installs to the 32-bit directory, so the guide needs
-    // a second example: the native script would refuse a correct beta4 install.
-    let beta4_path = documented_example("guide-windows-path-beta4")?;
-    let beta4_path_fragments = [
-        "ProgramFiles(x86)",
-        "GetFolderPath('ProgramFilesX86')",
-        "$netsukeDirectory = Join-Path $legacyProgramFiles 'netsuke'",
-        "$netsukeExecutable = Join-Path $netsukeDirectory 'netsuke.exe'",
-        "Test-Path -LiteralPath $netsukeExecutable -PathType Leaf",
-        "SetEnvironmentVariable('Path', $newUserPath, 'User')",
-    ];
-    ensure_contains_all(
-        &beta4_path.body,
-        &beta4_path_fragments,
-        "the beta4 PATH setup should resolve the 32-bit MSI directory and persist it",
-    )?;
-    ensure!(
-        !beta4_path.body.contains("ProgramW6432"),
-        "the beta4 PATH setup must not resolve the native directory"
-    );
-    assert_path_setup_checks_before_persisting(&beta4_path.body, "the beta4 PATH setup")?;
-    let users_guide =
-        test_fs::read_to_string("docs/users-guide.md").context("read docs/users-guide.md")?;
-    let setup_prose_fragments = [
-        "The v0.1.0-beta4 MSI linked above places the payload in the 32-bit program",
-        "The beta5 and later MSIs place the payload in the native",
-        "remove it by hand",
-    ];
-    ensure_contains_all(
-        &users_guide,
-        &setup_prose_fragments,
-        "the users' guide should distinguish beta4 PATH setup from beta5 and later",
-    )
-}
-
-/// Assert that a PATH setup fence tests for the executable before changing PATH.
-///
-/// Checking first keeps a missing MSI an immediate, legible failure rather than
-/// a stale entry discovered later.
-fn assert_path_setup_checks_before_persisting(body: &str, example: &str) -> Result<()> {
-    let existence_check = body
-        .find("Test-Path -LiteralPath $netsukeExecutable")
-        .with_context(|| format!("{example} must test for netsuke.exe"))?;
-    let path_persistence = body
-        .find("SetEnvironmentVariable('Path'")
-        .with_context(|| format!("{example} must persist the directory"))?;
-    ensure!(
-        existence_check < path_persistence,
-        "{example} must verify netsuke.exe before changing PATH"
-    );
-    Ok(())
-}
-
-/// Assert the documented Windows help setup and release staging contracts.
-fn assert_windows_help_examples() -> Result<()> {
-    let windows = documented_example("guide-windows-help")?;
-    ensure!(windows.body == "Get-Help Netsuke -Full\n", "help drifted");
-    let windows_help_install = documented_example("guide-windows-help-install")?;
-    let windows_help_fragments = [
-        "Import-Module",
-        concat!(
-            "$moduleDirectory = Join-Path $moduleRoot 'Netsuke\\",
-            env!("CARGO_PKG_VERSION"),
-            "'"
-        ),
-        "Import-Module (Join-Path $moduleDirectory 'Netsuke.psd1')",
-        "*windows-$architecture*",
-    ];
-    ensure_contains_all(
-        &windows_help_install.body,
-        &windows_help_fragments,
-        "Windows help setup should import the downloaded sidecars",
-    )?;
-    let staging = test_fs::read_to_string(".github/release-staging.toml")
-        .context("read release staging configuration")?;
-    ensure!(
-        staging.contains("Netsuke-help.xml") && staging.contains("about_Netsuke.help.txt"),
-        "Windows release should stage the help consumed by Get-Help"
-    );
     Ok(())
 }

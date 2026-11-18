@@ -39,55 +39,11 @@ fn find_child<'a, 'input>(parent: Node<'a, 'input>, tag_name: &str) -> Result<No
         .with_context(|| format!("expected a {tag_name} child"))
 }
 
-/// Read an element's attributes as a sorted map, omitting one allowed difference.
-fn comparable_attributes(node: Node<'_, '_>, omitted: Option<&str>) -> BTreeMap<String, String> {
+/// Read an element's attributes as a sorted map.
+fn comparable_attributes(node: Node<'_, '_>) -> BTreeMap<String, String> {
     node.attributes()
-        .filter(|attribute| Some(attribute.name()) != omitted)
         .map(|attribute| (attribute.name().to_owned(), attribute.value().to_owned()))
         .collect()
-}
-
-/// Compare two authoring trees, allowing only the moved layout to differ.
-///
-/// The `StandardDirectory` `Id` names the program files directory the payload
-/// is rooted at, and the `BinaryComponent` `Guid` changes with the executable's
-/// target location. Every other element, attribute, and child order must match,
-/// so the legacy fixture cannot drift from the release authoring it stands in
-/// for.
-fn assert_semantically_equal_except_layout(
-    release: Node<'_, '_>,
-    legacy: Node<'_, '_>,
-) -> Result<()> {
-    let tag_name = release.tag_name().name();
-    ensure!(
-        tag_name == legacy.tag_name().name(),
-        "release authoring has {tag_name} where the legacy fixture has {}",
-        legacy.tag_name().name()
-    );
-    let omitted = match tag_name {
-        "StandardDirectory" => Some("Id"),
-        "Component" if release.attribute("Id") == Some("BinaryComponent") => Some("Guid"),
-        _ => None,
-    };
-    ensure!(
-        comparable_attributes(release, omitted) == comparable_attributes(legacy, omitted),
-        "release {tag_name} attributes differ from the legacy fixture beyond {omitted:?}: \
-         release {:?}, legacy {:?}",
-        comparable_attributes(release, omitted),
-        comparable_attributes(legacy, omitted)
-    );
-    let release_children: Vec<Node<'_, '_>> = release.children().filter(Node::is_element).collect();
-    let legacy_children: Vec<Node<'_, '_>> = legacy.children().filter(Node::is_element).collect();
-    ensure!(
-        release_children.len() == legacy_children.len(),
-        "release {tag_name} has {} child elements where the legacy fixture has {}",
-        release_children.len(),
-        legacy_children.len()
-    );
-    for (release_child, legacy_child) in release_children.into_iter().zip(legacy_children) {
-        assert_semantically_equal_except_layout(release_child, legacy_child)?;
-    }
-    Ok(())
 }
 
 /// Verify that `WiX` declares major-upgrade metadata for prerelease packages.
@@ -323,17 +279,23 @@ fn package_gives_the_moved_binary_component_a_new_identity() -> Result<()> {
     Ok(())
 }
 
-/// Verify that the frozen beta4 fixture differs only where the migration does.
+/// Verify that the frozen beta4 fixture matches the release on every field the
+/// migration contract depends on.
+///
+/// The comparison is deliberately narrow. The fixture is a frozen baseline, so
+/// a release-only change such as `SummaryInformation/@Description` must not
+/// fail this test and tempt a copy of that change into the baseline. Only the
+/// upgrade family, product-code generation, install root, component identity,
+/// and release-rank location and condition decide whether one product upgrades
+/// the other, so only those are compared.
 #[test]
-fn legacy_fixture_matches_the_release_authoring_except_its_layout() -> Result<()> {
+fn legacy_fixture_matches_the_release_migration_contract() -> Result<()> {
     let release_contents =
         test_fs::read_to_string("installer/Package.wxs").context("read installer/Package.wxs")?;
     let legacy_contents =
         test_fs::read_to_string(LEGACY_FIXTURE_PATH).context("read the legacy MSI fixture")?;
     let release = Document::parse(&release_contents).context("parse installer/Package.wxs")?;
     let legacy = Document::parse(&legacy_contents).context("parse the legacy MSI fixture")?;
-
-    assert_semantically_equal_except_layout(release.root_element(), legacy.root_element())?;
 
     let release_standard = find_element(
         &release,
@@ -346,6 +308,18 @@ fn legacy_fixture_matches_the_release_authoring_except_its_layout() -> Result<()
         release_standard.attribute("Id") != legacy_standard.attribute("Id"),
         "the fixture should freeze the beta4 ProgramFilesFolder root"
     );
+    let release_install = find_child(release_standard, "Directory")?;
+    let legacy_install = find_child(legacy_standard, "Directory")?;
+    ensure!(
+        release_install.attribute("Id") == Some("INSTALLFOLDER")
+            && legacy_install.attribute("Id") == Some("INSTALLFOLDER"),
+        "both authorings should root the payload at INSTALLFOLDER"
+    );
+    ensure!(
+        comparable_attributes(release_install) == comparable_attributes(legacy_install),
+        "the fixture should keep the release's INSTALLFOLDER attributes"
+    );
+
     let release_component = find_element(&release, "Component", "Id", "BinaryComponent")?;
     let legacy_component = find_element(&legacy, "Component", "Id", "BinaryComponent")?;
     ensure!(
@@ -365,19 +339,33 @@ fn legacy_fixture_matches_the_release_authoring_except_its_layout() -> Result<()
         legacy_package.attribute("UpgradeCode") == release_package.attribute("UpgradeCode"),
         "the fixture should keep the stable UpgradeCode so upgrades remain related products"
     );
+    ensure!(
+        release_package.attribute("Id").is_none() && legacy_package.attribute("Id").is_none(),
+        "neither authoring should set Package/@Id, so WiX generates a fresh ProductCode"
+    );
     let release_major_upgrade = find_child(release_package, "MajorUpgrade")?;
     let legacy_major_upgrade = find_child(legacy_package, "MajorUpgrade")?;
     ensure!(
-        comparable_attributes(release_major_upgrade, None)
-            == comparable_attributes(legacy_major_upgrade, None),
+        comparable_attributes(release_major_upgrade) == comparable_attributes(legacy_major_upgrade),
         "the fixture should keep the release's MajorUpgrade attributes"
+    );
+    let release_launch = find_child(release_package, "Launch")?;
+    let legacy_launch = find_child(legacy_package, "Launch")?;
+    ensure!(
+        comparable_attributes(release_launch) == comparable_attributes(legacy_launch),
+        "the fixture should keep the release's release-rank guard condition"
     );
     let release_rank_search = rank_search(&release)?;
     let legacy_rank_search = rank_search(&legacy)?;
     ensure!(
-        comparable_attributes(release_rank_search, None)
-            == comparable_attributes(legacy_rank_search, None),
+        comparable_attributes(release_rank_search) == comparable_attributes(legacy_rank_search),
         "the fixture should keep the release's release-rank search"
+    );
+    let release_rank_marker = find_element(&release, "RegistryValue", "Name", "ReleaseRank")?;
+    let legacy_rank_marker = find_element(&legacy, "RegistryValue", "Name", "ReleaseRank")?;
+    ensure!(
+        comparable_attributes(release_rank_marker) == comparable_attributes(legacy_rank_marker),
+        "the fixture should keep the release's release-rank registry location"
     );
     Ok(())
 }

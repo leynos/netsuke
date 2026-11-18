@@ -217,14 +217,16 @@ reserved for 32-bit programs. The root now names `ProgramFiles6432Folder`,
 which follows the package architecture: both shipping MSIs install natively,
 and only an x86 package would use the 32-bit directory.
 
-Installing beta5 over a beta4 installation moves the payload and removes the
-old directory. The MSI does not edit `PATH`, so a beta4 entry still names
-`C:\Program Files (x86)\netsuke` after the upgrade and must be removed by hand.
-Follow [Complete Windows setup](users-guide.md#complete-windows-setup) to add
-the directory beta5 uses instead. The executable's target location changed,
-which Windows Installer treats as a new component, so the component that owns
-it also carries a new identity; the previous identity remains only in a frozen
-fixture that the release's MSI gate builds to prove the migration.
+Installing beta5 over a beta4 installation moves the payload. Windows Installer
+removes the installed MSI payload, but the old directory disappears only when
+nothing else remains in it; leave any unrelated files alone. The MSI does not
+edit `PATH`, so a beta4 entry still names `C:\Program Files (x86)\netsuke`
+after the upgrade and must be removed by hand. Follow
+[Complete Windows setup](users-guide.md#complete-windows-setup) to add the
+directory beta5 uses instead. The executable's target location changed, which
+Windows Installer treats as a new component, so the component that owns it also
+carries a new identity; the previous identity remains only in a frozen fixture
+that the release's MSI gate builds to prove the migration.
 
 The beta2 and beta3 MSIs were built from generated authoring with a different
 upgrade identity, so beta5 does not replace them. Uninstall either version from
