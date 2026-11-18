@@ -8,6 +8,7 @@
 use super::super::command_substitution::{
     CaseNesting, CaseObservation, SubstitutionBoundary, reject_ambiguous_case_comment,
 };
+use super::super::invalid_command_error;
 use super::super::posix_lexical::SubstitutionKind;
 use super::{IrGenError, ScriptSubstitutionTraversal, ShellQuoteContext};
 
@@ -54,6 +55,11 @@ impl ScriptCommandSubstitution {
     pub(super) const fn is_arithmetic(&self) -> bool {
         matches!(self.kind, SubstitutionKind::Arithmetic)
     }
+
+    /// Report whether a `)` at the cursor would end this substitution.
+    const fn is_outermost_group(&self) -> bool {
+        self.parenthesis_depth == 1
+    }
 }
 
 impl ScriptSubstitutionTraversal<'_, '_> {
@@ -91,6 +97,13 @@ impl ScriptSubstitutionTraversal<'_, '_> {
     /// A `)` that terminates a `case` pattern is kept in the output without
     /// closing anything: the shell reads it as an operator, and only the later
     /// `)` that ends the substitution belongs to the surrounding word.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when the `)` would close the region that
+    /// opened an open backtick, because the saved quote context would then have
+    /// no region to return to, and when a `case` body makes the comment rule
+    /// ambiguous.
     fn close_script_substitution(
         &mut self,
         pos: usize,
@@ -99,6 +112,9 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         if self.is_case_pattern_terminator() {
             self.output.push(ch);
             return Ok(Some(pos + 1));
+        }
+        if self.closes_backtick_owner() {
+            return Err(invalid_command_error(self.template.to_owned()));
         }
         let boundary = self.boundary_at(pos);
         let Some(is_closed) = self.decrement_command_substitution_parenthesis_depth() else {
@@ -131,6 +147,23 @@ impl ScriptSubstitutionTraversal<'_, '_> {
                     )
                 },
             )
+    }
+
+    /// Report whether the `)` at the cursor would close a backtick's owning region.
+    ///
+    /// The backtick saved the quote context of the region at its own depth, so
+    /// closing that region leaves the record with nowhere to restore. Rejecting
+    /// at the delimiter keeps the failure where the nesting first breaks instead
+    /// of deferring it to the backtick reached later.
+    fn closes_backtick_owner(&self) -> bool {
+        let closes_substitution = self
+            .command_substitutions
+            .last()
+            .is_some_and(ScriptCommandSubstitution::is_outermost_group);
+        closes_substitution
+            && self
+                .backtick_region
+                .is_some_and(|region| region.owner_depth == self.command_substitutions.len())
     }
 
     /// Record one source character for `case` nesting inside a substitution.

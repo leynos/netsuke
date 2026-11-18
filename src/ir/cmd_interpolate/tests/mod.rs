@@ -4,6 +4,8 @@ use super::*;
 
 use camino::Utf8PathBuf;
 
+mod backtick_region;
+
 mod heredoc;
 
 /// Verify POSIX interpolation rejects commands with unbalanced backticks.

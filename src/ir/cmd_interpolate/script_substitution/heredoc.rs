@@ -62,7 +62,6 @@ impl ScriptSubstitutionTraversal<'_, '_> {
     /// Comments and heredoc declarations are recognized only here: quoted text
     /// and backtick bodies belong to the surrounding shell region.
     pub(super) fn is_plain_script_text(&self) -> bool {
-        self.active_quote_context() == ShellQuoteContext::Unquoted
-            && self.backtick_outer_context.is_none()
+        self.active_quote_context() == ShellQuoteContext::Unquoted && self.backtick_region.is_none()
     }
 }

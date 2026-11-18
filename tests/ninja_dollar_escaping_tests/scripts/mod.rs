@@ -160,6 +160,54 @@ fn quoted_script_marker_cannot_inject_a_command_boundary(#[case] comment: &str) 
     Ok(())
 }
 
+/// Verify a backtick inside `$()` cannot unquote a later script marker.
+///
+/// The closing backtick once restored its saved quote context into the
+/// script-level field, so a marker after the substitution was encoded as if it
+/// sat inside double quotes. For a path containing `;` the double-quoted
+/// encoding leaves the separator executable while the unquoted encoding quotes
+/// it, so the corruption is observable as a command boundary.
+#[cfg(unix)]
+#[rstest]
+#[case::outputs("a; touch injected; echo b", None, "{{ outs }}")]
+#[case::inputs("out", Some("a; touch injected; echo b"), "{{ ins }}")]
+fn backtick_inside_command_substitution_cannot_unquote_a_script_marker(
+    #[case] target: &str,
+    #[case] source: Option<&str>,
+    #[case] marker: &str,
+) -> Result<()> {
+    let source_line = source.map_or_else(String::new, |path| format!("    sources: '{path}'\n"));
+    let manifest = manifest::from_str(&format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: '{target}'\n{source_line}    script: |\n      printf '%s\\n' $(printf %s \"`printf x`\") {marker}\n"
+    ))?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+    let commands = ninja_commands(&ninja, target)?;
+    let workspace = tempfile::tempdir()?;
+    let output = Command::new("/bin/sh")
+        .args(["-ec", &commands])
+        .current_dir(workspace.path())
+        .output()
+        .context("run the generated script command")?;
+    ensure!(
+        output.status.success(),
+        "generated script command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        output.stdout == b"x\na; touch injected; echo b\n",
+        "the marker after $() must stay one argument, got: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    ensure!(
+        !workspace.path().join("injected").exists(),
+        "a marker after $() must not execute the injected touch command"
+    );
+    Ok(())
+}
+
 /// Verify a no-break space before `#` cannot turn a quoted marker into syntax.
 ///
 /// A POSIX shell ends a word only at blank, newline, or an operator, so the
@@ -224,6 +272,25 @@ fn placeholders_inside_backticks_are_rejected_before_backend_escaping() -> Resul
     ensure!(
         result.is_err(),
         "a placeholder protected by backticks must not silently reach the shell"
+    );
+    Ok(())
+}
+
+/// Verify a `$()` that closes before its backtick is rejected at lowering.
+///
+/// The saved backtick context belongs to the `$()` region that opened it. Once
+/// that region has closed there is no correct region to restore, so lowering
+/// must fail closed rather than let a later marker inherit corrupted state.
+#[rstest]
+fn mismatched_backtick_and_command_substitution_nesting_is_rejected() -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: |\n      printf '%s' $(printf %s `printf x) printf y` {{ ins }}\n",
+    )?;
+    let error = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)
+        .expect_err("a $() that closes before its backtick must fail closed");
+    ensure!(
+        matches!(error, netsuke::ir::IrGenError::InvalidCommand { .. }),
+        "unexpected error: {error:?}"
     );
     Ok(())
 }
