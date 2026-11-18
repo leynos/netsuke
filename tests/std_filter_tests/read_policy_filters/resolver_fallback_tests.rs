@@ -17,10 +17,11 @@
 //! fault, so the module is compiled on Linux alone. macOS always uses the
 //! manual resolver, so its read-policy lane exercises the same policy without
 //! this harness.
-use std::{fs, path::Path, process::Command, time::Duration};
+use std::{path::Path, process::Command, time::Duration};
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
+use cap_std::{ambient_authority, fs::Dir};
 use minijinja::ErrorKind;
 use tempfile::tempdir;
 use test_support::{bounded_process::output_within, fluent::normalize_fluent_isolates};
@@ -144,7 +145,13 @@ fn manual_resolver_enforces_the_no_follow_policy() -> Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let trace_text = fs::read_to_string(&trace).context("read the strace output")?;
+    // The trace is read through a capability on its own directory rather than
+    // an ambient path, as the repository's filesystem policy requires.
+    let trace_root = Dir::open_ambient_dir(trace_dir.path(), ambient_authority())
+        .context("open the resolver trace directory")?;
+    let trace_text = trace_root
+        .read_to_string("resolver.strace")
+        .context("read the strace output")?;
     for expectation in trace_expectations() {
         assert_trace(&trace_text, &expectation)?;
     }

@@ -353,6 +353,9 @@ mod budget_tests;
 
 mod confinement_tests;
 
+#[cfg(unix)]
+mod fifo_tests;
+
 mod file_type_tests;
 
 #[cfg(target_os = "linux")]
