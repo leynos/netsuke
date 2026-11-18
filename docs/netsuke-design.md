@@ -1596,15 +1596,26 @@ for transforming data within templates.
   empty word, which is why `compact` is a separate filter rather than a flag
   here. It does not flatten nested lists. This is for deliberate shell recipes;
   structured `exec` recipes remain preferred when no shell syntax is needed.
-  The joined fragment is bounded at 1 MiB of encoded output. The filter
+  The joined fragment's encoded length is bounded at 1 MiB. The filter
   accumulates into one buffer rather than materializing an encoded copy of
-  every member and then the joined string, and it rejects a member that cannot
-  fit before encoding it. A host-supplied budget does not participate: the
-  ceiling is a fixed property of the filter, so the bound holds identically in
-  `help targets` and in build rendering. The rendered *text* is a separate
-  question: the query surface fixes the dialect to `Sh` so its values do not
-  depend on the host, while build rendering follows the selected recipe shell.
-  A manifest that needs the same text from both must pass `dialect` explicitly.
+  every member and then the joined string. Before encoding a member it checks a
+  lower bound on that member's encoded size, so a member that provably cannot
+  fit is rejected without being encoded; the bound is exact for PowerShell,
+  whose encoder is fixed-shape. It is only a lower bound for `Sh`, whose suffix
+  quoting can emit up to three bytes per input byte, so there the pre-check can
+  pass while the encoded member exceeds the ceiling and the post-encode check
+  rejects it, truncating the buffer back to the last accepted member. The 1 MiB
+  figure bounds the buffer's encoded length, not total heap allocation or the
+  buffer's capacity: a rejected `Sh` encoding can transiently grow it to at
+  most three times the ceiling plus one, and the `shell-quote` dependency
+  additionally copies the one member being encoded into a scratch vector, which
+  is bounded by that member and released when the call returns. A host-supplied
+  budget does not participate: the ceiling is a fixed property of the filter,
+  so the bound holds identically in `help targets` and in build rendering. The
+  rendered *text* is a separate question: the query surface fixes the dialect to
+  `Sh` so its values do not depend on the host, while build rendering follows
+  the selected recipe shell. A manifest that needs the same text from both must
+  pass `dialect` explicitly.
 
 - `| compact`: A collection filter that removes `none`, undefined, and empty
   strings while preserving order. It drops nothing else: `0`, `false`, `[]`,
