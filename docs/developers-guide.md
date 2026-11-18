@@ -3746,11 +3746,16 @@ header claims before the cap can refuse it. Reaching that cap is refused as an
 oversized archive rather than reported as a corrupt one, and the one backward
 seek `tarfile` performs, to read the member it has indexed, opens a second
 bounded pass over the same download. Once the member index has been accepted,
-the rest of the decompressed stream is read under the same cap before anything
-is yielded: `tarfile` stops at the archive's end marker, which leaves the gzip
-trailer unread, and only reaching the end of the compressed member makes gzip
-verify the CRC and length it recorded, so a download truncated after that
-marker or carrying a damaged trailer is refused as corrupt instead of accepted.
+the decompressed stream is read again from the offset the walk last accepted a
+member at, under the same cap, before anything is yielded. Resuming there
+rather than from where the reader happens to sit is what matters: `tarfile`
+ends the walk silently on an invalid header past the first block, and it has
+consumed that block by the time it returns, so a scan that read on would never
+see it. Everything from that offset must be zero blocks, which also refuses a
+second archive appended after the end marker; reaching the end of the
+compressed member makes gzip verify the CRC and length it recorded, so a
+download truncated after the marker or carrying a damaged trailer is refused as
+corrupt instead of accepted.
 
 The archive is opened once, and the digest and the member scan are taken
 through that one descriptor, so the bytes that were hashed are the bytes that

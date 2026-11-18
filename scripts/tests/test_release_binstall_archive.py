@@ -130,61 +130,6 @@ def test_inflate_refuses_an_oversized_read_without_allocating_it() -> None:
         _ = stream.read(1 << 48)
 
 
-def _tar_bytes() -> bytes:
-    """Return an uncompressed archive holding one root binary.
-
-    Returns
-    -------
-    bytes
-        The tar stream, including the end marker's zero blocks.
-    """
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w") as archive:
-        entry = tarfile.TarInfo(policy.BINARY_NAME)
-        entry.size = len(BINARY_BYTES)
-        _ = archive.addfile(entry, io.BytesIO(BINARY_BYTES))
-    return buffer.getvalue()
-
-
-def _gzipped_archive(path: pathlib.Path, tail: bytes) -> pathlib.Path:
-    """Write an archive whose decompressed stream continues past its end.
-
-    Returns
-    -------
-    pathlib.Path
-        The archive, which is the path it was asked to write.
-    """
-    _ = path.write_bytes(gzip.compress(_tar_bytes() + tail))
-    return path
-
-
-def test_scan_archive_accepts_zero_padding_after_the_end_marker(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Accept the zero padding standard writers leave after the end marker."""
-    archive = _gzipped_archive(tmp_path / "archive.tar.gz", b"\0" * tarfile.BLOCKSIZE)
-
-    layout = adapter.scan_archive(archive, expected_sha256=digest_of(archive))
-
-    assert layout.member_count == 1, "the padding must not be read as a member"
-
-
-def test_scan_archive_refuses_data_after_the_end_marker(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Refuse a block after the end marker, which the index walk never parses.
-
-    ``tarfile`` stops at the marker, so a block that follows it — a second
-    archive, or one whose checksum is wrong — is never read by the walk, and a
-    scan that trusted the walk would accept it. Only reading the decompressed
-    stream past the marker sees it.
-    """
-    archive = _gzipped_archive(tmp_path / "trail.tar.gz", b"\xaa" * tarfile.BLOCKSIZE)
-
-    with pytest.raises(adapter.ArchiveCorruptError):
-        adapter.scan_archive(archive, expected_sha256=digest_of(archive))
-
-
 def test_opened_archive_reports_a_parser_value_error_as_corruption(
     tmp_path: pathlib.Path,
 ) -> None:

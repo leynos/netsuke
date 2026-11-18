@@ -176,12 +176,10 @@ def verified_archive(
     different file whose members still match the accepted layout.
 
     Bytes that are not a readable gzip-compressed tar archive fail as
-    :class:`ArchiveCorruptError`, raised while the archive is opened, and an
-    unsafe member layout is refused by
-    :func:`release_consumer_archive_policy.require_safe_layout` before the
-    value is yielded, so the caller never holds an archive the policy has not
-    accepted. The stream is read to its end before the value is yielded, so a
-    download whose gzip trailer is missing or wrong is refused here too.
+    :class:`ArchiveCorruptError` while it is opened; an unsafe member layout is
+    refused by :func:`release_consumer_archive_policy.require_safe_layout`
+    before the value is yielded, and the stream is read to its end before then,
+    so a download whose gzip trailer is missing or wrong is refused here too.
     """
     handle = _opened_file(archive_path)
     with handle:
@@ -191,7 +189,7 @@ def verified_archive(
         try:
             headers = _scanned_headers(archive)
             layout = _scanned_layout(headers)
-            _require_index_tail(stream)
+            _require_index_tail(stream, archive.offset)
             yield ValidatedArchive(archive=archive, headers=headers, layout=layout)
         finally:
             archive.close()
@@ -308,35 +306,37 @@ def _opened_archive(
         raise ArchiveCorruptError(msg) from error
 
 
-def _require_index_tail(stream: inflate.InflatedStream) -> None:
-    """Read past the archive's end marker, requiring nothing but zero bytes.
+def _require_index_tail(stream: inflate.InflatedStream, start: int) -> None:
+    """Read from ``start`` to the stream's end, requiring nothing but zero bytes.
 
     Raises
     ------
     ArchiveCorruptError
-        If the compressed stream is damaged after the archive's end marker, or
+        If the stream is damaged at or after the archive's end marker, or
         carries a non-zero byte there.
     ArchiveRefusedError
         If the stream refuses a read past the budget; it passes through.
 
     Notes
     -----
-    ``tarfile`` stops at the first all-zero block it reads, so anything after
-    that block — a second archive appended to the first, or a header whose
-    checksum is wrong — is never parsed and so never refused. Reading the
-    decompressed stream to its end is what sees it. Standard writers pad the
-    end marker with further zero blocks, so zero bytes are accepted; any other
-    byte means these are not the bytes the index described.
+    ``tarfile`` stops at the first all-zero block, so a second archive appended
+    after it is never parsed, and a header whose checksum is wrong ends the walk
+    silently rather than raising. Either way the parser has consumed the block
+    before the walk returns, so reading on from where the stream sits never sees
+    it; ``start`` is where the walk last accepted a member, and seeking back to
+    it puts the block in view. Zero blocks are accepted, as standard writers pad
+    the end marker; any other byte means these are not the bytes the index
+    described.
 
-    Reading to the end is also what lets gzip verify the trailer it recorded:
-    the end marker leaves the decompressor short of it, and closing the reader
-    performs no check, so a download missing its trailer would otherwise be
-    accepted.
+    Reading to the end is also what lets gzip verify its trailer, which the
+    marker leaves unread: closing the reader performs no check, so a download
+    missing its trailer would otherwise be accepted.
     """
     try:
+        stream.seek(start)
         while block := stream.read(inflate.CHUNK_BYTES):
             if block.strip(b"\x00"):
-                msg = "the archive carries data after its end marker"
+                msg = "the archive carries data where its end marker belongs"
                 raise ArchiveCorruptError(msg)
     except ArchiveRefusedError:
         raise
