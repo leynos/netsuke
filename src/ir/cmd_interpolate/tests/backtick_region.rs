@@ -135,6 +135,24 @@ fn script_marker_after_backtick_in_command_substitution_uses_owning_region(
     );
 }
 
+/// Keep a quoted `)` inside a backtick body literal rather than a closer.
+///
+/// The body is its own shell region, so a `)` inside its quotes is data. Only
+/// an unquoted `)` may be read as closing the frame that owns the backtick.
+#[rstest]
+#[case::single_quoted_body("printf '%s' $(printf %s `printf ')'`) {marker}")]
+#[case::double_quoted_body("printf '%s' $(printf %s `printf \")\"`) {marker}")]
+fn script_quoted_parenthesis_inside_backtick_body_stays_literal(#[case] template: &str) {
+    let command = template.replace("{marker}", INS_TOKEN);
+    let actual = interpolate_script_with_bindings(&command, &context_bindings(RecipeShell::Posix))
+        .expect("a quoted ) in a backtick body must stay literal");
+    assert_eq!(
+        actual,
+        command.replace(INS_TOKEN, "UNQ"),
+        "a quoted ) in {command:?} must not close the owning $()"
+    );
+}
+
 /// Restore a top-level backtick's context into its surrounding quote region.
 #[rstest]
 #[case::unquoted("printf '%s' `printf x` {marker}", "UNQ")]
