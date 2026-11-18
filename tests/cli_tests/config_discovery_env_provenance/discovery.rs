@@ -4,6 +4,8 @@ use super::*;
 use rstest::rstest;
 use tempfile::tempdir;
 
+mod home_project_overlap;
+
 /// Name the primary file a configuration root uses to carry its chain.
 #[derive(Clone, Copy)]
 enum ChainRoot {

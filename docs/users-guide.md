@@ -2051,9 +2051,10 @@ skipped for the same reason: it would resolve on whichever drive the process
 runs from. `HOME` supplies the home directory when it is set to an absolute
 path; otherwise `USERPROFILE` does.
 
-System configuration is consulted only when no user file exists. On Unix that
-means each directory in `$XDG_CONFIG_DIRS`, defaulting to `/etc/xdg`, looking
-for `netsuke/config.toml` and `.netsuke.toml`.
+System configuration is consulted only when no user file exists. A candidate
+that is the project `.netsuke.toml` is not a user file for this purpose; see
+below. On Unix the system scope means each directory in `$XDG_CONFIG_DIRS`,
+defaulting to `/etc/xdg`, looking for `netsuke/config.toml` and `.netsuke.toml`.
 
 Automatic discovery chooses one exclusive winner among user configuration,
 system configuration, and built-in defaults. Netsuke then appends the project
@@ -2061,9 +2062,13 @@ configuration chain, so ordinary project values can override the winner while
 fields present only in the winner remain available.
 
 When the discovered user file is the same file as the project `.netsuke.toml` —
-which happens when the working directory is the home directory — Netsuke treats
-that single occurrence as project scope. Its fetch and environment grants are
-then quarantined like any other project configuration.
+which happens when the working directory is the home directory, or when a user
+location resolves to the project file — Netsuke does not adopt it as the user
+scope. The dependency scan runs instead, so the system file is still consulted
+and its `env_block_var` and `fetch_default_deny` restrictions still apply, and
+the project file is then appended as project configuration. That single
+occurrence keeps its project quarantine: its `env_allow_var` and fetch allow
+entries are not honoured as operator policy.
 
 Fetch-policy fields are the security-sensitive exception to this ordinary
 precedence. Every occurrence selected through the project `.netsuke.toml` and

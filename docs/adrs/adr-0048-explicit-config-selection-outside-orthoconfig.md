@@ -180,6 +180,32 @@ above. The rejection is reported as `OrthoError::File`, so the existing
 discovery series counts the pass under `outcome="error"` and the discovery span
 records `error_category="file"`.
 
+## Amendment — 2026-11-18
+
+The 2026-11-16 design kept the adoption decision and the trust decision apart:
+a candidate that was also the project configuration was adopted and then
+reported an untrusted root. Adoption returns before the dependency scan runs,
+so in that layout the system layers never loaded, and a system `env_block_var`
+or `fetch_default_deny` restriction stopped applying. That allocates authority
+in the wrong direction: the project configuration is not a user file, so
+reading the user scope first must not displace system policy for it.
+
+[`candidate_is_trusted`] now decides adoption as well as authority. A candidate
+that is the project configuration is refused, and the refusal is decisive: the
+dependency scan runs rather than a lower-priority candidate being tried, so a
+project file cannot promote another user file over the system layers. The scan
+composes the system file and appends the project chain — the composition this
+ADR already requires for a project file reached from an operator root — and the
+single occurrence keeps the project quarantine described above. Adopted chains
+therefore always report a trusted root.
+
+The users' guide and the migration guide state the resulting behaviour, and
+`tests/cli_tests/config_discovery_env_provenance/discovery.rs` pins it end to
+end by requiring a system `env_block_var` entry to keep blocking while the
+project value still applies.
+
+[`candidate_is_trusted`]: ../../src/cli/discovery/layers/user_candidate.rs
+
 ## Related documents
 
 - [`docs/developers-guide.md`](../developers-guide.md)

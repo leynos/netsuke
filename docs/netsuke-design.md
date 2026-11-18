@@ -4217,10 +4217,12 @@ flowchart TD
 
 Automatic configuration discovery first runs a Netsuke-owned user-scope pass
 over the injected environment. That pass checks every user location in
-preference order and stops at the first file it can load; a user file that
-exists but cannot be loaded is an error rather than a reason to continue. Only
-when no user file exists does discovery ask OrthoConfig's `ConfigDiscovery` for
-its candidate paths, then load each candidate's `extends` chain with
+preference order and stops at the first file it can load that is not the
+project configuration; a user file that exists but cannot be loaded is an error
+rather than a reason to continue, and a candidate that resolves to the project
+file is refused so the system layers still load. Only when no usable user file
+exists does discovery ask OrthoConfig's `ConfigDiscovery` for its candidate
+paths, then load each candidate's `extends` chain with
 `load_config_file_as_chain()`, retaining the first chain that exists. It does
 not call `compose_layers()`, because that call returns a flattened layer list
 without reporting which candidate root supplied it, and root provenance is what

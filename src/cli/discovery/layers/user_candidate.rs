@@ -57,7 +57,11 @@ pub(in crate::cli::discovery) enum UserScopeTrace {
         /// Run-local correlation hash of the adopted candidate's path.
         path_hash: String,
     },
-    /// No user location supplied one, so the dependency scan ran.
+    /// No user location supplied a trusted chain, so the dependency scan ran.
+    ///
+    /// A candidate that is the project configuration is project scope rather
+    /// than user scope, so it reaches this branch: the dependency scan composes
+    /// the system layers and appends the project chain.
     Fallback,
 }
 
@@ -85,8 +89,10 @@ impl UserScopeTrace {
 /// The user pass runs first so a valid system file cannot outrank the user's own
 /// configuration. The dependency's scan runs only when no user file exists, so
 /// system-provided configuration and the project roots it contributes still work
-/// as documented. An adopted user chain is rooted in the user's own file rather
-/// than in a project root, so it reports a trusted root.
+/// as documented. A candidate that is the project configuration is not a user
+/// file, so the scan also runs for it: adopting it would skip the system layers
+/// and drop the restrictions they set. An adopted user chain is rooted in the
+/// user's own file rather than in a project root, so it reports a trusted root.
 ///
 /// # Errors
 ///
@@ -135,13 +141,19 @@ pub(super) fn automatic_base_layers_with_probe(
     })
 }
 
-/// Load the first user-scope configuration file, if one exists.
+/// Load the first trusted user-scope configuration file, if one exists.
 ///
-/// The layers are returned with the trust their root warrants, computed exactly
-/// as the dependency scan computes it, so adopting a user file cannot quietly
-/// upgrade the authority of a path that is also the project configuration. The
-/// adoption decision travels back with them for replay; nothing is logged here,
-/// because the tracing filter is not yet raised.
+/// A candidate that is the project configuration is refused rather than
+/// adopted. The project pass already loads it, with the project quarantine its
+/// provenance earns, and adopting it here would return before the system layers
+/// load: the `fetch_default_deny` and `env_block_var` restrictions a system file
+/// sets would stop applying to a file the project itself controls. Refusing it
+/// is decisive — the dependency scan runs instead of a lower-priority candidate
+/// being tried — so a project file cannot silently promote a different user
+/// file over the system layers.
+///
+/// The adoption decision travels back with the layers for replay; nothing is
+/// logged here, because the tracing filter is not yet raised.
 ///
 /// # Errors
 ///
@@ -154,30 +166,35 @@ fn user_scope_base_layers(
     env_source: &dyn EnvSource,
     project_key: Option<&ProjectKey>,
 ) -> OrthoResult<Option<AutomaticLayers>> {
-    user_scope_candidates(env_source)
-        .into_iter()
-        .find_map(|candidate| match load_user_candidate(probe, &candidate) {
-            Ok(Some(chain)) => Some(Ok(AutomaticLayers {
-                layers: chain_layers(chain),
-                is_trusted_root: candidate_is_trusted(&candidate, project_key),
-                user_scope: UserScopeTrace::Adopted {
-                    path_hash: path_hash(&candidate),
-                },
-            })),
-            Ok(None) => None,
-            Err(error) => Some(Err(error)),
-        })
-        .transpose()
+    for candidate in user_scope_candidates(env_source) {
+        let Some(chain) = load_user_candidate(probe, &candidate)? else {
+            continue;
+        };
+        if !candidate_is_trusted(&candidate, project_key) {
+            return Ok(None);
+        }
+        return Ok(Some(AutomaticLayers {
+            layers: chain_layers(chain),
+            // Adoption requires a trusted root, so the adopted chain always
+            // reports one; the field still distinguishes the fallback's root.
+            is_trusted_root: true,
+            user_scope: UserScopeTrace::Adopted {
+                path_hash: path_hash(&candidate),
+            },
+        }));
+    }
+    Ok(None)
 }
 
-/// Report whether a candidate that supplied a chain may donate operator authority.
+/// Report whether a candidate is a user file rather than the project configuration.
 ///
-/// Operator authority is withheld from the project configuration file, because a
-/// project can influence it wherever it is read from. A user candidate is
-/// normally a home or XDG location, but the same path can also be the project
-/// file — `netsuke` run from `$HOME` makes `$HOME/.netsuke.toml` both — so the
-/// user pass applies the same identity test the dependency scan applies rather
-/// than assuming the user scope is trusted.
+/// The project configuration is not a user file, because a project can influence
+/// it wherever it is read from. A user candidate is normally a home or XDG
+/// location, but the same path can also be the project file — `netsuke` run from
+/// `$HOME` makes `$HOME/.netsuke.toml` both — so the user pass applies the same
+/// identity test the dependency scan applies. A false answer both withholds
+/// operator authority and prevents adoption, because a project-scoped file must
+/// not displace the system layers.
 pub(super) fn candidate_is_trusted(candidate: &Path, project_key: Option<&ProjectKey>) -> bool {
     !project_key.is_some_and(|key| {
         key.is_ambiguous() || key.matches_candidate(&FsPathNormalizer, candidate)

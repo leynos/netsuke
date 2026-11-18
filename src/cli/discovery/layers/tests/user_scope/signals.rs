@@ -69,12 +69,19 @@ fn is_discovery_counter(sample: &Sample, outcome: &str) -> bool {
         && matches!(value, DebugValue::Counter(1))
 }
 
-/// Return how many samples are discovery counters carrying `outcome`.
-fn counters_with_outcome(samples: &[Sample], outcome: &str) -> usize {
+/// Return every sample that is a discovery counter, whatever its labels.
+///
+/// Filtering by name and kind before looking at labels is what makes a widened
+/// series observable: a second sample carrying extra labels, or a second
+/// outcome series, is counted here even though [`is_discovery_counter`] would
+/// reject it.
+fn discovery_counters(samples: &[Sample]) -> Vec<&Sample> {
     samples
         .iter()
-        .filter(|sample| is_discovery_counter(sample, outcome))
-        .count()
+        .filter(|(key, _, _, _)| {
+            key.kind() == MetricKind::Counter && key.key().name() == DISCOVERY_TOTAL
+        })
+        .collect()
 }
 
 /// Build a sample named as the discovery counter, labelled as `labels` says.
@@ -139,13 +146,22 @@ fn dangling_user_candidate_records_a_bounded_error_signal() -> Result<()> {
 
     let (samples, fields) = record(&outcome);
 
+    // Exactly one discovery counter may exist, and it must be the documented
+    // error series with value 1. Counting the error series alone would accept a
+    // second sample that carried extra labels or the other outcome.
+    let counters = discovery_counters(&samples);
     ensure!(
-        counters_with_outcome(&samples, "error") == 1,
-        "the failed pass should be counted exactly once as an error"
+        counters.len() == 1,
+        "the failed pass should record exactly one discovery counter, got {}: {counters:?}",
+        counters.len()
     );
+    let counter = counters
+        .first()
+        .copied()
+        .context("exactly one counter is present when the count is one")?;
     ensure!(
-        counters_with_outcome(&samples, "success") == 0,
-        "a fail-closed pass must not also be counted as a success"
+        is_discovery_counter(counter, "error"),
+        "the only discovery counter must carry just outcome=\"error\" with value 1, got {counter:?}"
     );
     ensure!(
         fields.contains(&"outcome=\"error\"".to_owned()),
@@ -271,10 +287,14 @@ fn fallback_to_the_dependency_scan_records_scope_without_a_path() -> Result<()> 
         event.contains("skipped_compose_layers=false"),
         "fallback should record that the dependency scan ran: {event}"
     );
+    // Naming the exact fields is not enough: a raw path could travel in a field
+    // this test does not know about, so the system file the scan read is also
+    // checked for absence by path and by file name.
     ensure!(
         !event.contains("path_hash") && !event.contains("path_present"),
         "the fallback event must not name a configuration path: {event}"
     );
+    EventAssertion::new(event, &case.system_config()).ensure_raw_path_absent()?;
     ensure!(
         !events.iter().any(|line| line.contains(ADOPTED_MESSAGE)),
         "a fallback must not also report an adopted user file: {events:?}"
