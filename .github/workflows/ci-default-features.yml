@@ -60,6 +60,10 @@ jobs:
       # Ninja-dependent tests skip silently without it; this lane must run
       # them, as `build-test` does.
       NETSUKE_REQUIRE_NINJA: '1'
+      # The read-policy harness forces cap-std's manual resolver by injecting
+      # an `openat2` fault under `strace`; requiring the tracer keeps this
+      # uninstrumented lane's evidence comparable with `build-test`.
+      NETSUKE_READ_POLICY_RESOLVER_STRICT: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -67,10 +71,11 @@ jobs:
       - name: Resolve the pinned toolchain
         uses: ./.github/actions/resolve-toolchain
       - name: Install test shell dependencies
-        # Recipe tests run under GNU awk, as in `build-test`.
+        # Recipe tests run under GNU awk, as in `build-test`. `strace` is what
+        # lets the read-policy harness force cap-std's manual resolver.
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends gawk
+          sudo apt-get install --yes --no-install-recommends gawk strace
           test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"
           mkdir --parents "${test_shell_bin}"
           install --mode=0755 "$(command -v gawk)" "${test_shell_bin}/awk"

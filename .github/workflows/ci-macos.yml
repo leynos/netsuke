@@ -1,0 +1,74 @@
+---
+name: CI (macOS)
+
+# The macOS half of the merge gate. It runs the file-reading policy tests and
+# nothing else, because macOS is where the policy this lane pins is decided by
+# code rather than by the kernel. Linux normally resolves a whole path inside
+# `openat2`, where the raw `O_NOFOLLOW` flag refuses a final symlink on its
+# own; macOS has no `openat2`, so cap-std resolves one component at a time and
+# consults its logical `FollowSymlinks` policy. Setting only the operating-system
+# flag left that policy at its `Yes` default, so a `follow_symlinks=false` read
+# dereferenced the link (issue #1009). The Linux harness in
+# `tests/std_filter_tests/read_policy_filters/resolver_fallback_tests.rs`
+# forces the same resolver with an injected fault; this lane exercises it
+# natively.
+#
+# It lives in a reusable workflow for the same line-budget reason
+# `ci-windows.yml` does, and the cargo-nextest pin stays in the caller so there
+# is exactly one place to edit it. Ubicloud offers Linux runners only, so
+# `macos-latest` is the durable placement rather than a fallback.
+
+'on':
+  workflow_call:
+    inputs:
+      nextest-version:
+        description: cargo-nextest release the caller pins for the whole gate
+        required: true
+        type: string
+
+env:
+  NEXTEST_VERSION: ${{ inputs['nextest-version'] }}
+
+jobs:
+  read-policy:
+    name: Read policy
+    runs-on: macos-latest
+    # A cold build of the test target plus the policy subset: the ceiling
+    # exists so a hung nested Cargo build fails the lane instead of holding a
+    # runner for hours.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      # vCPU count of the GitHub-hosted `macos-latest` arm64 runner (3 vCPU).
+      MACOS_LANE_VCPUS: '3'
+      BUILD_JOBS: -j 3
+      NEXTEST_BUILD_JOBS: --build-jobs 3
+      NEXTEST_TEST_JOBS: -j 3
+      NEXTEST_PROFILE: ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Resolve the pinned toolchain
+        uses: ./.github/actions/resolve-toolchain
+      - name: Setup Rust
+        id: setup-rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
+          # Preserve warnings-as-errors through toolchain setup.
+          rustflags: -D warnings
+          cache-provider: external
+          expect-cache: any
+          use-sccache: 'false'
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: File-reading policy tests
+        # The manual resolver this lane exercises has no `strace` harness here:
+        # the platform takes that path natively, so no fault injection is
+        # needed or possible.
+        run: make test-read-policy

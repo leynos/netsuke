@@ -113,6 +113,11 @@ jobs:
       # Real-Ninja integration coverage must not silently skip when a runner
       # image lacks the backend executable.
       NETSUKE_REQUIRE_NINJA: '1'
+      # The read-policy harness injects an `openat2` fault under `strace` to
+      # force cap-std's manual resolver. Requiring it here means an image that
+      # lost the tracer fails the lane instead of passing over a case that
+      # never ran (issue #1009).
+      NETSUKE_READ_POLICY_RESOLVER_STRICT: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -145,6 +150,13 @@ jobs:
         # Installs gawk and stages a regular-file `awk` the sandbox probe can
         # follow; see the script's docstring and scripts/tests/test_ci_stage_test_shell.py.
         run: uv run --script scripts/ci/stage_test_shell.py
+      - name: Install strace
+        # The read-policy tests force cap-std's manual resolver by injecting an
+        # `openat2` fault; `NETSUKE_READ_POLICY_RESOLVER_STRICT` above makes a
+        # missing tracer a failure rather than a skip.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends strace
       - name: Setup Rust
         id: setup-rust
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
@@ -362,6 +374,21 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/ci-default-features.yml
+    with:
+      nextest-version: '0.9.133'
+
+  macos:
+    # The file-reading policy tests, on the platform where cap-std's manual
+    # resolver is the only resolver. Linux forces that path in a `strace`
+    # harness; macOS exercises it natively. A reusable workflow for the same
+    # line-budget reason as `windows`, with the pin repeated as a literal
+    # because a reusable workflow cannot read the caller's `env`.
+    name: macOS
+    # The nightly schedule exists for the Kani proofs alone.
+    if: github.event_name != 'schedule'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-macos.yml
     with:
       nextest-version: '0.9.133'
 
