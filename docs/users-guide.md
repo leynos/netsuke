@@ -1946,11 +1946,12 @@ fields present only in the winner remain available.
 When the discovered user file is the same file as the project `.netsuke.toml` —
 which happens when the working directory is the home directory, or when a user
 location resolves to the project file — Netsuke does not adopt it as the user
-scope. The dependency scan runs instead, so the system file is still consulted
-and its `env_block_var` and `fetch_default_deny` restrictions still apply, and
-the project file is then appended as project configuration. That single
-occurrence keeps its project quarantine: its `env_allow_var` and fetch allow
-entries are not honoured as operator policy.
+scope, and does not consult the user locations after it. The dependency scan
+runs instead, so the system file is still consulted and its `env_block_var` and
+`fetch_default_deny` restrictions still apply, and the project file is then
+appended as project configuration. That single occurrence keeps its project
+quarantine: its `env_allow_var` and fetch allow entries are not honoured as
+operator policy.
 
 Fetch-policy fields are the security-sensitive exception to this ordinary
 precedence. Every occurrence selected through the project `.netsuke.toml` and

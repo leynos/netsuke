@@ -1025,8 +1025,19 @@ candidate as the user scope, so it does not replace the system file. The system
 file's `env_block_var` and `fetch_default_deny` restrictions keep applying, and
 the project file is appended as project configuration. Its own `env_allow_var`
 and fetch allow entries remain quarantined as project policy, so an allowlist
-that must restrict environment reads belongs in the system file or in a user
-file that is not the project configuration.
+that must restrict environment reads belongs in the system file.
+
+A distinct user file supplies the allowlist only when discovery reaches it
+before the project candidate. The refusal is decisive, so the user locations
+after the project file are not consulted in this layout: with
+`XDG_CONFIG_HOME=$HOME` and the project file at `$HOME/.netsuke.toml`, the
+candidate `$HOME/.config/netsuke/config.toml` never loads. When neither file
+can carry the allowlist, declare it in an operator-owned layer instead:
+`NETSUKE_ENV_ALLOW_VAR`, a repeated `--env-allow-var`, or an explicit
+`--config` selection of a file that is not the project configuration. Running
+`netsuke` from a directory other than `$HOME` also helps, because the home
+dotfile is then no longer the project file and is adopted as user
+configuration, which replaces the system file as the paragraph above describes.
 
 A user file that exists but cannot be loaded now stops discovery; it no longer
 falls back to a system file. That covers malformed TOML, an `extends` parent
