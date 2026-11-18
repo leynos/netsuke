@@ -90,12 +90,16 @@ Instaladores pré-compilados estão disponíveis na
 
 Os pacotes Linux instalam a página de manual do `netsuke` e declaram
 `ninja-build` como dependência. O Ninja deve ser instalado separadamente ao
-usar o instalador do macOS ou do Windows. O MSI do Windows instala em
-`C:\Program Files\netsuke` e não atualiza o `PATH`. Arquivos de checksum
-SHA-256 acompanham os binários independentes e os arquivos de ajuda e licença
-preparados. Os pacotes instaladores não têm arquivos de checksum associados na
-v0.1.0-beta4. Veja o [guia do usuário](docs/users-guide.md#install-netsuke)
-para comandos específicos de cada plataforma e para a configuração no Windows.
+usar o instalador do macOS ou do Windows. O MSI do Windows não atualiza o
+`PATH`. O pacote v0.1.0-beta4 vinculado acima instala em
+`C:\Program Files (x86)\netsuke`, porque essa versão colocava um executável de
+64 bits no diretório de programas de 32 bits; um MSI posterior instala em
+`C:\Program Files\netsuke` e atualiza uma instalação beta4 no local. Arquivos
+de checksum SHA-256 acompanham os binários independentes e os arquivos de ajuda
+e licença preparados. Os pacotes instaladores não têm arquivos de checksum
+associados na v0.1.0-beta4. Veja o
+[guia do usuário](docs/users-guide.md#install-netsuke) para comandos
+específicos de cada plataforma e para a configuração no Windows.
 
 Para instalar o checkout atual do código-fonte com o Cargo:
 

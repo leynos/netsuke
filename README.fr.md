@@ -92,11 +92,15 @@ Des installateurs prêts à l'emploi sont disponibles depuis la version GitHub
 
 Les paquets Linux installent la page de manuel `netsuke` et déclarent
 `ninja-build` comme dépendance. Ninja doit être installé séparément lors de
-l'utilisation de l'installateur macOS ou Windows. Le MSI Windows s'installe dans
-`C:\Program Files\netsuke` et ne met pas à jour `PATH`. Des fichiers de somme
-de contrôle SHA-256 accompagnent les binaires autonomes ainsi que les fichiers
-d'aide et de licence intégrés. Les paquets d'installation n'ont pas de fichiers
-de somme de contrôle associés dans la v0.1.0-beta4. Consultez le
+l'utilisation de l'installateur macOS ou Windows. Le MSI Windows ne met pas à
+jour `PATH`. Le paquet v0.1.0-beta4 lié ci-dessus s'installe dans
+`C:\Program Files (x86)\netsuke`, car cette version plaçait un exécutable 64
+bits dans le répertoire des programmes 32 bits ; un MSI ultérieur s'installe
+dans `C:\Program Files\netsuke` et met à jour une installation beta4 sur place.
+Des fichiers de somme de contrôle SHA-256 accompagnent les binaires autonomes
+ainsi que les fichiers d'aide et de licence intégrés. Les paquets
+d'installation n'ont pas de fichiers de somme de contrôle associés dans la
+v0.1.0-beta4. Consultez le
 [guide de l'utilisateur](docs/users-guide.md#install-netsuke) pour les
 commandes spécifiques à chaque plateforme et la configuration sous Windows.
 

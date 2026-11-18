@@ -82,8 +82,9 @@ cargo +nightly-2026-10-22 install netsuke-build
 
 Linuxパッケージは
 `netsuke`のマニュアルページをインストールし、`ninja-build`を依存関係として宣言します
-。macOSまたはWindowsのインストーラーを使用する場合は、Ninjaを別途インストールする必要があります。Windows版のMSIは
-`C:\Program Files\netsuke`にインストールされ、`PATH`は更新されません
+。macOSまたはWindowsのインストーラーを使用する場合は、Ninjaを別途インストールする必要があります。Windows版のMSIは`PATH`を更新しません
+。上記でリンクしたv0.1.0-beta4のパッケージは、64ビットの実行ファイルを32ビットのプログラムディレクトリに配置していたため、`C:\Program Files (x86)\netsuke`にインストールされます
+。以降のMSIは`C:\Program Files\netsuke`にインストールされ、beta4のインストールをその場でアップグレードします
 。単体バイナリおよび同梱のヘルプとライセンスファイルにはSHA-256チェックサムファイルが付属します。v0.1.0-beta4の時点で、インストーラーパッケージにはチェックサムの付属ファイルはありません。プラットフォーム別のコマンドとWindowsのセットアップについては、
 [ユーザーズガイド](docs/users-guide.md#install-netsuke)を参照してください。
 

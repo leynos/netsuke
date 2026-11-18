@@ -26,8 +26,8 @@ const READMES: [&str; 7] = [
 /// The native directory the x64 and Arm64 MSIs install to.
 const WINDOWS_INSTALL_LOCATION: &str = "`C:\\Program Files\\netsuke`";
 
-/// The 32-bit directory earlier releases used, which only the upgrade note may
-/// name.
+/// The 32-bit directory the v0.1.0-beta4 MSI uses, which each document may
+/// name only as a statement about that release.
 const LEGACY_WINDOWS_INSTALL_LOCATION: &str = "C:\\Program Files (x86)\\netsuke";
 
 /// Verify that installation examples and release details retain their user contract.
@@ -145,6 +145,35 @@ fn beta1_installation_notice_pins_version_toolchain_and_polonius() -> Result<()>
     Ok(())
 }
 
+/// Verify the beta5 migration note covers the move and its manual steps.
+#[test]
+fn beta5_migration_note_covers_the_windows_msi_move() -> Result<()> {
+    // The note is the only migration advice a beta4 Windows user receives, so
+    // each manual step has to be named: the directory change, the PATH cleanup
+    // the MSI cannot perform, and the beta2/beta3 uninstall that the upgrade
+    // identity does not cover.
+    let guide = test_fs::read_to_string("docs/v0-1-0-migration-guide.md")
+        .context("read docs/v0-1-0-migration-guide.md")?;
+    let required_fragments = [
+        "## Install Windows MSIs under the native program files directory",
+        "Windows MSI installations",
+        "ProgramFiles6432Folder",
+        "Installing beta5 over a beta4 installation",
+        LEGACY_WINDOWS_INSTALL_LOCATION,
+        "C:\\Program Files\\netsuke",
+        "The MSI does not edit `PATH`",
+        "uninstall beta2 and beta3",
+        "Installed apps",
+    ];
+    for fragment in required_fragments {
+        ensure!(
+            guide.contains(fragment),
+            "the beta5 migration note should state: {fragment}"
+        );
+    }
+    Ok(())
+}
+
 /// Whether a toolchain name is `nightly-YYYY-MM-DD`.
 fn is_dated_nightly(name: &str) -> bool {
     let Some(date) = name.strip_prefix("nightly-") else {
@@ -203,7 +232,7 @@ fn assert_release_installation_contract() -> Result<()> {
         "Windows Installer (`.msi`)",
         "x86-64 (`amd64`) and Arm64 (`arm64`)",
         "Installer packages do not have checksum",
-        "The Windows MSI installs to `C:\\Program Files\\netsuke`",
+        "installs to `C:\\Program Files\\netsuke`",
     ];
     for path in ["README.md", "docs/users-guide.md"] {
         let document = test_fs::read_to_string(path).with_context(|| format!("read {path}"))?;
@@ -215,7 +244,7 @@ fn assert_release_installation_contract() -> Result<()> {
             );
         }
     }
-    assert_every_document_names_the_native_windows_location()?;
+    assert_every_document_names_the_windows_install_locations()?;
     let users_guide =
         test_fs::read_to_string("docs/users-guide.md").context("read docs/users-guide.md")?;
     let expected_msi_replacement_fragments = [
@@ -242,28 +271,53 @@ fn assert_release_installation_contract() -> Result<()> {
     Ok(())
 }
 
-/// Check that every README and the guide name the native installation directory.
+/// Check that every README and the guide name both Windows install locations.
 ///
-/// The location follows the package architecture, so a translated README that
-/// still names the 32-bit directory would send Windows users to a directory the
-/// installer no longer populates. Only the location statement is held to the
-/// native path: the users' guide's upgrade note must be able to name the old
-/// directory.
-fn assert_every_document_names_the_native_windows_location() -> Result<()> {
+/// The linked package and the next release install to different directories,
+/// so a document that names only one of them tells half the story: the native
+/// path is a statement about MSIs built from the release authoring, and the
+/// 32-bit path is a statement about the v0.1.0-beta4 MSI. The 32-bit path is
+/// correct only in that second role, so its paragraph must name the release it
+/// describes.
+fn assert_every_document_names_the_windows_install_locations() -> Result<()> {
     for path in READMES.into_iter().chain(["docs/users-guide.md"]) {
         let document = test_fs::read_to_string(path).with_context(|| format!("read {path}"))?;
-        let location_sentence = document
-            .lines()
-            .find(|line| line.contains(WINDOWS_INSTALL_LOCATION))
+        ensure!(
+            document.contains(WINDOWS_INSTALL_LOCATION),
+            "{path} should state the native Windows MSI install location {WINDOWS_INSTALL_LOCATION}"
+        );
+        let legacy_paragraph = paragraph_naming(&document, LEGACY_WINDOWS_INSTALL_LOCATION)
             .with_context(|| {
-                format!("{path} should state the Windows MSI install location {WINDOWS_INSTALL_LOCATION}")
+                format!(
+                    "{path} should state the v0.1.0-beta4 Windows MSI install location \
+                     {LEGACY_WINDOWS_INSTALL_LOCATION}"
+                )
             })?;
         ensure!(
-            !location_sentence.contains("Program Files (x86)"),
-            "{path} location statement must not name the 32-bit directory: {location_sentence}"
+            legacy_paragraph.contains("v0.1.0-beta4"),
+            "{path} must attribute the 32-bit directory to v0.1.0-beta4: {legacy_paragraph}"
         );
     }
     Ok(())
+}
+
+/// Return the Markdown paragraph holding the first line that names `needle`.
+///
+/// The release attribution and the directory it explains can sit on different
+/// lines of one wrapped paragraph, so a line-scoped search would reject prose
+/// that reads correctly.
+fn paragraph_naming(document: &str, needle: &str) -> Option<String> {
+    let lines: Vec<&str> = document.lines().collect();
+    let index = lines.iter().position(|line| line.contains(needle))?;
+    let start = lines[..index]
+        .iter()
+        .rposition(|line| line.trim().is_empty())
+        .map_or(0, |blank| blank + 1);
+    let end = lines[index..]
+        .iter()
+        .position(|line| line.trim().is_empty())
+        .map_or(lines.len(), |offset| index + offset);
+    Some(lines[start..end].join("\n"))
 }
 
 /// Check the documented Windows help, PATH, and staging contracts.
@@ -308,6 +362,52 @@ fn assert_windows_setup_examples() -> Result<()> {
     ensure!(
         existence_check < path_persistence,
         "Windows PATH setup must verify netsuke.exe before changing PATH"
+    );
+    // The linked beta4 MSI installs to the 32-bit directory, so the guide needs
+    // a second example: the native script would refuse a correct beta4 install.
+    let beta4_path = documented_example("guide-windows-path-beta4")?;
+    let beta4_path_fragments = [
+        "ProgramFiles(x86)",
+        "GetFolderPath('ProgramFilesX86')",
+        "$netsukeDirectory = Join-Path $legacyProgramFiles 'netsuke'",
+        "$netsukeExecutable = Join-Path $netsukeDirectory 'netsuke.exe'",
+        "Test-Path -LiteralPath $netsukeExecutable -PathType Leaf",
+        "SetEnvironmentVariable('Path', $newUserPath, 'User')",
+    ];
+    ensure!(
+        beta4_path_fragments
+            .into_iter()
+            .all(|fragment| beta4_path.body.contains(fragment)),
+        "the beta4 PATH setup should resolve the 32-bit MSI directory and persist it"
+    );
+    ensure!(
+        !beta4_path.body.contains("ProgramW6432"),
+        "the beta4 PATH setup must not resolve the native directory"
+    );
+    let beta4_existence_check = beta4_path
+        .body
+        .find("Test-Path -LiteralPath $netsukeExecutable")
+        .context("the beta4 PATH setup must test for netsuke.exe")?;
+    let beta4_path_persistence = beta4_path
+        .body
+        .find("SetEnvironmentVariable('Path'")
+        .context("the beta4 PATH setup must persist the directory")?;
+    ensure!(
+        beta4_existence_check < beta4_path_persistence,
+        "the beta4 PATH setup must verify netsuke.exe before changing PATH"
+    );
+    let users_guide =
+        test_fs::read_to_string("docs/users-guide.md").context("read docs/users-guide.md")?;
+    let setup_prose_fragments = [
+        "The v0.1.0-beta4 MSI linked above places the payload in the 32-bit program",
+        "The beta5 and later MSIs place the payload in the native",
+        "remove it by hand",
+    ];
+    ensure!(
+        setup_prose_fragments
+            .into_iter()
+            .all(|fragment| users_guide.contains(fragment)),
+        "the users' guide should distinguish beta4 PATH setup from beta5 and later"
     );
     let windows_help_install = documented_example("guide-windows-help-install")?;
     let windows_help_fragments = [

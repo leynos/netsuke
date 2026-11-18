@@ -77,8 +77,9 @@ cargo +nightly-2026-10-22 install netsuke-build
 | Windows | x64和Arm64                          | Windows Installer（`.msi`）     |
 
 Linux软件包会安装`netsuke`的手册页，并声明`ninja-build`为依赖项
-；使用macOS或Windows安装程序时，必须单独安装Ninja；Windows MSI会安装到
-`C:\Program Files\netsuke`，且不会更新`PATH`
+；使用macOS或Windows安装程序时，必须单独安装Ninja；Windows MSI不会更新`PATH`
+；上方链接的v0.1.0-beta4安装包会安装到`C:\Program Files (x86)\netsuke`，因为该版本将64位可执行文件放入了32位程序目录
+；后续MSI会安装到`C:\Program Files\netsuke`，并就地升级beta4安装
 ；SHA-256校验和文件会随附独立二进制文件以及配套的帮助文档和许可证文件；在v0.1.0-beta4中，安装程序包不附带校验和文件；关于平台专属命令和Windows设置，参见
 [用户指南](docs/users-guide.md#install-netsuke)。
 

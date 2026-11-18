@@ -66,10 +66,11 @@ The Linux packages install the binary under `/usr/bin`, add the `netsuke.1`
 manual page and declare `ninja-build` as a dependency. The macOS packages
 install the binary under `/usr/local/bin`, along with the manual page and
 licence. Ninja must be installed separately when using the macOS or Windows
-installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
-update `PATH`. The v0.1.0-beta4 MSI linked above predates that layout and
-installed the payload under `C:\Program Files (x86)\netsuke`; a later MSI
-upgrades that installation and places the payload natively.
+installer. The Windows MSI does not update `PATH`. An MSI built from the
+release authoring installs to `C:\Program Files\netsuke`. The v0.1.0-beta4 MSI
+linked above predates that layout and installs the payload under
+`C:\Program Files (x86)\netsuke`; a later MSI upgrades that installation and
+moves the payload natively.
 
 Linux package metadata comes from `[package]` in `Cargo.toml`: the first
 `authors` entry supplies the maintainer, while `homepage`, `license`, and
@@ -332,15 +333,43 @@ crates.io commands earlier in this section.
 
 ### Complete Windows setup
 
-The MSI does not add its installation directory to `PATH`. Add the native
-`C:\Program Files\netsuke` directory to the current user's persistent `PATH`,
-update the current PowerShell session, then verify that the command resolves.
-The script stops before changing `PATH` when the MSI has not installed
-`netsuke.exe` at that location, so it applies only to an MSI that uses the
-native layout. The v0.1.0-beta4 MSI linked above predates that layout and
-placed the payload in the 32-bit program files directory, which the script does
-not search; install a later MSI, which upgrades the beta4 release in place,
-before running the script.
+The MSI does not add its installation directory to `PATH`, and which directory
+to add depends on the MSI. Each script below stops before changing `PATH` when
+`netsuke.exe` is not installed at the location it resolves, so choosing the
+wrong one fails immediately instead of adding a directory the installer never
+populates.
+
+The v0.1.0-beta4 MSI linked above places the payload in the 32-bit program
+files directory. Run this script once for that release:
+
+<!-- tested-example: guide-windows-path-beta4 -->
+
+```powershell
+$legacyProgramFiles = ${env:ProgramFiles(x86)}
+if ([string]::IsNullOrWhiteSpace($legacyProgramFiles)) {
+    $legacyProgramFiles = [Environment]::GetFolderPath('ProgramFilesX86')
+}
+$netsukeDirectory = Join-Path $legacyProgramFiles 'netsuke'
+$netsukeExecutable = Join-Path $netsukeDirectory 'netsuke.exe'
+if (-not (Test-Path -LiteralPath $netsukeExecutable -PathType Leaf)) {
+    throw "Netsuke is not installed at $netsukeExecutable."
+}
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$userEntries = @($userPath -split ';' | Where-Object { $_ })
+if ($userEntries -notcontains $netsukeDirectory) {
+    $newUserPath = (($userEntries + $netsukeDirectory) -join ';')
+    [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
+}
+if (($env:Path -split ';') -notcontains $netsukeDirectory) {
+    $env:Path = "$env:Path;$netsukeDirectory"
+}
+netsuke --version
+```
+
+The beta5 and later MSIs place the payload in the native
+`C:\Program Files\netsuke` directory and upgrade a beta4 installation in place.
+That leaves the beta4 `PATH` entry naming a directory that no longer exists, so
+remove it by hand, then run the matching script:
 
 <!-- tested-example: guide-windows-path -->
 
