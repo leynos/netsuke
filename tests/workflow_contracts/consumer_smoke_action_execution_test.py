@@ -83,6 +83,22 @@ def _require_phases(run: ActionRun, failed: str) -> None:
         )
 
 
+def _require_every_phase_skipped(run: ActionRun) -> None:
+    """Require the report step to publish every phase as skipped.
+
+    Validation refuses the run before any phase begins, so the report step
+    still executes and must label all five outcomes. Asserting one phase only
+    would let a report that mislabels the other four pass, which is the very
+    boundary these cases exist to hold.
+    """
+    for phase in PHASES:
+        key = f"{phase.replace('_', '-')}-outcome"
+        assert run.outputs.get(key) == "skipped", (
+            f"{phase} must be reported skipped after a refused validation, "
+            f"got {run.outputs.get(key)!r}"
+        )
+
+
 def _require_every_phase_succeeded(run: ActionRun) -> None:
     """Require the report step to have published a successful outcome per phase."""
     for phase in PHASES:
@@ -206,9 +222,7 @@ def test_a_populated_work_directory_is_refused_at_validation(
     assert run.completed[0].returncode != 0, (
         "a populated work directory must be refused"
     )
-    assert run.outputs.get("crate-download-outcome") == "skipped", (
-        "a refused validation must report every phase as skipped"
-    )
+    _require_every_phase_skipped(run)
     assert "verdict-path" not in run.outputs, (
         "a refused validation must not name an earlier run's verdict"
     )
@@ -227,4 +241,5 @@ def test_an_empty_repository_is_refused_at_validation(tmp_path: pathlib.Path) ->
     assert "RELEASE_REPOSITORY must not be empty" in run.completed[0].stderr, (
         run.completed[0].stderr
     )
+    _require_every_phase_skipped(run)
     assert not run.curl_log, "a refused validation must not reach the network"
