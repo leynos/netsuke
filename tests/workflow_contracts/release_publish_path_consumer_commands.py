@@ -23,6 +23,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
+import typing as typ
 
 from release_publish_path_consumer_script import (
     ends_after_smoke_cli,
@@ -39,6 +40,9 @@ from release_publish_path_consumer_shape import (
     command_lines,
     steps_of,
 )
+
+if typ.TYPE_CHECKING:
+    from release_publish_path_consumer_script import Invocation
 
 #: The evidence flags both invocations must pass, in the reviewed order.
 _EVIDENCE_ARGUMENTS = (
@@ -124,28 +128,32 @@ def check_smoke_action_commands(
         _require_invocation(phase, expected, action_steps(action), violations)
 
 
-def _require_invocation(
-    phase: str,
-    expected: tuple[str, ...],
-    steps: list[dict[str, object]],
-    violations: list[str],
-) -> None:
-    """Require one subcommand to run once, unconditionally, exactly, and so it fails."""
-    label = f"{CONSUMER_SMOKE_JOB}.action: the {phase} invocation"
-    found = [
+def _calls_of_phase(
+    phase: str, steps: list[dict[str, object]]
+) -> list[tuple[dict[str, object], Invocation]]:
+    """Return every step whose invocation runs one phase of the smoke CLI.
+
+    Returns
+    -------
+    list[tuple[dict[str, object], Invocation]]
+        One entry per step that runs the CLI with this phase, so the caller can
+        require the count without re-reading the steps.
+    """
+    return [
         (step, call)
         for step in steps
         if (call := invocation(step)) is not None
         and invoked_phase(call.tokens) == phase
     ]
-    if len(found) != 1:
-        violations.append(f"{label} must appear exactly once, found {len(found)}")
-        return
-    step, call = found[0]
-    if "if" in step:
-        violations.append(
-            f"{label} must run whenever the action does, got if: {step['if']!r}"
-        )
+
+
+def _require_command_shape(
+    label: str,
+    expected: tuple[str, ...],
+    call: Invocation,
+    violations: list[str],
+) -> None:
+    """Require the invocation's words to be exact and expansion-safe."""
     if call.tokens != expected:
         violations.append(
             f"{label} must run exactly {list(expected)}, got {list(call.tokens)}"
@@ -155,6 +163,12 @@ def _require_invocation(
             f"{label} must let bash expand its evidence, but {call.line!r} "
             "single-quotes a reference"
         )
+
+
+def _require_script_shape(
+    label: str, step: dict[str, object], violations: list[str]
+) -> None:
+    """Require the script around the invocation to reach it and propagate it."""
     unreachable = unsupported_prologue(step)
     if unreachable is not None:
         violations.append(
@@ -166,6 +180,27 @@ def _require_invocation(
             f"{label} must propagate its refusal, but {absorbed!r} ends the "
             "step successfully afterwards"
         )
+
+
+def _require_invocation(
+    phase: str,
+    expected: tuple[str, ...],
+    steps: list[dict[str, object]],
+    violations: list[str],
+) -> None:
+    """Require one subcommand to run once, unconditionally, exactly, and so it fails."""
+    label = f"{CONSUMER_SMOKE_JOB}.action: the {phase} invocation"
+    found = _calls_of_phase(phase, steps)
+    if len(found) != 1:
+        violations.append(f"{label} must appear exactly once, found {len(found)}")
+        return
+    step, call = found[0]
+    if "if" in step:
+        violations.append(
+            f"{label} must run whenever the action does, got if: {step['if']!r}"
+        )
+    _require_command_shape(label, expected, call, violations)
+    _require_script_shape(label, step, violations)
 
 
 def check_smoke_compilation(

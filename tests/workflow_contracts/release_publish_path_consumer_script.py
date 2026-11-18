@@ -248,32 +248,62 @@ def _is_enabling_set(line: str) -> bool:
     )
 
 
+def _flag_letters(option: str) -> str | None:
+    """Return one argument's option letters, or ``None`` when it is not a flag.
+
+    Returns
+    -------
+    str | None
+        The letters after the leading ``-``, or ``None`` for an argument that
+        is not a flag at all, such as a bare option name.
+    """
+    if not option.startswith("-") or len(option) < 2:
+        return None
+    return option[1:]
+
+
+def _without_set_option(remaining: list[str], letters: str) -> str | None:
+    """Consume a trailing ``-o``'s argument name and return the letters left.
+
+    Returns
+    -------
+    str | None
+        The letters minus the trailing ``o``, or ``None`` when ``-o`` is not
+        last or the name it takes is not the reviewed one. Consuming the name
+        here is what lets a combined flag such as ``-euo pipefail`` be read as
+        one argument list rather than a pattern.
+
+    Notes
+    -----
+    The name is only consumed once the option is known to take one, so a
+    refused list leaves nothing half-read for the caller to reason about.
+    """
+    if "o" not in letters:
+        return letters
+    if letters[-1] != "o" or not remaining:
+        return None
+    if remaining.pop(0) != _REVIEWED_SET_OPTION:
+        return None
+    return letters[:-1]
+
+
 def _enables_only_reviewed(options: tuple[str, ...]) -> bool:
     """Return whether a ``set`` argument list only enables reviewed options.
 
     Returns
     -------
     bool
-        True when every argument turns one on. A combined flag such as
-        ``-euo`` names ``-o`` last and takes the next argument as that option's
-        name, which is why the list is walked rather than matched against one
-        pattern.
+        True when every argument turns one on and no argument is left over.
     """
     remaining = list(options)
     if not remaining:
         return False
     while remaining:
-        option = remaining.pop(0)
-        if not option.startswith("-") or len(option) < 2:
+        letters = _flag_letters(remaining.pop(0))
+        if letters is None:
             return False
-        letters = option[1:]
-        if "o" in letters:
-            if letters[-1] != "o" or not remaining:
-                return False
-            if remaining.pop(0) != _REVIEWED_SET_OPTION:
-                return False
-            letters = letters[:-1]
-        if not set(letters) <= _REVIEWED_SET_LETTERS:
+        letters = _without_set_option(remaining, letters)
+        if letters is None or not set(letters) <= _REVIEWED_SET_LETTERS:
             return False
     return True
 
