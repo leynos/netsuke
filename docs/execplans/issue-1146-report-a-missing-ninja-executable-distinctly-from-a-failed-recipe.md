@@ -92,7 +92,11 @@ temporary build file.
       lives in the binary crate and cannot see crate-private library items, so
       it keeps a fixture assembled the way the mapper does; the CLI tests cover
       the mapper itself end to end.
-  - [ ] Re-run the gates for these review fixes.
+  - [x] Re-ran the full gate set on the review fixes: check-fmt, lint
+    (958 s), doc-coverage (98.29%, 6825/6944), test (6041 passed, 9 skipped,
+    202 doctests), workflow contracts (2331 passed, 3 skipped), documentation
+    contracts (15 passed), markdownlint (0 issues in 237 files), nixie, and
+    typecheck. All nine passed against exactly the committed content.
   - [ ] Push and open the draft pull request.
 
 ## Plan of work
