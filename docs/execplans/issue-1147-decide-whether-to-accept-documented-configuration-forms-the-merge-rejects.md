@@ -131,6 +131,15 @@ list form.
 - [ ] (2026-11-18) CodeRabbit agent review re-run once the refactor lands. The
   first attempt ended with `Connection failed: WebSocket closed`, which the
   tool reports as recoverable.
+- [x] (2026-11-18) Rebased onto `origin/main` at `8daa9143`, which adds
+  `338ff4ac4` (public-consumer release smoke) and `8daa91431` (stdlib
+  file-reading filters within the workspace capability). No conflicts: all ten
+  commits replayed with identical patches (`range-diff` reports `=` for each),
+  and main's 130 changed files overlap this branch only in `CHANGELOG.md`,
+  `docs/developers-guide.md`, `docs/users-guide.md`, and
+  `docs/v0-1-0-migration-guide.md`, where both sides' entries survive. Main
+  changed no source, test, or manifest file this branch touches, so no branch
+  work needed to adopt a new pattern or helper.
 
 ## Surprises & discoveries
 
@@ -507,3 +516,6 @@ removing the workaround once it lands is tracked in
 
 - 2026-11-18: Initial plan drafted from issue #1147 and reconnaissance of the
   current branch.
+- 2026-11-18: Recorded the rebase onto `origin/main` (`8daa9143`) and the
+  post-review test refactor. The replay was conflict-free and every replayed
+  patch is identical to its pre-rebase form.
