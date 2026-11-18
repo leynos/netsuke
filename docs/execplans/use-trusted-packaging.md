@@ -5381,8 +5381,16 @@ and pass, on the final wording.
   `make check-fmt` each exit zero on `58cc7bb29`. The lesson carried into the
   next batch: a batch is only worth starting on a green `check-fmt`, because a
   red first target voids it, so the cheap gates are preflighted before a
-  multi-hour run is launched. A fresh batch over all thirteen targets runs on
-  this head. Date/Author: 2026-11-18, implementation agent.
+  multi-hour run is launched. A first attempt to launch the batch on
+  `e200220b4` was aborted at its second target: fetching showed main had
+  advanced again, by `8daa91431` (#1059), after the merge this entry records.
+  That commit confines the stdlib file-reading filters to the workspace
+  capability and edits the developers' guide, the users' guide, the design
+  document, and every locale catalogue. Merging it as `8a49ed6e1` was
+  conflict-free; both sides' edits to the shared documents sit in different
+  sections, and the release-admission bullets this branch added still read
+  twenty-four modules. The full batch runs on `8a49ed6e1`. Date/Author:
+  2026-11-18, implementation agent.
 
 ## Surprises & discoveries
 
