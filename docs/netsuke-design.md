@@ -4333,10 +4333,14 @@ resolve as an absent file, so the pass also inspects each candidate entry
 without following a link at its final component: an entry that exists but does
 not resolve is rejected, while a genuinely absent entry is skipped and a link
 whose target loads selects that target. Rejecting the candidate produces an
-`OrthoError::File`, so the existing `netsuke_cli_config_discovery_total` series
-counts the pass under `outcome="error"`, and the discovery span records the
-bounded `error_category="file"` field. A broken user file is thus observable as
-a failed discovery rather than as a silent success that loaded system policy.
+`OrthoError::File` whose source carries the closed failure reason, so the
+existing `netsuke_cli_config_discovery_total` series counts the pass under
+`outcome="error"`, and the discovery span records a bounded `error_category`
+naming the branch that fired: `dangling_link`, `present_without_layer`, or
+`probe_failed`. A plain file error with no such marker keeps the generic `file`
+category. A broken user file is thus observable as a failed discovery, and
+distinguishable in traces from a malformed or unreadable one, rather than as a
+silent success that loaded system policy.
 
 #### Manifest resource budget precedence
 
