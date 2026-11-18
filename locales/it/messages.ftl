@@ -514,3 +514,8 @@ check.rule.severity = Il selettore { $name } indica la severità { $severity }; 
 check.fail_on.invalid = Soglia di fallimento sconosciuta { $value }; attesa una fra { $values }.
 check.source_index = Impossibile indicizzare { $path } per le diagnostiche alla riga { $line }: { $reason }.
 status.tool.check = Verifica
+
+# Messaggi dell'individuazione automatica della configurazione.
+config.discovery.dangling_link = la destinazione del collegamento simbolico è assente.
+config.discovery.present_without_layer = la voce esiste ma non ha fornito alcun livello di configurazione.
+config.discovery.inspection_failed = non è stato possibile esaminare la voce.

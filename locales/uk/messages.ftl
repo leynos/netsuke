@@ -515,3 +515,8 @@ check.rule.severity = Селектор { $name } вказує важливіст
 check.fail_on.invalid = Невідомий поріг невдачі { $value }; очікувалося одне з { $values }.
 check.source_index = Не вдалося проіндексувати { $path } для діагностики в рядку { $line }: { $reason }.
 status.tool.check = Перевірка
+
+# Повідомлення автоматичного виявлення конфігурації.
+config.discovery.dangling_link = ціль символічного посилання відсутня.
+config.discovery.present_without_layer = запис існує, але не надав рівень конфігурації.
+config.discovery.inspection_failed = не вдалося перевірити запис.

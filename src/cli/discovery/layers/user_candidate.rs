@@ -25,6 +25,58 @@ use super::super::diagnostics::path_hash;
 use super::super::paths::{SanitisedUserBases, candidate_entry_metadata, user_scope_candidates};
 use super::project_key::ProjectKey;
 use super::{chain_layers, config_discovery, first_automatic_chain};
+use crate::localization::{LocalizedMessage, keys};
+
+/// Automatic discovery result, with the user pass's decision retained.
+///
+/// The decision travels with the layers rather than being logged where it is
+/// made: discovery runs before the composition boundary installs the tracing
+/// filter, so a `DEBUG` event emitted here would be dropped in a verbose run.
+/// [`UserScopeTrace`] replays it once the filter admits it.
+pub(super) struct AutomaticLayers {
+    /// Base merge layers in automatic-discovery order.
+    pub(super) layers: Vec<MergeLayer<'static>>,
+    /// Whether the root that supplied the chain may donate operator authority.
+    pub(super) is_trusted_root: bool,
+    /// Which scope supplied the chain.
+    pub(super) user_scope: UserScopeTrace,
+}
+
+/// Which scope supplied the automatic base chain.
+///
+/// Both variants are bounded: the adopted case carries a run-local correlation
+/// hash rather than the candidate path, and the fallback case names no path at
+/// all because the dependency scan reads several locations and naming one would
+/// misreport which file supplied policy.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum UserScopeTrace {
+    /// A user location supplied the chain.
+    Adopted {
+        /// Run-local correlation hash of the adopted candidate's path.
+        path_hash: String,
+    },
+    /// No user location supplied one, so the dependency scan ran.
+    Fallback,
+}
+
+impl UserScopeTrace {
+    /// Replay the adoption or fallback diagnostic from bounded metadata.
+    pub(super) fn emit(&self) {
+        match self {
+            Self::Adopted { path_hash } => debug!(
+                scope = "user",
+                skipped_compose_layers = true,
+                path_hash = %path_hash,
+                "automatic configuration discovery adopted a user candidate"
+            ),
+            Self::Fallback => debug!(
+                scope = "system_or_project",
+                skipped_compose_layers = false,
+                "automatic configuration discovery used the dependency scan"
+            ),
+        }
+    }
+}
 
 /// Load the automatic discovery chain, preferring the user scope.
 ///
@@ -42,7 +94,7 @@ pub(super) fn automatic_base_layers(
     directory: Option<&Path>,
     env_source: SharedEnvSource,
     project_key: Option<&ProjectKey>,
-) -> OrthoResult<(Vec<MergeLayer<'static>>, bool)> {
+) -> OrthoResult<AutomaticLayers> {
     automatic_base_layers_with_probe(&FsCandidateProbe, directory, env_source, project_key)
 }
 
@@ -63,27 +115,31 @@ pub(super) fn automatic_base_layers_with_probe(
     directory: Option<&Path>,
     env_source: SharedEnvSource,
     project_key: Option<&ProjectKey>,
-) -> OrthoResult<(Vec<MergeLayer<'static>>, bool)> {
-    if let Some(layers) = user_scope_base_layers(probe, env_source.as_ref())? {
-        return Ok((layers, true));
+) -> OrthoResult<AutomaticLayers> {
+    if let Some(found) = user_scope_base_layers(probe, env_source.as_ref(), project_key)? {
+        return Ok(found);
     }
-    // Name the winning scope even when it is not the user scope, so an
-    // operator can tell a fallback from an adopted user file without a path.
-    debug!(
-        scope = "system_or_project",
-        skipped_compose_layers = false,
-        "automatic configuration discovery used the dependency scan"
-    );
     // The dependency filters only empty base values, so its scan would resolve a
     // relative one against the working directory. Hand it the same view the
     // user pass used, where such a value reads as unset, and neither path can
     // load configuration from wherever the tool happened to run.
     let fallback_env: SharedEnvSource = Arc::new(SanitisedUserBases::new(env_source));
     let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), fallback_env);
-    first_automatic_chain(&discovery, project_key)
+    let (layers, is_trusted_root) = first_automatic_chain(&discovery, project_key)?;
+    Ok(AutomaticLayers {
+        layers,
+        is_trusted_root,
+        user_scope: UserScopeTrace::Fallback,
+    })
 }
 
 /// Load the first user-scope configuration file, if one exists.
+///
+/// The layers are returned with the trust their root warrants, computed exactly
+/// as the dependency scan computes it, so adopting a user file cannot quietly
+/// upgrade the authority of a path that is also the project configuration. The
+/// adoption decision travels back with them for replay; nothing is logged here,
+/// because the tracing filter is not yet raised.
 ///
 /// # Errors
 ///
@@ -94,32 +150,34 @@ pub(super) fn automatic_base_layers_with_probe(
 fn user_scope_base_layers(
     probe: &dyn CandidateProbe,
     env_source: &dyn EnvSource,
-) -> OrthoResult<Option<Vec<MergeLayer<'static>>>> {
+    project_key: Option<&ProjectKey>,
+) -> OrthoResult<Option<AutomaticLayers>> {
     user_scope_candidates(env_source)
         .into_iter()
         .find_map(|candidate| match load_user_candidate(probe, &candidate) {
-            Ok(Some(chain)) => {
-                emit_user_candidate_adopted(&candidate);
-                Some(Ok(chain_layers(chain)))
-            }
+            Ok(Some(chain)) => Some(Ok(AutomaticLayers {
+                layers: chain_layers(chain),
+                is_trusted_root: candidate_is_trusted(&candidate, project_key),
+                user_scope: UserScopeTrace::Adopted {
+                    path_hash: path_hash(&candidate),
+                },
+            })),
             Ok(None) => None,
             Err(error) => Some(Err(error)),
         })
         .transpose()
 }
 
-/// Emit the bounded adoption event for the user candidate that supplied policy.
+/// Report whether a candidate that supplied a chain may donate operator authority.
 ///
-/// The event records the scope and the skipped dependency scan plus a
-/// run-local correlation hash, so an operator can tell that a user file won
-/// without the event carrying the candidate's path.
-fn emit_user_candidate_adopted(candidate: &Path) {
-    debug!(
-        scope = "user",
-        skipped_compose_layers = true,
-        path_hash = %path_hash(candidate),
-        "automatic configuration discovery adopted a user candidate"
-    );
+/// Operator authority is withheld from the project configuration file, because a
+/// project can influence it wherever it is read from. A user candidate is
+/// normally a home or XDG location, but the same path can also be the project
+/// file — `netsuke` run from `$HOME` makes `$HOME/.netsuke.toml` both — so the
+/// user pass applies the same identity test the dependency scan applies rather
+/// than assuming the user scope is trusted.
+pub(super) fn candidate_is_trusted(candidate: &Path, project_key: Option<&ProjectKey>) -> bool {
+    !project_key.is_some_and(|key| key.is_ambiguous() || key.matches_path(candidate))
 }
 
 /// Load one user-scope candidate, distinguishing absence from a broken link.
@@ -211,13 +269,16 @@ pub(in crate::cli::discovery) enum CandidateFailure {
 }
 
 impl CandidateFailure {
-    /// Return the fixed diagnostic text shown to the user for this reason.
-    const fn description(self) -> &'static str {
-        match self {
-            Self::DanglingLink => "symbolic link target is missing",
-            Self::PresentWithoutLayer => "present entry yielded no layer",
-            Self::ProbeFailed => "candidate entry could not be inspected",
-        }
+    /// Return the localised diagnostic shown to the user for this reason.
+    ///
+    /// The text is looked up when the error is rendered rather than when it is
+    /// built, so a locale chosen after discovery still applies to the message.
+    const fn description(self) -> LocalizedMessage {
+        LocalizedMessage::new(match self {
+            Self::DanglingLink => keys::CONFIG_DISCOVERY_DANGLING_LINK,
+            Self::PresentWithoutLayer => keys::CONFIG_DISCOVERY_PRESENT_WITHOUT_LAYER,
+            Self::ProbeFailed => keys::CONFIG_DISCOVERY_INSPECTION_FAILED,
+        })
     }
 
     /// Return the closed telemetry label for this reason.
@@ -253,7 +314,7 @@ impl fmt::Display for UnloadableCandidate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.detail {
             Some(detail) => write!(f, "{detail}"),
-            None => f.write_str(self.reason.description()),
+            None => write!(f, "{}", self.reason.description()),
         }
     }
 }

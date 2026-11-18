@@ -502,3 +502,8 @@ check.rule.severity = 選擇器 { $name } 指定的嚴重程度 { $severity } �
 check.fail_on.invalid = 未知的失敗門檻 { $value }；應為 { $values } 之一。
 check.source_index = 無法為診斷在第 { $line } 行索引 { $path }：{ $reason }。
 status.tool.check = 檢查
+
+# 自動設定探索訊息。
+config.discovery.dangling_link = 符號連結的目標遺失。
+config.discovery.present_without_layer = 項目存在但未提供任何設定層。
+config.discovery.inspection_failed = 無法檢查該項目。

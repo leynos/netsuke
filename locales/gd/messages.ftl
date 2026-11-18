@@ -513,3 +513,8 @@ check.rule.severity = Tha an roghnaichear { $name } ag ainmeachadh na h-ìre { $
 check.fail_on.invalid = Stairsneach fàilligidh neo-aithnichte { $value }; bha dùil ri fear de { $values }.
 check.source_index = Cha b' urrainn { $path } a chlàr-amais airson breithneachaidh air loidhne { $line }: { $reason }.
 status.tool.check = Sgrùdadh
+
+# Teachdaireachdan lorg rèiteachaidh fèin-obrachail.
+config.discovery.dangling_link = tha targaid na ceangail shiomblaiche a dhìth.
+config.discovery.present_without_layer = tha an t-innteal ann ach cha tug e sreath rèiteachaidh sam bith.
+config.discovery.inspection_failed = cha b' urrainnear sgrùdadh a dhèanamh air an innteal.

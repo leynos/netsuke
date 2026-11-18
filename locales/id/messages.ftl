@@ -504,3 +504,8 @@ check.rule.severity = Pemilih { $name } menyebut keparahan { $severity }; dihara
 check.fail_on.invalid = Ambang kegagalan tidak dikenal { $value }; diharapkan salah satu dari { $values }.
 check.source_index = Tidak dapat mengindeks { $path } untuk diagnostik pada baris { $line }: { $reason }.
 status.tool.check = Pemeriksaan
+
+# Pesan penemuan konfigurasi otomatis.
+config.discovery.dangling_link = target tautan simbolis tidak ada.
+config.discovery.present_without_layer = entri ada tetapi tidak menyediakan lapisan konfigurasi.
+config.discovery.inspection_failed = entri tidak dapat diperiksa.

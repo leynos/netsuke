@@ -259,9 +259,9 @@ mod tests {
         let diagnostics = DiscoveryDiagnostics::new(
             super::super::trace::DiscoveryTrace::new(
                 &resolution,
-                super::super::trace::FileLayerTrace::Automatic {
-                    project_scope: None,
-                },
+                super::super::trace::FileLayerTrace::Automatic(
+                    super::super::layers::AutomaticTrace::default(),
+                ),
             ),
             None,
         );

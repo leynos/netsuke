@@ -506,3 +506,8 @@ check.rule.severity = Vælgeren { $name } nævner alvorsgraden { $severity }; fo
 check.fail_on.invalid = Ukendt fejltærskel { $value }; forventede en af { $values }.
 check.source_index = Kunne ikke indeksere { $path } til diagnostik på linje { $line }: { $reason }.
 status.tool.check = Kontrol
+
+# Meddelelser for automatisk registrering af konfiguration.
+config.discovery.dangling_link = symlinkets mål mangler.
+config.discovery.present_without_layer = posten findes, men gav ingen konfigurationslag.
+config.discovery.inspection_failed = posten kunne ikke undersøges.

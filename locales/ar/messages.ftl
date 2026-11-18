@@ -524,3 +524,8 @@ check.rule.severity = يسمي المُحدِّد { $name } درجة الخطو�
 check.fail_on.invalid = عتبة إخفاق غير معروفة { $value }؛ كان المتوقع إحدى القيم { $values }.
 check.source_index = تعذّرت فهرسة { $path } للتشخيص عند السطر { $line }: { $reason }.
 status.tool.check = فحص
+
+# رسائل اكتشاف الإعدادات التلقائي.
+config.discovery.dangling_link = هدف الرابط الرمزي مفقود.
+config.discovery.present_without_layer = الموجود قائم لكنه لم يوفّر أي طبقة إعدادات.
+config.discovery.inspection_failed = تعذّر فحص الموجود.

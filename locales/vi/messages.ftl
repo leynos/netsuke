@@ -503,3 +503,8 @@ check.rule.severity = Bộ chọn { $name } nêu mức nghiêm trọng { $severi
 check.fail_on.invalid = Ngưỡng thất bại không xác định { $value }; cần một trong { $values }.
 check.source_index = Không thể lập chỉ mục { $path } cho chẩn đoán tại dòng { $line }: { $reason }.
 status.tool.check = Kiểm tra
+
+# Thông báo phát hiện cấu hình tự động.
+config.discovery.dangling_link = thiếu đích của liên kết tượng trưng.
+config.discovery.present_without_layer = mục nhập tồn tại nhưng không cung cấp lớp cấu hình nào.
+config.discovery.inspection_failed = không thể kiểm tra mục nhập.

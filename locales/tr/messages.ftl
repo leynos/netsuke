@@ -507,3 +507,8 @@ check.rule.severity = { $name } seçicisi { $severity } önem derecesini veriyor
 check.fail_on.invalid = Bilinmeyen başarısızlık eşiği { $value }; şunlardan biri bekleniyordu: { $values }.
 check.source_index = { $path } tanılama için { $line }. satırda dizinlenemedi: { $reason }.
 status.tool.check = Denetleme
+
+# Otomatik yapılandırma keşfi iletileri.
+config.discovery.dangling_link = sembolik bağlantının hedefi yok.
+config.discovery.present_without_layer = girdi var ancak herhangi bir yapılandırma katmanı sağlamadı.
+config.discovery.inspection_failed = girdi incelenemedi.

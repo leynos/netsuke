@@ -347,4 +347,7 @@ define_keys! {
     SEMANTIC_PREFIX_RENDERED => "semantic.prefix.rendered",
     EXAMPLE_FILES_PROCESSED => "example.files_processed",
     EXAMPLE_ERRORS_FOUND => "example.errors_found",
+    CONFIG_DISCOVERY_DANGLING_LINK => "config.discovery.dangling_link",
+    CONFIG_DISCOVERY_PRESENT_WITHOUT_LAYER => "config.discovery.present_without_layer",
+    CONFIG_DISCOVERY_INSPECTION_FAILED => "config.discovery.inspection_failed",
 }
