@@ -156,6 +156,12 @@ list form.
   carries the two guide fixes and these records: `make check-fmt` (4s),
   `make markdownlint` (35s, 238 files, 0 issues), and `make nixie` (1s, 239
   files), all green.
+- [x] (2026-11-18) CodeRabbit's final pass on `cbcf89586` returned no verified
+  findings and one unverified one: the `NETSUKE_JSON` binary tests inherited
+  the test process environment. Both runs now use
+  `test_support::netsuke::run_netsuke_in_with_env`, which clears the child
+  environment and supplies an isolated `PATH`, `HOME`, and `XDG_CONFIG_HOME`;
+  the focused suite passes (`2` tests).
 - [x] (2026-11-18) Rebased onto `origin/main` at `8daa9143`, which adds
   `338ff4ac4` (public-consumer release smoke) and `8daa91431` (stdlib
   file-reading filters within the workspace capability). No conflicts: all ten
@@ -553,3 +559,5 @@ removing the workaround once it lands is tracked in
   change that answers it.
 - 2026-11-18: Recorded the second CodeRabbit pass, the migration-guide and
   CLI-design fixes it asked for, and the gate batches that validated each delta.
+- 2026-11-18: Recorded the third review pass and the child-environment
+  isolation it asked for in the `NETSUKE_JSON` binary tests.
