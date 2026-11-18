@@ -13,8 +13,8 @@ from release_mutation_support import replace_once
 from release_publish_crates_io_contracts import ACTION_PATH
 from release_publish_path_contract import (
     CALLER_WORKFLOW_PATH,
-    check_release_publish_path,
     ActionManifests,
+    check_release_publish_path,
 )
 from release_publish_path_mutations import (
     MUTATION_LABELS,
@@ -28,16 +28,6 @@ from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
     load_workflow,
 )
-
-
-
-"""Prove the release-path contract rejects each named regression.
-``test_release_path_contract_rejects_each_regression`` runs the real checks
-against every case in ``release_publish_path_mutations`` and requires the
-diagnostic that case names, so a mutation the contract no longer notices fails
-here. The remaining cases pin the helpers the mutations rely on, so a mutation
-that silently edited nothing cannot pass as a rejection.
-"""
 
 
 def test_mutation_error_preserves_standard_exception_arguments() -> None:
