@@ -971,9 +971,8 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   Ruff, Pylint, Interrogate, and ty pass.
 - Recovery: the modules are additive; revert the commit.
 - Remaining gaps: none in this milestone's own scope. The publication workflow
-  jobs it left to EP-M3 have since landed there, and the work the plan still
-  records as open is Stage C's live exercise, the LEM-5 permission suite, and
-  the package archive file list.
+  jobs it left to EP-M3 have since landed there; the later milestones record
+  the work that is still open, so this bullet states no plan-wide inventory.
 - Compatibility decision: none; these are new private modules.
 
 **EP-M3 — the GitHub-side publication sequence.**
