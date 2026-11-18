@@ -2,8 +2,8 @@
 
 This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
-`Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must be
-kept up to date as work proceeds.
+`Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
+be kept up to date as work proceeds.
 
 Status: IN PROGRESS
 
@@ -28,8 +28,8 @@ The user-visible outcomes are:
    `accessibility = "ON"` are accepted from configuration files and the
    environment, matching the case-insensitive `--color` command-line behaviour.
 3. Indexed list variables such as `NETSUKE_DEFAULT_TARGETS__0` remain rejected.
-   The guide instead documents the scalar form and the serialized
-   JSON-array form.
+   The guide instead documents the scalar form and the serialized JSON-array
+   form.
 
 A configuration file keeps strict Boolean parsing: `json = 1` remains invalid.
 Policy values are matched case-insensitively but are not trimmed, so
@@ -81,50 +81,60 @@ list form.
 ## Risks
 
 - Risk: accepting `1`/`0` in the environment layer could accidentally accept it
-  in configuration files.
-  Severity: medium Likelihood: low Mitigation: normalize only in
-  `src/cli/environment/mod.rs::parse_entry`, and pin `json = 1` rejection in a
-  file-layer test.
+  in configuration files. Severity: medium Likelihood: low Mitigation:
+  normalize only in `src/cli/environment/mod.rs::parse_entry`, and pin
+  `json = 1` rejection in a file-layer test.
 - Risk: a lower invalid layer may or may not be masked by a higher valid layer,
-  which changes what the early resolver must do.
-  Severity: medium Likelihood: low Mitigation: characterize masking first with
-  direct `MergeComposer` tests, then keep the `--json` short circuit only if the
-  characterization proves masking.
+  which changes what the early resolver must do. Severity: medium Likelihood:
+  low Mitigation: characterize masking first with direct `MergeComposer` tests,
+  then keep the `--json` short circuit only if the characterization proves
+  masking.
 - Risk: replacing derived `Deserialize` on the policy enums could change
-  accepted spellings or error text.
-  Severity: medium Likelihood: medium Mitigation: delegate to the existing
-  `FromStr`, keep `rename_all = "kebab-case"` on `Serialize`, and test lowercase,
-  uppercase, and mixed-case input through both `toml` and `serde_json`.
+  accepted spellings or error text. Severity: medium Likelihood: medium
+  Mitigation: delegate to the existing `FromStr`, keep
+  `rename_all = "kebab-case"` on `Serialize`, and test lowercase, uppercase,
+  and mixed-case input through both `toml` and `serde_json`.
 - Risk: the ADR number may collide with unpublished work.
-  Severity: low Likelihood: low Mitigation: confirm the highest allocated number
-  in `docs/adrs/` immediately before creating the file.
+  Severity: low Likelihood: low Mitigation: confirm the highest allocated
+  number in `docs/adrs/` immediately before creating the file.
 
 ## Progress
 
 - [x] (2026-11-18) Reconnaissance of the environment layer, diagnostic
   resolver, policy enums, merge pipeline, tests, and user guide.
-- [ ] Plan recorded and implementation started.
-- [ ] `EP-M1` strict shared Boolean parser, normalized environment layer, and
-  masking characterization.
-- [ ] `EP-M2` case-insensitive policy deserialization.
-- [ ] `EP-M3` full-merge, cached-merge, and binary regression tests.
-- [ ] `EP-M4` ADR, design-document reference, user guide, and migration guide.
+- [x] (2026-11-18) Plan recorded.
+- [x] (2026-11-18) `EP-M1` strict shared Boolean parser, normalized environment
+  layer, and masking characterization.
+- [x] (2026-11-18) `EP-M2` case-insensitive policy deserialization.
+- [x] (2026-11-18) `EP-M3` full-merge, cached-merge, and binary regression tests
+  written. The focused suite passes (`150` tests), including the masking
+  characterization (`3` tests).
+- [x] (2026-11-18) `EP-M4` ADR-0082, design-document reference, contents index,
+  user guide, migration guide, and changelog entry drafted.
 - [ ] All code quality gates pass; draft pull request opened.
 
 ## Surprises & discoveries
 
 - Observation: the current guide still documents all three forms, so the audit
-  described by issue #1147 has not yet removed them from this branch.
-  Evidence: `docs/users-guide.md` still shows `NETSUKE_JSON=1`,
-  `color = "AlWaYs"`, and `NETSUKE_DEFAULT_TARGETS__0`.
-  Impact: the guide must be corrected as part of this work for the rejected
-  form, and updated for the two newly accepted forms.
+  described by issue #1147 has not yet removed them from this branch. Evidence:
+  `docs/users-guide.md` still shows `NETSUKE_JSON=1`, `color = "AlWaYs"`, and
+  `NETSUKE_DEFAULT_TARGETS__0`. Impact: the guide must be corrected as part of
+  this work for the rejected form, and updated for the two newly accepted forms.
 - Observation: `src/cli/l10n/mod.rs::parse_bool_hint` is a third, lenient
   `NETSUKE_JSON` reader used before full parsing; it accepts `yes`, `on`, `no`,
-  and `off` and falls back to `false`.
-  Evidence: `src/locale/resolution.rs::resolve_startup_json` calls it.
-  Impact: it is a pre-parse display hint, not an acceptance path; it is left
-  unchanged and its difference from the strict resolver is recorded in the ADR.
+  and `off` and falls back to `false`. Evidence:
+  `src/locale/resolution.rs::resolve_startup_json` calls it. Impact: it is a
+  pre-parse display hint, not an acceptance path; it is left unchanged and its
+  difference from the strict resolver is recorded in the ADR.
+- Observation: the environment layer keeps values untrimmed, but Figment's
+  text parser trims an unquoted scalar before storing it. A policy value
+  therefore behaves asymmetrically: `NETSUKE_COLOR=' always '` is accepted,
+  while a quoted file value `color = " always "` is rejected. Evidence:
+  `figment-0.10.19/src/value/parse.rs` trims the non-quoted branch of
+  `value()`, and the focused run showed `" AlWaYs "` merging as `always`; the
+  new `non_boolean_string_values_are_trimmed` unit test pins it. Impact: the
+  guide, migration guide, and ADR state the trim as environment parser
+  behaviour rather than claiming whitespace is rejected everywhere.
 
 ## Decision log
 
@@ -132,8 +142,8 @@ list form.
   Rationale: `1` is the conventional continuous-integration spelling, while
   configuration files remain strongly typed and unchanged. The alternative,
   keeping the rejection and correcting the guide, was rejected because it makes
-  the early and later `NETSUKE_JSON` resolvers disagree.
-  Date/Author: 2026-11-18, agent.
+  the early and later `NETSUKE_JSON` resolvers disagree. Date/Author:
+  2026-11-18, agent.
 - D2. Accept mixed-case policy values from every layer.
   Rationale: `FromStr` is already case-insensitive and drives the CLI; making
   `Deserialize` delegate to it removes a surprising difference between sources.
@@ -141,9 +151,25 @@ list form.
   issue records case-insensitivity as the less surprising behaviour.
   Date/Author: 2026-11-18, agent.
 - D3. Keep rejecting indexed `__N` list variables.
-  Rationale: the scalar and JSON-array forms already cover the use case, and the
-  nested-map semantics are well defined. The guide will document the supported
-  forms and the rejection.
+  Rationale: the scalar and JSON-array forms already cover the use case, and
+  the nested-map semantics are well defined. The guide will document the
+  supported forms and the rejection. Date/Author: 2026-11-18, agent.
+- D4. Keep the explicit `--json` short circuit.
+  Evidence: `tests/cli_tests/merge/layer_masking.rs` proves a valid higher
+  layer masks an invalid lower layer before the single deserialization, so
+  skipping the lower-priority malformed environment value is consistent with
+  the merge contract rather than a special case. Date/Author: 2026-11-18, agent.
+- D5. Extend `Deserialize` tests to cover TOML as well as JSON.
+  Rationale: the merge boundary receives both file-derived and environment
+  values, so proving only `serde_json` would leave the file layer untested.
+  Date/Author: 2026-11-18, agent.
+- D6. Document environment-side trimming instead of forcing the environment
+  layer to preserve policy whitespace. Rationale: the trim is Figment's
+  ordinary scalar parsing and already applies to every string-valued
+  environment variable; removing it for four policy keys would add a second
+  special-case list and make `NETSUKE_LOCALE=" en-GB "` behave unlike
+  `NETSUKE_COLOR=" always "`. Accepting the trim keeps one rule for all
+  environment strings, and the file layer still rejects whitespace.
   Date/Author: 2026-11-18, agent.
 
 ## Outcomes & retrospective
@@ -155,9 +181,9 @@ To be completed when the work is delivered.
 Netsuke is a Rust build tool whose layered configuration is composed through
 `ortho_config`. `src/cli/config/mod.rs` defines `CliConfig`, the typed schema.
 `src/cli/merge/mod.rs` composes four layers: defaults, discovered files,
-environment, and explicit command-line overrides. `ortho_config` merges the JSON
-objects and deserializes the result once, so a higher layer's value masks a
-lower layer's value.
+environment, and explicit command-line overrides. `ortho_config` merges the
+JSON objects and deserializes the result once, so a higher layer's value masks
+a lower layer's value.
 
 The environment layer is `src/cli/environment/mod.rs::EnvironmentLayer`. It
 normalizes `NETSUKE_` keys (ASCII case and surrounding whitespace) and splits on
@@ -173,16 +199,15 @@ the full merge so failures can be reported in the requested output mode.
 
 The four display policies live in `src/cli/config/mod.rs` with canonical
 spellings in `src/cli/config/policy_definitions.rs`. Their `FromStr`
-implementations use `parse_policy`, which compares with
-`eq_ignore_ascii_case`. Their `Deserialize` is derived with
-`rename_all = "kebab-case"`, which is case-sensitive. The same enums are
-serialized into the CLI override layer, so canonical lowercase output matters.
+implementations use `parse_policy`, which compares with `eq_ignore_ascii_case`.
+Their `Deserialize` is derived with `rename_all = "kebab-case"`, which is
+case-sensitive. The same enums are serialized into the CLI override layer, so
+canonical lowercase output matters.
 
-Relevant tests are `src/cli/environment/tests.rs`,
-`src/cli/config/tests.rs`, `src/cli/diag/mod.rs`'s test module,
-`tests/cli_tests/merge/mod.rs`, `tests/cli_tests/merge_diag.rs`,
-`tests/cli_tests/merge_diag_proptests.rs`, and the binary-level
-`tests/logging_stderr/json.rs`.
+Relevant tests are `src/cli/environment/tests.rs`, `src/cli/config/tests.rs`,
+`src/cli/diag/mod.rs`'s test module, `tests/cli_tests/merge/mod.rs`,
+`tests/cli_tests/merge_diag.rs`, `tests/cli_tests/merge_diag_proptests.rs`, and
+the binary-level `tests/logging_stderr/json.rs`.
 
 Existing test infrastructure: `tests/cli_tests/merge_probe.rs` runs the real
 merge in a child process with an injected environment via
@@ -236,12 +261,12 @@ REQ-tests -> EP-M3 -> tests/logging_stderr/json.rs
 
 ### Abstract model
 
-For each configuration key, a value is selected from the highest-priority
-layer that supplies it. The environment layer maps an accepted Boolean spelling
-to a Figment Boolean and every other spelling on a Boolean path to a string.
-The merge deserializes only the selected value. A display policy value is
-accepted when its ASCII case-insensitive form equals one of the canonical
-spellings, and rejected otherwise.
+For each configuration key, a value is selected from the highest-priority layer
+that supplies it. The environment layer maps an accepted Boolean spelling to a
+Figment Boolean and every other spelling on a Boolean path to a string. The
+merge deserializes only the selected value. A display policy value is accepted
+when its ASCII case-insensitive form equals one of the canonical spellings, and
+rejected otherwise.
 
 ### Invariants and lemmas
 
@@ -269,46 +294,38 @@ spellings, and rejected otherwise.
 
 - Obligation: `INV-bool-set`.
   Method: parameterized `rstest` cases over all five paths and all accepted and
-  rejected spellings.
-  Rationale: the input domain is finite and normative.
+  rejected spellings. Rationale: the input domain is finite and normative.
   Domain: `true`, `false`, `1`, `0`, `True`, `yes`, `2`, empty, and whitespace.
-  Artefact: `src/cli/environment/tests.rs`.
-  Evidence: `cargo test -p netsuke cli::environment` passes; a test fails if the
-  normalization is removed.
-  Non-vacuity: both accepted and rejected values are asserted, and a
-  non-Boolean path keeps its numeric value.
+  Artefact: `src/cli/environment/tests.rs`. Evidence:
+  `cargo test -p netsuke cli::environment` passes; a test fails if the
+  normalization is removed. Non-vacuity: both accepted and rejected values are
+  asserted, and a non-Boolean path keeps its numeric value.
 - Obligation: `INV-bool-agree`.
   Method: fixed and property tests through the real resolver and merge.
-  Rationale: the two code paths are independently implemented.
-  Domain: raw strings including `1`, `0`, `true`, `false`, `yes`, `2`, and the
-  empty string, with and without `--json`.
-  Artefact: `tests/cli_tests/merge_diag.rs` and
-  `tests/cli_tests/merge_diag_proptests.rs`.
-  Evidence: both paths return the same success or rejection verdict.
-  Non-vacuity: the generated set includes at least one accepted and one rejected
-  spelling, and the `--json`-masked case is exercised separately.
+  Rationale: the two code paths are independently implemented. Domain: raw
+  strings including `1`, `0`, `true`, `false`, `yes`, `2`, and the empty
+  string, with and without `--json`. Artefact: `tests/cli_tests/merge_diag.rs`
+  and `tests/cli_tests/merge_diag_proptests.rs`. Evidence: both paths return
+  the same success or rejection verdict. Non-vacuity: the generated set
+  includes at least one accepted and one rejected spelling, and the
+  `--json`-masked case is exercised separately.
 - Obligation: `INV-policy-set`.
   Method: parameterized and property tests over all policy definitions.
   Rationale: the spellings are a finite set and `FromStr` already defines the
-  oracle.
-  Domain: lowercase, uppercase, mixed case, invalid strings, and non-string
-  inputs.
-  Artefact: `src/cli/config/tests.rs`.
-  Evidence: TOML and `serde_json` deserialization agree with `FromStr`.
-  Non-vacuity: the invalid case must fail, and the accepted cases must cross
-  both formats.
+  oracle. Domain: lowercase, uppercase, mixed case, invalid strings, and
+  non-string inputs. Artefact: `src/cli/config/tests.rs`. Evidence: TOML and
+  `serde_json` deserialization agree with `FromStr`. Non-vacuity: the invalid
+  case must fail, and the accepted cases must cross both formats.
 - Obligation: `INV-policy-canonical`.
-  Method: parameterized serialization test.
-  Domain: every variant.
-  Artefact: `src/cli/config/tests.rs`.
-  Evidence: serialized values are the canonical lowercase spellings.
+  Method: parameterized serialization test. Domain: every variant. Artefact:
+  `src/cli/config/tests.rs`. Evidence: serialized values are the canonical
+  lowercase spellings.
 - Obligation: `INV-indexed`.
-  Method: fixed integration test in the child merge process.
-  Domain: `NETSUKE_DEFAULT_TARGETS__0=hello.txt` and the scalar form.
-  Artefact: `tests/cli_tests/merge/env_value_forms.rs`.
-  Evidence: the indexed form fails with `invalid type: map`, the scalar form
-  succeeds.
-  Non-vacuity: the scalar control succeeds.
+  Method: fixed integration test in the child merge process. Domain:
+  `NETSUKE_DEFAULT_TARGETS__0=hello.txt` and the scalar form. Artefact:
+  `tests/cli_tests/merge/env_value_forms.rs`. Evidence: the indexed form fails
+  with `invalid type: map`, the scalar form succeeds. Non-vacuity: the scalar
+  control succeeds.
 
 ### Formal verification decision
 
@@ -328,32 +345,33 @@ exercise the observable behaviour through the real merge boundary.
 
 In `src/cli/environment/mod.rs`, add a `pub(crate)` strict parser that accepts
 exactly `true`, `false`, `1`, and `0`. Add a named constant listing the five
-single-component Boolean paths. In `parse_entry`, after UTF-8 validation, emit a
-Figment Boolean for an accepted spelling on those paths and a raw string
-otherwise. In `src/cli/diag/mod.rs`, call the shared parser from `json_from_env`
-and keep the existing error text. Characterize layer masking first with direct
-`MergeComposer` tests in `tests/cli_tests/merge/mod.rs`, then decide whether the
-explicit `--json` short circuit stays.
+single-component Boolean paths. In `parse_entry`, after UTF-8 validation, emit
+a Figment Boolean for an accepted spelling on those paths and a raw string
+otherwise. In `src/cli/diag/mod.rs`, call the shared parser from
+`json_from_env` and keep the existing error text. Characterize layer masking
+first with direct `MergeComposer` tests in `tests/cli_tests/merge/mod.rs`, then
+decide whether the explicit `--json` short circuit stays.
 
 ### `EP-M2` Case-insensitive policy deserialization
 
-In `src/cli/config/mod.rs`, replace the derived `Deserialize` on
-`ColourPolicy`, `EmojiPolicy`, `ProgressPolicy`, and `AccessibilityPolicy` with
-a manual implementation delegating to `FromStr`, retaining derived `Serialize`
-and `rename_all = "kebab-case"`. Add a private generic helper that deserializes
-a string and maps `FromStr` failure with `serde::de::Error::custom`, including
+In `src/cli/config/mod.rs`, replace the derived `Deserialize` on `ColourPolicy`,
+`EmojiPolicy`, `ProgressPolicy`, and `AccessibilityPolicy` with a manual
+implementation delegating to `FromStr`, retaining derived `Serialize` and
+`rename_all = "kebab-case"`. Add a private generic helper that deserializes a
+string and maps `FromStr` failure with `serde::de::Error::custom`, including
 the canonical expected values in the message. Extend `src/cli/config/tests.rs`
 with TOML and `serde_json` cases and a serialization test.
 
 ### `EP-M3` End-to-end regression tests
 
-Add `tests/cli_tests/merge/env_value_forms.rs`, register it in
-`tests/cli_tests/mod.rs`, and cover Boolean spellings, policy casing and
-precedence, file-layer strictness, and the indexed-list rejection. Extend
-`tests/cli_tests/merge_diag.rs` and `merge_diag_proptests.rs` with a coherent
-map-backed provider whose `get` and `entries` share a snapshot. Extend
-`tests/logging_stderr/json.rs` with `NETSUKE_JSON=1` and `NETSUKE_JSON=0` child
-runs.
+Add `tests/cli_tests/merge/env_value_forms.rs` with per-form submodules, and
+register it in `tests/cli_tests/merge/mod.rs`. Cover Boolean spellings, policy
+casing and precedence, file-layer strictness, and the indexed-list rejection.
+Extend `tests/cli_tests/merge_diag.rs` and `merge_diag_proptests.rs` with a
+coherent map-backed provider whose `get` and `entries` share a snapshot. Add
+`tests/logging_stderr/json_env.rs` — registered in
+`tests/logging_stderr_tests.rs` so the existing file stays under the size cap —
+with `NETSUKE_JSON=1` and `NETSUKE_JSON=0` child runs.
 
 ### `EP-M4` Documentation and decision record
 
@@ -397,9 +415,9 @@ not amend a commit while a gate batch is running.
 
 ## Artefacts and notes
 
-Reconnaissance confirmed the current rejection text for `NETSUKE_JSON`,
-the Figment value parsing behaviour, and the existing child-process merge
-adapter. Implementation evidence will be recorded after each milestone.
+Reconnaissance confirmed the current rejection text for `NETSUKE_JSON`, the
+Figment value parsing behaviour, and the existing child-process merge adapter.
+Implementation evidence will be recorded after each milestone.
 
 ## Interfaces and dependencies
 
