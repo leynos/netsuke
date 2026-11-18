@@ -18,6 +18,65 @@ const NON_UTF8_VALUE: &str = "non-UTF-8 environment value";
 const SHELLS_IN_ENVIRONMENT: &str =
     "the `shells` key may only be declared in a configuration file, not in the environment";
 
+/// Complete single-component paths that map to `CliConfig` Boolean fields.
+///
+/// This list mirrors `verbose`, `json`, `fetch_default_deny`,
+/// `trust_project_fetch_policy`, and `no_input` in `src/cli/config/mod.rs`.
+/// Nested aliases are deliberately excluded: only the exact configuration key
+/// accepts a Boolean environment spelling.
+pub(crate) const BOOLEAN_PATHS: [&str; 5] = [
+    "verbose",
+    "json",
+    "fetch_default_deny",
+    "trust_project_fetch_policy",
+    "no_input",
+];
+
+/// Parse the strict Boolean spellings accepted from the environment.
+///
+/// Exactly `true`, `false`, `1`, and `0` are accepted, with no surrounding
+/// whitespace and no case folding. Sharing this parser with the early
+/// diagnostic-mode resolver keeps the finite accepted set identical before and
+/// after the full merge. Configuration files keep strict Boolean typing; this
+/// helper applies only to environment values.
+pub(crate) fn parse_environment_bool(value: &str) -> Option<bool> {
+    match value {
+        "true" | "1" => Some(true),
+        "false" | "0" => Some(false),
+        _ => None,
+    }
+}
+
+/// Report whether `components` names a single Boolean configuration path.
+fn is_boolean_path(components: &[String]) -> bool {
+    match components {
+        [component] => BOOLEAN_PATHS.contains(&component.as_str()),
+        _ => false,
+    }
+}
+
+/// Parse one environment value according to its configuration path.
+///
+/// Boolean paths accept exactly the four strict spellings and otherwise keep
+/// the raw text, so case or whitespace variants fail deserialization instead of
+/// being coerced. Every other path keeps Figment's ordinary scalar parsing,
+/// which recognizes booleans, numbers, arrays, and strings. Figment trims
+/// surrounding whitespace from an unquoted scalar, so an environment policy
+/// such as `NETSUKE_COLOR=" always "` is accepted even though the same spaces
+/// in a quoted configuration-file value are not.
+fn parse_value(components: &[String], value_text: &str) -> Value {
+    if is_boolean_path(components) {
+        return match parse_environment_bool(value_text) {
+            Some(flag) => Value::from(flag),
+            None => Value::from(value_text.to_owned()),
+        };
+    }
+    match value_text.parse::<Value>() {
+        Ok(parsed) => parsed,
+        Err(never) => match never {},
+    }
+}
+
 /// Environment layer backed by an owned, injected snapshot.
 pub(super) struct EnvironmentLayer {
     /// Owned snapshot of the environment entries this layer presents.
@@ -93,10 +152,7 @@ fn parse_entry(key: &OsStr, value: &OsStr) -> Result<Option<(Vec<String>, Value)
     let Some(value_text) = value.to_str() else {
         return Err(Box::new(reject(NON_UTF8_VALUE, "non_utf8_value")));
     };
-    let parsed = match value_text.parse::<Value>() {
-        Ok(parsed) => parsed,
-        Err(never) => match never {},
-    };
+    let parsed = parse_value(&components, value_text);
     Ok(Some((components, parsed)))
 }
 

@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use metrics_util::debugging::DebuggingRecorder;
 use netsuke::cli_localization;
+use rstest::rstest;
 use std::cell::Cell;
 use std::{collections::HashMap, ffi::OsString, sync::Arc};
 use tempfile::tempdir;
@@ -169,8 +170,16 @@ impl netsuke::cli::ConfigEnvProvider for TestEnv {
         self.values.get(key).cloned()
     }
 
+    /// Present the same snapshot the diagnostic pass saw.
+    ///
+    /// A provider whose `get` and `entries` disagree makes the early resolver
+    /// and the full merge observe different environments, which would hide a
+    /// disagreement between the two passes rather than test it.
     fn entries(&self) -> Vec<(OsString, OsString)> {
-        Vec::new()
+        self.values
+            .iter()
+            .map(|(key, value)| (OsString::from(*key), value.clone()))
+            .collect()
     }
 }
 
@@ -214,4 +223,94 @@ impl TestEnv {
         self.values.insert(name, value.into());
         self
     }
+}
+
+/// Parse a CLI that selects `toml_content` as its explicit configuration file.
+///
+/// The returned [`tempfile::TempDir`] owns the file; keep it alive until the
+/// diagnostic pass has discovered the layers.
+fn parse_with_file(
+    toml_content: &str,
+) -> Result<(netsuke::cli::Cli, clap::ArgMatches, tempfile::TempDir)> {
+    let temp_dir = tempdir().context("create temporary config directory")?;
+    let config_path = temp_dir.path().join("netsuke.toml");
+    let config_dir = Dir::open_ambient_dir(temp_dir.path(), ambient_authority())
+        .context("open temporary config directory")?;
+    config_dir
+        .write("netsuke.toml", toml_content.as_bytes())
+        .context("write netsuke.toml")?;
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let config_arg = config_path.to_string_lossy().into_owned();
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(
+        ["netsuke", "--config", &config_arg],
+        &localizer,
+        clap::ColorChoice::Auto,
+    )
+    .context("parse CLI args for JSON boolean agreement")?;
+    Ok((cli, matches, temp_dir))
+}
+
+/// Both passes accept exactly the four strict Boolean spellings.
+#[rstest]
+#[case::true_spelling("true", true)]
+#[case::one("1", true)]
+#[case::false_spelling("false", false)]
+#[case::zero("0", false)]
+fn diagnostic_and_merge_passes_agree_on_json_boolean_forms(
+    #[case] raw: &str,
+    #[case] expected: bool,
+) -> Result<()> {
+    let (cli, matches, _config) = parse_with_file("json = false\n")?;
+    let env = TestEnv::default().with_var("NETSUKE_JSON", raw);
+
+    let (json, outcome) =
+        netsuke::cli::resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
+    ensure!(
+        json? == expected,
+        "the diagnostic pass should read NETSUKE_JSON={raw:?} as {expected}",
+    );
+
+    let merged =
+        netsuke::cli::merge_with_cached_file_layers(&cli, &matches, &env, outcome.into_layers())
+            .context("merge the cached layers")?;
+    ensure!(
+        merged.json == expected,
+        "the full merge should read NETSUKE_JSON={raw:?} as {expected}, got {}",
+        merged.json,
+    );
+    Ok(())
+}
+
+/// Both passes reject the same non-Boolean spellings.
+#[rstest]
+#[case::capitalized_true("True")]
+#[case::upper_true("TRUE")]
+#[case::yes("yes")]
+#[case::two("2")]
+#[case::empty("")]
+#[case::surrounded_by_spaces(" 1 ")]
+#[case::trailing_space("1 ")]
+fn diagnostic_and_merge_passes_reject_the_same_spellings(#[case] raw: &str) -> Result<()> {
+    let (cli, matches, _config) = parse_with_file("json = false\n")?;
+    let env = TestEnv::default().with_var("NETSUKE_JSON", raw);
+
+    let (json, outcome) =
+        netsuke::cli::resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
+    let diagnostic_error = json.expect_err("the diagnostic pass should reject the spelling");
+    ensure!(
+        diagnostic_error
+            .to_string()
+            .contains("must be true, false, 1, or 0"),
+        "the diagnostic rejection should name the accepted spellings, got: {diagnostic_error}",
+    );
+
+    let merge_error =
+        netsuke::cli::merge_with_cached_file_layers(&cli, &matches, &env, outcome.into_layers())
+            .expect_err("the full merge should reject the same spelling");
+    ensure!(
+        merge_error.to_string().contains("invalid type"),
+        "the full merge should fail Boolean deserialization, got: {merge_error}",
+    );
+    Ok(())
 }

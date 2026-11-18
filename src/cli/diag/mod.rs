@@ -14,6 +14,7 @@ use super::command::Cli;
 use super::discovery::{
     DiscoveryOutcome, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env, is_shells_key,
 };
+use super::environment::parse_environment_bool;
 
 /// Environment variable carrying an explicit JSON-output preference.
 const JSON_ENV_VAR: &str = "NETSUKE_JSON";
@@ -152,14 +153,15 @@ fn json_from_env(env: &impl EnvProvider) -> OrthoResult<Option<bool>> {
             ),
         })
     })?;
-    match raw.as_str() {
-        "true" | "1" => Ok(Some(true)),
-        "false" | "0" => Ok(Some(false)),
-        _ => Err(Arc::new(OrthoError::Validation {
-            key: String::from(JSON_ENV_VAR),
-            message: format!("{JSON_ENV_VAR} must be true, false, 1, or 0; got {raw:?}"),
-        })),
-    }
+    parse_environment_bool(&raw).map_or_else(
+        || {
+            Err(Arc::new(OrthoError::Validation {
+                key: String::from(JSON_ENV_VAR),
+                message: format!("{JSON_ENV_VAR} must be true, false, 1, or 0; got {raw:?}"),
+            }))
+        },
+        |value| Ok(Some(value)),
+    )
 }
 
 #[cfg(test)]

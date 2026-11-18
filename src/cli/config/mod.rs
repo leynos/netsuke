@@ -27,10 +27,35 @@ pub(super) use policy_definitions::{
     ACCESSIBILITY_POLICY_DEFINITIONS, COLOUR_POLICY_DEFINITIONS, EMOJI_POLICY_DEFINITIONS,
     PROGRESS_POLICY_DEFINITIONS,
 };
-use policy_definitions::{definition_for, parse_policy};
+use policy_definitions::{PolicyDefinition, definition_for, parse_policy};
 use shells::ShellDefinition;
+
+/// Deserialize a policy value by delegating to its case-insensitive `FromStr`.
+///
+/// Serialization keeps the canonical lowercase spellings, while `FromStr`
+/// defines the accepted, case-insensitive input set already used by the
+/// command line. Failure text names the accepted spellings so a configuration
+/// typo is actionable without consulting the guide.
+fn deserialize_policy<'de, D, T>(
+    deserializer: D,
+    definitions: &[PolicyDefinition<T>],
+) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: FromStr<Err = String>,
+{
+    let raw = String::deserialize(deserializer)?;
+    T::from_str(&raw).map_err(|error| {
+        let expected = definitions
+            .iter()
+            .map(|definition| definition.spelling)
+            .collect::<Vec<_>>()
+            .join(", ");
+        serde::de::Error::custom(format!("{error}; expected one of: {expected}"))
+    })
+}
 /// Colour-output policy accepted by layered configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ColourPolicy {
     /// Follow the host environment.
@@ -59,8 +84,17 @@ impl FromStr for ColourPolicy {
     }
 }
 
+impl<'de> Deserialize<'de> for ColourPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserialize_policy(deserializer, &COLOUR_POLICY_DEFINITIONS)
+    }
+}
+
 /// Progress rendering policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProgressPolicy {
     /// Follow Netsuke's default progress behaviour.
@@ -89,8 +123,17 @@ impl FromStr for ProgressPolicy {
     }
 }
 
+impl<'de> Deserialize<'de> for ProgressPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserialize_policy(deserializer, &PROGRESS_POLICY_DEFINITIONS)
+    }
+}
+
 /// Emoji rendering policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum EmojiPolicy {
     /// Follow the host environment and accessibility mode.
@@ -119,8 +162,17 @@ impl FromStr for EmojiPolicy {
     }
 }
 
+impl<'de> Deserialize<'de> for EmojiPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserialize_policy(deserializer, &EMOJI_POLICY_DEFINITIONS)
+    }
+}
+
 /// Accessible-output policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum AccessibilityPolicy {
     /// Follow terminal and environment detection.
@@ -147,6 +199,15 @@ impl FromStr for AccessibilityPolicy {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_policy(s, &ACCESSIBILITY_POLICY_DEFINITIONS)
             .ok_or_else(|| format!("invalid accessibility policy '{s}'"))
+    }
+}
+
+impl<'de> Deserialize<'de> for AccessibilityPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserialize_policy(deserializer, &ACCESSIBILITY_POLICY_DEFINITIONS)
     }
 }
 

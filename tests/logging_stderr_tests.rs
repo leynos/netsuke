@@ -10,6 +10,8 @@ mod command_list_failure_support;
 mod config_tracing;
 #[path = "logging_stderr/json.rs"]
 mod json;
+#[path = "logging_stderr/json_env.rs"]
+mod json_env;
 #[path = "logging_stderr/support.rs"]
 mod support;
 #[path = "logging_stderr/verbose.rs"]
