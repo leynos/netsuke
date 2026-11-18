@@ -61,6 +61,35 @@ def _verify_script(action: Job) -> tuple[dict[str, object], str]:
     return step, run
 
 
+def _invocation_place(run: str) -> tuple[list[str], int]:
+    """Return the script's executable lines and where the invocation sits.
+
+    Returns
+    -------
+    tuple[list[str], int]
+        The joined command lines and the index of the one that runs the CLI.
+
+    Raises
+    ------
+    ConsumerSmokeMutationError
+        If the script runs no line the contract reads as the invocation, so a
+        rewrite would change nothing.
+
+    Notes
+    -----
+    The lines are taken from :func:`command_lines`, which joins a command split
+    across backslash continuations and drops comments. A rewrite made in the
+    raw text would land inside the invocation's continuation chain and become
+    one of its arguments, which would change the command line the contract
+    compares rather than the script around it.
+    """
+    lines = command_lines(run)
+    for index, line in enumerate(lines):
+        if runs_smoke_cli(line):
+            return lines, index
+    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
+
+
 def _insert_before_invocation(run: str, added: str) -> str:
     """Return the script with ``added`` on its own line before the invocation.
 
@@ -70,25 +99,32 @@ def _insert_before_invocation(run: str, added: str) -> str:
         The rewritten script, holding only the executable lines of the original
         with the addition spliced in.
 
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the script runs no line the contract reads as the invocation, so the
-        insertion would change nothing.
+    Notes
+    -----
+    A script with no invocation refuses through :func:`_invocation_place`
+    rather than being returned unchanged, so an applier built on this cannot
+    silently mutate nothing.
+    """
+    lines, index = _invocation_place(run)
+    return "\n".join([*lines[:index], added, *lines[index:]])
+
+
+def _repeat_invocation(run: str) -> str:
+    """Return the script with the invocation line repeated directly below it.
+
+    Returns
+    -------
+    str
+        The rewritten script, whose only addition is a second copy of the
+        reviewed command.
 
     Notes
     -----
-    The lines are taken from :func:`command_lines`, which joins a command split
-    across backslash continuations and drops comments. An insertion made in the
-    raw text would land inside the invocation's continuation chain and become
-    one of its arguments, which would change the command line the contract
-    compares rather than the prologue around it.
+    A script with no invocation refuses through :func:`_invocation_place`
+    rather than being returned unchanged.
     """
-    lines = command_lines(run)
-    for index, line in enumerate(lines):
-        if runs_smoke_cli(line):
-            return "\n".join([*lines[:index], added, *lines[index:]])
-    raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
+    lines, index = _invocation_place(run)
+    return "\n".join([*lines[: index + 1], lines[index], *lines[index + 1 :]])
 
 
 def _short_circuit_verifier(_release: Job, action: Job) -> None:
@@ -181,6 +217,20 @@ def _mask_with_cli_named_assignment(_release: Job, action: Job) -> None:
     )
 
 
+def _duplicate_verifier(_release: Job, action: Job) -> None:
+    """Run the reviewed verifier twice inside the step that already runs it.
+
+    Both lines are byte-for-byte the reviewed command, so a contract that
+    compares the command line, and counts only the first invocation of each
+    step, sees exactly one reviewed execution while the action runs two. The
+    second run reads downloads the first has already consumed, so it fails for
+    a reason that says nothing about the release and hides the verdict the
+    step exists to report.
+    """
+    step, run = _verify_script(action)
+    step["run"] = _repeat_invocation(run)
+
+
 PROLOGUE_MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "short-circuit-consumer-smoke-verifier": _short_circuit_verifier,
     "hide-consumer-smoke-verifier-failure": _hide_verifier_failure,
@@ -195,6 +245,7 @@ PROLOGUE_MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "mask-consumer-smoke-verifier-with-cli-named-assignment": (
         _mask_with_cli_named_assignment
     ),
+    "duplicate-consumer-smoke-verifier": _duplicate_verifier,
 }
 
 

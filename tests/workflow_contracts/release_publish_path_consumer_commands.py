@@ -10,7 +10,8 @@ Four properties are asserted: the verifier is invoked exactly as reviewed, the
 invocation is reachable, its refusal reaches the step as a failure, and nothing
 in the action builds from source. All four read what bash would run rather than
 what a comment says, so documentation naming a compiler or a flag cannot be
-mistaken for an invocation.
+mistaken for an invocation. The invocations are counted across every line of
+every step, so a step that runs the command twice is not read as one execution.
 
 Reachability and failure propagation are read as a shape rather than as a
 search for one suspicious line, using the readers in
@@ -28,7 +29,7 @@ import typing as typ
 from release_publish_path_consumer_script import (
     ends_after_smoke_cli,
     hides_a_reference,
-    invocation,
+    invocations,
     invoked_phase,
     unsupported_prologue,
 )
@@ -131,19 +132,22 @@ def check_smoke_action_commands(
 def _calls_of_phase(
     phase: str, steps: list[dict[str, object]]
 ) -> list[tuple[dict[str, object], Invocation]]:
-    """Return every step whose invocation runs one phase of the smoke CLI.
+    """Return every invocation of one phase of the smoke CLI across the steps.
 
     Returns
     -------
     list[tuple[dict[str, object], Invocation]]
-        One entry per step that runs the CLI with this phase, so the caller can
-        require the count without re-reading the steps.
+        One entry per invocation line that runs the CLI with this phase, each
+        paired with the step carrying it, so the caller can require the count
+        without re-reading the steps. Every line of a step is read, not just
+        its first: a step can run the command twice, and the second run is as
+        much a part of what the action executes as the first.
     """
     return [
         (step, call)
         for step in steps
-        if (call := invocation(step)) is not None
-        and invoked_phase(call.tokens) == phase
+        for call in invocations(step)
+        if invoked_phase(call.tokens) == phase
     ]
 
 

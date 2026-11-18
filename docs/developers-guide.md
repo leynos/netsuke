@@ -3846,11 +3846,12 @@ before the step that calls the action, so neither a skipped download nor one
 that runs too late can leave the verifier reading a path that was never filled.
 What the action's command lines may run is asserted in
 `release_publish_path_consumer_commands.py`: both CLI invocations must appear
-exactly once, carry no `if`, and run exactly the reviewed command line,
-launcher included, so a step that only `echo`es it is refused. The line must
-also let bash expand its evidence, so a single-quoted `$IDENTITY_PATH` is
-refused although its shell words match the reviewed ones. No command line in
-the job or the action may name a compiler.
+exactly once, counted across every line of every step so a step that repeats
+the command is refused rather than read as a single execution, carry no `if`,
+and run exactly the reviewed command line, launcher included, so a step that
+only `echo`es it is refused. The line must also let bash expand its evidence,
+so a single-quoted `$IDENTITY_PATH` is refused although its shell words match
+the reviewed ones. No command line in the job or the action may name a compiler.
 `release_publish_path_consumer_script.py` judges the script around each
 invocation as a shape: a step may prepare it with the reviewed `set` options
 and plain assignments and nothing else, while a conditional, a loop, a bare

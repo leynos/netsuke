@@ -92,23 +92,37 @@ def _tokenised(line: str) -> tuple[str, ...] | None:
         return None
 
 
+def invocations(step: dict[str, object]) -> tuple[Invocation, ...]:
+    """Return every line of the step that runs the smoke CLI, in order.
+
+    Returns
+    -------
+    tuple[Invocation, ...]
+        One entry per executable line whose shell words include
+        :data:`SMOKE_CLI`, empty when none does. A step may carry the command
+        more than once — a retry, or a second copy below one that fails — so a
+        count taken from the first line alone is not a count.
+
+    Notes
+    -----
+    The lines are found by their words rather than by their text, so an
+    assignment whose value spells the CLI's path is not one of them.
+    """
+    return _found_in(command_lines(step.get("run")))
+
+
 def invocation(step: dict[str, object]) -> Invocation | None:
-    """Return the parsed boundary around the line that runs the smoke CLI.
+    """Return the parsed boundary around the first line that runs the smoke CLI.
 
     Returns
     -------
     Invocation | None
-        Where the invocation sits among the step's executable lines, its shell
-        words including the launcher, and the text those words came from, or
-        ``None`` when no line runs :data:`SMOKE_CLI`.
-
-    Notes
-    -----
-    The line is found by its words rather than by the text of the line, so an
-    assignment whose value spells the CLI's path is not mistaken for the
-    invocation and does not end the search for the command.
+        Where that line sits among the step's executable lines, its shell words
+        including the launcher, and the text those words came from, or ``None``
+        when no line runs :data:`SMOKE_CLI`.
     """
-    return _found_in(command_lines(step.get("run")))
+    found = invocations(step)
+    return found[0] if found else None
 
 
 def runs_smoke_cli(line: str) -> bool:
@@ -167,13 +181,13 @@ def hides_a_reference(line: str) -> bool:
     return False
 
 
-def _found_in(lines: list[str]) -> Invocation | None:
-    """Return the first line of ``lines`` that runs :data:`SMOKE_CLI`."""
-    for index, line in enumerate(lines):
-        tokens = _tokenised(line)
-        if tokens is not None and SMOKE_CLI in tokens:
-            return Invocation(index=index, tokens=tokens, line=line)
-    return None
+def _found_in(lines: list[str]) -> tuple[Invocation, ...]:
+    """Return every line of ``lines`` that runs :data:`SMOKE_CLI`, in order."""
+    return tuple(
+        Invocation(index=index, tokens=tokens, line=line)
+        for index, line in enumerate(lines)
+        if (tokens := _tokenised(line)) is not None and SMOKE_CLI in tokens
+    )
 
 
 def smoke_command_line(step: dict[str, object]) -> tuple[str, ...] | None:
@@ -271,12 +285,9 @@ def _without_set_option(remaining: list[str], letters: str) -> str | None:
         The letters minus the trailing ``o``, or ``None`` when ``-o`` is not
         last or the name it takes is not the reviewed one. Consuming the name
         here is what lets a combined flag such as ``-euo pipefail`` be read as
-        one argument list rather than a pattern.
-
-    Notes
-    -----
-    The name is only consumed once the option is known to take one, so a
-    refused list leaves nothing half-read for the caller to reason about.
+        one argument list rather than a pattern. The name is only consumed once
+        the option is known to take one, so a refused list leaves nothing
+        half-read for the caller to reason about.
     """
     if "o" not in letters:
         return letters
@@ -326,13 +337,9 @@ def _is_prologue(line: str) -> bool:
 def unsupported_prologue(step: dict[str, object]) -> str | None:
     r"""Return the first line before the CLI that could skip or disarm it.
 
-    The reviewed invocation is one command inside a script, so an exact match
-    on that line says nothing about the script around it. ``exit 0`` above it
-    makes it unreachable, ``if false; then`` above it confines it to a branch
-    bash never takes, and ``set +e`` above it lets a refusal fall through to an
-    ``exit 0`` below. Only a prologue that plainly prepares the step is
-    accepted, so a construct nobody reviewed is refused rather than assumed
-    harmless.
+    Only a prologue that plainly prepares the step is accepted, so a construct
+    nobody reviewed is refused rather than assumed harmless; see the module
+    documentation for what each one would do.
 
     Returns
     -------
@@ -348,10 +355,10 @@ def unsupported_prologue(step: dict[str, object]) -> str | None:
     """
     lines = command_lines(step.get("run"))
     found = _found_in(lines)
-    if found is None:
+    if not found:
         return None
     return next(
-        (line for line in lines[: found.index] if not _is_prologue(line)),
+        (line for line in lines[: found[0].index] if not _is_prologue(line)),
         None,
     )
 
@@ -371,10 +378,10 @@ def ends_after_smoke_cli(step: dict[str, object]) -> str | None:
     """
     lines = command_lines(step.get("run"))
     found = _found_in(lines)
-    if found is None:
+    if not found:
         return None
     return next(
-        (line for line in lines[found.index + 1 :] if ends_successfully(line)),
+        (line for line in lines[found[0].index + 1 :] if ends_successfully(line)),
         None,
     )
 
@@ -385,6 +392,7 @@ __all__ = [
     "ends_successfully",
     "hides_a_reference",
     "invocation",
+    "invocations",
     "invoked_phase",
     "runs_smoke_cli",
     "smoke_command_line",

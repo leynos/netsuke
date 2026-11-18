@@ -140,6 +140,10 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     "mask-consumer-smoke-verifier-with-cli-named-assignment": (
         ("static", f"{CONSUMER_SMOKE_JOB}.action"),
     ),
+    # The reviewed command line appears twice in one step, so a contract that
+    # counts steps, or reads only the first invocation of each step, reports
+    # one verified run while the action executes the verifier twice.
+    "duplicate-consumer-smoke-verifier": (("static", f"{CONSUMER_SMOKE_JOB}.action"),),
     # A step declares no environment and still expands the workflow token in
     # its shell, so a scan of environment mappings alone would leave it.
     "read-consumer-smoke-token-in-run": (("static", f"{CONSUMER_SMOKE_JOB}.token"),),

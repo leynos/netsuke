@@ -90,6 +90,7 @@ SECTION_MODULES = (
     "scripts/tests/test_release_binstall_extract.py",
     "scripts/tests/test_release_binstall_probe.py",
     "scripts/tests/test_consumer_smoke_cli.py",
+    "scripts/tests/test_consumer_smoke_evidence.py",
 )
 
 #: Source modules named by ``--doctest-modules`` in the Makefile target.

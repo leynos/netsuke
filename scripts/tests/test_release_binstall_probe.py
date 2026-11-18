@@ -300,32 +300,25 @@ _READY_SECONDS = 5.0
 _READY_POLL_SECONDS = 0.01
 
 
-def _signalled(launch: probe.ProbeLauncher, ready: pathlib.Path) -> probe.ProbeLauncher:
+def _signalled(
+    launch: probe.ProbeLauncher, ready: pathlib.Path, started: list[float]
+) -> probe.ProbeLauncher:
     """Return a launcher that waits for the descendant to announce readiness.
 
-    Parameters
-    ----------
-    launch
-        The launcher that starts the real child.
-    ready
-        The file the descendant creates once its ``os.setsid()`` call has
-        returned.
+    The returned launcher raises :class:`probe.ProbeLaunchError` when the
+    marker never appears; without the handshake the case would race the
+    descendant's session change and could pass for the wrong reason. Once the
+    marker is there it appends the readiness instant to ``started``, so the
+    caller times the probe from after the interpreter starts and
+    ``os.setsid()`` returns, not before. That wait is bounded by
+    :data:`_READY_SECONDS` and fails the case on its own, so a slow start is
+    never charged to the cleanup budget the case asserts.
 
     Returns
     -------
     probe.ProbeLauncher
         A launcher that starts the child, then waits up to a bound for the
         marker the child's descendant writes.
-
-    Notes
-    -----
-    The wait finishes before :func:`probe.probe_version` starts its deadline,
-    so the measured interval begins only once the descendant has certainly left
-    the process group. The child is stopped before the refusal is raised.
-
-    The returned launcher raises :class:`probe.ProbeLaunchError` when the
-    marker never appears. Without the handshake the case would race the
-    descendant's session change and could pass for the wrong reason.
     """
 
     def launcher(command: list[str], *, env: dict[str, str]) -> probe.ProbeProcess:
@@ -341,6 +334,7 @@ def _signalled(launch: probe.ProbeLauncher, ready: pathlib.Path) -> probe.ProbeL
                 )
                 raise probe.ProbeLaunchError(msg)
             time.sleep(_READY_POLL_SECONDS)
+        started.append(time.monotonic())
         return process
 
     return launcher
@@ -361,7 +355,9 @@ def test_probe_version_refuses_a_descendant_that_escapes_the_kill(
     probe which does not wait on it can finish inside the bound.
 
     The descendant announces its new session before the probe's deadline
-    starts, so the case cannot pass by killing one that had not yet detached.
+    starts, so the case cannot pass by killing one that had not yet detached,
+    and the assertion is timed from that announcement rather than from before
+    the interpreter that writes the marker has started.
     """
     lifetime = 5
     monkeypatch.setattr(probe, "PROBE_TIMEOUT_SECONDS", 1.0)
@@ -384,10 +380,15 @@ def test_probe_version_refuses_a_descendant_that_escapes_the_kill(
     )
     binary.chmod(0o755)
 
-    started = time.monotonic()
+    started: list[float] = []
     with pytest.raises(probe.ProbeTimeoutError):
-        probe.probe_version(binary, launcher=_signalled(child_adapter.launch, ready))
-    elapsed = time.monotonic() - started
+        probe.probe_version(
+            binary, launcher=_signalled(child_adapter.launch, ready, started)
+        )
+    ended = time.monotonic()
+
+    assert started, "the launcher must record the instant the descendant was ready"
+    elapsed = ended - started[0]
 
     assert elapsed < lifetime / 2, (
         "the probe must not close a stream its reader is still blocked on; "

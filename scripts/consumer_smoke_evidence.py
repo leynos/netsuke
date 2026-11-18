@@ -329,7 +329,10 @@ def recorded_status(source: pathlib.Path) -> int | None:
     Only an absent file means no status at all. A file present but holding a
     non-number is also no status: ``curl`` writes ``000`` after a transport
     failure and removes the body, so a status that is not a number cannot come
-    from a transfer that completed.
+    from a transfer that completed. Bytes that are not UTF-8 are no status for
+    the same reason — a decimal status is ASCII — and they are caught here
+    because :class:`UnicodeDecodeError` is a :class:`ValueError` raised by the
+    read itself, so it would otherwise escape the check below.
 
     A file that exists but cannot be read propagates its :class:`OSError`. A
     host failure is kept visible so the caller reports an unreadable download
@@ -338,7 +341,7 @@ def recorded_status(source: pathlib.Path) -> int | None:
     """
     try:
         content = source.read_text(encoding="utf-8")
-    except FileNotFoundError:
+    except FileNotFoundError, UnicodeDecodeError:
         return None
     try:
         return int(content.strip())
