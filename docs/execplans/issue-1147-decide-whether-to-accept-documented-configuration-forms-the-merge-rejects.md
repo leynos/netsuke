@@ -111,7 +111,16 @@ list form.
   characterization (`3` tests).
 - [x] (2026-11-18) `EP-M4` ADR-0082, design-document reference, contents index,
   user guide, migration guide, and changelog entry drafted.
-- [ ] All code quality gates pass; draft pull request opened.
+- [x] (2026-11-18) Module-layout and lint corrections: both test modules
+  that gained submodules moved to `mod.rs`, and the policy enums moved to
+  `src/cli/config/policies.rs` so `src/cli/config/mod.rs` stays under the
+  400-line cap.
+- [x] (2026-11-18) All code quality gates pass; draft pull request #1164
+  opened. Evidence: `make check-fmt`, `make lint` (including all four Whitaker
+  passes, Python lint, and `github-actions-lint`), `make typecheck`,
+  `make doc-coverage` (98.29% against the 80% bar), `make test` (6125 nextest
+  tests and the doctest pass), `make markdownlint`, `make nixie`, and
+  `make test-documentation-contracts` (15 passed).
 
 ## Surprises & discoveries
 
@@ -187,7 +196,32 @@ list form.
 
 ## Outcomes & retrospective
 
-To be completed when the work is delivered.
+Delivered the three decisions issue #1147 asked for. `NETSUKE_JSON=1` and
+`NETSUKE_VERBOSE=1` now merge as Booleans, and the early diagnostic resolver
+and the full merge share one strict parser, so both accept exactly `true`,
+`false`, `1`, and `0`. Every policy spelling is accepted in any ASCII casing
+from files, the environment, and the command line, and a rejection lists the
+accepted spellings. Indexed `__N` list variables remain rejected, and the
+users' guide now documents the scalar and serialized JSON-array forms instead.
+
+ADR-0082 records the decision, the rejected alternatives, and the known risk
+that `BOOLEAN_PATHS` mirrors the `CliConfig` Boolean fields by hand. The
+upstream capability that would remove that workaround is requested in
+leynos/ortho-config#714, and removing it is tracked in leynos/netsuke#1165. The
+users' guide, migration guide, CLI design document, developers' guide, and
+changelog are updated.
+
+Lessons:
+
+- Layer masking decides what the merge can accept: a valid higher-layer value
+  hides an invalid lower-layer one before the single deserialization, which is
+  what makes the early `--json` short circuit consistent with the merge.
+- Two lint oracles constrain test error handling at once. Whitaker's
+  `no_unwrap_or_else_panic` and `clippy::expect_fun_call` between them rule out
+  both idiomatic forms, so the helpers use an explicit `match` arm.
+- The 400-line cap applies as work lands, not only when a file is created; the
+  policy enums moved to `src/cli/config/policies.rs` once the new
+  implementations pushed `mod.rs` over the limit.
 
 ## Context and orientation
 
