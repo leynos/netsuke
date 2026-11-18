@@ -650,12 +650,18 @@ field. A backtick at script level records depth zero and still restores the
 script level; a backtick opened inside a `$( … )` restores that substitution's
 own quote state, including when the backtick body contains nested quotes.
 
+An open backtick body is its own shell region, so the traversal tracks the
+body's own quoting there. A `)` inside a single- or double-quoted part of the
+body is literal data, as the shell reads it; only an unquoted `)` may close a
+`$()` frame. The body's quoting is discarded when the closing backtick restores
+the region that opened it.
+
 Nesting that would leave the saved context without its owner fails closed with
-`IrGenError::InvalidCommand`; it is not approximated. Two shapes are rejected: a
-`)` that would close the `$()` region owning an open backtick, and a closing
-backtick seen while an inner `$()` frame is still open. Before this amendment
-the first shape popped the frame, so the later backtick restored into the
-script-level field. A marker after the substitution could then take the
+`IrGenError::InvalidCommand`; it is not approximated. Two shapes are rejected:
+an unquoted `)` that would close the `$()` region owning an open backtick, and
+a closing backtick seen while an inner `$()` frame is still open. Before this
+amendment the first shape popped the frame, so the later backtick restored into
+the script-level field. A marker after the substitution could then take the
 double-quoted path encoding while the shell read it unquoted, leaving a
 semicolon in a caller-supplied path executable.
 

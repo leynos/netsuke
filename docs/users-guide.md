@@ -2833,23 +2833,24 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   them unchanged. `{{ ins }}` and `{{ outs }}` are the only Netsuke markers for
   input and output paths. On POSIX and Bash routes, Netsuke encodes a marker
   for its unquoted, single-quoted, or double-quoted shell context, and rejects
-  one in a command substitution or backticks. A `$()` that would close the
-  region that opened an open backtick is rejected, as is a closing backtick
+  one in a command substitution or backticks. An unquoted `)` that would close
+  the region that opened an open backtick is rejected, as is a closing backtick
   seen while a `$()` opened inside it is still open; both fail with an
   invalid-command error, because the backtick's saved quote state must return
-  to the region that opened it. A `#` starts a comment only outside quotes, at
-  the beginning of input or after a space, tab, newline, or one of `;`, `&`,
-  `|`, `(`, `)`, `<`, and `>`. A `)` that closes `$(...)` or `$((...))` stays
-  part of the surrounding word, so `#` immediately after it does not start a
-  comment. A `)` that ends a `case` pattern is an operator, and the scanner
-  cannot distinguish it from one that closes a substitution, so a substitution
-  containing the `case` reserved word is rejected when a `)` is immediately
-  followed by `#`. That check matches the substitution's raw source text, so it
-  can also reject a substitution whose `case` appears only inside quotes or a
-  comment; that over-approximation keeps the check independent of a second
-  parse of the substitution. To clear a rejection, separate a real comment from
-  the closer with whitespace, or keep a literal `#` in a quoted region or
-  escape it as `\#`; the
+  to the region that opened it. A `)` quoted inside the backtick body stays
+  literal. A `#` starts a comment only outside quotes, at the beginning of
+  input or after a space, tab, newline, or one of `;`, `&`, `|`, `(`, `)`, `<`,
+  and `>`. A `)` that closes `$(...)` or `$((...))` stays part of the
+  surrounding word, so `#` immediately after it does not start a comment. A `)`
+  that ends a `case` pattern is an operator, and the scanner cannot distinguish
+  it from one that closes a substitution, so a substitution containing the
+  `case` reserved word is rejected when a `)` is immediately followed by `#`.
+  That check matches the substitution's raw source text, so it can also reject
+  a substitution whose `case` appears only inside quotes or a comment; that
+  over-approximation keeps the check independent of a second parse of the
+  substitution. To clear a rejection, separate a real comment from the closer
+  with whitespace, or keep a literal `#` in a quoted region or escape it as
+  `\#`; the
   [v0.1.0 migration guide](v0-1-0-migration-guide.md#separate-a-substitution-closer-and-a-following-)
   shows a form that preserves the emitted word and one that turns the text
   into a comment. A non-breaking space or another non-ASCII space before `#`
