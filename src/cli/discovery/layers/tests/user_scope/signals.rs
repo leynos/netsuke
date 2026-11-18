@@ -188,7 +188,7 @@ fn adopted_user_candidate_records_scope_without_a_path() -> Result<()> {
     ensure!(
         !events
             .iter()
-            .any(|event| event.contains("used the dependency scan")),
+            .any(|line| line.contains("used the dependency scan")),
         "an adopted user file must not also report the fallback: {events:?}"
     );
     EventAssertion::new(event, &home_config).ensure_bounded_path_fields()?;
@@ -233,7 +233,7 @@ fn fallback_to_the_dependency_scan_records_scope_without_a_path() -> Result<()> 
     ensure!(
         !events
             .iter()
-            .any(|event| event.contains("adopted a user candidate")),
+            .any(|line| line.contains("adopted a user candidate")),
         "a fallback must not also report an adopted user file: {events:?}"
     );
     Ok(())
