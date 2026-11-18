@@ -114,6 +114,12 @@ fn an_endless_iterable_of_small_members_is_stopped() -> Result<()> {
     Ok(())
 }
 
+/// Half of the ceiling, where two members plus a separating space cross it.
+///
+/// `LIMIT` is a power of two, so the shift is exact. It is written as a shift
+/// because the workspace lints deny integer division.
+const HALF_LIMIT: usize = LIMIT >> 1;
+
 /// A member length that mostly stays small but seeds the boundary.
 ///
 /// A fixed mebibyte ceiling is only exercised by large members, so the seeded
@@ -122,7 +128,7 @@ fn an_endless_iterable_of_small_members_is_stopped() -> Result<()> {
 fn budgeted_length() -> impl Strategy<Value = usize> {
     prop_oneof![
         8 => 0..24_usize,
-        2 => (LIMIT / 2 - 1)..=(LIMIT / 2 + 1),
+        2 => (HALF_LIMIT - 1)..=(HALF_LIMIT + 1),
         1 => Just(LIMIT),
         1 => Just(LIMIT + 1),
     ]
