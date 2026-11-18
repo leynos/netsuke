@@ -8,7 +8,7 @@
 
 use super::{Case, HomeArrangement};
 use crate::cli::DISCOVERY_TOTAL;
-use crate::cli::discovery::event_assertions::{EventAssertion, capture_events, find_event};
+use crate::cli::discovery::event_assertions::{EventAssertion, capture_events};
 use crate::cli::discovery::{DiscoveryOutcome, record_discovery_outcome};
 use crate::test_tracing_capture::with_test_subscriber;
 use anyhow::{Context, Result, ensure};
@@ -27,6 +27,12 @@ type Sample = (
     Option<metrics::SharedString>,
     DebugValue,
 );
+
+/// Event text marking a user-scope chain as the one discovery adopted.
+const ADOPTED_MESSAGE: &str = "adopted a user candidate";
+
+/// Event text marking discovery as having delegated to the dependency scan.
+const FALLBACK_MESSAGE: &str = "used the dependency scan";
 
 /// Record `outcome` under an isolated recorder, returning its samples and the
 /// bounded discovery-span fields.
@@ -152,6 +158,53 @@ fn dangling_user_candidate_records_a_bounded_error_signal() -> Result<()> {
     Ok(())
 }
 
+/// Discover and replay in separate captured phases.
+///
+/// One capture cannot distinguish replay from emission during discovery: a
+/// regression that logged where the decision is made would pass on the replay
+/// call alone. In production discovery runs before the composition boundary
+/// raises the filter, so an early event is dropped; requiring the discovery
+/// phase to carry no scope decision is what makes these tests sensitive to that
+/// contract. The replay phase is captured on its own so its events cannot be
+/// confused with anything discovery emitted.
+fn discover_without_scope_decision(
+    discover: impl FnOnce() -> DiscoveryOutcome,
+) -> Result<(DiscoveryOutcome, Vec<String>)> {
+    let (outcome, discovery_events) = capture_events(|| Ok::<_, anyhow::Error>(discover()))?;
+    for message in [ADOPTED_MESSAGE, FALLBACK_MESSAGE] {
+        ensure!(
+            !discovery_events.iter().any(|line| line.contains(message)),
+            "discovery emitted {message:?} before the tracing filter was raised, \
+             so a verbose run would drop it: {discovery_events:?}"
+        );
+    }
+    let ((), replay_events) = capture_events(|| {
+        outcome.emit_diagnostics();
+        Ok::<_, anyhow::Error>(())
+    })?;
+    Ok((outcome, replay_events))
+}
+
+/// Require the replay to carry `message` exactly once and return that event.
+///
+/// Counting rather than finding keeps a doubly emitted decision, or one emitted
+/// by two code paths, from satisfying a case that only needs it to appear.
+fn exactly_one_event<'a>(events: &'a [String], message: &str) -> Result<&'a String> {
+    let matches: Vec<&String> = events
+        .iter()
+        .filter(|line| line.contains(message))
+        .collect();
+    ensure!(
+        matches.len() == 1,
+        "the replay should emit {message:?} exactly once, got {}: {events:?}",
+        matches.len()
+    );
+    matches
+        .first()
+        .copied()
+        .context("a single match is present when the count is one")
+}
+
 /// Adopting a user candidate records the scope and skips the dependency scan.
 ///
 /// The event is what distinguishes "the user's file won" from "we fell back",
@@ -166,17 +219,14 @@ fn adopted_user_candidate_records_scope_without_a_path() -> Result<()> {
     let home_config = case.write_home_dotfile("jobs = 4\n")?;
     let environment = case.environment(HomeArrangement::EmptyXdgConfigHome);
 
-    let (outcome, events) = capture_events(|| {
-        let outcome = case.discover_outcome(&environment);
-        outcome.emit_diagnostics();
-        Ok::<_, anyhow::Error>(outcome)
-    })?;
+    let (outcome, events) =
+        discover_without_scope_decision(|| case.discover_outcome(&environment))?;
     ensure!(
         outcome.first_error().is_none(),
         "the user file should load without error"
     );
 
-    let event = find_event(&events, "adopted a user candidate")?;
+    let event = exactly_one_event(&events, ADOPTED_MESSAGE)?;
     ensure!(
         event.contains("scope=\"user\""),
         "adoption should name the user scope: {event}"
@@ -186,9 +236,7 @@ fn adopted_user_candidate_records_scope_without_a_path() -> Result<()> {
         "adoption should record that the dependency scan was skipped: {event}"
     );
     ensure!(
-        !events
-            .iter()
-            .any(|line| line.contains("used the dependency scan")),
+        !events.iter().any(|line| line.contains(FALLBACK_MESSAGE)),
         "an adopted user file must not also report the fallback: {events:?}"
     );
     EventAssertion::new(event, &home_config).ensure_bounded_path_fields()?;
@@ -207,17 +255,14 @@ fn fallback_to_the_dependency_scan_records_scope_without_a_path() -> Result<()> 
     let case = Case::new()?;
     let environment = case.environment(HomeArrangement::EmptyXdgConfigHome);
 
-    let (outcome, events) = capture_events(|| {
-        let outcome = case.discover_outcome(&environment);
-        outcome.emit_diagnostics();
-        Ok::<_, anyhow::Error>(outcome)
-    })?;
+    let (outcome, events) =
+        discover_without_scope_decision(|| case.discover_outcome(&environment))?;
     ensure!(
         outcome.first_error().is_none(),
         "the system file should load without error"
     );
 
-    let event = find_event(&events, "used the dependency scan")?;
+    let event = exactly_one_event(&events, FALLBACK_MESSAGE)?;
     ensure!(
         event.contains("scope=\"system_or_project\""),
         "fallback should name the scope it delegated to: {event}"
@@ -231,9 +276,7 @@ fn fallback_to_the_dependency_scan_records_scope_without_a_path() -> Result<()> 
         "the fallback event must not name a configuration path: {event}"
     );
     ensure!(
-        !events
-            .iter()
-            .any(|line| line.contains("adopted a user candidate")),
+        !events.iter().any(|line| line.contains(ADOPTED_MESSAGE)),
         "a fallback must not also report an adopted user file: {events:?}"
     );
     Ok(())
