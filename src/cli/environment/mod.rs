@@ -66,10 +66,8 @@ fn is_boolean_path(components: &[String]) -> bool {
 /// in a quoted configuration-file value are not.
 fn parse_value(components: &[String], value_text: &str) -> Value {
     if is_boolean_path(components) {
-        return match parse_environment_bool(value_text) {
-            Some(flag) => Value::from(flag),
-            None => Value::from(value_text.to_owned()),
-        };
+        return parse_environment_bool(value_text)
+            .map_or_else(|| Value::from(value_text.to_owned()), Value::from);
     }
     match value_text.parse::<Value>() {
         Ok(parsed) => parsed,

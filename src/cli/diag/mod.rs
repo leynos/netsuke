@@ -160,7 +160,7 @@ fn json_from_env(env: &impl EnvProvider) -> OrthoResult<Option<bool>> {
                 message: format!("{JSON_ENV_VAR} must be true, false, 1, or 0; got {raw:?}"),
             }))
         },
-        |value| Ok(Some(value)),
+        |flag| Ok(Some(flag)),
     )
 }
 

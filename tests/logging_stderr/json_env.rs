@@ -36,6 +36,10 @@ fn environment_json_one_selects_the_json_envelope(
 }
 
 /// `NETSUKE_JSON=0` keeps human-readable output.
+///
+/// Human-readable mode still reports stage progress on stderr, so only stdout
+/// distinguishes the two modes: human mode writes the DOT graph itself, while
+/// JSON mode writes one result document.
 #[rstest]
 fn environment_json_zero_keeps_human_readable_output(
     temp_with_minimal_manifest: Result<TempDir>,
@@ -50,10 +54,6 @@ fn environment_json_zero_keeps_human_readable_output(
     ensure!(
         output.status.success(),
         "NETSUKE_JSON=0 graph should succeed"
-    );
-    ensure!(
-        output.stderr.is_empty(),
-        "NETSUKE_JSON=0 should keep stderr empty on success"
     );
     let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
     ensure!(
