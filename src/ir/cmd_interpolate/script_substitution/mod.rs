@@ -29,7 +29,7 @@ pub(super) struct ScriptSubstitutionTraversal<'template, 'bindings> {
     /// Record the active ordinary POSIX shell quoting mode.
     quote_context: ShellQuoteContext,
     /// Restore the outer quoting mode after a backtick command substitution.
-    backtick_outer_context: Option<ShellQuoteContext>,
+    backtick_region: Option<BacktickRegion>,
     /// Track POSIX comments and heredocs whose text must remain lexically inert.
     posix_lexical: PosixLexicalState,
     /// Preserve a character escaped by a preceding backslash.
@@ -49,6 +49,22 @@ enum ShellQuoteContext {
     DoubleQuoted,
 }
 
+/// Record the shell region that opened a backtick command substitution.
+///
+/// A backtick saves the quote context of the region around it and restores that
+/// context when the closing backtick arrives. The saved context therefore
+/// belongs to the region at the recorded `$()` depth, not to the script-level
+/// field: restoring it at script level would leave a later marker outside the
+/// substitution using the quoting of the backtick body, which for an unquoted
+/// path can leave a command separator executable.
+#[derive(Clone, Copy)]
+struct BacktickRegion {
+    /// Quote context to restore when the closing backtick is reached.
+    outer_context: ShellQuoteContext,
+    /// `$()` frame depth at the opening backtick; zero means script level.
+    owner_depth: usize,
+}
+
 impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     /// Initialise a quote-aware traversal for one script template.
     pub(super) fn new(
@@ -62,7 +78,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             bindings,
             output: String::with_capacity(template.len()),
             quote_context: ShellQuoteContext::Unquoted,
-            backtick_outer_context: None,
+            backtick_region: None,
             posix_lexical: PosixLexicalState::new(),
             is_escaped: false,
             command_substitutions: Vec::new(),
@@ -163,7 +179,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch)? {
             return Ok(Some(next));
         }
-        if self.update_quote_context(ch) {
+        if self.update_quote_context(ch)? {
             self.output.push(ch);
             return Ok(Some(pos + 1));
         }
@@ -202,36 +218,62 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.
-    fn update_quote_context(&mut self, ch: char) -> bool {
-        if let Some(outer_context) = self.backtick_outer_context {
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a closing backtick is reached at a
+    /// different `$()` depth from the one that opened it. Its saved context then
+    /// has no owning region left to restore, and guessing one would describe the
+    /// script-level quotes from state that came from another region.
+    fn update_quote_context(&mut self, ch: char) -> Result<bool, IrGenError> {
+        if let Some(region) = self.backtick_region {
             if ch == '`' {
-                self.quote_context = outer_context;
-                self.backtick_outer_context = None;
-                return true;
+                self.close_backtick_region(region)?;
+                return Ok(true);
             }
-            return false;
+            return Ok(false);
         }
 
+        let owner_depth = self.command_substitutions.len();
         let quote_context = self.active_quote_context_mut();
         match (*quote_context, ch) {
             (ShellQuoteContext::Unquoted, '\'') => {
                 *quote_context = ShellQuoteContext::SingleQuoted;
-                true
+                Ok(true)
             }
             (ShellQuoteContext::Unquoted, '"') => {
                 *quote_context = ShellQuoteContext::DoubleQuoted;
-                true
+                Ok(true)
             }
             (ShellQuoteContext::SingleQuoted, '\'') | (ShellQuoteContext::DoubleQuoted, '"') => {
                 *quote_context = ShellQuoteContext::Unquoted;
-                true
+                Ok(true)
             }
             (ShellQuoteContext::Unquoted | ShellQuoteContext::DoubleQuoted, '`') => {
-                self.backtick_outer_context = Some(*quote_context);
-                true
+                self.backtick_region = Some(BacktickRegion {
+                    outer_context: *quote_context,
+                    owner_depth,
+                });
+                Ok(true)
             }
-            _ => false,
+            _ => Ok(false),
         }
+    }
+
+    /// Restore a closing backtick's saved quote context into its owning region.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when the active `$()` depth no longer
+    /// matches the depth recorded at the opening backtick, which means a frame
+    /// opened or closed on the wrong side of the backtick.
+    fn close_backtick_region(&mut self, region: BacktickRegion) -> Result<(), IrGenError> {
+        if self.command_substitutions.len() == region.owner_depth {
+            *self.active_quote_context_mut() = region.outer_context;
+            self.backtick_region = None;
+            return Ok(());
+        }
+        Err(invalid_command_error(self.template.to_owned()))
     }
 
     /// Append a safe replacement or reject a placeholder in a protected region.
@@ -245,7 +287,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.output.push(ch);
             return Ok(pos + 1);
         };
-        if self.backtick_outer_context.is_some() || self.is_in_command_substitution() {
+        if self.backtick_region.is_some() || self.is_in_command_substitution() {
             return Err(invalid_command_error(self.template.to_owned()));
         }
         let context = match self.active_quote_context() {
