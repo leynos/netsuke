@@ -64,6 +64,49 @@ fn user_file_that_is_the_project_file_is_untrusted() -> Result<()> {
     Ok(())
 }
 
+/// A user candidate that resolves to the project file is untrusted.
+///
+/// Candidate paths keep the spelling their scope produced while the project key
+/// holds a resolved path, so a home directory reached through a link describes
+/// the same file as the project configuration without comparing equal as text.
+/// The identity test must resolve the candidate before comparing, or adopting
+/// the linked candidate would grant operator authority to project content.
+#[cfg(unix)]
+#[rstest]
+fn user_file_linked_to_the_project_file_is_untrusted() -> Result<()> {
+    let case = Case::new()?;
+    // The target is relative so the link stays inside `$HOME`: the loader reads
+    // a candidate through a capability on its parent directory and rejects an
+    // absolute link escaping it outright.
+    let project_dir = case.home().join("linked-project");
+    test_support::fs::create_dir(&project_dir).context("create the project directory")?;
+    let project_file = write_config(&project_dir.join(".netsuke.toml"), "jobs = 9\n")?;
+    let user_link = case.home().join(".netsuke.toml");
+    test_support::fs::symlink(Path::new("linked-project/.netsuke.toml"), &user_link)
+        .context("link the user candidate at the project file")?;
+
+    let found = layers_with_project_key(
+        &case.environment(HomeArrangement::EmptyXdgConfigHome),
+        &project_file,
+    )
+    .context("the linked user candidate should still be adopted")?;
+
+    ensure!(
+        !found.layers.is_empty(),
+        "the adopted chain should still supply its layers"
+    );
+    ensure!(
+        matches!(found.user_scope, UserScopeTrace::Adopted { .. }),
+        "the linked candidate should still be reported as adopted, got {:?}",
+        found.user_scope
+    );
+    ensure!(
+        !found.is_trusted_root,
+        "a user candidate that resolves to the project file must not donate operator authority"
+    );
+    Ok(())
+}
+
 /// A user file distinct from the project file keeps operator authority.
 ///
 /// Without this case, an implementation that withheld trust from every user

@@ -316,9 +316,13 @@ impl UnloadableCandidate {
 
 impl fmt::Display for UnloadableCandidate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let description = self.reason.description();
         match &self.detail {
-            Some(detail) => write!(f, "{detail}"),
-            None => write!(f, "{}", self.reason.description()),
+            // Printing the detail alone would replace the localised reason
+            // rather than add to it, leaving the probe branch as the one
+            // rejection an operator sees without a catalogued explanation.
+            Some(detail) => write!(f, "{description}: {detail}"),
+            None => write!(f, "{description}"),
         }
     }
 }

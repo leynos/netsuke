@@ -14,6 +14,7 @@ use crate::cli::discovery::layers::user_candidate::{
     UserScopeTrace, automatic_base_layers_with_probe,
 };
 use crate::cli::test_support::TestEnv;
+use crate::localization::{LocalizedMessage, keys};
 use anyhow::{Context, Result, ensure};
 use ortho_config::{OrthoError, OrthoResult};
 use rstest::rstest;
@@ -71,16 +72,18 @@ fn layers_with_probe(probe: &dyn CandidateProbe, env: &TestEnv) -> OrthoResult<A
     automatic_base_layers_with_probe(probe, None, discovery_env_source(env), None)
 }
 
-/// Return the closed candidate-failure reason carried by a rejection.
-fn reason_of(error: &OrthoError) -> Option<CandidateFailure> {
+/// Return the closed failure payload carried by a rejection.
+fn payload_of(error: &OrthoError) -> Option<&UnloadableCandidate> {
     let OrthoError::File { source, .. } = error else {
         return None;
     };
     let io_error = source.downcast_ref::<io::Error>()?;
-    io_error
-        .get_ref()?
-        .downcast_ref::<UnloadableCandidate>()
-        .map(UnloadableCandidate::reason)
+    io_error.get_ref()?.downcast_ref::<UnloadableCandidate>()
+}
+
+/// Return the closed candidate-failure reason carried by a rejection.
+fn reason_of(error: &OrthoError) -> Option<CandidateFailure> {
+    payload_of(error).map(UnloadableCandidate::reason)
 }
 
 /// An entry the loader produced no layer for stops discovery.
@@ -141,6 +144,22 @@ fn failed_probe_stops_discovery_and_keeps_its_detail() -> Result<()> {
         io_error.kind() == io::ErrorKind::NotADirectory,
         "the probe's error kind must survive the rejection, got {:?}",
         io_error.kind()
+    );
+
+    // The detail is the source, so it is only shown if the message renders it.
+    // Requiring both halves keeps a future change from dropping either the
+    // catalogued reason or the operator's diagnostic detail.
+    let rendered = payload_of(&error)
+        .context("the rejection should carry its candidate-failure payload")?
+        .to_string();
+    let description = LocalizedMessage::new(keys::CONFIG_DISCOVERY_INSPECTION_FAILED).to_string();
+    ensure!(
+        rendered.contains(&description),
+        "the probe failure should be explained by the catalogued reason, got {rendered:?}"
+    );
+    ensure!(
+        rendered.contains("scripted probe failure"),
+        "the probe failure should keep the I/O detail alongside the reason, got {rendered:?}"
     );
     Ok(())
 }
