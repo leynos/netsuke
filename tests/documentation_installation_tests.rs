@@ -309,21 +309,38 @@ fn assert_every_document_names_the_windows_install_locations() -> Result<()> {
 fn paragraph_naming(document: &str, needle: &str) -> Option<String> {
     let lines: Vec<&str> = document.lines().collect();
     let index = lines.iter().position(|line| line.contains(needle))?;
-    let start = lines[..index]
+    let start = lines
+        .get(..index)?
         .iter()
         .rposition(|line| line.trim().is_empty())
         .map_or(0, |blank| blank + 1);
-    let end = lines[index..]
+    let end = lines
+        .get(index..)?
         .iter()
         .position(|line| line.trim().is_empty())
         .map_or(lines.len(), |offset| index + offset);
-    Some(lines[start..end].join("\n"))
+    lines.get(start..end).map(|paragraph| paragraph.join("\n"))
 }
 
 /// Check the documented Windows help, PATH, and staging contracts.
 fn assert_windows_setup_examples() -> Result<()> {
-    let windows = documented_example("guide-windows-help")?;
-    ensure!(windows.body == "Get-Help Netsuke -Full\n", "help drifted");
+    assert_native_windows_path_example()?;
+    assert_legacy_windows_path_example()?;
+    assert_windows_help_examples()
+}
+
+/// Assert that `body` contains every fragment in `fragments`, naming `expectation`
+/// when one is missing.
+fn ensure_contains_all(body: &str, fragments: &[&str], expectation: &str) -> Result<()> {
+    ensure!(
+        fragments.iter().all(|fragment| body.contains(fragment)),
+        "{expectation}"
+    );
+    Ok(())
+}
+
+/// Assert the documented PATH setup for an MSI that uses the native directory.
+fn assert_native_windows_path_example() -> Result<()> {
     let windows_path = documented_example("guide-windows-path")?;
     let windows_path_fragments = [
         "$programFiles = if ($env:ProgramW6432) { $env:ProgramW6432 } else { $env:ProgramFiles }",
@@ -333,12 +350,11 @@ fn assert_windows_setup_examples() -> Result<()> {
         "$netsukeDirectory",
         "SetEnvironmentVariable('Path', $newUserPath, 'User')",
     ];
-    ensure!(
-        windows_path_fragments
-            .into_iter()
-            .all(|fragment| windows_path.body.contains(fragment)),
-        "Windows PATH setup should resolve the native MSI directory and persist it"
-    );
+    ensure_contains_all(
+        &windows_path.body,
+        &windows_path_fragments,
+        "Windows PATH setup should resolve the native MSI directory and persist it",
+    )?;
     // The x64 and Arm64 packages install into the native directory. A script
     // that read the 32-bit directory would add a path the MSI never populates,
     // and `netsuke --version` would then fail for a correctly installed user.
@@ -349,20 +365,11 @@ fn assert_windows_setup_examples() -> Result<()> {
             .any(|fragment| windows_path.body.contains(fragment)),
         "Windows PATH setup must not resolve the 32-bit program files directory"
     );
-    // Checking for the executable before changing PATH keeps a missing MSI an
-    // immediate, legible failure rather than a stale entry discovered later.
-    let existence_check = windows_path
-        .body
-        .find("Test-Path -LiteralPath $netsukeExecutable")
-        .context("the Windows PATH setup must test for netsuke.exe")?;
-    let path_persistence = windows_path
-        .body
-        .find("SetEnvironmentVariable('Path'")
-        .context("the Windows PATH setup must persist the directory")?;
-    ensure!(
-        existence_check < path_persistence,
-        "Windows PATH setup must verify netsuke.exe before changing PATH"
-    );
+    assert_path_setup_checks_before_persisting(&windows_path.body, "the Windows PATH setup")
+}
+
+/// Assert the beta4 PATH setup that resolves the 32-bit program files directory.
+fn assert_legacy_windows_path_example() -> Result<()> {
     // The linked beta4 MSI installs to the 32-bit directory, so the guide needs
     // a second example: the native script would refuse a correct beta4 install.
     let beta4_path = documented_example("guide-windows-path-beta4")?;
@@ -374,28 +381,16 @@ fn assert_windows_setup_examples() -> Result<()> {
         "Test-Path -LiteralPath $netsukeExecutable -PathType Leaf",
         "SetEnvironmentVariable('Path', $newUserPath, 'User')",
     ];
-    ensure!(
-        beta4_path_fragments
-            .into_iter()
-            .all(|fragment| beta4_path.body.contains(fragment)),
-        "the beta4 PATH setup should resolve the 32-bit MSI directory and persist it"
-    );
+    ensure_contains_all(
+        &beta4_path.body,
+        &beta4_path_fragments,
+        "the beta4 PATH setup should resolve the 32-bit MSI directory and persist it",
+    )?;
     ensure!(
         !beta4_path.body.contains("ProgramW6432"),
         "the beta4 PATH setup must not resolve the native directory"
     );
-    let beta4_existence_check = beta4_path
-        .body
-        .find("Test-Path -LiteralPath $netsukeExecutable")
-        .context("the beta4 PATH setup must test for netsuke.exe")?;
-    let beta4_path_persistence = beta4_path
-        .body
-        .find("SetEnvironmentVariable('Path'")
-        .context("the beta4 PATH setup must persist the directory")?;
-    ensure!(
-        beta4_existence_check < beta4_path_persistence,
-        "the beta4 PATH setup must verify netsuke.exe before changing PATH"
-    );
+    assert_path_setup_checks_before_persisting(&beta4_path.body, "the beta4 PATH setup")?;
     let users_guide =
         test_fs::read_to_string("docs/users-guide.md").context("read docs/users-guide.md")?;
     let setup_prose_fragments = [
@@ -403,12 +398,35 @@ fn assert_windows_setup_examples() -> Result<()> {
         "The beta5 and later MSIs place the payload in the native",
         "remove it by hand",
     ];
+    ensure_contains_all(
+        &users_guide,
+        &setup_prose_fragments,
+        "the users' guide should distinguish beta4 PATH setup from beta5 and later",
+    )
+}
+
+/// Assert that a PATH setup fence tests for the executable before changing PATH.
+///
+/// Checking first keeps a missing MSI an immediate, legible failure rather than
+/// a stale entry discovered later.
+fn assert_path_setup_checks_before_persisting(body: &str, example: &str) -> Result<()> {
+    let existence_check = body
+        .find("Test-Path -LiteralPath $netsukeExecutable")
+        .with_context(|| format!("{example} must test for netsuke.exe"))?;
+    let path_persistence = body
+        .find("SetEnvironmentVariable('Path'")
+        .with_context(|| format!("{example} must persist the directory"))?;
     ensure!(
-        setup_prose_fragments
-            .into_iter()
-            .all(|fragment| users_guide.contains(fragment)),
-        "the users' guide should distinguish beta4 PATH setup from beta5 and later"
+        existence_check < path_persistence,
+        "{example} must verify netsuke.exe before changing PATH"
     );
+    Ok(())
+}
+
+/// Assert the documented Windows help setup and release staging contracts.
+fn assert_windows_help_examples() -> Result<()> {
+    let windows = documented_example("guide-windows-help")?;
+    ensure!(windows.body == "Get-Help Netsuke -Full\n", "help drifted");
     let windows_help_install = documented_example("guide-windows-help-install")?;
     let windows_help_fragments = [
         "Import-Module",
@@ -420,12 +438,11 @@ fn assert_windows_setup_examples() -> Result<()> {
         "Import-Module (Join-Path $moduleDirectory 'Netsuke.psd1')",
         "*windows-$architecture*",
     ];
-    ensure!(
-        windows_help_fragments
-            .into_iter()
-            .all(|fragment| windows_help_install.body.contains(fragment)),
-        "Windows help setup should import the downloaded sidecars"
-    );
+    ensure_contains_all(
+        &windows_help_install.body,
+        &windows_help_fragments,
+        "Windows help setup should import the downloaded sidecars",
+    )?;
     let staging = test_fs::read_to_string(".github/release-staging.toml")
         .context("read release staging configuration")?;
     ensure!(
