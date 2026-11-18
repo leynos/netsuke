@@ -3,13 +3,39 @@
 //! The unit and merge tests prove each pass reads `1` and `0` as Booleans. These
 //! tests prove the two passes agree in the real executable: `1` selects the JSON
 //! envelope, and `0` keeps human-readable output.
+//!
+//! Both runs use [`run_netsuke_in_with_env`], which clears the inherited
+//! environment and supplies only an isolated `PATH`, `HOME`, and
+//! `XDG_CONFIG_HOME`. A developer's exported `NETSUKE_*` values or user
+//! configuration therefore cannot change which spelling is being tested.
 
-use super::json::parse_success_result;
 use super::support::temp_with_minimal_manifest;
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use serde_json::Value;
 use tempfile::TempDir;
+use test_support::netsuke::{NetsukeRun, run_netsuke_in_with_env};
+
+/// Assert the run succeeded and returned exactly one `command` result envelope.
+fn parse_success_envelope(run: &NetsukeRun, command: &str) -> Result<Value> {
+    ensure!(run.success, "expected {command} command success");
+    ensure!(
+        run.stderr.is_empty(),
+        "stderr should stay empty for successful {command} JSON output: {}",
+        run.stderr
+    );
+    let document: Value =
+        serde_json::from_str(&run.stdout).context("stdout should hold one JSON document")?;
+    ensure!(
+        document.get("schema_version").and_then(Value::as_u64) == Some(1),
+        "JSON result should use schema version 1: {document}"
+    );
+    ensure!(
+        document.pointer("/result/command").and_then(Value::as_str) == Some(command),
+        "JSON result should identify the {command} command: {document}"
+    );
+    Ok(document)
+}
 
 /// `NETSUKE_JSON=1` selects the same JSON envelope as `--json`.
 #[rstest]
@@ -17,13 +43,9 @@ fn environment_json_one_selects_the_json_envelope(
     temp_with_minimal_manifest: Result<TempDir>,
 ) -> Result<()> {
     let temp = temp_with_minimal_manifest?;
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp.path())
-        .env("NETSUKE_JSON", "1")
-        .arg("graph")
-        .output()
+    let run = run_netsuke_in_with_env(temp.path(), &["graph"], &[("NETSUKE_JSON", "1")])
         .context("run netsuke graph with NETSUKE_JSON=1")?;
-    let document = parse_success_result(output, "graph")?;
+    let document = parse_success_envelope(&run, "graph")?;
     ensure!(
         document
             .pointer("/result/content")
@@ -45,24 +67,18 @@ fn environment_json_zero_keeps_human_readable_output(
     temp_with_minimal_manifest: Result<TempDir>,
 ) -> Result<()> {
     let temp = temp_with_minimal_manifest?;
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp.path())
-        .env("NETSUKE_JSON", "0")
-        .arg("graph")
-        .output()
+    let run = run_netsuke_in_with_env(temp.path(), &["graph"], &[("NETSUKE_JSON", "0")])
         .context("run netsuke graph with NETSUKE_JSON=0")?;
+    ensure!(run.success, "NETSUKE_JSON=0 graph should succeed");
     ensure!(
-        output.status.success(),
-        "NETSUKE_JSON=0 graph should succeed"
-    );
-    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
-    ensure!(
-        serde_json::from_str::<Value>(&stdout).is_err(),
-        "NETSUKE_JSON=0 should not emit a JSON envelope: {stdout}"
+        serde_json::from_str::<Value>(&run.stdout).is_err(),
+        "NETSUKE_JSON=0 should not emit a JSON envelope: {}",
+        run.stdout
     );
     ensure!(
-        stdout.contains("rankdir=\"LR\"") && stdout.contains("\"hello\""),
-        "NETSUKE_JSON=0 should emit the human-readable DOT graph: {stdout}"
+        run.stdout.contains("rankdir=\"LR\"") && run.stdout.contains("\"hello\""),
+        "NETSUKE_JSON=0 should emit the human-readable DOT graph: {}",
+        run.stdout
     );
     Ok(())
 }
