@@ -277,16 +277,20 @@ const EARLY_CLOSE_BYTES: u64 = 64;
 /// Guard the closed-pipe path end to end: a reader that stops early must not
 /// turn the run into an error.
 ///
-/// The long-name fixture's catalogue is far larger than a pipe buffer, so the
-/// child is still writing when the reader is dropped. The resulting broken
-/// pipe must count as a completed write, and the process must still exit
-/// successfully, which is what keeps `netsuke help targets | head` clean.
+/// The catalogue must exceed a pipe buffer, or the child could finish writing
+/// before the reader closes and the broken-pipe path would never run. The
+/// long-name fixture renders only about 40 kB, inside Linux's 64 KiB pipe
+/// capacity, so this uses the shared-description fixture, whose catalogue of
+/// roughly 4 MB cannot fit in the pipe. The child is therefore still writing
+/// when the reader is dropped, and the resulting broken pipe must count as a
+/// completed write with a successful exit status, which is what keeps
+/// `netsuke help targets | head` clean.
 #[rstest]
 fn help_targets_survives_an_early_closing_reader() -> Result<()> {
     let temp = tempfile::tempdir().context("create early-close workspace")?;
     let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
-    let fixture = write_long_name_manifest(temp_path)?;
-    let mut command = help_targets_command(temp_path, &fixture.manifest_path);
+    let (manifest_path, _description) = write_shared_description_manifest(temp_path)?;
+    let mut command = help_targets_command(temp_path, &manifest_path);
     let mut child = command
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())

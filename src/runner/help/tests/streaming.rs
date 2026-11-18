@@ -126,6 +126,13 @@ fn text_catalogue_propagates_write_failures() {
     let mut sink = FailingWriter {
         kind: std::io::ErrorKind::StorageFull,
     };
+    // The renderer attaches a deferred localized message, so the context
+    // resolves the active locale when it is formatted rather than when it is
+    // created. Pinning the locale and holding the lock across both conversions
+    // keeps the expectation and the rendered error in one language even when
+    // another test switches the localizer between them.
+    let _lock = localizer_lock();
+    let _localizer = set_localizer_for_tests(Arc::from(build_localizer(Some("en-US"))));
 
     let error = render_text(&mut sink, &entries, theme_prefs(ThemePreference::Unicode))
         .expect_err("a failing stdout must surface as an error");
