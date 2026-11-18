@@ -86,13 +86,28 @@ impl NinjaExitError {
     /// [`RunnerError::NinjaFailed`](crate::runner::RunnerError::NinjaFailed)
     /// without running a process, which is what a caller reporting a recorded
     /// failure or a test fixture needs.
-    #[must_use]
-    pub fn new(status: ExitStatus, operation: &str, attribution: Option<String>) -> Self {
-        Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`io::ErrorKind::InvalidInput`] when `status` reports success: a
+    /// successful exit is not a failure, and accepting one would let the
+    /// diagnostic claim Ninja failed when it did not.
+    pub fn new(
+        status: ExitStatus,
+        operation: &str,
+        attribution: Option<String>,
+    ) -> io::Result<Self> {
+        if status.success() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "a successful Ninja exit status cannot be reported as a failure",
+            ));
+        }
+        Ok(Self {
             status,
             operation: operation.to_owned(),
             attribution: render_attribution(attribution),
-        }
+        })
     }
 
     /// Return the exit status Ninja reported.
@@ -126,6 +141,19 @@ mod tests {
     /// Build one unsuccessful exit with the supplied attribution.
     fn exit_error(attribution: Option<&str>) -> NinjaExitError {
         NinjaExitError::new(exit_status(7), "build", attribution.map(str::to_owned))
+            .expect("an unsuccessful status should construct a failure")
+    }
+
+    #[test]
+    fn successful_status_is_rejected_as_a_failure() {
+        let error = NinjaExitError::new(exit_status(0), "build", None)
+            .expect_err("a successful status must not construct a failure");
+
+        assert_eq!(
+            error.kind(),
+            io::ErrorKind::InvalidInput,
+            "the rejection should be reported as invalid input"
+        );
     }
 
     #[test]

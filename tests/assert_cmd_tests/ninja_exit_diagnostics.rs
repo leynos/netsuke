@@ -5,9 +5,10 @@
 //! blame the temporary build file. The launch diagnostic lives beside this
 //! module in `runner_diagnostics`, which owns the shared process helpers.
 
+use super::generated_build_file::names_generated_build_file;
 use super::runner_diagnostics::{
-    first_json_diagnostic, flatten_localized_text, names_generated_build_file, run_netsuke,
-    string_field, workspace_with_minimal_manifest,
+    first_json_diagnostic, flatten_localized_text, run_netsuke, string_field,
+    workspace_with_minimal_manifest,
 };
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;

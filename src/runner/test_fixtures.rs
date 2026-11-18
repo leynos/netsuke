@@ -42,7 +42,7 @@ pub(crate) fn ninja_spawn_failure() -> Result<RunnerError> {
 /// Returns an error if the mapper produces an unclassified failure rather than
 /// the runner diagnostic the fixture asserts on.
 pub(crate) fn ninja_exit_failure(status: ExitStatus) -> Result<RunnerError> {
-    let exit = NinjaExitError::new(status, "build", Some(String::from("action 0123, entry 2")));
+    let exit = NinjaExitError::new(status, "build", Some(String::from("action 0123, entry 2")))?;
     mapped(NinjaInvocationError::exit(exit))
 }
 

@@ -245,13 +245,20 @@ fn large_stdout_cannot_supply_command_list_attribution() -> anyhow::Result<()> {
         anyhow::bail!("a failing command should return an error");
     };
 
-    let converted = error.into_io_error();
-    if converted
-        .to_string()
-        .contains("netsuke command-list failure: action ")
-    {
-        anyhow::bail!("stdout must not supply command-list attribution: {converted}");
-    }
+    // A launch failure would also carry no attribution text, so the exit
+    // variant must be established before the attribution check means anything.
+    let NinjaInvocationError::Exit(exit) = &error else {
+        anyhow::bail!("a shell that ran and exited must be an exit failure, got {error:?}");
+    };
+    anyhow::ensure!(
+        exit.status().code() == Some(1),
+        "the fixture exits with status 1, got {:?}",
+        exit.status()
+    );
+    anyhow::ensure!(
+        exit.to_string() == format!("ninja exited with {}", exit.status()),
+        "stdout must not supply command-list attribution: {exit}"
+    );
     Ok(())
 }
 

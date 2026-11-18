@@ -112,7 +112,8 @@ fn ninja_exit_failure_error() -> anyhow::Error {
         operation: String::from("build"),
         message: localization::message(keys::RUNNER_NINJA_BUILD_FAILED)
             .with_arg("status", status.to_string()),
-        source: crate::runner::NinjaExitError::new(status, "build", None),
+        source: crate::runner::NinjaExitError::new(status, "build", None)
+            .expect("an unsuccessful status should construct a failure"),
     })
 }
 

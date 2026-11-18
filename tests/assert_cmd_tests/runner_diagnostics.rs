@@ -6,6 +6,7 @@
 //! promise and reuses the process helpers defined here.
 
 use super::create_netsuke_command;
+use super::generated_build_file::names_generated_build_file;
 use anyhow::{Context, Result, ensure};
 use netsuke::runner::NINJA_ENV;
 use rstest::rstest;
@@ -46,7 +47,9 @@ fn absent_program_cause() -> &'static str {
     if cfg!(windows) {
         "program not found"
     } else {
-        "os error 2"
+        // The parentheses keep the assertion from accepting a different
+        // numbered OS error that merely contains `os error 2`.
+        "(os error 2)"
     }
 }
 
@@ -60,30 +63,6 @@ pub(super) fn flatten_localized_text(rendered: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-/// Whether text names the generated `netsuke.<random>.ninja` build file.
-///
-/// The `netsuke.` prefix alone is not enough: a temporary directory may
-/// legitimately be called `netsuke.review`, and the diagnostic has to name
-/// that path. The generated file is a path whose final component starts with
-/// `netsuke.` and ends with `.ninja`.
-pub(super) fn names_generated_build_file(text: &str) -> bool {
-    text.split(|character: char| character.is_whitespace() || character == '`')
-        .map(|token| {
-            token.trim_matches(|character: char| {
-                matches!(
-                    character,
-                    '\'' | '"' | ',' | ';' | ':' | '(' | ')' | '[' | ']'
-                )
-            })
-        })
-        .any(|token| {
-            token.contains("netsuke.")
-                && Path::new(token)
-                    .extension()
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case("ninja"))
-        })
 }
 
 /// Render the localized missing-manifest diagnostic, code, and help on stderr.

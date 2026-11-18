@@ -108,7 +108,7 @@ runner.context.render_graph = Graafituotosta ei voitu hahmontaa.
 runner.help.targets_edges_require_json = --edges-valinta edellyttää ylimmän tason --json-valintaa.
 runner.ninja.spawn_failed = Ninja-ohjelmaa `{ $program }` ei voitu käynnistää.
 runner.ninja.spawn_failed.help = Asenna Ninja ja varmista, että `{ $program }` on suoritettavissa, tai aseta NETSUKE_NINJA suoritettavan Ninjan poluksi.
-runner.ninja.build_failed = Ninja ilmoitti käännösvirheestä { $status }.
+runner.ninja.build_failed = Ninja ilmoitti koonnin epäonnistumisesta { $status }.
 runner.ninja.tool_failed = Ninja-työkalu `{ $tool }` ilmoitti virheestä { $status }.
 
 runner.io.create_temp_file = Väliaikaista Ninja-tiedostoa ei voitu luoda.

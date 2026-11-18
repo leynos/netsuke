@@ -102,11 +102,9 @@ pub(super) fn ninja_exit_error(
             |clause| format!("{failure} ({clause})"),
         )
     });
-    Err(NinjaInvocationError::exit(NinjaExitError::new(
-        status,
-        operation,
-        attribution,
-    )))
+    let error =
+        NinjaExitError::new(status, operation, attribution).map_err(NinjaInvocationError::Io)?;
+    Err(NinjaInvocationError::exit(error))
 }
 
 /// Join stderr forwarding and surface the child's wait result.

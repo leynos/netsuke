@@ -156,6 +156,10 @@ mod runner_diagnostics;
 #[path = "assert_cmd_tests/ninja_exit_diagnostics.rs"]
 mod ninja_exit_diagnostics;
 
+/// Detect the temporary build file the diagnostics must not name.
+#[path = "assert_cmd_tests/generated_build_file.rs"]
+mod generated_build_file;
+
 #[rstest]
 fn generate_streams_to_stdout_by_default() -> Result<()> {
     let temp = setup_simple_workspace("generate stdout test")?;

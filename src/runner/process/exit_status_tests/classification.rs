@@ -18,12 +18,6 @@ fn fake_ninja_script(script: &str) -> anyhow::Result<(tempfile::TempDir, camino:
     Ok((temp_dir, utf8_program))
 }
 
-#[cfg(unix)]
-fn fake_ninja_program() -> anyhow::Result<(tempfile::TempDir, std::path::PathBuf)> {
-    let (temp_dir, program) = fake_ninja_script("#!/bin/sh\nexit 0\n")?;
-    Ok((temp_dir, program.into_std_path_buf()))
-}
-
 /// Run one build with the supplied process settings and return its failure.
 ///
 /// The build file must exist because command configuration canonicalises it; a
@@ -216,10 +210,8 @@ fn configuration_failure_is_classified_as_io(
 fn build_and_tool_execution_preserve_operation_labels(
     temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,
 ) -> anyhow::Result<()> {
-    let (_program_dir, program) = fake_ninja_program()?;
+    let (_program_dir, program) = fake_ninja_script("#!/bin/sh\nexit 0\n")?;
     let (_build_lease, utf8_build_file) = temporary_build_file?;
-    let utf8_program = camino::Utf8PathBuf::from_path_buf(program)
-        .map_err(|path| anyhow::anyhow!("fake Ninja path is not UTF-8: {}", path.display()))?;
     let options = NinjaProcessOptions::default();
     let env = CommandEnv::inherit();
     let target_names = vec![String::from("default")];
@@ -228,7 +220,7 @@ fn build_and_tool_execution_preserve_operation_labels(
     let (build_result, build_events) = with_test_subscriber(LevelFilter::INFO, |captured| {
         let result = run_ninja_build_internal(
             NinjaBuildRequest {
-                program: &utf8_program,
+                program: &program,
                 options: &options,
                 build_file: &utf8_build_file,
                 targets: &targets,
@@ -251,7 +243,7 @@ fn build_and_tool_execution_preserve_operation_labels(
     let (tool_result, tool_events) = with_test_subscriber(LevelFilter::INFO, |captured| {
         let result = run_ninja_tool_internal(
             NinjaToolRequest {
-                program: &utf8_program,
+                program: &program,
                 options: &options,
                 build_file: &utf8_build_file,
                 tool: "clean",

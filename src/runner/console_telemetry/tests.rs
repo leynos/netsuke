@@ -1,6 +1,7 @@
 //! Verify bounded console-scheduling metrics for actual Ninja invocations.
 
 use super::*;
+use crate::runner::NinjaExitError;
 use crate::test_tracing_capture::with_test_subscriber;
 use metrics_util::{
     CompositeKey, MetricKind,
@@ -9,6 +10,7 @@ use metrics_util::{
 use monotony::test_util::FixedMonotonicClock;
 use rstest::rstest;
 use std::io;
+use test_support::exit_status;
 use tracing_subscriber::filter::LevelFilter;
 
 /// Duration reported by the injected clock for each test invocation.
@@ -90,7 +92,9 @@ fn invocation_records_bounded_scheduling_outcome_and_duration(
         with_test_subscriber(LevelFilter::INFO, |captured| {
             let result = instrument_ninja_build(&clock, console_edges, || {
                 if fail {
-                    Err(io::Error::other("private process detail"))
+                    Err(NinjaInvocationError::io(io::Error::other(
+                        "private process detail",
+                    )))
                 } else {
                     Ok(())
                 }
@@ -119,5 +123,47 @@ fn invocation_records_bounded_scheduling_outcome_and_duration(
         events
             .iter()
             .all(|event| !event.contains("private process detail"))
+    );
+}
+
+/// A recipe Ninja ran and that failed is not recorded as an I/O failure.
+///
+/// Both variants surface through the same `io::Error` shape, so only the typed
+/// failure can tell a metric consumer which one happened.
+#[rstest]
+fn unsuccessful_exit_records_a_non_io_error_category() {
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let clock = FixedMonotonicClock::with_elapsed(BUILD_ELAPSED);
+    let (result, events) = metrics::with_local_recorder(&recorder, || {
+        with_test_subscriber(LevelFilter::INFO, |captured| {
+            let result = instrument_ninja_build(&clock, 0, || {
+                Err::<(), _>(NinjaInvocationError::exit(
+                    NinjaExitError::new(exit_status(7), "build", None)
+                        .expect("an unsuccessful status should construct a failure"),
+                ))
+            });
+            (result, captured.snapshot())
+        })
+    });
+    assert!(
+        matches!(result, Err(NinjaInvocationError::Exit(_))),
+        "the typed exit failure should be returned unchanged"
+    );
+    let snapshot = snapshotter.snapshot().into_vec();
+    assert_metrics(
+        &snapshot,
+        0,
+        [
+            ("console_scheduling", "disabled"),
+            ("outcome", "error"),
+            ("error_category", "exit_status"),
+        ],
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.contains("error_category=\"exit_status\"")),
+        "the build event should name the exit-status category: {events:?}"
     );
 }

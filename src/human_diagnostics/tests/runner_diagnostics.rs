@@ -205,7 +205,8 @@ fn ninja_exit_failure() -> anyhow::Error {
             status,
             "build",
             Some(String::from("action 0123, entry 2")),
-        ),
+        )
+        .expect("an unsuccessful status should construct a failure"),
     })
 }
 
