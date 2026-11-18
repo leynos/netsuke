@@ -5079,6 +5079,48 @@ and pass, on the final wording.
   state what the pin means for a caller. The ADR gains a 2026-11-17 addendum
   rather than editing the accepted 2026-11-15 text.
 
+- Observation: **the sixth assessment showed that the pinned checkout alone
+  breaks cross-repository callers, so admission now checks out the candidate
+  and the verifier separately, and the distinction is demonstrated by
+  execution.** The reply to `NETSUKE-1141-R6-20261117` confirmed the
+  producer-trust refusal and the derived scenario table, then named one
+  blocking finding.
+
+  *The finding.* `commands.git_fetch_revision` runs
+  `git fetch --depth 1 --no-tags origin -- <revision>` from the process working
+  directory. With the verifier as the job's only checkout, `origin` named
+  `leynos/netsuke`, so a candidate that lives in the caller's repository was
+  unreachable and admission failed with `fetch_error` before it read a
+  manifest: the pin closed the bypass by breaking every cross-repository call.
+  The job now checks out two commits. The candidate checkout sits at the
+  workspace root, keeps the default credential persistence so the fetch can
+  read a private caller's repository, and is never executed. The verifier
+  checkout is `leynos/netsuke` at `${{ job.workflow_sha }}`, written into a
+  subdirectory with `persist-credentials: false`. The gate step runs
+  `uv run --script gate/.github/scripts/release_admission.py` from the
+  workspace root, so the working directory leaves `origin` naming the caller
+  while the code being run comes from this repository. A verifier checkout at
+  the root would have replaced the candidate checkout and re-pointed `origin`
+  here, so the subdirectory is the property that keeps the fetch working, not a
+  layout preference.
+
+  *The coverage.* The source-pin contract moved to
+  `release_admission_source_pin.py`, which holds the repository, ref, checkout
+  order, subdirectory, and gate step, and derives the expected gate command
+  from the verifier checkout's path so the workflow and the metric test cannot
+  drift apart. Nine checkout regressions moved to
+  `release_admission_checkout_mutations.py`, taking the stated total across
+  both mutation modules to thirty. `test_release_admission_cross_repository.py`
+  builds two real bare repositories with `uploadpack.allowAnySHA1InWant` over
+  `file://` URLs, because a cmd-mox invocation records neither a working
+  directory nor an `origin`; it runs the gate from the candidate checkout and
+  from the verifier checkout in both admission modes, and fails if the
+  verifier's repository contains the caller's candidate, so a passing fetch
+  cannot be vacuous. `release_admission_test_cases.py` also gained an
+  observation-mode fetch-failure case, because the fetch precedes the
+  enforcement decision and must not be masked by it. Date/Author: 2026-11-18,
+  implementation agent.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

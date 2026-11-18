@@ -6,12 +6,13 @@ negation, hard-code the enforcement mode in either direction, smuggle an
 ``always()`` onto the publication guard, disjoin
 the guard from an always-true clause, add a publisher whose scopes arrive as a
 ``write-all`` shorthand or through the workflow level, let the rehearsal adopt
-the gate, let publication adopt the rehearsal, grant the rehearsal a write
-scope the publisher model does not name, or unpin the admission job's checkout
-so a caller's own gate implementation supplies the outputs every write job
-trusts. The expected diagnostics name
-the scenario or the structural rule that must notice, so the mutation test
-shows each assertion fires rather than merely passing.
+the gate, let publication adopt the rehearsal, or grant the rehearsal a write
+scope the publisher model does not name. The admission job's own mutations,
+which collapse its two checkouts or move the gate step out of the candidate
+checkout, live in :mod:`release_admission_checkout_mutations` and are merged
+below. The expected diagnostics name the scenario or the structural rule that
+must notice, so the mutation test shows each assertion fires rather than merely
+passing.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -19,6 +20,7 @@ Run via ``make test-workflow-contracts``.
 import re
 import typing as typ
 
+from release_admission_checkout_mutations import CHECKOUT_MUTATIONS
 from release_admission_gate_contract import (
     ADMISSION_JOB,
     ADMISSION_STEP_ID,
@@ -106,9 +108,21 @@ GATE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
         ("static", "write-authority.publish-notes.guard"),
     ),
     "grant-rehearsal-unmodelled-write": (("static", "release.permissions"),),
-    "caller-selects-gate-implementation": (("static", f"{ADMISSION_JOB}.checkout"),),
-    "gate-from-caller-repository": (("static", f"{ADMISSION_JOB}.checkout"),),
-    "gate-from-run-commit-only": (("static", f"{ADMISSION_JOB}.checkout"),),
+    "caller-selects-gate-implementation": (
+        ("static", f"{ADMISSION_JOB}.checkout.verifier"),
+    ),
+    "gate-from-caller-repository": (("static", f"{ADMISSION_JOB}.checkout.verifier"),),
+    "gate-from-run-commit-only": (("static", f"{ADMISSION_JOB}.checkout.verifier"),),
+    "single-pinned-checkout": (("static", f"{ADMISSION_JOB}.checkout"),),
+    "gate-checkout-replaces-candidate": (
+        ("static", f"{ADMISSION_JOB}.checkout.verifier"),
+    ),
+    "candidate-checkout-names-verifier": (
+        ("static", f"{ADMISSION_JOB}.checkout.candidate"),
+    ),
+    "gate-runs-candidate-script": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
+    "gate-step-leaves-candidate": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
+    "job-default-moves-gate": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
 }
 
 
@@ -214,59 +228,6 @@ def _inherited_write_publisher(release: dict[str, object]) -> None:
     _add_job(release, INHERITING_JOB, {"runs-on": "ubuntu-latest"})
 
 
-def _caller_selects_gate(release: dict[str, object]) -> None:
-    """Let the admission job run whatever gate the caller's candidate contains.
-
-    This is the shape an unpinned ``actions/checkout`` produces in a reusable
-    workflow: the job checks out the caller's repository, so a caller that
-    keeps an older gate -- one written before the producer-trust refusal -- can
-    emit the mode, outcome and candidate the write guards consume while
-    ignoring the shipped literal.
-
-    Raises
-    ------
-    MutationError
-        If the checkout declares neither input, so the case the mutation
-        describes no longer exists in this workflow.
-    """
-    declared = _admission_checkout_inputs(release)
-    for key in ("repository", "ref"):
-        if declared.pop(key, None) is None:
-            raise MutationError(MutationIssue.PATTERN_MISMATCH, key)
-
-
-def _admission_checkout_inputs(
-    release: dict[str, object],
-) -> dict[str, object]:
-    """Return the admission job's checkout inputs, refusing a missing checkout."""
-    step = next(
-        (
-            item
-            for item in job_steps(release, ADMISSION_JOB)
-            if str(item.get("uses", "")).startswith("actions/checkout@")
-        ),
-        None,
-    )
-    if step is None:
-        raise MutationError(MutationIssue.PATTERN_MISMATCH, "actions/checkout")
-    return require_mapping(step.get("with"), f"{ADMISSION_JOB} checkout inputs")
-
-
-def _gate_from_caller_repository(release: dict[str, object]) -> None:
-    """Name the caller's repository while keeping the trusted ref."""
-    _admission_checkout_inputs(release)["repository"] = "${{ github.repository }}"
-
-
-def _gate_from_run_commit_only(release: dict[str, object]) -> None:
-    """Name the run's commit instead of the commit that defines the job.
-
-    On a reusable-workflow call ``github.sha`` is the caller's candidate, so an
-    older gate committed there would run while the repository input still names
-    this one.
-    """
-    _admission_checkout_inputs(release)["ref"] = "${{ github.sha }}"
-
-
 def _grant_unmodelled_write(release: dict[str, object]) -> None:
     """Grant a job that must stay reachable a write scope outside the model.
 
@@ -350,9 +311,7 @@ GATE_MUTATIONS: dict[str, cabc.Callable[[dict[str, object]], None]] = {
     "write-all-publisher": _write_all_publisher,
     "inherited-write-publisher": _inherited_write_publisher,
     "grant-rehearsal-unmodelled-write": _grant_unmodelled_write,
-    "caller-selects-gate-implementation": _caller_selects_gate,
-    "gate-from-caller-repository": _gate_from_caller_repository,
-    "gate-from-run-commit-only": _gate_from_run_commit_only,
+    **CHECKOUT_MUTATIONS,
     **{
         label: (lambda release, name=label: _drop_clause_for(name, release))
         for label in CLAUSE_REMOVALS

@@ -489,25 +489,57 @@ shipped.
 `actions/checkout` resolves the *caller's* repository. The admission job
 therefore read the caller's candidate, so a caller could run an older or
 modified `release_admission.py` that reported the mode, outcome, and candidate
-the write guards consume while ignoring the `false` literal. The job now checks
-out `leynos/netsuke` at `${{ job.workflow_sha }}` with
-`persist-credentials: false`. `job.workflow_sha` is the commit of the workflow
-file that defines the job, so the gate, the literal in its step environment,
-and the summary scripts come from the same commit as the guards that trust
-them, for a reusable-workflow call and for a directly triggered run alike.
-`github.sha` would not serve: on a call it is the caller's candidate, which is
-the commit the pin exists to refuse. The property postdates actionlint's
-vendored context types, so `.github/actionlint.yaml` exempts that one
-expression from the undefined-property check.
+the write guards consume while ignoring the `false` literal. The job now runs
+the gate from `leynos/netsuke` at `${{ job.workflow_sha }}`. `job.workflow_sha`
+is the commit of the workflow file that defines the job, so the gate and the
+literal in its step environment come from the same commit as the guards that
+trust them, and so do the job's inline steps, for a reusable-workflow call and
+for a directly triggered run alike. `github.sha` would not serve: on a call it
+is the caller's candidate, which is the commit the pin exists to refuse. The
+property postdates actionlint's vendored context types, so
+`.github/actionlint.yaml` exempts that diagnostic. The exemption matches on
+file and message text rather than on an expression, so it silences the message
+anywhere in `release.yml`; `release_admission_source_pin` is what holds the
+expression it exists for.
+
+The pin alone is not enough, because the gate also fetches the candidate commit
+from `origin`. A job whose only checkout is the verifier leaves `origin` naming
+this repository, so a candidate that lives in a caller's repository is
+unreachable and admission fails with `fetch_error` before it reads a manifest.
+The job therefore checks out two commits and keeps them apart. The candidate
+checkout sits at the workspace root, keeps the default credential persistence
+so the fetch can read a private caller's repository, and is never executed. The
+verifier checkout is written into a subdirectory with
+`persist-credentials: false`, and the gate step runs
+`uv run --script gate/.github/scripts/release_admission.py` from the workspace
+root. The subdirectory is a safety property rather than a layout preference: a
+verifier checkout at the root would replace the candidate checkout and re-point
+`origin` here.
 
 The pin removes the caller's choice of implementation. It is not producer
 authentication: a caller that replaces the whole workflow also replaces the
 guards, and attributing an upload to a named producer remains
-[#598](https://github.com/leynos/netsuke/issues/598)'s work.
+[#598](https://github.com/leynos/netsuke/issues/598)'s work. Two limits follow
+from the mechanism and are recorded rather than worked around. GitHub documents
+`job.workflow_sha` as unavailable on GitHub Enterprise Server, so the pin is
+for github.com. The hard-coded repository also assumes the job is defined in
+this repository, so a fork that runs its own copy of `release.yml` verifies
+with this repository's gate at this repository's commit until it changes the
+repository input.
+
 `check_admission_source_pin` in
-`tests/workflow_contracts/release_admission_gate_contract.py` holds the
-repository, the ref, and the ordering of the checkout before the gate step.
-`tests/workflow_contracts/release_publication_gate_mutations.py` gains three
-cases -- the checkout unpinned, pointed at `${{ github.repository }}`, and
-reduced to `${{ github.sha }}` -- bringing its stated regressions to
-twenty-four.
+`tests/workflow_contracts/release_admission_source_pin.py` holds the
+repository, the ref, the checkout order, the subdirectory, and the gate step,
+and derives the expected gate command from the verifier checkout so the two
+cannot drift apart.
+`tests/workflow_contracts/release_admission_checkout_mutations.py` states nine
+regressions of that shape: the pair collapsed into one pinned checkout, the
+verifier replacing the candidate, either checkout naming the other's repository
+or ref, the gate running the candidate's copy of the entry point, and a step or
+job default moving the working directory into the verifier. With those nine,
+the two mutation modules state thirty regressions in all.
+`scripts/tests/test_release_admission_cross_repository.py` settles the fetch
+question by execution rather than argument: it builds two real Git
+repositories, runs the gate from the candidate checkout and from the verifier
+checkout, in both observation and enforcement modes, and fails if the
+verifier's repository ever contains the caller's candidate.

@@ -1,18 +1,27 @@
 """Run the release-admission gate and decode the records one run produced.
 
 This module owns the subprocess boundary the release-admission runtime tests
-exercise: it builds an isolated environment, invokes the gate under test, and
-returns the completed process alongside the three artefact sets it wrote. The
-frozen measurements those tests are built on live in
+exercise: it invokes the gate under test and returns the completed process
+alongside the three artefact sets it wrote. The environment that process starts
+with is built by :mod:`release_admission_gate_environment`. The frozen
+measurements those tests are built on live in
 :mod:`release_admission_test_support`, which re-exports everything here as the
 facade the runtime modules import from, and the doubles the child reaches are
 registered by :mod:`release_admission_test_doubles`.
 
 The gate is a real process because only a process exercises the whole contract:
 the exit status the workflow reads, the artefact files the gate creates for
-itself, and the redirections it performs. The executables it runs are cmd-mox
+itself, and the redirections it performs. Most executables it runs are cmd-mox
 shims, so the boundary under test is the one production reaches while every
 external effect stays inside the test.
+
+The candidate fetch is the exception, and :func:`run_gate` supports it through
+``cwd`` and an absolute ``GIT_ADAPTER``. No shim can model which repository
+``origin`` names -- a shim's recorded invocation has no working directory -- so
+a test that must distinguish the candidate checkout from the verifier checkout
+builds real repositories in its own temporary tree and points the adapter at the
+host's own ``git``. The mutation stays inside that tree: the repositories are
+bare remotes and clones the test created for the run.
 
 The *shebang* is not one of those properties. :func:`run_gate` launches
 ``[str(PYTHON_PATH), str(SCRIPT_PATH)]`` -- the interpreter by absolute path,
@@ -24,7 +33,6 @@ which reads the first line of the file and its executable bit.
 """
 
 import dataclasses
-import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
 import typing as typ
 from pathlib import Path
@@ -33,29 +41,34 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
 from release_admission_evidence_fixtures import MISSING, candidate_for, write_evidence
-from release_admission_test_doubles import (
-    GITHUB_REPOSITORY,
-    PYTHON_PATH,
-    REVISION,
-    SCRIPT_PATH,
-    WORKFLOW_RUN_ID,
-    GateRun,
+from release_admission_gate_environment import (
+    EVIDENCE_FILE_VARIABLE,
+    GateInputs,
+    gate_environment,
 )
+from release_admission_test_doubles import PYTHON_PATH, SCRIPT_PATH, GateRun
 from release_admission_validator import METRICS_VALIDATOR
 
 if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
 
-#: The variable the child reads its evidence manifest from. The harness owns
-#: this spelling because it must write the fixture wherever the child is told
-#: to look, and a case may point the child somewhere else entirely.
-EVIDENCE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE"
 
-#: The prefix every admission control shares. An inherited name under it is
-#: dropped before the case's own values are applied: the harness runs one
-#: declared scenario, and a developer's exported tag, mode, bound, or adapter
-#: would otherwise decide what a case exercises.
-ADMISSION_VARIABLE_PREFIX = "NETSUKE_RELEASE_ADMISSION_"
+@dataclasses.dataclass(frozen=True, slots=True)
+class GateRunRequest:
+    """Hold the values one gate invocation is launched from.
+
+    Most cases vary only the temporary directory, the evidence state, and their
+    own environment overrides, and :func:`run_gate` takes exactly those. The
+    working directory is the fourth choice, and only a case that models two
+    checkouts makes it: it is what decides which repository ``origin`` names
+    for the gate's candidate fetch, so it must be a value that case states
+    rather than an ambient property of the test process.
+    """
+
+    tmp_path: Path
+    evidence_state: str = MISSING
+    extra_environment: cabc.Mapping[str, str | None] | None = None
+    cwd: Path | None = None
 
 
 def run_gate(
@@ -65,7 +78,7 @@ def run_gate(
     evidence_state: str = MISSING,
     extra_environment: cabc.Mapping[str, str | None] | None = None,
 ) -> GateRun:
-    """Run the production gate under cmd-mox and collect everything it wrote.
+    """Run the production gate from the test process's own directory.
 
     Parameters
     ----------
@@ -90,23 +103,65 @@ def run_gate(
 
     Notes
     -----
+    This is :func:`run_gate_request` for the common case, which keeps the test
+    process's working directory. A case that must choose the working directory
+    -- because it models a second checkout -- builds the request itself.
+    """
+    return run_gate_request(
+        cmd_mox,
+        GateRunRequest(
+            tmp_path,
+            evidence_state=evidence_state,
+            extra_environment=extra_environment,
+        ),
+    )
+
+
+def run_gate_request(cmd_mox: CmdMox, request: GateRunRequest) -> GateRun:
+    """Run the production gate for one request and collect what it wrote.
+
+    Parameters
+    ----------
+    cmd_mox
+        Active controller, already in replay, whose shims are on the child
+        ``PATH``.
+    request
+        The temporary directory, evidence state, environment overrides, and
+        working directory the run uses.
+
+    Returns
+    -------
+    GateRun
+        The completed process and the records decoded from the files it wrote.
+
+    Notes
+    -----
     Contract invariants: the child receives an isolated environment, the only
     ``gh`` and ``git`` it can reach are the shims, its standard input is closed,
     and every returned record is decoded from a file the gate itself produced.
     The tag is left unset unless a case supplies it, so the default run is the
     rehearsal form: the revision resolves and compares with itself.
     """
-    paths = gate_paths(tmp_path)
+    paths = gate_paths(request.tmp_path)
     environment = gate_environment(
-        cmd_mox, GateInputs(tmp_path, evidence_state, extra_environment, paths)
+        cmd_mox,
+        GateInputs(
+            request.tmp_path,
+            request.evidence_state,
+            request.extra_environment,
+            paths,
+        ),
     )
     write_evidence(
-        _evidence_path(environment, paths), evidence_state, candidate_for(environment)
+        _evidence_path(environment, paths),
+        request.evidence_state,
+        candidate_for(environment),
     )
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed test target.
         [str(PYTHON_PATH), str(SCRIPT_PATH)],
         capture_output=True,
         check=False,
+        cwd=request.cwd,
         env=environment,
         stdin=subprocess.DEVNULL,
         text=True,
@@ -203,100 +258,6 @@ def gate_paths(tmp_path: Path) -> dict[str, Path]:
     }
 
 
-@dataclasses.dataclass(frozen=True, slots=True)
-class GateInputs:
-    """Hold the runner-local inputs one gate invocation is configured from.
-
-    These four values travel together -- the isolated directory, the evidence
-    state the fixture supplies, the case's own overrides, and the named output
-    paths -- so they are one value rather than a five-argument call.
-    """
-
-    tmp_path: Path
-    evidence_state: str
-    extra_environment: cabc.Mapping[str, str | None] | None
-    paths: dict[str, Path]
-
-
-def gate_environment(
-    cmd_mox: CmdMox,
-    inputs: GateInputs,
-    inherited: cabc.Mapping[str, str] | None = None,
-) -> dict[str, str]:
-    """Build an isolated environment for one real gate invocation.
-
-    The PATH is the controller's own: cmd-mox prepends its shim directory when
-    it enters, so this copy puts the shims ahead of any real ``gh`` or ``git``
-    on the host, and a scenario must never replace it. A shim's shebang
-    resolves ``python3`` through the child's PATH, so a child started without
-    one cannot run the shim at all -- which reads as an unexplained missing
-    invocation rather than as the configuration error it is.
-
-    Every admission variable the parent exported is dropped rather than
-    inherited, because the child reads its tag, mode, bounds, adapters, and
-    sinks from this harness and from the case itself: a developer with
-    ``NETSUKE_RELEASE_ADMISSION_TAG`` exported would otherwise turn the default
-    rehearsal into a tagged run, and the resulting failure would read as a
-    defect in the gate.
-
-    Parameters
-    ----------
-    cmd_mox
-        Active controller whose shim directory leads the child PATH.
-    inputs
-        Runner-local inputs: the isolated directory, the fixture state, the
-        case's own overrides, and the named output paths.
-    inherited
-        The environment to inherit from before the fixed inputs and the case's
-        overrides are applied; the process environment by default.
-
-    Returns
-    -------
-    dict[str, str]
-        Environment mapping passed to the admission subprocess.
-
-    Notes
-    -----
-    Contract invariants: the child inherits the controller's environment, so
-    the shim directory and the IPC socket reach it, and production values are
-    preserved unless overridden. An absent shim directory means this helper
-    ran outside a live controller: a test fault, not a condition to report.
-    """
-    shim_dir = cmd_mox.environment.shim_dir
-    assert shim_dir is not None, "CmdMox must create its command shim directory"
-    base = os.environ if inherited is None else inherited
-    paths = inputs.paths
-    # The overrides are merged below, where a ``None`` *removes* a name rather
-    # than being stored: the returned mapping therefore holds only ``str``
-    # values, and the annotation is what says so rather than a narrowed view a
-    # reader would have to reconstruct.
-    environment: dict[str, str] = {
-        name: value
-        for name, value in base.items()
-        if not name.startswith(ADMISSION_VARIABLE_PREFIX)
-    }
-    environment.update({
-        "GITHUB_OUTPUT": str(paths["output"]),
-        "GITHUB_REPOSITORY": GITHUB_REPOSITORY,
-        "GITHUB_RUN_ID": WORKFLOW_RUN_ID,
-        "GITHUB_SHA": REVISION,
-        EVIDENCE_FILE_VARIABLE: str(paths["evidence"]),
-        "NETSUKE_RELEASE_ADMISSION_METRICS_FILE": str(paths["metrics"]),
-        "NETSUKE_RELEASE_ADMISSION_TRACE_FILE": str(paths["trace"]),
-        "PATH": os.pathsep.join([str(shim_dir), base["PATH"]]),
-        "RUNNER_TEMP": str(inputs.tmp_path),
-    })
-    # Mapping a name to ``None`` *unsets* it, which is not the same as mapping
-    # it to ``""``: the gate's colon-form default substitutes for an empty
-    # value, so only an unset variable reaches the earlier arm.
-    for name, value in (inputs.extra_environment or {}).items():
-        if value is None:
-            environment.pop(name, None)
-        else:
-            environment[name] = value
-    return environment
-
-
 def _read_gate_records(
     paths: dict[str, Path],
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
@@ -354,14 +315,15 @@ def _parse_records(
 
 
 __all__ = (
-    "GITHUB_REPOSITORY",
+    "EVIDENCE_FILE_VARIABLE",
     "METRICS_VALIDATOR",
     "PYTHON_PATH",
-    "REVISION",
     "SCRIPT_PATH",
     "GateInputs",
     "GateRun",
+    "GateRunRequest",
     "gate_environment",
     "gate_paths",
     "run_gate",
+    "run_gate_request",
 )

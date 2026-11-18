@@ -8,7 +8,10 @@ the gate writes, then check the records the job retains against
 fails here rather than in a release run.
 """
 
+import typing as typ
+
 from action_references import require_external_action_sha
+from release_admission_gate_contract import GATE_SCRIPT, verifier_gate_command
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
     REPO_ROOT,
@@ -89,12 +92,7 @@ SUMMARY_REQUIRED_FRAGMENTS = frozenset({
     "\\`$RELEASE_ADMISSION_GATE_OUTCOME\\`",
     "\\`$RELEASE_ADMISSION_ERROR_CATEGORY\\`",
 })
-#: The estate rule is that gate logic is Python: the admission step runs the
-#: PEP 723 entry point through ``uv``, which is what resolves its dependencies,
-#: rather than executing a shell script from the repository.
-ADMISSION_ENTRY_POINT = ".github/scripts/release_admission.py"
-ADMISSION_COMMAND = f"uv run --script {ADMISSION_ENTRY_POINT}"
-#: The shell gate this entry point replaced. A residual copy would be dead
+#: The shell gate the Python entry point replaced. A residual copy would be dead
 #: code, and a residual reference would mean the workflow still ran it.
 RETIRED_ADMISSION_SCRIPTS = (
     "require-release-admission-canaries.sh",
@@ -119,31 +117,42 @@ def test_release_admission_metrics_retain_read_only_delivery() -> None:
     enforcement value, the rehearsal job's independence, and metric and trace
     retention on applicable outcomes.
     """
-    (
-        admission,
-        release,
-        python_step,
-        evidence_step,
-        admission_step,
-        summary_step,
-        upload_step,
-        trace_upload,
-    ) = _workflow_parts()
-    _assert_admission_job_contract(
-        admission, python_step, evidence_step, admission_step
+    parts = _workflow_parts()
+    _assert_admission_job_contract(parts)
+    _assert_metrics_delivery_contract(
+        parts.summary_step, parts.upload_step, parts.trace_upload
     )
-    _assert_metrics_delivery_contract(summary_step, upload_step, trace_upload)
-    _assert_release_scaffold_boundary(release)
+    _assert_release_scaffold_boundary(parts.release)
 
 
-def _workflow_parts() -> tuple[dict[str, object], ...]:
-    """Return the workflow mappings exercised by the delivery contract.
+class WorkflowParts(typ.NamedTuple):
+    """Name the workflow values the delivery contract exercises.
+
+    A tuple would have to declare one element type for the whole group, but the
+    gate command among them is a string rather than a mapping. Naming the parts
+    gives each value its own type and lets each assertion read by name.
+    """
+
+    admission: dict[str, object]
+    release: dict[str, object]
+    python_step: dict[str, object]
+    evidence_step: dict[str, object]
+    admission_step: dict[str, object]
+    gate_command: str
+    summary_step: dict[str, object]
+    upload_step: dict[str, object]
+    trace_upload: dict[str, object]
+
+
+def _workflow_parts() -> WorkflowParts:
+    """Return the workflow values exercised by the delivery contract.
 
     Returns
     -------
-    tuple[dict[str, object], ...]
-        The workflow, release job, Python setup step, admission step, summary
-        step, metric upload step, and trace upload step, in that order.
+    WorkflowParts
+        The admission and release jobs, the Python setup, evidence download
+        and admission steps, the command the gate step must run, and the
+        summary, metric upload, and trace upload steps.
 
     """
     workflow = load_workflow(RELEASE_WORKFLOW_PATH)
@@ -168,15 +177,16 @@ def _workflow_parts() -> tuple[dict[str, object], ...]:
     ) < step_index_by_key(steps, "name", "Require release-admission evidence"), (
         "the gate must retrieve the evidence before it reads it"
     )
-    return (
-        workflow_job(workflow, "release-admission-canaries"),
-        workflow_job(workflow, "release"),
-        _step_named(steps, "Install Python for admission timings"),
-        _step_named(steps, "Download the release-admission evidence"),
-        _step_named(steps, "Require release-admission evidence"),
-        _step_named(steps, "Summarise release-admission metrics"),
-        _step_named(steps, "Upload release-admission metrics"),
-        _step_named(steps, "Upload release-admission traces"),
+    return WorkflowParts(
+        admission=workflow_job(workflow, "release-admission-canaries"),
+        release=workflow_job(workflow, "release"),
+        python_step=_step_named(steps, "Install Python for admission timings"),
+        evidence_step=_step_named(steps, "Download the release-admission evidence"),
+        admission_step=_step_named(steps, "Require release-admission evidence"),
+        gate_command=verifier_gate_command(steps),
+        summary_step=_step_named(steps, "Summarise release-admission metrics"),
+        upload_step=_step_named(steps, "Upload release-admission metrics"),
+        trace_upload=_step_named(steps, "Upload release-admission traces"),
     )
 
 
@@ -199,26 +209,18 @@ def _step_named(steps: list[dict[str, object]], name: str) -> dict[str, object]:
     return next(step for step in steps if step.get("name") == name)
 
 
-def _assert_admission_job_contract(
-    admission: dict[str, object],
-    python_step: dict[str, object],
-    evidence_step: dict[str, object],
-    admission_step: dict[str, object],
-) -> None:
+def _assert_admission_job_contract(parts: WorkflowParts) -> None:
     """Assert the admission job retains its read-only, candidate-bound contract.
 
     Parameters
     ----------
-    admission
-        Parsed release-admission job mapping.
-    python_step
-        Python setup step used for monotonic duration collection.
-    evidence_step
-        Step that retrieves the producer's evidence artefact.
-    admission_step
-        Gate execution step whose environment and command are inspected.
+    parts
+        The workflow values the delivery contract exercises: the admission job
+        plus the Python, evidence and gate steps it inspects, and the command
+        the pinned verifier's copy of the entry point implies.
 
     """
+    admission = parts.admission
     permissions = require_mapping(
         admission.get("permissions"), "release-admission-canaries.permissions"
     )
@@ -228,6 +230,7 @@ def _assert_admission_job_contract(
     assert admission.get("outputs") == ADMISSION_OUTPUTS, (
         "admission must expose its mode, outcome and candidate to every writer"
     )
+    evidence_step = parts.evidence_step
     require_external_action_sha(
         evidence_step.get("uses"),
         ADMISSION_ARTIFACT_ACTION,
@@ -247,6 +250,7 @@ def _assert_admission_job_contract(
     assert "continue-on-error" not in admission, (
         "observation mode must succeed without suppressing other admission failures"
     )
+    python_step = parts.python_step
     require_external_action_sha(
         python_step.get("uses"),
         ADMISSION_PYTHON_ACTION,
@@ -256,12 +260,15 @@ def _assert_admission_job_contract(
         "python-version": "3.14",
         "enable-cache": False,
     }, "the admission Python installation must use the pinned baseline without a cache"
+    admission_step = parts.admission_step
     assert (
         require_mapping(admission_step.get("env"), "release admission step environment")
         == ADMISSION_ENVIRONMENT
     ), "admission must scope its GitHub token and runner-local metrics file"
-    assert admission_step.get("run") == ADMISSION_COMMAND, (
-        "admission must run the Python entry point, whose PEP 723 block uv resolves"
+    assert admission_step.get("run") == parts.gate_command, (
+        "admission must run the pinned verifier's Python entry point, whose "
+        f"PEP 723 block uv resolves, and must run no other copy: got "
+        f"{admission_step.get('run')!r}, expected {parts.gate_command!r}"
     )
 
 
@@ -275,10 +282,8 @@ def test_admission_gate_is_python_and_its_shell_predecessors_are_gone() -> None:
     point the workflow runs exists, and none of the three shell scripts it
     replaced survives anywhere the workflow could still reach.
     """
-    admission = REPO_ROOT / ADMISSION_ENTRY_POINT
-    assert admission.is_file(), (
-        f"the admission step must have {ADMISSION_ENTRY_POINT} to run"
-    )
+    admission = REPO_ROOT / GATE_SCRIPT
+    assert admission.is_file(), f"the admission step must have {GATE_SCRIPT} to run"
     scripts = REPO_ROOT / ".github" / "scripts"
     survivors = [
         name for name in RETIRED_ADMISSION_SCRIPTS if (scripts / name).exists()

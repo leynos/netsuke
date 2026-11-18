@@ -186,6 +186,7 @@ from release_admission_evidence_fixtures import (
     candidate_for,
     write_evidence,
 )
+from release_admission_gate_environment import GateInputs, gate_environment
 from release_admission_test_doubles import (
     CLOCK_ARGUMENTS,
     GITHUB_REPOSITORY,
@@ -215,10 +216,10 @@ from release_admission_test_harness import (
     METRICS_VALIDATOR,
     PYTHON_PATH,
     SCRIPT_PATH,
-    GateInputs,
-    gate_environment,
+    GateRunRequest,
     gate_paths,
     run_gate,
+    run_gate_request,
 )
 from release_admission_test_records import (
     OPERATION_SEQUENCE,
@@ -259,6 +260,7 @@ __all__ = (
     "Candidate",
     "GateInputs",
     "GateRun",
+    "GateRunRequest",
     "Handler",
     "RunShape",
     "Subprocess",
@@ -281,6 +283,7 @@ __all__ = (
     "reply_to_github",
     "reply_to_sink",
     "run_gate",
+    "run_gate_request",
     "shim",
     "write_evidence",
 )

@@ -412,14 +412,35 @@ jobs:
       enforcement: ${{ steps.release_admission.outputs.enforcement }}
       candidate_commit: ${{ steps.release_admission.outputs.candidate-commit }}
     steps:
-      # The gate must run the implementation that ships with this workflow, not
-      # one from the caller's checkout. In a reusable workflow the default
-      # checkout resolves the *caller's* repository, so an unpinned checkout
-      # would let a caller supply an older or modified gate that emits the mode,
-      # outcome and candidate the write guards consume. `job.workflow_sha` is
-      # the commit of the workflow file that defines this job, which is a commit
-      # of this repository both for a reusable-workflow call and for a directly
+      # The job needs two different commits, and they must not be confused.
+      # This first checkout is the caller's candidate, and its job is to leave
+      # `origin` pointing at the repository the candidate belongs to: the gate
+      # fetches the candidate revision from `origin`, so a cross-repository
+      # caller's commit has to be fetchable from there. `persist-credentials`
+      # keeps its default because the fetch must read a private caller's
+      # repository; this job holds `contents: read`, so the credential git
+      # commands inherit here cannot write. Nothing from this checkout is
+      # executed.
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+      # The second checkout is the verifier: the gate must run the
+      # implementation that ships with this workflow, not one from the caller's
+      # checkout. In a reusable workflow the default checkout resolves the
+      # *caller's* repository, so an unpinned checkout would let a caller
+      # supply an older or modified gate that emits the mode, outcome and
+      # candidate the write guards consume. `job.workflow_sha` is the commit of
+      # the workflow file that defines this job, which is a commit of this
+      # repository both for a reusable-workflow call and for a directly
       # triggered run; no caller-named commit is ever selected.
+      #
+      # It goes in a subdirectory because a checkout at the workspace root
+      # would replace the candidate checkout above and re-point `origin` here,
+      # which is exactly how the candidate fetch stops working for a caller
+      # whose commit this repository does not have.
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
@@ -427,6 +448,7 @@ jobs:
           persist-credentials: false
           repository: leynos/netsuke
           ref: ${{ job.workflow_sha }}
+          path: gate
       - name: Install Python for admission timings
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
@@ -443,9 +465,9 @@ jobs:
       # caller that deliberately uploads under this name arrives here
       # indistinguishably. The gate therefore stays blocked on the flag below
       # until the producer attests its upload, which is why publication is
-      # refused even when a matching manifest is present. The checkout above is
-      # what keeps that refusal out of the caller's hands: the gate that reads
-      # this file is the one from this repository's own commit.
+      # refused even when a matching manifest is present. The verifier checkout
+      # is what keeps that refusal out of the caller's hands: the gate that
+      # reads this file is the one from this repository's own commit.
       - name: Download the release-admission evidence
         uses: >-
           actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
@@ -478,7 +500,10 @@ jobs:
             ${{ runner.temp }}/release-admission-metrics.jsonl
           NETSUKE_RELEASE_ADMISSION_TRACE_FILE: >-
             ${{ runner.temp }}/release-admission-traces.jsonl
-        run: uv run --script .github/scripts/release_admission.py
+        # The verifier's own script, run from the workspace root: the working
+        # directory stays the candidate checkout, which is where `origin`
+        # points at the caller's repository.
+        run: uv run --script gate/.github/scripts/release_admission.py
       - name: Summarise release-admission metrics
         if: always()
         shell: bash

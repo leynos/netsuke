@@ -408,6 +408,7 @@ test-release-admission: ## Validate the release-admission runtime contract
 		scripts/tests/test_release_admission_freshness_recheck.py \
 		scripts/tests/test_release_admission_freshness_properties.py \
 		scripts/tests/test_release_admission_producer_trust.py \
+		scripts/tests/test_release_admission_cross_repository.py \
 		scripts/tests/test_release_admission_sink_persistence.py \
 		scripts/tests/test_release_admission_harness_isolation.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider

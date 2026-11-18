@@ -3151,21 +3151,51 @@ workflow's default checkout resolves the *caller's* repository, so an unpinned
 admission job would run whatever `release_admission.py` the caller's candidate
 contains -- including an older gate written before the producer-trust refusal,
 which would report the mode, outcome, and candidate every write job consumes
-while ignoring the literal. The job therefore checks out `leynos/netsuke` at
-`${{ job.workflow_sha }}` before the gate step. `job.workflow_sha` is the
-commit of the workflow file that defines the job, so the gate, the literal in
-its step environment, and the summary scripts all come from the same commit as
-the guards that trust them, for a reusable-workflow call and for a directly
-triggered run alike; `github.sha` would not do, because on a call it is the
-caller's candidate. `job.workflow_sha` postdates actionlint's vendored context
-types, so `.github/actionlint.yaml` exempts that one expression from the
-undefined-property check and says why. `check_admission_source_pin` in
-`tests/workflow_contracts/release_admission_gate_contract.py` holds the
-repository and ref and requires exactly one checkout before the gate step, and
-`release_publication_gate_mutations.py` proves the rule fires when the checkout
-is unpinned, pointed at `${{ github.repository }}`, or reduced to
-`${{ github.sha }}`. This pin removes the caller's choice of implementation; it
-does not authenticate a producer, because a caller that replaces the whole
+while ignoring the literal.
+
+The job therefore checks out two commits and keeps them apart. The first
+checkout is the caller's candidate at the workspace root, and its purpose is to
+leave `origin` naming the repository the candidate belongs to: the gate fetches
+the candidate revision from `origin`, so a cross-repository caller's commit has
+to be fetchable from there. Its `persist-credentials` keeps the default because
+the fetch must read a private caller's repository; the job holds
+`contents: read`, so the credential git inherits cannot write, and nothing from
+that checkout is executed. The second checkout is the verifier,
+`leynos/netsuke` at `${{ job.workflow_sha }}`, written into a subdirectory with
+`persist-credentials: false`. A verifier checkout at the workspace root would
+replace the candidate checkout and re-point `origin` here, which is exactly how
+the candidate fetch stops working, so the subdirectory is a safety property
+rather than a layout preference. The gate step runs
+`uv run --script gate/.github/scripts/release_admission.py` with the candidate
+checkout as its working directory, which is what leaves `origin` naming the
+caller while the code being run comes from this repository.
+
+`job.workflow_sha` is the commit of the workflow file that defines the job, so
+the gate and the literal in its step environment come from the same commit as
+the guards that trust them; the job's inline steps, including the summary, come
+from that file as well. This holds for a reusable-workflow call and for a
+directly triggered run alike; `github.sha` would not do, because on a call it
+is the caller's candidate. `job.workflow_sha` postdates actionlint's vendored
+context types, so `.github/actionlint.yaml` exempts that diagnostic. The
+exemption matches on file and message text rather than on an expression, so it
+silences the message anywhere in `release.yml`; `release_admission_source_pin`
+in `tests/workflow_contracts/release_admission_source_pin.py` is what holds the
+repository, ref, checkout order, subdirectory, and gate step of the expression
+the exemption exists for. `release_publication_gate_mutations.py` and
+`release_admission_checkout_mutations.py` prove the rule fires when the pair is
+collapsed into one checkout, when the verifier replaces the candidate, when
+either checkout names the other's repository or ref, when the gate runs the
+candidate's copy of the entry point, and when a step or job default moves the
+working directory into the verifier -- thirty stated regressions in all.
+
+Two limits follow from the mechanism and are recorded rather than worked
+around. GitHub documents `job.workflow_sha` as unavailable on GitHub Enterprise
+Server, so this pin is for github.com. The hard-coded `leynos/netsuke` also
+assumes the job is defined in this repository, so a fork that runs its own copy
+of `release.yml` verifies with this repository's gate at this repository's
+commit: a fork's own changes to the gate do not take effect until it changes
+the repository input. This pin removes the caller's choice of implementation;
+it does not authenticate a producer, because a caller that replaces the whole
 workflow also replaces the guards. Provenance remains `#598`'s work.
 
 The gate logic is Python, per the estate rule in

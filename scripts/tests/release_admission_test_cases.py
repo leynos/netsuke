@@ -94,6 +94,16 @@ FAILURE_CASES = [
     pytest.param(
         FailureCase(
             evidence_state="missing",
+            operation="fetch_candidate_revision",
+            error_category="fetch_error",
+            adapters={"git": fail_git},
+            enforce=False,
+        ),
+        id="fetch-error-observation",
+    ),
+    pytest.param(
+        FailureCase(
+            evidence_state="missing",
             operation="fetch_workflow_run",
             error_category="api_error",
             adapters={"gh": answer_no_run_head()},
