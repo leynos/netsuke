@@ -128,6 +128,53 @@ pub(super) const DIGEST: FilterCase = FilterCase {
     linked: "e6487c5f",
 };
 
+/// The `follow_symlinks` policy a policy test renders under.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Policy {
+    /// The filter's default, which refuses a final symlink.
+    Omitted,
+    /// The explicit `follow_symlinks=false` spelling of the default.
+    FollowFalse,
+    /// The opt-in that resolves a final symlink.
+    FollowTrue,
+}
+
+impl Policy {
+    /// Every policy, in the order the policy tables exercise them.
+    pub(super) const ALL: [Self; 3] = [Self::Omitted, Self::FollowFalse, Self::FollowTrue];
+
+    /// Build a template that reads `path` through `case` under this policy.
+    pub(super) fn template(self, case: FilterCase) -> String {
+        match self.kwargs() {
+            Some(kwargs) => case.template_with(kwargs),
+            None => case.template(),
+        }
+    }
+
+    /// The stable label used in fixture and template names.
+    pub(super) fn suffix(self) -> &'static str {
+        match self {
+            Self::Omitted => "default",
+            Self::FollowFalse => "false",
+            Self::FollowTrue => "true",
+        }
+    }
+
+    /// Whether this policy asks the resolver to follow a final symlink.
+    pub(super) fn follows(self) -> bool {
+        self == Self::FollowTrue
+    }
+
+    /// The keyword argument spelling, or `None` for the omitted default.
+    fn kwargs(self) -> Option<&'static str> {
+        match self {
+            Self::Omitted => None,
+            Self::FollowFalse => Some("follow_symlinks=false"),
+            Self::FollowTrue => Some("follow_symlinks=true"),
+        }
+    }
+}
+
 /// Assert that `link` really is a symlink, failing setup when it is not.
 ///
 /// The metadata read does not follow the link, so a regular file sitting at the
@@ -200,6 +247,29 @@ pub(super) fn write_fixture(
     dir.write(name, contents)
         .with_context(|| format!("write fixture {name}"))?;
     Ok(root.join(name))
+}
+
+/// Create a relative symlink named `link` inside `root`, returning its path.
+///
+/// The target is a sibling name rather than an absolute path so the fixture
+/// stays inside the workspace on every platform. Callers verify the entry with
+/// [`require_real_symlink`] before rendering, because a host that silently
+/// substituted a regular file would invert a rejection assertion.
+///
+/// # Errors
+///
+/// Returns the setup error when the link cannot be created.
+#[cfg(unix)]
+pub(super) fn create_symlink(
+    root: &Utf8Path,
+    link: &str,
+    target: &str,
+) -> Result<camino::Utf8PathBuf> {
+    let dir = Dir::open_ambient_dir(root, ambient_authority())
+        .with_context(|| format!("open workspace root {root} to create symlink {link}"))?;
+    dir.symlink(target, link)
+        .with_context(|| format!("create fixture symlink {link} -> {target}"))?;
+    Ok(root.join(link))
 }
 
 /// Create a FIFO named `name` inside `root`, returning its path.
@@ -286,5 +356,8 @@ mod budget_tests;
 mod confinement_tests;
 
 mod file_type_tests;
+
+#[cfg(target_os = "linux")]
+mod resolver_fallback_tests;
 
 mod unknown_kwargs_tests;
