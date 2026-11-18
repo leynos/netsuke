@@ -1,6 +1,8 @@
 # Lokaliseringsressourcer til Netsukes kommandolinje.
 
 runner.io.dyndep.retention = Kunne ikke anvende opbevaring af den genererede dyndep under { $path }.
+runner.io.dyndep.alias = Den genererede dyndep-sti { $path } er et symbolsk link, et junction-punkt eller ikke en mappe; erstat den med en rigtig mappe.
+runner.io.dyndep.open = Kunne ikke åbne den genererede dyndep-mappe { $path }.
 cli.about = Netsuke oversætter YAML- + Jinja-manifester til Ninja-byggeplaner.
 cli.long_about = Netsuke omdanner YAML- + Jinja-manifester til reproducerbare Ninja-grafer og kører Ninja med sikre standardindstillinger.
 cli.usage = { $usage }

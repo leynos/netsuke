@@ -363,24 +363,18 @@ pub(crate) fn executable_file(path: impl AsRef<Path>) -> io::Result<bool> {
     Ok(metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
 }
 
-/// Create a symbolic link at `link` pointing to `target` on Unix.
-///
-/// # Errors
-///
-/// Propagates the underlying symbolic-link creation failure.
-///
-/// # Examples
-///
-/// ```
-/// let dir = tempfile::tempdir().expect("create tempdir");
-/// let target = dir.path().join("target");
-/// test_support::fs::create_dir(&target).expect("create target");
-/// test_support::fs::symlink(&target, dir.path().join("link")).expect("create symlink");
-/// ```
+/// Directory-alias fixtures, re-exported so `test_support::fs` stays the one
+/// ambient entry point callers reach for.
+#[path = "fs_links.rs"]
+mod links;
+
 #[cfg(unix)]
-pub fn symlink(target: impl AsRef<Path>, link: impl AsRef<Path>) -> io::Result<()> {
-    std::os::unix::fs::symlink(target, link)
-}
+pub use links::symlink;
+
+pub use links::is_symlink;
+
+#[cfg(windows)]
+pub use links::junction;
 
 #[cfg(test)]
 #[path = "fs_tests.rs"]

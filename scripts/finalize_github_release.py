@@ -62,7 +62,7 @@ import dataclasses
 
 # Cyclopts resolves these annotations when it builds the command, so the
 # module needs ``pathlib`` at runtime rather than only for type checking.
-import pathlib  # ruff: ignore[typing-only-standard-library-import]
+import pathlib
 import sys
 import typing as typ
 

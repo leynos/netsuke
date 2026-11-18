@@ -70,6 +70,63 @@ fn registry_install_examples_pin_the_toolchain() -> Result<()> {
     Ok(())
 }
 
+/// Verify the historical beta1 installation notice pins every required choice.
+#[test]
+fn beta1_installation_notice_pins_version_toolchain_and_polonius() -> Result<()> {
+    // beta1 predates the registry command the current release documents, so
+    // its version, toolchain, and Polonius flag are historical facts. Assert
+    // them literally rather than deriving them from the current crate version.
+    let guide = test_fs::read_to_string("docs/v0-1-0-migration-guide.md")
+        .context("read docs/v0-1-0-migration-guide.md")?
+        // Git checks the guide out with CRLF line endings on Windows, so
+        // normalise before comparing the multi-line PowerShell block verbatim.
+        .replace("\r\n", "\n");
+    let required_command_fragments = [
+        "RUSTFLAGS=-Zpolonius=next",
+        "cargo +nightly-2026-06-25 install netsuke-build",
+        "--version 0.1.0-beta1",
+        "--locked",
+    ];
+    ensure!(
+        guide.lines().any(|line| required_command_fragments
+            .into_iter()
+            .all(|fragment| line.contains(fragment))),
+        concat!(
+            "the beta1 install command must pin the Polonius flag, ",
+            "toolchain, version, and lockfile on one line"
+        )
+    );
+    // PowerShell cannot set a command-scoped variable ahead of the command, so
+    // its form must assign `RUSTFLAGS` and then run the same pinned install.
+    // Compare the whole block: the POSIX command above already names the same
+    // toolchain, so a fragment check here would pass without the PowerShell
+    // form existing at all.
+    let powershell_install = concat!(
+        "rustup toolchain install nightly-2026-06-25\n",
+        "$env:RUSTFLAGS = \"-Zpolonius=next\"\n",
+        "cargo +nightly-2026-06-25 install netsuke-build --version 0.1.0-beta1 --locked\n",
+    );
+    ensure!(
+        guide.contains(powershell_install),
+        concat!(
+            "the PowerShell beta1 form must set RUSTFLAGS, install the ",
+            "dated nightly, and pin the version and lockfile"
+        )
+    );
+    ensure!(
+        guide.contains("rustup toolchain install nightly-2026-06-25"),
+        "the beta1 installation notice must install its dated nightly"
+    );
+    ensure!(
+        guide.contains("no uploaded prebuilt artefacts"),
+        concat!(
+            "the beta1 installation notice must state that no prebuilt ",
+            "artefacts were published"
+        )
+    );
+    Ok(())
+}
+
 /// Whether a toolchain name is `nightly-YYYY-MM-DD`.
 fn is_dated_nightly(name: &str) -> bool {
     let Some(date) = name.strip_prefix("nightly-") else {

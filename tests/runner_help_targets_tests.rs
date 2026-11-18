@@ -12,11 +12,17 @@ use netsuke::runner::run;
 use rstest::{fixture, rstest};
 use test_support::{fluent::normalize_fluent_isolates, localizer_test_lock, set_en_localizer};
 
+#[path = "runner_help_targets_tests/bounds.rs"]
+mod bounds;
+
 #[path = "runner_help_targets_tests/catalogue.rs"]
 mod catalogue;
+
 #[path = "runner_help_targets_tests/edges.rs"]
 mod edges;
+
 mod fixtures;
+
 #[path = "runner_help_targets_tests/query_helpers.rs"]
 mod query_helpers;
 

@@ -11,6 +11,8 @@
 //!   (`shell_transport` module)
 //! - sandboxing PATH and HOME for the build-tools target tests (`build_tools` module)
 //! - building the shared temporary-path snapshot filter (`temp_path_filter` module)
+//! - redacting the diagnostic generator version in snapshots
+//!   (`generator_version` module)
 //!
 //! All items are intended for use in tests within this workspace; avoid using
 //! them in production code.
@@ -28,6 +30,7 @@ pub mod exec;
 pub mod fixture;
 pub mod fluent;
 pub mod fs;
+pub mod generator_version;
 pub mod hash;
 pub mod http;
 pub mod locale_stubs;

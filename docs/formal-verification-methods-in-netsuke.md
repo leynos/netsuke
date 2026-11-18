@@ -63,10 +63,12 @@ changing the global PATH order used to select the pinned `mold`. The repository
 no longer carries a Kani downloader. `make install-kani` uses the verified
 prebuilt release on Linux x86_64 and keeps the Cargo compile fallback for other
 local hosts. CI passes explicit paths for the Kani front-end and verified
-archives. `make verus` defaults to `verus/canonical_value/main.rs`; callers can
-repeat `--proof-file` through `VERUS_FLAGS` to select an ordered batch. The
-runner stops at the first failed proof and returns the verifier's status. The
-developers' guide documents the commands and their local usage.
+archives. Two Verus kernels are committed: `verus/canonical_value/main.rs` and
+`verus/configured_shells/main.rs`. `make verus` defaults to the first, so a
+maintainer proof run covers one kernel unless `VERUS_FLAGS` selects more;
+callers repeat `--proof-file` through that variable to run an ordered batch.
+The runner stops at the first failed proof and returns the verifier's status.
+The developers' guide documents the commands and their local usage.
 
 The composite [Kani cache action](../.github/actions/kani-cache/action.yml) owns
 `.kani-cargo`, `.kani-home`, and `.kani-rustup` under a key that includes the
@@ -104,10 +106,10 @@ The first Kani harnesses should cover these properties:
 `src/ir/cycle/mod.rs` is the strongest narrow proof candidate in the current
 repository. `canonicalize_cycle` has a crisp normalization contract that is
 small enough for Kani immediately and remains a plausible Verus kernel if
-stronger proof obligations become worthwhile.[^7] It is not yet one: the two
-kernels the "Optional Verus proof kernel" section below accepts are the
-canonical value key and equality relation, which is committed, and this cycle
-model, which is not.
+stronger proof obligations become worthwhile.[^7] It is not yet one: of the
+three kernels the "Optional Verus proof kernel" section below accepts, this
+cycle model is the one still uncommitted. The canonical value key and equality
+relation and the configured-shell name-sequence rule are proved under `verus/`.
 
 ### Kani for command interpolation
 
@@ -179,7 +181,7 @@ maintainer tools, has no Verus installer script, runs the proof in CI through
 `make verus` (`proofs.yml`), and keeps Verus files outside ordinary Cargo.
 
 Verus is not the correct first tool for the manifest or command-interpolation
-layers. Two kernels are accepted, and both are narrow normalization or
+layers. Three kernels are accepted, and all three are narrow normalization or
 algorithm models rather than production subsystems.
 
 The first is a cycle canonicalization model related to `src/ir/cycle/mod.rs`.
@@ -200,8 +202,22 @@ symmetry, and transitivity are *not* among its results: they are properties of
 byte-identity over a canonical form, and they are checked by the property
 battery in `src/stdlib/canonical_value/tests/properties.rs`, not proved here.
 
+The third is the name-sequence rule behind the configured-shell registry,
+proved in `verus/configured_shells/main.rs`. It establishes that a sequence of
+names is accepted exactly when it names no built-in shell and repeats no name,
+which is the pairwise statement the runtime applies after merging layers by
+concatenation. The statement is unbounded in sequence length. Names are
+abstract there — the model sees a name as its UTF-8 bytes and models "already
+seen" as membership in the accepted prefix — so the proof does not cover the
+production traversal, the production `HashMap` seen-set, discovery, or the
+authority classification that decides which layers may declare the key. The
+kernel carries non-vacuity witnesses: the empty registry, two distinct names, a
+reserved name, and a duplicate in the last position. Runtime correspondence is
+carried by the independent quadratic oracle in
+`src/cli/config/shells/tests/oracle.rs`, not by Verus.
+
 Production `HashMap` structures, MiniJinja values, filesystem helpers, and
-subprocess orchestration remain outside both proof boundaries. The second
+subprocess orchestration remain outside all three proof boundaries. The second
 kernel's keys are an abstract sort standing in for the runtime's byte strings,
 so the template-to-key conversion, the runtime's own membership structure, and
 the production adapter are each outside what it proves, and the kernel carries
@@ -265,9 +281,9 @@ stands; parts of it were never adopted. The `tools/` entries are real, and
 `tools/verus/VERSION` and `tools/verus/SHA256SUMS` are the pins that
 `make install-verus` and `make verus` read. The `verus/` filenames and the three
 `src/` harness modules are illustrative: the repository instead colocated its
-Kani harnesses beside the helpers they exercise, and its one Verus kernel is
-`verus/canonical_value/main.rs`. The `## Current repository state` section
-above records the actual layout.
+Kani harnesses beside the helpers they exercise, and its Verus kernels are
+`verus/canonical_value/main.rs` and `verus/configured_shells/main.rs`. The
+`## Current repository state` section above records the actual layout.
 
 Kani and Verus installation and execution should be delegated to the
 `rust-prover-tools` CLI rather than repository-local shell scripts. Netsuke

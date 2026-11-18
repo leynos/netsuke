@@ -1,5 +1,6 @@
 //! Process-level dyndep sidecar publication, retention, and telemetry.
 
+mod directory;
 mod files;
 mod retention;
 mod telemetry;

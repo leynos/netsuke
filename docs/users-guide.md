@@ -8,6 +8,11 @@ Beta4 is an early-adopter release. The compiler pipeline is useful, but command
 names, flags, diagnostic schemas, and some manifest details may change before
 1.0. Pin the Netsuke version in automated workflows.
 
+The installation channels this guide describes apply to v0.1.0-beta4. Readers
+installing v0.1.0-beta1 should follow
+[Published beta1 installation](v0-1-0-migration-guide.md#published-beta1-installation),
+where compiling from crates.io is the only available path.
+
 ## Install Netsuke
 
 Netsuke requires [Ninja](https://ninja-build.org/) on `PATH`. A source build
@@ -209,6 +214,28 @@ a second time, but only when its prerelease flag already matches the validated
 candidate and its inventory still matches the trusted record; a public release
 whose flag or inventory disagrees is refused, because it cannot be made a draft
 again. Either way the rerun is safe.
+
+A publishing run that has finalized the release then exercises it the way a
+consumer would. The `consumer-smoke` job runs after the verification and
+finalization jobs and holds `contents: read` alone: it declares no environment,
+neither it nor the action it calls reads a token, and it cannot publish,
+upload, or exchange a registry credential. It downloads the crate from
+`static.crates.io` and the cargo-binstall archive with its `sha256` sidecar
+from the release's public download URL. The crate is checked against the digest
+the package record retained, and the archive against the uploader's trusted
+digest record beside its own sidecar -- so an archive swapped for a different
+build is refused even when its sidecar was swapped with it. It downloads no
+platform bundle, compiles nothing, and never runs `cargo install`. Before
+extracting anything it judges the archive's whole member layout, refusing a
+member whose name would escape the extraction directory, a link, a device, or a
+second candidate binary; it then runs the one executable it verified under a
+fixed environment and requires it to report the candidate version exactly. A
+release whose version differs from the candidate is a failure, not a match. A
+refusal names the boundary that made it -- `crate-download`,
+`crate-verification`, `archive-download`, `archive-verification`, or
+`executable-probe` -- so an unavailable, empty, corrupt, or mismatched download
+is told apart without reading logs, and a rerun is safe because nothing in the
+smoke writes to the release or the registry.
 
 A caller that invokes `./.github/actions/upload-declared-assets` directly,
 rather than through `release.yml`, must pass `commit` as the **full, lowercase
@@ -954,6 +981,23 @@ then at most 32 obsolete `.dd` files and 1 MiB of obsolete `.dd` bytes. Stale
 `build` and `generate` prune after materialization; `clean` prunes only after
 successful `ninja -t clean`, and does not prune when clean fails.
 
+For its dyndep state, Netsuke refuses to use `.netsuke` or `.netsuke/dyndep`
+when either is a symbolic link, a Windows junction, or not a directory.
+Retention never deletes through such an alias, and the command fails with an
+error naming the offending path. The other contents of `.netsuke` — the fetch
+cache, command tempfiles, and the serial gates Ninja writes — are not checked,
+so the refusal covers the sidecar directory rather than the whole namespace.
+`build` and `generate` check the directory before they run Ninja or write
+output, and `clean` publishes its sidecars before invoking `ninja -t clean`, so
+a command carrying sidecars refuses before doing any work. A bundle with no
+sidecars checks the directory only at retention: `build` and `generate` still
+check before their own work, but `clean` prunes after `ninja -t clean`, so a
+sidecar-free `clean` may already have removed its declared build outputs when
+it reports the alias. Replace the alias with a real directory before retrying.
+This protects unrelated files that a project-supplied alias could otherwise
+make look like disposable cache entries. The `--directory` root itself may be a
+symbolic link; only the generated-state components beneath it are checked.
+
 An older arbitrary manifest written with `generate --output` may lose its
 referenced sidecars after a later command. Regenerate that manifest before
 using it if retention has removed any of its sidecars. The paths
@@ -1524,8 +1568,15 @@ represent files and are not removed.
 
 `help targets` prints the target and action catalogue for the selected manifest
 — actions first, then targets — with a localized default marker such as
-`[★ default]` (or `[* default]` in accessible output) on manifest defaults and
-an empty description column for entries without a `description`:
+`[★ default]` (or `[* default]` in accessible output) on manifest defaults, and
+entries without a `description` are listed without a description column.
+Descriptions align to the widest name in each section, measured in display
+columns after control characters are escaped. A name wider than 40 display
+columns still renders in full but does not widen the column: it is followed
+directly by the two-space description separator, and shorter rows keep their
+alignment against the widest name at or below the cap. A row with no
+description and no marker ends immediately after its name, so catalogue rows
+never carry trailing padding spaces:
 
 <!-- tested-example: guide-help-targets -->
 
@@ -1543,6 +1594,10 @@ skips command and script recipe bodies, so build-only helpers in those recipes
 are not evaluated and do not make discovery fail. Metadata such as `vars`,
 names, dependencies, and descriptions is still rendered; structural rule
 selectors are rendered as needed for graph validation.
+
+The catalogue is written out as each row is rendered. A description shared by
+many target names is therefore repeated in the output without being accumulated
+in memory, so a catalogue can be much larger than the manifest that defines it.
 
 Queries reject direct use of `env()` and `glob()`, file tests, filesystem
 metadata filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
@@ -1568,11 +1623,13 @@ emoji output is allowed, or `[? conditional]` in the ASCII theme. JSON output
 always includes a boolean `conditional` field: `true` means that discovery
 could not resolve the entry's `when` expression, while `false` means no such
 uncertainty was recorded. Integrations should therefore preserve conditional
-entries rather than treating them as confirmed selections. The command honours
-the usual manifest-selection options (`--file`, `-C/--directory`) and the
-normal colour, accessibility, locale, and JSON-output conventions; with
-`--json` the catalogue is emitted as a versioned JSON document whose
-`result.command` is `help-targets`.
+entries rather than treating them as confirmed selections. The alignment and
+padding rules above apply only to the human-readable text forms; `--json` emits
+names and descriptions verbatim and unchanged, and is likewise written as it is
+serialized. The command honours the usual manifest-selection options (`--file`,
+`-C/--directory`) and the normal colour, accessibility, locale, and JSON-output
+conventions; with `--json` the catalogue is emitted as a versioned JSON
+document whose `result.command` is `help-targets`.
 
 The standard-library reference describes the full helper set available while
 rendering a normal build manifest. The query allowlist above is the deliberate
@@ -2255,6 +2312,63 @@ behaviour explicit. Accessibility uses `on` and `off` for its explicit values.
 Netsuke has no interactive mode. It never prompts, and `no_input = false` is
 rejected. Pass root `--no-input` in automation to state that requirement
 explicitly and make the invocation self-documenting.
+
+### Configure shell definitions
+
+A shell definition names a shell, the program that name would run, and the
+fixed arguments that program receives. Definitions are operator policy, because
+a definition decides what Netsuke would execute. Only a system or user operator
+configuration file may declare them:
+
+<!-- tested-example: guide-configured-shell-definition -->
+
+```toml
+[[shells]]
+name = "dash"
+executable = "dash"
+args = ["-c"]
+```
+
+A project `.netsuke.toml`, a file selected with `--config` or `NETSUKE_CONFIG`,
+and the environment are all untrusted for this key. Netsuke rejects a `shells`
+declaration from any of them, including one inherited through a project
+`extends` chain, and stops before it compiles a manifest. The environment is
+rejected even when a variable name normalizes to `shells`, such as
+`NETSUKE_SHELLS` or `NETSUKE_SHELLS__0__NAME`.
+
+Definitions merge by concatenation in merge order, so the merged sequence is
+the registry. Nothing is replaced, keyed, or deduplicated, and an empty higher
+layer neither clears nor narrows a lower one. Two rules then apply to the
+merged registry: a definition may not reuse a built-in name (`sh`, `bash`,
+`pwsh`, or `powershell`), and no name may be declared twice, including an
+identical repeat. A violation rejects the whole registry rather than a partial
+one.
+
+Each field is validated as it is read:
+
+- `name` is 1 to 63 bytes and matches `[a-z][a-z0-9_-]{0,62}`.
+- `executable` is a bare program name or an absolute path. A relative path is
+  rejected, and so is a path that is absolute by POSIX rules but names no drive
+  or UNC share to Windows. Nothing probes the filesystem, so a definition
+  naming a program that is not installed is accepted at configuration time.
+- `args` has 1 to 16 elements and at most 4096 UTF-8 bytes in total, and no
+  element may contain a NUL byte. Empty elements are allowed because some
+  programs treat them as meaningful.
+
+`args` is the fixed prefix of Netsuke's future invocation: the executable, then
+these arguments, then exactly one rendered source argument. Choose a prefix for
+which that invocation reaches the executable's own source evaluator. Netsuke
+checks the structure of a definition only; it cannot establish that semantic
+property for an arbitrary program, so the choice remains the operator's. For
+`dash`, `["-c"]` is such a prefix.
+
+A rejected definition reports the configuration key that failed, such as
+`shells[0].executable`, and a bounded explanation. Diagnostics never print an
+argument vector, an unbounded offending value, or an ambient environment value.
+
+Loading a definition never runs the program it names. Named-command execution
+is a later task; this release only validates and composes the definitions an
+operator declares.
 
 ## Control output and accessibility
 

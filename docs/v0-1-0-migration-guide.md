@@ -9,17 +9,18 @@ sections that match the features they use.
 
 ## Impact at a glance
 
-| Priority          | Area                       | What to do                                                          |
-| ----------------- | -------------------------- | ------------------------------------------------------------------- |
-| Required          | Checkout source builds     | Use the pinned Rust toolchain before building from a checkout.      |
-| Required          | Linux checkout builds      | Install the pinned `mold` linker before building from a checkout.   |
-| Review if enabled | Manifest scheduling        | Opt in only where immediate console output is useful.               |
-| Required          | `Target` literals          | Add `description` and `console` to every literal.                   |
-| Required          | `BuildEdge` literals       | Add `output_visibility` to every literal.                           |
-| Review if enabled | Rust `Action.pool` choices | Move console scheduling onto the edge; keep custom pools off it.    |
-| Required          | `NinjaGenError` matches    | Add arms for the two new console variants.                          |
-| Optional          | Existing manifests         | Omit `console` to retain ordinary scheduling; it defaults to false. |
-| Optional          | Scripts parsing stdout     | Tolerate the forwarding-failure warning on stdout.                  |
+| Priority          | Area                         | What to do                                                          |
+| ----------------- | ---------------------------- | ------------------------------------------------------------------- |
+| Required          | Checkout source builds       | Use the pinned Rust toolchain before building from a checkout.      |
+| Required          | Linux checkout builds        | Install the pinned `mold` linker before building from a checkout.   |
+| Review if enabled | Manifest scheduling          | Opt in only where immediate console output is useful.               |
+| Required          | `Target` literals            | Add `description` and `console` to every literal.                   |
+| Required          | `BuildEdge` literals         | Add `output_visibility` to every literal.                           |
+| Review if enabled | Rust `Action.pool` choices   | Move console scheduling onto the edge; keep custom pools off it.    |
+| Required          | `NinjaGenError` matches      | Add arms for the two new console variants.                          |
+| Optional          | Existing manifests           | Omit `console` to retain ordinary scheduling; it defaults to false. |
+| Optional          | Scripts parsing stdout       | Tolerate the forwarding-failure warning on stdout.                  |
+| Optional          | Configured shell definitions | Declare `[[shells]]` only in operator configuration.                |
 
 _Table 1: migration obligations for the beta series and console-pool option._
 
@@ -117,6 +118,41 @@ outside the checkout and must select the same nightly explicitly:
 rustup toolchain install nightly-2026-10-22
 cargo +nightly-2026-10-22 install netsuke-build
 ```
+
+### Published beta1 installation
+
+The v0.1.0-beta1 release has no uploaded prebuilt artefacts.
+`cargo binstall netsuke-build` therefore cannot fetch a prebuilt beta1 binary,
+and no beta1 Debian (`.deb`), RPM (`.rpm`), macOS (`.pkg`), or Windows (`.msi`)
+package exists. The users' guide tagged with that release described planned
+packaging, not published artefacts.
+
+For beta1, compiling `netsuke-build` from crates.io is the only available
+installation path:
+
+```sh
+rustup toolchain install nightly-2026-06-25
+RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build --version 0.1.0-beta1 --locked
+```
+
+PowerShell cannot use that `RUSTFLAGS=...` prefix, so set the variable in the
+environment before running `cargo`:
+
+```powershell
+rustup toolchain install nightly-2026-06-25
+$env:RUSTFLAGS = "-Zpolonius=next"
+cargo +nightly-2026-06-25 install netsuke-build --version 0.1.0-beta1 --locked
+```
+
+`--version 0.1.0-beta1` selects the beta1 crate. `--locked` uses the
+`Cargo.lock` shipped in the published crate. `nightly-2026-06-25` is the
+compiler contract recorded for beta1, and `-Zpolonius=next` is required because
+that nightly predates 2026-08-04; nightlies from that date enable Polonius by
+default.
+
+Do not mix this command with the current `nightly-2026-10-22` command above:
+each selects the toolchain its release was built with. The command installs the
+`netsuke` executable, and Ninja must be on `PATH` when it runs.
 
 ## Install the linker the build standard uses
 
@@ -1069,6 +1105,24 @@ sidecars. See [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md). The
 [users' guide](users-guide.md#run-direct-dependencies-serially) documents the
 execution scope and the independent-reachability boundary.
 
+### Refuse an aliased generated-state directory
+
+The next pre-release (`v0.1.0-beta5`) also refuses to use `.netsuke` or
+`.netsuke/dyndep` when either part of the generated-state directory is a
+symbolic link, a Windows junction, or not a directory. `build`, `clean`, and
+`generate` report a localized error naming the offending path. Retention
+resolved both parts through the workspace before this change, so a
+project-supplied alias could make unrelated files look like disposable sidecar
+entries.
+
+Replace the alias with a real directory before retrying. A command carrying
+sidecars refuses before it does any work. A bundle with no sidecars checks the
+directory only at retention, and `clean` prunes after `ninja -t clean`, so a
+sidecar-free `clean` can remove its declared build outputs before it reports
+the alias. See
+[Run direct dependencies serially](users-guide.md#run-direct-dependencies-serially)
+and [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md).
+
 ## Discover targets and actions
 
 Target and action `description` values are optional discovery metadata. Adding
@@ -1115,6 +1169,27 @@ manifest-query rendering. See the detailed [help targets documentation]
 versioned JSON result document; its `result.command` is `help-targets`. The
 command and the new descriptions are beta-series additions and remain subject
 to the stability caveat above.
+
+## Configure shell definitions
+
+The next pre-release (`v0.1.0-beta5`) lets an operator declare additional
+structured-command shells with a `[[shells]]` registry. A definition names the
+shell, the program that name would run, and the fixed arguments that program
+receives. Declare the key only in system or user operator configuration: a
+project `.netsuke.toml`, a file selected with `--config` or `NETSUKE_CONFIG`,
+and the environment each reject it with a configuration-key error before any
+manifest is compiled, so a checked-in Netsukefile cannot widen the shells a
+build may run. The definitions merge by concatenation, and the merged registry
+may not reuse a built-in name or declare a name twice.
+
+A configuration that declares no `[[shells]]` key keeps the built-in shells and
+needs no change. One that does declare the key must declare it in system or
+user operator configuration: if a project `.netsuke.toml`, a file selected with
+`--config` or `NETSUKE_CONFIG`, or the environment already carries it, remove
+the key there or move those definitions to operator configuration, because
+startup now fails the authority check before compiling a manifest. See the
+[users' guide](users-guide.md#configure-shell-definitions) for the definition
+fields, the merge rules, and the validation diagnostics.
 
 ## Configure file reading limits
 
@@ -1311,6 +1386,8 @@ owned sink and completion-ordering contract.
 - [ ] If a script parses `netsuke` stdout, tolerate the
   `netsuke: warning: failed to forward child stderr` line.
 - [ ] Write project `env_block_var` and `fetch_block_host` values as arrays.
+- [ ] If you declare `[[shells]]`, declare it in system or user configuration,
+  not a project file.
 
 ## Common errors and fixes
 

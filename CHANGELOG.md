@@ -20,6 +20,14 @@
   `--explain` prints the rule reference. Suppression is a comment that names
   the rules it silences and states a reason; there is no blanket disable
   ([#592](https://github.com/leynos/netsuke/issues/592))
+- Allow operators to declare additional structured-command shells in system or
+  user configuration with a `[[shells]]` registry whose `name`, `executable`,
+  and fixed `args` are validated as they are read, and whose layers concatenate
+  in merge order without replacing entries. A project file, a file selected with
+  `--config` or `NETSUKE_CONFIG`, and the environment each reject the key
+  before a manifest is compiled. See the
+  [users' guide](docs/users-guide.md#configure-shell-definitions)
+  ([#593](https://github.com/leynos/netsuke/issues/593))
 - Add the public `InterpreterExecutable` binding, its
   `InterpreterExecutableError` rejection, `generate_with_interpreter`, and
   `generate_bundle_with_interpreter`, so embedders can render Windows recipes
@@ -309,6 +317,17 @@ _If you are upgrading: see the
   declaration from `Cargo.toml`; `rust-toolchain.toml` is now the single source
   of truth for the compiler contract
   ([#465](https://github.com/leynos/netsuke/issues/465))
+
+<!-- markdownlint-disable-next-line MD024 -->
+### Fixed
+
+- Correct the v0.1.0-beta1 installation record: the release published no
+  prebuilt binaries or installer packages, so `cargo binstall` and the `.deb`,
+  `.rpm`, `.pkg`, and `.msi` instructions in the guide tagged with that release
+  do not apply; compiling `netsuke-build` from crates.io with the pinned
+  command in the
+  [beta1 installation notice](docs/v0-1-0-migration-guide.md#published-beta1-installation)
+  is the only available path.
 
 [0.1.0-beta4]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4
 [0.1.0-beta3]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3

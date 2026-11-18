@@ -33,6 +33,11 @@ from release_publish_path_artifacts import (
     check_download_pattern,
     evaluate_field,
 )
+from release_publish_path_consumer_smoke import (
+    CONSUMER_SMOKE_ACTION_PATH,
+    ConsumerSmokeCheck,
+    check_consumer_smoke,
+)
 from release_publish_path_context import ScenarioRun, needs_context
 from release_publish_path_finalization import check_finalize_release
 from release_publish_path_publication import (
@@ -70,6 +75,22 @@ CALLER_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release-dry-run.ym
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ActionManifests:
+    """Name the composite manifests a caller supplies instead of the repository's.
+
+    Attributes
+    ----------
+    publisher
+        Parsed publisher action manifest, or ``None`` to read the repository's.
+    consumer_smoke
+        Parsed consumer-smoke manifest, or ``None`` to read the repository's.
+    """
+
+    publisher: dict[str, object] | None = None
+    consumer_smoke: dict[str, object] | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class ScenarioCheck:
     """Bundle the workflows and scenario state checked as one release run."""
 
@@ -78,6 +99,7 @@ class ScenarioCheck:
     outputs_by_mode: dict[str, dict[str, str]]
     scenario: Scenario
     violations: list[str]
+    smoke_action: dict[str, object] | None = None
 
 
 def _workflow_call_inputs(workflow: dict[str, object]) -> dict[str, object]:
@@ -303,6 +325,7 @@ def _check_scenario(check: ScenarioCheck) -> None:
     )
     check_publication_path(publication_check, run.results)
     publisher_job = workflow_job(check.release, "publish-crates-io")
+    check_finalize_release(check.release, run, check.violations)
     publisher_contexts: dict[str, object] = {
         "needs": _stage_needs(publisher_job, scenario, outputs, run.results),
         "status": {"cancelled": scenario.cancelled},
@@ -312,7 +335,15 @@ def _check_scenario(check: ScenarioCheck) -> None:
         publisher_job, publication_check, publisher_contexts, run.results
     )
     check_verify_inventory(check.release, run, check.violations)
-    check_finalize_release(check.release, run, check.violations)
+    check_consumer_smoke(
+        ConsumerSmokeCheck(
+            release=check.release,
+            action=check.smoke_action,
+            scenario=scenario,
+            outputs=outputs,
+            violations=check.violations,
+        )
+    )
 
 
 def _check_publisher_action(
@@ -336,7 +367,7 @@ def check_release_publish_path(
     release: dict[str, object],
     caller: dict[str, object],
     build: dict[str, object],
-    publisher_action: dict[str, object] | None = None,
+    manifests: ActionManifests | None = None,
 ) -> list[str]:
     """Return violations in the dry-run and tag-publish reachability contract.
 
@@ -344,15 +375,16 @@ def check_release_publish_path(
     ----------
     release, caller, build : dict[str, object]
         Parsed workflow documents for the release, caller, and build workflows.
-    publisher_action : dict[str, object] | None, optional
-        Parsed publisher action manifest. When ``None``, read it from the
-        repository.
+    manifests : ActionManifests | None, optional
+        Composite action manifests to check instead of the repository's. A
+        caller supplies them to check mutated copies.
 
     Returns
     -------
     list[str]
         Missing or incorrectly wired release-path invariants.
     """
+    supplied = manifests if manifests is not None else ActionManifests()
     violations: list[str] = []
     _check_caller(release, caller, violations)
     check_publication_gate(release, caller, violations)
@@ -373,7 +405,12 @@ def check_release_publish_path(
     )
     _check_release_needs(release, violations)
     _check_release_step_order(release, violations)
-    _check_publisher_action(release, publisher_action, violations)
+    _check_publisher_action(release, supplied.publisher, violations)
+    smoke_action = (
+        supplied.consumer_smoke
+        if supplied.consumer_smoke is not None
+        else action_sources().get(CONSUMER_SMOKE_ACTION_PATH)
+    )
     for scenario in SCENARIOS:
         _check_scenario(
             ScenarioCheck(
@@ -382,6 +419,7 @@ def check_release_publish_path(
                 outputs_by_mode=outputs_by_mode,
                 scenario=scenario,
                 violations=violations,
+                smoke_action=smoke_action,
             )
         )
     return violations

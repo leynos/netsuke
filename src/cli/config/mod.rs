@@ -1,31 +1,34 @@
 //! Layered CLI configuration schema.
 //!
 //! [`CliConfig`] is the single typed schema used for configuration discovery
-//! and merging. It captures global CLI settings plus per-subcommand defaults
-//! under the `cmds` namespace.
+//! and merging. It captures global CLI settings, trusted shell definitions, and
+//! per-subcommand defaults under the `cmds` namespace.
 pub(super) use super::validation::validation_error;
 use crate::host_pattern::HostPattern;
 use camino::Utf8PathBuf;
-use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
+use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
 mod budget;
+mod defaults;
 mod no_input;
+pub mod shells;
 mod validation;
 pub use no_input::NoInput;
 pub(super) mod policy_definitions;
 use budget::{
     DEFAULT_MANIFEST_EVALUATION_FUEL, DEFAULT_MANIFEST_EXPANDED_ENTRIES,
     DEFAULT_MANIFEST_FOREACH_CARDINALITY, DEFAULT_MANIFEST_FUEL, DEFAULT_MANIFEST_RENDERED_BYTES,
-    DEFAULT_MANIFEST_RENDERED_VALUE_BYTES, DEFAULT_MANIFEST_SOURCE_BYTES, validate_manifest_budget,
+    DEFAULT_MANIFEST_RENDERED_VALUE_BYTES, DEFAULT_MANIFEST_SOURCE_BYTES,
 };
+use defaults::default_manifest_path;
 pub(super) use policy_definitions::{
     ACCESSIBILITY_POLICY_DEFINITIONS, COLOUR_POLICY_DEFINITIONS, EMOJI_POLICY_DEFINITIONS,
     PROGRESS_POLICY_DEFINITIONS,
 };
 use policy_definitions::{definition_for, parse_policy};
-use validation::{validate_jobs, validate_manifest_path, validate_non_interactive};
+use shells::ShellDefinition;
 /// Colour-output policy accepted by layered configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -321,65 +324,21 @@ pub struct CliConfig {
     #[serde(default)]
     pub default_targets: Vec<String>,
 
+    /// Trusted shell definitions declared by an operator configuration file.
+    ///
+    /// Shell definitions grant executable authority, so the key is absent from
+    /// the command line and from the environment; discovery admits it only in
+    /// an operator-owned root. Layers concatenate in merge order, and the
+    /// post-merge hook then rejects built-in and repeated names across the
+    /// whole registry.
+    #[ortho_config(skip_cli, merge_strategy = "append")]
+    #[serde(default)]
+    pub shells: Vec<ShellDefinition>,
+
     /// Per-subcommand defaults.
     #[ortho_config(skip_cli)]
     #[serde(default)]
     pub cmds: CommandConfigs,
-}
-
-impl Default for CliConfig {
-    fn default() -> Self {
-        Self {
-            file: Self::default_manifest_path(),
-            jobs: None,
-            verbose: false,
-            locale: None,
-            fetch_allow_scheme: Vec::new(),
-            env_allow_var: Vec::new(),
-            env_block_var: Vec::new(),
-            fetch_allow_host: Vec::new(),
-            fetch_block_host: Vec::new(),
-            fetch_default_deny: false,
-            trust_project_fetch_policy: false,
-            manifest_evaluation_fuel: DEFAULT_MANIFEST_EVALUATION_FUEL,
-            manifest_fuel: DEFAULT_MANIFEST_FUEL,
-            manifest_rendered_value_bytes: DEFAULT_MANIFEST_RENDERED_VALUE_BYTES,
-            manifest_rendered_manifest_bytes: DEFAULT_MANIFEST_RENDERED_BYTES,
-            manifest_source_bytes: DEFAULT_MANIFEST_SOURCE_BYTES,
-            manifest_foreach_cardinality: DEFAULT_MANIFEST_FOREACH_CARDINALITY,
-            manifest_expanded_entries: DEFAULT_MANIFEST_EXPANDED_ENTRIES,
-            json: false,
-            no_input: NoInput::default(),
-            color: ColourPolicy::Auto,
-            emoji: EmojiPolicy::Auto,
-            progress: ProgressPolicy::Auto,
-            accessibility: AccessibilityPolicy::Auto,
-            default_targets: Vec::new(),
-            cmds: CommandConfigs::default(),
-        }
-    }
-}
-
-impl CliConfig {
-    /// Return the default manifest file path used when no file is supplied.
-    pub(super) fn default_manifest_path() -> Utf8PathBuf {
-        default_manifest_path()
-    }
-}
-
-impl PostMergeHook for CliConfig {
-    fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
-        validate_manifest_path(self)?;
-        validate_non_interactive(self)?;
-        validate_jobs(self)?;
-        validate_manifest_budget(self)?;
-        Ok(())
-    }
-}
-
-/// Return the default manifest file path, `Netsukefile` in the working directory.
-fn default_manifest_path() -> Utf8PathBuf {
-    Utf8PathBuf::from("Netsukefile")
 }
 
 /// Fixed reason reported when merged configuration enables interactive input.

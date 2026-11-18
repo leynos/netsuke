@@ -21,6 +21,7 @@ mod ninja;
 mod output_forwarding;
 mod paths;
 mod redaction;
+mod stdout_stream;
 mod streaming;
 #[cfg(test)]
 mod test_fixtures;
@@ -34,6 +35,7 @@ pub use file_io::*;
 use logging::{CommandLogContext, command_span, log_command_execution, log_command_spawn_failure};
 pub use ninja::resolve_ninja_program;
 use output_forwarding::{StatusObserver, spawn_and_stream_output};
+pub use stdout_stream::stream_text_stdout;
 pub use streaming::{
     FORWARD_FAILURE_LABELS, FORWARD_FAILURES_TOTAL, NINJA_STATUS_OVERSIZED_LINES_TOTAL,
 };
@@ -391,3 +393,4 @@ pub(crate) fn run_ninja_tool_with_status(
 
 /// Namespace for generated dyndep sidecar files.
 pub(super) const DYNDEP_DIR: &str = ".netsuke/dyndep";
+// weave: run 'weave explain src/runner/process/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

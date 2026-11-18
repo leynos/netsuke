@@ -15,9 +15,12 @@ use std::sync::Arc;
 use super::super::validation::validation_error;
 use super::json::json_from_value;
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
+use super::shell_definitions::shells_authority_errors;
 use super::trace::EnvGrantQuarantineTrace;
 use super::{ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
 use crate::host_pattern::HostPattern;
+
+pub(super) use super::shell_definitions::RootAuthority;
 
 /// Identify whether this occurrence belongs to a selected project chain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +39,8 @@ pub(super) struct ScopedFileLayer {
     scope: FileScope,
     /// Whether this occurrence belongs to an automatically discovered project chain.
     project_chain: bool,
+    /// Whether the root that loaded this occurrence may declare executable policy.
+    authority: RootAuthority,
 }
 
 impl ScopedFileLayer {
@@ -45,11 +50,34 @@ impl ScopedFileLayer {
             layer,
             scope: FileScope::Operator,
             project_chain: false,
+            authority: RootAuthority::Operator,
         }
+    }
+
+    /// Retain a file occurrence loaded through an unproven root.
+    ///
+    /// The occurrence keeps operator scope, so precedence and quarantine behave
+    /// exactly as before; only executable-authority claims are withheld.
+    pub(super) const fn untrusted(layer: MergeLayer<'static>) -> Self {
+        Self {
+            layer,
+            scope: FileScope::Operator,
+            project_chain: false,
+            authority: RootAuthority::Untrusted,
+        }
+    }
+
+    /// Report the authority this occurrence carries.
+    #[cfg(test)]
+    pub(super) const fn authority(&self) -> RootAuthority {
+        self.authority
     }
 }
 
 /// Mark inherited parents through the selected project layer as project-scoped.
+///
+/// Every call site reaches these occurrences through either the project file or
+/// an explicitly selected file, so none of them may declare executable policy.
 pub(super) fn scope_project_fetch_layers(
     layers: Vec<MergeLayer<'static>>,
     project_index: usize,
@@ -65,6 +93,7 @@ pub(super) fn scope_project_fetch_layers(
                 FileScope::Operator
             },
             project_chain: false,
+            authority: RootAuthority::Untrusted,
         })
         .collect()
 }
@@ -88,6 +117,11 @@ pub(super) fn scope_project_chain(
 }
 
 /// Identify the project file before discarding explicit-chain boundaries.
+///
+/// An explicit selector never establishes definition authority, whatever file
+/// it names. The occurrence that happens to be the project configuration file
+/// keeps its project scope, and every other occurrence keeps operator scope, so
+/// only executable-authority claims are withheld.
 pub(super) fn scope_selected_primary_layer(
     layers: Vec<MergeLayer<'static>>,
     directory: Option<&Path>,
@@ -104,7 +138,7 @@ pub(super) fn scope_selected_primary_layer(
     if let Some(index) = project_index {
         scope_project_fetch_layers(layers, index)
     } else {
-        layers.into_iter().map(ScopedFileLayer::operator).collect()
+        layers.into_iter().map(ScopedFileLayer::untrusted).collect()
     }
 }
 
@@ -138,10 +172,14 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
         layer,
         scope,
         project_chain,
+        authority,
     } in layers
     {
         let path = layer.path().map(ToOwned::to_owned);
         let mut value = layer.into_value();
+        resolved
+            .errors
+            .extend(shells_authority_errors(&value, path.as_deref(), authority));
         if let Some(json) = json_from_value(&value) {
             resolved.json_preference = json;
         }

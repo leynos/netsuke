@@ -1,6 +1,8 @@
 # Netsuke 명령줄의 지역화 리소스.
 
 runner.io.dyndep.retention = { $path } 아래에 생성된 dyndep 보존을 적용하지 못했습니다.
+runner.io.dyndep.alias = 생성된 dyndep 경로 { $path }은(는) 심볼릭 링크 또는 정션이거나 디렉터리가 아닙니다. 실제 디렉터리로 바꾸세요.
+runner.io.dyndep.open = 생성된 dyndep 디렉터리 { $path }을(를) 열지 못했습니다.
 cli.about = Netsuke는 YAML + Jinja 매니페스트를 Ninja 빌드 계획으로 컴파일합니다.
 cli.long_about = Netsuke는 YAML + Jinja 매니페스트를 재현 가능한 Ninja 그래프로 변환한 뒤 안전한 기본값으로 Ninja를 실행합니다.
 cli.usage = { $usage }

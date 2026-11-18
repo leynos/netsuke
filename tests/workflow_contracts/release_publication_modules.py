@@ -82,6 +82,15 @@ SECTION_MODULES = (
     "scripts/tests/test_release_upload_boundaries.py",
     "scripts/tests/test_release_upload_timing.py",
     "scripts/tests/test_release_upload_trace.py",
+    "scripts/tests/test_release_consumer_smoke.py",
+    "scripts/tests/test_release_consumer_archive_policy.py",
+    "scripts/tests/test_release_binstall_archive.py",
+    "scripts/tests/test_release_binstall_archive_tail.py",
+    "scripts/tests/test_release_binstall_sidecar.py",
+    "scripts/tests/test_release_binstall_extract.py",
+    "scripts/tests/test_release_binstall_probe.py",
+    "scripts/tests/test_consumer_smoke_cli.py",
+    "scripts/tests/test_consumer_smoke_evidence.py",
 )
 
 #: Source modules named by ``--doctest-modules`` in the Makefile target.
@@ -168,6 +177,20 @@ SOURCE_MODULES = (
     "scripts/upload_declared_assets_cli.py",
     "scripts/upload_declared_assets_refusals.py",
     "scripts/ensure_draft_release.py",
+    "scripts/release_consumer_smoke.py",
+    "scripts/release_consumer_archive_policy.py",
+    "scripts/release_binstall_archive.py",
+    "scripts/release_binstall_members.py",
+    "scripts/release_binstall_sidecar.py",
+    "scripts/release_consumer_payload.py",
+    "scripts/release_binstall_extract.py",
+    "scripts/release_binstall_probe.py",
+    "scripts/release_binstall_child.py",
+    "scripts/consumer_smoke_evidence.py",
+    "scripts/consumer_smoke_ledger.py",
+    "scripts/consumer_smoke_options.py",
+    "scripts/consumer_smoke_cli.py",
+    "scripts/consumer_smoke_verify.py",
 )
 
 #: Sources that decide from already parsed, in-memory values.
@@ -203,6 +226,9 @@ POLICY_MODULES = (
     "scripts/release_payload_selection.py",
     "scripts/release_upload_boundaries.py",
     "scripts/release_upload_failures.py",
+    "scripts/release_consumer_smoke.py",
+    "scripts/release_consumer_archive_policy.py",
+    "scripts/release_consumer_payload.py",
 )
 
 #: Sources that parse formats, touch files, or compose policy at the CLI edge.
@@ -258,6 +284,17 @@ ADAPTER_MODULES = (
     "scripts/upload_declared_assets_cli.py",
     "scripts/upload_declared_assets_refusals.py",
     "scripts/ensure_draft_release.py",
+    "scripts/release_binstall_archive.py",
+    "scripts/release_binstall_members.py",
+    "scripts/release_binstall_sidecar.py",
+    "scripts/release_binstall_extract.py",
+    "scripts/release_binstall_probe.py",
+    "scripts/release_binstall_child.py",
+    "scripts/consumer_smoke_evidence.py",
+    "scripts/consumer_smoke_ledger.py",
+    "scripts/consumer_smoke_verify.py",
+    "scripts/consumer_smoke_cli.py",
+    "scripts/consumer_smoke_options.py",
 )
 
 #: Sources that own the network boundary. The boundary test uses this same
@@ -293,13 +330,22 @@ NETWORK_FREE_MODULES = tuple(
 #: release path belongs to one of those boundaries. A new entry here is a
 #: reviewed decision, not a registration. The finalizer's CLI, operations,
 #: and records modules sit above that boundary and issue no process of
-#: their own.
+#: their own. ``release_binstall_child`` runs the binary the smoke downloaded:
+#: the only way to observe what a consumer actually receives. It compiles
+#: nothing, reaches no service of its own, and passes argv with a fixed
+#: environment rather than building a shell command. The probe that decides
+#: what the child's answer means holds no process of its own, and neither do
+#: the smoke's other adapters — the archive reader, the extractor, the evidence
+#: reads, the ledger, and the phase walk.
 PROCESS_MODULES = {
     "scripts/ensure_draft_release.py": "runs `gh release create`, the draft boundary",
     "scripts/package_crate_cli.py": "runs `cargo package`, a local build",
     "scripts/release_upload_remote.py": "runs `gh release upload`, the upload boundary",
     "scripts/finalize_github_release_io.py": (
         "runs `gh release view` and `gh release edit`, the publication boundary"
+    ),
+    "scripts/release_binstall_child.py": (
+        "runs the extracted `netsuke --version`, the smoke's execution boundary"
     ),
 }
 

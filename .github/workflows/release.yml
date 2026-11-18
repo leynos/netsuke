@@ -1232,6 +1232,14 @@ jobs:
       - verify-release-inventory
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The consumer smoke needs the publisher's retained digest record, and this
+    # job already depends on the publisher. Forwarding the name keeps the
+    # smoke's own dependencies to the candidate's three stages instead of
+    # widening them to the publisher. The name is read from the publisher's
+    # output rather than recomputed here for the same reason: a "Re-run failed
+    # jobs" reuses a successful publisher without running it again.
+    outputs:
+      trusted-artifact: ${{ needs.publish-release.outputs.trusted-artifact }}
     # The publisher, the verifier, and this stage hold write access to the
     # release API; only the publisher and this stage change the release, and
     # the verifier needs the scope because a draft is visible only with it.
@@ -1294,3 +1302,147 @@ jobs:
           digest-record-path: trusted/trusted.json
           work-directory: ${{ runner.temp }}/release-finalize
           github-token: ${{ github.token }}
+
+  consumer-smoke:
+    # Exercises the release the way a consumer does, once it is public: the
+    # crate from `static.crates.io` and the cargo-binstall archive from its
+    # public GitHub release URL, with no registry credential and no
+    # release-write authority. Finalization is a prerequisite because an
+    # archive attached to a draft release is not downloadable without a token,
+    # and this job deliberately holds none. Every dependency result is named
+    # explicitly because `!cancelled()` is a status function, and a status
+    # function suppresses the implicit success check GitHub would otherwise
+    # apply. The rehearsal job `release` is deliberately absent: a dry run
+    # publishes nothing, so there is nothing public to exercise.
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.package-crate.result == 'success' &&
+      needs.finalize-github-release.result == 'success' &&
+      needs.metadata.outputs.should_publish == 'true'
+    needs:
+      - metadata
+      - package-crate
+      - finalize-github-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Every byte this job reads is public, and it downloads rather than
+    # publishes: `contents: read` is the whole grant. No OIDC permission, no
+    # deployment environment, and no registry credential reaches this job.
+    permissions:
+      contents: read
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          # Run the candidate's own scripts, so the smoke exercises the code
+          # the publisher ran rather than whatever the tag resolves to.
+          ref: ${{ needs.metadata.outputs.candidate_commit }}
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.14'
+          # The smoke helpers are stdlib-only, so a restored dependency cache
+          # would add a supply-chain input and buy nothing.
+          enable-cache: false
+      - name: Download the package record
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1. One exact name. This artefact is the candidate's *evidence*
+        # — the crate name, digest, and identity the planner binds the smoke
+        # to — never the payload: the bytes under test are downloaded from the
+        # public hosts below.
+        with:
+          name: release-crate-package
+          path: release-crate-package
+      - name: Download the trusted digest record
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1. One exact name, forwarded by the finalization job from the
+        # publisher's output rather than recomputed from this attempt number,
+        # because a "Re-run failed jobs" reuses a successful publisher without
+        # running it again.
+        with:
+          name: ${{ needs.finalize-github-release.outputs.trusted-artifact }}
+          path: trusted
+      - id: release_operation_start
+        name: Start release operation timing
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: consumer_smoke
+        name: Exercise the published release as a consumer
+        uses: ./.github/actions/consumer-smoke
+        # The aggregate ceiling. The action's own steps cannot carry
+        # `timeout-minutes` (actions/runner#1979), so it bounds each command
+        # instead: 300s to plan, three transfers of at most 180s plus a 60s
+        # retry window each, and 600s to verify. That is 1620s of command
+        # budgets plus interpreter start-up, so this ceiling sits below the
+        # job's 30 minutes and a hung smoke is reported as this step.
+        timeout-minutes: 28
+        with:
+          identity-path: release-crate-package/artifacts/package/identity.json
+          asset-digest-record: trusted/trusted.json
+          repository: ${{ github.repository }}
+          commit: ${{ needs.metadata.outputs.candidate_commit }}
+          target: x86_64-unknown-linux-gnu
+          work-dir: ${{ runner.temp }}/release-consumer-smoke
+      # The smoke's phases are the boundaries an operator reads after a
+      # refusal, so the summary runs even when verification refused the
+      # release: that refusal is the outcome it exists to report.
+      - name: Record release operation observability
+        if: always()
+        env:
+          RELEASE_OPERATION: consumer_smoke
+          # The job runs only when the run is publishing, so the mode is fixed
+          # rather than read from an output that could disagree.
+          RELEASE_DRY_RUN: 'false'
+          JOB_STATUS: ${{ job.status }}
+          OPERATION_STARTED_NS: ${{ steps.release_operation_start.outputs.started_ns }}
+          CRATE_DOWNLOAD_OUTCOME: >-
+            ${{ steps.consumer_smoke.outputs.crate-download-outcome }}
+          CRATE_DOWNLOAD_STARTED_NS: >-
+            ${{ steps.consumer_smoke.outputs.crate-download-started-ns }}
+          CRATE_DOWNLOAD_ENDED_NS: >-
+            ${{ steps.consumer_smoke.outputs.crate-download-ended-ns }}
+          CRATE_VERIFICATION_OUTCOME: >-
+            ${{ steps.consumer_smoke.outputs.crate-verification-outcome }}
+          CRATE_VERIFICATION_STARTED_NS: >-
+            ${{ steps.consumer_smoke.outputs.crate-verification-started-ns }}
+          CRATE_VERIFICATION_ENDED_NS: >-
+            ${{ steps.consumer_smoke.outputs.crate-verification-ended-ns }}
+          ARCHIVE_DOWNLOAD_OUTCOME: >-
+            ${{ steps.consumer_smoke.outputs.archive-download-outcome }}
+          ARCHIVE_DOWNLOAD_STARTED_NS: >-
+            ${{ steps.consumer_smoke.outputs.archive-download-started-ns }}
+          ARCHIVE_DOWNLOAD_ENDED_NS: >-
+            ${{ steps.consumer_smoke.outputs.archive-download-ended-ns }}
+          ARCHIVE_VERIFICATION_OUTCOME: >-
+            ${{ steps.consumer_smoke.outputs.archive-verification-outcome }}
+          ARCHIVE_VERIFICATION_STARTED_NS: >-
+            ${{ steps.consumer_smoke.outputs.archive-verification-started-ns }}
+          ARCHIVE_VERIFICATION_ENDED_NS: >-
+            ${{ steps.consumer_smoke.outputs.archive-verification-ended-ns }}
+          EXECUTABLE_PROBE_OUTCOME: >-
+            ${{ steps.consumer_smoke.outputs.executable-probe-outcome }}
+          EXECUTABLE_PROBE_STARTED_NS: >-
+            ${{ steps.consumer_smoke.outputs.executable-probe-started-ns }}
+          EXECUTABLE_PROBE_ENDED_NS: >-
+            ${{ steps.consumer_smoke.outputs.executable-probe-ended-ns }}
+          # The smoke never uploads, so there is no upload error to report.
+          UPLOAD_ERROR_PRESENT: 'false'
+          OBSERVABILITY_PATH: ${{ runner.temp }}/release-operation-observability.jsonl
+        run: |
+          set -euo pipefail
+          python3 scripts/release_operation_observability.py
+      - name: Upload release operation observability
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        # v7.0.1. `ignore` because the summary step is the thing that writes
+        # this file; a failed summary is already reported as its own step and
+        # must not disguise itself as an upload failure.
+        with:
+          name: release-operation-observability-${{ github.job }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-operation-observability.jsonl
+          if-no-files-found: ignore

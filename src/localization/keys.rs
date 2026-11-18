@@ -113,6 +113,8 @@ define_keys! {
     RUNNER_IO_DYNDEP_TEMP_COLLISIONS => "runner.io.dyndep.temp_collisions",
     RUNNER_IO_DYNDEP_TOO_LARGE => "runner.io.dyndep.too_large",
     RUNNER_IO_DYNDEP_RETENTION => "runner.io.dyndep.retention",
+    RUNNER_IO_DYNDEP_ALIAS => "runner.io.dyndep.alias",
+    RUNNER_IO_DYNDEP_OPEN => "runner.io.dyndep.open",
     IR_RULE_NOT_FOUND => "ir.rule_not_found",
     IR_MULTIPLE_RULES => "ir.multiple_rules",
     IR_EMPTY_RULE => "ir.empty_rule",

@@ -244,6 +244,49 @@ metadata filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
 rendering still registers the full standard library; this restriction applies
 only to query rendering.
 
+Text layout is bounded by `MAX_HELP_ALIGNMENT_WIDTH` (40 display columns) in
+`src/runner/help/mod.rs`. `render_section` computes each section's alignment
+width only from names whose sanitized display width is at or below that cap; a
+wider name renders in full but contributes no padding, and `saturating_sub`
+keeps its own padding at zero. Padding is appended to the row only when a
+non-empty sanitized description or a marker follows, so a row with no following
+column ends at its name and carries no trailing padding spaces. Names are never
+truncated to meet the bound.
+
+The catalogue is streamed, not assembled. `build_catalogue` creates one row per
+name in a target's name list, and every row shares that target's description,
+so one manifest description can repeat across thousands of rows. The manifest
+budgets (`rendered_value_bytes`, `rendered_manifest_bytes`, and
+`expanded_entries`) charge that description once and count the target rather
+than its names, so they cannot bound the rendered catalogue, and a total output
+cap would instead reject legitimate large catalogues. Both renderers therefore
+write incrementally: `render_text` reuses one row buffer and writes each row as
+soon as it is complete, and `render_json` serializes with
+`serde_json::to_writer_pretty` rather than formatting into a string. Peak
+allocation follows the alignment-name vector plus the largest single row, not
+the row count multiplied by the description length. Do not reintroduce an
+accumulated catalogue buffer.
+
+The stdout seam is `process::stream_text_stdout` in
+`src/runner/process/stdout_stream.rs`. It buffers through `BufWriter`, and its
+`ClosedPipeWriter` treats a broken pipe as a completed write so a consumer such
+as `head` ends the stream without an error, while every other write failure
+still reaches the caller. Use it for catalogue-style output that may exceed the
+input it was derived from; `write_text_stdout` remains for a single string that
+is already complete. `render_json` still emits names and descriptions verbatim;
+the `--edges` graph projection is likewise outside the layout rule.
+
+Width is measured with `unicode-width`, which cannot know how a given terminal
+renders East Asian ambiguous-width characters or emoji, so alignment may differ
+visually between terminals while the padding bound still holds. Regression
+coverage pins the padding trigger in `src/runner/help/tests/bounds.rs` (one
+long name among many short rows, and a single target's name list). The
+amplification regression lives in `src/runner/help/tests/streaming.rs`: 2,000
+names sharing one 16 KiB description must produce at least one write per row,
+with no single write larger than one row.
+`tests/runner_help_targets_tests/bounds.rs` drives the same shape through the
+binary.
+
 The rejection is total: every query-context `env()` call fails, and an
 `env(name, default=value)` call reports the same query-disabled marker as a bare
 `env(name)` rather than an arity error. The stub accepts a keyword-argument
@@ -1671,9 +1714,10 @@ from the `bin-name` field that
   unchanged. `tests/binstall_metadata_tests.rs` and
   `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this contract.
 
-Only the two registry installation commands name `netsuke-build`, and
-`tests/documentation_installation_tests.rs` pins both. When adding a release
-target, a packaging format, or an artefact name, add the target to
+Three registry installation commands name `netsuke-build`: the README and
+users' guide examples, and the pinned v0.1.0-beta1 command in the migration
+guide. `tests/documentation_installation_tests.rs` pins all three. When adding
+a release target, a packaging format, or an artefact name, add the target to
 `.github/release-staging.toml`'s `[targets.*]` table and to the release
 workflow's target matrices; the single `pkg-url` template in `Cargo.toml`
 (`{ name }-{ version }-{ target }.tar.gz`) resolves new targets automatically,
@@ -2939,12 +2983,13 @@ against it, and then by `finalize-github-release`, which reconciles the draft
 against the same record before un-drafting it. Only a release the workflow
 creates is a draft: `ensure_draft_release.py` returns as soon as the tag
 already has one, without checking whether it is public, so a rerun attaches
-assets to whatever release the tag already names. `consumer-smoke` remains a
-planned job-matched action, so the release path ends at a public release whose
-published bytes have not yet been exercised as a consumer would. Read the
-section above as describing the upload path; the verification and finalization
-hand-off is described under *Verifying the downloaded release inventory* and
-*Finalizing the verified release*.
+assets to whatever release the tag already names. `consumer-smoke` then
+downloads the published crate and archive from their public URLs and runs the
+shipped binary, so the path ends by exercising a public release the way a
+consumer would. Read the section above as describing the upload path; the
+verification, finalization, and smoke hand-off is described under *Verifying
+the downloaded release inventory*, *Finalizing the verified release*, and
+*Smoke-testing the published release*.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
@@ -3489,6 +3534,7 @@ the separate GitHub release writer after their prerequisites succeed.
 | `publish-release`             | the same seven as `publish-crates-io`                                                    | `contents: write`                   | `should_publish == 'true'`     |
 | `verify-release-inventory`    | `metadata`, `package-crate`, `release-admission-canaries`, both publishers               | `contents: write`                   | both publishers succeeded      |
 | `finalize-github-release`     | `metadata`, `package-crate`, `release-admission-canaries`, both publishers, the verifier | `contents: write`                   | every prerequisite succeeded   |
+| `consumer-smoke`              | `metadata`, `package-crate`, `finalize-github-release`                                   | `contents: read`                    | every prerequisite succeeded   |
 
 *Table 1: `release.yml` jobs, their dependencies, permissions, and mode.*
 
@@ -3505,7 +3551,10 @@ with write access, and it reads without mutating, as the verification section
 below describes. Neither publishing job receives the other's authority, and the
 finalizer takes no `id-token` and declares no `environment`, so it can neither
 exchange nor hold a registry credential. `release-admission-canaries`
-additionally takes `actions: read` to inspect prior runs.
+additionally takes `actions: read` to inspect prior runs. `consumer-smoke` runs
+after the release is public and holds `contents: read` alone: it downloads what
+a consumer downloads and runs one published executable, so it needs no write
+authority over the release it is checking.
 
 `release` and `publish-release` carry mutually exclusive guards, so a run is a
 rehearsal or a publication and never both, but their dependency lists differ on
@@ -3905,7 +3954,7 @@ substitution visible, and that comparison is only meaningful if the record
 comes from the build.
 
 `publish` exits with the vocabulary below. The plan step runs the planner
-instead, whose own statuses are in Table 10, and reads `0`, `1`, and `2` as
+instead, whose own statuses are in Table 11, and reads `0`, `1`, and `2` as
 normal: a conflict and a missing asset are both decisions the finalize step
 turns into a diagnosis, and only a run whose planner could not record a plan
 stops there. The status alone cannot say a plan exists, because an `argparse`
@@ -3993,6 +4042,246 @@ interrupted retries, an already-finalized release, an already-public release
 that must not be edited, an undeclared attachment seen before the edit and on
 both later passes, missing and conflicting assets, and API and output failures
 through `cmd-mox`.
+
+### Smoke-testing the published release
+
+`consumer-smoke` is the last job of a publishing run and the only one that
+touches the release the way a consumer does. It runs after
+`finalize-github-release`, because an archive attached to a draft release is
+not downloadable without a credential and this job deliberately uses none. Its
+dependencies are `metadata`, `package-crate`, and `finalize-github-release`,
+and its guard names each result explicitly beside `!cancelled()` and
+`should_publish == 'true'`. Its whole grant is `contents: read`: it declares no
+environment, takes no `id-token`, and neither the job nor the action it calls
+reads or accepts a token, so the download, verification, and probe path holds
+no credential. A run's `github.token` exists whether or not a job names it, so
+what the job refuses is that token *persisted*: the checkout is pinned to
+`needs.metadata.outputs.candidate_commit` and passes
+`persist-credentials: false`, which keeps the token out of the git
+configuration every later step could read. The smoke runs the candidate's own
+scripts and leaves no credential behind.
+
+The job downloads two artefacts by exact name — `release-crate-package` for the
+candidate's identity and the publisher's `trusted-artifact` output for the
+pre-upload digest record — and both are evidence rather than payload. Every
+byte it exercises arrives over HTTPS from a public host: the `.crate` from
+`static.crates.io`, and the cargo-binstall archive with its `.sha256` sidecar
+from the release's own download URL. That is the point of the job. A smoke that
+read the run's artefacts would prove the build directory agrees with itself;
+only a public download proves the published release is what a consumer receives.
+
+`.github/actions/consumer-smoke` holds five bounded steps, and no step in it
+holds a token:
+
+- **Validate inputs** requires both records as regular files, refuses a work
+  directory that is not absent or empty, refuses one that overlaps either
+  record, and creates the extraction directory with `mktemp -d`. A re-run on
+  the same runner therefore cannot pass on the previous attempt's bytes, and a
+  download cannot overwrite the evidence it is judged against.
+- **Plan the public downloads** runs `consumer_smoke_cli.py plan`, whose output
+  binds the trusted evidence to the exact URLs and digests this run must
+  exercise. Every URL must be `https`, and every asset name must be a single
+  path segment, because that name becomes a file name under the downloads
+  directory.
+- **Download the public assets** runs one `curl` per asset. Nothing else in the
+  action reaches the network.
+- **Verify the downloads and the shipped executable** runs
+  `consumer_smoke_cli.py verify`, which re-derives the plan from the same
+  evidence and refuses a saved plan that disagrees with it, so the bytes
+  checked are the bytes this run's evidence names rather than whatever the
+  downloads produced.
+- **Report the smoke phases** reads the phase log and emits one outcome and one
+  timing pair per phase, whether verification passed or refused, including
+  `skipped` for a phase the log never reached.
+
+The two invocations are thin because no decision lives in the action. The plan
+is derived by `release_consumer_smoke`, which binds one candidate's identity,
+crate record, and declared archive set and refuses evidence naming another;
+`release_consumer_payload` turns a saved download into facts and holds the
+arrival, digest, and banner refusals; `release_consumer_archive_policy` judges
+a member list before anything is written; `consumer_smoke_evidence` reads the
+two records and the HTTP status saved beside each body, then renders and
+re-checks the plan document; `consumer_smoke_verify` walks the five phases and
+owns the exit statuses in Table 5; `consumer_smoke_ledger` keeps the verdict
+and phase log current as each phase completes; and `consumer_smoke_options` is
+where a flag name and the value the stage reads are the same name. The archive
+scan, extraction, sidecar check, and child launch live in the
+`release_binstall_*` adapters, which the cargo-binstall metadata contract
+already owns.
+
+`curl` is pinned rather than merely invoked. `--proto '=https'` and
+`--proto-redir '=https'` keep every hop on TLS even though the release host
+redirects to a CDN, `--max-redirs 5` bounds the chain, `--disable` ignores any
+`.curlrc` the runner might carry, the connect, transfer, and retry budgets
+bound the wait, and `--max-filesize` bounds what a broken or hostile response
+can write to disk. There is no `--fail`: an HTTP error status has to reach the
+verifier as a status, because a 404 naming a missing asset and a 503 that never
+delivered are different diagnoses. `--retry` consequently retries only the
+failures `curl` classifies as transient, never a missing asset. No request
+carries an `Authorization` header, so every transfer is the token-free download
+a consumer performs.
+
+Verification compares the crate bytes with the digest the package record
+retained, and the archive with both its own trusted digest and its published
+`.sha256` sidecar. The trusted record is the input, never the sidecar alone: a
+substituted archive uploaded together with a matching sidecar agrees with
+GitHub and disagrees with the build. The sidecar is checked as well because it
+is what a consumer's installer reads, so an archive whose sidecar describes
+different bytes is a release a `cargo-binstall` user cannot install even though
+the archive itself is sound.
+
+The archive is untrusted input, so its whole member layout is judged before the
+first byte is written. Every name must stay inside the extraction directory
+under both path flavours, no member may be a link, device, or FIFO, and exactly
+one regular, non-empty file may sit at the root as the shipped binary. Member
+counts and sizes carry fixed caps, so a hostile archive is refused from its
+metadata rather than discovered mid-write. Headers are walked one at a time
+rather than loaded as a whole index, and the member cap stops that walk as soon
+as it is passed, so the work a hostile index can cause is bounded by the cap
+rather than by the number of headers it claims. Decompression is capped
+separately, because a cap on the compressed download bounds neither the memory
+the reader holds nor the work a gzip bomb can demand: every decompressed byte
+is counted before `tarfile` parses it, including the extended-header bodies
+that carry long member names. A header declares the size of its own body, so
+reads are served in bounded chunks rather than allocating whatever a hostile
+header claims before the cap can refuse it. Reaching that cap is refused as an
+oversized archive rather than reported as a corrupt one, and the one backward
+seek `tarfile` performs, to read the member it has indexed, opens a second
+bounded pass over the same download. Once the member index has been accepted,
+the decompressed stream is read again from the offset the walk last accepted a
+member at, under the same cap, before anything is yielded. Resuming there
+rather than from where the reader happens to sit is what matters: `tarfile`
+ends the walk silently on an invalid header past the first block, and it has
+consumed that block by the time it returns, so a scan that read on would never
+see it. Everything from that offset must be zero blocks, which also refuses a
+second archive appended after the end marker; reaching the end of the
+compressed member makes gzip verify the CRC and length it recorded, so a
+download truncated after the marker or carrying a damaged trailer is refused as
+corrupt instead of accepted.
+
+The archive is opened once, and the digest and the member scan are taken
+through that one descriptor, so the bytes that were hashed are the bytes that
+are copied; checking a pathname and then reopening it would leave a window in
+which the name resolves to a different file whose members still match the
+accepted layout. Extraction still compares the layout it was handed with the
+one its own scan produces, so a caller holding a layout from some other archive
+is refused rather than trusted.
+
+The binary is then run once with `--version` under a wall-clock limit, a
+ceiling on how much of its output the smoke will read, and a replaced
+environment that inherits nothing, so the child cannot read the environment
+variables the runner exports. The ceiling is 8 KiB, far more than a one-line
+banner and far less than a buffer worth exhausting: a child that writes past it
+is killed rather than read further, so a download that floods its standard
+output cannot outlive the run that rejected it. The read runs on its own thread
+and is joined against the same deadline that bounds the wait for the child to
+exit, because the child is not the only holder of the pipe: a descendant that
+inherited it keeps a blocking read open after the child itself has exited. The
+child is therefore started in a session of its own, and a refusal kills the
+process group rather than the child alone, which is what releases that pipe. A
+descendant that starts a session of its own escapes the kill and keeps the pipe
+open past the drain budget, so the captured stream is released by whichever
+party is not blocked on it: the reader thread closes it when its read returns,
+and the probe closes it only once that thread has finished. Closing a stream a
+live read holds would wait on that read's lock and stretch the probe past its
+deadline. A binary that prints its banner, closes its output, and then finishes
+is waited for and reaped; one that stays alive once its output is closed is
+refused as a timeout rather than waited on indefinitely. The process plumbing
+lives in `release_binstall_child.py`, which drives `subprocess` directly rather
+through `cuprum`, because the ceiling has to stop the child at the byte that
+passes it, `cuprum` captures whole, and the smoke runs under
+`uv run --no-project`, where `cuprum` is not installed. Replacing the child's
+initial environment is an allowlist, not a sandbox: it does not isolate the
+executable from the runner's filesystem, network, or any other resource. Its
+banner must name the candidate version exactly; a prerelease suffix is matched
+in full, and a banner that merely contains the version is refused.
+`consumer_smoke_cli.py` reports the phase that refused:
+
+| Exit | Meaning                                                        |
+| ---- | -------------------------------------------------------------- |
+| 0    | every phase verified                                           |
+| 1    | the identity, trusted record, archive set, or plan is unusable |
+| 2    | a download is missing, empty, or not the bytes we published    |
+| 3    | the archive is corrupt, unsafe to extract, or unwritable       |
+| 4    | the executable could not report the candidate's exact version  |
+
+*Table 5: `consumer_smoke_cli.py` exit statuses.*
+
+The job records the `consumer_smoke` operation through
+`scripts/release_operation_observability.py` with the five phases
+`crate_download`, `crate_verification`, `archive_download`,
+`archive_verification`, and `executable_probe`, and uploads the record whether
+the smoke verified or refused. The verifier writes the phase log as it walks
+the smoke, and the report step turns that log into the action's outputs, so the
+job's summary and the catalogue cannot drift apart: the log is the only source
+of a phase outcome. Every phase is emitted, `skipped` included. The summary
+reads each output unconditionally, so an omitted output would arrive there as
+an empty string and be reported as `unknown`; emitting `skipped` for a phase
+the log does not name, or for a run whose log is absent, keeps a planning
+failure from reading as five indeterminate outcomes.
+
+The work directory belongs to the attempt that validated it. A refused
+validation — a re-run's leftovers, an overlapping record, a missing input —
+leaves an earlier attempt's records in place, so the report step reads nothing
+from a work directory that validation refused: every phase is reported as
+`skipped` and no verdict path is named, rather than attributing stale evidence
+to a smoke that never began.
+
+`tests/workflow_contracts/release_publish_path_consumer_shape.py` holds the
+job's dependencies, permissions, checkout, environment, action inputs, and
+failure-visibility checks, and `release_publish_path_consumer_smoke.py`
+composes them with the guard's reachability oracle, re-exporting the shape
+names its callers use; the split keeps each module inside the 400-line cap. The
+checkout check is what keeps the workflow token from being persisted into the
+job's git config, the one credential a read-only job could still acquire. The
+credential scans live in `release_publish_path_consumer_credentials.py`, which
+reads the workflow's, the job's, and the composite action's step environments,
+together with the executable lines of every step: a token can be expanded in a
+script without any environment declaring it, and the action's steps run in the
+same process but appear nowhere in the workflow. The failure-visibility check
+reads the job, its invocation step, and every step of the action, because a
+composite step that tolerates its own failure ends the action successfully and
+the job never sees the refusal. `release_publish_path_consumer_artifacts.py`
+owns the two evidence downloads: each must name its artefact exactly, land in
+the directory the matching action input reads, carry no `if`, and be declared
+before the step that calls the action, so neither a skipped download nor one
+that runs too late can leave the verifier reading a path that was never filled.
+What the action's command lines may run is asserted in
+`release_publish_path_consumer_commands.py`: both CLI invocations must appear
+exactly once, counted across every line of every step so a step that repeats
+the command is refused rather than read as a single execution, carry no `if`,
+and run exactly the reviewed command line, launcher included, so a step that
+only `echo`es it is refused. The line must also let bash expand its evidence,
+so a single-quoted `$IDENTITY_PATH` is refused although its shell words match
+the reviewed ones. No command line in the job or the action may name a compiler.
+`release_publish_path_consumer_script.py` judges the script around each
+invocation as a shape: a step may prepare it with the reviewed `set` options
+and plain assignments and nothing else, while a conditional, a loop, a bare
+command, an assignment-prefixed command, a `set` that turns on an option nobody
+reviewed (such as `set -n`), or a `set +e` above the invocation, and a success
+exit below it, are each refused because they can skip the verification or
+absorb its refusal. The invocation itself is located by its shell words, so an
+assignment whose value spells the CLI's path is a prologue line rather than the
+command, and cannot hide what follows it.
+`release_publish_path_consumer_mutations.py` registers one labelled regression
+for each of the wiring properties,
+`release_publish_path_consumer_prologue_mutations.py` for each prologue and
+epilogue property, and `release_publish_path_consumer_artifact_mutations.py`
+for each download property, with the violation each must produce stated in
+`release_publish_path_consumer_expectations.py`, and
+`release_publish_path_consumer_mutations_test.py` requires the contract to
+report it.
+`tests/workflow_contracts/release_publish_path_consumer_smoke_test.py` holds
+the telemetry to the catalogue. The adapter behaviour — the downloads, the
+digest checks, the archive refusals, the extraction, and the probe — is covered
+by `make test-release-publication`. The action's steps themselves are executed
+by `consumer_smoke_action_harness.py`, which takes each `run` body from the
+manifest, stubs `uv` and `curl` at the path boundary, and runs the checked-in
+CLI over bytes `consumer_smoke_action_fixtures.py` publishes;
+`consumer_smoke_action_execution_test.py` requires a verified candidate to
+report every phase successful and each refused download, unsafe archive,
+disagreeing banner, and populated work directory to be reported by the phase
+that refused it.
 
 ### Crate-package operation telemetry
 
@@ -4091,7 +4380,7 @@ one from the other.
 | Installed binary | `netsuke`                       | `[[bin]] name`   |
 | Packaged archive | `netsuke-build-<version>.crate` | `cargo package`  |
 
-*Table 5: The package-versus-binary identity contract.* (ADR-0007 records why
+*Table 6: The package-versus-binary identity contract.* (ADR-0007 records why
 the crate cannot be called `netsuke`.)
 
 The trusted-publication plan targets a flat set of twenty names: the six
@@ -4109,7 +4398,7 @@ Linux, two `.pkg` for macOS, two `.msi` for Windows.
 | Hoist adapter's `expected_archive_names`        | six archives and their six sidecars |
 | `PLATFORM_FORMATS` held against the staged tree | eight operating-system packages     |
 
-*Table 6: The two sources of the planned twenty-name declaration.*
+*Table 7: The two sources of the planned twenty-name declaration.*
 
 Holding the staged tree to a count is what makes a failed package build a
 refusal rather than a smaller declaration. The
@@ -4150,7 +4439,7 @@ state determines whether the workflow exchanges credentials or stops:
 | `yanked`        | Fail without mutation                    | No                  | None                      |
 | `indeterminate` | Fail closed without mutation             | No                  | None                      |
 
-*Table 7: crates.io version-state decisions.*
+*Table 8: crates.io version-state decisions.*
 
 The `crates_io_registry_http.py` adapter permits HTTPS requests only to
 `crates.io` and `static.crates.io`. urllib applies the same host and scheme
@@ -4230,7 +4519,7 @@ check run for both `publish` and `skip` decisions.
 | Upload failure or ambiguous response              | 2         | Stop; do not retry in the same job     |
 | Downloaded bytes match / fail verification        | 0 / 2     | Verified / fail the job                |
 
-*Table 8: Exit statuses used by the candidate and registry CLIs.*
+*Table 9: Exit statuses used by the candidate and registry CLIs.*
 
 ### Recovering a partial crates.io publication
 
@@ -4444,7 +4733,7 @@ four actions, and the name's own evidence decides which:
 | `CONFLICT`      | the attached digest was read and differs from the record's     |
 | `UNVERIFIABLE`  | the name is attached and no digest could be established for it |
 
-*Table 9: The four actions `plan_asset_actions` assigns.*
+*Table 10: The four actions `plan_asset_actions` assigns.*
 
 `CONFLICT` and `UNVERIFIABLE` both stop the upload, and they are kept apart
 because their remedies differ. A conflict says the release holds demonstrably
@@ -4510,7 +4799,7 @@ operator acts.
 | `EXIT_INPUT_UNREADABLE`  | 3    | the record cannot support a decision at all              |
 | `EXIT_OUTPUT_UNWRITABLE` | 4    | the reconciliation plan could not be written             |
 
-*Table 10: `finalize_github_release_cli` exit statuses.*
+*Table 11: `finalize_github_release_cli` exit statuses.*
 
 Conflict outranks upload when a draft holds both kinds of finding. The
 precedence is stated in `_verdict` rather than taken from the numeric maximum,
@@ -4743,7 +5032,7 @@ CLI also refuses, so the mistake surfaces as the input that caused it.
 | `version`      | yes      | the crate version from the manifest                   |
 | `bin-name`     | yes      | `netsuke`, the installed binary name                  |
 
-*Table 11: `package-crate` action inputs.*
+*Table 12: `package-crate` action inputs.*
 
 The action publishes three outputs — `identity-path`, `crate-name`, and
 `crate-path` — and resolves the archive name from the record it just wrote
@@ -5789,13 +6078,21 @@ well as `scripts/` and the test sources. The validator target reads
 overridden for a downloaded artefact in another directory.
 
 The configuration in `pyproject.toml` mirrors the df12 estate policy in
-[episodic](https://github.com/leynos/episodic); only path-shaped settings are
-local. The file deliberately declares no `[project]` table, so `uv` never
-treats this Rust workspace as a Python project. A pinned Pylint
-(`PYLINT_VERSION`) runs through `uv tool run --managed-python` on CPython 3.14,
-the Python baseline, so it parses every repository-owned source, with the
-message set enabled in `pyproject.toml` and `syntax-error` left enabled so a
-module it cannot parse fails the lint; the
+[episodic](https://github.com/leynos/episodic). Local differences are
+path-shaped settings plus one runtime-evaluation exemption. The
+`runtime-evaluated-decorators` setting in the `flake8-type-checking` section
+names `cyclopts.App.command`, so Ruff's `TC` rules treat a decorated command's
+annotations as resolved at run time rather than only under a type checker. The
+option dataclasses such a command names must therefore stay imported at run
+time, and without the exemption the `TC001` to `TC003` fixes would move them
+into a `TYPE_CHECKING` block and fail the command on first use. Removing the
+setting requires first giving those annotations a runtime-safe home. The file
+deliberately declares no `[project]` table, so `uv` never treats this Rust
+workspace as a Python project. A pinned Pylint (`PYLINT_VERSION`) runs through
+`uv tool run --managed-python` on CPython 3.14, the Python baseline, so it
+parses every repository-owned source, with the message set enabled in
+`pyproject.toml` and `syntax-error` left enabled so a module it cannot parse
+fails the lint; the
 [df12-python-lints](https://github.com/leynos/df12-python-lints) messages
 (structural pattern matching, assert messages, suppression hygiene, snapshot
 discipline, and the baseline-gated R9112/C9112 checks) need CPython 3.14 and
@@ -6461,7 +6758,10 @@ three as one key set
 ([ADR-0069](adrs/adr-0069-split-the-localization-key-tables.md)). Rather than
 declaring `src/cli/mod.rs` and inheriting the whole subtree, it declares an
 inline `cli` module naming exactly four files — `src/cli/command.rs`,
-`src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`.
+`src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs` —
+beside five path-imported siblings: `src/cli/localization/mod.rs`,
+`src/host/pattern.rs`, `src/shell_selection/mod.rs`,
+`src/locale/catalogues.rs`, and `src/localization/mod.rs`.
 
 That slice is a maintained boundary, not an accident:
 
@@ -6480,6 +6780,12 @@ That slice is a maintained boundary, not an accident:
 - `src/host/pattern.rs` covers pattern syntax; matching a concrete hostname
   against a parsed pattern lives in `src/host/matching.rs`, which the build
   script does not compile.
+- `src/shell_selection/mod.rs` supplies the trusted shell vocabulary the CLI
+  schema names in its `shells` definitions. `ShellDefinition` stores a validated
+  `ShellName` and classifies its executable by `HostFamily`, so the schema
+  cannot be described without `BuiltInShell`, `ShellName`, and `HostFamily`.
+  Only that vocabulary is compiled: resolving an executable and running a
+  configured shell stay outside the build script.
 
 Keeping the slice narrow is what lets rustc's unused-item analysis run normally
 inside the build-script crate. Widening it — for example by making
@@ -6490,6 +6796,17 @@ dead code: an unused `pub` item in `src/cli/config/mod.rs` is reported by the
 build-script crate but not by the library because the library exports that
 module publicly.
 
+Four of the six declarations are `pub`: the inline `cli` module,
+`shell_selection`, `locale_catalogues`, and `localization`. `cli_localization`
+and `host_pattern` stay private. `locale_catalogues` and `localization` are
+public because `localization` re-exports the registry from a public path, and a
+private module cannot be re-exported. The inline `cli` module and
+`shell_selection` became public with the shell schema for the same reason: the
+slice re-exports that vocabulary through `cli::config`, so declaring them as
+the library does keeps the unused-item analysis about this compilation unit's
+real reachability rather than about a visibility the production source never
+had.
+
 A dependency added outside the slice surfaces as a build-script compile error.
 Prefer moving the new code into a sibling module over widening the slice.
 
@@ -6497,8 +6814,8 @@ Manifest resource-budget code remains on the runtime side of this boundary.
 `src/cli/command.rs` and the private `config::budget` submodule included through
 `src/cli/config/mod.rs` contribute the CLI schema, defaults, and validation
 needed by the build script's generated help artefacts. `build.rs` directly
-declares only the four root files named above; the budget-config path is an
-included submodule of `config/mod.rs`, not a fifth directly declared
+declares only the CLI files and sibling sources named above; the budget-config
+path is an included submodule of `config/mod.rs`, not a directly declared
 build-script source. The runtime `ManifestBudgetLimits`, `ManifestBudget`, and
 manifest-loading adapters are library code and are deliberately not imported by
 `build.rs`; adding a runtime budget dependency must not widen the build
@@ -6512,14 +6829,15 @@ checks the package boundary and that dependency equality. `slice.rs` mirrors
 `build.rs`'s whole declaration boundary, not just the inline `cli` module: the
 four CLI declarations and the two `pub use` re-exports, then the path imports
 for `src/cli/localization/mod.rs`, `src/host/pattern.rs`,
-`src/locale/catalogues.rs`, and `src/localization/mod.rs`. The source contract
-compares every one of those declarations in order after normalizing the
-fixture's `../src/` prefix, so a reordered path attribute fails even when the
-same modules are still named. `build_l10n_audit` is the one declaration
-`build.rs` keeps to itself — it lives beside the build script, declares no
-path, and audits generated catalogues rather than exposing production source —
-and a test asserts both its presence there and its absence from `slice.rs`, so
-the exclusion reads as a decision rather than an omission.
+`src/shell_selection/mod.rs`, `src/locale/catalogues.rs`, and
+`src/localization/mod.rs`. The source contract compares every one of those
+declarations in order after normalizing the fixture's `../src/` prefix, so a
+reordered path attribute fails even when the same modules are still named.
+`build_l10n_audit` is the one declaration `build.rs` keeps to itself — it lives
+beside the build script, declares no path, and audits generated catalogues
+rather than exposing production source — and a test asserts both its presence
+there and its absence from `slice.rs`, so the exclusion reads as a decision
+rather than an omission.
 
 The fixture uses `cfg(not(any(test, doctest)))` around those production module
 imports. This keeps unrelated production unit tests out of the fixture and
@@ -7912,12 +8230,17 @@ Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
 optional, proof-kernel-only, and not installed or run by default; any Verus
 work must stay outside ordinary Cargo and is limited to small, self-contained
-kernels. Two are accepted: the cycle canonicalization model derived from
-`src/ir/cycle/mod.rs`, and the canonical value key and equality relation
-(`src/stdlib/canonical_value/`, proved in `verus/canonical_value/main.rs`).
-Verus remains outside `formal-pr`, which runs Kani only, and outside every
-routine gate. Stateright is deferred entirely until Netsuke gains an accepted
-stateful concurrent subsystem such as a daemon, watch service, remote-execution
+kernels. Three are accepted: the cycle canonicalization model derived from
+`src/ir/cycle/mod.rs`, which is not yet committed; the canonical value key and
+equality relation (`src/stdlib/canonical_value/`, proved in
+`verus/canonical_value/main.rs`); and the configured-shell name-sequence rule
+(`verus/configured_shells/main.rs`, described under
+[Configured shell definitions](#configured-shell-definitions) below).
+`make verus` proves `verus/canonical_value/main.rs` by default, so select any
+other kernel by repeating `--proof-file` through `VERUS_FLAGS`. Verus remains
+outside `formal-pr`, which runs Kani only, and outside every routine gate.
+Stateright is deferred entirely until Netsuke gains an accepted stateful
+concurrent subsystem such as a daemon, watch service, remote-execution
 coordinator, actor protocol, or internal scheduler with long-lived mutable
 control-plane state. See
 [`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
@@ -9041,9 +9364,25 @@ content, then uses a same-directory temporary file plus atomic rename. Keep
 generated sidecars content-addressed and idempotent; corruption is an error,
 not a reason to overwrite an unknown file.
 
-`src/runner/process/dyndep/retention/mod.rs` owns the publication lease and
-retention cleanup. The command-boundary module invokes it after materialization
-or successful clean while retaining the lease through bundle consumption.
+`src/runner/process/dyndep/directory/mod.rs` establishes the generated-state
+directory. `.netsuke` and `.netsuke/dyndep` are project-controlled, so a
+manifest can ship either as a symbolic link or a Windows junction. The module
+walks the two components one at a time, refuses any entry that is not a real
+directory, and returns a verified handle. Publication, locking, and retention
+then address bare entry names through that handle, so no operation can resolve
+a component outside the directory it verified. The refusal is checked on the
+entry before it is opened, so the diagnostic names the aliased component, and
+again on the opened handle, so an entry swapped in between cannot smuggle an
+alias past the check. Unix opens with `O_NOFOLLOW`; Windows opens the reparse
+point itself and rejects every reparse attribute, not only the tags `std`
+reports as symlinks. The `--directory` root itself may still be a symbolic
+link: it is the caller's chosen capability root, not generated state.
+
+`src/runner/process/dyndep/retention/lease.rs` defines
+`DyndepPublicationLease`, the advisory publication lease, and
+`src/runner/process/dyndep/retention/mod.rs` owns retention cleanup. The
+command-boundary module invokes them after materialization or successful clean
+while retaining the lease through bundle consumption.
 
 `DyndepPublicationLease` also coordinates retention. Sidecar-capable `build`,
 `generate`, and `clean` commands hold the capability-scoped exclusive
@@ -9053,7 +9392,9 @@ obsolete `.dd` files are retained in deterministic path order up to 32 files
 and 1 MiB. The current bundle is always retained. `build` and `generate` prune
 after materialization; `clean` prunes only after successful `ninja -t clean`,
 never after a failed clean. Do not introduce age-based cleanup or mutate an
-existing content-addressed sidecar. See
+existing content-addressed sidecar. The lease is an advisory lock: it
+coordinates cooperating Netsuke processes and does not defend against a process
+that ignores it. See
 [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md) for the durable
 policy.
 
@@ -9778,18 +10119,42 @@ test support, justified by new call sites.
 
 ### JSON snapshot version redaction
 
-`src/snapshot_test_support.rs` owns the snapshot settings for versioned JSON
-output. Its private `add_generator_version_filter` helper is composed only by
-`diagnostic_json_snapshot_settings()` and
-`help_targets_json_snapshot_settings()`; individual tests must use those
-specialized builders rather than adding the filter themselves. JSON diagnostic
-snapshots must bind through the diagnostic builder, and JSON help-target
-catalogue snapshots must bind through the help-target builder.
+[`test_support::generator_version`](../test_support/src/generator_version.rs)
+owns the single implementation of the generator-version pattern both snapshot
+trees bind. It publishes `GENERATOR_VERSION_PATTERN`,
+`GENERATOR_VERSION_REPLACEMENT`, and `redact_generator_version`, which applies
+those two to a document.
+
+The pattern is anchored on the enclosing `"generator"` object and its
+`"name": "netsuke"` field, so every other `version` field — and a version
+quoted in a diagnostic message — remains visible and must still be asserted.
+
+The two trees cannot share a settings builder, because the library's
+`#[cfg(test)]` code is not reachable from an integration crate: the unit-test
+settings in `src/snapshot_test_support.rs` compile inside the library, while
+`tests/cli_tests/shells_startup/` links only the library's public surface. Each
+tree therefore binds the shared definition itself:
+
+- `src/snapshot_test_support.rs` binds it in `add_generator_version_filter`,
+  which three specialized builders compose —
+  `diagnostic_json_snapshot_settings()`,
+  `help_targets_json_snapshot_settings()`, and the lint-gated
+  `check_json_snapshot_settings()`. The newer
+  `schema_admission_diagnostic_snapshot_settings()` extends the diagnostic
+  builder rather than binding the filter again. Individual tests must use the
+  matching builder rather than adding the filter themselves: JSON diagnostic
+  snapshots bind through the diagnostic builder, JSON help-target catalogues
+  through the help-target builder, lint-result documents through the check
+  builder, and schema-admission documents through the schema-admission builder.
+- `tests/cli_tests/shells_startup/support.rs` calls
+  `generator_version::redact_generator_version` from `normalised`.
 
 Text catalogue snapshots must continue to use the unfiltered
-`snapshot_settings("help_targets")` builder. The filter is anchored on the
-Netsuke generator object, so unrelated `version` fields remain asserted in
-every snapshot.
+`snapshot_settings("help_targets")` builder.
+
+**Re-use policy:** any generator-version filter must build on the shared
+pattern and apply the shared replacement. Do not restate either in a `Settings`
+builder, a test helper, or another module.
 
 ### The temporary-path snapshot filter
 
@@ -9839,6 +10204,18 @@ is not obvious from the name:
   underlying metadata error. Fixture code must use this wrapper for directory
   predicates rather than calling `std::fs::metadata(...).is_dir()` or
   `Path::is_dir` directly.
+- `symlink(target, link)` (Unix only) creates a symbolic link and propagates
+  the creation failure. `is_symlink(path) -> bool` reports whether the path's
+  own directory entry is a symbolic link; unlike `is_dir` and `exists` it does
+  not follow the link, so a dangling link is still a link.
+  `junction(target, link) -> io::Result<bool>` (Windows only) creates a
+  directory junction through the `cmd.exe` `mklink` built-in and returns
+  `Ok(false)` when the host has no `cmd.exe`, so a fixture can report a skip
+  rather than a failure. A junction needs no privilege, so that absence is the
+  only skip: a quoted path, a spawn failure, and a non-zero `mklink` exit are
+  all errors. The three helpers live in `test_support/src/fs_links.rs` and are
+  re-exported here, so fixtures keep a single ambient boundary and the platform
+  split stays out of `fs.rs`.
 - `PathState` and `inspect_path(path) -> io::Result<PathState>` provide a
   fallible target-state probe. `PathState::Absent` means metadata returned
   `NotFound`, `PathState::Directory` means the target is a directory, and
@@ -12001,9 +12378,27 @@ comparison, and tests alongside the main discovery flow:
   unresolved path fatal. `FsPathNormalizer` uses `dunce::canonicalize` to
   mirror OrthoConfig's native Windows identity (without UNC-prefix or
   short-name divergence); on other platforms it follows
-  `std::fs::canonicalize`. Keep it confined to this comparison boundary:
-  selectors remain pure path queries, OrthoConfig supplies the layer path, and
-  tracing remains at the orchestration boundary.
+  `std::fs::canonicalize`. The `PathNormalizer` seam also answers `exists` with
+  an `io::Result<bool>`, because the caller has to distinguish an absent
+  project file from an unreadable one and `Path::exists` collapses every error
+  into `false`. Keep the seam confined to this comparison boundary: selectors
+  remain pure path queries, OrthoConfig supplies the layer path, and tracing
+  remains at the orchestration boundary.
+- `discovery/layers/` — the collection pass that keeps each root's authority
+  attached to the layer it loaded. It runs the `OrthoConfig` scan and the
+  project-scope second pass, and returns `ScopedFileLayer` values rather than
+  bare `MergeLayer`s. Each occurrence carries `RootAuthority::Operator` when a
+  system or user root loaded it, and `RootAuthority::Untrusted` when a project,
+  explicit, or environment root did, or when an untrusted root appears anywhere
+  in its chain. Authority is separate from `FileScope`: scope decides
+  precedence and quarantine, authority decides whether the occurrence may
+  declare executable policy at all. `layers/project_key.rs` classifies the
+  project `.netsuke.toml` once per scan so the second pass can compare recorded
+  layer paths against it without re-normalizing each one, and it fails closed:
+  a project file that exists but cannot be normalized leaves its identity
+  unproven, and every occurrence is then treated as possibly that file. An
+  existence query that fails is classified the same way, because absence cannot
+  be concluded from a failed probe.
 - `discovery/event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`
@@ -12021,6 +12416,95 @@ Both test modules import `capture_events`, `find_event`, and `EventAssertion`
 from `discovery::event_assertions` rather than duplicating them. The `insta`
 snapshot calls themselves stay in the test modules because snapshot names bind
 to the test module's path, not to a shared helper module.
+
+### Configured shell definitions
+
+`src/cli/config/shells/` owns the trusted `shells` schema. `ShellDefinition`
+groups a `ShellName`, a `ShellExecutable`, and `ShellArguments`, and
+`validate_composition` applies the two registry rules. Field types validate as
+they deserialize, so a `ShellDefinition` that exists is already locally valid.
+That is what lets the same deserializers check a single occurrence during
+discovery and the merged vector after merging, without duplicating a rule.
+
+Ownership boundary: `src/shell_selection/` supplies the `ShellName`,
+`BuiltInShell`, and `HostFamily` vocabulary and must not depend on CLI
+configuration; the schema depends on it, not the reverse. `SHELLS_KEY` lives in
+the schema module rather than `cli::constants` so the build script's compiled
+slice can carry the key without pulling in the modules that share the constants
+file. The build script compiles `src/shell_selection/` as part of that slice,
+whose boundary and public declarations are described in
+[the build script's module slice](#the-build-scripts-module-slice).
+
+`ShellExecutable` spelling rules live in `src/cli/config/shells/spelling.rs`
+and take the host family as a parameter, so both families' rules run on either
+build host. Both reject an empty value, an embedded NUL, and the `.` and `..`
+directory references. Beyond that, a Unix-like host accepts a rooted path or a
+spelling with no separator at all, and rejects every other relative path. A
+Windows host accepts a bare name, a drive letter with a root (`C:\tools\dash` or
+`C:/tools/dash`), or a complete UNC share (`\\server\share`); `C:dash` names a
+drive without a root and is rejected as drive-relative, a rooted path such as
+`/bin/dash` or `\bin\dash` is rejected because it names no drive, and anything
+else carrying either separator is relative. Neither family probes the
+filesystem, so an uninstalled program is accepted at configuration time.
+
+Configuration deserialization is the one caller that cannot be handed a family:
+serde's `Deserialize` signature carries no context, and the configuration tree
+is parsed before any per-host value could be threaded through it.
+`ShellExecutable`'s `Deserialize` therefore uses `HostFamily::current()`, the
+build host, and the impl documents that compile-time dependency. A definition
+spelled for the other family is rejected while the file is read rather than
+accepted and refused later; callers that must choose a family explicitly use
+`ShellExecutable::parse`.
+
+Source-label handling: discovery records the root that loaded each occurrence
+before merging. `src/cli/discovery/shell_definitions.rs` checks `shells`
+presence before any typed merge and reports either an untrusted-source error
+for a project, explicit, or unproven root, or `shells[index].field` errors for
+an operator root. `project_policy::shells_authority_errors` is a step of its
+own rather than part of the collecting loop: authority answers a different
+question from the precedence and quarantine rules beside it, so the step
+returns its errors and `retain_layers_and_resolve_json` joins them into
+`ResolvedFileLayers.errors`. It runs before the JSON preference is read, so a
+malformed declaration still lets a later `json = true` select JSON diagnostics.
+The environment layer rejects the key outright rather than stripping it.
+
+Validation and rendering are separate in that module. A check yields an
+`OccurrenceDiagnostic` holding the field key and the rule it broke;
+`OccurrenceDiagnostic::render` is the one place that appends the declaring file
+and bounds the quoted path. A unit test can therefore assert the exact key and
+rule text without creating a file, and a new check cannot forget to name the
+source.
+
+Proof scope: `verus/configured_shells/main.rs` proves that its model walk,
+`walk`, accepts exactly the pairwise specification — no reserved name and no
+two positions equal — at every sequence length. The proof does not cover the
+production traversal or the internals of the production `HashMap` seen-set: the
+model abstracts a name as its UTF-8 bytes and models "already seen" as
+membership in the accepted prefix. Production correspondence is bounded test
+evidence rather than proof: `src/cli/config/shells/tests/oracle.rs`, an
+independent quadratic Rust oracle, checks `validate_composition` against the
+same pairwise statement over generated sequences of validated names. The proof
+carries non-vacuity witnesses: the empty registry, two distinct names, a
+reserved name, and a duplicate in the last position.
+
+Test commands:
+
+- `make test` runs the unit, property, and behavioural suites, including
+  `tests/cli_tests/shells_authority.rs`, the `tests/cli_tests/shells_startup/`
+  module, and the `configured_shells` feature.
+- `make verus VERUS_FLAGS='--proof-file verus/configured_shells/main.rs'`
+  rechecks the shell-composition proof. The target's default proof file is
+  `verus/canonical_value/main.rs`, so a bare `make verus` does not recheck this
+  one.
+- `make test` runs
+  `configured_shell_example_is_accepted_from_an_operator_root`, which loads the
+  users' guide example from an operator configuration root, and
+  `every_documented_fence_has_a_known_unique_identifier`, which pins the
+  example's registry entry.
+- `make test-documentation-contracts` validates the loader and the exact
+  example registry.
+- Focused run:
+  `cargo nextest run --workspace --all-targets --all-features -E 'test(configured_shell)'`.
 
 ### Configuration-load observability
 
