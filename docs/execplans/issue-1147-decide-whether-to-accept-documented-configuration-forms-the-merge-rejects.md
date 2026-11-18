@@ -128,9 +128,22 @@ list form.
   `policy_values.rs` (scores 9.10 and 9.39); `cs check` now scores all four
   files 10.00 with no warnings. That check is not in the required set, so the
   refactor is a separate commit after the functional one.
-- [ ] (2026-11-18) CodeRabbit agent review re-run once the refactor lands. The
-  first attempt ended with `Connection failed: WebSocket closed`, which the
-  tool reports as recoverable.
+- [x] (2026-11-18) CodeRabbit agent review re-run on the rebased head after
+  the refactor landed. The first attempt had ended with
+  `Connection failed: WebSocket closed`, which the tool reports as recoverable;
+  the retry completed and returned one minor finding: the changelog, ADR-0082,
+  and users' guide present `0` as accepted for `NETSUKE_NO_INPUT` without
+  saying that configuration then rejects `false`.
+- [x] (2026-11-18) CI `build-test` was red on `9b36dca8d`: the Kani scope
+  contract reported that the harnesses reach `src/cli/config/policies.rs`, which
+  `tools/kani/proof-scope.toml` did not cover. The gate brief for that batch
+  had omitted `make test-workflow-contracts`, so the move in `D7` was never
+  checked against the manifest. Reproduced locally (`1 failed`, `2439 passed`)
+  and fixed by adding the module in sorted position; the contract suite then
+  passed. Commit `5dba44571`.
+- [x] (2026-11-18) Answered the CodeRabbit finding in all three documents:
+  `NETSUKE_NO_INPUT=0` parses to `false` and is then rejected by the no-input
+  policy, so only `true` and `1` are usable. Commit `338687099`.
 - [x] (2026-11-18) Rebased onto `origin/main` at `8daa9143`, which adds
   `338ff4ac4` (public-consumer release smoke) and `8daa91431` (stdlib
   file-reading filters within the workspace capability). No conflicts: all ten
@@ -249,6 +262,10 @@ Lessons:
 - The 400-line cap applies as work lands, not only when a file is created; the
   policy enums moved to `src/cli/config/policies.rs` once the new
   implementations pushed `mod.rs` over the limit.
+- A module move can change more than the Rust build. The workflow-contract
+  suite is outside the eight-gate set, and it owns the Kani scope contract that
+  recomputes the harness closure from the source. It must therefore run
+  whenever a module the proofs already reach is split, or a new one is created.
 
 ## Context and orientation
 
@@ -519,3 +536,6 @@ removing the workaround once it lands is tracked in
 - 2026-11-18: Recorded the rebase onto `origin/main` (`8daa9143`) and the
   post-review test refactor. The replay was conflict-free and every replayed
   patch is identical to its pre-rebase form.
+- 2026-11-18: Recorded the CI `build-test` failure and the Kani scope fix, and
+  the CodeRabbit finding about `NETSUKE_NO_INPUT=0` with the documentation
+  change that answers it.
