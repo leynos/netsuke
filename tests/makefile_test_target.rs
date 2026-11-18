@@ -50,6 +50,9 @@ use toml::Value;
 /// determinism work added as a focused inner loop; it is a subset of what
 /// `test-nextest` already covers, but it invokes the runner directly, so it
 /// shares the bounds for the same reason every other entry does.
+/// `test-read-policy` runs the file-reading policy boundary alone, because the
+/// macOS lane has no other test run to carry it, and it selects the same
+/// excluded cases the ordinary suite does.
 /// A contributor sets the worker bounds once and expects them honoured
 /// wherever nextest runs, so the list is a contract rather than a note of what
 /// happens to be true today.
@@ -58,7 +61,7 @@ use toml::Value;
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 9] = [
+const NEXTEST_TARGETS: [&str; 10] = [
     "proptest",
     "test-default-features",
     "test-documentation-contracts",
@@ -66,6 +69,7 @@ const NEXTEST_TARGETS: [&str; 9] = [
     "test-kani-mutations",
     "test-kani-scope-wrapper",
     "test-nextest",
+    "test-read-policy",
     "test-rfc-stdlib-coverage",
     "test-verus-e2e",
 ];

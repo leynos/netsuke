@@ -262,17 +262,17 @@ fn fallback_unavailable() -> Option<String> {
         Ok(dir) => dir,
         Err(error) => return Some(format!("cannot create the strace probe directory: {error}")),
     };
-    let output = Command::new("strace")
+    let probe = Command::new("strace")
         .args(["-f", "--kill-on-exit", "-o"])
         .arg(probe_dir.path().join("probe.trace"))
         .args(["-e", "trace=openat2", "-e", "inject=openat2:error=EPERM"])
         .arg("true")
         .output();
-    match output {
-        Ok(output) if output.status.success() => None,
-        Ok(output) => Some(format!(
+    match probe {
+        Ok(ran) if ran.status.success() => None,
+        Ok(ran) => Some(format!(
             "strace cannot inject an openat2 fault: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
+            String::from_utf8_lossy(&ran.stderr).trim()
         )),
         Err(error) => Some(format!("the strace fault probe is not runnable: {error}")),
     }

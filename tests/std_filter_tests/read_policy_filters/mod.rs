@@ -145,10 +145,8 @@ impl Policy {
 
     /// Build a template that reads `path` through `case` under this policy.
     pub(super) fn template(self, case: FilterCase) -> String {
-        match self.kwargs() {
-            Some(kwargs) => case.template_with(kwargs),
-            None => case.template(),
-        }
+        self.kwargs()
+            .map_or_else(|| case.template(), |kwargs| case.template_with(kwargs))
     }
 
     /// The stable label used in fixture and template names.
