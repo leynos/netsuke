@@ -32,7 +32,9 @@ def _metadata_step(release: dict[str, object], step_id: str) -> dict[str, object
 #: Run bodies that name the policy without executing it. ``comment-only`` hides
 #: it behind ``#``; ``argument-only`` passes it to ``python -c`` as an argument;
 #: ``split-command`` wraps the expected words across two shell commands, which
-#: the runner executes as two separate lines rather than one invocation.
+#: the runner executes as two separate lines rather than one invocation;
+#: ``suffixed-filename`` names a different file that a comment-stripping
+#: tokeniser would shorten to the expected path.
 _UNEXECUTED_RUNS = (
     pytest.param(
         f"uv run --no-project --python 3.14 python -c 'pass'  # {AUTHORIZATION_SCRIPT}",
@@ -46,6 +48,10 @@ _UNEXECUTED_RUNS = (
         f"uv run\n--no-project --python 3.14 {AUTHORIZATION_SCRIPT}",
         id="split-command",
     ),
+    pytest.param(
+        f"uv run --no-project --python 3.14 {AUTHORIZATION_SCRIPT}#disabled",
+        id="suffixed-filename",
+    ),
 )
 
 
@@ -54,9 +60,10 @@ def test_the_authorization_step_must_execute_the_policy(run: str) -> None:
     """Refuse a run body that names the policy without running it.
 
     A membership test accepts a trailing comment, a script handed to
-    ``python -c`` as an argument, and words split across two shell commands, so
-    the step would run something else while the policy's name stayed in the
-    workflow.
+    ``python -c`` as an argument, words split across two shell commands, and a
+    suffixed filename a comment-stripping tokeniser shortens to the expected
+    path, so the step would run something else while the policy's name stayed
+    in the workflow.
     """
     release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
     step = _metadata_step(release, AUTHORIZATION_STEP)

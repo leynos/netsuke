@@ -118,20 +118,23 @@ def _check_condition(step: dict[str, object], violations: list[str]) -> None:
 
 
 def _command_tokens(script: str) -> list[str]:
-    """Split one shell command into words, dropping a trailing comment.
+    """Split one shell command into words, keeping ``#`` inside a word.
 
-    ``shlex`` in comment mode treats ``#`` at a word boundary as the start of a
-    comment, so a script path that appears only in a comment is not mistaken for
-    the command that runs the policy. Unbalanced quotes make ``shlex`` raise
-    ``ValueError``; the caller reports that rather than treating the script as
-    authorised.
+    Comment handling stays off. ``shlex``'s comment mode ends a word at ``#``
+    even mid-word, so ``scripts/authorize_release_writes.py#disabled`` would
+    tokenise to the expected path while the shell runs a different file.
+    Refusing every comment is safe for an exact-command check: the one
+    permitted invocation carries none, and a comment either changes an executed
+    word or adds tokens the comparison rejects. Unbalanced quotes make
+    ``shlex`` raise ``ValueError``; the caller reports that rather than treating
+    the script as authorised.
 
     Returns
     -------
     list[str]
-        The command words, with any comment removed.
+        The command words, splitting only on shell whitespace.
     """
-    return shlex.split(script, comments=True)
+    return shlex.split(script, comments=False)
 
 
 def _check_run(step: dict[str, object], violations: list[str]) -> None:
