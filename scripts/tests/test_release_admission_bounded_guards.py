@@ -115,6 +115,6 @@ def test_anything_but_a_full_object_id_publishes_as_empty(revision: str) -> None
     refuse a truncated or overlong value, and the case rows refuse an object ID
     spelled in a form Git does not produce.
     """
-    assert policy.publishable_revision(revision) == "", (
+    assert not policy.publishable_revision(revision), (
         f"{revision!r} is not a full lowercase object ID and must publish as empty"
     )

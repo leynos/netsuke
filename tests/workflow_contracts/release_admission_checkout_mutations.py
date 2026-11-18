@@ -232,6 +232,12 @@ def _verifier_persists_credentials(release: dict[str, object]) -> None:
     The verifier's token would then sit inside the tree the candidate's content
     occupies, where any process the gate runs from the workspace root can read
     it.
+
+    Raises
+    ------
+    MutationError
+        If the checkout already persists credentials, so the mutation would
+        change nothing the contract reads.
     """
     declared = _checkout_inputs(release, has_path=True)
     if declared.get("persist-credentials") is not False:
@@ -247,6 +253,12 @@ def _verifier_path_needs_quoting(release: dict[str, object]) -> None:
     The gate command interpolates the path unquoted, so a space splits it into
     two arguments and the gate never starts -- a job that reports success
     without judging anything.
+
+    Raises
+    ------
+    MutationError
+        If the verifier checkout declares no path, so there is nothing to
+        split.
     """
     declared = _checkout_inputs(release, has_path=True)
     path = declared.get("path")
@@ -282,6 +294,12 @@ def _workflow_default_moves_gate(release: dict[str, object]) -> None:
     those two sees nothing wrong. A workflow-level default applies to every job
     all the same, and this gate would then resolve its script below
     ``<path>/<path>/``.
+
+    Raises
+    ------
+    MutationError
+        If the verifier checkout declares no path, so there is no directory to
+        move the workflow into.
     """
     declared = _checkout_inputs(release, has_path=True)
     path = declared.get("path")
@@ -298,6 +316,12 @@ def _gate_run_splits_the_command(release: dict[str, object]) -> None:
     --no-project`` and then looks for a program called ``--script``. A
     comparison that folds the newline into a space accepts the command as
     written.
+
+    Raises
+    ------
+    MutationError
+        If the command does not contain exactly one ` --script ` boundary, so
+        the split the mutation describes is not the command's shape.
     """
     step = _gate_step(release)
     run = str(step.get("run", ""))

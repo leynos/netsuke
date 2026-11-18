@@ -5316,7 +5316,7 @@ and pass, on the final wording.
   writes the verifier first is reported even though both checkouts still
   precede the gate step. The `run` comparison trims only the outer whitespace a
   block scalar leaves, because an internal newline is a shell command boundary.
-  `verifier_gate_command` normalises the declared path through the same
+  `verifier_gate_command` normalizes the declared path through the same
   `normalise_gate_path` the validator uses, and a regression case proves
   `./gate` and `gate` name one command. The working-directory rule now also
   reads the workflow-level `defaults.run`, which applies to this job even when
