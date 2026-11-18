@@ -297,13 +297,17 @@ fn legacy_fixture_matches_the_release_migration_contract() -> Result<()> {
     let release = Document::parse(&release_contents).context("parse installer/Package.wxs")?;
     let legacy = Document::parse(&legacy_contents).context("parse the legacy MSI fixture")?;
 
-    let release_standard = find_element(
-        &release,
-        "StandardDirectory",
-        "Id",
-        "ProgramFiles6432Folder",
-    )?;
-    let legacy_standard = find_element(&legacy, "StandardDirectory", "Id", "ProgramFilesFolder")?;
+    assert_install_roots(&release, &legacy)?;
+    assert_component_identities(&release, &legacy)?;
+    assert_package_identity(&release, &legacy)?;
+    assert_upgrade_conditions(&release, &legacy)
+}
+
+/// Assert that the fixture installs to the frozen beta4 root, not the native one.
+fn assert_install_roots(release: &Document<'_>, legacy: &Document<'_>) -> Result<()> {
+    let release_standard =
+        find_element(release, "StandardDirectory", "Id", "ProgramFiles6432Folder")?;
+    let legacy_standard = find_element(legacy, "StandardDirectory", "Id", "ProgramFilesFolder")?;
     ensure!(
         release_standard.attribute("Id") != legacy_standard.attribute("Id"),
         "the fixture should freeze the beta4 ProgramFilesFolder root"
@@ -319,9 +323,13 @@ fn legacy_fixture_matches_the_release_migration_contract() -> Result<()> {
         comparable_attributes(release_install) == comparable_attributes(legacy_install),
         "the fixture should keep the release's INSTALLFOLDER attributes"
     );
+    Ok(())
+}
 
-    let release_component = find_element(&release, "Component", "Id", "BinaryComponent")?;
-    let legacy_component = find_element(&legacy, "Component", "Id", "BinaryComponent")?;
+/// Assert that each authoring gives the moved binary its own component identity.
+fn assert_component_identities(release: &Document<'_>, legacy: &Document<'_>) -> Result<()> {
+    let release_component = find_element(release, "Component", "Id", "BinaryComponent")?;
+    let legacy_component = find_element(legacy, "Component", "Id", "BinaryComponent")?;
     ensure!(
         legacy_component.attribute("Guid") == Some(LEGACY_COMPONENT_GUID),
         "the fixture should freeze the beta4 BinaryComponent GUID, got {:?}",
@@ -332,7 +340,11 @@ fn legacy_fixture_matches_the_release_migration_contract() -> Result<()> {
         "the release should use the new BinaryComponent GUID, got {:?}",
         release_component.attribute("Guid")
     );
+    Ok(())
+}
 
+/// Assert that the fixture keeps the upgrade family and lets WiX generate codes.
+fn assert_package_identity(release: &Document<'_>, legacy: &Document<'_>) -> Result<()> {
     let release_package = find_child(release.root_element(), "Package")?;
     let legacy_package = find_child(legacy.root_element(), "Package")?;
     ensure!(
@@ -343,6 +355,13 @@ fn legacy_fixture_matches_the_release_migration_contract() -> Result<()> {
         release_package.attribute("Id").is_none() && legacy_package.attribute("Id").is_none(),
         "neither authoring should set Package/@Id, so WiX generates a fresh ProductCode"
     );
+    Ok(())
+}
+
+/// Assert that the fixture keeps the release's upgrade guard and rank markers.
+fn assert_upgrade_conditions(release: &Document<'_>, legacy: &Document<'_>) -> Result<()> {
+    let release_package = find_child(release.root_element(), "Package")?;
+    let legacy_package = find_child(legacy.root_element(), "Package")?;
     let release_major_upgrade = find_child(release_package, "MajorUpgrade")?;
     let legacy_major_upgrade = find_child(legacy_package, "MajorUpgrade")?;
     ensure!(
@@ -355,14 +374,14 @@ fn legacy_fixture_matches_the_release_migration_contract() -> Result<()> {
         comparable_attributes(release_launch) == comparable_attributes(legacy_launch),
         "the fixture should keep the release's release-rank guard condition"
     );
-    let release_rank_search = rank_search(&release)?;
-    let legacy_rank_search = rank_search(&legacy)?;
+    let release_rank_search = rank_search(release)?;
+    let legacy_rank_search = rank_search(legacy)?;
     ensure!(
         comparable_attributes(release_rank_search) == comparable_attributes(legacy_rank_search),
         "the fixture should keep the release's release-rank search"
     );
-    let release_rank_marker = find_element(&release, "RegistryValue", "Name", "ReleaseRank")?;
-    let legacy_rank_marker = find_element(&legacy, "RegistryValue", "Name", "ReleaseRank")?;
+    let release_rank_marker = find_element(release, "RegistryValue", "Name", "ReleaseRank")?;
+    let legacy_rank_marker = find_element(legacy, "RegistryValue", "Name", "ReleaseRank")?;
     ensure!(
         comparable_attributes(release_rank_marker) == comparable_attributes(legacy_rank_marker),
         "the fixture should keep the release's release-rank registry location"
