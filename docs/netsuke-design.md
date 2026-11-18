@@ -1786,8 +1786,21 @@ Implementation notes:
   `O_NOFOLLOW` is added only by the default policy, which refuses a symlink
   final component. Blocking mode is restored once the opened object is
   confirmed to be a regular file, and the regular-file check runs on the opened
-  handle, so special files are rejected without a check-then-open window. On
-  Windows the default policy asks the open itself not to traverse a reparse
+  handle, so special files are rejected without a check-then-open window.
+- The Unix refusal is set in two places, and both are required. The
+  `open_file_checked` builder also calls `OpenOptionsFollowExt::follow` with
+  `FollowSymlinks::No` whenever `follow_symlinks` is false, because cap-std has
+  two resolution paths. Linux normally resolves the whole path in
+  `openat2`, where the kernel's `O_NOFOLLOW` bit is decisive. macOS, Linux
+  before 5.6, and any host whose security policy refuses `openat2` make
+  cap-std's manual resolver walk one component at a time, and that resolver
+  dereferences the final component from the logical `FollowSymlinks` policy
+  rather than from the raw flag bits. Setting only the flag left the policy at
+  its `Yes` default, so the manual resolver read the link target despite
+  `follow_symlinks=false` (issue #1009). The logical policy is
+  platform-neutral, so the same builder states it on Windows too, where the
+  open flags are separate.
+- On Windows the default policy asks the open itself not to traverse a reparse
   point and then refuses the opened handle when it carries
   `FILE_ATTRIBUTE_REPARSE_POINT`; that refuses symlinks, junctions, volume
   mount points, and every other tag alike, because the test is on the attribute
@@ -1804,8 +1817,9 @@ Implementation notes:
   quotes the path and the byte limit. An opened object that is not a regular
   file (a FIFO, a device, or a Windows reparse point refused on the opened
   handle) fails with `stdlib.path.contents.not_regular_file`, which quotes the
-  path alone. A Unix symlink refused by `O_NOFOLLOW` surfaces as the mapped
-  open error for the action (the `stdlib.path.io.failed` family) instead of the
+  path alone. A Unix symlink refused by `O_NOFOLLOW`, or by the logical
+  no-follow policy on the manual resolver, surfaces as the mapped open error
+  for the action (the `stdlib.path.io.failed` family) instead of the
   regular-file diagnostic, because the refusal happens while opening.
   `linecount` validates UTF-8 incrementally as it counts, so a file that is not
   text is rejected rather than silently counted as opaque bytes.
