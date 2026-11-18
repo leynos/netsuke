@@ -32,28 +32,21 @@ function Get-MsiProperty {
     return [string]$record.StringData(1)
 }
 
-function Invoke-MsiInstall {
+function Invoke-MsiExec {
     param(
         [Parameter(Mandatory)]
-        [string]$MsiPath,
+        [ValidateSet('Install', 'Uninstall')]
+        [string]$Operation,
         [Parameter(Mandatory)]
-        [string]$LogPath
+        [string]$Target,
+        [Parameter(Mandatory)]
+        [string]$LogName
     )
 
-    $arguments = "/i `"$MsiPath`" /qn /norestart /l*v `"$LogPath`""
-    $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru
-    return $process.ExitCode
-}
-
-function Invoke-MsiUninstall {
-    param(
-        [Parameter(Mandatory)]
-        [string]$ProductCode,
-        [Parameter(Mandatory)]
-        [string]$LogPath
-    )
-
-    $arguments = "/x $ProductCode /qn /norestart /l*v `"$LogPath`""
+    # `/i` takes a package path, which has to be quoted; `/x` takes a product
+    # code, which must not be.
+    $verb = if ($Operation -eq 'Install') { "/i `"$Target`"" } else { "/x $Target" }
+    $arguments = "$verb /qn /norestart /l*v `"$(Join-Path $LogDirectory $LogName)`""
     $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru
     return $process.ExitCode
 }
@@ -135,7 +128,10 @@ function Install-AndAssert {
         [hashtable]$ExpectedInstallation
     )
 
-    $exitCode = Invoke-MsiInstall -MsiPath $MsiPath -LogPath (Join-Path $LogDirectory $ExpectedInstallation.LogName)
+    $exitCode = Invoke-MsiExec `
+        -Operation Install `
+        -Target $MsiPath `
+        -LogName $ExpectedInstallation.LogName
     if ($exitCode -ne 0) {
         throw "Installing $MsiPath failed with msiexec exit code $exitCode."
     }
@@ -154,7 +150,7 @@ function Assert-DowngradeIsRejected {
         [string]$LogName
     )
 
-    $exitCode = Invoke-MsiInstall -MsiPath $MsiPath -LogPath (Join-Path $LogDirectory $LogName)
+    $exitCode = Invoke-MsiExec -Operation Install -Target $MsiPath -LogName $LogName
     if ($exitCode -eq 0) {
         throw "Downgrade MSI $MsiPath installed successfully."
     }
@@ -221,9 +217,10 @@ Install-AndAssert `
     -ProductCode $finalProductCode `
     -ExpectedInstallation $cleanInstallation
 Assert-PathAbsent -Path $legacyApplication
-$cleanUninstallCode = Invoke-MsiUninstall `
-    -ProductCode $finalProductCode `
-    -LogPath (Join-Path $LogDirectory 'final-clean-uninstall.log')
+$cleanUninstallCode = Invoke-MsiExec `
+    -Operation Uninstall `
+    -Target $finalProductCode `
+    -LogName 'final-clean-uninstall.log'
 if ($cleanUninstallCode -ne 0) {
     throw "Uninstalling $finalProductCode failed with msiexec exit code $cleanUninstallCode."
 }
