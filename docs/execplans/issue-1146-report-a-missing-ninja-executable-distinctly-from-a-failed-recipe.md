@@ -124,7 +124,31 @@ temporary build file.
     start and end content binding matched. Two earlier attempts of this round
     were red: three Clippy `-D warnings` violations, then one stale help-text
     expectation in `ninja_failure_tests`, both fixed before the green run.
-  - [ ] Push and open the draft pull request.
+  - [x] A fourth CodeRabbit pass reported eleven findings; all are applied:
+    - `NinjaExitError::new` rejects a successful status with `InvalidInput`, so
+      a fixture or a caller reporting a recorded failure cannot claim Ninja
+      failed when it exited zero;
+    - console telemetry keeps the typed `NinjaInvocationError` instead of
+      flattening it into `io::Error`, and records `launch`, `exit_status`, or
+      `io`, with a test that pins the exit category;
+    - the generated build-file detector inspects only the final path
+      component, strips sentence punctuation, and lives beside its own cases so
+      `runner_diagnostics.rs` stays under the 400-line limit;
+    - the exit-variant process test establishes the variant before asserting on
+      attribution, so a launch failure cannot satisfy it vacuously;
+    - the absent-program JSON cause requires the parenthesized `(os error 2)`,
+      so a different numbered OS error cannot satisfy it;
+    - the Finnish, Polish, Portuguese and Romanian build-failure summaries say
+      "build" rather than "compilation".
+  - [x] Re-ran the full gate set on the fourth round against exactly the content
+    committed as `33ee15394`: check-fmt, lint (6626 s), doc-coverage (98.29%,
+    6826/6945), test (6051 passed, 9 skipped), workflow contracts (2331
+    passed), documentation contracts (15 passed), markdownlint (0 issues in 237
+    files), nixie, and typecheck; the start and end content binding matched. A
+    first attempt was red at `make lint` with one `missing_const_for_fn`
+    violation, fixed before the green run.
+  - [x] Pushed and opened the draft pull request (#1163), whose description
+    carries `Closes #1146`.
 
 ## Plan of work
 
