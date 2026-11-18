@@ -320,6 +320,12 @@ def test_release_maps_windows_targets_to_their_msi_architectures() -> None:
         build_windows.get("strategy"), "jobs.build-windows.strategy"
     )
     matrix = require_mapping(strategy.get("matrix"), "jobs.build-windows.matrix")
+    # An extra axis would multiply the effective legs beyond the include rows
+    # this contract reads, leaving the added legs unchecked.
+    assert set(matrix) == {"include"}, (
+        "the build-windows matrix must declare only its include entries, "
+        f"got {sorted(matrix)!r}"
+    )
     includes = require_list(matrix.get("include"), "jobs.build-windows includes")
     actual = _windows_msi_rows(includes)
     assert actual == EXPECTED_MSI_ARCHITECTURES, (
@@ -330,6 +336,10 @@ def test_release_maps_windows_targets_to_their_msi_architectures() -> None:
     assert inputs.get("msi-arch") == "${{ matrix.msi_arch }}", (
         "build-windows must pass its matrix entry to build-and-package.yml, "
         f"got {inputs.get('msi-arch')!r}"
+    )
+    assert inputs.get("target") == "${{ matrix.target }}", (
+        "build-windows must forward its matrix target, not a hard-coded one, "
+        f"got {inputs.get('target')!r}"
     )
 
 

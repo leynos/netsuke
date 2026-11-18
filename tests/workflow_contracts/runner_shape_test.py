@@ -13,7 +13,7 @@ import pytest
 import yaml
 from fork_fallback import owned_runner, read_placement
 from nextest_budgets import global_timeout
-from runner_matrix import selected_labels
+from runner_matrix import caller_runner_labels, selected_labels
 from runner_placement_invariants import (
     GITHUB_HOSTED_LABELS,
     INSTRUMENTED_BUILD_JOBS,
@@ -94,10 +94,13 @@ def _selected_labels(declaration: object, job: dict[str, object]) -> list[str]:
 def _self_hosted_labels_in_use() -> set[str]:
     """Return every label the workflows select that GitHub does not host."""
     # A matrix selector resolves against the job's own matrix here, so a label
-    # chosen that way reaches this inventory exactly as a bare one does.
+    # chosen that way reaches this inventory exactly as a bare one does. A
+    # caller job that passes its runner to a local reusable workflow is read
+    # from that input, since its own `runs-on` is absent.
     found: set[str] = set()
     for _, _, job in _all_jobs():
         found.update(_selected_labels(job.get("runs-on"), job))
+        found.update(caller_runner_labels(job))
     return {label for label in found if is_self_hosted_label(label)}
 
 

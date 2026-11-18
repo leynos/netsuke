@@ -110,42 +110,6 @@ def test_windows_jobs_run_on_a_github_hosted_runner(job_name: str) -> None:
     )
 
 
-def test_windows_msi_gate_runs_exactly_the_two_architecture_legs() -> None:
-    """The MSI gate installs both shipping architectures, and only those.
-
-    The installer now resolves its program files folder from the package
-    architecture, so one leg cannot prove the other. Each leg must still be a
-    GitHub-hosted Windows runner of the matching platform; a move to a Linux
-    runner would fail to install at all, while an extra leg would multiply the
-    gate's cost without exercising another package.
-    """
-    job = workflow_job(load_workflow(CI_WINDOWS_WORKFLOW_PATH), MSI_JOB)
-    strategy = require_mapping(job.get("strategy"), f"{MSI_JOB}.strategy")
-    matrix = require_mapping(strategy.get("matrix"), f"{MSI_JOB}.strategy.matrix")
-    assert set(matrix) == {"include"}, (
-        f"{MSI_JOB} must declare only a matrix include, got {sorted(matrix)!r}"
-    )
-    includes = matrix.get("include")
-    assert isinstance(includes, list), f"{MSI_JOB} must declare a matrix include list"
-    # A duplicate architecture would collapse in the dictionary below, so the
-    # entry count is checked first; otherwise a third leg could run unnoticed.
-    assert len(includes) == 2, (
-        f"{MSI_JOB} must declare exactly two matrix legs, got {includes!r}"
-    )
-    legs = {
-        item.get("architecture"): item.get("runner")
-        for item in includes
-        if isinstance(item, dict)
-    }
-    assert legs == {
-        "x64": "windows-latest",
-        "arm64": "windows-11-arm",
-    }, f"{MSI_JOB} must run x64 and arm64 gate legs, got {legs!r}"
-    assert job.get("runs-on") == "${{ matrix.runner }}", (
-        f"{MSI_JOB} must take its runner from the matrix, got {job.get('runs-on')!r}"
-    )
-
-
 @pytest.mark.parametrize("job_name", RUST_WINDOWS_JOBS)
 def test_windows_jobs_use_git_bash_for_recipes(job_name: str) -> None:
     """Each job runs recipes under Git Bash, not cmd.exe.

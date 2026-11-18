@@ -1,12 +1,13 @@
 """Property-test matrix selector resolution against a direct model.
 
 `runner_matrix` exists so the self-hosted label inventory cannot fail open: a
-selector over a job's own matrix must contribute exactly the labels that axis
-declares, and a selector the job cannot resolve must come back as itself. The
-example-based suite beside this module pins the documented shapes; these
-properties hold both guarantees over generated matrices, where an empty
-declaration, an axis sharing values with another axis, or an ``include`` entry
-for a different axis is easy to miss.
+selector over a job's own matrix must contribute exactly the labels the legs
+GitHub creates, and a selector the job cannot resolve must come back as
+itself. The example-based suite beside this module pins the documented shapes;
+these properties hold both guarantees over generated matrices, where an
+excluded leg, an include row that re-adds an excluded value, a later row that
+overrides an earlier one, or an axis sharing values with another axis is easy
+to miss.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -22,10 +23,10 @@ _AXIS_REST = st.text(
     alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-",
     max_size=8,
 )
-#: Names the matrix grammar accepts, excluding the reserved ``include`` and
-#: ``strategy`` keys a matrix uses for its own structure.
+#: Names the matrix grammar accepts, excluding the case-insensitive reserved
+#: keys a matrix uses for its own structure.
 _AXIS = st.builds(operator.add, _AXIS_INITIAL, _AXIS_REST).filter(
-    lambda name: name not in {"include", "strategy"}
+    lambda name: name.lower() not in {"include", "exclude", "strategy"}
 )
 _LABEL = st.text(
     alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-",
@@ -39,30 +40,108 @@ def _selector(axis: str) -> str:
     return "${{ matrix." + axis + " }}"
 
 
-@st.composite
-def _resolvable_case(draw: st.DrawFn) -> tuple[str, dict[str, object], list[str]]:
-    """Generate a job that declares an axis and the labels it must resolve to.
+def _distinct(values: list[str]) -> list[str]:
+    """Return values in first-occurrence order, without repeats."""
+    return list(dict.fromkeys(values))
 
-    The other axis and its values are generated too, so a resolver that read
-    every ``include`` entry instead of the selected axis would return a
-    different list rather than passing on a matrix that had only one axis.
+
+@st.composite
+def _case_variant(draw: st.DrawFn, name: str) -> str:
+    """Return ``name`` with each character independently upper- or lowercase."""
+    return "".join(
+        character.upper() if draw(st.booleans()) else character.lower()
+        for character in name
+    )
+
+
+@st.composite
+def _added_axis_values(draw: st.DrawFn, declared: list[str]) -> list[str]:
+    """Generate include-row values for one axis: some declared, some new.
+
+    Returns
+    -------
+    list[str]
+        Declared values first, then distinct values the axis does not declare.
+    """
+    again = draw(st.lists(st.sampled_from(declared), max_size=3))
+    fresh = draw(
+        st.lists(
+            _LABEL.filter(lambda label: label not in declared),
+            max_size=3,
+            unique=True,
+        )
+    )
+    return [*again, *fresh]
+
+
+def _expected_values(
+    surviving: list[str], include: list[dict[str, str]], axis: str
+) -> list[str]:
+    """Return the axis values the include rows add beyond the survivors."""
+    included = [row[axis] for row in include if axis in row]
+    return _distinct([
+        *surviving,
+        *(value for value in included if value not in surviving),
+    ])
+
+
+@st.composite
+def _axis_case(draw: st.DrawFn) -> tuple[str, dict[str, object], list[str]]:
+    """Generate a matrix whose effective values for one axis are known.
+
+    The matrix combines a declared axis, excluded declared values, include
+    rows that re-add declared values, include rows that add distinct values,
+    and include rows for another declared axis. The expected list is therefore
+    the surviving declared values followed by the distinct include values the
+    surviving legs do not already hold.
 
     Returns
     -------
     tuple[str, dict[str, object], list[str]]
-        The axis, the job that declares it, and the labels it must resolve to.
+        The selector, the job that declares the matrix, and the labels the
+        selector must resolve to.
     """
     axis = draw(_AXIS)
-    other_axis = draw(_AXIS.filter(lambda name: name != axis))
-    declared = draw(st.lists(_LABEL, min_size=1, max_size=4))
-    included = draw(st.lists(_LABEL, max_size=4))
+    other_axis = draw(_AXIS.filter(lambda name: name.lower() != axis.lower()))
+    declared = draw(st.lists(_LABEL, min_size=1, max_size=4, unique=True))
+    excluded = draw(
+        st.lists(st.sampled_from(declared), max_size=len(declared), unique=True)
+    )
     other_values = draw(st.lists(_LABEL, min_size=1, max_size=3))
-    include = [{axis: value} for value in included]
+    include = [{axis: value} for value in draw(_added_axis_values(declared))]
     include += [{other_axis: value} for value in other_values]
-    matrix: dict[str, object] = {axis: declared, "include": include}
-    if draw(st.booleans()):
-        matrix[other_axis] = other_values
-    return axis, {"strategy": {"matrix": matrix}}, [*declared, *included]
+    matrix: dict[str, object] = {
+        axis: declared,
+        other_axis: other_values,
+        "exclude": [{axis: value} for value in excluded],
+        "include": include,
+    }
+    surviving = [value for value in declared if value not in excluded]
+    expected = _expected_values(surviving, include, axis)
+    selector = _selector(draw(_case_variant(axis)))
+    # With every leg excluded and no include row naming the axis, there are no
+    # values at all. `selected_labels` keeps an unreadable selector visible as
+    # itself in that case, so the model includes that documented fallback.
+    return selector, {"strategy": {"matrix": matrix}}, expected or [selector]
+
+
+@st.composite
+def _include_only_case(draw: st.DrawFn) -> tuple[str, dict[str, object], list[str]]:
+    """Generate an include-only matrix with one leg per row.
+
+    Returns
+    -------
+    tuple[str, dict[str, object], list[str]]
+        The selector, the job, and the labels the include rows declare.
+    """
+    axis = draw(_AXIS)
+    other_axis = draw(_AXIS.filter(lambda name: name.lower() != axis.lower()))
+    values = draw(st.lists(_LABEL, min_size=1, max_size=4, unique=True))
+    other_values = draw(st.lists(_LABEL, min_size=1, max_size=3))
+    include = [{axis: value} for value in values]
+    include += [{other_axis: value} for value in other_values]
+    job: dict[str, object] = {"strategy": {"matrix": {"include": include}}}
+    return _selector(draw(_case_variant(axis))), job, values
 
 
 @st.composite
@@ -79,7 +158,7 @@ def _unresolvable_case(draw: st.DrawFn) -> tuple[str, dict[str, object]]:
         The axis the selector reads and a job that does not declare it.
     """
     axis = draw(_AXIS)
-    other_axis = draw(_AXIS.filter(lambda name: name != axis))
+    other_axis = draw(_AXIS.filter(lambda name: name.lower() != axis.lower()))
     values = draw(st.lists(_LABEL, min_size=1, max_size=4))
     include = [{other_axis: value} for value in values]
     matrix: dict[str, object] = {other_axis: values, "include": include}
@@ -92,16 +171,29 @@ def _unresolvable_case(draw: st.DrawFn) -> tuple[str, dict[str, object]]:
 
 
 @settings(max_examples=200, derandomize=True, deadline=None)
-@given(case=_resolvable_case())
-def test_a_resolvable_selector_returns_exactly_its_own_axis(
+@given(case=_axis_case())
+def test_a_resolvable_selector_returns_the_effective_axis_values(
     case: tuple[str, dict[str, object], list[str]],
 ) -> None:
-    """Every declared leg counts, and no other axis's legs do."""
-    axis, job, expected = case
-    selector = _selector(axis)
+    """Excluded legs drop out, and includes contribute only final values."""
+    selector, job, expected = case
     actual = selected_labels(selector, job)
     assert actual == expected, (
-        f"{selector} must resolve to {expected!r}, got {actual!r}"
+        f"{selector} must resolve to {expected!r}, got {actual!r} from {job!r}"
+    )
+
+
+@settings(max_examples=200, derandomize=True, deadline=None)
+@given(case=_include_only_case())
+def test_an_include_only_matrix_keeps_every_row_as_its_own_leg(
+    case: tuple[str, dict[str, object], list[str]],
+) -> None:
+    """An include-only matrix never merges two rows into one leg."""
+    selector, job, expected = case
+    actual = selected_labels(selector, job)
+    assert actual == expected, (
+        f"{selector} must resolve to one value per include row {expected!r}, "
+        f"got {actual!r} from {job!r}"
     )
 
 
@@ -121,7 +213,7 @@ def test_an_unresolvable_selector_is_returned_as_itself(
 
 
 @settings(max_examples=200, derandomize=True, deadline=None)
-@given(case=_resolvable_case(), value=_LABEL)
+@given(case=_axis_case(), value=_LABEL)
 def test_a_bare_label_is_never_resolved_through_the_matrix(
     case: tuple[str, dict[str, object], list[str]], value: str
 ) -> None:
