@@ -9164,6 +9164,17 @@ split out for the same reason: it holds the quote-context queries and updates,
 each of which has to name the innermost active shell region rather than the
 traversal's own state, because a substitution carries its own quote context.
 
+The script traversal records a backtick region as a private pair of the saved
+quote context and the `$()` frame depth that opened it. The closing backtick
+restores that context through the region the recorded depth selects, so a
+script-level backtick writes the script field while a backtick inside `$( … )`
+writes that substitution's field. `script_substitution/delimiters.rs` rejects a
+`)` that would pop the region owning an open backtick, and the closing backtick
+itself rejects a depth that no longer matches its owner; both produce
+`IrGenError::InvalidCommand`. The command traversal in `substitution/posix.rs`
+keeps its boolean `in_backticks` toggle instead and does not share this record,
+so command lowering is unchanged.
+
 Heredoc declaration handling is also shared rather than duplicated: the helper
 decides what a declaration is, and each traversal supplies only the context
 around it. `substitution/posix.rs` performs that step for

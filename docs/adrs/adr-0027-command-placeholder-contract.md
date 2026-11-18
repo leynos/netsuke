@@ -54,6 +54,11 @@ whitespace, and a `)` that closes a substitution immediately before `#` fails
 closed when the substitution source contains the `case` reserved word. The
 POSIX comment and heredoc boundary amendment below states the contract.
 
+Amended on 2026-11-18 for issue #1000. A closing backtick now restores its
+saved quote context into the `$()` or script region that opened it, and nesting
+that would leave that region closed is rejected. The addendum below states the
+ownership rule.
+
 ## Date
 
 2026-09-19
@@ -634,3 +639,36 @@ apart on it. The split keeps each module within the workspace's 400-line limit.
 Regressions run through both traversals in
 `src/ir/cmd_interpolate/tests/heredoc/` and through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
+
+## Addendum — 2026-11-18: Backtick quote state belongs to its opening region (#1000)
+
+A legacy backtick command substitution saves the quote context of the shell
+region that opened it. `ScriptSubstitutionTraversal` records that region's
+`$()` frame depth beside the saved context and restores through the region the
+depth selects, rather than writing the saved context into the script-level
+field. A backtick at script level records depth zero and still restores the
+script level; a backtick opened inside a `$( … )` restores that substitution's
+own quote state, including when the backtick body contains nested quotes.
+
+Nesting that would leave the saved context without its owner fails closed with
+`IrGenError::InvalidCommand`; it is not approximated. Two shapes are rejected: a
+`)` that would close the `$()` region owning an open backtick, and a closing
+backtick seen while an inner `$()` frame is still open. Before this amendment
+the first shape popped the frame, so the later backtick restored into the
+script-level field. A marker after the substitution could then take the
+double-quoted path encoding while the shell read it unquoted, leaving a
+semicolon in a caller-supplied path executable.
+
+This is distinct from the #629 marker invariant recorded under *Backtick
+handling is two mechanisms at two different strengths*. #629 rejects a marker
+inside a backtick or `$( … )`; this addendum fixes where the region state is
+restored after that protected region closes. Supported syntax is unchanged: a
+`$()` opened inside a backtick remains valid while it closes first, and
+top-level backticks still restore the script level.
+
+The Bash route decodes the same POSIX script and runs it under `/bin/sh`, so
+the rule covers both routes. PowerShell does not use
+`ScriptSubstitutionTraversal` and is outside this change. The execution
+regressions are Unix-only, use `/bin/sh`, and require Ninja; Linux continuous
+integration sets `NETSUKE_REQUIRE_NINJA=1`, so a missing Ninja fails the run
+instead of skipping the case.
