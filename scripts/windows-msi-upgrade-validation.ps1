@@ -45,6 +45,19 @@ function Invoke-MsiInstall {
     return $process.ExitCode
 }
 
+function Invoke-MsiUninstall {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProductCode,
+        [Parameter(Mandatory)]
+        [string]$LogPath
+    )
+
+    $arguments = "/x $ProductCode /qn /norestart /l*v `"$LogPath`""
+    $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru
+    return $process.ExitCode
+}
+
 function Assert-PayloadEquals {
     param(
         [Parameter(Mandatory)]
@@ -181,6 +194,12 @@ $finalInstallation = @{
     PayloadPath = $nativeApplication
     LogName = 'final-install.log'
 }
+$cleanInstallation = @{
+    Rank = 65535
+    Payload = 'MZfinal'
+    PayloadPath = $nativeApplication
+    LogName = 'final-clean-install.log'
+}
 if (
     ($beta1ProductCode -eq $beta2ProductCode) -or
     ($beta1ProductCode -eq $finalProductCode) -or
@@ -188,6 +207,28 @@ if (
 ) {
     throw 'Each MSI fixture must have a generated, distinct ProductCode.'
 }
+
+# A clean install is the case issue #1143 reported: with no earlier
+# installation, the package must populate only the native directory. The
+# upgrade sequence cannot show that on its own, because its first fixture
+# deliberately installs the legacy layout. Refusing a dirty runner keeps a
+# leftover installation from being misreported as a clean install.
+Assert-ProductAbsent -ProductCode $beta1ProductCode
+Assert-ProductAbsent -ProductCode $beta2ProductCode
+Assert-ProductAbsent -ProductCode $finalProductCode
+Install-AndAssert `
+    -MsiPath $FinalMsi `
+    -ProductCode $finalProductCode `
+    -ExpectedInstallation $cleanInstallation
+Assert-PathAbsent -Path $legacyApplication
+$cleanUninstallCode = Invoke-MsiUninstall `
+    -ProductCode $finalProductCode `
+    -LogPath (Join-Path $LogDirectory 'final-clean-uninstall.log')
+if ($cleanUninstallCode -ne 0) {
+    throw "Uninstalling $finalProductCode failed with msiexec exit code $cleanUninstallCode."
+}
+Assert-ProductAbsent -ProductCode $finalProductCode
+Assert-PathAbsent -Path $nativeApplication
 
 # beta1 is the frozen beta4 layout, so it proves the starting point really is
 # the 32-bit directory and that nothing already sits in the native one.
