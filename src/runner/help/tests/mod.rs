@@ -23,8 +23,13 @@ use std::time::{Duration, Instant};
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::{localizer::LOCALIZER_TEST_LOCK, localizer_test_lock};
 
-#[path = "graph_json/tests.rs"]
+mod bounds;
+#[path = "../graph_json/tests.rs"]
 mod graph_json_tests;
+mod property;
+mod render_string;
+mod streaming;
+use render_string::{render_json_string, render_text_string};
 
 /// Parse the fixed fixture manifest used by the catalogue snapshots.
 fn fixture_manifest() -> Result<NetsukeManifest> {
@@ -131,10 +136,8 @@ fn text_catalogue_snapshot_with_theme(
         snapshot_name,
         &snapshot_settings("help_targets"),
         |manifest| {
-            Ok(normalize_fluent_isolates(&render_text(
-                &build_catalogue(manifest),
-                theme_prefs(theme),
-            )))
+            let rendered = render_text_string(&build_catalogue(manifest), theme_prefs(theme))?;
+            Ok(normalize_fluent_isolates(&rendered))
         },
     )
 }
@@ -155,7 +158,7 @@ fn render_catalogue_with_locale(
 fn catalogue_rendering_releases_localizer_lock_before_snapshot_work() -> Result<()> {
     let manifest = fixture_manifest()?;
     let rendered = render_catalogue_with_locale("en-US", &manifest, |parsed_manifest| {
-        render_json(&build_catalogue(parsed_manifest), None)
+        render_json_string(&build_catalogue(parsed_manifest), None)
     })?;
     let (acquired, confirmed) = mpsc::sync_channel(1);
     thread::scope(|scope| -> Result<()> {
@@ -208,7 +211,7 @@ fn json_catalogue_snapshot() -> Result<()> {
         "en-US",
         "json_catalogue",
         &help_targets_json_snapshot_settings(),
-        |manifest| render_json(&build_catalogue(manifest), None),
+        |manifest| render_json_string(&build_catalogue(manifest), None),
     )
 }
 
@@ -224,10 +227,10 @@ fn text_catalogue_escapes_terminal_control_characters() -> Result<()> {
     );
     action.description = Some("description\r\nwith\tcontrols\u{0007}\u{202E}".to_owned());
 
-    let output = render_text(
+    let output = render_text_string(
         &build_catalogue(&manifest),
         theme_prefs(ThemePreference::Unicode),
-    );
+    )?;
 
     anyhow::ensure!(
         output.contains("line\\nnext\\t\\u{1b}[31mred\\u{9b}m\\u{202e}reordered"),
@@ -262,10 +265,10 @@ fn text_catalogue_escapes_cc_range_boundaries() -> Result<()> {
         "start\0unit\u{001F}delete\u{007F}application\u{009F}end".to_owned(),
     );
 
-    let output = render_text(
+    let output = render_text_string(
         &build_catalogue(&manifest),
         theme_prefs(ThemePreference::Unicode),
-    );
+    )?;
 
     for escaped in ["\\u{0}", "\\u{1f}", "\\u{7f}", "\\u{9f}"] {
         anyhow::ensure!(
@@ -335,16 +338,14 @@ proptest! {
             .chain(&targets)
             .flat_map(|(names, _, _)| names.iter().cloned())
             .collect();
-        let defaults = if declared_names.is_empty() {
-            Vec::new()
-        } else {
-            declared_names
-                .iter()
-                .zip(default_flags)
-                .filter(|(_, is_default)| *is_default)
-                .map(|(name, _)| name.clone())
-                .collect()
-        };
+        // Zipping an empty name list yields no defaults, so the short-circuit
+        // for a manifest with no names is the zip itself.
+        let defaults: Vec<String> = declared_names
+            .iter()
+            .zip(default_flags)
+            .filter(|(_, is_default)| *is_default)
+            .map(|(name, _)| name.clone())
+            .collect();
         let manifest = NetsukeManifest {
             netsuke_version: Version::new(1, 0, 0),
             vars: crate::ast::Vars::default(),

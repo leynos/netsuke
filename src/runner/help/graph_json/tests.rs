@@ -1,6 +1,7 @@
 //! Snapshot the graph export schema and its raw recipe boundary.
 
-use super::super::{build_catalogue, graph_json, graph_json::GraphJson, render_json};
+use super::super::{build_catalogue, graph_json, graph_json::GraphJson};
+use super::render_json_string;
 use crate::ast::{
     CommandIsolation, DependencyOrder, NetsukeManifest, Recipe, Rule, StringOrList, Target,
 };
@@ -60,7 +61,7 @@ defaults: [check, built, built]
 fn graph_v1_schema_snapshot() -> Result<()> {
     let manifest = graph_fixture_manifest()?;
     let graph = graph_json::GraphJson::from_manifest(&manifest);
-    let rendered = render_json(&build_catalogue(&manifest), Some(&graph))?;
+    let rendered = render_json_string(&build_catalogue(&manifest), Some(&graph))?;
     ensure!(
         rendered.contains("{{ ins }}") && rendered.contains("{{ outs }}"),
         "export should preserve authored delayed placeholders"

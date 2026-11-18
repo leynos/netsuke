@@ -191,7 +191,7 @@ pub fn write_text_file(path: &Path, content: &str) -> AnyResult<()> {
 }
 
 /// Return whether `err` signals a closed reader on the other end.
-fn is_broken_pipe(err: &io::Error) -> bool {
+pub(super) fn is_broken_pipe(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::BrokenPipe
 }
 

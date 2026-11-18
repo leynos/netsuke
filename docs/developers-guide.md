@@ -244,6 +244,49 @@ metadata filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
 rendering still registers the full standard library; this restriction applies
 only to query rendering.
 
+Text layout is bounded by `MAX_HELP_ALIGNMENT_WIDTH` (40 display columns) in
+`src/runner/help/mod.rs`. `render_section` computes each section's alignment
+width only from names whose sanitized display width is at or below that cap; a
+wider name renders in full but contributes no padding, and `saturating_sub`
+keeps its own padding at zero. Padding is appended to the row only when a
+non-empty sanitized description or a marker follows, so a row with no following
+column ends at its name and carries no trailing padding spaces. Names are never
+truncated to meet the bound.
+
+The catalogue is streamed, not assembled. `build_catalogue` creates one row per
+name in a target's name list, and every row shares that target's description,
+so one manifest description can repeat across thousands of rows. The manifest
+budgets (`rendered_value_bytes`, `rendered_manifest_bytes`, and
+`expanded_entries`) charge that description once and count the target rather
+than its names, so they cannot bound the rendered catalogue, and a total output
+cap would instead reject legitimate large catalogues. Both renderers therefore
+write incrementally: `render_text` reuses one row buffer and writes each row as
+soon as it is complete, and `render_json` serializes with
+`serde_json::to_writer_pretty` rather than formatting into a string. Peak
+allocation follows the alignment-name vector plus the largest single row, not
+the row count multiplied by the description length. Do not reintroduce an
+accumulated catalogue buffer.
+
+The stdout seam is `process::stream_text_stdout` in
+`src/runner/process/stdout_stream.rs`. It buffers through `BufWriter`, and its
+`ClosedPipeWriter` treats a broken pipe as a completed write so a consumer such
+as `head` ends the stream without an error, while every other write failure
+still reaches the caller. Use it for catalogue-style output that may exceed the
+input it was derived from; `write_text_stdout` remains for a single string that
+is already complete. `render_json` still emits names and descriptions verbatim;
+the `--edges` graph projection is likewise outside the layout rule.
+
+Width is measured with `unicode-width`, which cannot know how a given terminal
+renders East Asian ambiguous-width characters or emoji, so alignment may differ
+visually between terminals while the padding bound still holds. Regression
+coverage pins the padding trigger in `src/runner/help/tests/bounds.rs` (one
+long name among many short rows, and a single target's name list). The
+amplification regression lives in `src/runner/help/tests/streaming.rs`: 2,000
+names sharing one 16 KiB description must produce at least one write per row,
+with no single write larger than one row.
+`tests/runner_help_targets_tests/bounds.rs` drives the same shape through the
+binary.
+
 The rejection is total: every query-context `env()` call fails, and an
 `env(name, default=value)` call reports the same query-disabled marker as a bare
 `env(name)` rather than an arity error. The stub accepts a keyword-argument

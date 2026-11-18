@@ -8,6 +8,7 @@
 use anyhow::{Context, Result};
 use serde::Serialize;
 use std::borrow::Cow;
+use std::io::Write;
 use unicode_width::UnicodeWidthStr;
 
 use crate::cli::{Cli, configured_command};
@@ -22,24 +23,38 @@ use super::{RunnerError, process};
 use telemetry::instrument_help_targets;
 
 mod graph_json;
+
 mod query;
+
 mod telemetry;
 
 #[cfg(test)]
 use query::build_catalogue;
 use query::{HelpEntry, HelpTargetsQueryFailure, query_help_targets};
 
-/// Render the `help targets` catalogue to stdout without invoking Ninja.
+/// Maximum display width that one catalogue name contributes to alignment.
+///
+/// The width is measured in terminal display columns after [`terminal_safe`],
+/// so escaped control characters count as the visible characters they become.
+/// Names wider than this are rendered in full but never widen the column:
+/// padding is bounded at this many columns per row, so the padding cost stays
+/// proportional to the row count rather than to the widest name times the row
+/// count. Names are never truncated to satisfy the bound.
+pub(super) const MAX_HELP_ALIGNMENT_WIDTH: usize = 40;
+
+/// Stream the `help targets` catalogue to stdout without invoking Ninja.
 ///
 /// The manifest is loaded, expanded, rendered, and validated through the same
 /// pipeline stages as a real build, but with impure template helpers disabled.
 /// The IR is built only to validate the rendered manifest, and no recipe is
-/// executed and no build output created.
+/// executed and no build output created. Rows are written as they are
+/// rendered, so a description repeated across many names does not accumulate
+/// in memory.
 ///
 /// # Errors
 ///
 /// Returns an error when the manifest cannot be resolved, loaded, rendered, or
-/// validated, or when the catalogue cannot be serialized.
+/// validated, or when the catalogue cannot be serialized or written.
 pub(super) fn handle_help_targets(
     cli: &Cli,
     edges: bool,
@@ -66,11 +81,10 @@ pub(super) fn handle_help_targets(
     let status_key: LocalizationKey = keys::STATUS_TOOL_HELP_TARGETS.into();
     report_pipeline_stage(reporter, PipelineStage::GraphRendering, Some(status_key));
     if cli.json {
-        let rendered = render_json(&query.entries, query.graph.as_ref())?;
-        process::write_text_stdout(&rendered)?;
+        process::stream_text_stdout(|out| render_json(out, &query.entries, query.graph.as_ref()))?;
     } else {
-        let rendered = render_text(&query.entries, resolved_prefs(plan));
-        process::write_text_stdout(&rendered)?;
+        let prefs = resolved_prefs(plan);
+        process::stream_text_stdout(|out| render_text(out, &query.entries, prefs))?;
     }
     reporter.report_complete(status_key);
     Ok(())
@@ -138,34 +152,52 @@ const fn resolved_prefs(plan: DisplayPlan) -> OutputPrefs {
     plan.prefs()
 }
 
-/// Render the text catalogue: an "Actions:" section followed by a "Targets:"
+/// Stream the text catalogue: an "Actions:" section followed by a "Targets:"
 /// section, with aligned name and description columns and a localized default
 /// marker and a localized conditional marker. A missing description leaves the
 /// entry visible without a description column. Empty sections are omitted.
-fn render_text(entries: &[HelpEntry], prefs: OutputPrefs) -> String {
+///
+/// Each row is written to `out` as soon as it is complete. A description
+/// shared by many names therefore repeats in the output without repeating in
+/// memory, which keeps peak allocation proportional to the widest row rather
+/// than to the row count times the description length.
+///
+/// # Errors
+///
+/// Returns an error when a section or row cannot be written to `out`.
+fn render_text(out: &mut dyn Write, entries: &[HelpEntry], prefs: OutputPrefs) -> Result<()> {
     let actions: Vec<&HelpEntry> = entries.iter().filter(|entry| entry.is_action).collect();
     let targets: Vec<&HelpEntry> = entries.iter().filter(|entry| !entry.is_action).collect();
-    let mut out = String::new();
-    render_section(&mut out, &actions, keys::CLI_HELP_ACTIONS_HEADING, prefs);
+    render_section(out, &actions, keys::CLI_HELP_ACTIONS_HEADING, prefs)?;
     if !actions.is_empty() && !targets.is_empty() {
-        out.push('\n');
+        write_catalogue(out, b"\n")?;
     }
-    render_section(&mut out, &targets, keys::CLI_HELP_TARGETS_HEADING, prefs);
-    out
+    render_section(out, &targets, keys::CLI_HELP_TARGETS_HEADING, prefs)
 }
 
-/// Render one aligned catalogue section, omitting it entirely when empty.
+/// Stream one aligned catalogue section, omitting it entirely when empty.
+///
+/// The alignment width is computed only from display names at or below
+/// [`MAX_HELP_ALIGNMENT_WIDTH`], and padding is written only when a
+/// description or marker follows the name. Together those rules stop one long
+/// manifest-controlled name from multiplying padding across every other row,
+/// while names themselves are always rendered in full.
+///
+/// # Errors
+///
+/// Returns an error when the heading or a row cannot be written to `out`.
 fn render_section(
-    out: &mut String,
+    out: &mut dyn Write,
     entries: &[&HelpEntry],
     heading_key: &'static str,
     prefs: OutputPrefs,
-) {
+) -> Result<()> {
     if entries.is_empty() {
-        return;
+        return Ok(());
     }
-    out.push_str(&localization::message(heading_key).to_string());
-    out.push('\n');
+    let heading = localization::message(heading_key).to_string();
+    write_catalogue(out, heading.as_bytes())?;
+    write_catalogue(out, b"\n")?;
     let display_names: Vec<Cow<'_, str>> = entries
         .iter()
         .map(|entry| terminal_safe(&entry.name))
@@ -173,29 +205,91 @@ fn render_section(
     let width = display_names
         .iter()
         .map(|name| UnicodeWidthStr::width(name.as_ref()))
+        .filter(|&name_width| name_width <= MAX_HELP_ALIGNMENT_WIDTH)
         .max()
         .unwrap_or(0);
     let default_marker = default_marker(prefs);
     let conditional_marker = conditional_marker(prefs);
-    for (entry, name) in entries.iter().zip(display_names) {
-        let name_width = UnicodeWidthStr::width(name.as_ref());
-        out.push_str("  ");
-        out.push_str(&name);
-        out.push_str(&" ".repeat(width.saturating_sub(name_width)));
-        if let Some(description) = entry.description.as_deref() {
-            out.push_str("  ");
-            out.push_str(&terminal_safe(description));
+    let layout = RowLayout {
+        width,
+        default_marker: &default_marker,
+        conditional_marker: &conditional_marker,
+    };
+    let mut row = String::new();
+    for (entry, name) in entries.iter().zip(&display_names) {
+        row.clear();
+        append_row(&mut row, entry, name, &layout);
+        write_catalogue(out, row.as_bytes())?;
+    }
+    Ok(())
+}
+
+/// Column layout shared by every row in one section.
+struct RowLayout<'marker> {
+    /// Alignment width for names at or below [`MAX_HELP_ALIGNMENT_WIDTH`].
+    width: usize,
+    /// Localized marker appended to manifest defaults.
+    default_marker: &'marker str,
+    /// Localized marker appended to query-disabled entries.
+    conditional_marker: &'marker str,
+}
+
+/// Append one complete catalogue row, including its newline, to `row`.
+///
+/// `row` is reused across rows so its capacity grows only to the widest row,
+/// never to the accumulated catalogue.
+fn append_row(row: &mut String, entry: &HelpEntry, name: &str, layout: &RowLayout<'_>) {
+    row.push_str("  ");
+    row.push_str(name);
+    let sanitized_description = entry.description.as_deref().map(terminal_safe);
+    let description = sanitized_description
+        .as_deref()
+        .filter(|text| !text.is_empty());
+    if has_following_column(entry, description.is_some()) {
+        let padding = layout.width.saturating_sub(UnicodeWidthStr::width(name));
+        push_spaces(row, padding);
+        if let Some(description_text) = description {
+            row.push_str("  ");
+            row.push_str(description_text);
         }
         if entry.is_default {
-            out.push(' ');
-            out.push_str(&default_marker);
+            row.push(' ');
+            row.push_str(layout.default_marker);
         }
         if entry.conditional {
-            out.push(' ');
-            out.push_str(&conditional_marker);
+            row.push(' ');
+            row.push_str(layout.conditional_marker);
         }
-        out.push('\n');
     }
+    row.push('\n');
+}
+
+/// Write one catalogue chunk, naming the stdout operation when it fails.
+///
+/// # Errors
+///
+/// Returns an error when the chunk cannot be written to `out`.
+fn write_catalogue(out: &mut dyn Write, bytes: &[u8]) -> Result<()> {
+    out.write_all(bytes)
+        .context(localization::message(keys::RUNNER_IO_WRITE_STDOUT))
+}
+
+/// Whether anything is rendered after the name in this row.
+///
+/// A row ends at its name unless a description or a marker follows, which is
+/// what keeps padding, and therefore trailing whitespace, out of bare rows.
+const fn has_following_column(entry: &HelpEntry, has_description: bool) -> bool {
+    has_description || has_marker(entry)
+}
+
+/// Whether the entry renders a default or conditional marker after its name.
+const fn has_marker(entry: &HelpEntry) -> bool {
+    entry.is_default || entry.conditional
+}
+
+/// Append `count` literal spaces without allocating a temporary padding string.
+fn push_spaces(out: &mut String, count: usize) {
+    out.extend(std::iter::repeat_n(' ', count));
 }
 
 /// The localized default marker, pairing a theme glyph with a translated label
@@ -214,6 +308,7 @@ fn conditional_marker(prefs: OutputPrefs) -> String {
     let label = localization::message(keys::CLI_HELP_CONDITIONAL_MARKER).to_string();
     format!("[{glyph} {label}]")
 }
+
 /// Versioned JSON catalogue document, mirroring `crate::result_json`'s
 /// envelope shape while carrying the listing payload instead of free text.
 #[derive(Debug, Serialize)]
@@ -255,20 +350,31 @@ struct HelpEntryJson<'a> {
 
 /// Serialize the catalogue into a pretty-printed versioned JSON document.
 ///
+/// The document is written straight to `out` rather than formatted into a
+/// string first, so a description shared by many names costs one write per row
+/// instead of one accumulated buffer sized by the whole catalogue.
+///
 /// # Errors
 ///
-/// Returns an error when the catalogue cannot be serialized.
-fn render_json(entries: &[HelpEntry], graph: Option<&graph_json::GraphJson>) -> Result<String> {
-    serde_json::to_string_pretty(&HelpTargetsDocument {
-        schema_version: SCHEMA_VERSION,
-        generator: GeneratorInfo::current(),
-        result: HelpTargetsResult {
-            command: "help-targets",
-            actions: json_entries(entries.iter().filter(|entry| entry.is_action)),
-            targets: json_entries(entries.iter().filter(|entry| !entry.is_action)),
-            graph,
+/// Returns an error when the catalogue cannot be serialized or written.
+fn render_json(
+    out: &mut dyn Write,
+    entries: &[HelpEntry],
+    graph: Option<&graph_json::GraphJson>,
+) -> Result<()> {
+    serde_json::to_writer_pretty(
+        out,
+        &HelpTargetsDocument {
+            schema_version: SCHEMA_VERSION,
+            generator: GeneratorInfo::current(),
+            result: HelpTargetsResult {
+                command: "help-targets",
+                actions: json_entries(entries.iter().filter(|entry| entry.is_action)),
+                targets: json_entries(entries.iter().filter(|entry| !entry.is_action)),
+                graph,
+            },
         },
-    })
+    )
     .context("serialize help targets catalogue")
 }
 
