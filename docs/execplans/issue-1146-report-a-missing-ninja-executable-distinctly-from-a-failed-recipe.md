@@ -116,7 +116,14 @@ temporary build file.
       leaving the matrix to cover it;
     - the `cfg(doctest)` facade is deleted: it was compiled out of the library
       doctests link against, so it served no doctest, and it had no consumer.
-  - [ ] Re-run the full gate set on this third round of review fixes.
+  - [x] Re-ran the full gate set on this third round of review fixes against
+    exactly the content committed as `1abcc9f27`: check-fmt, lint (613 s),
+    doc-coverage (98.29%, 6825/6944), test (6047 passed, 9 skipped),
+    workflow contracts (2331 passed, 3 skipped), documentation contracts (15
+    passed), markdownlint (0 issues in 237 files), nixie, and typecheck. The
+    start and end content binding matched. Two earlier attempts of this round
+    were red: three Clippy `-D warnings` violations, then one stale help-text
+    expectation in `ninja_failure_tests`, both fixed before the green run.
   - [ ] Push and open the draft pull request.
 
 ## Plan of work
