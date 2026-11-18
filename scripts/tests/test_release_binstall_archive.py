@@ -57,7 +57,7 @@ def test_scan_archive_refuses_an_oversized_file(tmp_path: pathlib.Path) -> None:
         adapter.scan_archive(archive, expected_sha256=digest_of(archive))
 
 
-def test_scan_archive_refuses_a_differentdigest_of(tmp_path: pathlib.Path) -> None:
+def test_scan_archive_refuses_a_different_digest(tmp_path: pathlib.Path) -> None:
     """Refuse bytes the trusted record does not name."""
     archive = tarball(tmp_path / "archive.tar.gz")
 
@@ -65,7 +65,7 @@ def test_scan_archive_refuses_a_differentdigest_of(tmp_path: pathlib.Path) -> No
         adapter.scan_archive(archive, expected_sha256="ab" * 32)
 
 
-def test_scan_archive_refuses_bytes_that_are_not_atarball(
+def test_scan_archive_refuses_bytes_that_are_not_a_tarball(
     tmp_path: pathlib.Path,
 ) -> None:
     """Translate a gzip or tar failure into one corrupt-archive refusal."""
@@ -130,33 +130,139 @@ def test_inflate_refuses_an_oversized_read_without_allocating_it() -> None:
         _ = stream.read(1 << 48)
 
 
-def test_drain_consumes_the_padding_tail_and_keeps_nothing() -> None:
-    """Read the tail after the payload to its end without retaining it.
+def _tar_bytes() -> bytes:
+    """Return an uncompressed archive holding one root binary.
 
-    ``drain`` exists so gzip verifies the trailer the tar end marker leaves
-    unread, which means it must keep reading past the payload. The observable
-    consequence of discarding rather than accumulating is that the same pass
-    continues to its end: a tail far larger than the payload is consumed, the
-    position reaches the whole decompressed length, and a further read finds
-    nothing left.
+    Returns
+    -------
+    bytes
+        The tar stream, including the end marker's zero blocks.
     """
-    payload = b"netsuke" * 4
-    padded = payload + b"\0" * 8192
-    stream = inflate.InflatedStream(
-        io.BytesIO(gzip.compress(padded)),
-        limit=len(padded) + 1,
-        refusal=ValueError,
-    )
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w") as archive:
+        entry = tarfile.TarInfo(policy.BINARY_NAME)
+        entry.size = len(BINARY_BYTES)
+        _ = archive.addfile(entry, io.BytesIO(BINARY_BYTES))
+    return buffer.getvalue()
 
-    with stream:
-        assert stream.read(len(payload)) == payload, (
-            "the stream must serve the payload before the drain"
-        )
-        stream.drain()
-        assert stream.tell() == len(padded), (
-            "drain must consume the whole padding tail, not stop at the payload"
-        )
-        assert stream.read() == b"", "a drained pass must have nothing left to serve"
+
+def _gzipped_archive(path: pathlib.Path, tail: bytes) -> pathlib.Path:
+    """Write an archive whose decompressed stream continues past its end.
+
+    Returns
+    -------
+    pathlib.Path
+        The archive, which is the path it was asked to write.
+    """
+    _ = path.write_bytes(gzip.compress(_tar_bytes() + tail))
+    return path
+
+
+def test_scan_archive_accepts_zero_padding_after_the_end_marker(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Accept the zero padding standard writers leave after the end marker."""
+    archive = _gzipped_archive(tmp_path / "archive.tar.gz", b"\0" * tarfile.BLOCKSIZE)
+
+    layout = adapter.scan_archive(archive, expected_sha256=digest_of(archive))
+
+    assert layout.member_count == 1, "the padding must not be read as a member"
+
+
+def test_scan_archive_refuses_data_after_the_end_marker(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a block after the end marker, which the index walk never parses.
+
+    ``tarfile`` stops at the marker, so a block that follows it — a second
+    archive, or one whose checksum is wrong — is never read by the walk, and a
+    scan that trusted the walk would accept it. Only reading the decompressed
+    stream past the marker sees it.
+    """
+    archive = _gzipped_archive(tmp_path / "trail.tar.gz", b"\xaa" * tarfile.BLOCKSIZE)
+
+    with pytest.raises(adapter.ArchiveCorruptError):
+        adapter.scan_archive(archive, expected_sha256=digest_of(archive))
+
+
+def test_opened_archive_reports_a_parser_value_error_as_corruption(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Report a bare parser ``ValueError`` as a corrupt archive.
+
+    ``tarfile`` maps most malformed fields to a :class:`tarfile.TarError`, but
+    a field it decodes or converts outside that mapping escapes as a plain
+    ``ValueError``. Reporting it as corruption keeps every damaged download on
+    the refusal path instead of surfacing a traceback.
+    """
+    archive = tarball(tmp_path / "archive.tar.gz")
+
+    def refuse(*_args: object, **_kwargs: object) -> typ.NoReturn:
+        """Stand in for ``tarfile.open`` and raise the bare ``ValueError``."""
+        raise ValueError("unparseable")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(adapter.tarfile, "open", refuse)
+        with pytest.raises(adapter.ArchiveCorruptError):
+            adapter.scan_archive(archive, expected_sha256=digest_of(archive))
+
+
+def test_opened_archive_keeps_an_inflation_refusal(tmp_path: pathlib.Path) -> None:
+    """Let the stream's own budget refusal keep its identity.
+
+    :class:`adapter.ArchiveRefusedError` is a ``ValueError``, so a site that
+    translated every ``ValueError`` would report an archive that expands too
+    far as corruption rather than as the inflation refusal its caller reports.
+    """
+    archive = tarball(tmp_path / "archive.tar.gz")
+
+    def refuse(*_args: object, **_kwargs: object) -> typ.NoReturn:
+        """Stand in for ``tarfile.open`` and raise the stream's own refusal."""
+        raise adapter.ArchiveInflationError("expanded")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(adapter.tarfile, "open", refuse)
+        with pytest.raises(adapter.ArchiveInflationError):
+            adapter.scan_archive(archive, expected_sha256=digest_of(archive))
+
+
+def _sparse_header_with_unreadable_size() -> bytes:
+    """Return a tar stream whose sparse header declares a non-numeric size.
+
+    Returns
+    -------
+    bytes
+        The uncompressed tar stream. The header checksum is recomputed after
+        the edit, so the parser reaches the sparse fields rather than refusing
+        the block as a bad checksum first.
+    """
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w", format=tarfile.GNU_FORMAT) as archive:
+        entry = tarfile.TarInfo(policy.BINARY_NAME)
+        entry.type = tarfile.GNUTYPE_SPARSE
+        entry.size = 0
+        _ = archive.addfile(entry, io.BytesIO(b""))
+    blocks = bytearray(buffer.getvalue())
+    blocks[483:495] = b"not a number"
+    blocks[148:156] = b" " * 8
+    blocks[148:156] = f"{sum(blocks[0:512]):06o}\0 ".encode()
+    return bytes(blocks)
+
+
+def test_scan_archive_refuses_malformed_sparse_metadata(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a sparse header whose size field the parser cannot read.
+
+    The GNU sparse fields sit outside the header parser's numeric guards, so a
+    malformed one is the shape most likely to escape as a bare exception. It
+    must still be reported as a refused archive rather than a traceback.
+    """
+    damaged = tmp_path / "sparse.tar.gz"
+    _ = damaged.write_bytes(gzip.compress(_sparse_header_with_unreadable_size()))
+
+    with pytest.raises(adapter.ArchiveCorruptError):
+        adapter.scan_archive(damaged, expected_sha256=digest_of(damaged))
 
 
 def _incompressible_payload(size: int) -> bytes:

@@ -616,6 +616,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_consumer_smoke.py \
 		scripts/release_consumer_archive_policy.py \
 		scripts/release_binstall_archive.py \
+		scripts/release_binstall_members.py \
 		scripts/release_binstall_sidecar.py \
 		scripts/release_consumer_payload.py \
 		scripts/release_binstall_extract.py \

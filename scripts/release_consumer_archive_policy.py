@@ -216,15 +216,16 @@ def _normalised_parts(name: str) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        The components with empty and ``.`` entries removed.
+        The components :class:`pathlib.PurePosixPath` resolves the name into.
+        Reading the name through the same path type the containment check uses
+        keeps the two from disagreeing about what a component is.
 
     Raises
     ------
     UnsafeMemberNameError
-        If nothing is left once those entries are removed, or a component is
-        ``..``.
+        If the name resolves to no components, or one of them is ``..``.
     """
-    parts = tuple(part for part in name.split("/") if part not in {"", "."})
+    parts = PurePosixPath(name).parts
     if not parts:
         msg = f"archive member name {name!r} names no path"
         raise UnsafeMemberNameError(msg)

@@ -11,11 +11,11 @@ This module puts the cap where the bytes are actually produced, and gives the
 tar reader the one thing it needs from a file object besides ``read``: a
 backward ``seek``, which opens a second bounded pass over the same download.
 Reads are served in chunks, so a header that declares a huge size cannot make
-the reader allocate that size before the cap has refused it, and
-:meth:`InflatedStream.drain` reads a pass to its end so gzip verifies the
-trailer that the tar end marker leaves unread. The archive's own refusals stay
-in :mod:`release_binstall_archive`; the error raised at the cap is supplied by
-the caller so a refusal keeps that identity.
+the reader allocate that size before the cap has refused it. Reading past the
+tar end marker is served the same way, and that is what lets gzip verify the
+trailer the marker leaves unread. The archive's own refusals stay in
+:mod:`release_binstall_archive`; the error raised at the cap is supplied by the
+caller so a refusal keeps that identity.
 
 Run through ``scripts/release_binstall_archive.py``; behavioural coverage lives
 in ``scripts/tests/test_release_binstall_archive.py``.
@@ -181,26 +181,6 @@ class InflatedStream(io.RawIOBase):
             if count == 0:
                 return bytes(served)
             served += chunk[:count]
-
-    def drain(self) -> None:
-        """Read to the end of this pass so gzip checks its trailer.
-
-        Notes
-        -----
-        ``tarfile`` stops at the archive's end marker, which leaves the
-        decompressor short of the gzip trailer; only a read to the end of the
-        compressed member makes gzip verify the CRC and length it recorded.
-        A pass that runs out of budget first is refused exactly as a read is.
-
-        The bytes are read into one reused buffer and dropped, because nothing
-        here consumes them: a small archive followed by a large compressed
-        padding tail would otherwise be held in full and then copied, spending
-        the whole budget's worth of memory to verify a trailer.
-        """
-        scratch = bytearray(CHUNK_BYTES)
-        count = self.readinto(scratch)
-        while count:
-            count = self.readinto(scratch)
 
     def readinto(self, buffer: cabc.Buffer) -> int:
         """Serve decompressed bytes without passing the pass's budget.

@@ -3,12 +3,12 @@
 This adapter owns the first half of what the consumer smoke does with a
 published archive: opening the download once, checking its size and digest
 through that descriptor, translating a damaged gzip or tar stream into one
-typed refusal, mapping each tar header into the policy's member record, and
-validating the whole member layout.
+typed refusal, and reading the member index through to its end.
 
 Every safety decision about member names and kinds belongs to
-:mod:`release_consumer_archive_policy`; this module only maps tar metadata into
-the policy's records and refuses an archive the policy has not accepted.
+:mod:`release_consumer_archive_policy`; mapping tar headers into the policy's
+records is :mod:`release_binstall_members`, and this module refuses an archive
+the policy has not accepted.
 Writing the binary out is :mod:`release_binstall_extract`, running it is
 :mod:`release_binstall_probe`, and checking its ``.sha256`` sidecar is
 :mod:`release_binstall_sidecar`. Verification and extraction share one open
@@ -28,6 +28,7 @@ import typing as typ
 import zlib
 
 import release_binstall_inflate as inflate
+import release_binstall_members as members
 import release_consumer_archive_policy as policy
 import release_digest
 import release_digest_files
@@ -46,6 +47,22 @@ MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
 #: archive the release declared. Shared with :mod:`release_binstall_extract`,
 #: which reads the member data after this module has read the index.
 CORRUPT_STREAM = (tarfile.TarError, EOFError, zlib.error, gzip.BadGzipFile)
+
+#: What a refused parse translates into :class:`ArchiveCorruptError`.
+#:
+#: ``tarfile`` validates a header's checksum before it parses the fields, so
+#: most damage arrives as a :class:`tarfile.TarError`. A field that does parse
+#: as a checksum but not as what it claims to be escapes that gate: the GNU
+#: sparse metadata is read outside the header parser's own guard, and a
+#: malformed one raises a bare ``ValueError``. Listing it here reports such an
+#: archive as refused rather than as a traceback.
+#:
+#: It is kept apart from :data:`CORRUPT_STREAM` because
+#: :class:`ArchiveRefusedError` is a ``ValueError``: every site that catches
+#: this tuple must let a refusal through unchanged, and extraction, which
+#: shares :data:`CORRUPT_STREAM`, must not translate an inflation refusal into
+#: corruption.
+PARSE_FAULTS = (*CORRUPT_STREAM, ValueError)
 
 
 class ArchiveRefusedError(ValueError):
@@ -174,7 +191,7 @@ def verified_archive(
         try:
             headers = _scanned_headers(archive)
             layout = _scanned_layout(headers)
-            _require_stream_complete(stream)
+            _require_index_tail(stream)
             yield ValidatedArchive(archive=archive, headers=headers, layout=layout)
         finally:
             archive.close()
@@ -263,7 +280,11 @@ def _opened_archive(
     Raises
     ------
     ArchiveCorruptError
-        If the bytes are not a readable gzip-compressed tar archive.
+        If the bytes are not a readable gzip-compressed tar archive, including
+        a header whose fields the parser cannot read.
+    ArchiveRefusedError
+        If the stream refuses the bytes before the parser sees them, such as
+        when the first header exceeds the budget; it passes through unchanged.
 
     Notes
     -----
@@ -278,26 +299,48 @@ def _opened_archive(
     )
     try:
         return tarfile.open(fileobj=stream, mode="r:"), stream
-    except CORRUPT_STREAM as error:
+    except ArchiveRefusedError:
+        stream.close()
+        raise
+    except PARSE_FAULTS as error:
         stream.close()
         msg = f"the downloaded archive is not a readable gzip tar file: {error}"
         raise ArchiveCorruptError(msg) from error
 
 
-def _require_stream_complete(stream: inflate.InflatedStream) -> None:
-    """Read the stream to its end so gzip checks the trailer it recorded.
+def _require_index_tail(stream: inflate.InflatedStream) -> None:
+    """Read past the archive's end marker, requiring nothing but zero bytes.
 
     Raises
     ------
     ArchiveCorruptError
-        If the compressed stream is damaged after the archive's end marker.
-        Nothing before that point reads those bytes: ``tarfile`` stops at the
-        marker, and closing the reader performs no check, so a download missing
-        the gzip trailer would otherwise be accepted.
+        If the compressed stream is damaged after the archive's end marker, or
+        carries a non-zero byte there.
+    ArchiveRefusedError
+        If the stream refuses a read past the budget; it passes through.
+
+    Notes
+    -----
+    ``tarfile`` stops at the first all-zero block it reads, so anything after
+    that block — a second archive appended to the first, or a header whose
+    checksum is wrong — is never parsed and so never refused. Reading the
+    decompressed stream to its end is what sees it. Standard writers pad the
+    end marker with further zero blocks, so zero bytes are accepted; any other
+    byte means these are not the bytes the index described.
+
+    Reading to the end is also what lets gzip verify the trailer it recorded:
+    the end marker leaves the decompressor short of it, and closing the reader
+    performs no check, so a download missing its trailer would otherwise be
+    accepted.
     """
     try:
-        stream.drain()
-    except CORRUPT_STREAM as error:
+        while block := stream.read(inflate.CHUNK_BYTES):
+            if block.strip(b"\x00"):
+                msg = "the archive carries data after its end marker"
+                raise ArchiveCorruptError(msg)
+    except ArchiveRefusedError:
+        raise
+    except PARSE_FAULTS as error:
         msg = f"the archive's compressed stream is corrupt: {error}"
         raise ArchiveCorruptError(msg) from error
 
@@ -314,7 +357,11 @@ def _scanned_headers(archive: tarfile.TarFile) -> tuple[tarfile.TarInfo, ...]:
     Raises
     ------
     ArchiveCorruptError
-        If the member index cannot be read to its end.
+        If the member index cannot be read to its end, including a header whose
+        fields the parser cannot read.
+    ArchiveRefusedError
+        If the stream refuses a header the budget does not admit. The stream's
+        own refusal passes through unchanged.
 
     Notes
     -----
@@ -332,7 +379,9 @@ def _scanned_headers(archive: tarfile.TarFile) -> tuple[tarfile.TarInfo, ...]:
             headers.append(entry)
             if len(headers) > policy.MAX_MEMBERS:
                 break
-    except CORRUPT_STREAM as error:
+    except ArchiveRefusedError:
+        raise
+    except PARSE_FAULTS as error:
         msg = f"the archive's member index is corrupt: {error}"
         raise ArchiveCorruptError(msg) from error
     return tuple(headers)
@@ -348,52 +397,4 @@ def _scanned_layout(
     release_consumer_archive_policy.ArchiveLayout
         The single root binary and the member totals the policy accepted.
     """
-    return policy.require_safe_layout([_member(entry) for entry in headers])
-
-
-def _member(entry: tarfile.TarInfo) -> policy.ArchiveMember:
-    """Map one tar header into the policy's member record.
-
-    Returns
-    -------
-    release_consumer_archive_policy.ArchiveMember
-        The member name, its kind, and its declared size.
-
-    Examples
-    --------
-    >>> entry = tarfile.TarInfo("netsuke")
-    >>> _member(entry).kind
-    <MemberKind.REGULAR: 'regular'>
-    """
-    return policy.ArchiveMember(
-        name=entry.name, kind=_member_kind(entry), size=entry.size
-    )
-
-
-def _member_kind(entry: tarfile.TarInfo) -> policy.MemberKind:
-    """Classify one tar header without reading its data.
-
-    Returns
-    -------
-    release_consumer_archive_policy.MemberKind
-        The kind extraction would create for this member.
-
-    Notes
-    -----
-    A table rather than a chain of branches: the header predicates are
-    mutually exclusive, so the first match is the answer, and a kind added to
-    the policy fails visibly here instead of silently classifying as
-    ``other``.
-    """
-    recognised = (
-        (entry.isreg, policy.MemberKind.REGULAR),
-        (entry.isdir, policy.MemberKind.DIRECTORY),
-        (entry.issym, policy.MemberKind.SYMLINK),
-        (entry.islnk, policy.MemberKind.HARDLINK),
-        (entry.isdev, policy.MemberKind.DEVICE),
-        (entry.isfifo, policy.MemberKind.FIFO),
-    )
-    return next(
-        (kind for predicate, kind in recognised if predicate()),
-        policy.MemberKind.OTHER,
-    )
+    return members.require_layout(headers)
