@@ -40,7 +40,9 @@ def test_a_relative_verifier_path_names_the_same_gate_command() -> None:
     spelled the path ``./gate`` fail both, so the expectation is derived
     through the same normalisation the validator applies.
     """
-    steps = [{"uses": f"{CHECKOUT_ACTION}@v4", "with": {"path": "./gate"}}]
+    steps: list[dict[str, object]] = [
+        {"uses": f"{CHECKOUT_ACTION}@v4", "with": {"path": "./gate"}}
+    ]
     assert verifier_gate_command(steps) == (
         f"uv run {UV_ISOLATION_FLAGS} --script gate/{GATE_SCRIPT}"
     ), "a leading './' in the checkout path must not change the gate command"

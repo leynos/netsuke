@@ -5389,8 +5389,20 @@ and pass, on the final wording.
   document, and every locale catalogue. Merging it as `8a49ed6e1` was
   conflict-free; both sides' edits to the shared documents sit in different
   sections, and the release-admission bullets this branch added still read
-  twenty-four modules. The full batch runs on `8a49ed6e1`. Date/Author:
-  2026-11-18, implementation agent.
+  twenty-four modules. The batch then ran all thirteen targets green on
+  `dd29bb0f6`, the head that records the merge.
+
+  *Typecheck.* The batch's target set does not include `make typecheck`, and
+  running it separately found the one thing the batch could not: `ty` refuses
+  the eighth assessment's verifier-path test, because the list literal it
+  passes to `verifier_gate_command` infers
+  `list[dict[str, str | dict[str, str]]]` and the parameter takes
+  `list[dict[str, object]]`. Annotating the binding fixes it without weakening
+  the test, which still compares the command `verifier_gate_command` derives
+  from a `./gate` checkout path. `make typecheck` now joins the batch set, so
+  the next full run covers it alongside the other thirteen targets; running it
+  only afterwards would have repeated this discovery on every candidate.
+  Date/Author: 2026-11-18, implementation agent.
 
 ## Surprises & discoveries
 
