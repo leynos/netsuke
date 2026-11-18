@@ -19,7 +19,8 @@ use std::io::Seek;
 use tempfile::TempDir;
 
 use super::{Utf8Validator, linecount, linecount_from, read_utf8_from};
-use crate::stdlib::path::fs_utils::{FileReadLimits, open_file_checked};
+use crate::stdlib::path::ReadingRoot;
+use crate::stdlib::path::fs_utils::{FileReadLimits, ReadScope, open_file_checked};
 
 /// Name of the fixture file staged inside the temporary directory.
 const FIXTURE_NAME: &str = "payload";
@@ -72,7 +73,10 @@ fn readable(message: &str) -> String {
 #[case::trailing_fragment("alpha\nbeta", 2)]
 fn linecount_counts_the_reference_lines(#[case] text: &str, #[case] expected: usize) -> Result<()> {
     let (_dir, file) = fixture(text.as_bytes())?;
-    let counted = linecount(&file, &UNBOUNDED)?;
+    let counted = linecount(
+        &file,
+        ReadScope::new(&UNBOUNDED, &ReadingRoot::for_fixture(&file)?),
+    )?;
     ensure!(
         counted == expected,
         "expected {expected} lines for {text:?} but counted {counted}"
@@ -89,8 +93,11 @@ fn linecount_counts_the_reference_lines(#[case] text: &str, #[case] expected: us
 #[test]
 fn linecount_rejects_a_line_longer_than_the_budget() -> Result<()> {
     let (_dir, file) = fixture(&[b'x'; 32])?;
-    let err = linecount(&file, &budget(8))
-        .expect_err("a 32-byte unterminated line must exceed an 8-byte budget");
+    let err = linecount(
+        &file,
+        ReadScope::new(&budget(8), &ReadingRoot::for_fixture(&file)?),
+    )
+    .expect_err("a 32-byte unterminated line must exceed an 8-byte budget");
     ensure!(
         err.kind() == ErrorKind::InvalidOperation,
         "expected InvalidOperation but was {:?}",
@@ -119,7 +126,10 @@ fn consumed_before_rejection(
 ) -> Result<u64> {
     let (_dir, file) = fixture(payload)?;
     let limits = budget(byte_budget);
-    let mut handle = open_file_checked(&file, &limits)?;
+    let mut handle = open_file_checked(
+        &file,
+        ReadScope::new(&limits, &ReadingRoot::for_fixture(&file)?),
+    )?;
     let err = read(&mut handle).expect_err("an over-budget fixture must be rejected");
     ensure!(
         err.kind() == ErrorKind::InvalidOperation,
@@ -174,7 +184,10 @@ fn linecount_rejects_undecodable_bytes() -> Result<()> {
     ];
     for (label, payload) in cases {
         let (_dir, file) = fixture(payload)?;
-        let Err(err) = linecount(&file, &UNBOUNDED) else {
+        let Err(err) = linecount(
+            &file,
+            ReadScope::new(&UNBOUNDED, &ReadingRoot::for_fixture(&file)?),
+        ) else {
             bail!("{label}: invalid UTF-8 must be rejected rather than counted");
         };
         ensure!(
@@ -255,7 +268,8 @@ mod properties {
 
     use super::super::{BoundedRead, read_bounded_chunk};
     use super::{FIXTURE_NAME, linecount};
-    use crate::stdlib::path::fs_utils::{FileReadLimits, open_file_checked};
+    use crate::stdlib::path::ReadingRoot;
+    use crate::stdlib::path::fs_utils::{FileReadLimits, ReadScope, open_file_checked};
 
     /// Write `payload` to a temporary file and return the directory guard
     /// alongside the file's path. See the parent module's `fixture`.
@@ -285,8 +299,12 @@ mod properties {
         ) {
             let budget_u64 = u64::try_from(budget).expect("a usize budget fits u64");
             let (_dir, file) = fixture(&payload).expect("stage the payload");
-            let mut handle = open_file_checked(&file, &limits(budget_u64))
-                .expect("open the fixture");
+            let root = ReadingRoot::for_fixture(&file).expect("open the fixture root");
+            let mut handle = open_file_checked(
+                &file,
+                ReadScope::new(&limits(budget_u64), &root),
+            )
+            .expect("open the fixture");
             let mut state = BoundedRead::new(budget_u64);
             let mut buffer = [0_u8; 8192];
             let mut collected = Vec::new();
@@ -328,9 +346,13 @@ mod properties {
         ) {
             let text: String = chars.into_iter().collect();
             let (_dir, file) = fixture(text.as_bytes()).expect("stage the payload");
+            let root = ReadingRoot::for_fixture(&file).expect("open the fixture root");
             let counted = linecount(
                 &file,
-                &limits(u64::try_from(budget).expect("a usize budget fits u64")),
+                ReadScope::new(
+                    &limits(u64::try_from(budget).expect("a usize budget fits u64")),
+                    &root,
+                ),
             );
             if text.len() > budget {
                 prop_assert!(

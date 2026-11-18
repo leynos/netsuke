@@ -183,6 +183,7 @@ sources = [
   "src/stdlib/path/mod.rs",
   "src/stdlib/path/path_utils.rs",
   "src/stdlib/path/read_telemetry/mod.rs",
+  "src/stdlib/path/reading_root/mod.rs",
   "src/stdlib/path/windows_reparse/mod.rs",
   "src/stdlib/recipe_text/dialect_telemetry.rs",
   "src/stdlib/recipe_text/mod.rs",

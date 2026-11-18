@@ -199,3 +199,29 @@ provides and reuses its diagnostic and environment shapes.
 - [ADR-0050: bound manifest template evaluation](adr-0050-bound-manifest-template-evaluation.md)
 - [RFC 0007: Netsukefile testing framework](../rfcs/rfc-0007-netsukefile-testing-framework.md)
 - [Roadmap items 7.1.2 and 7.4.1](../roadmap.md#71-seams-and-loader-options)
+
+## Addendum — 2026-11-16: build-path reads are confined to the workspace
+
+The decision above is unchanged. This records a build-path boundary that landed
+after this ADR was accepted, so the inventory's build-path dispositions are not
+read as leaving file reads unconfined.
+
+The four reading filters — `contents`, `linecount`, `hash` and `digest` — used
+to resolve a template-supplied path against the process working directory.
+Since issue #968 they resolve every request through `ReadingRoot`
+(`src/stdlib/path/reading_root/mod.rs`), which pairs `StdlibConfig`'s
+`workspace_root` capability with its optional recorded spelling and refuses a
+request outside that root with one localized diagnostic.
+
+`glob` is not in that group. The manifest loader registers it with the
+workspace root, so a relative pattern is anchored there and falls back to the
+process working directory only when no root is supplied. The `is <kind>` file
+tests and the `size` and `realpath` filters do resolve against the process
+working directory, as they did when this decision was taken, and confining them
+is not claimed here.
+
+The deny-by-default test-mode decision is unaffected. All four reading filters
+remain `TestDisposition::Refused` in the `SURFACE` inventory, so a test load
+never reaches `ReadingRoot`; this addendum describes the build path only.
+Giving test mode a sandbox-rooted workspace remains roadmap item 7.4.1, and the
+scope recorded for it is unchanged.

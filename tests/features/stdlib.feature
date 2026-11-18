@@ -32,6 +32,15 @@ Feature: Template stdlib filters
     When I render template "{{ path | linecount }}" at stdlib path "lines.txt"
     Then the stdlib output equals "3"
 
+  Scenario: contents refuses an absolute path outside the workspace
+    Given a stdlib file "secret" outside the workspace contains "TOP-SECRET-OUTSIDE-PAYLOAD-968"
+    When I render template "{{ path | contents }}" at the stdlib outside path
+    Then the stdlib error contains "outside the workspace"
+
+  Scenario: linecount refuses a path that climbs above the workspace
+    When I render template "{{ path | linecount }}" at stdlib path "../outside/secret"
+    Then the stdlib error contains "outside the workspace"
+
   Scenario: size returns the byte length
     When I render template "{{ path | size }}" at stdlib path "file"
     Then the stdlib output equals "4"
