@@ -100,6 +100,16 @@
   are usable. Indexed `__N` list variables remain unsupported
   ([#1147](https://github.com/leynos/netsuke/issues/1147), [ADR-0083](docs/adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md)).
 
+### Fixed
+
+- Run every action, and every target declaring `phony: true`, on each build even
+  when a file or directory of the same name exists, and stop `netsuke clean`
+  from removing that path. A phony executable edge now publishes its name as a
+  native Ninja `phony` alias over a hidden output under `.netsuke/phony`; an
+  `always: true` edge gains a shared, permanently dirty prerequisite, so its
+  recipe re-runs while an unchanged output still prunes downstream work
+  ([#1144](https://github.com/leynos/netsuke/issues/1144), [ADR-0084](docs/adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md))
+
 ### Security
 
 - Preserve `script` bytes byte for byte through the `printf %b` transport, so a

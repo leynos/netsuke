@@ -59,3 +59,22 @@ See the [users' guide](users-guide.md#which-resolver-observability) for the
 counter and label reference and
 [ADR-0024](adrs/adr-0024-require-explicit-recursive-which-search.md) for the
 decision that added the label.
+
+## Expect phony and always work to run
+
+No manifest needs an edit, but two shapes now behave as their names promised.
+
+An action, and any target declaring `phony: true`, runs on every build even
+when a file or directory of that name exists. Previously such a path made the
+edge look up to date, so the recipe was skipped after its first run.
+`netsuke clean` now leaves that path alone and removes the generated output
+under `.netsuke/phony` instead.
+
+A target declaring `always: true` re-runs on every invocation even when its
+inputs and output are unchanged. A dependant still rebuilds only when the
+`always` recipe changed what it wrote.
+
+Because the generated Ninja text changes shape for these edges, a manifest that
+compares `netsuke generate` output against a stored copy must update that copy.
+See the [users' guide](users-guide.md#rely-on-phony-and-always-work-running) and
+[ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).

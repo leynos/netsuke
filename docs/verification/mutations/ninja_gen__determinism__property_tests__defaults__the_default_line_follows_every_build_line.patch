@@ -22,7 +22,7 @@ diff --git a/src/ninja_gen/dyndep/mod.rs b/src/ninja_gen/dyndep/mod.rs
 diff --git a/src/ninja_gen/mod.rs b/src/ninja_gen/mod.rs
 --- a/src/ninja_gen/mod.rs
 +++ b/src/ninja_gen/mod.rs
-@@ -235,6 +235,12 @@
+@@ -297,6 +297,12 @@
          });
      }
      write_action_rules(graph, out, shell, binding)?;
@@ -32,10 +32,10 @@ diff --git a/src/ninja_gen/mod.rs b/src/ninja_gen/mod.rs
 +        writeln!(out, "default {}", join(&defaults))?;
 +    }
 +
+     force_run::write_force_statement(graph, out)?;
      for edge in ordered_edges(graph.edges()) {
          let metadata = edge_metadata::for_edge(graph, edge, localizer.as_ref())?;
-         write!(
-@@ -250,11 +256,6 @@
+@@ -316,11 +322,6 @@
          )?;
      }
  

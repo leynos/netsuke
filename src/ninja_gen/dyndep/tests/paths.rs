@@ -169,10 +169,22 @@ fn whitespace_paths_are_escaped_in_every_path_field(
 #[case::input(EdgePathField::Input)]
 #[case::implicit_dependency(EdgePathField::ImplicitDependency)]
 #[case::order_only_dependency(EdgePathField::OrderOnlyDependency)]
-fn reserved_output_namespace_is_rejected(#[case] field: EdgePathField) -> Result<()> {
+fn reserved_namespace_is_rejected(
+    #[case] field: EdgePathField,
+    // Every namespace the generator writes into, including the two fixed names
+    // the phony lowering emits, so a manifest cannot forge or shadow them.
+    #[values(
+        ".netsuke/serial/x",
+        ".netsuke/dyndep/x",
+        ".netsuke/phony/x",
+        ".netsuke/phony/force",
+        ".netsuke/phony/edge-0123456789abcdef"
+    )]
+    path: &str,
+) -> Result<()> {
     let mut edge = parallel_edge("all", &["dep"]);
-    set_edge_path(&mut edge, field, ".netsuke/serial/x");
-    if edge.explicit_outputs == [Utf8PathBuf::from(".netsuke/serial/x")] {
+    set_edge_path(&mut edge, field, path);
+    if edge.explicit_outputs == [Utf8PathBuf::from(path)] {
         edge.explicit_outputs.insert(0, Utf8PathBuf::from("all"));
     }
     let graph = graph_with_edge(edge);

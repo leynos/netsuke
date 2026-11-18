@@ -6,11 +6,15 @@ use super::{DependencyOrder, Recipe, StringOrList, Vars};
 
 /// A single build target.
 ///
-/// Targets describe the files produced by a rule and their dependencies.
-/// `phony` targets are always considered out of date, while `always` targets are
-/// regenerated even if their inputs are unchanged. `console` asks Ninja to run
-/// an executable edge in its serial console pool, which can make long-running
-/// output visible sooner at the cost of serializing other console edges.
+/// Targets describe the files produced by a rule and their dependencies. A
+/// `phony` target names a logical operation rather than a file: the backend
+/// publishes the name as a Ninja `phony` alias over a hidden output, so an
+/// existing file or directory of that name neither suppresses the recipe nor is
+/// removed by `clean`. An `always` target keeps its declared output but gains a
+/// permanently dirty prerequisite, so the recipe runs even when its inputs are
+/// unchanged. `console` asks Ninja to run an executable edge in its serial
+/// console pool, which can make long-running output visible sooner at the cost
+/// of serializing other console edges.
 #[expect(
     clippy::struct_excessive_bools,
     reason = "manifest controls are independent and may be combined"
@@ -44,7 +48,7 @@ pub struct Target {
     #[serde(default)]
     pub vars: Vars,
 
-    /// Declares that the target does not correspond to a real file.
+    /// Declares that the target is a logical operation rather than a file.
     #[serde(default)]
     pub phony: bool,
 

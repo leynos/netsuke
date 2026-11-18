@@ -98,7 +98,13 @@ unrepresentable or rejected, and compatibility/canonical-edge evidence passes.
   - Dependencies: 26.1.2.
 - [ ] 26.2.2. Migrate lowering and backend consumers to resolved operations.
   - Resolve or reject every rule before emission and preserve command, script,
-    phony, always, dependency, output, and serial-ordering behaviour.
+    phony, always, dependency, output, and serial-ordering behaviour. Preserve
+    the phony and always lowering as
+    [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md)
+    defines it: a hidden output plus native alias for executable phony edges,
+    and a shared force node for both executable phony and non-phony always
+    edges. Replacing the resolved-operation representation must not revert
+    either shape to a public output carrying the recipe.
   - Acceptance: all production consumers use the new representation; malformed
     input yields consistent typed failures in debug and release configurations.
     No backend panic substitutes for compiler validation.
