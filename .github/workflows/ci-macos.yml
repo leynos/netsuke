@@ -33,10 +33,12 @@ jobs:
   read-policy:
     name: Read policy
     runs-on: macos-latest
-    # A cold build of the test target plus the policy subset: the ceiling
-    # exists so a hung nested Cargo build fails the lane instead of holding a
-    # runner for hours.
-    timeout-minutes: 60
+    # A cold build of the test target plus the policy subset. This lane has no
+    # compiler cache, so it pays the whole dependency graph on three vCPUs
+    # every run; the ceiling matches the Windows test job's, which is the
+    # closest measured shape, and exists so a hung Cargo build fails the lane
+    # instead of holding a runner for hours.
+    timeout-minutes: 90
     permissions:
       contents: read
     env:

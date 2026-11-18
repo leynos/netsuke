@@ -13123,7 +13123,10 @@ ignored child copy of the test binary under `strace`, injects `EPERM` for
 where `strace` cannot inject the fault, unless
 `NETSUKE_READ_POLICY_RESOLVER_STRICT` is set, which the Linux CI lanes do. The
 macOS lane in `ci-macos.yml` runs the same subset natively, because that
-platform always takes the manual path.
+platform always takes the manual path. `make test-read-policy` is the target
+both lanes use; it selects the boundary with `--no-tests fail`, so a filter
+that matched nothing cannot report success on the lane whose only test run it
+is.
 
 Windows has no `O_NOFOLLOW` through cap-std, but `windows_reparse` reaches the
 same guarantee through `cap_std`'s Windows-only `OpenOptionsExt::custom_flags`,
