@@ -2637,10 +2637,13 @@ device nodes. A symlinked directory used *inside* a path is followed only when
 its target is written as a relative path and stays within the workspace: a
 target that leads outside is refused like any other escape, and a target
 written as an absolute path is refused even when it resolves inside, because
-the capability cannot tell where an absolute target points. On Windows the same
-refusal covers every reparse point, not only symlinks: junctions, volume mount
-points, and other tags such as deduplication or cloud placeholders are all
-rejected, including tags Windows may add later.
+the capability cannot tell where an absolute target points. On Windows that
+final-component refusal covers every reparse point, not only symlinks:
+junctions, volume mount points, and other tags such as deduplication or cloud
+placeholders are all rejected, including tags Windows may add later. Only the
+final component is judged that way: a directory link earlier in the path is
+resolved as described above, so a reparse point there is followed when its
+target is written as a relative path and stays within the workspace.
 
 `follow_symlinks=true` waives that final-component refusal, and only that. The
 capability that anchors every read in the workspace is unaffected, so the

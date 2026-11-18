@@ -37,10 +37,6 @@ enum LinkTarget {
     /// but climbs above the file's own parent directory.
     #[cfg(unix)]
     Climbing,
-    /// `absalias/file`, behind an intermediate link whose target is the
-    /// absolute spelling of a directory inside the workspace.
-    #[cfg(unix)]
-    AbsoluteAlias,
     /// `jescape/secret`, behind the Windows junction to the outside directory.
     #[cfg(windows)]
     Junction,
@@ -69,11 +65,6 @@ impl LinkTarget {
                     links.climbing.clone(),
                     case.template_with("follow_symlinks=true"),
                 ))
-            }
-            #[cfg(unix)]
-            Self::AbsoluteAlias => {
-                let links = ws.links.as_ref()?;
-                Some((links.absolute_alias.join("file"), case.template()))
             }
             #[cfg(windows)]
             Self::Junction => {
@@ -131,6 +122,9 @@ fn reading_filters_reject_an_intermediate_link_that_escapes(
 /// all the same: it cannot tell where such a target points without leaving the
 /// capability it was given, so it reports an escape. The case pins that rule so
 /// the guide's statement about relative link targets stays true.
+///
+/// The link is built here rather than in the shared tree, so a host that cannot
+/// create it fails this case alone instead of every confinement case.
 #[cfg(unix)]
 #[rstest]
 #[case::contents(CONTENTS)]
@@ -140,7 +134,13 @@ fn reading_filters_reject_an_intermediate_link_that_escapes(
 fn reading_filters_refuse_an_intermediate_link_with_an_absolute_target(
     #[case] case: FilterCase,
 ) -> Result<()> {
-    refuse_through(case, LinkTarget::AbsoluteAlias)
+    let ws = confinement_workspace()?;
+    let requested = ws.create_absolute_alias()?.join("file");
+    refuse(
+        case,
+        ReadTarget::new(&ws.root, &requested, 1024),
+        &case.template(),
+    )
 }
 
 /// A `..` behind an intermediate link is the filesystem's `..`, not a lexical

@@ -28,13 +28,16 @@ use tempfile::tempdir;
 ///     sub/deep/inner.txt  (inner)
 ///     escape -> ../outside            (Unix only)
 ///     alias  -> sub/deep              (Unix only)
-///     absalias -> <root>/sub          (Unix only, absolute target)
 ///     out    -> ../outside/secret     (Unix only)
 ///     sub/upto -> ../file             (Unix only)
 ///     jescape -> ../outside           (Windows only, a junction)
 ///   outside/
 ///     secret          (SOLID_SECRET_CONTENT)
 /// ```
+///
+/// The absolute-target link `absalias -> <root>/sub` is not part of this tree:
+/// [`ConfinementWorkspace::create_absolute_alias`] creates it for the one case
+/// that reads it, so a host that cannot create that link fails only that case.
 pub(crate) struct ConfinementWorkspace {
     /// Keeps the temporary tree alive for the life of the test.
     _temp: tempfile::TempDir,
@@ -59,10 +62,10 @@ pub(crate) struct ConfinementWorkspace {
 /// Real symlinks that a confined read must not follow out of the
 /// workspace.
 ///
-/// Except for `absalias`, each link's target is relative, so the fixtures
-/// exercise the resolver rather than a platform refusal of absolute link
-/// targets. `absalias` is the deliberate exception: it points inside the
-/// workspace by an absolute path, which the capability must still refuse.
+/// Each link's target is relative, so the fixtures exercise the resolver
+/// rather than a platform refusal of absolute link targets. The one
+/// absolute-target link is created on demand by
+/// [`ConfinementWorkspace::create_absolute_alias`].
 pub(crate) struct EscapeLinks {
     /// `workspace/escape` -> `../outside`, an intermediate directory link.
     pub(crate) escape: Utf8PathBuf,
@@ -70,11 +73,6 @@ pub(crate) struct EscapeLinks {
     /// inside and whose target is deep enough that `alias/..` differs from
     /// the link's lexical parent.
     pub(crate) alias: Utf8PathBuf,
-    /// `workspace/absalias` -> the absolute spelling of `workspace/sub`, an
-    /// intermediate link whose target is inside the workspace but is written
-    /// absolutely. Only the Unix fixture builds it.
-    #[cfg(unix)]
-    pub(crate) absolute_alias: Utf8PathBuf,
     /// `workspace/out` -> `../outside/secret`, a final component link.
     pub(crate) out: Utf8PathBuf,
     /// `workspace/sub/upto` -> `../file`, a final component link whose target
@@ -191,11 +189,10 @@ fn create_junction_escape(root: &Utf8Path, outside: &Utf8Path) -> Result<Option<
 
 /// Create the escape links inside `root`.
 ///
-/// The relative-target links are created through the capability handle, which
-/// refuses an absolute target — so `absalias` is created with ambient authority
-/// instead, and Windows goes through `std::os::windows::fs` because that is
-/// where the platform reports `ERROR_PRIVILEGE_NOT_HELD`, the one condition
-/// that makes the fixture unavailable rather than faulty.
+/// Unix creates them through the capability handle; Windows goes through
+/// `std::os::windows::fs` because that is where the platform reports
+/// `ERROR_PRIVILEGE_NOT_HELD`, the one condition that makes the fixture
+/// unavailable rather than faulty.
 #[cfg(unix)]
 fn create_escape_links(root: &Utf8Path, handle: &Dir) -> Result<Option<EscapeLinks>> {
     handle
@@ -204,12 +201,6 @@ fn create_escape_links(root: &Utf8Path, handle: &Dir) -> Result<Option<EscapeLin
     handle
         .symlink("sub/deep", "alias")
         .context("create escape link 'alias' -> 'sub/deep'")?;
-    // The absolute target names a directory inside the workspace, so this link
-    // is not an escape in fact — only in the form the capability refuses to
-    // follow. `Dir::symlink` will not create it: it validates the target the
-    // same way, so the fixture uses the ambient call the platform provides.
-    std::os::unix::fs::symlink(root.join("sub"), root.join("absalias"))
-        .context("create absolute-target link 'absalias' -> '<root>/sub'")?;
     handle
         .symlink("../outside/secret", "out")
         .context("create escape link 'out' -> '../outside/secret'")?;
@@ -257,9 +248,34 @@ impl EscapeLinks {
             alias: root.join("alias"),
             out: root.join("out"),
             #[cfg(unix)]
-            absolute_alias: root.join("absalias"),
-            #[cfg(unix)]
             climbing: root.join("sub/upto"),
         }
+    }
+}
+
+impl ConfinementWorkspace {
+    /// Create the absolute-target link the absolute-target case reads through,
+    /// and return its path.
+    ///
+    /// Kept out of the shared tree so this one link cannot fail the cases that
+    /// never read it: a filesystem that refuses the target, or a temporary path
+    /// deep enough to make it too long, then fails only the case that needs it.
+    /// `Dir::symlink` refuses an absolute target by design, so the link is
+    /// written with `Dir::symlink_contents`, which stores the target text
+    /// verbatim while still resolving the link entry through the workspace
+    /// capability rather than its ambient path.
+    ///
+    /// # Errors
+    ///
+    /// Returns the setup error when the workspace cannot be reopened or the
+    /// link cannot be created.
+    #[cfg(unix)]
+    pub(crate) fn create_absolute_alias(&self) -> Result<Utf8PathBuf> {
+        let handle = Dir::open_ambient_dir(&self.root, ambient_authority())
+            .context("open confinement workspace directory")?;
+        handle
+            .symlink_contents(self.root.join("sub"), "absalias")
+            .context("create absolute-target link 'absalias' -> '<root>/sub'")?;
+        Ok(self.root.join("absalias"))
     }
 }
