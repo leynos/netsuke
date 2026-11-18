@@ -1036,9 +1036,18 @@ section.
 
 Automatic configuration discovery now checks every user location before any
 system location. On Unix, with `XDG_CONFIG_HOME` unset, `$HOME/.netsuke.toml`
-and `$HOME/.config/netsuke/config.toml` now override `/etc/xdg` system
-configuration. Operators with both files must review their fetch and
-`env_allow_var` policy, because the user file's values now take effect.
+and `$HOME/.config/netsuke/config.toml` now outrank `/etc/xdg` system
+configuration.
+
+The two scopes are not merged. The winning user file and the `extends` parents
+it names replace the system file, so every setting that exists only in the
+system file stops applying. A system file that sets
+`fetch_default_deny = true` no longer restricts a user file that sets only
+`jobs`, and the same loss applies to every other system-only setting.
+Operators who keep both files must review their fetch and `env_allow_var`
+policy and move any restriction they still require into the user file or into
+another layer they trust, since a restriction left only in the system file no
+longer takes effect.
 
 A user file that exists but cannot be loaded now stops discovery; it no longer
 falls back to a system file. That covers malformed TOML, an `extends` parent
