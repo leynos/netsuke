@@ -37,6 +37,10 @@ enum LinkTarget {
     /// but climbs above the file's own parent directory.
     #[cfg(unix)]
     Climbing,
+    /// `absalias/file`, behind an intermediate link whose target is the
+    /// absolute spelling of a directory inside the workspace.
+    #[cfg(unix)]
+    AbsoluteAlias,
     /// `jescape/secret`, behind the Windows junction to the outside directory.
     #[cfg(windows)]
     Junction,
@@ -65,6 +69,11 @@ impl LinkTarget {
                     links.climbing.clone(),
                     case.template_with("follow_symlinks=true"),
                 ))
+            }
+            #[cfg(unix)]
+            Self::AbsoluteAlias => {
+                let links = ws.links.as_ref()?;
+                Some((links.absolute_alias.join("file"), case.template()))
             }
             #[cfg(windows)]
             Self::Junction => {
@@ -111,6 +120,27 @@ fn reading_filters_reject_an_intermediate_link_that_escapes(
     #[case] case: FilterCase,
 ) -> Result<()> {
     refuse_through(case, LinkTarget::Intermediate)
+}
+
+/// An intermediate link is followed only when its target is written as a
+/// relative path, even when the target is inside the workspace.
+///
+/// `workspace/absalias` points at the absolute spelling of `workspace/sub`, so
+/// the file it names is inside the workspace and `absalias/file` would read the
+/// same bytes as `sub/file`. cap-std refuses to follow an absolute link target
+/// all the same: it cannot tell where such a target points without leaving the
+/// capability it was given, so it reports an escape. The case pins that rule so
+/// the guide's statement about relative link targets stays true.
+#[cfg(unix)]
+#[rstest]
+#[case::contents(CONTENTS)]
+#[case::linecount(LINECOUNT)]
+#[case::hash(HASH)]
+#[case::digest(DIGEST)]
+fn reading_filters_refuse_an_intermediate_link_with_an_absolute_target(
+    #[case] case: FilterCase,
+) -> Result<()> {
+    refuse_through(case, LinkTarget::AbsoluteAlias)
 }
 
 /// A `..` behind an intermediate link is the filesystem's `..`, not a lexical

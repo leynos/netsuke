@@ -2633,18 +2633,21 @@ contents.
 
 The reading filters also refuse to follow a symlink as the final path component
 and reject anything that is not a regular file once opened, including FIFOs and
-device nodes. A symlinked directory used *inside* a path is unaffected while it
-stays within the workspace; one that leads outside is refused like any other
-escape. On Windows the same refusal covers every reparse point, not only
-symlinks: junctions, volume mount points, and other tags such as deduplication
-or cloud placeholders are all rejected, including tags Windows may add later.
+device nodes. A symlinked directory used *inside* a path is followed only when
+its target is written as a relative path and stays within the workspace: a
+target that leads outside is refused like any other escape, and a target
+written as an absolute path is refused even when it resolves inside, because
+the capability cannot tell where an absolute target points. On Windows the same
+refusal covers every reparse point, not only symlinks: junctions, volume mount
+points, and other tags such as deduplication or cloud placeholders are all
+rejected, including tags Windows may add later.
 
 `follow_symlinks=true` waives that final-component refusal, and only that. The
-capability that anchors every read in the workspace is unaffected, so a link
-whose target is written as an absolute path is still refused with a diagnostic
-reporting that a path led outside the filesystem — even when the target is in
-fact inside the workspace. Relativity of the *link target*, not containment of
-the resolved path, is what that check tests.
+capability that anchors every read in the workspace is unaffected, so the
+absolute-target rule above still applies: such a link is refused with a
+diagnostic reporting that a path led outside the filesystem, even when the
+target is in fact inside the workspace. Relativity of the *link target*, not
+containment of the resolved path, is what that check tests.
 
 A relative-target link is the supported form, but it is resolved from the
 capability opened for the requested file's own parent directory rather than

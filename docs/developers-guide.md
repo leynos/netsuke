@@ -12122,11 +12122,13 @@ share one open-and-read policy under `src/stdlib/path/`:
   silently redirect `alias/../file` and would let `missing/../file` succeed on
   a platform that fails it. `open_parent` then opens the resolved parent
   through the capability, so a link in an intermediate component cannot leave
-  the workspace; `is_capability_escape` recognizes the capability's escape
-  error so that refusal shares the lexical diagnostic. Because that parent is
-  the capability a final-component link target is resolved from, a relative
-  target such as `../file` leaves it and is refused even when the target is
-  inside the workspace.
+  the workspace; that open also refuses an intermediate link whose target is
+  written as an absolute path, even when the target resolves inside, because
+  the capability cannot follow an absolute target. `is_capability_escape`
+  recognizes the capability's escape error so that refusal shares the lexical
+  diagnostic. Because that parent is the capability a final-component link
+  target is resolved from, a relative target such as `../file` leaves it and is
+  refused even when the target is inside the workspace.
 - `fs_utils.rs` owns what may be opened: `FileReadLimits` carries the per-call
   `max_bytes` and `follow_symlinks` values, `ReadScope` pairs those limits with
   the workspace capability, and `open_file_checked` opens the parent directory

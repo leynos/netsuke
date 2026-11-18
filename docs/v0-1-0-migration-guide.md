@@ -1165,7 +1165,11 @@ and a request that climbs above the root — at its start or after naming a
 directory — or that reaches outside it through a link in an intermediate
 component is refused before any file is opened. A `..` component keeps the
 meaning the filesystem gives it. A template that reads outside the workspace
-must move that file inside it or name it beneath the root.
+must move that file inside it or name it beneath the root. A directory link on
+the way to the file is followed only when its target is written as a relative
+path; an absolute target is refused even when it resolves inside the workspace,
+so an existing absolute-target directory link must be recreated with a relative
+one.
 
 ## Release packaging validates its candidate offline
 
