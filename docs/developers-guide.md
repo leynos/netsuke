@@ -6261,6 +6261,25 @@ carries the same cardinality hazard as a label. It is not redundant with the
 record check: the gate's own diagnostics are fixed sentences, but an adapter's
 message reaches that stream through the inherited stderr.
 
+Four further modules own one construction each, so a case names the state it
+wants instead of assembling the machinery around it. The environment one real
+invocation starts with belongs to `release_admission_gate_environment.py`:
+`gate_environment` drops every inherited `NETSUKE_RELEASE_ADMISSION_*` and
+`GIT_*` name, because an exported tag or a hook's `GIT_DIR` would otherwise
+decide what the case exercises, prepends the active cmd-mox shim directory to
+`PATH`, writes the fixed runner values, and applies the case's own overrides
+last, where a `None` removes a name rather than storing an empty one.
+`release_admission_evidence_fixtures.py` builds the candidate-bound manifests
+the cases hand the gate; it writes the schema out independently of the
+verifier, so a fixture cannot agree with a reader that dropped a required
+result. `release_admission_cross_repository_layout.py` builds the caller and
+verifier repositories in the case's own temporary tree, because the working
+directory that chooses `origin` is invisible to a command double, and the
+layout is asserted as it is built so a passing fetch cannot be vacuous.
+`release_admission_validator.py` loads the workflow-contract metrics schema by
+file path and exposes it as a narrow protocol, so the runtime suite asserts
+against the contract suite's validator rather than restating it.
+
 The isolated subprocess uses `GITHUB_REPOSITORY` as the fixed repository value
 at its doubled GitHub boundary. The boundedness property generates canonical
 lowercase hexadecimal Git object IDs of 40 or 64 characters so execution
