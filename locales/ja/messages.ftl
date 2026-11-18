@@ -108,8 +108,8 @@ runner.context.render_graph = グラフ成果物を描画できませんでし�
 runner.help.targets_edges_require_json = --edges オプションには最上位の --json が必要です。
 runner.ninja.spawn_failed = Ninja プログラム `{ $program }` を起動できませんでした。
 runner.ninja.spawn_failed.help = Ninja をインストールし、`{ $program }` が PATH に存在して実行可能であることを確認するか、NETSUKE_NINJA に Ninja 実行ファイルのパスを設定してください。
-runner.ninja.build_failed = Ninja がビルドの失敗を報告しました ({ $status })。
-runner.ninja.tool_failed = Ninja ツール `{ $tool }` が失敗を報告しました ({ $status })。
+runner.ninja.build_failed = Ninja がビルドの失敗を報告しました { $status }。
+runner.ninja.tool_failed = Ninja ツール `{ $tool }` が失敗を報告しました { $status }。
 
 runner.io.create_temp_file = 一時 Ninja ファイルを作成できませんでした。
 runner.io.write_temp_ninja = 一時 Ninja ファイルに書き込めませんでした。

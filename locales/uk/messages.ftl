@@ -108,8 +108,8 @@ runner.context.render_graph = Не вдалося відобразити арт�
 runner.help.targets_edges_require_json = Параметр --edges потребує --json на верхньому рівні.
 runner.ninja.spawn_failed = Не вдалося запустити програму Ninja `{ $program }`.
 runner.ninja.spawn_failed.help = Встановіть Ninja і переконайтеся, що `{ $program }` є в PATH і є виконуваним, або вкажіть у NETSUKE_NINJA шлях до виконуваного файлу Ninja.
-runner.ninja.build_failed = Ninja повідомив про помилку збирання ({ $status }).
-runner.ninja.tool_failed = Інструмент Ninja `{ $tool }` повідомив про помилку ({ $status }).
+runner.ninja.build_failed = Ninja повідомив про помилку збирання { $status }.
+runner.ninja.tool_failed = Інструмент Ninja `{ $tool }` повідомив про помилку { $status }.
 
 runner.io.create_temp_file = Не вдалося створити тимчасовий файл Ninja.
 runner.io.write_temp_ninja = Не вдалося записати тимчасовий файл Ninja.

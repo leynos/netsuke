@@ -27,6 +27,7 @@ pub mod command_helper;
 pub mod config_metrics;
 pub mod env;
 pub mod exec;
+pub mod exit_status;
 pub mod fixture;
 pub mod fluent;
 pub mod fs;
@@ -60,6 +61,9 @@ pub use manifest::ensure_manifest_exists;
 
 /// Helpers for writing executable stubs and setting executable bits in tests.
 pub use exec::{make_executable, write_exec, write_exec_with_content};
+
+/// Re-export the exit-status adapter for renderer fixtures.
+pub use exit_status::exit_status;
 
 mod error;
 /// Thread-local tracing capture for integration-test observability assertions.

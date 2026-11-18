@@ -108,8 +108,8 @@ runner.context.render_graph = 그래프 산출물을 렌더링하지 못했습�
 runner.help.targets_edges_require_json = --edges 옵션을 사용하려면 최상위 수준에서 --json을 지정해야 합니다.
 runner.ninja.spawn_failed = Ninja 프로그램 `{ $program }`을(를) 시작할 수 없습니다.
 runner.ninja.spawn_failed.help = Ninja를 설치하고 `{ $program }`이(가) PATH에 있으며 실행 가능한지 확인하거나, NETSUKE_NINJA를 Ninja 실행 파일의 경로로 설정하십시오.
-runner.ninja.build_failed = Ninja가 빌드 실패를 보고했습니다 ({ $status }).
-runner.ninja.tool_failed = Ninja 도구 `{ $tool }`이(가) 실패를 보고했습니다 ({ $status }).
+runner.ninja.build_failed = Ninja가 빌드 실패를 보고했습니다 { $status }.
+runner.ninja.tool_failed = Ninja 도구 `{ $tool }`이(가) 실패를 보고했습니다 { $status }.
 
 runner.io.create_temp_file = 임시 Ninja 파일을 만들지 못했습니다.
 runner.io.write_temp_ninja = 임시 Ninja 파일에 쓰지 못했습니다.

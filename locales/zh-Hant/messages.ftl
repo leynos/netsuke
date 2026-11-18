@@ -107,8 +107,8 @@ runner.context.render_graph = 無法算繪圖產物。
 runner.help.targets_edges_require_json = --edges 選項需要在最上層指定 --json。
 runner.ninja.spawn_failed = 無法啟動 Ninja 程式 `{ $program }`。
 runner.ninja.spawn_failed.help = 請安裝 Ninja 並確認 `{ $program }` 存在於 PATH 中且可執行，或將 NETSUKE_NINJA 設定為 Ninja 可執行檔的路徑。
-runner.ninja.build_failed = Ninja 回報建置失敗（{ $status }）。
-runner.ninja.tool_failed = Ninja 工具 `{ $tool }` 回報失敗（{ $status }）。
+runner.ninja.build_failed = Ninja 回報建置失敗{ $status }。
+runner.ninja.tool_failed = Ninja 工具 `{ $tool }` 回報失敗{ $status }。
 
 runner.io.create_temp_file = 無法建立暫存的 Ninja 檔案。
 runner.io.write_temp_ninja = 無法寫入暫存的 Ninja 檔案。

@@ -7,6 +7,26 @@
 use super::{RunnerError, process};
 use crate::localization::{self, keys};
 use crate::terminal_text::terminal_safe;
+use std::process::ExitStatus;
+
+/// Render an exit status in the active locale.
+///
+/// `ExitStatus`'s own `Display` is English-only and platform-defined, so
+/// embedding it would leave an English fragment, worded differently on Unix
+/// and Windows, inside an otherwise translated summary. The command layer
+/// already words both an exit code and a signal in every catalogue, so the
+/// summary reuses those suffixes and keeps the raw status in the cause chain
+/// for callers that need it.
+fn localized_status(status: ExitStatus) -> String {
+    status.code().map_or_else(
+        || localization::message(keys::COMMAND_SIGNAL_SUFFIX).to_string(),
+        |code| {
+            localization::message(keys::COMMAND_EXIT_STATUS_SUFFIX)
+                .with_arg("status", code)
+                .to_string()
+        },
+    )
+}
 
 /// Convert a typed Ninja failure into the diagnostic the runner reports.
 ///
@@ -33,7 +53,7 @@ pub(super) fn ninja_failure(
         }
         process::NinjaInvocationError::Exit(exit) => {
             let status = exit.status();
-            let status_text = status.to_string();
+            let status_text = localized_status(status);
             let message = if exit.operation() == "build" {
                 localization::message(keys::RUNNER_NINJA_BUILD_FAILED)
                     .with_arg("status", status_text)

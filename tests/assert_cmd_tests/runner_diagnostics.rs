@@ -14,6 +14,42 @@ use std::fs;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
 
+/// Program name a Windows fixture lets Netsuke attempt.
+///
+/// Windows resolves a bare name beside `netsuke.exe` and on the parent
+/// process `PATH` as well as on the child `PATH`, and a test controls only the
+/// last. A host Ninja would therefore turn the missing-Ninja cases into real
+/// builds. The unique name is absent everywhere, so the launch still fails
+/// deterministically; the default program selection itself is covered by the
+/// `runner::process` unit tests.
+const ABSENT_WINDOWS_PROGRAM: &str = "netsuke-fixture-absent-ninja";
+
+/// Name the program the missing-Ninja fixtures let Netsuke attempt.
+fn missing_ninja_program() -> &'static str {
+    if cfg!(windows) {
+        ABSENT_WINDOWS_PROGRAM
+    } else {
+        "ninja"
+    }
+}
+
+/// Supply the child-only override the Windows missing-Ninja cases require.
+fn missing_ninja_override() -> Option<&'static Path> {
+    cfg!(windows).then_some(Path::new(ABSENT_WINDOWS_PROGRAM))
+}
+
+/// Text the platform's resolver reports for an absent bare program name.
+///
+/// Windows resolution reports a synthetic `NotFound` with no OS code, while
+/// Unix passes through `execvp`'s `ENOENT` and its code.
+fn absent_program_cause() -> &'static str {
+    if cfg!(windows) {
+        "program not found"
+    } else {
+        "os error 2"
+    }
+}
+
 /// Remove bidi isolates and terminal wrapping from localized output.
 pub(super) fn flatten_localized_text(rendered: &str) -> String {
     let without_bidi_isolates = rendered
@@ -120,8 +156,11 @@ fn assert_spawn_failure_reported(stderr: &str, program: &str) -> Result<()> {
         flattened.contains("NETSUKE_NINJA"),
         "the help must name the NETSUKE_NINJA override: {stderr}"
     );
+    // The generated build file is named `netsuke.<random>.ninja`, so its
+    // prefix identifies it without rejecting an unrelated `.ninja` component
+    // in a temporary directory path.
     ensure!(
-        !flattened.contains("with build file") && !flattened.contains(".ninja"),
+        !flattened.contains("with build file") && !flattened.contains("netsuke."),
         "the diagnostic must not name the temporary build file: {stderr}"
     );
     Ok(())
@@ -167,12 +206,18 @@ fn assert_spawn_failure_json(stderr: &str, program: &str) -> Result<()> {
         .get("causes")
         .and_then(Value::as_array)
         .context("the JSON diagnostic must carry its cause chain")?;
+    // A non-empty array of nulls would satisfy a length check while carrying
+    // no cause at all. These fixtures deny the program's existence, so the
+    // cause must carry the text the platform's resolver reports for that.
     ensure!(
-        !causes.is_empty(),
-        "the launch failure must keep its OS cause: {stderr}"
+        causes
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|cause| cause.contains(absent_program_cause())),
+        "the launch failure must keep its operating-system cause: {stderr}"
     );
     ensure!(
-        !stderr.contains("with build file") && !stderr.contains(".ninja"),
+        !stderr.contains("with build file") && !stderr.contains("netsuke."),
         "the JSON diagnostic must not name the temporary build file: {stderr}"
     );
     Ok(())
@@ -183,10 +228,11 @@ fn assert_spawn_failure_json(stderr: &str, program: &str) -> Result<()> {
 fn missing_ninja_reports_the_documented_summary() -> Result<()> {
     let temp = workspace_with_minimal_manifest("the documented missing-Ninja case")?;
     let empty_path = tempdir().context("create an empty PATH directory")?;
+    let program = missing_ninja_program();
     let output = run_netsuke(
         temp.path(),
         empty_path.path(),
-        None,
+        missing_ninja_override(),
         &["--progress", "never", "build"],
     )?;
     ensure!(
@@ -194,7 +240,7 @@ fn missing_ninja_reports_the_documented_summary() -> Result<()> {
         "a build without an installed Ninja must fail"
     );
     let stderr = String::from_utf8(output.stderr).context("diagnostic stderr is UTF-8")?;
-    assert_spawn_failure_reported(&stderr, "ninja")
+    assert_spawn_failure_reported(&stderr, program)
 }
 
 /// Report the launch failure in every rendering mode of both subcommands.
@@ -219,16 +265,29 @@ fn missing_ninja_reports_the_documented_summary_across_modes(
         arguments.push("--json");
     }
     arguments.push(subcommand);
-    let output = run_netsuke(temp.path(), empty_path.path(), None, &arguments)?;
+    let output = run_netsuke(
+        temp.path(),
+        empty_path.path(),
+        missing_ninja_override(),
+        &arguments,
+    )?;
     ensure!(
         !output.status.success(),
         "{subcommand} must fail without an installed Ninja"
     );
-    let stderr = String::from_utf8(output.stderr).context("diagnostic stderr is UTF-8")?;
     if json {
-        assert_spawn_failure_json(&stderr, "ninja")
+        ensure!(
+            output.stdout.is_empty(),
+            "a failing JSON run must not write to stdout: {:?}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+    let stderr = String::from_utf8(output.stderr).context("diagnostic stderr is UTF-8")?;
+    let program = missing_ninja_program();
+    if json {
+        assert_spawn_failure_json(&stderr, program)
     } else {
-        assert_spawn_failure_reported(&stderr, "ninja")
+        assert_spawn_failure_reported(&stderr, program)
     }
 }
 

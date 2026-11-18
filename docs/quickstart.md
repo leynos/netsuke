@@ -211,7 +211,7 @@ netsuke build
 When Ninja runs but a recipe fails, the summary reports Ninja's exit status:
 
 ```text
-Ninja reported a build failure (exit status: 1).
+Ninja reported a build failure (exit status 1).
 ```
 
 In human mode Ninja's own output, including the failing command, appears above
@@ -220,7 +220,7 @@ document, keeping only the command-list attribution Netsuke recovers from the
 output tail. For a tool subcommand the summary names the tool instead:
 
 ```text
-Ninja tool `clean` reported a failure (exit status: 1).
+Ninja tool `clean` reported a failure (exit status 1).
 ```
 
 The temporary build file Netsuke generated is not named in either case.

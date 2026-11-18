@@ -5,59 +5,11 @@
 //! document agree about which fault occurred and why.
 
 use super::{first_diagnostic, render_diagnostic_json};
-use crate::localization::{self, keys};
-use crate::runner::{NinjaExitError, RunnerError};
+use crate::runner::test_fixtures::{ninja_exit_failure, ninja_spawn_failure};
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use serde_json::{Map, Value};
-use std::process::ExitStatus;
-use test_support::{EnLocalizer, en_localizer};
-
-/// Report an exit status without spawning a process.
-///
-/// Unix stores the exit code in the high byte of a raw wait status while
-/// Windows stores it directly. Taking a `u8` keeps the caller's value
-/// identical on both platforms, so only this adapter differs.
-#[cfg(unix)]
-fn exit_status(code: u8) -> ExitStatus {
-    use std::os::unix::process::ExitStatusExt;
-
-    ExitStatus::from_raw(i32::from(code) << 8)
-}
-
-/// Report an exit status without spawning a process.
-#[cfg(windows)]
-fn exit_status(code: u8) -> ExitStatus {
-    use std::os::windows::process::ExitStatusExt;
-
-    ExitStatus::from_raw(u32::from(code))
-}
-
-/// Build a launch failure for a Ninja that is not installed.
-fn spawn_failure() -> RunnerError {
-    RunnerError::NinjaSpawnFailed {
-        program: String::from("ninja"),
-        message: localization::message(keys::RUNNER_NINJA_SPAWN_FAILED)
-            .with_arg("program", "ninja"),
-        help: localization::message(keys::RUNNER_NINJA_SPAWN_FAILED_HELP)
-            .with_arg("program", "ninja"),
-        source: std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "No such file or directory (os error 2)",
-        ),
-    }
-}
-
-/// Build an unsuccessful exit carrying command-list attribution.
-fn exit_failure() -> RunnerError {
-    let status = exit_status(7);
-    RunnerError::NinjaFailed {
-        status,
-        operation: String::from("build"),
-        message: localization::message(keys::RUNNER_NINJA_BUILD_FAILED).with_arg("status", status),
-        source: NinjaExitError::new(status, "build", Some(String::from("action 0123, entry 2"))),
-    }
-}
+use test_support::{EnLocalizer, en_localizer, exit_status};
 
 /// Read one string field from a diagnostic object.
 fn string_field<'a>(diagnostic: &'a Map<String, Value>, name: &str) -> Result<&'a str> {
@@ -102,7 +54,7 @@ fn causes(diagnostic: &Map<String, Value>) -> Result<Vec<&str>> {
 #[rstest]
 fn spawn_failure_json_names_program_and_remedies(en_localizer: EnLocalizer) -> Result<()> {
     let _en_localizer = en_localizer;
-    let document = render_diagnostic_json(&spawn_failure())?;
+    let document = render_diagnostic_json(&ninja_spawn_failure()?)?;
     let value = serde_json::from_str::<Value>(&document)?;
     let diagnostic = first_diagnostic(&value)?;
 
@@ -140,7 +92,7 @@ fn spawn_failure_json_names_program_and_remedies(en_localizer: EnLocalizer) -> R
 #[rstest]
 fn exit_failure_json_reports_status_and_attribution(en_localizer: EnLocalizer) -> Result<()> {
     let _en_localizer = en_localizer;
-    let document = render_diagnostic_json(&exit_failure())?;
+    let document = render_diagnostic_json(&ninja_exit_failure(exit_status(7))?)?;
     let value = serde_json::from_str::<Value>(&document)?;
     let diagnostic = first_diagnostic(&value)?;
 
@@ -149,14 +101,13 @@ fn exit_failure_json_reports_status_and_attribution(en_localizer: EnLocalizer) -
         "the exit failure's code should be stable: {document}"
     );
     let message = without_isolation(string_field(diagnostic, "message")?);
-    // The status wording is platform-defined: Unix renders `exit status: 7`
-    // and Windows `exit code: 7`, so both expectations derive from the same
-    // value the fixture passed to the message rather than restating one form.
-    let status = exit_status(7);
+    // The summary is localized, so it does not carry the platform-defined
+    // `ExitStatus` wording; the cause chain still does.
     ensure!(
-        message == format!("Ninja reported a build failure ({status})."),
+        message == "Ninja reported a build failure (exit status 7).",
         "the summary should report Ninja's status: {message:?} in {document}"
     );
+    let status = exit_status(7);
     let expected_cause = format!("ninja exited with {status}: action 0123, entry 2");
     ensure!(
         causes(diagnostic)? == [expected_cause.as_str()],

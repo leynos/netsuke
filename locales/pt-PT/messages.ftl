@@ -109,8 +109,8 @@ runner.context.render_graph = Não foi possível representar o artefacto do graf
 runner.help.targets_edges_require_json = A opção --edges requer --json no nível raiz.
 runner.ninja.spawn_failed = Não foi possível iniciar o programa Ninja `{ $program }`.
 runner.ninja.spawn_failed.help = Instale o Ninja e certifique-se de que `{ $program }` existe no PATH e é executável, ou defina NETSUKE_NINJA como o caminho de um executável Ninja.
-runner.ninja.build_failed = O Ninja comunicou uma falha de compilação ({ $status }).
-runner.ninja.tool_failed = A ferramenta Ninja `{ $tool }` comunicou uma falha ({ $status }).
+runner.ninja.build_failed = O Ninja comunicou uma falha de compilação { $status }.
+runner.ninja.tool_failed = A ferramenta Ninja `{ $tool }` comunicou uma falha { $status }.
 
 runner.io.create_temp_file = Não foi possível criar o ficheiro Ninja temporário.
 runner.io.write_temp_ninja = Não foi possível escrever o ficheiro Ninja temporário.

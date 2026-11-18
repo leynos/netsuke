@@ -15,6 +15,8 @@ mod error;
 mod failure_diagnostic;
 mod manifest_structure_telemetry;
 mod reporter;
+#[cfg(test)]
+pub(crate) mod test_fixtures;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::display_plan::DisplayPlan;
 use crate::localization::keys;

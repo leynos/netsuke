@@ -15,14 +15,20 @@ use serde_json::Value;
 use tempfile::tempdir;
 use test_support::fake_ninja;
 
-/// Format the exit status as the child process would be described.
-fn exit_status_text() -> &'static str {
+/// Format the exit status as the child process's own `Display` renders it.
+///
+/// Only the cause chain keeps Ninja's legacy text, whose wording is platform
+/// defined; the localized summary supplies its own wording.
+fn exit_cause_status_text() -> &'static str {
     if cfg!(windows) {
         "exit code: 7"
     } else {
         "exit status: 7"
     }
 }
+
+/// Status phrase the English summary's localized suffix supplies.
+const SUMMARY_STATUS: &str = "exit status 7";
 
 /// Assert the human exit diagnostic for `subcommand`.
 fn assert_exit_failure_reported(stderr: &str, subcommand: &str) -> Result<()> {
@@ -31,22 +37,22 @@ fn assert_exit_failure_reported(stderr: &str, subcommand: &str) -> Result<()> {
         flattened.contains("netsuke::runner::ninja_failed"),
         "the exit failure must carry its stable code: {stderr}"
     );
-    let status = exit_status_text();
     let summary = if subcommand == "build" {
-        format!("Ninja reported a build failure ({status}).")
+        format!("Ninja reported a build failure ({SUMMARY_STATUS}).")
     } else {
-        format!("Ninja tool `{subcommand}` reported a failure ({status}).")
+        format!("Ninja tool `{subcommand}` reported a failure ({SUMMARY_STATUS}).")
     };
     ensure!(
         flattened.contains(&summary),
         "the summary must report Ninja's status and operation: {stderr}"
     );
+    let cause_status = exit_cause_status_text();
     ensure!(
-        flattened.contains(&format!("ninja exited with {status}")),
+        flattened.contains(&format!("ninja exited with {cause_status}")),
         "the cause must keep Ninja's legacy exit text: {stderr}"
     );
     ensure!(
-        !flattened.contains("with build file") && !flattened.contains(".ninja"),
+        !flattened.contains("with build file") && !flattened.contains("netsuke."),
         "the diagnostic must not name the temporary build file: {stderr}"
     );
     Ok(())
@@ -59,17 +65,17 @@ fn assert_exit_failure_json(stderr: &str, subcommand: &str) -> Result<()> {
         string_field(&diagnostic, "code")? == "netsuke::runner::ninja_failed",
         "the JSON diagnostic must carry its stable code: {stderr}"
     );
-    let status = exit_status_text();
     let summary = if subcommand == "build" {
-        format!("Ninja reported a build failure ({status}).")
+        format!("Ninja reported a build failure ({SUMMARY_STATUS}).")
     } else {
-        format!("Ninja tool `{subcommand}` reported a failure ({status}).")
+        format!("Ninja tool `{subcommand}` reported a failure ({SUMMARY_STATUS}).")
     };
     let message = flatten_localized_text(string_field(&diagnostic, "message")?);
     ensure!(
         message == summary,
         "the JSON summary must report Ninja's status, got {message:?} in {stderr}"
     );
+    let cause_status = exit_cause_status_text();
     let causes = diagnostic
         .get("causes")
         .and_then(Value::as_array)
@@ -78,11 +84,11 @@ fn assert_exit_failure_json(stderr: &str, subcommand: &str) -> Result<()> {
         causes
             .iter()
             .filter_map(Value::as_str)
-            .any(|cause| cause.contains(&format!("ninja exited with {status}"))),
+            .any(|cause| cause.contains(&format!("ninja exited with {cause_status}"))),
         "the JSON cause must keep Ninja's exit text: {stderr}"
     );
     ensure!(
-        !stderr.contains("with build file") && !stderr.contains(".ninja"),
+        !stderr.contains("with build file") && !stderr.contains("netsuke."),
         "the JSON diagnostic must not name the temporary build file: {stderr}"
     );
     Ok(())
@@ -136,6 +142,13 @@ fn recipe_failure_reports_ninja_status_across_modes(
         !output.status.success(),
         "{subcommand} must fail when Ninja reports an unsuccessful exit"
     );
+    if json {
+        ensure!(
+            output.stdout.is_empty(),
+            "a failing JSON run must not write to stdout: {:?}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
     let stderr = String::from_utf8(output.stderr).context("diagnostic stderr is UTF-8")?;
     if json {
         assert_exit_failure_json(&stderr, subcommand)

@@ -2,7 +2,7 @@
 
 use super::*;
 use rstest::rstest;
-use test_support::{EnLocalizer, en_localizer};
+use test_support::{EnLocalizer, en_localizer, exit_status};
 
 /// Build the runner's own missing-manifest failure with the runner context.
 fn runner_failure() -> anyhow::Error {
@@ -168,6 +168,11 @@ fn runner_failures_outrank_manifest_failures_in_one_chain() -> Result<()> {
 }
 
 /// Build the launch failure for a Ninja that is not installed.
+///
+/// The binary crate cannot see the library's crate-private `ninja_failure`
+/// mapper, so this fixture assembles the diagnostic the way the mapper does.
+/// The end-to-end CLI tests are what prove the mapper itself still routes a
+/// launch failure here without the invocation context.
 fn ninja_spawn_failure() -> anyhow::Error {
     anyhow::Error::new(runner::RunnerError::NinjaSpawnFailed {
         program: String::from("ninja"),
@@ -183,38 +188,25 @@ fn ninja_spawn_failure() -> anyhow::Error {
 }
 
 /// Build an unsuccessful exit carrying command-list attribution.
+///
+/// The status phrase comes from the same catalogue suffix the mapper uses, so
+/// this fixture cannot drift from the production summary wording.
 fn ninja_exit_failure() -> anyhow::Error {
     let status = exit_status(7);
+    let status_text = localization::message(keys::COMMAND_EXIT_STATUS_SUFFIX)
+        .with_arg("status", 7)
+        .to_string();
     anyhow::Error::new(runner::RunnerError::NinjaFailed {
         status,
         operation: String::from("build"),
-        message: localization::message(keys::RUNNER_NINJA_BUILD_FAILED).with_arg("status", status),
+        message: localization::message(keys::RUNNER_NINJA_BUILD_FAILED)
+            .with_arg("status", status_text),
         source: runner::NinjaExitError::new(
             status,
             "build",
             Some(String::from("action 0123, entry 2")),
         ),
     })
-}
-
-/// Report an exit status without spawning a process.
-///
-/// Unix stores the exit code in the high byte of a raw wait status while
-/// Windows stores it directly. Taking a `u8` keeps the caller's value
-/// identical on both platforms, so only this adapter differs.
-#[cfg(unix)]
-fn exit_status(code: u8) -> std::process::ExitStatus {
-    use std::os::unix::process::ExitStatusExt;
-
-    std::process::ExitStatus::from_raw(i32::from(code) << 8)
-}
-
-/// Report an exit status without spawning a process.
-#[cfg(windows)]
-fn exit_status(code: u8) -> std::process::ExitStatus {
-    use std::os::windows::process::ExitStatusExt;
-
-    std::process::ExitStatus::from_raw(u32::from(code))
 }
 
 /// A launch failure names the program, offers remedies, and keeps the OS cause.
@@ -272,11 +264,15 @@ fn ninja_exit_failures_render_status_and_attribution(en_localizer: EnLocalizer) 
         flattened.contains("netsuke::runner::ninja_failed"),
         "the rendered diagnostic must carry the exit failure's stable code: {rendered}"
     );
-    // Unix renders `exit status: 7`; Windows renders `exit code: 7`.
-    let expected_summary = format!("Ninja reported a build failure ({})", exit_status(7));
+    // The summary is localized, so it no longer carries the platform-defined
+    // `ExitStatus` wording; only the cause chain does.
     ensure!(
-        flattened.contains(&expected_summary),
+        flattened.contains("Ninja reported a build failure (exit status 7)."),
         "the rendered diagnostic must report Ninja's status: {rendered}"
+    );
+    ensure!(
+        flattened.contains(&format!("ninja exited with {}", exit_status(7))),
+        "the cause chain must keep the platform's raw status: {rendered}"
     );
     ensure!(
         flattened.contains("action 0123, entry 2"),

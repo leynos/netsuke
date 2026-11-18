@@ -54,9 +54,10 @@ temporary build file.
     `make typecheck` pass on the complete change (6041 tests).
   - [x] CodeRabbit reported six findings and one unverified finding; all seven
     are applied:
-    - the JSON and human diagnostic tests derive the platform-defined
+    - the JSON and human diagnostic tests derived the platform-defined
       `ExitStatus` wording (`exit status` on Unix, `exit code` on Windows)
-      from the status value instead of hard-coding one form;
+      from the status value instead of hard-coding one form; a later pass
+      moved that wording out of the summary, leaving it only in the cause;
     - the developers' guide describes `into_io_error` accurately, and the
       users' guide describes how each mode handles Ninja's output;
     - the Arabic help isolates the literal `PATH` and `NETSUKE_NINJA` with
@@ -67,6 +68,30 @@ temporary build file.
       the POSIX one;
     - the `exit_status` test helpers take one `u8`, so only the platform
       adapter differs between the `cfg` branches.
+  - [x] CodeRabbit's later passes reported the Welsh term for "executable"
+    (fixed in `f9ee7460d`) and then six findings plus one unverified finding;
+    all are applied:
+    - the exit summary no longer embeds `ExitStatus`'s English, platform-defined
+      text: it passes the code to the existing `stdlib.command` exit-status and
+      signal suffixes, and the 35 catalogue templates now supply only the
+      sentence around it;
+    - the JSON launch-diagnostic test requires the platform's absent-program
+      cause text rather than a merely non-empty cause array;
+    - the Windows missing-Ninja fixtures no longer rely on the default program
+      name, which Windows also resolves beside `netsuke.exe` and on the parent
+      `PATH`; they name a unique absent program through `NETSUKE_NINJA`, while
+      the default selection stays covered by the `runner::process` unit tests;
+    - the command-list test pins `NETSUKE_LOCALE`, so an inherited locale
+      cannot decide whether its English assertion passes;
+    - the build-file assertions key on the generated `netsuke.` prefix rather
+      than rejecting any `.ninja` path component;
+    - both JSON matrices assert that a failing run writes nothing to stdout;
+    - the JSON renderer fixture now passes a typed invocation failure through
+      the production mapper (`runner::test_fixtures`), with a sentinel
+      build-file context that a regression would surface. The human renderer
+      lives in the binary crate and cannot see crate-private library items, so
+      it keeps a fixture assembled the way the mapper does; the CLI tests cover
+      the mapper itself end to end.
   - [ ] Re-run the gates for these review fixes.
   - [ ] Push and open the draft pull request.
 
@@ -118,9 +143,20 @@ gate set.
   distinguishes them without overstating the diagnosis.
 - Record the decision in `docs/netsuke-design.md` rather than a new ADR,
   because it applies existing ADR-0035 and ADR-0046 direction.
-- Derive the expected status text from `ExitStatus` in tests. Its `Display`
-  implementation is platform-defined, so a hard-coded `exit status: 7` would
-  pass on Unix and fail on Windows without naming the real cause.
+- Word the exit status inside Fluent rather than embedding `ExitStatus`'s
+  `Display`. That text is English-only and platform-defined, so a translated
+  summary would carry an English fragment worded differently on Windows. The
+  summary reuses the command layer's `stdlib.command.exit_status_suffix` and
+  `stdlib.command.signal_suffix`, which every catalogue already provides, and
+  leaves the raw status to the cause chain.
+- Keep the platform-defined status text only in the cause chain, and derive the
+  tests' expectation for it from the `ExitStatus` value rather than hard-coding
+  one platform's form.
+- On Windows, do not rely on a bare `ninja` staying unresolved: the platform's
+  program search also covers the directory of `netsuke.exe` and the parent
+  process `PATH`, neither of which an in-process test can control. The missing-
+  Ninja CLI fixtures therefore name a unique absent program through
+  `NETSUKE_NINJA`, and unit tests keep the default program selection covered.
 - Mark embedded Latin identifiers in Arabic text with U+200E rather than
   restating them in a separate clause; the catalogue already uses that mark for
   `--rule` and `--limit`.
@@ -133,6 +169,14 @@ gate set.
   cannot see a `pub(crate)` item.
 - Fluent wraps every placeable in bidi isolation controls, so text assertions
   compare with U+2068 and U+2069 stripped rather than reproducing them.
+- Windows program resolution searches the child `PATH`, then the directory of
+  the running executable, then the system directories, and finally the parent
+  process `PATH`. Setting only the child `PATH` therefore cannot make a bare
+  `ninja` unresolvable, and a host Ninja would turn a missing-Ninja test into a
+  real build.
+- The human renderer's tests compile in the binary crate, which cannot see the
+  library's crate-private `ninja_failure` mapper or its typed failure; only the
+  library's JSON renderer tests can exercise the mapper directly.
 - `instrument_ninja_build` was generic over `io::Result`; it now carries
   `<T, E>` and records `error_category = "io"` from the error's own chain, so
   the telemetry contract is unchanged while the typed error survives.

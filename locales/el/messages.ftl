@@ -109,8 +109,8 @@ runner.context.render_graph = Δεν ήταν δυνατή η απόδοση τ�
 runner.help.targets_edges_require_json = Η επιλογή --edges απαιτεί το --json στο ανώτατο επίπεδο.
 runner.ninja.spawn_failed = Δεν ήταν δυνατή η εκκίνηση του προγράμματος Ninja `{ $program }`.
 runner.ninja.spawn_failed.help = Εγκαταστήστε το Ninja και βεβαιωθείτε ότι το `{ $program }` υπάρχει στο PATH και είναι εκτελέσιμο, ή ορίστε το NETSUKE_NINJA στη διαδρομή ενός εκτελέσιμου Ninja.
-runner.ninja.build_failed = Το Ninja ανέφερε αποτυχία κατασκευής ({ $status }).
-runner.ninja.tool_failed = Το εργαλείο Ninja `{ $tool }` ανέφερε αποτυχία ({ $status }).
+runner.ninja.build_failed = Το Ninja ανέφερε αποτυχία κατασκευής { $status }.
+runner.ninja.tool_failed = Το εργαλείο Ninja `{ $tool }` ανέφερε αποτυχία { $status }.
 
 runner.io.create_temp_file = Δεν ήταν δυνατή η δημιουργία του προσωρινού αρχείου Ninja.
 runner.io.write_temp_ninja = Δεν ήταν δυνατή η εγγραφή του προσωρινού αρχείου Ninja.

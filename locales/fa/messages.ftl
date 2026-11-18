@@ -108,8 +108,8 @@ runner.context.render_graph = نمایش فرآوردهٔ گراف ممکن نش
 runner.help.targets_edges_require_json = گزینهٔ --edges به --json در سطح اصلی نیاز دارد.
 runner.ninja.spawn_failed = اجرای برنامهٔ Ninja با نشانی `{ $program }` ممکن نشد.
 runner.ninja.spawn_failed.help = ‏Ninja را نصب کنید و مطمئن شوید `{ $program }` در PATH وجود دارد و اجراپذیر است، یا NETSUKE_NINJA را به نشانی یک پروندهٔ اجراپذیر Ninja تنظیم کنید.
-runner.ninja.build_failed = ‏Ninja یک شکست ساخت گزارش داد ({ $status }).
-runner.ninja.tool_failed = ابزار Ninja با نام `{ $tool }` شکستی گزارش داد ({ $status }).
+runner.ninja.build_failed = ‏Ninja یک شکست ساخت گزارش داد { $status }.
+runner.ninja.tool_failed = ابزار Ninja با نام `{ $tool }` شکستی گزارش داد { $status }.
 
 runner.io.create_temp_file = ساخت پروندهٔ موقت Ninja ممکن نشد.
 runner.io.write_temp_ninja = نوشتن در پروندهٔ موقت Ninja ممکن نشد.

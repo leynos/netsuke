@@ -70,6 +70,9 @@ fn run_failing_build(temp: &TempDir, arguments: &[&str]) -> Result<std::process:
     assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
         .env(NINJA_ENV, "ninja")
+        // The assertion below searches localized text, so an inherited
+        // developer or CI locale must not decide whether it passes.
+        .env("NETSUKE_LOCALE", "en-GB")
         .args(arguments)
         .output()
         .context("run failing command-list build")

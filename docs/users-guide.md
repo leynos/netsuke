@@ -2841,11 +2841,12 @@ set `NETSUKE_NINJA` to the path of a Ninja executable.
 
 When Ninja starts but an action fails, the diagnostic is
 `netsuke::runner::ninja_failed`. Its summary reads
-`Ninja reported a build failure (exit status: 1).`, reporting the status Ninja
+`Ninja reported a build failure (exit status 1).`, reporting the status Ninja
 returned, and its cause keeps Ninja's own `ninja exited with …` text, including
-command-list attribution when Netsuke recovered it. A failed `clean` identifies
-the tool instead, with the summary
-``Ninja tool `clean` reported a failure (exit status: 1).``
+command-list attribution when Netsuke recovered it. The status phrase in the
+summary is localized with the rest of the sentence; the platform's own wording
+appears only in the cause. A failed `clean` identifies the tool instead, with
+the summary ``Ninja tool `clean` reported a failure (exit status 1).``
 
 In JSON mode both variants publish the same code, message, help, and cause
 chain as fields in the single stderr document. Automation can therefore branch

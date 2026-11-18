@@ -108,8 +108,8 @@ runner.context.render_graph = Grafartefakten kunde inte renderas.
 runner.help.targets_edges_require_json = Alternativet --edges kräver --json på toppnivå.
 runner.ninja.spawn_failed = Det gick inte att starta Ninja-programmet `{ $program }`.
 runner.ninja.spawn_failed.help = Installera Ninja och se till att `{ $program }` finns i PATH och är körbar, eller ange NETSUKE_NINJA som sökvägen till en körbar Ninja.
-runner.ninja.build_failed = Ninja rapporterade ett byggfel ({ $status }).
-runner.ninja.tool_failed = Ninja-verktyget `{ $tool }` rapporterade ett fel ({ $status }).
+runner.ninja.build_failed = Ninja rapporterade ett byggfel { $status }.
+runner.ninja.tool_failed = Ninja-verktyget `{ $tool }` rapporterade ett fel { $status }.
 
 runner.io.create_temp_file = Den tillfälliga Ninja-filen kunde inte skapas.
 runner.io.write_temp_ninja = Den tillfälliga Ninja-filen kunde inte skrivas.

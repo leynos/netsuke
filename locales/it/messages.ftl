@@ -109,8 +109,8 @@ runner.context.render_graph = Impossibile generare l'artefatto del grafo.
 runner.help.targets_edges_require_json = L'opzione --edges richiede --json a livello principale.
 runner.ninja.spawn_failed = Impossibile avviare il programma Ninja `{ $program }`.
 runner.ninja.spawn_failed.help = Installare Ninja e verificare che `{ $program }` esista nel PATH e sia eseguibile, oppure impostare NETSUKE_NINJA sul percorso di un eseguibile Ninja.
-runner.ninja.build_failed = Ninja ha segnalato un errore di compilazione ({ $status }).
-runner.ninja.tool_failed = Lo strumento Ninja `{ $tool }` ha segnalato un errore ({ $status }).
+runner.ninja.build_failed = Ninja ha segnalato un errore di compilazione { $status }.
+runner.ninja.tool_failed = Lo strumento Ninja `{ $tool }` ha segnalato un errore { $status }.
 
 runner.io.create_temp_file = Impossibile creare il file Ninja temporaneo.
 runner.io.write_temp_ninja = Impossibile scrivere il file Ninja temporaneo.
