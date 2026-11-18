@@ -221,6 +221,9 @@ fn render_manifest_parse_diagnostic_omits_yaml_snippet(en_localizer: EnLocalizer
     Ok(())
 }
 
+/// The typed Ninja launch and exit diagnostics, in JSON form.
+mod ninja_failure_tests;
+
 /// The general source-excerpt guard, and the cases that keep it honest.
 ///
 /// The guard walks a document's causes, including those of its nested `related`

@@ -11,6 +11,7 @@ use std::{
 use super::{
     StderrMode,
     failure_attribution::CommandListFailure,
+    invocation_error::{NinjaExitError, NinjaInvocationError},
     list_failure_telemetry,
     logging::{CommandLogContext, log_command_exit_failure},
     streaming::ForwardStats,
@@ -39,7 +40,7 @@ pub(super) fn check_exit_status_with_context<Clock: MonotonicClock>(
     status: ExitStatus,
     context: &CommandLogContext,
     failure_context: &ExitFailureContext<'_, '_, Clock>,
-) -> io::Result<()> {
+) -> Result<(), NinjaInvocationError> {
     if status.success() {
         Ok(())
     } else {
@@ -67,6 +68,7 @@ pub(super) fn check_exit_status_with_context<Clock: MonotonicClock>(
         }
         ninja_exit_error(
             status,
+            failure_context.operation,
             failure_context.command_list_failure,
             target_clause.as_deref(),
         )
@@ -84,21 +86,27 @@ pub(super) fn terminate_child(child: &mut Child, context: &str) {
 }
 
 /// Convert a Ninja exit status into an error with optional bounded attribution.
+///
+/// The attribution is rendered here, once, so [`NinjaExitError`] reproduces the
+/// legacy `ninja exited with …` text exactly and the runner can reuse the same
+/// value for its diagnostic.
 pub(super) fn ninja_exit_error(
     status: ExitStatus,
+    operation: &str,
     command_list_failure: Option<&CommandListFailure>,
     target_clause: Option<&str>,
-) -> io::Result<()> {
-    let message = command_list_failure.map_or_else(
-        || format!("ninja exited with {status}"),
-        |failure| {
-            target_clause.map_or_else(
-                || format!("ninja exited with {status}: {failure}"),
-                |clause| format!("ninja exited with {status}: {failure} ({clause})"),
-            )
-        },
-    );
-    Err(io::Error::other(message))
+) -> Result<(), NinjaInvocationError> {
+    let attribution = command_list_failure.map(|failure| {
+        target_clause.map_or_else(
+            || format!("{failure}"),
+            |clause| format!("{failure} ({clause})"),
+        )
+    });
+    Err(NinjaInvocationError::exit(NinjaExitError::new(
+        status,
+        operation,
+        attribution,
+    )))
 }
 
 /// Join stderr forwarding and surface the child's wait result.

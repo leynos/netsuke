@@ -106,6 +106,10 @@ runner.context.build_graph = Cha b' urrainnear graf a thogail on fhoirm-liosta.
 runner.context.generate_ninja = Cha b' urrainnear am foirm-liosta Ninja a dhèanamh.
 runner.context.render_graph = Cha b' urrainnear toradh a' ghraf a reandarachadh.
 runner.help.targets_edges_require_json = Feumaidh an roghainn --edges --json aig an ìre as àirde.
+runner.ninja.spawn_failed = Cha b’ urrainnear am prògram Ninja `{ $program }` a thòiseachadh.
+runner.ninja.spawn_failed.help = Stàlaich Ninja agus dèan cinnteach gu bheil `{ $program }` ann air PATH agus gu bheil e so-ghnìomhach, no suidhich NETSUKE_NINJA gu slighe prògram Ninja so-ghnìomhaich.
+runner.ninja.build_failed = Dh’aithris Ninja fàilligeadh togail ({ $status }).
+runner.ninja.tool_failed = Dh’aithris an t-inneal Ninja `{ $tool }` fàilligeadh ({ $status }).
 
 runner.io.create_temp_file = Cha b' urrainnear am faidhle Ninja sealach a chruthachadh.
 runner.io.write_temp_ninja = Cha b' urrainnear sgrìobhadh don fhaidhle Ninja shealach.

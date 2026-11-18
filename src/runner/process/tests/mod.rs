@@ -183,6 +183,7 @@ fn command_list_failure_duration_uses_the_injected_monotonic_clock() {
     let snapshotter = recorder.snapshotter();
 
     let execution = CommandExecutionContext {
+        program: Utf8Path::new("sh"),
         operation: "build",
         stderr_mode: StderrMode::Suppress,
         captures_ninja_failure_output: false,
@@ -230,6 +231,7 @@ fn large_stdout_cannot_supply_command_list_attribution() -> anyhow::Result<()> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let execution = CommandExecutionContext {
+        program: Utf8Path::new("sh"),
         operation: "build",
         stderr_mode: StderrMode::Suppress,
         // Only a Ninja build can relay a subcommand's stderr through stdout.
@@ -243,11 +245,12 @@ fn large_stdout_cannot_supply_command_list_attribution() -> anyhow::Result<()> {
         anyhow::bail!("a failing command should return an error");
     };
 
-    if error
+    let converted = error.into_io_error();
+    if converted
         .to_string()
         .contains("netsuke command-list failure: action ")
     {
-        anyhow::bail!("stdout must not supply command-list attribution: {error}");
+        anyhow::bail!("stdout must not supply command-list attribution: {converted}");
     }
     Ok(())
 }

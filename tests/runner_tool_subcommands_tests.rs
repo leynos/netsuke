@@ -14,7 +14,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use netsuke::cli::{Cli, Commands};
 use netsuke::display_plan::{TerminalFacts, resolve_display_plan};
 use netsuke::localization::{self, keys};
-use netsuke::runner::{run, run_with_ninja_program};
+use netsuke::runner::{RunnerError, run, run_with_ninja_program};
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
 use test_support::{
@@ -76,17 +76,27 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
         messages.iter().any(|m| m.contains("ninja exited")),
         "error should report ninja exit status, got: {messages:?}"
     );
+    let failure = err
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<RunnerError>())
+        .context("the failure should be the runner's own diagnostic")?;
+    let RunnerError::NinjaFailed {
+        operation, status, ..
+    } = failure
+    else {
+        bail!("expected a Ninja exit diagnostic, got {failure:?}");
+    };
     ensure!(
-        messages
-            .iter()
-            .any(|m| m.contains(&format!("-t {expected_tool}"))),
-        "error should mention running ninja tool {expected_tool}, got: {messages:?}"
+        operation == expected_tool,
+        "the diagnostic should name tool {expected_tool}, got {operation}"
     );
     ensure!(
-        messages
-            .iter()
-            .any(|m| m.contains("with build file") && m.contains(".ninja")),
-        "error should include build file context, got: {messages:?}"
+        status.code() == Some(7),
+        "the diagnostic should carry Ninja's status, got {status}"
+    );
+    ensure!(
+        !messages.iter().any(|m| m.contains(".ninja")),
+        "error should not name the temporary build file, got: {messages:?}"
     );
     Ok(())
 }

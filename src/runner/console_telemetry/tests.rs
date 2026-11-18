@@ -8,6 +8,7 @@ use metrics_util::{
 };
 use monotony::test_util::FixedMonotonicClock;
 use rstest::rstest;
+use std::io;
 use tracing_subscriber::filter::LevelFilter;
 
 /// Duration reported by the injected clock for each test invocation.

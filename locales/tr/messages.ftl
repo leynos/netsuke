@@ -106,6 +106,10 @@ runner.context.build_graph = Bildirimden çizge oluşturulamadı.
 runner.context.generate_ninja = Ninja bildirimi üretilemedi.
 runner.context.render_graph = Çizge ürünü işlenemedi.
 runner.help.targets_edges_require_json = --edges seçeneği en üst düzeyde --json gerektirir.
+runner.ninja.spawn_failed = Ninja programı `{ $program }` başlatılamadı.
+runner.ninja.spawn_failed.help = Ninja'yı kurun ve `{ $program }` yolunun PATH içinde olduğundan ve çalıştırılabilir olduğundan emin olun ya da NETSUKE_NINJA değişkenini çalıştırılabilir bir Ninja dosyasının yoluna ayarlayın.
+runner.ninja.build_failed = Ninja bir derleme hatası bildirdi ({ $status }).
+runner.ninja.tool_failed = Ninja aracı `{ $tool }` bir hata bildirdi ({ $status }).
 
 runner.io.create_temp_file = Geçici Ninja dosyası oluşturulamadı.
 runner.io.write_temp_ninja = Geçici Ninja dosyası yazılamadı.

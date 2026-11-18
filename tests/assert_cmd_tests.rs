@@ -148,9 +148,13 @@ fn generate_writes_file() -> Result<()> {
 #[path = "assert_cmd_tests/schema_version.rs"]
 mod schema_version;
 
-/// Cover human diagnostics at the missing-manifest process boundary.
+/// Cover launch diagnostics at the missing-manifest process boundary.
 #[path = "assert_cmd_tests/runner_diagnostics.rs"]
 mod runner_diagnostics;
+
+/// Cover failed-recipe diagnostics at the same process boundary.
+#[path = "assert_cmd_tests/ninja_exit_diagnostics.rs"]
+mod ninja_exit_diagnostics;
 
 #[rstest]
 fn generate_streams_to_stdout_by_default() -> Result<()> {

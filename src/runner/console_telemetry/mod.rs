@@ -5,7 +5,7 @@
 
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use monotony::MonotonicClock;
-use std::{io, sync::Once, time::Duration};
+use std::{sync::Once, time::Duration};
 use tracing::field;
 
 /// Metric counting actual runner-owned Ninja build invocations.
@@ -30,14 +30,19 @@ pub(in crate::runner) const fn scheduling_label(console_edge_count: usize) -> &'
 /// Count configured user edges in the attempted build graph, rather than
 /// inferring which edges Ninja actually executed or how long they occupied its pool.
 ///
+/// The closure's error type is deliberately opaque: this boundary records that
+/// the invocation failed, not why, so it must not force the process layer to
+/// flatten a typed failure into an [`std::io::Error`] before the runner can
+/// classify it.
+///
 /// # Errors
 ///
-/// Returns the invocation's I/O error unchanged when Ninja execution fails.
-pub(in crate::runner) fn instrument_ninja_build<T>(
+/// Returns the invocation's error unchanged when Ninja execution fails.
+pub(in crate::runner) fn instrument_ninja_build<T, E>(
     clock: &dyn MonotonicClock,
     console_edge_count: usize,
-    invoke: impl FnOnce() -> io::Result<T>,
-) -> io::Result<T> {
+    invoke: impl FnOnce() -> Result<T, E>,
+) -> Result<T, E> {
     describe_metrics();
     let console_scheduling = scheduling_label(console_edge_count);
     let span = tracing::info_span!(
@@ -60,11 +65,11 @@ pub(in crate::runner) fn instrument_ninja_build<T>(
 }
 
 /// Emit the bounded result, duration, and configured-edge aggregate.
-fn record_result<T>(
+fn record_result<T, E>(
     span: &tracing::Span,
     console_edge_count: usize,
     elapsed: Duration,
-    result: &io::Result<T>,
+    result: &Result<T, E>,
 ) {
     let console_scheduling = scheduling_label(console_edge_count);
     let (outcome, error_category) = if result.is_ok() {

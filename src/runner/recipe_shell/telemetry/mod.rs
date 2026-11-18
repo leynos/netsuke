@@ -200,12 +200,15 @@ pub(in crate::runner) fn instrument_legacy_recipe_operation<T>(
 
 /// Classify a runner-operation failure without exposing controlled details.
 fn legacy_recipe_failure_category(error: &anyhow::Error) -> &'static str {
-    if error
+    error
         .chain()
-        .any(|cause| cause.downcast_ref::<RunnerError>().is_some())
-    {
-        "manifest"
-    } else if error
+        .find_map(|cause| cause.downcast_ref::<RunnerError>())
+        .map_or_else(|| untyped_failure_category(error), runner_failure_category)
+}
+
+/// Classify a failure whose chain carries no typed runner error.
+fn untyped_failure_category(error: &anyhow::Error) -> &'static str {
+    if error
         .chain()
         .any(|cause| cause.downcast_ref::<IrGenError>().is_some())
     {
@@ -222,6 +225,19 @@ fn legacy_recipe_failure_category(error: &anyhow::Error) -> &'static str {
         "ninja_io"
     } else {
         "other"
+    }
+}
+
+/// Split runner failures between manifest evaluation and Ninja invocation.
+///
+/// A launch or exit failure is a Ninja invocation failure, so it keeps the
+/// `ninja_io` category the bare `io::Error` those diagnostics replaced used to
+/// carry. Reporting it as `manifest` would blame the wrong stage and the fixed
+/// label set must not grow.
+const fn runner_failure_category(error: &RunnerError) -> &'static str {
+    match error {
+        RunnerError::NinjaSpawnFailed { .. } | RunnerError::NinjaFailed { .. } => "ninja_io",
+        _ => "manifest",
     }
 }
 

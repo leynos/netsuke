@@ -109,6 +109,10 @@ runner.context.build_graph = Failed to build graph from the manifest.
 runner.context.generate_ninja = Failed to generate the Ninja manifest.
 runner.context.render_graph = Failed to render the graph artefact.
 runner.help.targets_edges_require_json = The --edges option requires root-level --json.
+runner.ninja.spawn_failed = Could not start the Ninja program `{ $program }`.
+runner.ninja.spawn_failed.help = Install Ninja and make sure `{ $program }` exists on PATH and is executable, or set NETSUKE_NINJA to the path of a Ninja executable.
+runner.ninja.build_failed = Ninja reported a build failure ({ $status }).
+runner.ninja.tool_failed = Ninja tool `{ $tool }` reported a failure ({ $status }).
 
 runner.io.create_temp_file = Failed to create temporary Ninja file.
 runner.io.write_temp_ninja = Failed to write temporary Ninja file.

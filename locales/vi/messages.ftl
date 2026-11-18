@@ -106,6 +106,10 @@ runner.context.build_graph = Không dựng được đồ thị từ tệp kê k
 runner.context.generate_ninja = Không tạo được tệp kê khai Ninja.
 runner.context.render_graph = Không kết xuất được sản phẩm đồ thị.
 runner.help.targets_edges_require_json = Tùy chọn --edges yêu cầu --json ở cấp cao nhất.
+runner.ninja.spawn_failed = Không thể khởi chạy chương trình Ninja `{ $program }`.
+runner.ninja.spawn_failed.help = Hãy cài đặt Ninja và bảo đảm `{ $program }` tồn tại trong PATH và có thể thực thi, hoặc đặt NETSUKE_NINJA thành đường dẫn của tệp thực thi Ninja.
+runner.ninja.build_failed = Ninja đã báo lỗi biên dịch ({ $status }).
+runner.ninja.tool_failed = Công cụ Ninja `{ $tool }` đã báo lỗi ({ $status }).
 
 runner.io.create_temp_file = Không tạo được tệp Ninja tạm.
 runner.io.write_temp_ninja = Không ghi được tệp Ninja tạm.

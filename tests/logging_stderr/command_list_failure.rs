@@ -102,6 +102,18 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
         contains_target_clause(human_error, "target \"result.txt\""),
         "human diagnostics should name the resolved target: {human_error}"
     );
+    ensure!(
+        stderr.contains("netsuke::runner::ninja_failed"),
+        "the human diagnostic should carry the exit failure's stable code: {stderr}"
+    );
+    ensure!(
+        stderr.contains("Ninja reported a build failure"),
+        "the summary should report Ninja's failure rather than the build file: {stderr}"
+    );
+    ensure!(
+        !stderr.contains("with build file"),
+        "the summary must not name the temporary build file: {stderr}"
+    );
     insta::assert_snapshot!(
         "command_list_failure_human_diagnostic",
         diagnostics

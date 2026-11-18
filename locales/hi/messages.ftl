@@ -106,6 +106,10 @@ runner.context.build_graph = मैनिफ़ेस्ट से ग्रा�
 runner.context.generate_ninja = Ninja मैनिफ़ेस्ट नहीं बनाया जा सका।
 runner.context.render_graph = ग्राफ़ का उत्पाद प्रस्तुत नहीं किया जा सका।
 runner.help.targets_edges_require_json = --edges विकल्प के लिए शीर्ष स्तर पर --json आवश्यक है।
+runner.ninja.spawn_failed = Ninja प्रोग्राम `{ $program }` प्रारंभ नहीं किया जा सका।
+runner.ninja.spawn_failed.help = Ninja इंस्टॉल करें और सुनिश्चित करें कि `{ $program }` PATH पर मौजूद है और निष्पादन योग्य है, या NETSUKE_NINJA को किसी निष्पादन योग्य Ninja के पथ पर सेट करें।
+runner.ninja.build_failed = Ninja ने बिल्ड विफलता की सूचना दी ({ $status })।
+runner.ninja.tool_failed = Ninja टूल `{ $tool }` ने विफलता की सूचना दी ({ $status })।
 
 runner.io.create_temp_file = अस्थायी Ninja फ़ाइल नहीं बनाई जा सकी।
 runner.io.write_temp_ninja = अस्थायी Ninja फ़ाइल में नहीं लिखा जा सका।

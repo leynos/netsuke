@@ -667,7 +667,9 @@ PowerShell child processes.
 
 Ninja turns a failed recipe into its own non-zero result, and `netsuke` returns
 failure after forwarding Ninja's output. The CLI contract distinguishes success
-from failure; it does not promise to return the recipe's exact child value.
+from failure; it does not promise to return the recipe's exact child value. A
+Ninja program that cannot be started is a separate fault, reported before any
+recipe runs; see [Interpret failures](#interpret-failures).
 
 Library callers that generate plans directly use the same contract. A bound
 interpreter is an `InterpreterExecutable`; passing one to
@@ -2788,10 +2790,16 @@ Netsuke reports failures at the earliest stage that can identify them:
   before Ninja starts. See
   [Dependency and build-graph semantics](#dependency-and-build-graph-semantics)
   for the cycle scope.
-- Ninja failures retain the subprocess exit status and output.
+- A Ninja program that cannot be started reports its own diagnostic, naming the
+  program Netsuke tried to run and offering the installation and
+  `NETSUKE_NINJA` remedies.
+- Ninja failures retain the subprocess exit status and output, and the summary
+  reports the status Ninja returned.
 
 Human diagnostics include remediation hints where one is available. JSON mode
-exposes the same information as fields.
+exposes the same information as fields. Neither Ninja diagnostic names the
+temporary build file Netsuke generated, because that file is an implementation
+detail that says nothing about the fault.
 
 ### Read a manifest failure in human mode
 
@@ -2815,6 +2823,32 @@ line depends on whether it can point at a place in the manifest:
 The rule is that a diagnostic is self-contained when it names both its source
 and a labelled span within it. Only then does it stand alone as the whole
 report.
+
+### Read a Ninja failure in human and JSON mode
+
+Netsuke distinguishes a Ninja program it could not start from a build Ninja ran
+and failed.
+
+A missing or non-executable program produces
+`netsuke::runner::ninja_spawn_failed`. Its summary reads
+``Could not start the Ninja program `ninja`.``, naming the program Netsuke
+attempted, and its cause is the operating system error, such as
+`No such file or directory (os error 2)`. The help line offers both remedies:
+install Ninja so the attempted program exists on `PATH` and is executable, or
+set `NETSUKE_NINJA` to the path of a Ninja executable.
+
+When Ninja starts but an action fails, the diagnostic is
+`netsuke::runner::ninja_failed`. Its summary reads
+`Ninja reported a build failure (exit status: 1).`, reporting the status Ninja
+returned, and its cause keeps Ninja's own `ninja exited with …` text, including
+command-list attribution when Netsuke recovered it. A failed `clean` identifies
+the tool instead, with the summary
+``Ninja tool `clean` reported a failure (exit status: 1).``
+
+In JSON mode both variants publish the same code, message, help, and cause
+chain as fields in the single stderr document. Automation can therefore branch
+on `code` without parsing the summary, and an operator reading human output
+sees the same attribution.
 
 Terminal human-mode configuration-load events emitted by `config_err_to_exit`
 include structured `operation` and `error_category` fields. `operation` is
