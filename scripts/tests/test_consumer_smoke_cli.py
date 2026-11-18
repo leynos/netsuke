@@ -15,7 +15,6 @@ Run via ``make test-release-publication``.
 import json
 import typing as typ
 
-import consumer_smoke_evidence
 import pytest
 from consumer_smoke_cli import build_app, main
 from consumer_smoke_harness import (
@@ -177,27 +176,38 @@ def test_verify_reports_a_download_the_host_did_not_deliver(
 
 
 def test_verify_reports_a_saved_download_it_cannot_read(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Record an unreadable saved download as that phase's own refusal.
 
-    The file is present, so this is not "the host did not deliver it": the run
-    listed the file and then a stat or a hash of it failed. That belongs to the
-    download phase, which must record the failure and return the download
-    status rather than letting the host's ``OSError`` end the run with no
-    verdict at all.
+    The status file is present but is a directory, so this is not "the host did
+    not deliver it": the run listed the file and then reading it failed. That
+    belongs to the download phase, which must record the failure and return the
+    download status rather than letting the host's ``OSError`` end the run with
+    no verdict at all. A real unreadable path is used rather than a patched
+    reader, so the refusal is proved through the code that reads it.
+
+    The diagnosis is asserted as well as the status, because both outcomes exit
+    ``2``: reporting an unreadable file as a download the host never sent would
+    satisfy the status alone while telling an operator the wrong thing.
     """
     staged = _prepared(tmp_path)
+    unreadable = tmp_path / "crate-status-directory"
+    unreadable.mkdir()
 
-    def unreadable(**_kwargs: object) -> object:
-        """Fail the way a stat or a hash of the saved body would."""
-        msg = "permission denied"
-        raise OSError(msg)
+    assert (
+        run_verify(
+            staged, launcher=fake_probe(), overrides={"crate-status": unreadable}
+        )
+        == 2
+    ), "a download the smoke cannot read must be refused as a download"
 
-    monkeypatch.setattr(consumer_smoke_evidence, "payload_facts", unreadable)
-
-    assert run_verify(staged, launcher=fake_probe()) == 2, (
-        "a download the smoke cannot read must be refused as a download"
+    reported = capsys.readouterr().err
+    assert "could not be read" in reported, (
+        f"the refusal must name an unreadable download; got {reported!r}"
+    )
+    assert "was not downloaded" not in reported, (
+        f"a file that exists must not be reported as never sent; got {reported!r}"
     )
     verdict = read_verdict(staged)
     assert verdict["phases"]["crate_download"] == "failure", (
@@ -205,6 +215,9 @@ def test_verify_reports_a_saved_download_it_cannot_read(
     )
     assert verdict["phases"]["crate_verification"] == "skipped", (
         "no later phase may run once the download is refused"
+    )
+    assert read_phase_log(staged)["crate_download"]["outcome"] == "failure", (
+        "the refusal must be recorded against the phase that hit it"
     )
 
 

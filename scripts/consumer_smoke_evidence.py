@@ -321,18 +321,28 @@ def recorded_status(source: pathlib.Path) -> int | None:
     Returns
     -------
     int | None
-        The status curl wrote, or ``None`` when the file is absent or holds
-        something other than an integer.
+        The status curl wrote, or ``None`` when no status was recorded or the
+        file holds something other than an integer.
 
     Notes
     -----
-    A missing or unreadable status is reported as no status at all rather than
-    as a failure of this function: the download cannot be vouched for without
-    one, which is what the caller's refusal says.
+    Only an absent file means no status at all. A file present but holding a
+    non-number is also no status: ``curl`` writes ``000`` after a transport
+    failure and removes the body, so a status that is not a number cannot come
+    from a transfer that completed.
+
+    A file that exists but cannot be read propagates its :class:`OSError`. A
+    host failure is kept visible so the caller reports an unreadable download
+    rather than a download the host never delivered, which are different
+    diagnoses an operator acts on differently.
     """
     try:
-        return int(source.read_text(encoding="utf-8").strip())
-    except OSError, ValueError:
+        content = source.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    try:
+        return int(content.strip())
+    except ValueError:
         return None
 
 
@@ -344,6 +354,12 @@ def payload_facts(*, body: pathlib.Path, status: pathlib.Path) -> payload.Payloa
     release_consumer_payload.PayloadFacts
         Whether the host delivered the body, how many bytes it holds, and its
         digest when there are bytes to hash.
+
+    Notes
+    -----
+    An unreadable recorded status propagates its :class:`OSError` from
+    :func:`recorded_status`; the caller translates it into a download refusal
+    instead of reporting the download as absent.
     """
     delivered = (
         recorded_status(status) == release_crates_io_adapter.SUCCESS_STATUS

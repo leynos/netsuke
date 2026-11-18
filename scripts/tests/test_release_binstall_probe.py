@@ -293,6 +293,59 @@ def test_probe_version_releases_a_pipe_a_descendant_holds(
     )
 
 
+#: How long the readiness handshake waits for the descendant to leave the
+#: child's process group, and how often it looks. The bound covers one
+#: interpreter start, so a case that needs all of it has already failed.
+_READY_SECONDS = 5.0
+_READY_POLL_SECONDS = 0.01
+
+
+def _signalled(launch: probe.ProbeLauncher, ready: pathlib.Path) -> probe.ProbeLauncher:
+    """Return a launcher that waits for the descendant to announce readiness.
+
+    Parameters
+    ----------
+    launch
+        The launcher that starts the real child.
+    ready
+        The file the descendant creates once its ``os.setsid()`` call has
+        returned.
+
+    Returns
+    -------
+    probe.ProbeLauncher
+        A launcher that starts the child, then waits up to a bound for the
+        marker the child's descendant writes.
+
+    Notes
+    -----
+    The wait finishes before :func:`probe.probe_version` starts its deadline,
+    so the measured interval begins only once the descendant has certainly left
+    the process group. The child is stopped before the refusal is raised.
+
+    The returned launcher raises :class:`probe.ProbeLaunchError` when the
+    marker never appears. Without the handshake the case would race the
+    descendant's session change and could pass for the wrong reason.
+    """
+
+    def launcher(command: list[str], *, env: dict[str, str]) -> probe.ProbeProcess:
+        """Start the child, then wait for the descendant's marker."""
+        process = launch(command, env=env)
+        deadline = time.monotonic() + _READY_SECONDS
+        while not ready.exists():
+            if time.monotonic() > deadline:
+                _ = process.stop()
+                msg = (
+                    "the detached descendant did not leave the process group "
+                    f"within {_READY_SECONDS}s"
+                )
+                raise probe.ProbeLaunchError(msg)
+            time.sleep(_READY_POLL_SECONDS)
+        return process
+
+    return launcher
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="needs a POSIX shell script")
 def test_probe_version_refuses_a_descendant_that_escapes_the_kill(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
@@ -306,15 +359,25 @@ def test_probe_version_refuses_a_descendant_that_escapes_the_kill(
     to the reader and report its refusal on time. The descendant's lifetime is
     bounded so nothing outlives the case, and it is long enough that only a
     probe which does not wait on it can finish inside the bound.
+
+    The descendant announces its new session before the probe's deadline
+    starts, so the case cannot pass by killing one that had not yet detached.
     """
     lifetime = 5
     monkeypatch.setattr(probe, "PROBE_TIMEOUT_SECONDS", 1.0)
     monkeypatch.setattr(probe, "PROBE_DRAIN_SECONDS", 0.5)
     binary = tmp_path / policy.BINARY_NAME
-    detached = f"import os, time; os.setsid(); time.sleep({lifetime})"
+    ready = tmp_path / "detached.ready"
+    detached = (
+        "import os, pathlib, time; os.setsid(); "
+        'pathlib.Path(os.environ["READY"]).write_text(""); '
+        f"time.sleep({lifetime})"
+    )
     _ = binary.write_text(
         "#!/bin/sh\n"
         "printf 'netsuke 1.2.3\\n'\n"
+        f'READY="{ready}"\n'
+        "export READY\n"
         f"'{sys.executable}' -c '{detached}' &\n"
         "exit 0\n",
         encoding="utf-8",
@@ -323,7 +386,7 @@ def test_probe_version_refuses_a_descendant_that_escapes_the_kill(
 
     started = time.monotonic()
     with pytest.raises(probe.ProbeTimeoutError):
-        probe.probe_version(binary, launcher=child_adapter.launch)
+        probe.probe_version(binary, launcher=_signalled(child_adapter.launch, ready))
     elapsed = time.monotonic() - started
 
     assert elapsed < lifetime / 2, (
