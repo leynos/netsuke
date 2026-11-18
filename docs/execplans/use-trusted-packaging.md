@@ -681,10 +681,11 @@ release's public download URL, verifies each against the pre-upload digest
 record, judges the archive's whole member layout before extracting the one
 binary, and runs it to read the version it reports. Its job needs `metadata`,
 `package-crate`, and `finalize-github-release`, holds `contents: read` alone,
-declares no environment, and receives no token, so it cannot publish, upload,
-or exchange a registry credential. The archive and probe boundaries refuse
-corruption, unsafe member paths, and a banner that does not name the candidate
-version exactly, and every refusal is reported as the phase that made it.
+declares no environment, and neither it nor the action it calls reads or
+accepts a token, so it cannot publish, upload, or exchange a registry
+credential. The archive and probe boundaries refuse corruption, unsafe member
+paths, and a banner that does not name the candidate version exactly, and every
+refusal is reported as the phase that made it.
 
 `finalize-github-release/` is **delivered** (#1068): it reconciles the draft
 against the trusted digest record and un-drafts it only when every declared
@@ -858,8 +859,8 @@ all delivered; no live release has exercised the sequence yet:
    `metadata` is named for the candidate version and commit the plan is bound
    to, `package-crate` for the staged crate digest the download is compared
    with, and `finalize-github-release` because an asset attached to a draft
-   release is not downloadable without a token this job deliberately holds none
-   of. Every dependency's `result` is named in the guard alongside
+   release is not downloadable without a credential, and this job deliberately
+   reads none. Every dependency's `result` is named in the guard alongside
    `should_publish == 'true'`, for the same status-function reason as
    `finalize-github-release`. It fetches
    `https://static.crates.io/crates/netsuke-build/netsuke-build-<version>.crate`,

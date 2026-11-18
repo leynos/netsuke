@@ -3646,14 +3646,18 @@ through `cmd-mox`.
 `consumer-smoke` is the last job of a publishing run and the only one that
 touches the release the way a consumer does. It runs after
 `finalize-github-release`, because an archive attached to a draft release is
-not downloadable without a token and this job deliberately holds none. Its
+not downloadable without a credential and this job deliberately uses none. Its
 dependencies are `metadata`, `package-crate`, and `finalize-github-release`,
 and its guard names each result explicitly beside `!cancelled()` and
 `should_publish == 'true'`. Its whole grant is `contents: read`: it declares no
-environment, takes no `id-token`, receives no secret, and passes no token to
-the action it calls. The checkout is pinned to
-`needs.metadata.outputs.candidate_commit` with `persist-credentials: false`, so
-the smoke runs the candidate's own scripts and leaves no credential behind.
+environment, takes no `id-token`, and neither the job nor the action it calls
+reads or accepts a token, so the download, verification, and probe path holds
+no credential. A run's `github.token` exists whether or not a job names it, so
+what the job refuses is that token *persisted*: the checkout is pinned to
+`needs.metadata.outputs.candidate_commit` and passes
+`persist-credentials: false`, which keeps the token out of the git
+configuration every later step could read. The smoke runs the candidate's own
+scripts and leaves no credential behind.
 
 The job downloads two artefacts by exact name — `release-crate-package` for the
 candidate's identity and the publisher's `trusted-artifact` output for the
@@ -3838,17 +3842,24 @@ that runs too late can leave the verifier reading a path that was never filled.
 What the action's command lines may run is asserted in
 `release_publish_path_consumer_commands.py`: both CLI invocations must appear
 exactly once, carry no `if`, and run exactly the reviewed command line,
-launcher included, so a step that only `echo`es it is refused, and no command
-line in the job or the action may name a compiler.
+launcher included, so a step that only `echo`es it is refused. The line must
+also let bash expand its evidence, so a single-quoted `$IDENTITY_PATH` is
+refused although its shell words match the reviewed ones. No command line in
+the job or the action may name a compiler.
 `release_publish_path_consumer_script.py` judges the script around each
-invocation as a shape: a step may prepare it with `set -…` and plain
-assignments and nothing else, while a conditional, a loop, a bare command, or a
-`set +e` above the invocation, and a success exit below it, are each refused
-because they can skip the verification or absorb its refusal.
+invocation as a shape: a step may prepare it with the reviewed `set` options
+and plain assignments and nothing else, while a conditional, a loop, a bare
+command, an assignment-prefixed command, a `set` that turns on an option nobody
+reviewed (such as `set -n`), or a `set +e` above the invocation, and a success
+exit below it, are each refused because they can skip the verification or
+absorb its refusal. The invocation itself is located by its shell words, so an
+assignment whose value spells the CLI's path is a prologue line rather than the
+command, and cannot hide what follows it.
 `release_publish_path_consumer_mutations.py` registers one labelled regression
-for each of the wiring properties and
-`release_publish_path_consumer_artifact_mutations.py` for each download
-property, with the violation each must produce stated in
+for each of the wiring properties,
+`release_publish_path_consumer_prologue_mutations.py` for each prologue and
+epilogue property, and `release_publish_path_consumer_artifact_mutations.py`
+for each download property, with the violation each must produce stated in
 `release_publish_path_consumer_expectations.py`, and
 `release_publish_path_consumer_mutations_test.py` requires the contract to
 report it.

@@ -384,11 +384,19 @@ state before this stage existed and are left as they were written.
 **Decision.** `release.yml` declares `consumer-smoke`, the last job of the
 publication sequence, and `./.github/actions/consumer-smoke` performs it. The
 job needs `metadata`, `package-crate`, and `finalize-github-release`; holds
-`contents: read` and nothing else; declares no environment, no `id-token`, and
-no token or secret of any kind; and checks out the candidate commit with
-`persist-credentials: false`. It runs only for a publishing run, after
-finalization has succeeded, because an asset attached to a draft release is not
-downloadable without a credential and this job deliberately holds none.
+`contents: read` and nothing else; declares no environment and no `id-token`;
+and checks out the candidate commit with `persist-credentials: false`. It runs
+only for a publishing run, after finalization has succeeded, because an asset
+attached to a draft release is not downloadable without a credential and this
+job deliberately uses none.
+
+A run's `github.token` exists whether or not a job names it, so the guarantee
+is narrower than "the job has no token": the grant is read-only, no step reads
+the token, and the action accepts no token input, so the download,
+verification, and probe path has no credential to use. What the job refuses is
+a token *persisted* — `actions/checkout` writes it into the local git
+configuration by default, which would leave it readable by every later step of
+a job that must not hold one.
 
 - The smoke downloads the crate from `static.crates.io` and the cargo-binstall
   archive with its `sha256` sidecar from the release's public
@@ -397,9 +405,11 @@ downloadable without a credential and this job deliberately holds none.
   artefacts it reads are the identity record and the pre-upload digest record.
   A check against the run's own retained bytes would prove only that the run
   agrees with itself.
-- Each download is judged against the digest recorded before upload, and the
-  archive against its sidecar as well, so an archive substituted together with
-  a matching sidecar is still refused. The action's `curl` calls carry
+- Each download is judged against a digest recorded before upload: the crate
+  against the one the package record retained, the archive and its sidecar
+  against those in the uploader's trusted digest record. The archive is checked
+  against its sidecar as well, so an archive substituted together with a
+  matching sidecar is still refused. The action's `curl` calls carry
   `--proto '=https'` and `--proto-redir '=https'` so a redirect cannot
   downgrade the transfer, bound the response with `--max-time` and
   `--max-filesize`, and omit `--fail` so a `404` reaches the verifier as the
@@ -413,12 +423,9 @@ downloadable without a credential and this job deliberately holds none.
 - The one extracted executable is run under a fixed environment with its own
   time bound, and must report the candidate version exactly. The version comes
   from the validated candidate identity, not from the archive's name.
-- The checkout is pinned to the candidate commit and told not to persist
-  credentials. `actions/checkout` writes the workflow token into the local git
-  config by default, so leaving that on would give a job that must hold no
-  credential the one credential it could otherwise acquire, and checking out
-  the tag would exercise whatever the tag resolves to rather than the tree the
-  publisher built.
+- The checkout is pinned to the candidate commit rather than the tag: checking
+  out the tag would exercise whatever the tag resolves to rather than the tree
+  the publisher built.
 - Every phase is reported, `skipped` included. The job's summary reads each
   action output unconditionally, so an output a refused smoke never wrote would
   reach it as an empty string and be summarized as `unknown`; reporting a phase
@@ -443,13 +450,14 @@ scans the job, the workflow environment, and the action's own step environments
 for a credential; `release_publish_path_consumer_commands.py` together with
 `release_publish_path_consumer_script.py`, which read what each command line
 may run and judge the script around the invocation as a shape, so an
-unreachable verifier or an absorbed refusal is refused; and
-`release_publish_path_consumer_artifacts.py`, which requires the two evidence
-downloads by exact name, destination, condition, and order.
+unreachable verifier, an absorbed refusal, or a single-quoted evidence path is
+refused; and `release_publish_path_consumer_artifacts.py`, which requires the
+two evidence downloads by exact name, destination, condition, and order.
 `release_publish_path_consumer_smoke.py` composes those checks with the guard's
 reachability oracle and re-exports them, because it is the module the
-release-path contract and the mutation suite import. Thirty labelled
+release-path contract and the mutation suite import. Thirty-four labelled
 regressions across `release_publish_path_consumer_mutations.py`,
+`release_publish_path_consumer_prologue_mutations.py`,
 `release_publish_path_consumer_artifact_mutations.py`, and the reviewed claims
 in `release_publish_path_consumer_expectations.py` state the violation each
 must produce. Telemetry wiring lives in
