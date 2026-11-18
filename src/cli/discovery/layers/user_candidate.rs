@@ -49,7 +49,7 @@ pub(super) struct AutomaticLayers {
 /// all because the dependency scan reads several locations and naming one would
 /// misreport which file supplied policy.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum UserScopeTrace {
+pub(in crate::cli::discovery) enum UserScopeTrace {
     /// A user location supplied the chain.
     Adopted {
         /// Run-local correlation hash of the adopted candidate's path.
@@ -61,7 +61,7 @@ pub(super) enum UserScopeTrace {
 
 impl UserScopeTrace {
     /// Replay the adoption or fallback diagnostic from bounded metadata.
-    pub(super) fn emit(&self) {
+    pub(in crate::cli::discovery) fn emit(&self) {
         match self {
             Self::Adopted { path_hash } => debug!(
                 scope = "user",
