@@ -149,3 +149,10 @@ deserialization with an invalid-type error.
 - Because higher layers mask lower layers before deserialization, an invalid
   value in a lower layer can be hidden by a valid value in a higher layer. This
   is the established layering contract, not a property of these value forms.
+- `BOOLEAN_PATHS` mirrors the Boolean field names of `CliConfig` by hand
+  because ortho-config's environment layer has no per-field value parser.
+  Adding or renaming a Boolean field requires updating the list. The upstream
+  capability is requested in
+  [ortho-config#714](https://github.com/leynos/ortho-config/issues/714), and
+  replacing the workaround is tracked in
+  [#1165](https://github.com/leynos/netsuke/issues/1165).

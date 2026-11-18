@@ -419,6 +419,12 @@ Reconnaissance confirmed the current rejection text for `NETSUKE_JSON`, the
 Figment value parsing behaviour, and the existing child-process merge adapter.
 Implementation evidence will be recorded after each milestone.
 
+The per-field Boolean rule is a workaround for an ortho-config capability gap.
+The upstream request is
+[ortho-config#714](https://github.com/leynos/ortho-config/issues/714) and
+removing the workaround once it lands is tracked in
+[#1165](https://github.com/leynos/netsuke/issues/1165); ADR-0082 records both.
+
 ## Interfaces and dependencies
 
 - `pub(crate) fn parse_environment_bool(value: &str) -> Option<bool>` in
