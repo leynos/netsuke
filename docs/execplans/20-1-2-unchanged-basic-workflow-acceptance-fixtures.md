@@ -132,7 +132,7 @@ places:
     vocabulary.
 - `README.md`, "Your first build" (lines 126 to 150), with markers
   `readme-first-build-manifest` and `readme-first-build-commands`.
-- `docs/users-guide.md`, "Run the first build" (lines 341 to 369), with
+- `docs/users-guide.md`, "Run the first build" (lines 346 to 374), with
   markers `guide-first-build-manifest` and `guide-first-build-commands`.
 
 Existing coverage of these manifests is real but shallow:
@@ -273,8 +273,8 @@ that job. GitHub's Ubuntu 24.04 image does not list `strace`.
 - `docs/netsuke-design.md` section 2.9, "Progressive-enhancement contracts",
   maps RFCs 0021 to 0025 to ADR-0075 through ADR-0081.
 - `docs/developers-guide.md` has the relevant sections:
-  - "Test execution", with "Required real-Ninja coverage", at line 7859;
-  - "User-facing documentation examples", at line 8527, which lists the three
+  - "Test execution", with "Required real-Ninja coverage", at line 7860;
+  - "User-facing documentation examples", at line 8528, which lists the three
     loaded documents;
   - "Test isolation utilities".
 - `docs/repository-layout.md` "Placement conventions" puts reusable
@@ -355,7 +355,7 @@ Skills to load during implementation:
 
 ## Conformance basis
 
-Upstream artefacts at `main` revision `5c231fed1`:
+Upstream artefacts at `main` revision `2eec2305f`:
 
 - `docs/terms-of-reference.md`:
   - TOR-G1, "A shallow end": "the existing quick start is the regression
@@ -469,8 +469,9 @@ ADR75-ADMIT -> RM-a -> EP-M1 -> OBL-1
 
 ## Tolerances (exception triggers)
 
-The comparison base is `5c231fed1`; re-base the counts if the branch is
-rebased. Each count excludes this ExecPlan and every `*.snap` file.
+The comparison base is `2eec2305f` (rebased from `5c231fed1`); re-base the
+counts if the branch is rebased. Each count excludes this ExecPlan and every
+`*.snap` file.
 
 Changes fall into three categories:
 
@@ -485,18 +486,18 @@ Changes fall into three categories:
 Count net lines (additions minus deletions) per category with:
 
 ```sh
-net() { git diff --numstat 5c231fed1...HEAD -- "$@" ':!docs/execplans/*' ':!*.snap' \
+net() { git diff --numstat 2eec2305f...HEAD -- "$@" ':!docs/execplans/*' ':!*.snap' \
   | awk '{a+=$1; d+=$2} END {print a-d}'; }
 net src test_support tests                                    # code
 net .github Makefile dylint.toml test_support/dylint.toml .config Cargo.toml test_support/Cargo.toml  # configuration
 net docs README.md CHANGELOG.md                               # documentation
-git diff --name-only 5c231fed1...HEAD -- ':!docs/execplans/*' ':!*.snap' | wc -l   # files
-git diff --name-only --diff-filter=A 5c231fed1...HEAD -- '*.snap' | wc -l          # new snapshots
+git diff --name-only 2eec2305f...HEAD -- ':!docs/execplans/*' ':!*.snap' | wc -l   # files
+git diff --name-only --diff-filter=A 2eec2305f...HEAD -- '*.snap' | wc -l          # new snapshots
 ```
 
 Escalation triggers:
 
-- Production code: if `git diff --numstat 5c231fed1...HEAD -- src` is
+- Production code: if `git diff --numstat 2eec2305f...HEAD -- src` is
   non-empty, stop and escalate.
 - Files: if more than 56 non-ExecPlan, non-snapshot files change, stop and
   escalate. The planned set is about 50 files, listed under `Concrete steps`.
@@ -1646,3 +1647,10 @@ and no dependency is added.
 
   Effect on remaining work: larger code and file budgets, no production change,
   and approval still pending.
+- 2026-11-18: Rebased onto `origin/main` at `2eec2305f`, which corrects the
+  installation guide (#1149). That change shifted the cited line numbers in
+  `docs/users-guide.md` (the first-build section is now lines 346 to 374) and
+  `docs/developers-guide.md` (one line later), and this revision updates them.
+  The commit adds no pattern or helper relevant to this plan, and the
+  conformance basis and budgets are unaffected. The tolerance comparison base
+  and the counting commands now use the rebase target, `2eec2305f`.
