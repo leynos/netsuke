@@ -8,10 +8,16 @@ rule 00ea0ab8887980936b52022196b4723924fd4d0f1f120f7bac53f2a60aab1148
 rule 6530944c178f4c8cf6d38d1d9298bd291a71091fe6ea01b3ab16a60fdae95e71
   command = echo linting
 
+build .netsuke/phony/force: phony
+
 build all: phony | check-fmt lint
 
-build check-fmt: 00ea0ab8887980936b52022196b4723924fd4d0f1f120f7bac53f2a60aab1148
+build .netsuke/phony/edge-321f52ff49be2b99df328ead9b3f4a6740c947c7dbe6b0b62e079e029945bdd9: 00ea0ab8887980936b52022196b4723924fd4d0f1f120f7bac53f2a60aab1148 | .netsuke/phony/force
   description = Building ⁨check-fmt⁩
 
-build lint: 6530944c178f4c8cf6d38d1d9298bd291a71091fe6ea01b3ab16a60fdae95e71
+build check-fmt: phony .netsuke/phony/edge-321f52ff49be2b99df328ead9b3f4a6740c947c7dbe6b0b62e079e029945bdd9
+
+build .netsuke/phony/edge-08695bcfb900b89dfb81433d0dd0d254512452861c5e43238fcd2609a936b26e: 6530944c178f4c8cf6d38d1d9298bd291a71091fe6ea01b3ab16a60fdae95e71 | .netsuke/phony/force
   description = Building ⁨lint⁩
+
+build lint: phony .netsuke/phony/edge-08695bcfb900b89dfb81433d0dd0d254512452861c5e43238fcd2609a936b26e

@@ -613,11 +613,18 @@ The cleaner model is:
   YAML `|` block style. Netsuke registers these macros in the template
   environment before rendering other sections.
 
-- `phony`: When set to `true`, the target runs when explicitly requested even if
-  a file with the same name exists. The default value is `false`.
+- `phony`: When set to `true`, the target names a logical operation rather than
+  a file. The default value is `false`. The backend publishes the name as a
+  native Ninja `phony` alias over a hidden output under `.netsuke/phony`, so a
+  file or directory of the same name neither suppresses the recipe nor is
+  removed by `clean`. See §5.4 and
+  [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).
 
 - `always`: When set to `true`, the target runs on every invocation regardless
-  of timestamps or dependencies. The default value is `false`.
+  of timestamps or dependencies. The default value is `false`. The backend
+  makes the edge permanently dirty through the shared `.netsuke/phony/force`
+  node, while retaining the edge-level `restat` that lets an unchanged output
+  prune downstream work.
 
 - `console`: When set to `true`, Netsuke assigns this action or target's build
   edge to Ninja's special `console` pool so command output can be forwarded as
@@ -1180,11 +1187,11 @@ pub struct Target {
     #[serde(default)]
     pub env: HashMap<String, EnvValue>,
 
-    /// Run this target when requested even if a file with the same name exists.
+    /// Declares that the target is a logical operation rather than a file.
     #[serde(default)]
     pub phony: bool,
 
-    /// Run this target on every invocation regardless of timestamps.
+    /// Force the recipe to run even if the outputs are up to date.
     #[serde(default)]
     pub always: bool,
 
@@ -1341,9 +1348,11 @@ order observed in the YAML manifest. This guarantees that downstream consumers
 see keys in a stable sequence after foreach expansion, matching the authoring
 intent and keeping diagnostics and serialized output predictable. Targets also
 accept optional `phony` and `always` booleans. They default to `false`, making
-it explicit when an action should run regardless of file timestamps. Targets
-listed in the `actions` section are deserialized using a custom helper so they
-are always treated as `phony` tasks. This ensures preparation actions never
+it explicit when an action should run regardless of file timestamps. Both flags
+reach the emitter unchanged: `phony` selects the hidden-output and alias
+lowering and `always` makes the edge permanently dirty (§5.4). Targets listed
+in the `actions` section are deserialized using a custom helper so they are
+always treated as `phony` tasks. This ensures preparation actions never
 generate build artefacts. Convenience functions in `src/manifest/mod.rs` load a
 manifest from a string or a file path, returning `anyhow::Result` for
 straightforward error handling. Diagnostics now wrap source and manifest
@@ -2680,8 +2689,8 @@ pub enum EdgeOutputVisibility {
 
 /// Represents a single build statement, analogous to a Ninja 'build' edge.
 /// It connects a set of inputs to a set of outputs via an Action. The `phony`
-/// and `always` flags control execution when outputs already exist or when
-/// timestamps would normally skip the step.
+/// flag marks a logical operation, lowered to a `phony` alias over a hidden
+/// output, and `always` marks work that must run on every invocation.
 pub struct BuildEdge {
     /// The unique identifier of the Action used for this edge.
     pub action_id: String,
@@ -3034,10 +3043,7 @@ structures to the Ninja file syntax.
    statement carrying all of its output aliases. This involves formatting the
    lists of explicit outputs, implicit outputs, inputs, implicit dependencies,
    and order-only dependencies using the correct Ninja syntax (`:`, `|`, and
-   `||`).[^7] Use Ninja's built-in `phony` rule when `phony` is `true`. For an
-   `always` edge, either generate a `phony` build with no outputs or emit a
-   dummy output marked `restat = 1` and depend on a permanently dirty target so
-   the command runs on each invocation.
+   `||`).[^7]
 
    Code snippet
 
@@ -3046,6 +3052,38 @@ structures to the Ninja file syntax.
    build foo.o: cc foo.c
    build bar.o: cc bar.c
    build my_app: link foo.o bar.o | lib_dependency.a
+   ```
+
+   The `phony` and `always` flags then decide the statement shape:
+
+   - A dependency-only action selects Ninja's built-in `phony` rule with its
+     implicit dependencies as inputs, and produces no recipe statement.
+   - An executable edge whose `phony` flag is set carries its recipe on a
+     hidden, content-addressed output beneath `.netsuke/phony`, and the
+     declared names become a native `phony` alias over that output. Progress
+     metadata stays on the hidden statement; `restat` is suppressed there
+     because the hidden path is never written. See
+     [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).
+   - A non-phony edge whose `always` flag is set keeps its declared output and
+     gains the shared `.netsuke/phony/force` node as an implicit dependency, so
+     the recipe runs on each invocation while the retained `restat` still
+     prunes downstream work when the output is unchanged.
+
+   The force statement `build .netsuke/phony/force: phony` is written once,
+   after the rules and before the first edge, and only when a rendered edge
+   consumes it. Neither the force node nor a hidden output is added to the
+   default targets.
+
+   Code snippet
+
+   ```ninja
+   rule check
+     command = cargo test
+
+   build .netsuke/phony/force: phony
+
+   build .netsuke/phony/edge-<digest>: check | .netsuke/phony/force
+   build test: phony .netsuke/phony/edge-<digest>
    ```
 
 #### POSIX script transport encoding
@@ -3121,10 +3159,10 @@ encoding pass per script.
    sidecars. Each runner command then materializes those sidecars through an
    injected effective-working-directory capability before it writes or runs the
    main file. The main file declares `ninja_required_version = 1.10` only when
-   it contains such staged serial ordering. `.netsuke/serial` and
-   `.netsuke/dyndep` are reserved for generated state. `serial` applies only to
-   direct implicit dependencies; it does not delay an independently reachable
-   node elsewhere in the graph.
+   it contains such staged serial ordering. `.netsuke/serial`,
+   `.netsuke/dyndep`, and `.netsuke/phony` are reserved for generated state.
+   `serial` applies only to direct implicit dependencies; it does not delay an
+   independently reachable node elsewhere in the graph.
 
 Figure: Runner-owned serial dyndep bundle generation and execution.
 
@@ -3203,6 +3241,14 @@ renderer emits an empty edge-level `pool =` only when the shared rule declares
 `console`, so `Action.pool = "compile"`, for example, stays in effect. This
 edge-level choice does not affect action identity.
 
+- The `phony` and `always` flags change the generated statement shape rather
+  than the IR: a phony executable edge moves its recipe onto a hidden output
+  under the reserved `.netsuke/phony` namespace and republishes its name as a
+  native `phony` alias, while an `always` edge keeps its output and gains a
+  shared permanently dirty node. Nothing in the graph, action identity, or
+  manifest schema changes, so every consumer of the IR sees the same values it
+  always did. See
+  [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
   serialization of their recipe, inputs, and outputs. Because commands embed
   shell-quoted file paths, two targets share an identifier only when both the

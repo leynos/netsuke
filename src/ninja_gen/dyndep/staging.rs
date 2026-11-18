@@ -136,8 +136,18 @@ fn sidecar_content(gate: &Utf8PathBuf, relay: &Utf8PathBuf) -> Result<String, Ni
 
 /// Content-address a sidecar by its complete bytes and a format tag.
 fn sidecar_digest(content: &str) -> String {
+    content_digest(DYNDEP_SCHEMA, content)
+}
+
+/// Content-address `content` under an explicit format tag.
+///
+/// The tag separates generations of the addressing scheme, so changing a
+/// generated file's shape names a fresh artefact instead of silently
+/// reinterpreting an old one. Shared with the phony and always lowering, which
+/// derives a hidden output name the same way.
+pub(crate) fn content_digest(schema: &str, content: &str) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(DYNDEP_SCHEMA.as_bytes());
+    hasher.update(schema.as_bytes());
     hasher.update(b"\0");
     hasher.update(content.as_bytes());
     hex::to_lower_hex(&hasher.finalize())

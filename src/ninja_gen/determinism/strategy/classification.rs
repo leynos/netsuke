@@ -38,14 +38,18 @@ pub(crate) struct Classification {
     /// Edges whose action is a dependency-only phony node.
     ///
     /// This is the count that matters to the emitter: a dependency-only action
-    /// lowers to a rule-less `phony` build line. An edge's own `phony` field is
-    /// never consulted by the emitter at all, so it is counted separately.
+    /// lowers to a rule-less `phony` build line regardless of the edge's own
+    /// `phony` field, which is counted separately.
     pub(crate) phony_edges: usize,
     /// Edges in serial order carrying more than one implicit dependency.
     pub(crate) dyndep_staged_edges: usize,
     /// Edges marked `always`.
     pub(crate) always_edges: usize,
-    /// Edges whose `phony` field is set, whether or not the emitter reads it.
+    /// Edges whose `phony` field is set.
+    ///
+    /// An executable edge with this flag set lowers to a hidden output plus a
+    /// native `phony` alias, so the count is non-vacuity evidence for that
+    /// branch rather than a tally of a field the emitter ignores.
     pub(crate) phony_flag_edges: usize,
     /// Actions marked `restat`.
     pub(crate) restat_actions: usize,
@@ -57,9 +61,10 @@ pub(crate) struct Classification {
     /// mask with the bit numbered `2 * always + restat` set.
     ///
     /// `DisplayEdge` emits the edge-level `restat` override only when
-    /// `edge.always && !action_restat` (`src/ninja_gen/display_edge.rs:37`), so
-    /// a run missing a bit has not exercised that branch's whole truth table.
-    /// A mask rather than four flags because a run-wide tally merges by union.
+    /// `edge.always && !action_restat`, and never on a hidden phony statement,
+    /// so a run missing a bit has not exercised that branch's whole truth
+    /// table. A mask rather than four flags because a run-wide tally merges by
+    /// union.
     pub(crate) always_restat_seen: u8,
 }
 

@@ -68,9 +68,11 @@ mod render;
 mod staging;
 pub use bundle::{GeneratedDyndep, GeneratedNinja};
 use render::render_edges;
+pub(crate) use staging::content_digest;
 
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
+use crate::ninja_gen::force_run::PHONY_NAMESPACE;
 use crate::ninja_gen::{
     InterpreterBinding, NinjaGenError, RecipeShell, graph_requires_dyndep, join,
     ordered_default_targets, reject_unsupported_path_characters, resolve_default_interpreter,
@@ -94,8 +96,8 @@ const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
 /// # Errors
 ///
 /// Returns [`NinjaGenError::ReservedOutputPath`] when a user output or
-/// dependency collides with the reserved `.netsuke/serial` or
-/// `.netsuke/dyndep` namespace, and [`NinjaGenError::MissingAction`] when an
+/// dependency collides with the reserved `.netsuke/serial`, `.netsuke/dyndep`
+/// or `.netsuke/phony` namespace, and [`NinjaGenError::MissingAction`] when an
 /// edge references an unknown action. Returns
 /// [`NinjaGenError::ConsoleDependencyOnly`] when a console edge uses a
 /// dependency-only action, and [`NinjaGenError::ConsolePoolConflict`] when its
@@ -208,8 +210,8 @@ pub(crate) fn generate_bundle_for_shell_with_interpreter(
 ///
 /// Returns [`NinjaGenError::UnsupportedPathCharacter`] when a graph path
 /// contains a character Ninja cannot represent, and
-/// [`NinjaGenError::ReservedOutputPath`] when a graph path collides with the
-/// reserved serial-ordering namespaces. Returns
+/// [`NinjaGenError::ReservedOutputPath`] when a graph path collides with a
+/// reserved generated-state namespace. Returns
 /// [`NinjaGenError::EmptyCommandRecipe`],
 /// [`NinjaGenError::MultipleBackgroundJobs`],
 /// [`NinjaGenError::UnsupportedCommandListExec`],
@@ -255,8 +257,8 @@ fn generate_bundle_inner(
     })
 }
 
-/// Reject user outputs or dependencies that collide with the reserved
-/// serial-ordering state namespace.
+/// Reject user outputs or dependencies that collide with a reserved
+/// generated-state namespace.
 pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenError> {
     for edge in graph.edges() {
         for path in edge
@@ -268,7 +270,7 @@ pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenEr
             .chain(&edge.order_only_deps)
         {
             let as_str = path.as_str();
-            let is_reserved = [SERIAL_NAMESPACE, DYNDEP_NAMESPACE]
+            let is_reserved = [SERIAL_NAMESPACE, DYNDEP_NAMESPACE, PHONY_NAMESPACE]
                 .iter()
                 .any(|namespace| {
                     as_str == *namespace

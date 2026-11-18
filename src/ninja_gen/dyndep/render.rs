@@ -9,6 +9,7 @@ use super::staging::{SerialStages, render_serial_block};
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::ninja_gen::edge_metadata;
 use crate::ninja_gen::escape::NinjaValue;
+use crate::ninja_gen::force_run;
 use crate::ninja_gen::{DisplayEdge, NinjaGenError, edge_requires_gates, ordered_edges};
 use camino::Utf8PathBuf;
 use std::fmt::Write as _;
@@ -24,6 +25,7 @@ pub(super) fn render_edges(
     out: &mut String,
     localizer: &dyn ortho_config::Localizer,
 ) -> Result<Vec<GeneratedDyndep>, NinjaGenError> {
+    force_run::write_force_statement(graph, out)?;
     let mut renderer = EdgeRenderer {
         graph,
         out,
@@ -60,6 +62,8 @@ impl EdgeRenderer<'_> {
         let rendered_edge = RenderedEdge {
             action: rendered_action,
             description: metadata.description.as_ref(),
+            hidden_output: metadata.hidden_output.as_ref(),
+            needs_force: metadata.needs_force,
         };
         if edge_requires_gates(edge) {
             return self.render_serial_edge(edge, rendered_edge);
@@ -95,6 +99,8 @@ impl EdgeRenderer<'_> {
                 action_pool: rendered_edge.action.pool,
                 implicit_deps,
                 description: rendered_edge.description,
+                hidden_output: rendered_edge.hidden_output,
+                needs_force: rendered_edge.needs_force,
             }
         )?;
         Ok(())
@@ -108,6 +114,10 @@ struct RenderedEdge<'a> {
     action: RenderedAction<'a>,
     /// Optional safe inline progress description.
     description: Option<&'a NinjaValue>,
+    /// Hidden output for an executable `phony` edge.
+    hidden_output: Option<&'a Utf8PathBuf>,
+    /// Whether the statement depends on the shared force node.
+    needs_force: bool,
 }
 
 /// Hold the selected Ninja rule metadata while lowering a graph edge.

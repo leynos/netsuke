@@ -66,6 +66,7 @@ const CONSOLE_POOL: &str = "console";
 mod display_edge;
 pub(crate) use display_edge::DisplayEdge;
 mod edge_metadata;
+mod force_run;
 mod named_action;
 mod order;
 mod progress_label;
@@ -296,6 +297,7 @@ pub(crate) fn generate_into_with_binding<W: Write>(
         });
     }
     write_action_rules(graph, out, shell, binding)?;
+    force_run::write_force_statement(graph, out)?;
     for edge in ordered_edges(graph.edges()) {
         let metadata = edge_metadata::for_edge(graph, edge, localizer.as_ref())?;
         write!(
@@ -308,6 +310,8 @@ pub(crate) fn generate_into_with_binding<W: Write>(
                 action_pool: metadata.pool,
                 implicit_deps: &edge.implicit_deps,
                 description: metadata.description.as_ref(),
+                hidden_output: metadata.hidden_output.as_ref(),
+                needs_force: metadata.needs_force,
             }
         )?;
     }

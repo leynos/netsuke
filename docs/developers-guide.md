@@ -1567,12 +1567,42 @@ edge-level `description`. Named-rule metadata remains on the rule, where its
 description continues to control progress.
 
 `src/ninja_gen/edge_metadata.rs` owns the shared action lookup, rule-name
-selection, `restat` value and escaped progress description for generated edges.
-Its only callers are `generate_into_with_shell` and
-`EdgeRenderer::render_edge`; each passes the graph edge and the localizer
-resolved once for generation, then forwards the returned metadata to
-`DisplayEdge`. Keep action identity, command text, named-rule metadata and
-Ninja text emission outside this helper.
+selection, `restat` value, escaped progress description, and the phony/always
+classification for generated edges. Its only callers are
+`generate_into_with_shell` and `EdgeRenderer::render_edge`; each passes the
+graph edge and the localizer resolved once for generation, then forwards the
+returned metadata to `DisplayEdge`. Keep action identity, command text,
+named-rule metadata and Ninja text emission outside this helper.
+
+### Phony and always lowering
+
+`src/ninja_gen/force_run.rs` owns the reserved force node, the hidden-output
+identity, the graph-level predicate that decides whether the force statement is
+needed, and the statement itself. Three shapes come out of the classification,
+and each is deliberate:
+
+- A **dependency-only** edge is unchanged: a rule-less `build all: phony | dep`
+  line, whatever the edge's own `phony` flag says.
+- An **executable phony** edge moves its recipe onto
+  `.netsuke/phony/edge-<digest>` and republishes its declared names as
+  `build <name>: phony <hidden>`. The alias carries the implicit outputs; the
+  hidden statement carries the recipe, its `description` and `pool`, and no
+  `restat`, because the hidden path is never written.
+- An **always, non-phony** edge keeps its declared output and gains
+  `.netsuke/phony/force` as a render-time implicit dependency, retaining the
+  edge-level `restat` so an unchanged output still prunes dependants.
+
+`write_force_statement` emits `build .netsuke/phony/force: phony` once, after
+the rules and before the first edge, and only when some rendered edge consumes
+it. Both emission paths call it, so the bundle and the string generator agree
+byte for byte; a test asserts that agreement, and another asserts that a graph
+using neither flag keeps its previous bytes. The hidden identity hashes the
+explicit then implicit outputs under the schema tag `netsuke-phony-v1`, with
+NUL-separated paths and a `U+0001` group separator; path validation already
+rejects those characters, so the encoding cannot be forged. Never add the force
+node or a hidden output to the default targets, and never reuse the namespace
+for a user-visible path. See
+[ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).
 
 ## Adding a lint rule
 
@@ -9612,11 +9642,12 @@ be built first. The decision and whole-manifest scope are recorded in
 with more than one dependency. It produces a `GeneratedNinja` bundle: the main
 build-file text plus immutable, content-addressed `GeneratedDyndep` sidecars.
 The generated phony gates live under `.netsuke/serial`; sidecars live under
-`.netsuke/dyndep`. Those are reserved graph namespaces, validated before
-generation. User graph paths in outputs, inputs, implicit dependencies, and
-order-only dependencies cannot use either namespace. A string-only generator
-must return `DyndepFilesRequired` for a graph that needs sidecars rather than
-returning an incomplete build file.
+`.netsuke/dyndep`; the hidden outputs and force node of `phony` and `always`
+lowering live under `.netsuke/phony`. Those are reserved graph namespaces,
+validated before generation. User graph paths in outputs, inputs, implicit
+dependencies, and order-only dependencies cannot use any of them. A string-only
+generator must return `DyndepFilesRequired` for a graph that needs sidecars
+rather than returning an incomplete build file.
 
 Generated bundles need Ninja 1.10 or newer only when a serial direct-dependency
 list has at least two items and therefore needs staged ordering; parallel lists

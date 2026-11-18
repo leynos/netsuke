@@ -14,13 +14,19 @@ rule 942a9563150dd5319d3478ac8b180f7d234b732e102e1a2e1f190dbbc53562e0
 rule aed5f83a13f8763315f10af13630dd88eccbc70c46a8f0a4c2ac132e7f6f2858
   command = echo ordinary-action
 
+build .netsuke/phony/force: phony
+
 build inline-console: 04ca8490eedc2a14f7ea86f319edd5b7ea47a9b1dc3deab48f610cfba9a50fe0
   description = Building ⁨inline-console⁩
   pool = console
 
-build ordinary-action: aed5f83a13f8763315f10af13630dd88eccbc70c46a8f0a4c2ac132e7f6f2858
+build .netsuke/phony/edge-59eca7300165e20180d6822eefe19035332f08ce355d9557e61ecfa39ed469fd: aed5f83a13f8763315f10af13630dd88eccbc70c46a8f0a4c2ac132e7f6f2858 | .netsuke/phony/force
+
+build ordinary-action: phony .netsuke/phony/edge-59eca7300165e20180d6822eefe19035332f08ce355d9557e61ecfa39ed469fd
 
 build ordinary-target: 942a9563150dd5319d3478ac8b180f7d234b732e102e1a2e1f190dbbc53562e0
 
-build streamed-action: 409e0ba0938d3fa40f7344fdd2f33e631f5b4ec8b51527e101bd8f6f29851b1c
+build .netsuke/phony/edge-17134da85d9ad2be49b436fba92f18332240e45aa0236bc33fc68890d04cb23d: 409e0ba0938d3fa40f7344fdd2f33e631f5b4ec8b51527e101bd8f6f29851b1c | .netsuke/phony/force
   pool = console
+
+build streamed-action: phony .netsuke/phony/edge-17134da85d9ad2be49b436fba92f18332240e45aa0236bc33fc68890d04cb23d

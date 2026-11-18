@@ -628,7 +628,9 @@ The top-level fields are:
 - `macros`: named Jinja macro definitions registered before other fields
   render.
 - `rules`: reusable recipes referenced by targets or actions.
-- `actions`: implicitly phony operations, such as `test` or `lint`.
+- `actions`: implicitly phony operations, such as `test` or `lint`. Their name
+  is not a file, so the recipe runs on every build even when a file or
+  directory of that name exists.
 - `targets`: required list of file-producing or logical build nodes. An empty
   list is valid for an action-only manifest.
 - `defaults`: target or action names used when `build` receives no explicit
@@ -982,8 +984,13 @@ A target supports these fields:
   dependent target.
 - `vars`: values that override global variables for this target. The `env`
   and `glob` restriction above applies here too.
-- `phony`: marks a logical target that does not represent a file.
-- `always`: forces the recipe to run whenever the target is requested.
+- `phony`: marks a logical target that does not represent a file. The recipe
+  runs whenever the target is requested, and a file or directory with the same
+  name neither suppresses it nor is removed by `netsuke clean`.
+- `always`: forces the recipe to run whenever the target is requested, even
+  when its inputs and output are unchanged. An unchanged output still prunes
+  downstream work, so dependants rebuild only when the recipe actually changed
+  what it wrote.
 - `console`: selects Ninja's serial console pool for this executable action or
   target. It defaults to `false` and is unavailable to dependency-only
   aggregates.
@@ -994,6 +1001,33 @@ A target supports these fields:
 
 `name`, `sources`, `deps`, and `order_only_deps` accept either one string or a
 list of strings.
+
+### Rely on phony and always work running
+
+An `actions` entry and a target with `phony: true` declare that the name is not
+a file. Netsuke publishes that name to Ninja as a native `phony` alias over a
+generated output beneath `.netsuke/phony`, so:
+
+- the recipe runs on every `netsuke build`, including after a successful run;
+- a file or directory with the same name cannot make the target look up to
+  date, and the recipe may itself write a path with that name;
+- `netsuke clean` leaves a user path of that name in place and removes the
+  generated output instead.
+
+A target with `always: true` keeps its declared output, so it may produce a
+real file. Netsuke makes its edge permanently dirty, so the recipe runs on
+every invocation even when its inputs and output are unchanged. The edge
+re-stats its output afterwards, which is what stops an unchanged result from
+rebuilding anything that depends on it.
+
+The flags are independent. An entry in `actions` is implicitly phony and not
+always; it may also set `always: true`, though the phony lowering already runs
+it on every request. A dependency-only aggregate — an entry whose `deps` are
+its whole operation — is phony whatever its own `phony` flag says.
+
+See
+[ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md)
+for the generated statement shapes and the rejected alternatives.
 
 ### Stream long-running output with the console pool
 
@@ -1159,9 +1193,10 @@ symbolic link; only the generated-state components beneath it are checked.
 An older arbitrary manifest written with `generate --output` may lose its
 referenced sidecars after a later command. Regenerate that manifest before
 using it if retention has removed any of its sidecars. The paths
-`.netsuke/serial` and `.netsuke/dyndep` must not occur in any user graph path,
-including outputs, inputs, implicit dependencies, and order-only dependencies;
-they are reserved for Netsuke-generated gates and sidecars.
+`.netsuke/serial`, `.netsuke/dyndep`, and `.netsuke/phony` must not occur in
+any user graph path, including outputs, inputs, implicit dependencies, and
+order-only dependencies; they are reserved for Netsuke-generated gates,
+sidecars, and the hidden outputs and force node of phony work.
 
 When migrating an existing manifest, see the
 [v0.1.0 migration guide](v0-1-0-migration-guide.md#opting-into-serial-dependency-ordering)

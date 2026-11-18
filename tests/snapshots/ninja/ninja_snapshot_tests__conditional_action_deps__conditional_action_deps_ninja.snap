@@ -11,11 +11,17 @@ rule e119fafadd9fa5af44c4dc58e047f27d387ed098c0702aeffbce67f90746ca3c
 rule e8c3bab461990fead7f11b007334dcd68b89db712472c5a294c69609dd7302b5
   command = echo fallback
 
-build fallback-alpha: dfd2ff5921f146a85d62fcfeb725508df48b315134db4f325585bd6981940de6 src/alpha.in | build/alpha.o shared/action.cfg || order/alpha.stamp
+build .netsuke/phony/force: phony
+
+build .netsuke/phony/edge-ccf8d6cdb2d93cbe199077e63ffa1d5b1af7d09d07c8e91a9e63a1bfd627949c: dfd2ff5921f146a85d62fcfeb725508df48b315134db4f325585bd6981940de6 src/alpha.in | build/alpha.o shared/action.cfg .netsuke/phony/force || order/alpha.stamp
   description = Building ⁨fallback-alpha⁩
 
-build fallback-beta: e119fafadd9fa5af44c4dc58e047f27d387ed098c0702aeffbce67f90746ca3c src/beta.in | build/beta.o shared/action.cfg || order/beta.stamp
+build fallback-alpha: phony .netsuke/phony/edge-ccf8d6cdb2d93cbe199077e63ffa1d5b1af7d09d07c8e91a9e63a1bfd627949c
+
+build .netsuke/phony/edge-20adf90902d9412bb20d105a55042a3ced918e9317480362f378c5492991c873: e119fafadd9fa5af44c4dc58e047f27d387ed098c0702aeffbce67f90746ca3c src/beta.in | build/beta.o shared/action.cfg .netsuke/phony/force || order/beta.stamp
   description = Building ⁨fallback-beta⁩
+
+build fallback-beta: phony .netsuke/phony/edge-20adf90902d9412bb20d105a55042a3ced918e9317480362f378c5492991c873
 
 build out/fallback: e8c3bab461990fead7f11b007334dcd68b89db712472c5a294c69609dd7302b5 src/target.in | include/fallback.h || order/target.stamp
   description = Building ⁨out/fallback⁩

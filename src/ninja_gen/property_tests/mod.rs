@@ -26,6 +26,11 @@ mod ninja_oracle;
 use edge_strategy::edge_strategy_with_ranges;
 use ninja_oracle::scalar_graph;
 
+/// Render one edge for the separator properties.
+///
+/// The strategy generates only plain edges, so the phony lowering is
+/// deliberately absent here; `edge_metadata` owns that decision and the
+/// lowering tests cover it.
 fn format_edge(edge: &BuildEdge) -> String {
     DisplayEdge {
         edge,
@@ -34,6 +39,8 @@ fn format_edge(edge: &BuildEdge) -> String {
         action_pool: None,
         implicit_deps: &edge.implicit_deps,
         description: None,
+        hidden_output: None,
+        needs_force: false,
     }
     .to_string()
 }
