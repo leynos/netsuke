@@ -22,7 +22,9 @@ use std::sync::Arc;
 use tracing::debug;
 
 use super::super::diagnostics::path_hash;
-use super::super::paths::{SanitisedUserBases, candidate_entry_metadata, user_scope_candidates};
+use super::super::paths::{
+    FsPathNormalizer, SanitisedUserBases, candidate_entry_metadata, user_scope_candidates,
+};
 use super::project_key::ProjectKey;
 use super::{chain_layers, config_discovery, first_automatic_chain};
 use crate::localization::{LocalizedMessage, keys};
@@ -177,7 +179,9 @@ fn user_scope_base_layers(
 /// user pass applies the same identity test the dependency scan applies rather
 /// than assuming the user scope is trusted.
 pub(super) fn candidate_is_trusted(candidate: &Path, project_key: Option<&ProjectKey>) -> bool {
-    !project_key.is_some_and(|key| key.is_ambiguous() || key.matches_path(candidate))
+    !project_key.is_some_and(|key| {
+        key.is_ambiguous() || key.matches_candidate(&FsPathNormalizer, candidate)
+    })
 }
 
 /// Load one user-scope candidate, distinguishing absence from a broken link.
