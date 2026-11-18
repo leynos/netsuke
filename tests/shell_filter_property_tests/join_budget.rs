@@ -82,16 +82,18 @@ fn a_join_within_the_ceiling_still_renders(
     Ok(())
 }
 
-/// An endless iterable of oversized members is stopped by the ceiling.
+/// Join `endless` and require that the ceiling, not the input, ended it.
 ///
-/// The post-encode check alone would also stop this input, so what the test
-/// asserts is that the ceiling ends the sequence rather than the input: the
-/// test's own completion is part of the assertion. The pre-check's separate
-/// guarantee — that the member is never encoded — is pinned by the unit suite.
-#[test]
-fn an_endless_iterable_of_large_members_is_stopped() -> Result<()> {
-    let endless = Value::make_iterable(|| std::iter::repeat("a".repeat(400_000)));
-    let error = render_with("{{ value | shell_join }}", SH, &endless)
+/// The assertion that the call returns at all is part of the contract: an
+/// endless iterable that the budget did not stop would hang the test rather
+/// than fail it, so the enclosing test's completion carries meaning too.
+///
+/// # Errors
+///
+/// Returns an error when the join succeeds, or when its diagnostic does not
+/// carry the stable ceiling code.
+fn assert_endless_iterable_is_stopped(endless: &Value) -> Result<()> {
+    let error = render_with("{{ value | shell_join }}", SH, endless)
         .expect_err("an endless iterable must reach the ceiling rather than run forever");
     ensure!(
         format!("{error:#}").contains(LIMIT_CODE),
@@ -100,18 +102,24 @@ fn an_endless_iterable_of_large_members_is_stopped() -> Result<()> {
     Ok(())
 }
 
+/// An endless iterable of oversized members is stopped by the ceiling.
+///
+/// The post-encode check alone would also stop this input, so what the test
+/// asserts is that the ceiling ends the sequence rather than the input: the
+/// test's own completion is part of the assertion. The pre-check's separate
+/// guarantee — that the member is never encoded — is pinned by the unit suite.
+#[test]
+fn an_endless_iterable_of_large_members_is_stopped() -> Result<()> {
+    assert_endless_iterable_is_stopped(&Value::make_iterable(|| {
+        std::iter::repeat("a".repeat(400_000))
+    }))
+}
+
 /// An endless iterable of small members is also stopped, so the ceiling bounds
 /// the total rather than only one member.
 #[test]
 fn an_endless_iterable_of_small_members_is_stopped() -> Result<()> {
-    let endless = Value::make_iterable(|| std::iter::repeat("abcdefg"));
-    let error = render_with("{{ value | shell_join }}", SH, &endless)
-        .expect_err("an endless iterable of small members must reach the ceiling");
-    ensure!(
-        format!("{error:#}").contains(LIMIT_CODE),
-        "the endless iterable should fail on the ceiling: {error:#}"
-    );
-    Ok(())
+    assert_endless_iterable_is_stopped(&Value::make_iterable(|| std::iter::repeat("abcdefg")))
 }
 
 /// Half of the ceiling, where two members plus a separating space cross it.
