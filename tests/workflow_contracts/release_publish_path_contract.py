@@ -40,6 +40,7 @@ from release_publish_path_consumer_smoke import (
 )
 from release_publish_path_context import ScenarioRun, needs_context
 from release_publish_path_finalization import check_finalize_release
+from release_publish_path_metadata import metadata_outputs
 from release_publish_path_publication import (
     PublicationCheck,
     UploadPlanCheck,
@@ -49,12 +50,12 @@ from release_publish_path_publication import (
     step_runs,
 )
 from release_publish_path_results import resolve_results
+from release_publish_path_scenario_table import SCENARIOS
 from release_publish_path_scenarios import (
     GITHUB_SHA,
     MODE_OUTPUTS,
     PACKAGE_UPLOAD,
     REQUIRED_DRY_RUN_EVENTS,
-    SCENARIOS,
     STAGING_FORBIDDEN_NEEDS,
     STAGING_NEEDS,
     Scenario,
@@ -109,52 +110,6 @@ def _workflow_call_inputs(workflow: dict[str, object]) -> dict[str, object]:
     )
     call = require_mapping(triggers.get("workflow_call"), "workflow_call")
     return require_mapping(call.get("inputs"), "workflow_call.inputs")
-
-
-def _metadata_outputs(
-    release: dict[str, object], mode: str, violations: list[str]
-) -> dict[str, str]:
-    """Resolve the release-mode outputs declared by the metadata job."""
-    declarations = require_mapping(
-        workflow_job(release, "metadata").get("outputs"), "metadata.outputs"
-    )
-    steps = {
-        "release_modes": {"outputs": MODE_OUTPUTS[mode]},
-        "repo_name": {"outputs": {"value": REPO_ROOT.name}},
-    }
-    contexts: dict[str, object] = {"steps": steps}
-    outputs: dict[str, str] = {}
-    expected = {
-        "should_publish": MODE_OUTPUTS[mode]["should-publish"],
-        "dry_run": MODE_OUTPUTS[mode]["dry-run"],
-        "should_upload_workflow_artifacts": MODE_OUTPUTS[mode][
-            "should-upload-workflow-artifacts"
-        ],
-        "should_upload_package_artifacts": str(PACKAGE_UPLOAD[mode]).lower(),
-        "repo_name": REPO_ROOT.name,
-    }
-    for name, expected_value in expected.items():
-        expression = declarations.get(name, MISSING)
-        label = f"metadata.{name}"
-        if expression is MISSING:
-            violations.append(f"{label}: output is missing")
-            continue
-        value = evaluate_field(
-            expression,
-            FieldEvaluation(contexts=contexts, violations=violations, label=label),
-        )
-        if value is MISSING:
-            continue
-        rendered = str(value).lower() if isinstance(value, bool) else value
-        if not isinstance(rendered, str):
-            violations.append(f"{label}: output did not resolve to a string or boolean")
-            continue
-        outputs[name] = rendered
-        if rendered != expected_value:
-            violations.append(
-                f"{label}: resolved to {rendered!r}, expected {expected_value!r}"
-            )
-    return outputs
 
 
 def _stage_needs(
@@ -390,7 +345,7 @@ def check_release_publish_path(
     check_publication_gate(release, caller, violations)
     check_admission_source_pin(release, violations)
     outputs_by_mode = {
-        mode: _metadata_outputs(release, mode, violations) for mode in MODE_OUTPUTS
+        mode: metadata_outputs(release, mode, violations) for mode in MODE_OUTPUTS
     }
     check_artifact_names(
         release,

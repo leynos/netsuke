@@ -22,6 +22,7 @@ TARGET = "test-release-admission"
 RUNTIME_MODULES = (
     "scripts/tests/test_release_admission_metrics.py",
     "scripts/tests/test_release_admission_metric_failures.py",
+    "scripts/tests/test_release_admission_invalid_configuration.py",
     "scripts/tests/test_release_admission_metric_boundedness.py",
     "scripts/tests/test_release_admission_process_bounds.py",
     "scripts/tests/test_release_admission_environment_contract.py",

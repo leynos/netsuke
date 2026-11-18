@@ -3711,7 +3711,7 @@ reached through nested wrappers; a `gh` subcommand outside the two the contract
 has a rule for, whether built from a variable or quoted, which hides the call
 the `gh api` check looks for; and any command that would hand a run-time string
 to an interpreter. The job's reachability is computed independently of its
-guard, from the scenario table in `release_publish_path_scenarios.py`, and
+guard, from the scenario table in `release_publish_path_scenario_table.py`, and
 evaluated by `release_publish_path_verification.py`. The table varies each of
 the seven prerequisites through `failure`, `skipped`, and `cancelled`, adds the
 two `verify-release-inventory` outcomes, and keeps the realistic dry run in
@@ -6135,12 +6135,13 @@ Python gate. It uses the repository's Python 3.14 baseline and provisions
 `pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
 `cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
 `cyclopts==4.25.3` for the entry point the tests import. The target runs the
-twenty-three runtime modules with `python -m pytest`, `-c /dev/null`,
+twenty-four runtime modules with `python -m pytest`, `-c /dev/null`,
 `--rootdir=.`, and `-p no:cacheprovider`, so the test run is isolated from
 repository-local pytest configuration and cache state:
 
 - `scripts/tests/test_release_admission_metrics.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
+- `scripts/tests/test_release_admission_invalid_configuration.py`
 - `scripts/tests/test_release_admission_metric_boundedness.py`
 - `scripts/tests/test_release_admission_process_bounds.py`
 - `scripts/tests/test_release_admission_environment_contract.py`

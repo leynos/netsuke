@@ -9,7 +9,7 @@ where it does not depend on the failure.
 """
 
 import pytest
-from release_publish_path_contract import _metadata_outputs
+from release_publish_path_metadata import metadata_outputs
 from release_publish_path_results import dependency_order, resolve_results
 from release_publish_path_scenarios import (
     GITHUB_SHA,
@@ -40,7 +40,7 @@ def _scenario(mode: str, outcomes: dict[str, str] | None = None) -> Scenario:
 def _outputs(release: dict[str, object], mode: str) -> dict[str, str]:
     """Resolve the metadata outputs the guards read for *mode*."""
     violations: list[str] = []
-    outputs = _metadata_outputs(release, mode, violations)
+    outputs = metadata_outputs(release, mode, violations)
     assert not violations, f"metadata outputs should resolve; got {violations!r}"
     return outputs
 

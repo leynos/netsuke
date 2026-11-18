@@ -16,7 +16,7 @@ import typing as typ
 
 import pytest
 from release_publish_path_context import ScenarioRun
-from release_publish_path_scenarios import SCENARIOS
+from release_publish_path_scenario_table import SCENARIOS
 from release_publish_path_verification import check_verify_inventory
 from release_verify_inventory_command_words import (
     forbidden_executor_words,
