@@ -88,6 +88,12 @@ extend-ignore = [
 # input by design, so the argument-count ceilings do not apply to them.
 "scripts/ci/*.py" = ["too-many-arguments", "too-many-positional-arguments"]
 
+[tool.ruff.lint.flake8-type-checking]
+# Cyclopts reads a command's annotations when it builds the command, so the
+# option dataclasses a command names must stay importable at runtime rather
+# than moving into a type-checking block.
+runtime-evaluated-decorators = ["cyclopts.App.command"]
+
 [tool.ruff.lint.flake8-import-conventions]
 # Declare the banned `from` imports.
 banned-from = [

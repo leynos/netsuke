@@ -154,6 +154,11 @@ PHASES = {
     "release_listing": ("Release listing", "release_listing"),
     "release_download": ("Release download", "release_download"),
     "inventory_verification": ("Inventory verification", "inventory_verification"),
+    "crate_download": ("Public crate download", "crate_download"),
+    "crate_verification": ("Public crate verification", "crate_verification"),
+    "archive_download": ("Public archive download", "archive_download"),
+    "archive_verification": ("Public archive verification", "archive_verification"),
+    "executable_probe": ("Published executable probe", "executable_probe"),
 }
 OPERATION_PHASES = {
     "release_staging": (
@@ -191,6 +196,18 @@ OPERATION_PHASES = {
         "release_listing",
         "release_download",
         "inventory_verification",
+    ),
+    # The smoke reads only public bytes. Its phases are the two downloads as
+    # the verifier observes their arrival, the two digest checks, and the one
+    # execution of the shipped binary, which is the boundary an operator needs
+    # to tell a host that never delivered an asset from bytes that are not the
+    # published ones from an executable that misreports its version.
+    "consumer_smoke": (
+        "crate_download",
+        "crate_verification",
+        "archive_download",
+        "archive_verification",
+        "executable_probe",
     ),
 }
 OPERATIONS = frozenset(OPERATION_PHASES)

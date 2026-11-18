@@ -27,6 +27,11 @@ PUBLISHED_CHARACTERS = {"~": "."}
 #: Prefix GitHub puts on the digest it reports for an asset.
 GITHUB_DIGEST_PREFIX = "sha256:"
 
+#: Where a release asset is downloadable without a credential. The URL
+#: redirects to a signed object URL on GitHub's asset host; both hops are
+#: HTTPS, so a consumer following the redirect never downgrades.
+RELEASE_DOWNLOAD_BASE = "https://github.com"
+
 
 def published_asset_name(staged_name: str) -> str:
     """Return the name GitHub publishes for a staged asset.
@@ -47,6 +52,40 @@ def published_asset_name(staged_name: str) -> str:
     for staged, replacement in PUBLISHED_CHARACTERS.items():
         published = published.replace(staged, replacement)
     return published
+
+
+def public_download_url(repository: str, tag: str, asset_name: str) -> str:
+    """Return the URL any consumer uses to download one release asset.
+
+    Parameters
+    ----------
+    repository
+        The ``owner/name`` slug the release was published under.
+    tag
+        The release tag, e.g. ``v1.2.3``.
+    asset_name
+        The name GitHub publishes, which
+        :func:`published_asset_name` derives from the staged one.
+
+    Returns
+    -------
+    str
+        The public HTTPS URL of the asset.
+
+    Notes
+    -----
+    This is the same URL a browser follows, so the smoke exercises the path a
+    consumer takes rather than an API route only an authenticated client uses.
+    No escaping is applied: every caller has already required
+    ``asset_name`` to be one bare file name, and a name needing escaping is
+    one this workflow would not have published.
+
+    Examples
+    --------
+    >>> public_download_url("leynos/netsuke", "v1.2.3", "netsuke-1.2.3.tar.gz")
+    'https://github.com/leynos/netsuke/releases/download/v1.2.3/netsuke-1.2.3.tar.gz'
+    """
+    return f"{RELEASE_DOWNLOAD_BASE}/{repository}/releases/download/{tag}/{asset_name}"
 
 
 def normalise_github_digest(reported: object) -> str | None:

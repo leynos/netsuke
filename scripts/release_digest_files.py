@@ -37,10 +37,35 @@ def digest_of_file(path: pathlib.Path) -> str:
     ...     digest_of_file(sample)
     '79e4b991b14ef4d874ee27ff97dc10f5873a452496ac92c3d234e9ca46207b85'
     """
-    hasher = hashlib.sha256()
     with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            hasher.update(block)
+        return digest_of_stream(handle)
+
+
+def digest_of_stream(source: typ.IO[bytes]) -> str:
+    """Return the lowercase SHA-256 of the bytes ``source`` yields from here on.
+
+    Returns
+    -------
+    str
+        The lowercase hexadecimal SHA-256 digest of the remaining bytes.
+
+    Notes
+    -----
+    The read starts at the stream's current position, so a caller that has
+    already consumed part of a file must seek back to its start first. Reading
+    a stream the caller already holds is what lets an adapter hash and parse
+    one open file: hashing a pathname and then reopening it leaves a window in
+    which the path can name different bytes.
+
+    Examples
+    --------
+    >>> import io
+    >>> digest_of_stream(io.BytesIO(b"netsuke"))
+    '79e4b991b14ef4d874ee27ff97dc10f5873a452496ac92c3d234e9ca46207b85'
+    """
+    hasher = hashlib.sha256()
+    for block in iter(lambda: source.read(1024 * 1024), b""):
+        hasher.update(block)
     return hasher.hexdigest()
 
 

@@ -11,10 +11,12 @@ The plan is approved and implementation has begun. EP-M1 and EP-M2 are
 complete. Issue #1064 delivers the first crates.io publisher and its workflow
 contracts, #1066 replaces the shared upload action in `publish-release` with a
 candidate-bound declared-asset upload, #1067 adds the downloaded-inventory
-verifier, and #1068 adds digest-aware GitHub release finalization. Stage C
-remains partial because the consumer smoke test is still open. Stage D is in
-progress. No release, tag, registry publication, live credential exchange,
-GitHub Release, or account setting has been changed by this work.
+verifier, #1068 adds digest-aware GitHub release finalization, and #1069 adds
+the public-consumer smoke that exercises the published release. Stage C's
+sequence is now fully declared, but no tagged run has exercised it, so its
+roadmap entry stays open; Stage D is in progress. No release, tag, registry
+publication, live credential exchange, GitHub Release, or account setting has
+been changed by this work.
 
 ## Purpose / big picture
 
@@ -27,8 +29,12 @@ registry bytes, and then finalizes the GitHub Release. Issue #1064 adds the
 candidate-backed crates.io publisher, and #1067 verifies the downloaded GitHub
 inventory against the digest record `publish-release` retained, not against the
 crates.io publisher or its package bytes. #1068 un-drafts the release only
-after both surfaces are proven; the consumer smoke test remains open before the
-full release path can make that end-to-end claim.
+after both surfaces are proven, and #1069 then exercises the result the way a
+consumer does: it downloads the crate from `static.crates.io` and the
+cargo-binstall archive from the release's public URL, verifies both against the
+digests recorded before upload, and runs the shipped binary to read the version
+it reports. No step of that smoke holds a registry credential or write
+authority over the release it is checking.
 
 The registry upload itself stops depending on a long-lived secret. GitHub mints
 a short-lived, repository-scoped token from an OIDC identity; the token exists
@@ -669,9 +675,17 @@ against the declaration and the pre-upload digest record the publisher
 retained; its job needs both publishers and holds `contents: write` for draft
 visibility alone.
 
-One job-matched action remains open:
-
-- `consumer-smoke/` — download, verify, extract and run the published bytes.
+`consumer-smoke/` is **delivered** (#1069): it downloads the crate from
+`static.crates.io` and the cargo-binstall archive with its sidecar from the
+release's public download URL, verifies each against the pre-upload digest
+record, judges the archive's whole member layout before extracting the one
+binary, and runs it to read the version it reports. Its job needs `metadata`,
+`package-crate`, and `finalize-github-release`, holds `contents: read` alone,
+declares no environment, and neither it nor the action it calls reads or
+accepts a token, so it cannot publish, upload, or exchange a registry
+credential. The archive and probe boundaries refuse corruption, unsafe member
+paths, and a banner that does not name the candidate version exactly, and every
+refusal is reported as the phase that made it.
 
 `finalize-github-release/` is **delivered** (#1068): it reconciles the draft
 against the trusted digest record and un-drafts it only when every declared
@@ -787,8 +801,8 @@ non-vacuity, so the stricter rule cannot pass by having nothing to check.
 The intended end-state in `.github/workflows/release.yml` adds the sequence
 below after the existing `metadata`, `build-*`, `windows-native-recipe-smoke`,
 and `release-admission-canaries` jobs. `package-crate`, `publish-crates-io`,
-`verify-release-inventory`, and `finalize-github-release` are delivered;
-consumer smoke remains:
+`verify-release-inventory`, `finalize-github-release`, and `consumer-smoke` are
+all delivered; no live release has exercised the sequence yet:
 
 1. `package-crate` — `needs: metadata`; `contents: read`; ubuntu-latest. The
    order is: resolve candidate -> package -> verify.
@@ -838,9 +852,17 @@ consumer smoke remains:
    check. The rehearsal job `release` is absent: a dry run never creates a
    draft. Named `finalize-` rather than `publish-github-` to keep it distinct
    from the existing `publish-release`, which it follows rather than replaces.
-5. `consumer-smoke` — `needs: [finalize-github-release]`; verifies the
-   published bytes without compiling anything (see `Surprises & discoveries`:
-   `cargo install` is forbidden in CI by policy). It fetches
+5. `consumer-smoke` — delivered by #1069.
+   `needs: [metadata, package-crate, finalize-github-release]`; verification
+   runs against the published bytes without compiling anything (see
+   `Surprises & discoveries`: `cargo install` is forbidden in CI by policy).
+   `metadata` is named for the candidate version and commit the plan is bound
+   to, `package-crate` for the staged crate digest the download is compared
+   with, and `finalize-github-release` because an asset attached to a draft
+   release is not downloadable without a credential, and this job deliberately
+   reads none. Every dependency's `result` is named in the guard alongside
+   `should_publish == 'true'`, for the same status-function reason as
+   `finalize-github-release`. It fetches
    `https://static.crates.io/crates/netsuke-build/netsuke-build-<version>.crate`,
    checks its SHA-256 against the staged digest, then downloads the published
    cargo-binstall archive by its public release URL, verifies it against its
@@ -948,7 +970,9 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   GitHub digest syntax in policy code. Both boundaries have positive controls;
   Ruff, Pylint, Interrogate, and ty pass.
 - Recovery: the modules are additive; revert the commit.
-- Remaining gaps: the remaining publication workflow jobs and stages are open.
+- Remaining gaps: none in this milestone's own scope. The publication workflow
+  jobs it left to EP-M3 have since landed there; the later milestones record
+  the work that is still open, so this bullet states no plan-wide inventory.
 - Compatibility decision: none; these are new private modules.
 
 **EP-M3 — the GitHub-side publication sequence.**
@@ -959,13 +983,15 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   already 688 lines on `main`. The extraction follows the repository's
   documented composite-action convention
   ([cache ownership and bounded CI resources](../developers-guide.md#cache-ownership-and-bounded-ci-resources)).)
-- Requirements: INV-1, LEM-5, and LEM-6 are assigned here. The
-  `publish-crates-io` job and its permission, prerequisite-reachability, and
-  dry-run contracts have landed; the remaining workflow sequence and the
-  separately planned LEM-5 suite remain open.
+- Requirements: INV-1, LEM-5, and LEM-6 are assigned here. The whole sequence
+  has landed, from `package-crate` through `publish-crates-io`,
+  `verify-release-inventory`, `finalize-github-release`, `publish-release`, and
+  `consumer-smoke`, each with its contract; the separately planned LEM-5 suite
+  remains open.
 - Acceptance evidence: `make test-workflow-contracts` covers the delivered
-  publisher permission, reachability, and mode-matrix contracts. The separate
-  LEM-5 permission suite and remaining publication jobs have not landed.
+  publisher permission, reachability, and mode-matrix contracts, the inventory
+  verifier, the finalizer, and the consumer smoke. The separate LEM-5
+  permission suite has not landed.
 - Conformance check: the six existing outputs are unchanged; the three
   `workflow_call` inputs are unchanged.
 - Recovery: the sequence is additive after `release`; a revert restores the
@@ -973,14 +999,14 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 - Remaining gaps: `package-crate`, `publish-crates-io`,
   `verify-release-inventory`, `finalize-github-release`, and
   `upload-declared-assets` (called by `publish-release`) are in the workflow
-  graph. One job-matched action and job remains (`consumer-smoke`), together
-  with the separate LEM-5 suite. The retained `trusted.json` has both of its
-  consumers: #1066 produces and retains that record, #1067 verifies it against
-  the downloaded assets, and #1068 un-drafts the release only on that result.
-  No live exchange or release has exercised the publisher, and
-  trusted-publisher registration and account settings remain maintainer
-  actions. The package already exists on crates.io (`0.1.0-beta1` through
-  `beta4`), so no initial publication is outstanding.
+  graph, and `consumer-smoke` with its checked-in action completes the
+  job-matched set. The separate LEM-5 suite remains. The retained
+  `trusted.json` has both of its consumers: #1066 produces and retains that
+  record, #1067 verifies it against the downloaded assets, and #1068 un-drafts
+  the release only on that result. No live exchange or release has exercised
+  the publisher, and trusted-publisher registration and account settings remain
+  maintainer actions. The package already exists on crates.io (`0.1.0-beta1`
+  through `beta4`), so no initial publication is outstanding.
 - Compatibility decision: the reusable interface is preserved because
   `release-dry-run.yml` and the repository's release runbook depend on it.
 
@@ -1012,8 +1038,8 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   version that was published before the interruption classifies as `identical`,
   so the rerun skips the upload and verifies the public bytes.
 - Remaining gaps: no live exchange or release has exercised the action; the
-  package archive file list and the consumer smoke remain open. The inventory
-  verifier (#1067) and the release finalizer (#1068) are delivered.
+  package archive file list remains open. The inventory verifier (#1067), the
+  release finalizer (#1068), and the consumer smoke (#1069) are delivered.
 - Compatibility decision: none.
 
 **EP-M5 — recoverability and reconciliation.**
@@ -1032,8 +1058,8 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   `--clobber` is used for reconciliation.
 - Recovery: a failed run leaves the draft and the published version intact
   and is safe to re-run.
-- Remaining gaps: the consumer smoke test and a live exercise of the release
-  path. No cross-service atomicity is claimed.
+- Remaining gaps: a live exercise of the release path, now that the consumer
+  smoke is delivered. No cross-service atomicity is claimed.
 - Compatibility decision: none.
 
 **EP-M6 — gates, guards, and documentation.**
@@ -1719,9 +1745,13 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the retained declaration and digest record, and #1068 has added
   `finalize-github-release`, which reconciles the recorded listing against that
   record and un-drafts the release only when every declared asset already holds
-  its trusted digest. `consumer-smoke` remains. No live exchange or release has
-  exercised the publisher; the external GitHub `crates-io` environment and
-  crates.io publisher registration remain unverified, so Stage C remains open.
+  its trusted digest, and #1069 has added `consumer-smoke`, which downloads the
+  published crate and cargo-binstall archive from their public URLs and runs
+  the shipped binary with `contents: read` alone. Every job in the sequence is
+  now declared; no live exchange or release has exercised the publisher or the
+  smoke, and the external GitHub `crates-io` environment and crates.io
+  publisher registration remain unverified, so Stage C stays open until a
+  tagged run passes through it.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 - [x] (2026-10-17) Ran the full eleven-target batch over the review-closure
   change and committed it as `d604b0cd`. Nine targets pass outright:
@@ -4214,6 +4244,90 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `release_inventory.py` path — so this candidate's `test-workflow-contracts`
   run executes the reviewed versions, and `pytest tests/workflow_contracts`
   covers the whole directory rather than a selected subset.
+- [x] (2026-11-15) Delivered the public-consumer smoke (#1069) and the contracts
+  that hold it, completing the last job of Stage C's sequence.
+
+  **The delivery.** `release.yml` declares `consumer-smoke` after
+  `finalize-github-release`, and `./.github/actions/consumer-smoke` performs
+  it. The job needs `metadata`, `package-crate`, and `finalize-github-release`,
+  holds `contents: read` alone, declares no environment, takes no `id-token`,
+  and checks out the candidate commit with `persist-credentials: false`; the
+  contract refuses a checkout that persists the token or resolves the tag, so
+  the one credential a read-only job could acquire is held to the same rule as
+  the ones it must not be given. Its guard names every dependency result
+  explicitly, because the `!cancelled()` it opens with is a status function and
+  would otherwise suppress the implicit success check; the rehearsal job
+  `release` is absent from `needs` because a dry run publishes nothing to
+  exercise. `finalize-github-release` gained one passive output,
+  `trusted-artifact`, forwarding the publisher's artefact name, so the smoke's
+  dependency list stays at three rather than reaching past the finalizer for a
+  name it already has.
+
+  **Public downloads, not artefact storage.** The smoke downloads the crate from
+  `https://static.crates.io/…` and the cargo-binstall archive with its
+  `sha256` sidecar from the release's `releases/download/<tag>/…` URL. The two
+  workflow artefacts it downloads are evidence, never payload:
+  `release-crate-package` carries the identity record and `trusted.json`
+  carries the pre-upload digest record. A smoke that verified the workflow's
+  own retained bytes would prove only that the run agrees with itself; the
+  archive is judged against the digest recorded before upload, so a substituted
+  archive that agrees with its own sidecar is still refused.
+
+  **The boundaries and their refusals.** `release_consumer_payload` binds the
+  evidence to the exact URLs, names, and digests and refuses a target the
+  declaration never listed and a plan that disagrees with a re-derivation from
+  the same evidence. `release_binstall_archive` and
+  `release_consumer_archive_policy` judge the whole member layout before
+  extracting anything — a name that leaves the extraction directory under
+  either POSIX or Windows path rules, a symlink, a device, a FIFO, or a second
+  candidate binary — and re-scan during extraction rather than trusting the
+  first pass. `release_binstall_probe` runs the one extracted binary under a
+  fixed environment (`PATH=/usr/bin:/bin`, `LANG=C`, `LC_ALL=C`) with a
+  60-second bound and requires the exact candidate version, so a binary that
+  reports a nearby version is refused rather than accepted as a match.
+  `consumer_smoke_cli` exits `0` verified, `1` evidence or verdict unusable,
+  `2` download missing, empty, or mismatched, `3` archive corrupt, unsafe, or
+  unwritable, and `4` executable reporting the wrong version.
+
+  **Telemetry.** The five phases `crate_download`, `crate_verification`,
+  `archive_download`, `archive_verification`, and `executable_probe` are
+  registered on the `consumer_smoke` operation, so a refusal names the boundary
+  that made it. The action reports them from one phase log written by the
+  verifier, and the job's summary reads the action's outputs rather than
+  restating labels, so the catalogue and the action cannot drift into reporting
+  a phase the smoke never runs as skipped on every run.
+
+  **The contracts.** Four modules join the directory:
+  `release_publish_path_consumer_shape` holds the job's dependencies,
+  permissions, checkout, environment, artefact, action-input, and compilation
+  checks; `release_publish_path_consumer_smoke` composes those with the
+  reachability oracle and re-exports them, which is also what keeps each module
+  inside the 400-line cap; `release_publish_path_consumer_mutations` registers
+  thirteen labelled regressions with the scenario and contract each must break;
+  and `release_publish_path_consumer_smoke_test` holds the telemetry and
+  action-output wiring. Two scenarios were added to
+  `release_publish_path_scenarios` — `finalize-failure` and
+  `finalize-skipped` — because without them a guard that dropped
+  `needs.finalize-github-release.result == 'success'` while keeping the
+  dependency would agree with every existing scenario. The compilation check is
+  proved live in both directions: appending `cargo install netsuke-build` to
+  either the job or the action is reported, and the shipped documents clear the
+  same scan.
+
+  **The evidence.** The six release-path suites report 59 passed, of which 14
+  are the smoke mutations (thirteen regressions plus the compilation control)
+  and 5 are the telemetry wiring. The smoke's own unit suites landed with
+  `04528ef3e`, which added the policy, adapters, and CLI. No release, tag,
+  registry credential, or GitHub setting was touched, and the smoke has not run
+  against a real release: a tagged run is still what would exercise it.
+
+  **Later revisions.** This entry records the delivery as it stood then. Review
+  then split the contract across six modules to stay inside the 400-line cap
+  and grew the labelled mutation set from thirteen regressions to thirty, as
+  the credential, command, artefact, and script-shape properties were added.
+  The current inventory is the developers' guide section on smoke-testing the
+  published release, and `CONSUMER_SMOKE_EXPECTED_VIOLATIONS` is the count's
+  source.
 
 ## Surprises & discoveries
 
