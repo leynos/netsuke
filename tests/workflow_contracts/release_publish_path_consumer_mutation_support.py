@@ -14,7 +14,7 @@ Run via ``make test-workflow-contracts``.
 import enum
 import typing as typ
 
-from release_publish_path_consumer_commands import invoked_phase, smoke_command_line
+from release_publish_path_consumer_script import invoked_phase, smoke_command_line
 from release_publish_path_consumer_smoke import CONSUMER_SMOKE_JOB, LOCAL_SMOKE_ACTION
 
 #: One parsed workflow or composite-action document, mutated in place.

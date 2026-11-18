@@ -23,11 +23,12 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
-import shlex
 
 from release_publish_path_consumer_script import (
     ends_after_smoke_cli,
-    ends_successfully,
+    hides_a_reference,
+    invocation,
+    invoked_phase,
     unsupported_prologue,
 )
 from release_publish_path_consumer_shape import (
@@ -105,44 +106,6 @@ SMOKE_ACTION_LAUNCHERS = {
 COMPILATION_COMMAND = re.compile(r"\b(?:cargo|rustc|rustup)\b")
 
 
-def smoke_command_line(step: dict[str, object]) -> tuple[str, ...] | None:
-    """Return the complete command line a step runs for the smoke CLI.
-
-    Returns
-    -------
-    tuple[str, ...] | None
-        Every token of the first line that runs :data:`SMOKE_CLI`, launcher
-        included, or ``None`` when no line does. A line that cannot be
-        tokenized is not a command and is skipped.
-    """
-    for line in command_lines(step.get("run")):
-        try:
-            tokens = tuple(shlex.split(line))
-        except ValueError:
-            continue
-        if SMOKE_CLI in tokens:
-            return tokens
-    return None
-
-
-def invoked_phase(tokens: tuple[str, ...] | None) -> str | None:
-    """Return the subcommand one tokenised command line runs, or ``None``.
-
-    Returns
-    -------
-    str | None
-        The token after :data:`SMOKE_CLI`, which names the phase the CLI is
-        asked to run, or ``None`` when the line does not run the CLI or names
-        no phase after it.
-    """
-    if tokens is None:
-        return None
-    for index, token in enumerate(tokens):
-        if token == SMOKE_CLI:
-            return tokens[index + 1] if index + 1 < len(tokens) else None
-    return None
-
-
 def check_smoke_action_commands(
     action: dict[str, object] | None, violations: list[str]
 ) -> None:
@@ -170,22 +133,27 @@ def _require_invocation(
     """Require one subcommand to run once, unconditionally, exactly, and so it fails."""
     label = f"{CONSUMER_SMOKE_JOB}.action: the {phase} invocation"
     found = [
-        (step, tokens)
+        (step, call)
         for step in steps
-        if (tokens := smoke_command_line(step)) is not None
-        and invoked_phase(tokens) == phase
+        if (call := invocation(step)) is not None
+        and invoked_phase(call.tokens) == phase
     ]
     if len(found) != 1:
         violations.append(f"{label} must appear exactly once, found {len(found)}")
         return
-    step, tokens = found[0]
+    step, call = found[0]
     if "if" in step:
         violations.append(
             f"{label} must run whenever the action does, got if: {step['if']!r}"
         )
-    if tokens != expected:
+    if call.tokens != expected:
         violations.append(
-            f"{label} must run exactly {list(expected)}, got {list(tokens)}"
+            f"{label} must run exactly {list(expected)}, got {list(call.tokens)}"
+        )
+    if hides_a_reference(call.line):
+        violations.append(
+            f"{label} must let bash expand its evidence, but {call.line!r} "
+            "single-quotes a reference"
         )
     unreachable = unsupported_prologue(step)
     if unreachable is not None:
@@ -238,9 +206,4 @@ __all__ = [
     "SMOKE_CLI",
     "check_smoke_action_commands",
     "check_smoke_compilation",
-    "ends_after_smoke_cli",
-    "ends_successfully",
-    "invoked_phase",
-    "smoke_command_line",
-    "unsupported_prologue",
 ]

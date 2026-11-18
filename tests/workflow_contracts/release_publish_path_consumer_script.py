@@ -13,23 +13,52 @@ search for one suspicious line. A step may prepare the invocation with
 refused rather than assumed harmless, because a construct nobody reviewed is
 exactly what a contract must not wave through.
 
+The invocation itself is located by its shell words, not by the text of a line.
+An assignment whose value happens to spell the CLI's path is a prologue line,
+not the invocation, so it neither ends the search for the command nor hides a
+construct that follows it.
+
 Which command the step must run is asserted in
 ``release_publish_path_consumer_commands``, which composes these readers.
 
 Run via ``make test-workflow-contracts``.
 """
 
+import dataclasses
 import re
 import shlex
 
 from release_publish_path_consumer_shape import SMOKE_CLI, command_lines
 
-#: The only lines a step may run before the reviewed invocation: an assignment
-#: of one variable, or a ``set`` that enables options. Shell separators and
-#: substitutions that run a command are excluded from an assignment's value, so
-#: a line cannot both assign and run something.
+#: The shape of one assignment: a shell name, ``=``, then a value carrying no
+#: separator and no backtick. The shape alone accepts ``NAME=1 exit 0``, which
+#: bash runs as ``exit 0``, so a line must also tokenize to this one word.
 _ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=[^;&|`]*")
-_ENABLING_SET = re.compile(r"set -[A-Za-z]+(?: [A-Za-z][A-Za-z0-9_]*)*")
+#: A substitution that runs a command. A plain ``$NAME`` expands a value and is
+#: what the shipped prologue uses; ``$(…)`` runs something of its own.
+_COMMAND_SUBSTITUTION = re.compile(r"\$\(")
+#: The ``set`` letters a prologue may turn on: ``-e`` fails fast and ``-u``
+#: refuses an unset variable. Every other letter either disables execution
+#: (``-n``) or changes how the invocation's words are expanded.
+_REVIEWED_SET_LETTERS = frozenset("eu")
+#: The one ``set -o`` name a prologue may turn on.
+_REVIEWED_SET_OPTION = "pipefail"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Invocation:
+    """Hold one parsed boundary between a script's prologue and its command.
+
+    The three readings answer different questions and must come from the same
+    line: the position slices the script around the command, the words are what
+    the contract compares, and the text is what quoting checks read. Deriving
+    them separately would let a check compare one line's words against
+    another's text.
+    """
+
+    index: int
+    tokens: tuple[str, ...]
+    line: str
 
 
 def ends_successfully(line: str) -> bool:
@@ -47,11 +76,206 @@ def ends_successfully(line: str) -> bool:
     >>> ends_successfully("exit 0"), ends_successfully("exit 1")
     (True, False)
     """
+    tokens = _tokenised(line)
+    return (
+        tokens is not None
+        and tokens[:1] in {("exit",), ("return",)}
+        and (tokens[1:] in {(), ("0",)})
+    )
+
+
+def _tokenised(line: str) -> tuple[str, ...] | None:
+    """Return the line's shell words, or ``None`` when it cannot be tokenized."""
     try:
-        tokens = tuple(shlex.split(line))
+        return tuple(shlex.split(line))
     except ValueError:
+        return None
+
+
+def invocation(step: dict[str, object]) -> Invocation | None:
+    """Return the parsed boundary around the line that runs the smoke CLI.
+
+    Returns
+    -------
+    Invocation | None
+        Where the invocation sits among the step's executable lines, its shell
+        words including the launcher, and the text those words came from, or
+        ``None`` when no line runs :data:`SMOKE_CLI`.
+
+    Notes
+    -----
+    The line is found by its words rather than by the text of the line, so an
+    assignment whose value spells the CLI's path is not mistaken for the
+    invocation and does not end the search for the command.
+    """
+    return _found_in(command_lines(step.get("run")))
+
+
+def runs_smoke_cli(line: str) -> bool:
+    """Return whether one command line runs :data:`SMOKE_CLI`.
+
+    Returns
+    -------
+    bool
+        True when the line's shell words include :data:`SMOKE_CLI`. Matching on
+        the words is what keeps an assignment whose value spells the CLI's path
+        from reading as an invocation.
+
+    Examples
+    --------
+    >>> runs_smoke_cli("uv run scripts/consumer_smoke_cli.py verify")
+    True
+    >>> runs_smoke_cli('script="scripts/consumer_smoke_cli.py"')
+    False
+    """
+    tokens = _tokenised(line)
+    return tokens is not None and SMOKE_CLI in tokens
+
+
+def hides_a_reference(line: str) -> bool:
+    """Return whether the line single-quotes a ``$``, which bash will not expand.
+
+    Returns
+    -------
+    bool
+        True when a ``$`` sits inside single quotes. Tokenising cannot show
+        this, because the quotes are removed: ``"$IDENTITY_PATH"`` and
+        ``'$IDENTITY_PATH'`` produce the same word, and only the second reaches
+        the program as the literal text.
+
+    Notes
+    -----
+    A quote inside the other kind of quote is literal, so the scan tracks both
+    states rather than toggling on every quote character.
+
+    Examples
+    --------
+    >>> hides_a_reference('--identity "$IDENTITY_PATH"')
+    False
+    >>> hides_a_reference("--identity '$IDENTITY_PATH'")
+    True
+    """
+    single = False
+    double = False
+    for character in line:
+        if character == "'" and not double:
+            single = not single
+        elif character == '"' and not single:
+            double = not double
+        elif character == "$" and single:
+            return True
+    return False
+
+
+def _found_in(lines: list[str]) -> Invocation | None:
+    """Return the first line of ``lines`` that runs :data:`SMOKE_CLI`."""
+    for index, line in enumerate(lines):
+        tokens = _tokenised(line)
+        if tokens is not None and SMOKE_CLI in tokens:
+            return Invocation(index=index, tokens=tokens, line=line)
+    return None
+
+
+def smoke_command_line(step: dict[str, object]) -> tuple[str, ...] | None:
+    """Return the complete command line a step runs for the smoke CLI.
+
+    Returns
+    -------
+    tuple[str, ...] | None
+        Every token of the first line that runs :data:`SMOKE_CLI`, launcher
+        included, or ``None`` when no line does.
+    """
+    found = invocation(step)
+    return None if found is None else found.tokens
+
+
+def invoked_phase(tokens: tuple[str, ...] | None) -> str | None:
+    """Return the subcommand one tokenised command line runs, or ``None``.
+
+    Returns
+    -------
+    str | None
+        The token after :data:`SMOKE_CLI`, which names the phase the CLI is
+        asked to run, or ``None`` when the line does not run the CLI or names
+        no phase after it.
+    """
+    if tokens is None:
+        return None
+    for index, token in enumerate(tokens):
+        if token == SMOKE_CLI:
+            return tokens[index + 1] if index + 1 < len(tokens) else None
+    return None
+
+
+def _is_assignment(line: str) -> bool:
+    """Return whether one line assigns one variable and runs nothing else.
+
+    Returns
+    -------
+    bool
+        True when the line tokenizes to exactly one word of the assignment's
+        shape. Tokenizing is what refuses ``NAME=1 exit 0``, which the shape
+        alone accepts and bash runs as ``exit 0``, and the substitution check
+        refuses a value that runs a command of its own.
+    """
+    if _COMMAND_SUBSTITUTION.search(line):
         return False
-    return tokens[:1] in {("exit",), ("return",)} and tokens[1:] in {(), ("0",)}
+    tokens = _tokenised(line)
+    return (
+        tokens is not None
+        and len(tokens) == 1
+        and _ASSIGNMENT.fullmatch(tokens[0]) is not None
+    )
+
+
+def _is_enabling_set(line: str) -> bool:
+    """Return whether one line only turns on the reviewed ``set`` options.
+
+    Returns
+    -------
+    bool
+        True when every option is a reviewed enabling option. ``set -n`` skips
+        execution, ``set +e`` clears fail-fast, and an unreviewed ``-o`` name
+        changes what the invocation's own words mean; none of those is a
+        prologue a reviewed step carries.
+    """
+    tokens = _tokenised(line)
+    return (
+        tokens is not None
+        and bool(tokens)
+        and tokens[0] == "set"
+        and _enables_only_reviewed(tokens[1:])
+    )
+
+
+def _enables_only_reviewed(options: tuple[str, ...]) -> bool:
+    """Return whether a ``set`` argument list only enables reviewed options.
+
+    Returns
+    -------
+    bool
+        True when every argument turns one on. A combined flag such as
+        ``-euo`` names ``-o`` last and takes the next argument as that option's
+        name, which is why the list is walked rather than matched against one
+        pattern.
+    """
+    remaining = list(options)
+    if not remaining:
+        return False
+    while remaining:
+        option = remaining.pop(0)
+        if not option.startswith("-") or len(option) < 2:
+            return False
+        letters = option[1:]
+        if "o" in letters:
+            if letters[-1] != "o" or not remaining:
+                return False
+            if remaining.pop(0) != _REVIEWED_SET_OPTION:
+                return False
+            letters = letters[:-1]
+        if not set(letters) <= _REVIEWED_SET_LETTERS:
+            return False
+    return True
 
 
 def _is_prologue(line: str) -> bool:
@@ -60,15 +284,13 @@ def _is_prologue(line: str) -> bool:
     Returns
     -------
     bool
-        True for an assignment of one variable or a ``set`` that enables
-        options, which are the two things a step needs before the command it
-        exists to run. Everything else — a conditional, a loop, a bare command,
-        or a ``set +e`` — can decide whether the invocation runs at all.
+        True for an assignment of one variable or a ``set`` that turns on the
+        reviewed options, which are the two things a step needs before the
+        command it exists to run. Everything else — a conditional, a loop, a
+        bare command, or a ``set +e`` — can decide whether the invocation runs
+        at all.
     """
-    return (
-        _ASSIGNMENT.fullmatch(line) is not None
-        or _ENABLING_SET.fullmatch(line) is not None
-    )
+    return _is_assignment(line) or _is_enabling_set(line)
 
 
 def unsupported_prologue(step: dict[str, object]) -> str | None:
@@ -85,8 +307,8 @@ def unsupported_prologue(step: dict[str, object]) -> str | None:
     Returns
     -------
     str | None
-        The first line ahead of :data:`SMOKE_CLI` that is not a plain prologue,
-        or ``None`` when every line ahead of the invocation prepares the step.
+        The first line ahead of the invocation that is not a plain prologue, or
+        ``None`` when every line ahead of it prepares the step.
 
     Examples
     --------
@@ -94,12 +316,14 @@ def unsupported_prologue(step: dict[str, object]) -> str | None:
     >>> unsupported_prologue(step)
     'exit 0'
     """
-    for line in command_lines(step.get("run")):
-        if SMOKE_CLI in line:
-            return None
-        if not _is_prologue(line):
-            return line
-    return None
+    lines = command_lines(step.get("run"))
+    found = _found_in(lines)
+    if found is None:
+        return None
+    return next(
+        (line for line in lines[: found.index] if not _is_prologue(line)),
+        None,
+    )
 
 
 def ends_after_smoke_cli(step: dict[str, object]) -> str | None:
@@ -112,18 +336,27 @@ def ends_after_smoke_cli(step: dict[str, object]) -> str | None:
     Returns
     -------
     str | None
-        The first success exit that follows :data:`SMOKE_CLI`, or ``None`` when
-        nothing after the invocation would end the step successfully.
+        The first success exit that follows the invocation, or ``None`` when
+        nothing after it would end the step successfully.
     """
     lines = command_lines(step.get("run"))
-    position = next(
-        (index for index, line in enumerate(lines) if SMOKE_CLI in line), None
-    )
-    if position is None:
+    found = _found_in(lines)
+    if found is None:
         return None
     return next(
-        (line for line in lines[position + 1 :] if ends_successfully(line)), None
+        (line for line in lines[found.index + 1 :] if ends_successfully(line)),
+        None,
     )
 
 
-__all__ = ["ends_after_smoke_cli", "ends_successfully", "unsupported_prologue"]
+__all__ = [
+    "Invocation",
+    "ends_after_smoke_cli",
+    "ends_successfully",
+    "hides_a_reference",
+    "invocation",
+    "invoked_phase",
+    "runs_smoke_cli",
+    "smoke_command_line",
+    "unsupported_prologue",
+]

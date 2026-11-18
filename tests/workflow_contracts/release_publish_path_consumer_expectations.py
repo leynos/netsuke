@@ -105,7 +105,8 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     "short-circuit-consumer-smoke-verifier": (
         ("static", f"{CONSUMER_SMOKE_JOB}.action"),
     ),
-    # The invocation line is untouched, so only a contract that reads the
+    # The invocation line is untouched, and `set +e` sits after the reviewed
+    # fail-fast rather than above it, so only a contract that reads the
     # prologue and what follows it notices the refusal being absorbed.
     "hide-consumer-smoke-verifier-failure": (
         ("static", f"{CONSUMER_SMOKE_JOB}.action"),
@@ -113,6 +114,30 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     # The invocation stays on its own line with every reviewed argument; only
     # the branch around it makes it unreachable.
     "enclose-consumer-smoke-verifier-in-false-branch": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.action"),
+    ),
+    # `PLACEHOLDER=1 exit 0` has an assignment's spelling and bash's `exit 0`
+    # semantics, so a reader that matches the line's shape rather than
+    # tokenizing it waves the early exit through.
+    "prefix-consumer-smoke-verifier-with-assignment-exit": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.action"),
+    ),
+    # `set -n` looks like the reviewed `set -euo pipefail` and makes bash read
+    # the invocation without running it, so only a reader that checks which
+    # options a prologue turns on refuses it.
+    "disable-consumer-smoke-verifier-execution": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.action"),
+    ),
+    # Single quotes turn the evidence path into a literal string. The tokenized
+    # command line is unchanged, so only a check that reads the line's quoting
+    # notices that every lookup will fail at run time.
+    "single-quote-consumer-smoke-verifier-reference": (
+        ("static", f"{CONSUMER_SMOKE_JOB}.action"),
+    ),
+    # The assignment above the early exit legitimately spells the CLI's path,
+    # so a reader that stops the prologue scan at the first line naming the CLI
+    # reports the prologue as clean and lets the verifier be skipped.
+    "mask-consumer-smoke-verifier-with-cli-named-assignment": (
         ("static", f"{CONSUMER_SMOKE_JOB}.action"),
     ),
     # A step declares no environment and still expands the workflow token in

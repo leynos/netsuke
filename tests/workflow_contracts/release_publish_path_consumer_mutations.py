@@ -16,7 +16,6 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 from release_publish_path_consumer_artifact_mutations import ARTIFACT_MUTATIONS
-from release_publish_path_consumer_commands import SMOKE_CLI
 from release_publish_path_consumer_expectations import (
     CONSUMER_SMOKE_EXPECTED_VIOLATIONS,
     MUTATION_LABELS,
@@ -32,6 +31,8 @@ from release_publish_path_consumer_mutation_support import (
     smoke_job,
     steps,
 )
+from release_publish_path_consumer_prologue_mutations import PROLOGUE_MUTATIONS
+from release_publish_path_consumer_script import runs_smoke_cli
 from release_publish_path_consumer_shape import command_lines
 
 if typ.TYPE_CHECKING:
@@ -223,68 +224,10 @@ def _echo_verifier(_release: Job, action: Job) -> None:
     declared, index = cli_invocation(action, "verify")
     step = declared[index]
     for line in command_lines(step.get("run")):
-        if SMOKE_CLI in line:
+        if runs_smoke_cli(line):
             step["run"] = f"echo {line}"
             return
     raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
-
-
-def _verify_script(action: Job) -> tuple[dict[str, object], str]:
-    """Return the verify step and its script, ready for one wrapper.
-
-    Returns
-    -------
-    tuple[dict[str, object], str]
-        The step and the script it currently runs, so an applier can replace
-        the script with a wrapped copy without re-reading the document.
-
-    Raises
-    ------
-    ConsumerSmokeMutationError
-        If the verify step carries no script to wrap, so the mutation would
-        change nothing the contract reads.
-    """
-    declared, index = cli_invocation(action, "verify")
-    step = declared[index]
-    run = step.get("run")
-    if not isinstance(run, str):
-        raise ConsumerSmokeMutationError(ConsumerSmokeMutationIssue.MISSING_ACTION_STEP)
-    return step, run
-
-
-def _short_circuit_verifier(_release: Job, action: Job) -> None:
-    """End the verify step successfully before the verifier can run.
-
-    Every reviewed argument stays in place, so only a contract that reads the
-    script's shape rather than searching it for an exit notices that the
-    verification is unreachable.
-    """
-    step, run = _verify_script(action)
-    step["run"] = f"exit 0\n{run}"
-
-
-def _hide_verifier_failure(_release: Job, action: Job) -> None:
-    """Let the verifier fail without failing the step.
-
-    ``set +e`` above the invocation turns off the fail-fast the script starts
-    with, and ``exit 0`` below it then ends the step successfully, so a refused
-    verification reaches the job as a pass. The invocation line itself is
-    untouched, so only a contract that reads the prologue and what follows it
-    notices the refusal being absorbed.
-    """
-    step, run = _verify_script(action)
-    step["run"] = f"set +e\n{run}\nexit 0"
-
-
-def _enclose_verifier_in_false_branch(_release: Job, action: Job) -> None:
-    """Confine the verifier to a branch bash never takes.
-
-    The invocation stays on its own line with every reviewed argument, so only
-    a contract that reads the script's control flow notices that the branch's
-    condition is false and nothing verified the release.
-    """
-    step, run = _verify_script(action)
-    step["run"] = f"if false; then\n{run}\nfi"
 
 
 def _read_token_in_job_run(release: Job, _action: Job) -> None:
@@ -328,11 +271,7 @@ _MUTATIONS: dict[str, cabc.Callable[[Job, Job], None]] = {
     "absorb-consumer-smoke-action-failure": _absorb_action_failure,
     "drop-consumer-smoke-verifier": _drop_verifier,
     "echo-consumer-smoke-verifier": _echo_verifier,
-    "short-circuit-consumer-smoke-verifier": _short_circuit_verifier,
-    "hide-consumer-smoke-verifier-failure": _hide_verifier_failure,
-    "enclose-consumer-smoke-verifier-in-false-branch": (
-        _enclose_verifier_in_false_branch
-    ),
+    **PROLOGUE_MUTATIONS,
     "read-consumer-smoke-token-in-run": _read_token_in_job_run,
     "read-consumer-smoke-action-token-in-run": _read_token_in_action_run,
     "compile-in-consumer-smoke-job": _compile_in_job,
