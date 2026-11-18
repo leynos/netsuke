@@ -2209,11 +2209,13 @@ Common environment equivalents include:
 - `NETSUKE_WHICH_WORKSPACE=0`
 
 Boolean configuration environment variables accept `true`, `false`, `1`, and
-`0`, with no surrounding whitespace and no case folding. A configuration file
-keeps strict Boolean typing, so `verbose = 1` is rejected there even though
-`NETSUKE_VERBOSE=1` is accepted. Policy values accept any ASCII casing in a
-file and in the environment, as described in
-[Policy values and parsing](#policy-values-and-parsing).
+`0`, with no surrounding whitespace and no case folding. `NETSUKE_NO_INPUT`
+follows the same rule, so `NETSUKE_NO_INPUT=0` parses to `false` and is then
+rejected, because configuration does not accept `no_input = false`; only `true`
+and `1` are usable. A configuration file keeps strict Boolean typing, so
+`verbose = 1` is rejected there even though `NETSUKE_VERBOSE=1` is accepted.
+Policy values accept any ASCII casing in a file and in the environment, as
+described in [Policy values and parsing](#policy-values-and-parsing).
 
 List-valued variables accept a scalar, which becomes a one-element list, or a
 serialized JSON array. For example, `NETSUKE_DEFAULT_TARGETS=hello.txt` and

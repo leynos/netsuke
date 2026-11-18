@@ -51,6 +51,9 @@ accepting it would require a new path model rather than a value coercion.
 - Reject case variants (`True`), word variants (`yes`, `on`), numbers other than
   `1` and `0`, empty values, and values with surrounding whitespace for those
   Boolean variables in both passes.
+- Keep the existing `no_input = false` policy rejection, so `NETSUKE_NO_INPUT=0`
+  parses as Boolean `false` and is then rejected by configuration validation
+  instead of selecting a different behaviour.
 - Accept every canonical policy spelling in any ASCII casing from TOML, the
   environment, and the command line.
 - Keep accepting the scalar and serialized JSON-array forms of list variables.

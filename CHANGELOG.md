@@ -81,8 +81,9 @@
   `NETSUKE_TRUST_PROJECT_FETCH_POLICY`, and `NETSUKE_NO_INPUT` environment
   variables, and accept display-policy values in any ASCII casing from
   configuration files and the environment. The early `NETSUKE_JSON` resolver
-  and the full merge now accept the same set. Indexed `__N` list variables
-  remain unsupported
+  and the full merge now accept the same set. `NETSUKE_NO_INPUT=0` parses as
+  `false` and is then rejected by the no-input policy, so only `true` and `1`
+  are usable. Indexed `__N` list variables remain unsupported
   ([#1147](https://github.com/leynos/netsuke/issues/1147), [ADR-0082](docs/adrs/adr-0082-accept-environment-boolean-digits-and-case-insensitive-policies.md)).
 
 ### Security
