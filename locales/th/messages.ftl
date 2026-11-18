@@ -503,3 +503,8 @@ check.rule.severity = ตัวเลือก { $name } ระบุควา�
 check.fail_on.invalid = เกณฑ์ความล้มเหลวที่ไม่รู้จัก { $value }; คาดหวังหนึ่งใน { $values }
 check.source_index = ไม่สามารถทำดัชนี { $path } สำหรับการวินิจฉัยที่บรรทัด { $line }: { $reason }
 status.tool.check = ตรวจสอบ
+
+# ข้อความการค้นหาการกำหนดค่าอัตโนมัติ
+config.discovery.dangling_link = ไม่พบเป้าหมายของลิงก์สัญลักษณ์
+config.discovery.present_without_layer = รายการมีอยู่แต่ไม่ได้ให้เลเยอร์การกำหนดค่า
+config.discovery.inspection_failed = ไม่สามารถตรวจสอบรายการได้

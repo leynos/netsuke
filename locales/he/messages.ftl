@@ -516,3 +516,8 @@ check.rule.severity = הבורר { $name } מציין את החומרה { $sever
 check.fail_on.invalid = סף כישלון לא מוכר { $value }; נדרש אחד מתוך { $values }.
 check.source_index = לא ניתן לאנדקס את { $path } לצורך אבחון בשורה { $line }: { $reason }.
 status.tool.check = בדיקה
+
+# הודעות גילוי תצורה אוטומטי.
+config.discovery.dangling_link = היעד של הקישור הסמלי חסר.
+config.discovery.present_without_layer = הרשומה קיימת אך לא סיפקה שכבת תצורה.
+config.discovery.inspection_failed = לא ניתן היה לבדוק את הרשומה.

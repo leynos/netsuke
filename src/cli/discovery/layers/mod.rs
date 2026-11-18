@@ -33,7 +33,9 @@ mod project_key;
 use project_key::ProjectKey;
 
 pub(super) mod user_candidate;
-use user_candidate::automatic_base_layers;
+use user_candidate::{
+    AutomaticLayers, UserScopeTrace, automatic_base_layers, candidate_is_trusted,
+};
 
 /// Project-scope outcome retained for a later trace replay.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -85,6 +87,43 @@ impl ProjectScopeTrace {
                     path,
                 );
             }
+        }
+    }
+}
+
+/// Decisions the automatic pass retains for a later verbose replay.
+///
+/// Discovery runs before the composition boundary raises the tracing filter, so
+/// an event emitted where the decision is made would be dropped. These bounded
+/// decisions travel with the layers instead and are replayed once the filter
+/// admits them.
+#[derive(Clone, Debug, Default)]
+pub(super) struct AutomaticTrace {
+    /// Which scope supplied the automatic base chain, when the pass decided.
+    user_scope: Option<UserScopeTrace>,
+    /// Trail of the project-scope second pass, when one ran.
+    project_scope: Option<ProjectScopeTrace>,
+}
+
+impl AutomaticTrace {
+    /// Combine a user-pass decision with any project-scope outcome.
+    const fn new(
+        user_scope: Option<UserScopeTrace>,
+        project_scope: Option<ProjectScopeTrace>,
+    ) -> Self {
+        Self {
+            user_scope,
+            project_scope,
+        }
+    }
+
+    /// Emit both retained decisions without repeating discovery.
+    pub(super) fn emit(&self) {
+        if let Some(user_scope) = &self.user_scope {
+            user_scope.emit();
+        }
+        if let Some(project_scope) = &self.project_scope {
+            project_scope.emit();
         }
     }
 }
@@ -143,8 +182,7 @@ pub(super) fn first_automatic_chain(
     for candidate in discovery.candidates() {
         match load_config_file_as_chain(&candidate) {
             Ok(Some(chain)) => {
-                let is_trusted = !project_key
-                    .is_some_and(|key| key.is_ambiguous() || key.matches_path(&candidate));
+                let is_trusted = candidate_is_trusted(&candidate, project_key);
                 return Ok((chain_layers(chain), is_trusted));
             }
             Ok(None) => {}
@@ -185,21 +223,27 @@ pub(super) fn collect_file_layers_with_normalizer(
         .map(|layers| layers.into_iter().map(|scoped| scoped.layer).collect())
 }
 
-/// Build the discovery chain and project-scope trace using `normalizer`.
+/// Build the discovery chain and automatic trace using `normalizer`.
 pub(super) fn collect_file_layers_with_normalizer_and_trace(
     directory: Option<&Path>,
     normalizer: &impl PathNormalizer,
     env_source: SharedEnvSource,
-) -> (Option<ProjectScopeTrace>, OrthoResult<Vec<ScopedFileLayer>>) {
+) -> (AutomaticTrace, OrthoResult<Vec<ScopedFileLayer>>) {
     let project_file = project_scope_file(directory);
     let project_key = project_file
         .as_deref()
         .map(|path| ProjectKey::classify(normalizer, path));
-    let (file_layers, is_trusted_root) =
-        match automatic_base_layers(directory, env_source, project_key.as_ref()) {
-            Ok(found) => found,
-            Err(error) => return (None, Err(error)),
-        };
+    let AutomaticLayers {
+        layers: file_layers,
+        is_trusted_root,
+        user_scope,
+    } = match automatic_base_layers(directory, env_source, project_key.as_ref()) {
+        Ok(found) => found,
+        // The pass failed before it reached a decision, so there is no
+        // user-scope outcome to replay; discovery telemetry records the
+        // failure itself.
+        Err(error) => return (AutomaticTrace::default(), Err(error)),
+    };
 
     let project_index = project_key.as_ref().and_then(|key| {
         file_layers
@@ -209,12 +253,15 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
     let project_trace_path = BoundedConfigPath::from_path(project_file.as_deref());
     if let Some(index) = project_index.filter(|index| *index + 1 == file_layers.len()) {
         return (
-            Some(ProjectScopeTrace::Included(project_trace_path)),
+            AutomaticTrace::new(
+                Some(user_scope),
+                Some(ProjectScopeTrace::Included(project_trace_path)),
+            ),
             Ok(scope_project_chain(file_layers, index)),
         );
     }
 
-    merge_project_scope_layers(
+    let (project_scope, result) = merge_project_scope_layers(
         file_layers,
         ProjectScope {
             file: project_file.as_deref(),
@@ -224,7 +271,8 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
                 project_key: project_key.as_ref(),
             },
         },
-    )
+    );
+    (AutomaticTrace::new(Some(user_scope), project_scope), result)
 }
 
 /// Load project layers and preserve authority when operator and project paths overlap.

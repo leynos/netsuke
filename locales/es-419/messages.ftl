@@ -512,3 +512,8 @@ check.rule.severity = El selector { $name } nombra la severidad { $severity }; s
 check.fail_on.invalid = Umbral de falla desconocido { $value }; se esperaba uno de { $values }.
 check.source_index = No se pudo indexar { $path } para los diagnósticos en la línea { $line }: { $reason }.
 status.tool.check = Revisión
+
+# Mensajes del descubrimiento automático de configuración.
+config.discovery.dangling_link = falta el destino del enlace simbólico.
+config.discovery.present_without_layer = la entrada existe pero no aportó ninguna capa de configuración.
+config.discovery.inspection_failed = no se pudo inspeccionar la entrada.

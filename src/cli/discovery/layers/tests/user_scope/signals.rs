@@ -44,25 +44,65 @@ fn record(outcome: &DiscoveryOutcome) -> (Vec<Sample>, Vec<String>) {
     (snapshotter.snapshot().into_vec(), fields)
 }
 
-/// Return how many samples are discovery counters carrying `outcome`.
+/// Report whether `sample` is the discovery counter for exactly `outcome`.
 ///
 /// The counter's documented label set is `outcome` alone; the finer
-/// `error_category` is a span field. Keeping the two apart here means a change
-/// that widens the metric's cardinality fails this test rather than passing
+/// `error_category` is a span field. Requiring the complete label set, rather
+/// than merely finding a matching `outcome` label among others, means a change
+/// that widens the metric's cardinality fails this test instead of passing
 /// unnoticed.
+fn is_discovery_counter(sample: &Sample, outcome: &str) -> bool {
+    let (key, _, _, value) = sample;
+    key.kind() == MetricKind::Counter
+        && key.key().name() == DISCOVERY_TOTAL
+        && key.key().labels().count() == 1
+        && key
+            .key()
+            .labels()
+            .any(|label| label.key() == "outcome" && label.value() == outcome)
+        && matches!(value, DebugValue::Counter(1))
+}
+
+/// Return how many samples are discovery counters carrying `outcome`.
 fn counters_with_outcome(samples: &[Sample], outcome: &str) -> usize {
     samples
         .iter()
-        .filter(|(key, _, _, value)| {
-            key.kind() == MetricKind::Counter
-                && key.key().name() == DISCOVERY_TOTAL
-                && key
-                    .key()
-                    .labels()
-                    .any(|label| label.key() == "outcome" && label.value() == outcome)
-                && matches!(value, DebugValue::Counter(1))
-        })
+        .filter(|sample| is_discovery_counter(sample, outcome))
         .count()
+}
+
+/// Build a sample named as the discovery counter, labelled as `labels` says.
+fn discovery_sample(labels: Vec<metrics::Label>) -> Sample {
+    let key = CompositeKey::new(
+        MetricKind::Counter,
+        metrics::Key::from_parts(DISCOVERY_TOTAL, labels),
+    );
+    (key, None, None, DebugValue::Counter(1))
+}
+
+/// The label-set check accepts the documented series and rejects a wider one.
+///
+/// The helper is the only thing standing between a widened label set and a
+/// passing test, so both directions are exercised: without the accepting case a
+/// helper that rejected everything would pass the rejection case alone, and
+/// without the rejecting case the cardinality guarantee would be asserted but
+/// never tested.
+#[rstest]
+fn discovery_counter_label_set_is_exact() {
+    let documented = discovery_sample(vec![metrics::Label::new("outcome", "error")]);
+    assert!(
+        is_discovery_counter(&documented, "error"),
+        "a counter labelled only by outcome must satisfy the documented label set"
+    );
+
+    let widened = discovery_sample(vec![
+        metrics::Label::new("outcome", "error"),
+        metrics::Label::new("error_category", "dangling_link"),
+    ]);
+    assert!(
+        !is_discovery_counter(&widened, "error"),
+        "a counter carrying an extra label must not satisfy the documented label set"
+    );
 }
 
 /// A dangling user candidate records a bounded discovery-error signal.
@@ -116,15 +156,21 @@ fn dangling_user_candidate_records_a_bounded_error_signal() -> Result<()> {
 ///
 /// The event is what distinguishes "the user's file won" from "we fell back",
 /// so it must name the scope, the skipped pass, and a correlation hash without
-/// carrying the candidate path.
+/// carrying the candidate path. It is emitted on replay rather than where the
+/// decision is made, so the case asks for the replay under verbose tracing, and
+/// the fallback event must be absent — otherwise the two branches would not be
+/// distinguishable.
 #[rstest]
 fn adopted_user_candidate_records_scope_without_a_path() -> Result<()> {
     let case = Case::new()?;
     let home_config = case.write_home_dotfile("jobs = 4\n")?;
     let environment = case.environment(HomeArrangement::EmptyXdgConfigHome);
 
-    let (outcome, events) =
-        capture_events(|| Ok::<_, anyhow::Error>(case.discover_outcome(&environment)))?;
+    let (outcome, events) = capture_events(|| {
+        let outcome = case.discover_outcome(&environment);
+        outcome.emit_diagnostics();
+        Ok::<_, anyhow::Error>(outcome)
+    })?;
     ensure!(
         outcome.first_error().is_none(),
         "the user file should load without error"
@@ -139,6 +185,12 @@ fn adopted_user_candidate_records_scope_without_a_path() -> Result<()> {
         event.contains("skipped_compose_layers=true"),
         "adoption should record that the dependency scan was skipped: {event}"
     );
+    ensure!(
+        !events
+            .iter()
+            .any(|event| event.contains("used the dependency scan")),
+        "an adopted user file must not also report the fallback: {events:?}"
+    );
     EventAssertion::new(event, &home_config).ensure_bounded_path_fields()?;
     Ok(())
 }
@@ -147,14 +199,19 @@ fn adopted_user_candidate_records_scope_without_a_path() -> Result<()> {
 ///
 /// A case with no user file exercises the fallback branch. The event must not
 /// carry any path or path hash: the dependency scan reads several locations and
-/// naming one of them would misreport which file supplied policy.
+/// naming one of them would misreport which file supplied policy. It is
+/// replayed under verbose tracing, and the adoption event must be absent so the
+/// two branches stay distinguishable.
 #[rstest]
 fn fallback_to_the_dependency_scan_records_scope_without_a_path() -> Result<()> {
     let case = Case::new()?;
     let environment = case.environment(HomeArrangement::EmptyXdgConfigHome);
 
-    let (outcome, events) =
-        capture_events(|| Ok::<_, anyhow::Error>(case.discover_outcome(&environment)))?;
+    let (outcome, events) = capture_events(|| {
+        let outcome = case.discover_outcome(&environment);
+        outcome.emit_diagnostics();
+        Ok::<_, anyhow::Error>(outcome)
+    })?;
     ensure!(
         outcome.first_error().is_none(),
         "the system file should load without error"
@@ -172,6 +229,12 @@ fn fallback_to_the_dependency_scan_records_scope_without_a_path() -> Result<()> 
     ensure!(
         !event.contains("path_hash") && !event.contains("path_present"),
         "the fallback event must not name a configuration path: {event}"
+    );
+    ensure!(
+        !events
+            .iter()
+            .any(|event| event.contains("adopted a user candidate")),
+        "a fallback must not also report an adopted user file: {events:?}"
     );
     Ok(())
 }

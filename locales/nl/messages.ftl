@@ -510,3 +510,8 @@ check.rule.severity = Selector { $name } noemt ernst { $severity }; verwacht wer
 check.fail_on.invalid = Onbekende faaldrempel { $value }; verwacht werd een van { $values }.
 check.source_index = Kon { $path } niet indexeren voor diagnostiek op regel { $line }: { $reason }.
 status.tool.check = Controleren
+
+# Berichten van automatische configuratiedetectie.
+config.discovery.dangling_link = het doel van de symbolische koppeling ontbreekt.
+config.discovery.present_without_layer = de vermelding bestaat, maar leverde geen configuratielaag.
+config.discovery.inspection_failed = de vermelding kon niet worden geïnspecteerd.

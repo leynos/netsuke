@@ -10,12 +10,12 @@
 use super::{Case, HomeArrangement};
 use crate::cli::discovery::discovery_env_source;
 use crate::cli::discovery::layers::user_candidate::{
-    CandidateEntry, CandidateFailure, CandidateProbe, UnloadableCandidate,
-    automatic_base_layers_with_probe,
+    AutomaticLayers, CandidateEntry, CandidateFailure, CandidateProbe, UnloadableCandidate,
+    UserScopeTrace, automatic_base_layers_with_probe,
 };
 use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
-use ortho_config::{MergeLayer, OrthoError, OrthoResult};
+use ortho_config::{OrthoError, OrthoResult};
 use rstest::rstest;
 use std::cell::RefCell;
 use std::error::Error as _;
@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 
 /// How a scripted probe answers every candidate it is asked about.
 #[derive(Clone, Copy, Debug)]
-enum Answer {
+pub(super) enum Answer {
     /// Report this entry state.
     Entry(CandidateEntry),
     /// Fail with this I/O error kind.
@@ -36,14 +36,14 @@ enum Answer {
 /// Recording matters as much as the answer: a rejection that never consulted
 /// the probe would still fail, so the assertions require the probe to have been
 /// asked.
-struct ScriptedProbe {
+pub(super) struct ScriptedProbe {
     answer: Answer,
     probed: RefCell<Vec<PathBuf>>,
 }
 
 impl ScriptedProbe {
     /// Build a probe that answers every candidate with `answer`.
-    const fn new(answer: Answer) -> Self {
+    pub(super) const fn new(answer: Answer) -> Self {
         Self {
             answer,
             probed: RefCell::new(Vec::new()),
@@ -67,10 +67,7 @@ impl CandidateProbe for ScriptedProbe {
 }
 
 /// Run the automatic discovery pass with `probe` against `env`.
-fn layers_with_probe(
-    probe: &dyn CandidateProbe,
-    env: &TestEnv,
-) -> OrthoResult<(Vec<MergeLayer<'static>>, bool)> {
+fn layers_with_probe(probe: &dyn CandidateProbe, env: &TestEnv) -> OrthoResult<AutomaticLayers> {
     automatic_base_layers_with_probe(probe, None, discovery_env_source(env), None)
 }
 
@@ -159,21 +156,27 @@ fn absent_entry_falls_through_to_the_system_scope() -> Result<()> {
     let probe = ScriptedProbe::new(Answer::Entry(CandidateEntry::Absent));
     let environment = case.environment(HomeArrangement::EmptyXdgConfigHome);
 
-    let (layers, is_trusted_root) = layers_with_probe(&probe, &environment)
+    let found = layers_with_probe(&probe, &environment)
         .context("an absent user candidate must not fail discovery")?;
 
     // Only a chain rooted at the project file is untrusted, and no project key
     // is supplied here, so the operator-scope system file is the trusted root.
     ensure!(
-        is_trusted_root,
+        found.is_trusted_root,
         "a system-scope chain must report a trusted root"
+    );
+    ensure!(
+        found.user_scope == UserScopeTrace::Fallback,
+        "an absent user candidate must be reported as a fallback, got {:?}",
+        found.user_scope
     );
     ensure!(
         !probe.probed().is_empty(),
         "discovery must consult the presence probe before falling through"
     );
     let expected = super::canonical(&case.system_config())?;
-    let paths: Vec<String> = layers
+    let paths: Vec<String> = found
+        .layers
         .iter()
         .filter_map(|layer| layer.path())
         .map(|path| super::canonical(Path::new(path.as_str())).unwrap_or_else(|_| path.to_string()))

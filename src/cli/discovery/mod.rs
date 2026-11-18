@@ -240,12 +240,12 @@ fn collect_file_layers_with_env(
     let resolution = selector::resolve_config_selector(cli.config.clone(), env);
     let (file_layers, load_warning, outcome) = resolution.path.as_deref().map_or_else(
         || {
-            let (project_scope, outcome) = collect_file_layers_with_normalizer_and_trace(
+            let (automatic_trace, outcome) = collect_file_layers_with_normalizer_and_trace(
                 cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
                 normalizer,
                 discovery_env_source(env),
             );
-            (FileLayerTrace::Automatic { project_scope }, None, outcome)
+            (FileLayerTrace::Automatic(automatic_trace), None, outcome)
         },
         |path| {
             // Explicit selectors are independent of `-C/--directory`.
