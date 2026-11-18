@@ -5645,13 +5645,21 @@ well as `scripts/` and the test sources. The validator target reads
 overridden for a downloaded artefact in another directory.
 
 The configuration in `pyproject.toml` mirrors the df12 estate policy in
-[episodic](https://github.com/leynos/episodic); only path-shaped settings are
-local. The file deliberately declares no `[project]` table, so `uv` never
-treats this Rust workspace as a Python project. A pinned Pylint
-(`PYLINT_VERSION`) runs through `uv tool run --managed-python` on CPython 3.14,
-the Python baseline, so it parses every repository-owned source, with the
-message set enabled in `pyproject.toml` and `syntax-error` left enabled so a
-module it cannot parse fails the lint; the
+[episodic](https://github.com/leynos/episodic). Local differences are
+path-shaped settings plus one runtime-evaluation exemption. The
+`runtime-evaluated-decorators` setting in the `flake8-type-checking` section
+names `cyclopts.App.command`, so Ruff's `TC` rules treat a decorated command's
+annotations as resolved at run time rather than only under a type checker. The
+option dataclasses such a command names must therefore stay imported at run
+time, and without the exemption the `TC001` to `TC003` fixes would move them
+into a `TYPE_CHECKING` block and fail the command on first use. Removing the
+setting requires first giving those annotations a runtime-safe home. The file
+deliberately declares no `[project]` table, so `uv` never treats this Rust
+workspace as a Python project. A pinned Pylint (`PYLINT_VERSION`) runs through
+`uv tool run --managed-python` on CPython 3.14, the Python baseline, so it
+parses every repository-owned source, with the message set enabled in
+`pyproject.toml` and `syntax-error` left enabled so a module it cannot parse
+fails the lint; the
 [df12-python-lints](https://github.com/leynos/df12-python-lints) messages
 (structural pattern matching, assert messages, suppression hygiene, snapshot
 discipline, and the baseline-gated R9112/C9112 checks) need CPython 3.14 and

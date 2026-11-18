@@ -970,7 +970,10 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   GitHub digest syntax in policy code. Both boundaries have positive controls;
   Ruff, Pylint, Interrogate, and ty pass.
 - Recovery: the modules are additive; revert the commit.
-- Remaining gaps: the remaining publication workflow jobs and stages are open.
+- Remaining gaps: none in this milestone's own scope. The publication workflow
+  jobs it left to EP-M3 have since landed there, and the work the plan still
+  records as open is Stage C's live exercise, the LEM-5 permission suite, and
+  the package archive file list.
 - Compatibility decision: none; these are new private modules.
 
 **EP-M3 — the GitHub-side publication sequence.**
