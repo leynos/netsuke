@@ -69,8 +69,8 @@ fn spawn_failure_json_names_program_and_remedies(en_localizer: EnLocalizer) -> R
     );
     ensure!(
         without_isolation(string_field(diagnostic, "help")?)
-            == "Install Ninja and make sure `ninja` exists on PATH and is executable, or set \
-                NETSUKE_NINJA to the path of a Ninja executable.",
+            == "Install Ninja and make sure `ninja` can be executed, or set NETSUKE_NINJA to \
+                the path of a Ninja executable.",
         "the help should offer the installation and configuration remedies: {document}"
     );
     ensure!(

@@ -66,8 +66,6 @@ pub use build_targets::BuildTargets;
 #[cfg(feature = "lint")]
 pub use check::telemetry::{CHECK_DURATION, CHECK_TOTAL};
 pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
-#[cfg(doctest)]
-pub use process::doc;
 pub use process::{
     CommandEnv, FORWARD_FAILURE_LABELS, FORWARD_FAILURES_TOTAL, MAX_RETAINED_DYNDEP_FILES,
     NINJA_STATUS_OVERSIZED_LINES_TOTAL, NinjaBuildRequest, NinjaExitError, NinjaJobCount,

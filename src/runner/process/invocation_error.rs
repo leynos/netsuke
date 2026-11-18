@@ -121,24 +121,11 @@ mod tests {
     //! Characterize the legacy cause text preserved by the bridge.
 
     use super::*;
+    use test_support::exit_status;
 
     /// Build one unsuccessful exit with the supplied attribution.
     fn exit_error(attribution: Option<&str>) -> NinjaExitError {
         NinjaExitError::new(exit_status(7), "build", attribution.map(str::to_owned))
-    }
-
-    #[cfg(unix)]
-    fn exit_status(code: i32) -> ExitStatus {
-        use std::os::unix::process::ExitStatusExt;
-
-        ExitStatus::from_raw(code << 8)
-    }
-
-    #[cfg(windows)]
-    fn exit_status(code: u32) -> ExitStatus {
-        use std::os::windows::process::ExitStatusExt;
-
-        ExitStatus::from_raw(code)
     }
 
     #[test]

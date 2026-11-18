@@ -47,8 +47,20 @@ pub(crate) fn ninja_exit_failure(status: ExitStatus) -> Result<RunnerError> {
 }
 
 /// Pass a typed failure through the production mapper.
+///
+/// The mapper must return the diagnostic itself, not a context wrapper around
+/// it: a wrapper would carry the temporary build file into the summary. The
+/// downcast alone would strip any wrapper and hide that regression, so the
+/// check inspects the head of the chain first.
 fn mapped(failure: NinjaInvocationError) -> Result<RunnerError> {
-    ninja_failure(failure, || SENTINEL_CONTEXT.to_owned())
-        .downcast::<RunnerError>()
-        .map_err(|error| error.context("the fixture should produce a classified runner diagnostic"))
+    let error = ninja_failure(failure, || SENTINEL_CONTEXT.to_owned());
+    if !matches!(
+        error.chain().next(),
+        Some(first) if first.downcast_ref::<RunnerError>().is_some()
+    ) {
+        anyhow::bail!("the mapper must return the runner diagnostic without an outer context");
+    }
+    error.downcast::<RunnerError>().map_err(|unclassified| {
+        unclassified.context("the fixture should produce a classified runner diagnostic")
+    })
 }

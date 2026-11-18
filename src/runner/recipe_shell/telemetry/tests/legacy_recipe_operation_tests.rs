@@ -14,7 +14,7 @@ use anyhow::bail;
 use metrics_util::{MetricKind, debugging::DebugValue};
 use proptest::prelude::*;
 use std::path::PathBuf;
-use std::process::ExitStatus;
+use test_support::exit_status;
 
 /// Assert that `snapshot` records one histogram sample with exactly `labels`.
 fn assert_histogram(snapshot: &Snapshot, name: &str, labels: &[(&str, &str)]) {
@@ -114,20 +114,6 @@ fn ninja_exit_failure_error() -> anyhow::Error {
             .with_arg("status", status.to_string()),
         source: crate::runner::NinjaExitError::new(status, "build", None),
     })
-}
-
-#[cfg(unix)]
-fn exit_status(code: i32) -> ExitStatus {
-    use std::os::unix::process::ExitStatusExt;
-
-    ExitStatus::from_raw(code << 8)
-}
-
-#[cfg(windows)]
-fn exit_status(code: u32) -> ExitStatus {
-    use std::os::windows::process::ExitStatusExt;
-
-    ExitStatus::from_raw(code)
 }
 
 /// Verify that shell labels cannot contain values outside the declared vocabulary.

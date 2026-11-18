@@ -107,7 +107,7 @@ runner.context.generate_ninja = Ninja マニフェストを生成できません
 runner.context.render_graph = グラフ成果物を描画できませんでした。
 runner.help.targets_edges_require_json = --edges オプションには最上位の --json が必要です。
 runner.ninja.spawn_failed = Ninja プログラム `{ $program }` を起動できませんでした。
-runner.ninja.spawn_failed.help = Ninja をインストールし、`{ $program }` が PATH に存在して実行可能であることを確認するか、NETSUKE_NINJA に Ninja 実行ファイルのパスを設定してください。
+runner.ninja.spawn_failed.help = Ninja をインストールし、`{ $program }` が実行可能であることを確認するか、NETSUKE_NINJA に Ninja 実行ファイルのパスを設定してください。
 runner.ninja.build_failed = Ninja がビルドの失敗を報告しました { $status }。
 runner.ninja.tool_failed = Ninja ツール `{ $tool }` が失敗を報告しました { $status }。
 

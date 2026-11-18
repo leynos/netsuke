@@ -107,7 +107,7 @@ runner.context.generate_ninja = Manifestul Ninja nu a putut fi generat.
 runner.context.render_graph = Artefactul grafului nu a putut fi redat.
 runner.help.targets_edges_require_json = Opțiunea --edges necesită --json la nivelul rădăcină.
 runner.ninja.spawn_failed = Programul Ninja `{ $program }` nu a putut fi pornit.
-runner.ninja.spawn_failed.help = Instalați Ninja și asigurați-vă că `{ $program }` există în PATH și este executabil, sau setați NETSUKE_NINJA la calea unui executabil Ninja.
+runner.ninja.spawn_failed.help = Instalați Ninja și asigurați-vă că `{ $program }` este executabil, sau setați NETSUKE_NINJA la calea unui executabil Ninja.
 runner.ninja.build_failed = Ninja a raportat o eroare de compilare { $status }.
 runner.ninja.tool_failed = Instrumentul Ninja `{ $tool }` a raportat o eroare { $status }.
 

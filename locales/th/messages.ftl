@@ -107,7 +107,7 @@ runner.context.generate_ninja = สร้างไฟล์รายการ Ni
 runner.context.render_graph = แสดงผลลัพธ์กราฟไม่สำเร็จ
 runner.help.targets_edges_require_json = ตัวเลือก --edges ต้องใช้ --json ในระดับบนสุด
 runner.ninja.spawn_failed = ไม่สามารถเริ่มโปรแกรม Ninja `{ $program }` ได้
-runner.ninja.spawn_failed.help = ติดตั้ง Ninja และตรวจสอบว่า `{ $program }` มีอยู่ใน PATH และสามารถเรียกใช้ได้ หรือตั้งค่า NETSUKE_NINJA เป็นพาธของไฟล์เรียกใช้ Ninja
+runner.ninja.spawn_failed.help = ติดตั้ง Ninja และตรวจสอบว่า `{ $program }` สามารถเรียกใช้ได้ หรือตั้งค่า NETSUKE_NINJA เป็นพาธของไฟล์เรียกใช้ Ninja
 runner.ninja.build_failed = Ninja รายงานความล้มเหลวในการสร้าง { $status }
 runner.ninja.tool_failed = เครื่องมือ Ninja `{ $tool }` รายงานความล้มเหลว { $status }
 

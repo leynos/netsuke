@@ -5,23 +5,17 @@
 //! diagnostic from that classification rather than from an `io::ErrorKind`.
 
 use super::*;
+use rstest::{fixture, rstest};
 
 #[cfg(unix)]
 fn fake_ninja_script(script: &str) -> anyhow::Result<(tempfile::TempDir, camino::Utf8PathBuf)> {
-    use cap_std::{
-        ambient_authority,
-        fs::{Dir, PermissionsExt},
-    };
+    use test_support::exec::write_exec_with_content;
 
     let temp_dir = tempfile::tempdir()?;
-    let directory = Dir::open_ambient_dir(temp_dir.path(), ambient_authority())?;
-    directory.write("ninja", script)?;
-    let mut permissions = directory.metadata("ninja")?.permissions();
-    permissions.set_mode(0o700);
-    directory.set_permissions("ninja", permissions)?;
-    let program = camino::Utf8PathBuf::from_path_buf(temp_dir.path().join("ninja"))
+    let program = write_exec_with_content(temp_dir.path(), "ninja", script)?;
+    let utf8_program = camino::Utf8PathBuf::from_path_buf(program)
         .map_err(|path| anyhow::anyhow!("fake Ninja path is not UTF-8: {}", path.display()))?;
-    Ok((temp_dir, program))
+    Ok((temp_dir, utf8_program))
 }
 
 #[cfg(unix)]
@@ -30,24 +24,24 @@ fn fake_ninja_program() -> anyhow::Result<(tempfile::TempDir, std::path::PathBuf
     Ok((temp_dir, program.into_std_path_buf()))
 }
 
-/// Run one build and return the typed failure it produced.
+/// Run one build with the supplied process settings and return its failure.
 ///
 /// The build file must exist because command configuration canonicalises it; a
 /// missing program then reaches `spawn` exactly as it would in a real run. The
 /// request is assembled here rather than in a helper so the fixture stays
-/// local to its single caller.
+/// local to its callers.
 #[cfg(unix)]
 fn run_classification_build(
     program: &Utf8Path,
     build_file: &Utf8Path,
+    options: &NinjaProcessOptions,
 ) -> anyhow::Result<NinjaInvocationError> {
-    let options = NinjaProcessOptions::default();
     let targets = BuildTargets::default();
     let env = CommandEnv::inherit();
     let clock = FixedMonotonicClock::with_elapsed(Duration::ZERO);
     let request = NinjaBuildRequest {
         program,
-        options: &options,
+        options,
         build_file,
         targets: &targets,
         env: &env,
@@ -64,6 +58,7 @@ fn run_classification_build(
 /// file. Callers must bind it for at least as long as they use the path, since
 /// command configuration canonicalises an existing build file.
 #[cfg(unix)]
+#[fixture]
 fn temporary_build_file() -> anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)> {
     let file = tempfile::NamedTempFile::new()?;
     let path = camino::Utf8PathBuf::from_path_buf(file.path().to_path_buf())
@@ -76,14 +71,16 @@ fn temporary_build_file() -> anyhow::Result<(tempfile::NamedTempFile, camino::Ut
 /// The public conversion must not lose `NotFound` or the raw OS code, because
 /// existing callers branch on those values.
 #[cfg(unix)]
-#[test]
-fn missing_program_is_classified_as_a_spawn_failure() -> anyhow::Result<()> {
+#[rstest]
+fn missing_program_is_classified_as_a_spawn_failure(
+    temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,
+) -> anyhow::Result<()> {
     let program_dir = tempfile::tempdir()?;
     let program = camino::Utf8PathBuf::from_path_buf(program_dir.path().join("absent-ninja"))
         .map_err(|path| anyhow::anyhow!("tempdir path is not UTF-8: {}", path.display()))?;
-    let (_build_file, build_file) = temporary_build_file()?;
+    let (_build_lease, build_file) = temporary_build_file?;
 
-    let error = run_classification_build(&program, &build_file)?;
+    let error = run_classification_build(&program, &build_file, &NinjaProcessOptions::default())?;
     let NinjaInvocationError::Spawn {
         program: attempted,
         source,
@@ -101,6 +98,10 @@ fn missing_program_is_classified_as_a_spawn_failure() -> anyhow::Result<()> {
         source.kind()
     );
     let raw_os_error = source.raw_os_error();
+    anyhow::ensure!(
+        raw_os_error.is_some(),
+        "a missing program should expose the OS error code"
+    );
 
     let converted = error.into_io_error();
     anyhow::ensure!(
@@ -119,12 +120,14 @@ fn missing_program_is_classified_as_a_spawn_failure() -> anyhow::Result<()> {
 
 /// An ordinary nonzero exit is classified as an exit failure with its status.
 #[cfg(unix)]
-#[test]
-fn unsuccessful_exit_is_classified_with_its_status() -> anyhow::Result<()> {
+#[rstest]
+fn unsuccessful_exit_is_classified_with_its_status(
+    temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,
+) -> anyhow::Result<()> {
     let (_program_dir, program) = fake_ninja_script("#!/bin/sh\nexit 7\n")?;
-    let (_build_file, build_file) = temporary_build_file()?;
+    let (_build_lease, build_file) = temporary_build_file?;
 
-    let error = run_classification_build(&program, &build_file)?;
+    let error = run_classification_build(&program, &build_file, &NinjaProcessOptions::default())?;
     let NinjaInvocationError::Exit(exit) = &error else {
         anyhow::bail!("an unsuccessful exit should be an exit failure, got {error:?}");
     };
@@ -149,14 +152,16 @@ fn unsuccessful_exit_is_classified_with_its_status() -> anyhow::Result<()> {
 
 /// A signal-terminated Ninja is still an exit failure, and keeps its signal.
 #[cfg(unix)]
-#[test]
-fn signal_terminated_ninja_is_classified_as_an_exit_failure() -> anyhow::Result<()> {
+#[rstest]
+fn signal_terminated_ninja_is_classified_as_an_exit_failure(
+    temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,
+) -> anyhow::Result<()> {
     use std::os::unix::process::ExitStatusExt;
 
     let (_program_dir, program) = fake_ninja_script("#!/bin/sh\nkill -TERM $$\n")?;
-    let (_build_file, build_file) = temporary_build_file()?;
+    let (_build_lease, build_file) = temporary_build_file?;
 
-    let error = run_classification_build(&program, &build_file)?;
+    let error = run_classification_build(&program, &build_file, &NinjaProcessOptions::default())?;
     let NinjaInvocationError::Exit(exit) = &error else {
         anyhow::bail!("a terminated Ninja should be an exit failure, got {error:?}");
     };
@@ -173,16 +178,48 @@ fn signal_terminated_ninja_is_classified_as_an_exit_failure() -> anyhow::Result<
     Ok(())
 }
 
+/// A configuration failure before spawn is an I/O failure, not a launch failure.
+///
+/// The missing-program case cannot protect this category, because it fails
+/// inside `spawn`. An unusable working directory fails while the command is
+/// configured, and must stay distinct so the runner does not blame the program.
 #[cfg(unix)]
-#[test]
-fn build_and_tool_execution_preserve_operation_labels() -> anyhow::Result<()> {
+#[rstest]
+fn configuration_failure_is_classified_as_io(
+    temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,
+) -> anyhow::Result<()> {
+    let (_program_dir, program) = fake_ninja_script("#!/bin/sh\nexit 0\n")?;
+    let (_build_lease, build_file) = temporary_build_file?;
+    let absent_dir = tempfile::tempdir()?.path().join("absent");
+    let working_dir = camino::Utf8PathBuf::from_path_buf(absent_dir).map_err(|path| {
+        anyhow::anyhow!("working directory path is not UTF-8: {}", path.display())
+    })?;
+    let options = NinjaProcessOptions {
+        working_dir: Some(working_dir),
+        jobs: None,
+    };
+
+    let error = run_classification_build(&program, &build_file, &options)?;
+    let NinjaInvocationError::Io(source) = &error else {
+        anyhow::bail!("an unusable working directory should be an I/O failure, got {error:?}");
+    };
+    anyhow::ensure!(
+        source.kind() == io::ErrorKind::NotFound,
+        "a missing working directory should report NotFound, got {:?}",
+        source.kind()
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[rstest]
+fn build_and_tool_execution_preserve_operation_labels(
+    temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,
+) -> anyhow::Result<()> {
     let (_program_dir, program) = fake_ninja_program()?;
-    let build_file = tempfile::NamedTempFile::new()?;
+    let (_build_lease, utf8_build_file) = temporary_build_file?;
     let utf8_program = camino::Utf8PathBuf::from_path_buf(program)
         .map_err(|path| anyhow::anyhow!("fake Ninja path is not UTF-8: {}", path.display()))?;
-    // `build_file` stays bound so the file outlives the path derived from it.
-    let utf8_build_file = camino::Utf8PathBuf::from_path_buf(build_file.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("build file path is not UTF-8: {}", path.display()))?;
     let options = NinjaProcessOptions::default();
     let env = CommandEnv::inherit();
     let target_names = vec![String::from("default")];

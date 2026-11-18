@@ -6,26 +6,14 @@
 //! module in `runner_diagnostics`, which owns the shared process helpers.
 
 use super::runner_diagnostics::{
-    first_json_diagnostic, flatten_localized_text, run_netsuke, string_field,
-    workspace_with_minimal_manifest,
+    first_json_diagnostic, flatten_localized_text, names_generated_build_file, run_netsuke,
+    string_field, workspace_with_minimal_manifest,
 };
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use serde_json::Value;
 use tempfile::tempdir;
-use test_support::fake_ninja;
-
-/// Format the exit status as the child process's own `Display` renders it.
-///
-/// Only the cause chain keeps Ninja's legacy text, whose wording is platform
-/// defined; the localized summary supplies its own wording.
-fn exit_cause_status_text() -> &'static str {
-    if cfg!(windows) {
-        "exit code: 7"
-    } else {
-        "exit status: 7"
-    }
-}
+use test_support::{exit_status, fake_ninja};
 
 /// Status phrase the English summary's localized suffix supplies.
 const SUMMARY_STATUS: &str = "exit status 7";
@@ -46,13 +34,15 @@ fn assert_exit_failure_reported(stderr: &str, subcommand: &str) -> Result<()> {
         flattened.contains(&summary),
         "the summary must report Ninja's status and operation: {stderr}"
     );
-    let cause_status = exit_cause_status_text();
+    // The cause keeps Ninja's legacy text, whose status wording is platform
+    // defined; `test_support::exit_status` produces the same status so the
+    // expectation follows whichever `Display` the platform supplies.
     ensure!(
-        flattened.contains(&format!("ninja exited with {cause_status}")),
+        flattened.contains(&format!("ninja exited with {}", exit_status(7))),
         "the cause must keep Ninja's legacy exit text: {stderr}"
     );
     ensure!(
-        !flattened.contains("with build file") && !flattened.contains("netsuke."),
+        !flattened.contains("with build file") && !names_generated_build_file(&flattened),
         "the diagnostic must not name the temporary build file: {stderr}"
     );
     Ok(())
@@ -75,7 +65,7 @@ fn assert_exit_failure_json(stderr: &str, subcommand: &str) -> Result<()> {
         message == summary,
         "the JSON summary must report Ninja's status, got {message:?} in {stderr}"
     );
-    let cause_status = exit_cause_status_text();
+    let expected_cause = format!("ninja exited with {}", exit_status(7));
     let causes = diagnostic
         .get("causes")
         .and_then(Value::as_array)
@@ -84,34 +74,14 @@ fn assert_exit_failure_json(stderr: &str, subcommand: &str) -> Result<()> {
         causes
             .iter()
             .filter_map(Value::as_str)
-            .any(|cause| cause.contains(&format!("ninja exited with {cause_status}"))),
+            .any(|cause| cause.contains(&expected_cause)),
         "the JSON cause must keep Ninja's exit text: {stderr}"
     );
     ensure!(
-        !stderr.contains("with build file") && !stderr.contains("netsuke."),
+        !stderr.contains("with build file") && !names_generated_build_file(stderr),
         "the JSON diagnostic must not name the temporary build file: {stderr}"
     );
     Ok(())
-}
-
-/// Report an unsuccessful recipe with Ninja's own exit status.
-#[test]
-fn recipe_failure_reports_ninja_status() -> Result<()> {
-    let temp = workspace_with_minimal_manifest("a failing recipe")?;
-    let empty_path = tempdir().context("create an empty PATH directory")?;
-    let (_ninja_dir, ninja) = fake_ninja(7)?;
-    let output = run_netsuke(
-        temp.path(),
-        empty_path.path(),
-        Some(&ninja),
-        &["--progress", "never", "build"],
-    )?;
-    ensure!(
-        !output.status.success(),
-        "a failing recipe must fail the build"
-    );
-    let stderr = String::from_utf8(output.stderr).context("diagnostic stderr is UTF-8")?;
-    assert_exit_failure_reported(&stderr, "build")
 }
 
 /// Report Ninja's exit status in every rendering mode of both subcommands.

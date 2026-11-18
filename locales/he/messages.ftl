@@ -107,7 +107,7 @@ runner.context.generate_ninja = לא ניתן היה ליצור את מניפס�
 runner.context.render_graph = לא ניתן היה לעבד את תוצר הגרף.
 runner.help.targets_edges_require_json = האפשרות --edges מחייבת --json ברמה העליונה.
 runner.ninja.spawn_failed = לא ניתן היה להפעיל את תוכנית Ninja `{ $program }`.
-runner.ninja.spawn_failed.help = התקינו את Ninja וודאו ש-`{ $program }` קיים ב-PATH ושניתן להפעיל אותו, או הגדירו את NETSUKE_NINJA לנתיב של קובץ Ninja בר-הפעלה.
+runner.ninja.spawn_failed.help = התקינו את Ninja וודאו שניתן להפעיל את `{ $program }`, או הגדירו את NETSUKE_NINJA לנתיב של קובץ Ninja בר-הפעלה.
 runner.ninja.build_failed = ‏Ninja דיווח על כשל בנייה { $status }.
 runner.ninja.tool_failed = כלי Ninja `{ $tool }` דיווח על כשל { $status }.
 

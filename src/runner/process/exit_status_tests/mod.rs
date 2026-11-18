@@ -18,6 +18,7 @@ use std::{
     process::ExitStatus,
     time::{Duration, Instant},
 };
+use test_support::exit_status;
 use tracing_subscriber::filter::LevelFilter;
 
 /// Build the graph fixture shared with command-list target-index tests.
@@ -36,20 +37,6 @@ fn command_list_failure(fingerprint: &str) -> super::failure_attribution::Comman
     writer
         .into_failure()
         .expect("test marker should parse into an attribution")
-}
-
-#[cfg(unix)]
-fn exit_status(code: i32) -> ExitStatus {
-    use std::os::unix::process::ExitStatusExt;
-
-    ExitStatus::from_raw(code << 8)
-}
-
-#[cfg(windows)]
-fn exit_status(code: u32) -> ExitStatus {
-    use std::os::windows::process::ExitStatusExt;
-
-    ExitStatus::from_raw(code)
 }
 
 fn command_log_context() -> CommandLogContext {

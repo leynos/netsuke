@@ -107,7 +107,7 @@ runner.context.generate_ninja = A Ninja-jegyzéket nem sikerült előállítani.
 runner.context.render_graph = A gráfterméket nem sikerült megjeleníteni.
 runner.help.targets_edges_require_json = Az --edges kapcsolóhoz a legfelső szintű --json kapcsoló szükséges.
 runner.ninja.spawn_failed = Nem sikerült elindítani a Ninja programot: `{ $program }`.
-runner.ninja.spawn_failed.help = Telepítse a Ninját, és győződjön meg arról, hogy `{ $program }` létezik a PATH-ban és futtatható, vagy állítsa a NETSUKE_NINJA változót egy futtatható Ninja elérési útjára.
+runner.ninja.spawn_failed.help = Telepítse a Ninját, és győződjön meg arról, hogy `{ $program }` futtatható, vagy állítsa a NETSUKE_NINJA változót egy futtatható Ninja elérési útjára.
 runner.ninja.build_failed = A Ninja build-hibát jelentett { $status }.
 runner.ninja.tool_failed = A Ninja `{ $tool }` eszköze hibát jelentett { $status }.
 

@@ -97,6 +97,26 @@ temporary build file.
     202 doctests), workflow contracts (2331 passed, 3 skipped), documentation
     contracts (15 passed), markdownlint (0 issues in 237 files), nixie, and
     typecheck. All nine passed against exactly the committed content.
+  - [x] A third CodeRabbit pass reported fifteen findings; the applied subset
+    covers:
+    - the launch help names only remedies that work in both human and JSON
+      modes, in all 35 catalogues: install Ninja, ensure the named program is
+      executable, or point `NETSUKE_NINJA` at a Ninja executable;
+    - the build-file assertions reject only a path token that both contains
+      `netsuke.` and ends with `.ninja`, so a temporary directory named
+      `netsuke.review` is no longer a false positive;
+    - the non-executable CLI test covers both subcommands, both progress
+      policies, and both renderers, and asserts the `Permission denied` cause;
+    - the exit-diagnostic tests derive the cause text from
+      `test_support::exit_status` instead of branching on the platform;
+    - the duplicate `build --progress never` human row is gone from the launch
+      matrix, because the issue names
+      `missing_ninja_reports_the_documented_summary` as the test that owns that
+      case; the standalone duplicate of the exit summary test is removed,
+      leaving the matrix to cover it;
+    - the `cfg(doctest)` facade is deleted: it was compiled out of the library
+      doctests link against, so it served no doctest, and it had no consumer.
+  - [ ] Re-run the full gate set on this third round of review fixes.
   - [ ] Push and open the draft pull request.
 
 ## Plan of work

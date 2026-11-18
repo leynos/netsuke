@@ -62,6 +62,30 @@ pub(super) fn flatten_localized_text(rendered: &str) -> String {
         .join(" ")
 }
 
+/// Whether text names the generated `netsuke.<random>.ninja` build file.
+///
+/// The `netsuke.` prefix alone is not enough: a temporary directory may
+/// legitimately be called `netsuke.review`, and the diagnostic has to name
+/// that path. The generated file is a path whose final component starts with
+/// `netsuke.` and ends with `.ninja`.
+pub(super) fn names_generated_build_file(text: &str) -> bool {
+    text.split(|character: char| character.is_whitespace() || character == '`')
+        .map(|token| {
+            token.trim_matches(|character: char| {
+                matches!(
+                    character,
+                    '\'' | '"' | ',' | ';' | ':' | '(' | ')' | '[' | ']'
+                )
+            })
+        })
+        .any(|token| {
+            token.contains("netsuke.")
+                && Path::new(token)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("ninja"))
+        })
+}
+
 /// Render the localized missing-manifest diagnostic, code, and help on stderr.
 #[test]
 fn missing_manifest_renders_runner_diagnostic_and_help() -> Result<()> {
@@ -144,8 +168,10 @@ fn assert_spawn_failure_reported(stderr: &str, program: &str) -> Result<()> {
         flattened.contains("netsuke::runner::ninja_spawn_failed"),
         "the launch failure must carry its stable code: {stderr}"
     );
+    let expected =
+        flatten_localized_text(&format!("Could not start the Ninja program `{program}`."));
     ensure!(
-        flattened.contains(&format!("Could not start the Ninja program `{program}`.")),
+        flattened.contains(&expected),
         "the summary must name the attempted program: {stderr}"
     );
     ensure!(
@@ -156,11 +182,8 @@ fn assert_spawn_failure_reported(stderr: &str, program: &str) -> Result<()> {
         flattened.contains("NETSUKE_NINJA"),
         "the help must name the NETSUKE_NINJA override: {stderr}"
     );
-    // The generated build file is named `netsuke.<random>.ninja`, so its
-    // prefix identifies it without rejecting an unrelated `.ninja` component
-    // in a temporary directory path.
     ensure!(
-        !flattened.contains("with build file") && !flattened.contains("netsuke."),
+        !flattened.contains("with build file") && !names_generated_build_file(&flattened),
         "the diagnostic must not name the temporary build file: {stderr}"
     );
     Ok(())
@@ -186,38 +209,39 @@ pub(super) fn first_json_diagnostic(stderr: &str) -> Result<Value> {
         .context("the JSON document must carry the runner diagnostic")
 }
 
-/// Assert the JSON launch diagnostic for `program`.
-fn assert_spawn_failure_json(stderr: &str, program: &str) -> Result<()> {
+/// Assert the JSON launch diagnostic for `program`, caused by `launch_cause`.
+fn assert_spawn_failure_json(stderr: &str, program: &str, launch_cause: &str) -> Result<()> {
     let diagnostic = first_json_diagnostic(stderr)?;
     ensure!(
         string_field(&diagnostic, "code")? == "netsuke::runner::ninja_spawn_failed",
         "the JSON diagnostic must carry its stable code: {stderr}"
     );
+    let expected =
+        flatten_localized_text(&format!("Could not start the Ninja program `{program}`."));
     ensure!(
-        flatten_localized_text(string_field(&diagnostic, "message")?)
-            .contains(&format!("Could not start the Ninja program `{program}`.")),
+        flatten_localized_text(string_field(&diagnostic, "message")?).contains(&expected),
         "the JSON summary must name the attempted program: {stderr}"
     );
+    let help = flatten_localized_text(string_field(&diagnostic, "help")?);
     ensure!(
-        flatten_localized_text(string_field(&diagnostic, "help")?).contains("NETSUKE_NINJA"),
-        "the JSON help must name the NETSUKE_NINJA override: {stderr}"
+        help.contains("Install Ninja and make sure") && help.contains("NETSUKE_NINJA"),
+        "the JSON help must name both remedies: {stderr}"
     );
     let causes = diagnostic
         .get("causes")
         .and_then(Value::as_array)
         .context("the JSON diagnostic must carry its cause chain")?;
     // A non-empty array of nulls would satisfy a length check while carrying
-    // no cause at all. These fixtures deny the program's existence, so the
-    // cause must carry the text the platform's resolver reports for that.
+    // no cause at all, so each fixture states the text the platform reports.
     ensure!(
         causes
             .iter()
             .filter_map(Value::as_str)
-            .any(|cause| cause.contains(absent_program_cause())),
+            .any(|cause| cause.contains(launch_cause)),
         "the launch failure must keep its operating-system cause: {stderr}"
     );
     ensure!(
-        !stderr.contains("with build file") && !stderr.contains("netsuke."),
+        !stderr.contains("with build file") && !names_generated_build_file(stderr),
         "the JSON diagnostic must not name the temporary build file: {stderr}"
     );
     Ok(())
@@ -244,10 +268,13 @@ fn missing_ninja_reports_the_documented_summary() -> Result<()> {
 }
 
 /// Report the launch failure in every rendering mode of both subcommands.
+///
+/// The human `build --progress never` case is owned by
+/// [`missing_ninja_reports_the_documented_summary`], which the issue names, so
+/// this matrix does not repeat it.
 #[rstest]
 #[case("build", "always", false)]
 #[case("build", "always", true)]
-#[case("build", "never", false)]
 #[case("build", "never", true)]
 #[case("clean", "always", false)]
 #[case("clean", "always", true)]
@@ -285,7 +312,7 @@ fn missing_ninja_reports_the_documented_summary_across_modes(
     let stderr = String::from_utf8(output.stderr).context("diagnostic stderr is UTF-8")?;
     let program = missing_ninja_program();
     if json {
-        assert_spawn_failure_json(&stderr, program)
+        assert_spawn_failure_json(&stderr, program, absent_program_cause())
     } else {
         assert_spawn_failure_reported(&stderr, program)
     }
@@ -312,10 +339,22 @@ fn absent_ninja_override_names_the_configured_path() -> Result<()> {
     assert_spawn_failure_reported(&stderr, program)
 }
 
-/// Report a Ninja program that exists but cannot be executed.
+/// Report a Ninja program that exists but cannot be executed, in every mode.
 #[cfg(unix)]
-#[test]
-fn non_executable_ninja_is_reported_as_a_launch_failure() -> Result<()> {
+#[rstest]
+#[case("build", "always", false)]
+#[case("build", "always", true)]
+#[case("build", "never", false)]
+#[case("build", "never", true)]
+#[case("clean", "always", false)]
+#[case("clean", "always", true)]
+#[case("clean", "never", false)]
+#[case("clean", "never", true)]
+fn non_executable_ninja_is_reported_as_a_launch_failure(
+    #[case] subcommand: &str,
+    #[case] progress: &str,
+    #[case] json: bool,
+) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     let temp = workspace_with_minimal_manifest("a non-executable Ninja")?;
@@ -325,22 +364,33 @@ fn non_executable_ninja_is_reported_as_a_launch_failure() -> Result<()> {
     fs::set_permissions(&script, fs::Permissions::from_mode(0o644))
         .context("remove the execute bit from the Ninja file")?;
 
-    let output = run_netsuke(
-        temp.path(),
-        empty_path.path(),
-        Some(&script),
-        &["--progress", "never", "build"],
-    )?;
+    let mut arguments = vec!["--progress", progress];
+    if json {
+        arguments.push("--json");
+    }
+    arguments.push(subcommand);
+    let output = run_netsuke(temp.path(), empty_path.path(), Some(&script), &arguments)?;
     ensure!(
         !output.status.success(),
-        "a build with a non-executable Ninja must fail"
+        "{subcommand} with a non-executable Ninja must fail"
     );
+    if json {
+        ensure!(
+            output.stdout.is_empty(),
+            "a failing JSON run must not write to stdout: {:?}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
     let stderr = String::from_utf8(output.stderr).context("diagnostic stderr is UTF-8")?;
     let program = script.to_str().context("the configured path is UTF-8")?;
-    assert_spawn_failure_reported(&stderr, program)?;
-    ensure!(
-        flatten_localized_text(&stderr).contains("Permission denied"),
-        "the launch failure must preserve the OS cause: {stderr}"
-    );
-    Ok(())
+    if json {
+        assert_spawn_failure_json(&stderr, program, "Permission denied")
+    } else {
+        assert_spawn_failure_reported(&stderr, program)?;
+        ensure!(
+            flatten_localized_text(&stderr).contains("Permission denied"),
+            "the launch failure must preserve the OS cause: {stderr}"
+        );
+        Ok(())
+    }
 }

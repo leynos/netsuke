@@ -107,7 +107,7 @@ runner.context.generate_ninja = Ninja-manifestet kunne ikke genereres.
 runner.context.render_graph = Grafartefaktet kunne ikke gengives.
 runner.help.targets_edges_require_json = Indstillingen --edges kræver --json på øverste niveau.
 runner.ninja.spawn_failed = Kunne ikke starte Ninja-programmet `{ $program }`.
-runner.ninja.spawn_failed.help = Installer Ninja, og sørg for, at `{ $program }` findes på PATH og kan køres, eller angiv NETSUKE_NINJA til stien til en kørbar Ninja.
+runner.ninja.spawn_failed.help = Installer Ninja, og sørg for, at `{ $program }` kan køres, eller angiv NETSUKE_NINJA til stien til en kørbar Ninja.
 runner.ninja.build_failed = Ninja rapporterede en build-fejl { $status }.
 runner.ninja.tool_failed = Ninja-værktøjet `{ $tool }` rapporterede en fejl { $status }.
 

@@ -13723,9 +13723,8 @@ the keyword list rather than adding a second redaction path if new sensitive
 arguments appear.
 
 The module's doc examples are marked `ignore`. `CommandArg` and the helpers are
-crate-private, and the `cfg(doctest)` re-export in `runner::process::doc` is
-compiled out of the library that doctests link against, so no doctest can
-import them. Behaviour is covered by the unit tests in the module instead.
+crate-private, so a doctest, which compiles as a separate crate, cannot import
+them. Behaviour is covered by the unit tests in the module instead.
 
 ### Module: `runner` target selection
 

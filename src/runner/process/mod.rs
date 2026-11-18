@@ -71,10 +71,6 @@ struct CommandExecutionContext<'a, Clock> {
     command_list_targets: Option<&'a CommandListTargetIndex>,
 }
 
-// Doctests reach `pub(crate)` items through this module; see `doc.rs`.
-#[cfg(doctest)]
-pub mod doc;
-
 /// Spawn and stream a prepared command, converting a failed exit into an error.
 ///
 /// # Errors

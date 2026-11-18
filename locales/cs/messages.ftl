@@ -107,7 +107,7 @@ runner.context.generate_ninja = Manifest Ninja se nepodařilo vytvořit.
 runner.context.render_graph = Artefakt grafu se nepodařilo vykreslit.
 runner.help.targets_edges_require_json = Volba --edges vyžaduje --json na nejvyšší úrovni.
 runner.ninja.spawn_failed = Nepodařilo se spustit program Ninja `{ $program }`.
-runner.ninja.spawn_failed.help = Nainstalujte Ninja a ujistěte se, že `{ $program }` existuje v PATH a je spustitelný, nebo nastavte NETSUKE_NINJA na cestu ke spustitelnému souboru Ninja.
+runner.ninja.spawn_failed.help = Nainstalujte Ninja a ujistěte se, že `{ $program }` je spustitelný, nebo nastavte NETSUKE_NINJA na cestu ke spustitelnému souboru Ninja.
 runner.ninja.build_failed = Ninja ohlásil selhání sestavení { $status }.
 runner.ninja.tool_failed = Nástroj Ninja `{ $tool }` ohlásil selhání { $status }.
 
