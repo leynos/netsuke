@@ -27,12 +27,16 @@ fn assert_policy_accepts<T>(spelling: &str, expected: &T)
 where
     T: DeserializeOwned + PartialEq + std::fmt::Debug,
 {
-    let from_json: T = serde_json::from_value(serde_json::Value::from(spelling))
-        .unwrap_or_else(|error| panic!("{spelling:?} should deserialize from JSON: {error}"));
+    let from_json: T = match serde_json::from_value(serde_json::Value::from(spelling)) {
+        Ok(value) => value,
+        Err(error) => panic!("{spelling:?} should deserialize from JSON: {error}"),
+    };
     assert_eq!(&from_json, expected, "JSON spelling {spelling:?}");
 
-    let from_toml: PolicyField<T> = toml::from_str(&format!("value = {spelling:?}\n"))
-        .unwrap_or_else(|error| panic!("{spelling:?} should deserialize from TOML: {error}"));
+    let from_toml: PolicyField<T> = match toml::from_str(&format!("value = {spelling:?}\n")) {
+        Ok(value) => value,
+        Err(error) => panic!("{spelling:?} should deserialize from TOML: {error}"),
+    };
     assert_eq!(&from_toml.value, expected, "TOML spelling {spelling:?}");
 }
 

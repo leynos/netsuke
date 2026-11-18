@@ -11,8 +11,10 @@ use std::ffi::{OsStr, OsString};
 
 /// Interpret one environment entry through the real `parse_entry` seam.
 fn parse(key: &str, value: &str) -> Value {
-    let parsed = parse_entry(OsStr::new(key), OsStr::new(value))
-        .unwrap_or_else(|error| panic!("{key:?} should parse: {error}"));
+    let parsed = match parse_entry(OsStr::new(key), OsStr::new(value)) {
+        Ok(parsed) => parsed,
+        Err(error) => panic!("{key:?} should parse: {error}"),
+    };
     let Some((_, parsed_value)) = parsed else {
         panic!("{key:?} should be a Netsuke configuration key");
     };
