@@ -62,16 +62,20 @@ fn quote_for_recipe(
     encode_one(dialect, text)
 }
 
-/// The most encoded bytes `shell_join` will build before failing.
+/// The most encoded bytes `shell_join` retains before failing.
 ///
 /// A manifest can repeat a reference to one generated string, so the sequence a
-/// filter sees need not correspond to the text an author wrote. This ceiling
-/// bounds the native memory one `shell_join` call can commit. It is separate
-/// from the manifest-wide budgets in ADR-0050: those bound rendered output,
-/// whereas this bounds a filter's intermediate buffer, which rendering has not
-/// reached yet. It is a fixed constant rather than a `StdlibConfig` field
-/// because the query surface must stay hermetic (ADR-0044) and a host-supplied
-/// budget would change rendered text between machines.
+/// filter sees need not correspond to the text an author wrote. The ceiling
+/// bounds the accepted encoded output, not the peak transient allocation: a
+/// rejected `Sh` member can grow the buffer to
+/// `3 * SHELL_JOIN_MAX_ENCODED_BYTES + 1` before the post-check truncates it,
+/// `shell-quote` copies that member into its own scratch buffer, and a `Vec`'s
+/// capacity need not match its length. It is separate from the manifest-wide
+/// budgets in ADR-0050: those bound rendered output, whereas this bounds a
+/// filter's intermediate buffer, which rendering has not reached yet. It is a
+/// fixed constant rather than a `StdlibConfig` field because the query surface
+/// must stay hermetic (ADR-0044) and a host-supplied budget would change
+/// rendered text between machines.
 pub(crate) const SHELL_JOIN_MAX_ENCODED_BYTES: usize = 1024 * 1024;
 
 /// Encode every member of a sequence as its own shell word.
@@ -114,16 +118,18 @@ fn join_sequence(dialect: ShellDialect, value: &Value) -> Result<String, Error> 
     Ok(shell_word::encoded_bytes_to_string(joined))
 }
 
-/// Append one encoded member and its separator, or fail without growing past
-/// the ceiling.
+/// Append one encoded member and its separator, or fail without retaining more
+/// than the ceiling.
 ///
-/// The pre-check uses a lower bound so an element that cannot fit is rejected
-/// before it is encoded; without it, one oversized member would be materialised
-/// in full before the budget could object. The post-check then enforces the
-/// ceiling on what the encoder actually produced, which for `Sh` can be up to
-/// three times the pre-check estimate. Truncating to `before` discards both the
-/// separator and the member, so a failed call retains nothing past the last
-/// accepted member.
+/// The pre-check uses a lower bound so an element whose lower bound cannot fit
+/// is rejected before it is encoded; without it, one oversized member would be
+/// materialised in full before the budget could object. That settles the
+/// question exactly for PowerShell, whose encoder is fixed-shape, but `Sh` can
+/// emit up to three bytes per input byte, so a member that passes the lower
+/// bound can still encode past the ceiling; the post-check then truncates the
+/// buffer and rejects it. Truncating to `before` discards both the separator
+/// and the member, so a failed call retains nothing past the last accepted
+/// member.
 fn append_encoded(
     dialect: ShellDialect,
     text: &str,

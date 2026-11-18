@@ -293,9 +293,13 @@ bounded by `3 * SHELL_JOIN_MAX_ENCODED_BYTES + 1`.
 The dependency records one further allocation: `shell-quote` 0.7.2's
 `quote_into_vec` first copies the member into an internal scratch vector before
 writing the encoded bytes, so encoding costs a second buffer proportional to
-that one member. It is not reachable by the amplification in this finding,
-because the pre-check rejects a member that cannot fit before the encoder sees
-it, and it disappears with the call.
+that one member. The repetition in this finding does not amplify it, because
+the scratch copy exists only while one member is encoded and is released when
+the call returns. The pre-check does not make it unreachable: it rejects only
+members whose *lower bound* cannot fit, and a `Sh` member whose lower bound
+fits can still encode past the ceiling, so the scratch copy may belong to a
+member the post-check then rejects. Its size is still bounded by the one member
+being encoded.
 
 ## References
 
