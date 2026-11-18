@@ -194,12 +194,12 @@ ir.multiple_rules = 대상 '{ $target }'은(는) 규칙 하나만 참조해야 �
 ir.empty_rule = 대상 '{ $target }'은(는) 규칙을 참조해야 합니다.
 ir.duplicate_outputs = 중복된 출력이 발견되었습니다: { $outputs }.
 ir.circular_dependency = 순환 의존성이 발견되었습니다: { $cycle }.
-ir.action_serialisation = 동작을 직렬화하지 못했습니다: { $details }.
+ir.action_serialisation = 작업을 직렬화하지 못했습니다: { $details }.
 ir.invalid_command = 명령의 보간이 잘못되었습니다: { $snippet }.
 ir.ambiguous_substitution_boundary = { $position }번째 문자에서 명령 치환 경계가 모호합니다. 치환의 닫는 괄호를 뒤따르는 '#'과 분리하세요.
 
 # Ninja 생성 오류.
-ninja_gen.missing_action = 빌드 간선이 참조하는 동작 '{ $id }'이(가) 없습니다.
+ninja_gen.missing_action = 빌드 간선이 참조하는 작업 '{ $id }'이(가) 없습니다.
 ninja_gen.console_dependency_only = 빌드 간선 ‘{ $output }’은(는) 콘솔 풀을 선택할 수 없습니다. 작업이 종속성만으로 이루어져 있기 때문입니다.
 ninja_gen.console_pool_conflict = 빌드 간선 ‘{ $output }’은(는) 콘솔 풀을 선택하지만 작업은 사용자 지정 풀 ‘{ $pool }’을(를) 요청합니다.
 ninja_gen.format = Ninja 매니페스트 출력의 서식을 지정하지 못했습니다.
