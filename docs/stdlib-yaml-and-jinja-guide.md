@@ -170,8 +170,8 @@ while on Windows the open declines to traverse the reparse point, so the
 refusal comes from the opened handle and reuses the not-a-regular-file
 diagnostic. On Unix the refusal is stated to both the kernel flag and cap-std's
 logical resolver policy, so it also holds on macOS and on any host where
-`openat2` is unavailable and the path is resolved one component at a time.
-That Windows refusal covers every reparse tag, not only symlinks, and a
+`openat2` is unavailable and the path is resolved one component at a time. That
+Windows refusal covers every reparse tag, not only symlinks, and a
 relative-target link is the supported opt-in case. Two optional keyword
 arguments narrow a call:
 
@@ -179,9 +179,9 @@ arguments narrow a call:
   budget is clamped to it). Example:
   `{{ 'fixtures/big.bin' | contents(max_bytes=1024) }}`.
 - `follow_symlinks=true` waives that final-component refusal. The link must be
-  the final component and its target must be relative; a directory component
-  in the middle of the path is resolved by the capability that anchors the
-  read, not waived by this argument. Example:
+  the final component and its target must be relative; a directory component in
+  the middle of the path is resolved by the capability that anchors the read,
+  not waived by this argument. Example:
   `{{ 'version.txt' | contents(follow_symlinks=true) }}`.
 
 See

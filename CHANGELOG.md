@@ -129,8 +129,7 @@
   logical `FollowSymlinks` policy, whose default is `Yes`, so on macOS and on
   Linux hosts without `openat2` the target was dereferenced and read despite
   `follow_symlinks: false`. Both the policy and the platform flag now refuse
-  the link (CWE-59)
-  ([#1009](https://github.com/leynos/netsuke/issues/1009))
+  the link (CWE-59) ([#1009](https://github.com/leynos/netsuke/issues/1009))
 
 <!-- markdownlint-disable-next-line MD024 -->
 ### Fixed

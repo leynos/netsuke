@@ -1790,16 +1790,15 @@ Implementation notes:
 - The Unix refusal is set in two places, and both are required. The
   `open_file_checked` builder also calls `OpenOptionsFollowExt::follow` with
   `FollowSymlinks::No` whenever `follow_symlinks` is false, because cap-std has
-  two resolution paths. Linux normally resolves the whole path in
-  `openat2`, where the kernel's `O_NOFOLLOW` bit is decisive. macOS, Linux
-  before 5.6, and any host whose security policy refuses `openat2` make
-  cap-std's manual resolver walk one component at a time, and that resolver
-  dereferences the final component from the logical `FollowSymlinks` policy
-  rather than from the raw flag bits. Setting only the flag left the policy at
-  its `Yes` default, so the manual resolver read the link target despite
-  `follow_symlinks=false` (issue #1009). The logical policy is
-  platform-neutral, so the same builder states it on Windows too, where the
-  open flags are separate.
+  two resolution paths. Linux normally resolves the whole path in `openat2`,
+  where the kernel's `O_NOFOLLOW` bit is decisive. macOS, Linux before 5.6, and
+  any host whose security policy refuses `openat2` make cap-std's manual
+  resolver walk one component at a time, and that resolver dereferences the
+  final component from the logical `FollowSymlinks` policy rather than from the
+  raw flag bits. Setting only the flag left the policy at its `Yes` default, so
+  the manual resolver read the link target despite `follow_symlinks=false`
+  (issue #1009). The logical policy is platform-neutral, so the same builder
+  states it on Windows too, where the open flags are separate.
 - On Windows the default policy asks the open itself not to traverse a reparse
   point and then refuses the opened handle when it carries
   `FILE_ATTRIBUTE_REPARSE_POINT`; that refuses symlinks, junctions, volume
