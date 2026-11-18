@@ -11637,9 +11637,17 @@ behaviour.
 
 `src/cli/discovery/layers/user_candidate.rs` loads those candidates before the
 dependency's own walk. An absent candidate is skipped, a load error is returned
-immediately, and the first successful chain becomes the base layers. Only when
-no user candidate exists does `layers/mod.rs::first_automatic_chain` run, which
-is what still reaches system scope and the project roots.
+immediately, and the first successful chain that is not the project
+configuration becomes the base layers. A candidate that is the project
+configuration — `$HOME/.netsuke.toml` when the tool runs from `$HOME`, or any
+user location that resolves to the project file — is refused rather than
+adopted: adoption returns before the dependency's scan loads the system layers,
+so a system `env_block_var` or `fetch_default_deny` restriction would stop
+applying to a file the project itself controls. The refusal is decisive, so a
+project file cannot promote a lower-priority user file over the system layers.
+When no usable user candidate exists, `layers/mod.rs::first_automatic_chain`
+runs, which is what still reaches system scope and the project roots and then
+appends the project chain.
 
 The dependency filters only empty base values, so its own scan would still
 resolve a relative one against the working directory. The fallback therefore
@@ -11660,12 +11668,14 @@ probes a candidate that did not load with `candidate_entry_metadata`, which
 opens the candidate's parent directory through `cap_std` and stats the entry
 without following it. A genuinely absent path stays `NotFound` and is skipped,
 a link whose target exists never reaches the probe because the chain loads, and
-a path that still exists without having loaded fails discovery. Authority
-assignment is unchanged: a base chain whose last layer is the project file
-stays project-scoped, so a `$HOME/.netsuke.toml` that is also the project
-configuration keeps its existing project quarantine instead of gaining operator
-authority. Reading the user scope first changes which candidates are
-considered, not how a loaded file is trusted.
+a path that still exists without having loaded fails discovery. The same
+identity test bounds adoption: `candidate_is_trusted` resolves the candidate
+before comparing it with the classified project key, so a home directory
+reached through a link is recognized as the same file. A false answer means the
+pass does not adopt the candidate at all; the project pass loads it with its
+existing project quarantine, and the system layers still load. Reading the user
+scope first changes which candidates are considered, not how a loaded file is
+trusted.
 
 Discovery reports that decision through bounded telemetry. Adopting a user
 candidate emits a `debug!` event with `scope = "user"`,

@@ -1018,6 +1018,16 @@ review their fetch and `env_allow_var` policy and move any restriction they
 still require into the user file or into another layer they trust, since a
 restriction left only in the system file no longer takes effect.
 
+That advice does not apply to a user location that is also the project
+configuration: `$HOME/.netsuke.toml` when `netsuke` runs from `$HOME`, or a
+user candidate that resolves to the project file. Netsuke does not adopt such a
+candidate as the user scope, so it does not replace the system file. The system
+file's `env_block_var` and `fetch_default_deny` restrictions keep applying, and
+the project file is appended as project configuration. Its own `env_allow_var`
+and fetch allow entries remain quarantined as project policy, so an allowlist
+that must restrict environment reads belongs in the system file or in a user
+file that is not the project configuration.
+
 A user file that exists but cannot be loaded now stops discovery; it no longer
 falls back to a system file. That covers malformed TOML, an `extends` parent
 that does not exist, and a symbolic link whose target is missing. The reported
