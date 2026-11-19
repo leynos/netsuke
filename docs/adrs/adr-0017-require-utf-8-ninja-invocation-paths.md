@@ -24,7 +24,7 @@ adapter owns command construction. Existing error-wrapping conventions also
 distinguish encoding failures at their boundary, including `ResolveError`, the
 `RUNNER_*_UTF8` keys and the `MANIFEST_*_NON_UTF8` keys.
 
-`src/cli/discovery/paths/mod.rs` is a deliberate `std::path` carve-out. It must
+`src/cli/discovery/paths.rs` is a deliberate `std::path` carve-out. It must
 inspect host-provided discovery paths, whose encoding Netsuke cannot constrain.
 Child-process environment payloads likewise remain `OsStr` and `OsString`
 because environment-variable values genuinely need not be UTF-8.
@@ -77,6 +77,14 @@ already-removed `prepend_dir_to_path` helper, so it requires no migration.
   partial migration would create inconsistent conventions in one module.
 - **Continue accepting non-UTF-8 build paths.** Rejected because it leaves
   support accidental and diagnostics dependent on arbitrary downstream code.
+
+## Addendum — 2026-11-19
+
+The carve-out named above moved when `src/cli/discovery/paths.rs` became
+`src/cli/discovery/paths/mod.rs` with a `paths/sanitised.rs` sibling, so the
+decision now applies to both files. The split separates the path helpers from
+the environment view that shares the base-validity predicate with them; the
+`std::path` rationale and the Accepted status are unchanged.
 
 ## Implementation references
 

@@ -12159,6 +12159,20 @@ the system candidates too. Skipping the candidate loses nothing: the project
 pass loads the same chain with the project quarantine and appends it after the
 system layers.
 
+`layers/project_key.rs::ProjectKey::classify_candidate` answers that comparison
+with a closed three-state result rather than a boolean. `Project` means the
+candidate resolves to, or literally spells, the project file. `Other` means it
+provably names a different file. `Unresolved` means it neither resolved nor
+matched literally, so it cannot be ruled out as the project file. The skip
+accepts only `Project`, and `candidate_is_trusted` grants authority only to
+`Other`: an unresolvable candidate still loads, but its chain cannot donate
+operator authority, which is the same fail-closed rule `is_ambiguous` applies
+to the key. Only the literal-spelling case is still identified when resolution
+fails, because the candidate's own text is evidence rather than doubt. The
+normalizer is passed in from `collect_file_layers_with_normalizer_and_trace`
+through `automatic_base_layers` and `first_automatic_chain`, so the key and the
+candidates are compared through the same resolution seam.
+
 The dependency filters only empty base values, so its own scan would still
 resolve a relative one against the working directory. The fallback therefore
 receives `paths/sanitised.rs::SanitisedUserBases`, an `EnvSource` view that

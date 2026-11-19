@@ -218,7 +218,7 @@ makes its failure branch testable rather than in the path module. The
 2026-11-16 addendum's references to `paths::candidate_entry_metadata` and
 `paths::SanitisedUserBases` name those helpers before this split.
 
-## Amendment — 2026-11-19: the fallback scan skips a refused candidate
+## Amendment — 2026-11-19: refused candidates and unresolved identity
 
 The 2026-11-18 amendment made the refusal decisive and relied on the dependency
 scan to compose the system file with the project chain. That holds only while
@@ -244,8 +244,21 @@ system layers.
 the layout end to end, requiring a system `env_block_var` entry to keep
 blocking while the project value still applies.
 
+Candidate identity is now a closed answer rather than a boolean.
+[`classify_candidate`] returns `Project`, `Other`, or `Unresolved`: a candidate
+that neither resolves nor literally spells the key is *unresolved*, not a
+silent miss. Collapsing it into a miss would have granted operator authority on
+an identity that could not be established, which is the same trust upgrade the
+key's ambiguity flag already refuses. The skip accepts only `Project`, because
+skipping an unresolved candidate could drop an ordinary user chain, while
+[`candidate_is_trusted`] accepts only `Other`, so an unresolvable candidate
+still loads but cannot donate authority. The normalizer is also injected from
+the caller that classified the key instead of being constructed inside the
+predicate, so both comparisons resolve through one seam.
+
 [`first_automatic_chain`]: ../../src/cli/discovery/layers/mod.rs
 [`is_refused_user_candidate`]: ../../src/cli/discovery/layers/mod.rs
+[`classify_candidate`]: ../../src/cli/discovery/layers/project_key.rs
 
 ## Related documents
 
