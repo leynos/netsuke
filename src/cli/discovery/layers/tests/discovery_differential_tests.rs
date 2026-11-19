@@ -70,7 +70,9 @@ fn restricted_outcome(
     discovery: &ConfigDiscovery,
     project_key: Option<&ProjectKey>,
 ) -> Result<FlatLayers, String> {
-    first_automatic_chain(discovery, project_key)
+    // These cases reach the project file only through a project root, so no
+    // user-scope candidate needs skipping: the walk still mirrors ortho's.
+    first_automatic_chain(discovery, project_key, &[])
         .map(|(layers, _)| flatten(layers))
         .map_err(|error| error.to_string())
 }
