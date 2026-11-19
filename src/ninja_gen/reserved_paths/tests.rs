@@ -19,6 +19,8 @@ use rstest::rstest;
 #[case("./.netsuke/phony/force", true)]
 #[case("out/../.netsuke/phony/force", true)]
 #[case("out/./../.netsuke/serial/x", true)]
+#[case(".netsuke/phony/.", true)]
+#[case(".netsuke/phony/..", false)]
 #[case(".netsuke", false)]
 #[case(".netsuke/phoney/force", false)]
 #[case(".netsuke/phonyx", false)]
@@ -83,11 +85,15 @@ proptest! {
         prop_assert!(!is_reserved_path(&path), "{path} must not be reserved");
     }
 
-    /// Appending any non-empty name inside a namespace keeps it reserved.
+    /// Appending a filename inside a namespace keeps it reserved.
+    ///
+    /// The strategy starts with a name character, so it never produces the
+    /// navigation components `.` and `..`; those are not descendants and have
+    /// their own cases in the table above.
     #[test]
     fn every_descendant_of_a_namespace_is_reserved(
         namespace in prop::sample::select(vec![".netsuke/phony", ".netsuke/serial", ".netsuke/dyndep"]),
-        leaf in "[a-zA-Z0-9_.-]{1,12}",
+        leaf in "[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,11}",
     ) {
         let path = Utf8PathBuf::from(format!("{namespace}/{leaf}"));
         prop_assert!(is_reserved_path(&path), "{path} must be reserved");

@@ -62,7 +62,10 @@ decision that added the label.
 
 ## Expect phony and always work to run
 
-No manifest needs an edit, but two shapes now behave as their names promised.
+No manifest needs an edit for these two shapes, but they now behave as their
+names promised. One reservation is new: a manifest that already declares a
+target or output inside `.netsuke/phony` must move it, because that spelling
+now names generated state and generation rejects it.
 
 An action or target declaring `phony: true` with a recipe runs every time it is
 reached, even when a file or directory of that name exists. Previously such a

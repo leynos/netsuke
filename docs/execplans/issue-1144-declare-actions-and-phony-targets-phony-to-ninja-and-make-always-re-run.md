@@ -277,10 +277,16 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   surviving components, never a rebuilt `Utf8PathBuf`, so the match is
   independent of the platform separator. A path that is absolute, carries a
   prefix, or climbs above its root is not treated as reserved.
-- The reset opens `.netsuke` and `.netsuke/phony` only after inspecting each
-  with `stat(..., FollowSymlinks::No)`, and refuses either component when it is
-  a symbolic link or not a directory. Removal happens through that verified
-  handle, so a link cannot redirect a recursive delete outside the namespace.
+- The reset inspects `.netsuke` and `.netsuke/phony` with
+  `stat(..., FollowSymlinks::No)` and refuses either component when it is a
+  symbolic link or not a directory. The open that follows uses
+  `cap_primitives::fs::open_dir_nofollow`, which refuses a link as the final
+  component itself — `O_NOFOLLOW` on Unix, a reparse-point check on the opened
+  handle on Windows — so a link swapped in after the inspection fails the open
+  instead of yielding a handle that points elsewhere. Removal happens through
+  that verified handle, so a link cannot redirect a recursive delete outside
+  the namespace. A test pins the primitive's refusal, so a dependency change
+  that dropped it fails rather than silently weakening the reset.
 - Both cleanup contexts are localized Fluent keys carrying `$path`
   (`runner.io.phony.inspect` and `runner.io.phony.reset`), and the refusal uses
   `io::ErrorKind::NotADirectory` rather than authored English prose.
@@ -321,15 +327,16 @@ Verification that has actually run: the generation-side suite in
 The commit gates were then run as one sequential batch on the final tree.
 `make check-fmt`, `make lint`, `make typecheck`, `make doc-coverage`,
 `make markdownlint`, `make nixie`, `make test-workflow-contracts` and
-`NETSUKE_REQUIRE_NINJA=1 make test` each exited 0; the test gate ran all 6102
+`NETSUKE_REQUIRE_NINJA=1 make test` each exited 0; the test gate ran all 6107
 nextest cases with 9 environment-gated skips and passed every doctest target.
 Doc-comment coverage measured 98% against the 80% threshold.
 
-Two earlier drafts recorded 6050 and 6065 cases. Both were real measurements of
-earlier trees: the first before the runtime and generation suites added for
-this change were in the same batch, the second before the third review's alias
-tests existed. A count belongs to the tree its batch ran on, so 6102 is the
-figure for the tree that ships.
+Earlier drafts recorded 6050, 6065 and 6102 cases. Each was a real measurement
+of an earlier tree: the first before the runtime and generation suites added
+for this change were in the same batch, the second before the third review's
+alias tests existed, and 6102 before the fourth review's namespace-open and
+outside-link tests were added. A count belongs to the tree its batch ran on, so
+6107 is the figure for the tree that ships.
 
 The first review then raised shape questions the generation tests could not
 answer, and the fixes changed executable behaviour:
@@ -362,16 +369,30 @@ all of it is addressed:
   declared that exact path under another spelling. It now resolves every
   declared path against the canonical working directory and refuses the reset
   when one lands in a reserved namespace.
-  `src/ninja_gen/reserved_paths/tests.rs` pins the pure folding, and
-  `src/runner/phony_state/tests.rs` covers an absolute alias, a `..` re-entry,
-  a symbolic-link alias, an unrelated path, and properties that derive the
-  expected answer from the workspace. One property states the converse
-  explicitly: `../<workspace>/...` re-enters the workspace, so an above-root
-  path is not automatically safe.
+  `src/ninja_gen/reserved_paths/tests.rs` pins the pure folding, and the
+  `src/runner/phony_state/tests` module covers an absolute alias, a `..`
+  re-entry, a symbolic-link alias, a declared link whose target lies outside
+  the workspace, an unrelated path, and properties that derive the expected
+  answer from the workspace. One property states the converse explicitly:
+  `../<workspace>/...` re-enters the workspace, so an above-root path is not
+  automatically safe. A further test pins
+  `cap_primitives::fs::open_dir_nofollow` refusing a link as the final
+  component, which is the guarantee the reset's TOCTOU argument rests on.
+
 - The v0.1.0 migration guide gained the phony and always notice and names
   `.netsuke/phony` in its reserved-namespace paragraph.
 - The developers' guide records the `src/runner/phony_state` boundary, and
   ADR-0084 carries an amendment for the alias guard.
+
+The fourth review confirmed the lowering and raised four more points, all
+addressed: the two namespace opens are covered at both components and the
+reset's doc comment now states the primitive's own refusal rather than claiming
+the inspection alone protects the delete; a declared absolute link whose target
+lies outside the workspace is refused by resolving the parent and keeping the
+entry name; the runtime test file moved its manifests under `tests/data/` to
+stay within the 400-line limit; and both migration guides qualify "no manifest
+needs an edit" for a manifest that already declares a path inside
+`.netsuke/phony`.
 
 Retrospective: the largest avoidable detour was diagnosing two failing text
 assertions whose premises were wrong rather than whose implementation was. One

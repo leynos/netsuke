@@ -1,0 +1,9 @@
+netsuke_version: '1.0.0'
+actions:
+  - name: check
+    command: echo run >> runs.log
+targets:
+  - name: stamp
+    always: true
+    command: echo run >> runs.log; echo stamp > stamp
+defaults: [check, stamp]
