@@ -12163,15 +12163,19 @@ system layers.
 with a closed three-state result rather than a boolean. `Project` means the
 candidate resolves to, or literally spells, the project file. `Other` means it
 provably names a different file. `Unresolved` means it neither resolved nor
-matched literally, so it cannot be ruled out as the project file. The skip
-accepts only `Project`, and `candidate_is_trusted` grants authority only to
-`Other`: an unresolvable candidate still loads, but its chain cannot donate
-operator authority, which is the same fail-closed rule `is_ambiguous` applies
-to the key. Only the literal-spelling case is still identified when resolution
-fails, because the candidate's own text is evidence rather than doubt. The
-normalizer is passed in from `collect_file_layers_with_normalizer_and_trace`
-through `automatic_base_layers` and `first_automatic_chain`, so the key and the
-candidates are compared through the same resolution seam.
+matched literally, so it cannot be ruled out as the project file.
+`ProjectIdentity` pairs the classified key with the normalizer that produced
+it, so the key and a candidate cannot be compared through different views of
+the filesystem. Its `candidate_is_project_file` accepts only `Project`, which
+is the skip, and its `candidate_is_trusted` grants authority only to `Other`:
+an unresolvable candidate still loads, but its chain cannot donate operator
+authority, which is the same fail-closed rule `is_ambiguous` applies to the
+key. Only the literal-spelling case is still identified when resolution fails,
+because the candidate's own text is evidence rather than doubt. The identity is
+constructed in `collect_file_layers_with_normalizer_and_trace` from the
+normalizer that classified the key, and travels through `automatic_base_layers`
+and `first_automatic_chain`, so every candidate is resolved through the seam
+that classified the key.
 
 The dependency filters only empty base values, so its own scan would still
 resolve a relative one against the working directory. The fallback therefore
@@ -12199,13 +12203,13 @@ loaded fails discovery. The suite drives the two answers a directory cannot
 produce on demand — an entry the loader skipped and an inspection that failed —
 through a scripted `CandidateProbe`, and pins the production helper's error arm
 against a real parent that is not a directory. The same identity test bounds
-adoption: `candidate_is_trusted` resolves the candidate before comparing it
-with the classified project key through `ProjectKey::matches_candidate`, so a
-home directory reached through a link is recognized as the same file. A false
-answer means the pass does not adopt the candidate at all; the project pass
-loads it with its existing project quarantine, and the system layers still
-load. Reading the user scope first changes which candidates are considered, not
-how a loaded file is trusted.
+adoption: `ProjectIdentity::candidate_is_trusted` resolves the candidate before
+comparing it with the classified project key through
+`ProjectKey::classify_candidate`, so a home directory reached through a link is
+recognized as the same file. A false answer means the pass does not adopt the
+candidate at all; the project pass loads it with its existing project
+quarantine, and the system layers still load. Reading the user scope first
+changes which candidates are considered, not how a loaded file is trusted.
 
 Both passes retain their decisions for replay. `UserScopeTrace` records whether
 the user pass adopted a candidate or fell back, `ProjectScopeTrace` records

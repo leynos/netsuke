@@ -7,9 +7,8 @@ use super::super::super::super::paths::{
     FailingPathNormalizer, FsPathNormalizer, UnreadablePathNormalizer,
 };
 use super::super::super::super::project_policy::RootAuthority;
-use super::super::super::{
-    CandidateIdentity, ProjectKey, ScopedFileLayer, scope_discovered_occurrence,
-};
+use super::super::super::project_key::CandidateIdentity;
+use super::super::super::{ProjectKey, ScopedFileLayer, scope_discovered_occurrence};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use ortho_config::MergeLayer;

@@ -10,10 +10,10 @@
 use super::probe::{Answer, ScriptedProbe};
 use super::{Case, HomeArrangement, canonical, write_config};
 use crate::cli::discovery::discovery_env_source;
-use crate::cli::discovery::layers::ProjectKey;
 use crate::cli::discovery::layers::user_candidate::{
     AutomaticLayers, CandidateEntry, UserScopeTrace, automatic_base_layers_with_probe,
 };
+use crate::cli::discovery::layers::{ProjectIdentity, ProjectKey};
 use crate::cli::discovery::paths::{FailingPathNormalizer, FsPathNormalizer, PathNormalizer};
 use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
@@ -70,8 +70,7 @@ fn run_with_normalizer(
         &probe,
         directory,
         discovery_env_source(env),
-        normalizer,
-        project_key,
+        ProjectIdentity::new(normalizer, project_key),
     )
 }
 

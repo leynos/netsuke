@@ -204,7 +204,7 @@ The users' guide and the migration guide state the resulting behaviour, and
 end by requiring a system `env_block_var` entry to keep blocking while the
 project value still applies.
 
-[`candidate_is_trusted`]: ../../src/cli/discovery/layers/user_candidate/mod.rs
+[`candidate_is_trusted`]: ../../src/cli/discovery/layers/project_key.rs
 
 ## Amendment — 2026-11-19
 
@@ -251,14 +251,16 @@ silent miss. Collapsing it into a miss would have granted operator authority on
 an identity that could not be established, which is the same trust upgrade the
 key's ambiguity flag already refuses. The skip accepts only `Project`, because
 skipping an unresolved candidate could drop an ordinary user chain, while
-[`candidate_is_trusted`] accepts only `Other`, so an unresolvable candidate
-still loads but cannot donate authority. The normalizer is also injected from
-the caller that classified the key instead of being constructed inside the
+`ProjectIdentity::candidate_is_trusted` accepts only `Other`, so an
+unresolvable candidate still loads but cannot donate authority. The normalizer
+is also carried by the [`ProjectIdentity`] that pairs it with the key, from the
+caller that classified the key, instead of being constructed inside the
 predicate, so both comparisons resolve through one seam.
 
 [`first_automatic_chain`]: ../../src/cli/discovery/layers/mod.rs
 [`is_refused_user_candidate`]: ../../src/cli/discovery/layers/mod.rs
 [`classify_candidate`]: ../../src/cli/discovery/layers/project_key.rs
+[`ProjectIdentity`]: ../../src/cli/discovery/layers/project_key.rs
 
 ## Related documents
 
