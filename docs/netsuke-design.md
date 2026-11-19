@@ -4559,13 +4559,13 @@ uploads disabled through the separate `should_upload_workflow_artifacts`
 output. The composite pins the `WixToolset.UI.wixext` extension to v6 to match
 the WiX v6 CLI and avoid the `WIX6101` incompatibility seen with the legacy v4
 bundle. The installer uses WiX v4 syntax, installs per-machine, and presents
-the minimal UI appropriate for a CLI tool. Windows does not modify the PATH, so
-users must add the installation directory manually if they want global command
-resolution. The Unix manual page remains in the staged artefacts for parity
-with the other platforms but is not bundled into the installer to avoid
-shipping an inaccessible help format. Windows PowerShell help is staged as
-sidecar release artefacts in the `Netsuke` module layout so users can inspect
-it with `Get-Help Netsuke -Full`.
+the minimal UI appropriate for a CLI tool. The package installs under
+`C:\Program Files\netsuke`, and Windows does not modify the PATH, so users must
+add that directory manually if they want global command resolution. The Unix
+manual page remains in the staged artefacts for parity with the other platforms
+but is not bundled into the installer to avoid shipping an inaccessible help
+format. Windows PowerShell help is staged as sidecar release artefacts in the
+`Netsuke` module layout so users can inspect it with `Get-Help Netsuke -Full`.
 
 The MSI keeps a stable WiX `UpgradeCode` for the release family while WiX
 generates a fresh `ProductCode` for each package. Since Windows Installer
@@ -4576,6 +4576,28 @@ prevents an older beta from replacing a later beta or final release. Installer
 package tests validate the WiX authoring and workflow wiring statically; the
 repository has no local `msiexec` end-to-end harness, so install and upgrade
 execution remains a Windows packaging workflow concern.
+
+The install root is `ProgramFiles6432Folder`, which resolves to the native
+program files directory for the x64 and Arm64 packages the release builds. The
+authoring previously used `ProgramFilesFolder`, whose WiX v4 meaning is always
+the 32-bit directory; a 64-bit binary therefore landed under
+`C:\Program Files (x86)\netsuke` from v0.1.0-beta4 onwards. Moving the
+executable changes its component's key path, and Windows Installer requires a
+new component GUID for a relocated component, so the beta4 GUID is retired and
+must not be reused. The registry value carrying the release rank stays at its
+original location, because an older MSI compares its own rank against whatever
+it finds there before allowing the replacement.
+
+The move leaves two upgrade consequences that the installer cannot fix itself.
+The beta4 directory is removed only once nothing remains in it, so a user who
+upgraded still sees a stale `PATH` entry pointing at the old location until it
+is removed by hand or the directory disappears, and Windows never rewrites
+`PATH` during an install or an upgrade. The users' guide therefore documents two
+`PATH` setups: one resolving the native directory for beta5 and later, and one
+resolving the 32-bit directory for the linked v0.1.0-beta4 MSI, which still
+installs there. The documentation contracts pin both examples, and the Windows
+job executes them against a temporary install tree so that a script which reads
+correctly but cannot write the user environment fails the build.
 
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. The same composite action interprets the TOML

@@ -4979,7 +4979,8 @@ console before anything else.
 Register every intentional Ubicloud label in
 [`.github/actionlint.yaml`](../.github/actionlint.yaml). actionlint rejects an
 unregistered self-hosted label, so a typo or an unreviewed shape fails the lint
-gate rather than queueing forever. The contract tests hold the registered set
+gate rather than queueing forever.
+`tests/workflow_contracts/runner_registry_test.py` holds the registered set
 equal to the set actually in use.
 
 That set is derived from the workflows rather than read back from the

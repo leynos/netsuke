@@ -1,10 +1,26 @@
 //! Validate the `WiX` major-upgrade contract for Windows installer packages.
-
-use std::collections::BTreeMap;
+//!
+//! The release authoring in `installer/Package.wxs` is compared against the
+//! frozen v0.1.0-beta4 authoring the MSI gate builds its beta1 fixture from.
+//! Two properties need a second package to be meaningful at all: the upgrade
+//! family is only stable if both packages share an `UpgradeCode`, and a
+//! relocated component is only safe if it does not reuse the GUID the earlier
+//! package shipped. Reading both files here keeps those promises in the
+//! repository's own tests rather than in the hosted gate.
+//!
+//! The MSI validation action
+//! (`.github/actions/windows-msi-upgrade-validation`) runs the built packages
+//! through `msiexec` on Windows and asserts the behaviour those static
+//! contracts describe: replacement, downgrade refusal, and a clean native
+//! install. This file cannot replace that run; it fails first, on a Linux
+//! runner, when the authoring drifts from the contract.
 
 use anyhow::{Context, Result, ensure};
-use roxmltree::{Document, Node};
+use installer_package_wxs::{comparable_attributes, find_child, find_element, rank_search};
+use roxmltree::Document;
 use test_support::fs as test_fs;
+
+mod installer_package_wxs;
 
 /// The component GUID v0.1.0-beta4 shipped for the installed executable.
 const LEGACY_COMPONENT_GUID: &str = "{8A7AA941-A8C3-4314-8A7D-3195B4806511}";
@@ -13,38 +29,6 @@ const NATIVE_COMPONENT_GUID: &str = "{C3257D3D-FC15-40C7-A36F-ED6F37025326}";
 /// The frozen v0.1.0-beta4 authoring the MSI gate builds its beta1 fixture from.
 const LEGACY_FIXTURE_PATH: &str =
     ".github/actions/windows-msi-upgrade-validation/fixtures/legacy-program-files-x86.wxs";
-
-/// Find the first descendant element with the given tag name and attribute.
-fn find_element<'a, 'input>(
-    document: &'a Document<'input>,
-    tag_name: &str,
-    attribute: &str,
-    value: &str,
-) -> Result<Node<'a, 'input>> {
-    document
-        .descendants()
-        .find(|node| {
-            node.is_element()
-                && node.tag_name().name() == tag_name
-                && node.attribute(attribute) == Some(value)
-        })
-        .with_context(|| format!("expected {tag_name} with {attribute}={value}"))
-}
-
-/// Find the first child element with the given tag name.
-fn find_child<'a, 'input>(parent: Node<'a, 'input>, tag_name: &str) -> Result<Node<'a, 'input>> {
-    parent
-        .children()
-        .find(|node| node.is_element() && node.tag_name().name() == tag_name)
-        .with_context(|| format!("expected a {tag_name} child"))
-}
-
-/// Read an element's attributes as a sorted map.
-fn comparable_attributes(node: Node<'_, '_>) -> BTreeMap<String, String> {
-    node.attributes()
-        .map(|attribute| (attribute.name().to_owned(), attribute.value().to_owned()))
-        .collect()
-}
 
 /// Verify that `WiX` declares major-upgrade metadata for prerelease packages.
 #[test]
@@ -343,7 +327,8 @@ fn assert_component_identities(release: &Document<'_>, legacy: &Document<'_>) ->
     Ok(())
 }
 
-/// Assert that the fixture keeps the upgrade family and lets WiX generate codes.
+/// Assert that the fixture keeps the upgrade family and lets `WiX` generate
+/// codes.
 fn assert_package_identity(release: &Document<'_>, legacy: &Document<'_>) -> Result<()> {
     let release_package = find_child(release.root_element(), "Package")?;
     let legacy_package = find_child(legacy.root_element(), "Package")?;
@@ -387,10 +372,4 @@ fn assert_upgrade_conditions(release: &Document<'_>, legacy: &Document<'_>) -> R
         "the fixture should keep the release's release-rank registry location"
     );
     Ok(())
-}
-
-/// Return the registry search that reads the installed release rank.
-fn rank_search<'a, 'input>(document: &'a Document<'input>) -> Result<Node<'a, 'input>> {
-    let property = find_element(document, "Property", "Id", "PREVIOUS_NETSUKE_RELEASE_RANK")?;
-    find_child(property, "RegistrySearch")
 }
