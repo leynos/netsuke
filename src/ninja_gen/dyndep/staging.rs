@@ -9,16 +9,17 @@
 //! The boundary is ownership of the emitted staging shape rather than a line
 //! count: a change to what a stage looks like lands here, while a change to how
 //! bundles are assembled stays in the parent. The reserved-namespace constants
-//! stay in the parent because path rejection needs them too.
+//! live in [`crate::ninja_gen::reserved_paths`] because path rejection owns them.
 //!
 //! Why a sidecar reveals a relay phony instead of the real dependency is
 //! recorded in
 //! [ADR-0058](../../../docs/adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md),
 //! and summarized in [`super`]'s module documentation.
 
-use super::{DYNDEP_NAMESPACE, GeneratedDyndep, SERIAL_NAMESPACE};
+use super::GeneratedDyndep;
 use crate::hex;
 use crate::ir::BuildEdge;
+use crate::ninja_gen::reserved_paths::{DYNDEP_NAMESPACE, SERIAL_NAMESPACE};
 use crate::ninja_gen::{NinjaGenError, validated_ninja_path};
 use camino::Utf8PathBuf;
 use sha2::{Digest, Sha256};

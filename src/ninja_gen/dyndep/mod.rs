@@ -72,21 +72,14 @@ pub(crate) use staging::content_digest;
 
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
-use crate::ninja_gen::force_run::PHONY_NAMESPACE;
+use crate::ninja_gen::reserved_paths::is_reserved_path;
 use crate::ninja_gen::{
     InterpreterBinding, NinjaGenError, RecipeShell, graph_requires_dyndep, join,
     ordered_default_targets, reject_unsupported_path_characters, resolve_default_interpreter,
     write_action_rules,
 };
 use crate::recipe_shell::InterpreterExecutable;
-use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use std::fmt::Write as _;
-
-/// Reserved state namespace for serial gate paths.
-const SERIAL_NAMESPACE: &str = ".netsuke/serial";
-
-/// Reserved state namespace for dyndep sidecar files.
-const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
 
 /// Generate a complete Ninja bundle for `graph`, materializing staged dyndep
 /// sidecars for every multi-dependency serial edge.
@@ -283,50 +276,6 @@ pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenEr
         }
     }
     Ok(())
-}
-
-/// Return whether `path` names a location inside a reserved namespace.
-///
-/// Ninja compares paths textually, so `.netsuke//serial/x` and
-/// `./.netsuke/serial/x` name the same file as `.netsuke/serial/x` without
-/// matching it as a string. Normalizing `.` and empty components first keeps a
-/// spelling variant from shadowing generated state.
-fn is_reserved_path(path: &Utf8Path) -> bool {
-    let Some(normalized) = normalize_lexically(path) else {
-        // Only a path that climbs above its root lands here, and such a path
-        // cannot reach generated state inside the build tree.
-        return false;
-    };
-    let candidate = normalized.as_str();
-    [SERIAL_NAMESPACE, DYNDEP_NAMESPACE, PHONY_NAMESPACE]
-        .iter()
-        .any(|namespace| {
-            candidate == *namespace
-                || candidate
-                    .strip_prefix(namespace)
-                    .is_some_and(|suffix| suffix.starts_with('/'))
-        })
-}
-
-/// Resolve `.` and empty components and fold `..` where it can be applied.
-///
-/// Returns `None` when a leading `..` climbs above the path's root. Such a path
-/// cannot resolve inside the build tree, so it cannot name the generated state
-/// that lives there.
-fn normalize_lexically(path: &Utf8Path) -> Option<String> {
-    let mut normalized = Utf8PathBuf::new();
-    for component in path.components() {
-        match component {
-            Utf8Component::CurDir => {}
-            Utf8Component::ParentDir => {
-                if !normalized.pop() {
-                    return None;
-                }
-            }
-            other => normalized.push(other.as_str()),
-        }
-    }
-    Some(normalized.into_string())
 }
 
 #[cfg(test)]

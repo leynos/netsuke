@@ -12,12 +12,11 @@
 //! output stays a function of the graph rather than of emission order.
 
 use super::dyndep::content_digest;
+use super::reserved_paths::PHONY_NAMESPACE;
 use crate::ir::{BuildEdge, BuildGraph};
 use camino::Utf8PathBuf;
 use std::fmt::Write;
 
-/// Reserved namespace for generated phony and always state.
-pub(super) const PHONY_NAMESPACE: &str = ".netsuke/phony";
 /// Permanently dirty prerequisite shared by every forced edge.
 pub(crate) const FORCE_PATH: &str = ".netsuke/phony/force";
 /// Schema tag incorporated into every hidden-output identity.

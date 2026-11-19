@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = Kunne ikke bruke den begrensede policyen for bevaring eller opprydding av dyndep-filer under { $path }.
 runner.io.dyndep.alias = Den genererte dyndep-banen { $path } er en symbolsk lenke, et junction-punkt eller ikke en mappe; erstatt den med en ekte mappe.
 runner.io.dyndep.open = Kunne ikke åpne den genererte dyndep-mappen { $path }.
+runner.io.phony.inspect = Kunne ikke inspisere den reserverte phony-tilstanden på { $path }.
+runner.io.phony.reset = Kunne ikke rydde den reserverte phony-tilstanden på { $path }.
 cli.about = Netsuke kompilerer YAML- + Jinja-manifester til Ninja-byggeplaner.
 cli.long_about = Netsuke gjør YAML- + Jinja-manifester om til reproduserbare Ninja-grafer og kjører Ninja med trygge standardverdier.
 cli.usage = { $usage }

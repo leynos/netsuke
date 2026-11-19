@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = { $path } altındaki oluşturulan dyndep dosyasının tutulması uygulanamadı.
 runner.io.dyndep.alias = Oluşturulan dyndep yolu { $path } bir sembolik bağlantı ya da bağlantı noktasıdır veya bir dizin değildir; gerçek bir dizinle değiştirin.
 runner.io.dyndep.open = Oluşturulan dyndep dizini { $path } açılamadı.
+runner.io.phony.inspect = { $path } konumundaki ayrılmış phony durumu denetlenemedi.
+runner.io.phony.reset = { $path } konumundaki ayrılmış phony durumu temizlenemedi.
 cli.about = Netsuke, YAML + Jinja bildirimlerini Ninja derleme planlarına derler.
 cli.long_about = Netsuke, YAML + Jinja bildirimlerini yeniden üretilebilir Ninja çizgelerine dönüştürür ve Ninja'yı güvenli varsayılanlarla çalıştırır.
 cli.usage = { $usage }

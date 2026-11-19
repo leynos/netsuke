@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = Nu s-a putut aplica păstrarea fișierului dyndep generat sub { $path }.
 runner.io.dyndep.alias = Calea dyndep generată { $path } este o legătură simbolică, o joncțiune sau nu este un director; înlocuiți-o cu un director real.
 runner.io.dyndep.open = Deschiderea directorului dyndep generat { $path } a eșuat.
+runner.io.phony.inspect = Starea phony rezervată de la { $path } nu a putut fi inspectată.
+runner.io.phony.reset = Starea phony rezervată de la { $path } nu a putut fi curățată.
 cli.about = Netsuke compilează manifeste YAML + Jinja în planuri de construire Ninja.
 cli.long_about = Netsuke transformă manifestele YAML + Jinja în grafuri Ninja reproductibile și rulează Ninja cu valori implicite sigure.
 cli.usage = { $usage }

@@ -217,7 +217,7 @@ fn execute_build(
         Some(keys::STATUS_TOOL_BUILD.into()),
         graph_generation,
     )?;
-    let (bundle, command_list_targets) = generated.into_build_parts();
+    let (bundle, command_list_targets, declared_paths) = generated.into_build_parts();
     let console_edge_count = bundle.console_edge_count();
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
@@ -229,8 +229,10 @@ fn execute_build(
     };
 
     // Ninja reads the force node's absence as "permanently dirty", so a
-    // leftover path there would quietly turn off every forced edge.
-    reset_force_node(cli)?;
+    // leftover path there would quietly turn off every forced edge. The reset
+    // takes the manifest's paths because a spelling that only the working
+    // directory can resolve must not delete a declared output.
+    reset_force_node(cli, &declared_paths)?;
     let build_file = process::create_temp_ninja_file(&ninja)?;
     let build_path = build_file.as_path();
     let ninja_program = context.ninja_program;
