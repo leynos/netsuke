@@ -46,7 +46,7 @@ pub(super) fn describe_metrics() {
 fn error_category(error: &OrthoError) -> &'static str {
     match error {
         OrthoError::File { source, .. } => {
-            candidate_failure(source.as_ref()).map_or("file", CandidateFailure::label)
+            candidate_failure(source.as_ref()).map_or("file", candidate_failure_label)
         }
         OrthoError::Validation { .. } => "validation",
         OrthoError::CyclicExtends { .. } => "cyclic_extends",
@@ -71,6 +71,20 @@ fn candidate_failure(
         .get_ref()?
         .downcast_ref::<UnloadableCandidate>()
         .map(UnloadableCandidate::reason)
+}
+
+/// Return the telemetry label for a closed candidate-failure reason.
+///
+/// The vocabulary belongs to telemetry rather than to the policy type: the
+/// match is exhaustive, so adding a rejection reason forces a decision about
+/// how it is counted instead of silently reusing another label. The values are
+/// deliberately stable strings; consumers filter the discovery series on them.
+fn candidate_failure_label(reason: CandidateFailure) -> &'static str {
+    match reason {
+        CandidateFailure::DanglingLink => "dangling_link",
+        CandidateFailure::PresentWithoutLayer => "present_without_layer",
+        CandidateFailure::ProbeFailed => "probe_failed",
+    }
 }
 
 /// Record the discovery outcome series at the composition boundary.
