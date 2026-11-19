@@ -11,6 +11,10 @@
 
 use super::posix_lexical::SourceChar;
 
+mod state;
+
+use state::{CaseSightings, PrefixSlot, WordRole};
+
 /// Describe one source character offered to a substitution's `case` tracker.
 ///
 /// The four values are one observation rather than independent arguments: the
@@ -53,7 +57,6 @@ impl CaseObservation {
 /// substitution open across pattern terminators. That makes the real closer the
 /// one that is checked for an ambiguous `#`, instead of the pattern terminator
 /// that merely happens to come first.
-#[derive(Default)]
 pub(super) struct CaseNesting {
     /// Record the parenthesis depth at which each open `case` began.
     ///
@@ -72,72 +75,6 @@ pub(super) struct CaseNesting {
     /// Record which compound-command prefix slot the next word may fill.
     prefix_slot: PrefixSlot,
 }
-
-/// Record which `case` keywords one substitution's tracker has seen.
-///
-/// The two observations are independent, so they cannot be one flag: a single
-/// substitution may contain a modelled construct, an unplaceable keyword, or
-/// both. They are one value because every reader asks about the same
-/// substitution's sightings, and the boundary check needs `has_any` and
-/// `has_unplaced` together.
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum CaseSightings {
-    /// No `case` keyword has been seen.
-    #[default]
-    None,
-    /// Every `case` keyword seen stood in a modelled command position.
-    Placed,
-    /// A `case` keyword stood where the tracker read argument data.
-    Unplaced,
-    /// A placed keyword and an unplaced keyword have both been seen.
-    PlacedAndUnplaced,
-}
-
-impl CaseSightings {
-    /// Record that a `case` keyword stood in command position.
-    const fn record_placed(&mut self) {
-        *self = match *self {
-            Self::None | Self::Placed => Self::Placed,
-            Self::Unplaced | Self::PlacedAndUnplaced => Self::PlacedAndUnplaced,
-        };
-    }
-
-    /// Record that a `case` keyword stood where the tracker read argument data.
-    const fn record_unplaced(&mut self) {
-        *self = match *self {
-            Self::None | Self::Unplaced => Self::Unplaced,
-            Self::Placed | Self::PlacedAndUnplaced => Self::PlacedAndUnplaced,
-        };
-    }
-
-    /// Report whether a `case` keyword was seen in either position.
-    const fn has_any(self) -> bool {
-        !matches!(self, Self::None)
-    }
-
-    /// Report whether a `case` keyword stood outside a modelled position.
-    const fn has_unplaced(self) -> bool {
-        matches!(self, Self::Unplaced | Self::PlacedAndUnplaced)
-    }
-}
-
-/// Record which compound-command prefix slot the next word may fill.
-///
-/// Bash keeps a command position open after a `time` option and after a
-/// `coproc` name, so the word after either may be the `case` keyword. The
-/// prefixes are alternatives rather than independent flags: a word cannot be
-/// both an option of `time` and the name of a `coproc`.
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum PrefixSlot {
-    /// No compound-command prefix is open.
-    #[default]
-    None,
-    /// The next word may be an option of a `time` command.
-    TimeOption,
-    /// The next word may name a `coproc` command.
-    CoprocName,
-}
-
 impl CaseNesting {
     /// Initialize an empty tracker for one command substitution.
     pub(super) const fn new() -> Self {
@@ -256,62 +193,95 @@ impl CaseNesting {
 
     /// Apply the completed word to the `case` nesting state.
     ///
+    /// Classification reads the state before any of it is changed, so the word
+    /// is judged against the position it was written in, and application then
+    /// moves exactly the state that role owns.
+    fn finish_word(&mut self, parenthesis_depth: usize) {
+        if self.word.is_empty() {
+            return;
+        }
+        let role = self.classify_word(parenthesis_depth);
+        self.prefix_slot = PrefixSlot::None;
+        self.apply_role(role, parenthesis_depth);
+        self.word.clear();
+    }
+
+    /// Classify the completed word by its effect on the tracker.
+    ///
     /// A reserved word counts only in command position, so `printf esac` passes
     /// `esac` as an argument and leaves the construct open. Popping there would
     /// end the construct early, and the pattern terminator that follows would
     /// then be read as the substitution closer one `)` too soon.
     ///
-    /// `time` and `coproc` are matched before the generic arm because both keep
+    /// `time` and `coproc` are tested before the prefix slots because both keep
     /// a command position open: the `case` that follows them is a reserved word
     /// even though it is not the first word of the command.
-    fn finish_word(&mut self, parenthesis_depth: usize) {
-        if self.word.is_empty() {
-            return;
-        }
+    fn classify_word(&self, parenthesis_depth: usize) -> WordRole {
         let is_command_position = self.expects_command;
-        let is_time_option =
-            self.prefix_slot == PrefixSlot::TimeOption && is_option_word(&self.word);
-        let is_coproc_name =
-            self.prefix_slot == PrefixSlot::CoprocName && !starts_command_list(&self.word);
-        self.prefix_slot = PrefixSlot::None;
-        match self.word.as_str() {
-            "case" if is_command_position => {
+        let word = self.word.as_str();
+        if word == "case" {
+            return if is_command_position {
+                WordRole::OpenCase
+            } else {
+                // A `case` behind a word the tracker read as an argument may
+                // still be a keyword: `time` options and a `coproc` name are
+                // opaque when written as quoted or expanded words. Recording it
+                // lets the boundary check fail closed instead of lowering a
+                // marker for a context the shell does not share.
+                WordRole::UnplacedCase
+            };
+        }
+        // A case pattern may itself be spelled `esac`. Only a construct open at
+        // this depth is the one this word closes; anything deeper is inside a
+        // pattern group and must not close it.
+        if word == "esac" && is_command_position && self.is_open_at(parenthesis_depth) {
+            return WordRole::CloseCase;
+        }
+        if word == "time" && is_command_position {
+            return WordRole::TimePrefix;
+        }
+        if word == "coproc" && is_command_position {
+            return WordRole::CoprocPrefix;
+        }
+        if self.prefix_slot == PrefixSlot::TimeOption && is_option_word(word) {
+            return WordRole::TimePrefix;
+        }
+        if self.prefix_slot == PrefixSlot::CoprocName && !starts_command_list(word) {
+            return WordRole::CoprocPrefix;
+        }
+        WordRole::Other {
+            continues_command_list: is_command_position && starts_command_list(word),
+        }
+    }
+
+    /// Apply a classified word to the tracker's state.
+    fn apply_role(&mut self, role: WordRole, parenthesis_depth: usize) {
+        match role {
+            WordRole::OpenCase => {
                 self.depths.push(parenthesis_depth);
                 self.sightings.record_placed();
                 self.expects_command = false;
             }
-            // A `case` behind a word the tracker read as an argument may still
-            // be a keyword: `time` options and a `coproc` name are opaque when
-            // written as quoted or expanded words. Record it so the boundary
-            // check can fail closed instead of lowering a marker for a context
-            // the shell does not share.
-            "case" => {
+            WordRole::UnplacedCase => {
                 self.sightings.record_unplaced();
                 self.expects_command = false;
             }
-            // A case pattern may itself be spelled `esac`. Only a construct
-            // open at this depth is the one this word closes; anything deeper
-            // is inside a pattern group and must not close it.
-            "esac" if is_command_position && self.is_open_at(parenthesis_depth) => {
+            WordRole::CloseCase => {
                 self.depths.pop();
                 self.expects_command = false;
             }
-            "time" if is_command_position => {
+            WordRole::TimePrefix => {
                 self.prefix_slot = PrefixSlot::TimeOption;
                 self.expects_command = true;
             }
-            "coproc" if is_command_position => {
+            WordRole::CoprocPrefix => {
                 self.prefix_slot = PrefixSlot::CoprocName;
                 self.expects_command = true;
             }
-            _ if is_time_option => {
-                self.prefix_slot = PrefixSlot::TimeOption;
-                self.expects_command = true;
-            }
-            _ if is_coproc_name => self.expects_command = true,
-            word => self.expects_command = is_command_position && starts_command_list(word),
+            WordRole::Other {
+                continues_command_list,
+            } => self.expects_command = continues_command_list,
         }
-        self.word.clear();
     }
 }
 
