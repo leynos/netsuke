@@ -871,7 +871,7 @@ variables accept a scalar or a serialized JSON array; indexed `__N` segments
 nest into maps and are not a list syntax. The merge masks lower layers with
 higher ones before deserializing the document once, so a valid higher-layer
 value hides an invalid lower-layer value. See
-[ADR-0082](adrs/adr-0082-accept-environment-boolean-digits-and-case-insensitive-policies.md)
+[ADR-0083](adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md)
 for the decision and its limits.
 
 **Command-Line Flags:** OrthoConfig integrates with Clap such that flags parsed

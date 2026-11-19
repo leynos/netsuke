@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0082: Accept environment Boolean digits and case-insensitive policy values
+# Architectural decision record (ADR) 0083: Accept environment Boolean digits and case-insensitive policy values
 
 ## Status
 

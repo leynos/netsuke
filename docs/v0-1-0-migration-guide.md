@@ -515,7 +515,7 @@ policy check as well, so `NETSUKE_NO_INPUT=0` parses to `false` and is then
 rejected; only `true` and `1` are usable. List variables accept a scalar or a
 serialized JSON array; the indexed `NETSUKE_<KEY>__0` spelling remains
 unsupported and must be replaced with one of the supported forms. See
-[ADR-0082](adrs/adr-0082-accept-environment-boolean-digits-and-case-insensitive-policies.md).
+[ADR-0083](adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md).
 
 ## Colour, emoji and progress are resolved once
 

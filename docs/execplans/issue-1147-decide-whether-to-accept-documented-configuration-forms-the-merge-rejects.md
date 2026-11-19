@@ -109,7 +109,7 @@ list form.
 - [x] (2026-11-18) `EP-M3` full-merge, cached-merge, and binary regression tests
   written. The focused suite passes (`150` tests), including the masking
   characterization (`3` tests).
-- [x] (2026-11-18) `EP-M4` ADR-0082, design-document reference, contents index,
+- [x] (2026-11-18) `EP-M4` ADR-0083, design-document reference, contents index,
   user guide, migration guide, and changelog entry drafted.
 - [x] (2026-11-18) Module-layout and lint corrections: both test modules
   that gained submodules moved to `mod.rs`, and the policy enums moved to
@@ -131,7 +131,7 @@ list form.
 - [x] (2026-11-18) CodeRabbit agent review re-run on the rebased head after
   the refactor landed. The first attempt had ended with
   `Connection failed: WebSocket closed`, which the tool reports as recoverable;
-  the retry completed and returned one minor finding: the changelog, ADR-0082,
+  the retry completed and returned one minor finding: the changelog, ADR-0083,
   and users' guide present `0` as accepted for `NETSUKE_NO_INPUT` without
   saying that configuration then rejects `false`.
 - [x] (2026-11-18) CI `build-test` was red on `9b36dca8d`: the Kani scope
@@ -182,7 +182,7 @@ list form.
   rule. `src/cli/diag/alias_tests.rs` compares the resolver with
   `merge_with_cached_file_layers` for the canonical, lower-case, mixed-case,
   and whitespace-trimmed spellings, for the same spellings when the merge then
-  fails, and for three keys that name other paths. ADR-0082 and the users'
+  fails, and for three keys that name other paths. ADR-0083 and the users'
   guide record the behaviour. Red probe: with the snapshot scan disabled, four
   of the nine alias cases fail and the others still pass, so the suite is not
   vacuous.
@@ -286,7 +286,7 @@ from files, the environment, and the command line, and a rejection lists the
 accepted spellings. Indexed `__N` list variables remain rejected, and the
 users' guide now documents the scalar and serialized JSON-array forms instead.
 
-ADR-0082 records the decision, the rejected alternatives, and the known risk
+ADR-0083 records the decision, the rejected alternatives, and the known risk
 that `BOOLEAN_PATHS` mirrors the `CliConfig` Boolean fields by hand. The
 upstream capability that would remove that workaround is requested in
 leynos/ortho-config#714, and removing it is tracked in leynos/netsuke#1165. The
@@ -577,7 +577,7 @@ The per-field Boolean rule is a workaround for an ortho-config capability gap.
 The upstream request is
 [ortho-config#714](https://github.com/leynos/ortho-config/issues/714) and
 removing the workaround once it lands is tracked in
-[#1165](https://github.com/leynos/netsuke/issues/1165); ADR-0082 records both.
+[#1165](https://github.com/leynos/netsuke/issues/1165); ADR-0083 records both.
 
 ## Interfaces and dependencies
 

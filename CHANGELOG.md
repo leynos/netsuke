@@ -84,7 +84,7 @@
   and the full merge now accept the same set. `NETSUKE_NO_INPUT=0` parses as
   `false` and is then rejected by the no-input policy, so only `true` and `1`
   are usable. Indexed `__N` list variables remain unsupported
-  ([#1147](https://github.com/leynos/netsuke/issues/1147), [ADR-0082](docs/adrs/adr-0082-accept-environment-boolean-digits-and-case-insensitive-policies.md)).
+  ([#1147](https://github.com/leynos/netsuke/issues/1147), [ADR-0083](docs/adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md)).
 
 ### Security
 
