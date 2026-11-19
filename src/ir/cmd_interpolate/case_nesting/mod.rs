@@ -234,7 +234,8 @@ impl CaseNesting {
         // A case pattern may itself be spelled `esac`. Only a construct open at
         // this depth is the one this word closes; anything deeper is inside a
         // pattern group and must not close it.
-        if word == "esac" && is_command_position && self.is_open_at(parenthesis_depth) {
+        let is_open_here = is_command_position && self.is_open_at(parenthesis_depth);
+        if word == "esac" && is_open_here {
             return WordRole::CloseCase;
         }
         if word == "time" && is_command_position {
