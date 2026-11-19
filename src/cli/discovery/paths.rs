@@ -13,34 +13,30 @@
 //! through a directory capability, so a symbolic link whose target is missing
 //! is distinguished from a file that is not installed and fails closed.
 //!
-//! [`SanitisedUserBases`] applies the first rule to the environment view handed
-//! to the dependency's own scan, so neither pass admits a candidate that
-//! depends on where the tool happened to run.
-//!
 //! `crate::cli::discovery::layers::user_candidate` is the only consumer. Its
-//! user pass reads
-//! [`user_scope_candidates`] and probes each one with
-//! [`candidate_entry_metadata`]; its fallback hands the dependency's scan a
-//! [`SanitisedUserBases`] view and `ortho_config` then performs that later
-//! discovery pass, which runs only when no user candidate exists. The project
-//! pass uses [`project_scope_file`], and layer comparison uses
-//! [`comparison_key`] over a [`PathNormalizer`], so every helper here answers
-//! one of those three callers rather than being a general-purpose utility.
+//! user pass reads [`user_scope_candidates`]; its fallback hands the
+//! dependency's scan a [`SanitisedUserBases`] view and `ortho_config` then
+//! performs that later discovery pass, which runs only when no user candidate
+//! exists. The project pass uses [`project_scope_file`], and layer comparison
+//! uses [`comparison_key`] over a [`PathNormalizer`], so every helper here
+//! answers one of those three callers rather than being a general-purpose
+//! utility.
 //!
-//! [`candidate_entry_metadata`] is the `cap_std` presence probe behind the
-//! fail-closed rule. It inspects the candidate's final path component without
-//! following a link there, so an entry that is absent (no directory, no file)
-//! is distinguished from one that is present but unresolved. That distinction
-//! is what lets a dangling symbolic link be rejected while a genuinely absent
-//! file still falls through to the next candidate.
+//! The [`sanitised`] submodule owns the environment view and the base predicate
+//! it shares with the derivation. The presence probe behind the fail-closed
+//! rule lives beside the `CandidateProbe` trait in the consumer's `probe`
+//! submodule, because it answers that pass's rejection rule rather than path
+//! derivation.
 
-use cap_std::ambient_authority;
-use cap_std::fs::{Dir, Metadata};
-use ortho_config::{EnvSource, SharedEnvSource};
-use std::ffi::{OsStr, OsString};
-use std::fmt;
+use ortho_config::EnvSource;
 use std::io;
 use std::path::{Path, PathBuf};
+
+pub(super) mod sanitised;
+
+use sanitised::is_usable_base;
+
+pub(super) use sanitised::SanitisedUserBases;
 
 /// Application directory name used beneath every configuration base.
 const APP_DIR: &str = "netsuke";
@@ -119,85 +115,15 @@ fn push_base_candidates(candidates: &mut Vec<PathBuf>, base: &Path) {
 /// file would then be merged with operator authority, so the value is ignored
 /// and the next base is tried, exactly as for an empty value.
 ///
-/// The predicate is `is_absolute()` rather than `has_root()`. On Windows a bare
-/// leading separator such as `\config` is rooted but carries no drive, so it
-/// resolves on whichever drive the process happens to run from — the same
-/// process-state dependence the filter exists to exclude, merely anchored at the
-/// current drive instead of the working directory.
+/// [`is_usable_base`] is the shared predicate, and it compares `is_absolute()`
+/// rather than `has_root()`: a Windows value such as `\config` is rooted but
+/// names no drive, so it would resolve on whichever drive the process runs
+/// from.
 fn absolute_base(env_source: &dyn EnvSource, key: &str) -> Option<PathBuf> {
     env_source
         .get(key)
         .filter(|value| is_usable_base(value))
         .map(PathBuf::from)
-}
-
-/// Report whether `value` may be used as a configuration base directory.
-///
-/// This is the single predicate behind both the candidate derivation above and
-/// the sanitised view handed to the dependency's fallback, so the two cannot
-/// disagree about which bases are usable.
-fn is_usable_base(value: &OsStr) -> bool {
-    Path::new(value).is_absolute()
-}
-
-/// The user base variables whose unusable values must read as unset.
-///
-/// The list mirrors the bases [`user_scope_candidates`] derives from. The
-/// system-scope variable is deliberately absent: its handling stays with the
-/// dependency.
-const USER_BASE_KEYS: [&str; 5] = [
-    "XDG_CONFIG_HOME",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "HOME",
-    "USERPROFILE",
-];
-
-/// An environment view that hides unusable user base values from the fallback.
-///
-/// [`user_scope_candidates`] rejects an empty or non-absolute base, but
-/// `ortho_config` 0.10.0 filters only empty values. Handing the dependency the
-/// raw environment would let its own scan resolve a relative base against the
-/// working directory and load configuration from wherever the tool happened to
-/// run — the hazard the filter exists to remove. This view applies the same
-/// predicate to the dependency's lookups, so a value the user pass rejected
-/// cannot come back through the fallback.
-pub(super) struct SanitisedUserBases {
-    /// The environment whose lookups this view filters.
-    source: SharedEnvSource,
-}
-
-impl SanitisedUserBases {
-    /// Wrap `source` so unusable user base values read as unset.
-    pub(super) fn new(source: SharedEnvSource) -> Self {
-        Self { source }
-    }
-}
-
-impl fmt::Debug for SanitisedUserBases {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SanitisedUserBases")
-            .field("source", &self.source)
-            .finish()
-    }
-}
-
-impl EnvSource for SanitisedUserBases {
-    fn get(&self, key: &str) -> Option<OsString> {
-        let value = self.source.get(key)?;
-        if USER_BASE_KEYS.contains(&key) && !is_usable_base(&value) {
-            return None;
-        }
-        Some(value)
-    }
-
-    fn home_fallback(&self) -> Option<PathBuf> {
-        self.source.home_fallback()
-    }
-
-    fn config_dir_fallback(&self) -> Option<PathBuf> {
-        self.source.config_dir_fallback()
-    }
 }
 
 /// Resolve the home directory from the injected environment.
@@ -273,36 +199,6 @@ pub(super) fn normalized_path_key(
     path: &str,
 ) -> io::Result<PathBuf> {
     normalizer.normalize(Path::new(path))
-}
-
-/// Inspect a candidate entry without following a link at its final component.
-///
-/// The probe holds only the candidate's parent directory, so it reads no more
-/// authority than the discovery loader that reports an unresolvable candidate as
-/// absent. A missing entry, or a missing parent directory, reports absence.
-///
-/// # Errors
-///
-/// Returns an I/O error when the parent directory cannot be opened or the entry
-/// cannot be inspected.
-pub(super) fn candidate_entry_metadata(path: &Path) -> io::Result<Option<Metadata>> {
-    let Some(name) = path.file_name() else {
-        return Ok(None);
-    };
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    let dir = match Dir::open_ambient_dir(parent, ambient_authority()) {
-        Ok(dir) => dir,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error),
-    };
-    match dir.symlink_metadata(name) {
-        Ok(metadata) => Ok(Some(metadata)),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error),
-    }
 }
 
 /// A normalizer that always fails, so the failure branch is deterministic.

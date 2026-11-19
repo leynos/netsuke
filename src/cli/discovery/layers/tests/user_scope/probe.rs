@@ -2,10 +2,16 @@
 //!
 //! `OrthoConfig` reports a candidate it could not resolve exactly as it reports
 //! one that is not installed, so discovery takes a second look at the directory
-//! entry. That look is a seam, and these tests drive it directly: the two
-//! answers a real filesystem cannot produce on demand — an entry the loader
-//! skipped, and an inspection that failed — must stop discovery, while an
-//! absent entry must still fall through to the system scope.
+//! entry. That look is a seam, and these tests drive it directly: an entry the
+//! loader skipped, a link whose target is missing, and an inspection that
+//! failed must all stop discovery, while an absent entry must still fall
+//! through to the system scope.
+//!
+//! The inspection failure is the one answer a real directory cannot produce on
+//! demand here: the loader opens the same parent first, so it reports that
+//! failure before the probe runs. The seam is what keeps the branch testable.
+//! The absent and dangling-link answers are also pinned against real
+//! directories by the cases in the sibling modules.
 
 use super::{Case, HomeArrangement};
 use crate::cli::discovery::discovery_env_source;
@@ -106,6 +112,38 @@ fn present_entry_without_a_layer_stops_discovery() -> Result<()> {
     ensure!(
         reason == Some(CandidateFailure::PresentWithoutLayer),
         "the rejection must report a present entry that yielded no layer, got {reason:?}: {error}"
+    );
+    ensure!(
+        !probe.probed().is_empty(),
+        "discovery must consult the presence probe rather than the loader alone"
+    );
+    Ok(())
+}
+
+/// A dangling link the loader reported as absent fails closed.
+///
+/// The loader answers `Ok(None)` for a link whose target is missing inside the
+/// probed directory, exactly as it does for a file that is not installed. This
+/// is the branch that turns that answer into a rejection, so the system scope
+/// the user meant to replace cannot supply the policy for it.
+#[rstest]
+fn dangling_link_entry_stops_discovery() -> Result<()> {
+    let case = Case::new()?;
+    let probe = ScriptedProbe::new(Answer::Entry(CandidateEntry::Symlink));
+    let environment = case.environment(HomeArrangement::EmptyXdgConfigHome);
+
+    let error = layers_with_probe(&probe, &environment)
+        .err()
+        .context("a dangling link must fail discovery rather than fall through")?;
+
+    ensure!(
+        matches!(error.as_ref(), OrthoError::File { .. }),
+        "the rejection must be a file error, got {error:?}"
+    );
+    let reason = reason_of(&error);
+    ensure!(
+        reason == Some(CandidateFailure::DanglingLink),
+        "the rejection must report a dangling link, got {reason:?}: {error}"
     );
     ensure!(
         !probe.probed().is_empty(),

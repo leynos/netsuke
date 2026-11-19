@@ -22,12 +22,14 @@ use std::sync::Arc;
 use tracing::debug;
 
 use super::super::diagnostics::path_hash;
-use super::super::paths::{
-    FsPathNormalizer, SanitisedUserBases, candidate_entry_metadata, user_scope_candidates,
-};
+use super::super::paths::{FsPathNormalizer, SanitisedUserBases, user_scope_candidates};
 use super::project_key::ProjectKey;
 use super::{chain_layers, config_discovery, first_automatic_chain};
 use crate::localization::{LocalizedMessage, keys};
+
+pub(super) mod probe;
+
+pub(super) use probe::{CandidateEntry, CandidateProbe, FsCandidateProbe};
 
 /// Automatic discovery result, with the user pass's decision retained.
 ///
@@ -233,47 +235,6 @@ fn load_user_candidate(
     }
 }
 
-/// What a [`CandidateProbe`] found at a user candidate path.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum CandidateEntry {
-    /// Nothing exists at the path.
-    Absent,
-    /// The entry is a symbolic link whose target did not resolve.
-    Symlink,
-    /// An entry exists and is not a symbolic link.
-    Present,
-}
-
-/// Presence probe for one user-scope candidate.
-///
-/// The loader reports an unreadable candidate exactly as it reports an absent
-/// one, so the fail-closed rule needs a second look at the directory entry
-/// itself. Keeping that look behind a trait lets a test drive the three
-/// answers, and the probe's own failure, without staging a directory that
-/// happens to break the loader first.
-pub(super) trait CandidateProbe {
-    /// Report what the filesystem holds at `path`.
-    ///
-    /// # Errors
-    ///
-    /// Returns the inspection error when the entry cannot be examined, for
-    /// example because a parent component is not a directory.
-    fn probe(&self, path: &Path) -> io::Result<CandidateEntry>;
-}
-
-/// The filesystem-backed probe production discovery uses.
-struct FsCandidateProbe;
-
-impl CandidateProbe for FsCandidateProbe {
-    fn probe(&self, path: &Path) -> io::Result<CandidateEntry> {
-        candidate_entry_metadata(path).map(|found| match found {
-            Some(metadata) if metadata.file_type().is_symlink() => CandidateEntry::Symlink,
-            Some(_) => CandidateEntry::Present,
-            None => CandidateEntry::Absent,
-        })
-    }
-}
-
 /// Closed reason a user-scope candidate could not supply configuration.
 ///
 /// The reason travels with the error as a typed payload rather than as part of
@@ -300,15 +261,6 @@ impl CandidateFailure {
             Self::PresentWithoutLayer => keys::CONFIG_DISCOVERY_PRESENT_WITHOUT_LAYER,
             Self::ProbeFailed => keys::CONFIG_DISCOVERY_INSPECTION_FAILED,
         })
-    }
-
-    /// Return the closed telemetry label for this reason.
-    pub(in crate::cli::discovery) const fn label(self) -> &'static str {
-        match self {
-            Self::DanglingLink => "dangling_link",
-            Self::PresentWithoutLayer => "present_without_layer",
-            Self::ProbeFailed => "probe_failed",
-        }
     }
 }
 
