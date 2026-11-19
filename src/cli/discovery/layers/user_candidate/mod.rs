@@ -12,8 +12,7 @@
 //! label the fail-closed branch without reading error text.
 
 use ortho_config::{
-    FileLayerChain, MergeLayer, OrthoError, OrthoResult, SharedEnvSource,
-    load_config_file_as_chain,
+    FileLayerChain, MergeLayer, OrthoError, OrthoResult, SharedEnvSource, load_config_file_as_chain,
 };
 use std::fmt;
 use std::io;
