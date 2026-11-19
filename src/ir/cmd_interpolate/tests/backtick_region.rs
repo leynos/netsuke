@@ -153,6 +153,61 @@ fn script_quoted_parenthesis_inside_backtick_body_stays_literal(#[case] template
     );
 }
 
+/// Keep an escaped backtick inside a quoted body from ending the region.
+///
+/// The shell finds the closing backtick before it parses the body's quotes, so
+/// a backslash escapes the backtick even inside the body's single quotes.
+/// Ending the region there would restore the outer context early and leave the
+/// trailing `'` to open script-level single quoting, which encodes a later
+/// marker with the single-quoted form that does not quote a `;`.
+#[test]
+fn script_escaped_backtick_inside_quoted_body_does_not_end_the_region() {
+    let bindings = context_bindings(RecipeShell::Posix);
+    let command = format!(r"printf '%s' `printf '%s' '\`'` {INS_TOKEN}");
+    let actual = interpolate_script_with_bindings(&command, &bindings)
+        .expect("an escaped backtick in a body must not end the region");
+    assert_eq!(
+        actual,
+        command.replace(INS_TOKEN, "UNQ"),
+        "a marker after the escaped backtick in {command:?} must stay unquoted"
+    );
+}
+
+/// Prove that `\'` inside a body's single quotes does not escape the quote.
+///
+/// With the quote closed, the `)` that follows is unquoted in the body, so it
+/// would close the frame that owns the open backtick and the crossing shape is
+/// rejected. If the backslash swallowed the apostrophe instead, the `)` would
+/// stay inside single quotes and the script would be accepted.
+#[test]
+fn script_backslash_does_not_escape_a_backtick_body_quote() {
+    let bindings = context_bindings(RecipeShell::Posix);
+    let command = format!(r"printf '%s' $(printf %s `printf '%s' 'x\' )` {INS_TOKEN}");
+    let error = interpolate_script_with_bindings(&command, &bindings)
+        .expect_err("the body's single quote must close at the apostrophe after the backslash");
+    assert!(
+        matches!(error, IrGenError::InvalidCommand { .. }),
+        "expected an invalid-command error for {command:?}, got {error:?}"
+    );
+}
+
+/// Close a `$()` opened inside a double-quoted backtick body.
+///
+/// The frame is the innermost region once opened, so its own unquoted `)`
+/// closes it even though the body around it is double-quoted.
+#[test]
+fn script_command_substitution_inside_quoted_backtick_body_closes_its_frame() {
+    let bindings = context_bindings(RecipeShell::Posix);
+    let command = format!(r#"printf '%s' `printf '%s' "$(printf x)"` {INS_TOKEN}"#);
+    let actual = interpolate_script_with_bindings(&command, &bindings)
+        .expect("a $() inside a quoted backtick body must close its own frame");
+    assert_eq!(
+        actual,
+        command.replace(INS_TOKEN, "UNQ"),
+        "a marker after the nested substitution in {command:?} must stay unquoted"
+    );
+}
+
 /// Restore a top-level backtick's context into its surrounding quote region.
 #[rstest]
 #[case::unquoted("printf '%s' `printf x` {marker}", "UNQ")]

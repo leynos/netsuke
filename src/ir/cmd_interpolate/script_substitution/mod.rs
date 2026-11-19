@@ -244,13 +244,32 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     /// Returns an invalid-command error when the escape would modify a marker
     /// lowered immediately after it.
     fn starts_escape(&self, pos: usize, ch: char) -> Result<bool, IrGenError> {
-        if ch != '\\' || self.active_quote_context() == ShellQuoteContext::SingleQuoted {
+        if ch != '\\' {
+            return Ok(false);
+        }
+        if let Some(region) = self.backtick_region
+            && self.command_substitutions.len() == region.owner_depth
+        {
+            return Ok(self.backtick_body_escapes(pos));
+        }
+        if self.active_quote_context() == ShellQuoteContext::SingleQuoted {
             return Ok(false);
         }
         if backslash_escapes_marker(self.chars, pos, false, None) {
             return Err(invalid_command_error(self.template.to_owned()));
         }
         Ok(true)
+    }
+
+    /// Report whether the backslash at `pos` escapes the next body character.
+    ///
+    /// The shell finds the closing backtick before it parses the body's quotes,
+    /// so inside a body a backslash protects `$`, `` ` `` and `\` even where the
+    /// body's own quoting would make a backslash literal. Limiting the escapes
+    /// this way keeps `\'` inside a body's single quotes from swallowing the
+    /// quote that closes them.
+    fn backtick_body_escapes(&self, pos: usize) -> bool {
+        matches!(self.chars.get(pos + 1), Some('$' | '`' | '\\'))
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.
@@ -268,7 +287,9 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.close_backtick_region(region)?;
             return Ok(true);
         }
-        if let Some(region) = self.backtick_region.as_mut() {
+        if let Some(region) = self.backtick_region.as_mut()
+            && self.command_substitutions.len() == region.owner_depth
+        {
             return Ok(region.toggle_body_quote(ch));
         }
 
@@ -342,11 +363,14 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
 
     /// Return the quote context that governs the next source character.
     ///
-    /// An open backtick body is the innermost region, so its own quoting wins
-    /// while it lasts; the outer quote context it will restore is recorded
+    /// An open backtick body governs only while no `$()` frame has been opened
+    /// inside it: once one is, that frame is the innermost region and carries
+    /// its own quoting. The context the backtick will restore is recorded
     /// separately and is not consulted until the closing backtick.
     fn active_quote_context(&self) -> ShellQuoteContext {
-        if let Some(region) = self.backtick_region {
+        if let Some(region) = self.backtick_region
+            && self.command_substitutions.len() == region.owner_depth
+        {
             return region.body_context;
         }
         self.command_substitutions
