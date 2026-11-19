@@ -306,11 +306,13 @@ backticks inside single quotes; it is not a shell parser. `script:` recipes and
 PowerShell skip the count. A future release may accept more without a breaking
 change. Balanced author-written command substitutions remain live.
 
-This POSIX manifest is rejected before Ninja runs. Run
-`netsuke --locale en-GB generate` to see the cause: the default human output
-names `Invalid command interpolation: unmatched backtick`. The diagnostic never
-repeats the recipe, whose rendered text may already contain a value resolved
-from the environment.
+This POSIX manifest is rejected before Ninja runs, because its markers sit
+inside a backtick command substitution. Run `netsuke --locale en-GB generate`
+to see the cause: the default human output names
+`Invalid command interpolation:` followed by
+`recipe marker inside a protected shell region`. The diagnostic never repeats
+the recipe, whose rendered text may already contain a value resolved from the
+environment.
 
 <!-- tested-example: readme-backtick-rejection-manifest -->
 

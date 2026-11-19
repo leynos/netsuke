@@ -189,7 +189,10 @@ fn permitted_environment_value_stays_out_of_the_interpolation_diagnostic() -> Re
         "the unmatched backtick must fail generate, got status {:?}",
         output.status
     );
-    let stderr = String::from_utf8(output.stderr).context("diagnostic stderr is UTF-8")?;
+    // Fluent wraps each inserted argument in bidi isolation marks, so the
+    // rendered sentence cannot be matched as plain text until they are gone.
+    let raw_stderr = String::from_utf8(output.stderr).context("diagnostic stderr is UTF-8")?;
+    let stderr = flatten_localized_text(&raw_stderr);
     ensure!(
         stderr.contains("Invalid command interpolation: unmatched backtick"),
         "stderr must name the failed syntax: {stderr}"

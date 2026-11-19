@@ -285,12 +285,13 @@ Shell-Parser. `script:`-Rezepte und PowerShell führen diese Zählung nicht aus.
 Eine künftige Version kann ohne inkompatible Änderung mehr akzeptieren.
 Ausgewogene, vom Autor geschriebene Befehlssubstitutionen bleiben aktiv.
 
-Dieses POSIX-Manifest wird zurückgewiesen, bevor Ninja ausgeführt wird. Führen
-Sie `netsuke --locale en-GB generate` aus, um die Ursache zu sehen: Die
-menschenlesbare Standardfehlerausgabe nennt
-`Invalid command interpolation: unmatched backtick`. Die Diagnose wiederholt
-niemals das Rezept, dessen gerenderter Text bereits einen aus der Umgebung
-aufgelösten Wert enthalten kann.
+Dieses POSIX-Manifest wird zurückgewiesen, bevor Ninja ausgeführt wird, weil
+seine Marker in einer Backtick-Befehlssubstitution stehen. Führen Sie
+`netsuke --locale en-GB generate` aus, um die Ursache zu sehen: Die
+menschenlesbare Standardfehlerausgabe nennt `Invalid command interpolation:`
+gefolgt von `recipe marker inside a protected shell region`. Die Diagnose
+wiederholt niemals das Rezept, dessen gerenderter Text bereits einen aus der
+Umgebung aufgelösten Wert enthalten kann.
 
 ```yaml
 netsuke_version: '1.0.0'

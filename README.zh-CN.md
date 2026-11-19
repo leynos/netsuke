@@ -233,9 +233,10 @@ defaults: [output.txt]
 配方和PowerShell不执行此计数。未来版本可能在不造成破坏性
 变更的情况下接受更多内容。作者写入且反引号成对的命令替换仍可使用。
 
-以下POSIX清单会在Ninja运行前被拒绝。运行 `netsuke --locale en-GB generate`
-可查看原因：默认的人类可读输出会指出
-`Invalid command interpolation: unmatched backtick`。诊断不会重复命令内容，
+以下POSIX清单会在Ninja运行前被拒绝，因为其中的标记位于反引号命令替换内部。 运行
+`netsuke --locale en-GB generate` 可查看原因：默认的人类可读输出会指出
+`Invalid command interpolation:`，其后是
+`recipe marker inside a protected shell region`。诊断不会重复命令内容，
 因为渲染后的命令可能已包含从环境解析出的值。
 
 ```yaml

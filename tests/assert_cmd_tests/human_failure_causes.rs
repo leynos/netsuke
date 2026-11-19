@@ -245,7 +245,7 @@ fn readme_backtick_interpolation_snapshot() -> Result<()> {
         manifest: BACKTICK_INTERPOLATION,
         expected: &[
             "Failed to build graph from the manifest.",
-            "Invalid command interpolation: unmatched backtick",
+            "Invalid command interpolation: recipe marker inside a protected shell region",
         ],
     })
 }

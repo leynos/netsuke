@@ -289,11 +289,13 @@ analizador de shell. Las recetas `script:` y PowerShell omiten el recuento. Una
 versión futura puede aceptar más casos sin un cambio incompatible. Las
 sustituciones equilibradas escritas por el autor siguen activas.
 
-Este manifiesto POSIX se rechaza antes de ejecutar Ninja. Ejecute
+Este manifiesto POSIX se rechaza antes de ejecutar Ninja, porque sus marcadores
+están dentro de una sustitución de comando con comillas invertidas. Ejecute
 `netsuke --locale en-GB generate` para ver la causa: la salida legible
-predeterminada indica `Invalid command interpolation: unmatched backtick`. El
-diagnóstico nunca repite la receta, cuyo texto renderizado puede contener ya un
-valor resuelto desde el entorno.
+predeterminada indica `Invalid command interpolation:` seguido de
+`recipe marker inside a protected shell region`. El diagnóstico nunca repite la
+receta, cuyo texto renderizado puede contener ya un valor resuelto desde el
+entorno.
 
 ```yaml
 netsuke_version: '1.0.0'

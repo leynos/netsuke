@@ -277,11 +277,13 @@ inclui crases dentro de aspas simples; não é um analisador de shell. Receitas
 mais casos sem alteração incompatível. Substituições equilibradas escritas pelo
 autor continuam ativas.
 
-Este manifesto POSIX é rejeitado antes da execução do Ninja. Execute
+Este manifesto POSIX é rejeitado antes da execução do Ninja, porque seus
+marcadores estão dentro de uma substituição de comando com crases. Execute
 `netsuke --locale en-GB generate` para ver a causa: a saída legível padrão
-informa `Invalid command interpolation: unmatched backtick`. O diagnóstico
-nunca repete a receita, cujo texto renderizado pode já conter um valor
-resolvido a partir do ambiente.
+informa `Invalid command interpolation:` seguido de
+`recipe marker inside a protected shell region`. O diagnóstico nunca repete a
+receita, cujo texto renderizado pode já conter um valor resolvido a partir do
+ambiente.
 
 ```yaml
 netsuke_version: '1.0.0'

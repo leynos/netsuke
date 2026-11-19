@@ -254,9 +254,11 @@ NetsukeはPOSIXとBashのバッククォートによるコマンド置換内、�
 互換性を損なわずに受け入れる範囲が広がる可能性があります。作成者が
 記述した対になったコマンド置換は引き続き有効です。
 
-このPOSIXマニフェストはNinjaの実行前に拒否されます。原因を見るには
+このPOSIXマニフェストは、マーカーがバッククォートによるコマンド置換の
+内部にあるため、Ninjaの実行前に拒否されます。原因を見るには
 `netsuke --locale en-GB generate` を実行します。既定の人間向け出力は
-`Invalid command interpolation: unmatched backtick` と表示します。診断は
+`Invalid command interpolation:` に続けて
+`recipe marker inside a protected shell region` と表示します。診断は
 レシピを繰り返しません。レンダリング済みのレシピには、環境から解決された
 値がすでに含まれている可能性があるためです。
 
