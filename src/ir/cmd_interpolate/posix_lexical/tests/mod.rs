@@ -2,12 +2,14 @@
 
 mod case;
 mod delimiter_words;
+mod escaped_delimiters;
 mod support;
 
 use super::super::{
     CommandBindings, INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell,
     interpolate_command_with_bindings, interpolate_script_with_bindings,
 };
+use super::{EscapeBeforeMarker, PosixCharacter, PosixLexicalState};
 
 use camino::Utf8PathBuf;
 use rstest::rstest;
@@ -210,6 +212,46 @@ fn inner_group_close_inside_substitution_starts_inert_comment() {
         &expected,
         "a group closer inside a substitution must begin a comment",
         Interpolators::ScriptOnly,
+    );
+}
+
+/// Reject an escaped delimiter declaration before writing any output text.
+///
+/// The tracker parses and renders one declaration into the caller's output
+/// buffer. A marker after an active escape must return before that buffer is
+/// extended, so no rendered path text can reach the executable script.
+#[test]
+fn a_rejected_delimiter_declaration_writes_no_path_text() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from(HOSTILE_PATH)],
+        &[Utf8PathBuf::from("output")],
+        RecipeShell::Posix,
+    );
+    let template = format!("cat <<\\{INS_TOKEN}");
+    let chars: Vec<char> = template.chars().collect();
+    let operator = template.chars().take_while(|ch| *ch != '<').count();
+    let mut output = String::new();
+    let mut state = PosixLexicalState::new();
+    let mut character = PosixCharacter {
+        chars: &chars,
+        pos: operator,
+        ch: '<',
+        output: &mut output,
+    };
+
+    let result = state.append_heredoc_declaration(&mut character, &bindings);
+
+    assert!(
+        matches!(result, Err(EscapeBeforeMarker)),
+        "the declaration must be rejected before rendering"
+    );
+    assert!(
+        output.is_empty(),
+        "a rejected declaration must not extend the output buffer"
+    );
+    assert!(
+        !output.contains(HOSTILE_PATH),
+        "no path text may reach the executable script"
     );
 }
 
