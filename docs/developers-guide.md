@@ -9958,28 +9958,49 @@ unchanged. End-to-end coverage runs a generated command, rule-command, and
 script recipe through Ninja and `/bin/sh` on Unix, asserting the argument count
 and first argument so a split path fails the test, and is skipped when
 `ninja_integration_workspace` reports Ninja is unavailable. The script case
-depends on the layered `printf %b` transport preserving script bytes. POSIX and
-Bash `script:` recipes use the POSIX-aware scanner; PowerShell `command:` and
-`script:` recipes share the PowerShell-aware scanner and reject markers in
-quoted strings, here-strings, `$()`, or immediately after a backtick.
-Typographic PowerShell quote characters also make later markers fail closed.
-PowerShell rejects markers in the raw native-command region after an unquoted
-`--%` stop-parsing token. That region ends at a newline or pipeline character;
-a semicolon does not end it, and scanning resumes after the boundary. The path
-text otherwise reaches the native command literally instead of being
-interpreted as Netsuke's quoted path literal. PowerShell scripts have no inert
-comment regions: plain line-comment text leaves later markers eligible for
-interpolation, while scanner-sensitive syntax after a comment boundary or any
-mid-token `#` can make later markers fail closed. This includes a block-comment
-opener, quotes, backticks, or substitution syntax. In particular, an apostrophe
-in a comment can make a later marker fail closed. For POSIX and Bash `command:`
-recipes, the scanner then validates the substituted text: odd backticks reject
-the command, and the `shlex` guard also evaluates that substituted text.
-`script:` recipes skip both checks, because a script may legitimately contain
-heredocs and other syntax `shlex` cannot model. The odd-backtick and guard
-properties are complementary: one proves rejection of odd substituted backtick
-counts, while the other proves that the guard's success or failure and returned
-command agree with the substituted command.
+depends on the layered `printf %b` transport preserving script bytes.
+
+Heredoc-delimiter rejection after an active backslash has its own coverage in
+`src/ir/cmd_interpolate/posix_lexical/tests/escaped_delimiters.rs`. It drives
+both markers through both traversals and both POSIX-compatible shells for
+unquoted, double-quoted, and mid-word delimiters, checks the single-quoted
+positive control, tabulates odd and even backslash counts, and runs a bounded
+proptest over shell-metacharacter paths. The CLI contract in
+`tests/heredoc_delimiter_escape_e2e_tests.rs` runs the real binary with a
+sentinel Ninja under `--json`, because the human renderer reports only the
+runner's graph context; the JSON cause chain carries the localized
+interpolation rejection, and the sentinel proves lowering failed before Ninja
+started. The real-Ninja control in
+`tests/ninja_dollar_escaping_tests/heredoc.rs` shows paired backslashes keep a
+hostile body quoted and its markers inert. Those shell-executing cases are
+Unix-only, and they skip when the integration workspace reports Ninja is
+unavailable unless `NETSUKE_REQUIRE_NINJA=1` turns the skip into a failure. A
+multiline heredoc therefore belongs in `script:`: Ninja generation rejects a
+multiline `command:` value as `UnsafeNinjaValue`, so a `command:` case can only
+exercise the delimiter on one line. PowerShell has no heredoc delimiter and is
+outside this coverage.
+
+POSIX and Bash `script:` recipes use the POSIX-aware scanner; PowerShell
+`command:` and `script:` recipes share the PowerShell-aware scanner and reject
+markers in quoted strings, here-strings, `$()`, or immediately after a
+backtick. Typographic PowerShell quote characters also make later markers fail
+closed. PowerShell rejects markers in the raw native-command region after an
+unquoted `--%` stop-parsing token. That region ends at a newline or pipeline
+character; a semicolon does not end it, and scanning resumes after the
+boundary. The path text otherwise reaches the native command literally instead
+of being interpreted as Netsuke's quoted path literal. PowerShell scripts have
+no inert comment regions: plain line-comment text leaves later markers eligible
+for interpolation, while scanner-sensitive syntax after a comment boundary or
+any mid-token `#` can make later markers fail closed. This includes a
+block-comment opener, quotes, backticks, or substitution syntax. In particular,
+an apostrophe in a comment can make a later marker fail closed. For POSIX and
+Bash `command:` recipes, the scanner then validates the substituted text: odd
+backticks reject the command, and the `shlex` guard also evaluates that
+substituted text. `script:` recipes skip both checks, because a script may
+legitimately contain heredocs and other syntax `shlex` cannot model. The
+odd-backtick and guard properties are complementary: one proves rejection of
+odd substituted backtick counts, while the other proves that the guard's
+success or failure and returned command agree with the substituted command.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies
