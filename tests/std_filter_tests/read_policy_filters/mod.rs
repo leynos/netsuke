@@ -141,6 +141,12 @@ pub(super) enum Policy {
 
 impl Policy {
     /// Every policy, in the order the policy tables exercise them.
+    ///
+    /// Only the manual-resolver modules iterate this list, and both are Linux
+    /// test modules, so it is compiled where it has a caller; a lane that
+    /// compiles the file-type tables alone already names each policy explicitly
+    /// and would otherwise see this constant as dead code.
+    #[cfg(target_os = "linux")]
     pub(super) const ALL: [Self; 3] = [Self::Omitted, Self::FollowFalse, Self::FollowTrue];
 
     /// Build a template that reads `path` through `case` under this policy.
@@ -159,6 +165,12 @@ impl Policy {
     }
 
     /// Whether this policy asks the resolver to follow a final symlink.
+    ///
+    /// The FIFO cases and the manual-resolver cases ask this question; the
+    /// cross-platform file-type table spells each expected outcome out per
+    /// case instead. Windows compiles neither caller, so the method is Unix
+    /// only for the same reason `Self::ALL` is Linux only.
+    #[cfg(unix)]
     pub(super) fn follows(self) -> bool {
         self == Self::FollowTrue
     }
