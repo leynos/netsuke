@@ -2,9 +2,10 @@
 
 use super::{
     CommandBindings, IrGenError, QuoteContext,
+    case_nesting::CaseObservation,
     command_substitution::{
-        CaseObservation, CommandSubstitution, CommandSubstitutionDelimiter, SubstitutionBoundary,
-        reject_ambiguous_case_comment,
+        CommandSubstitution, CommandSubstitutionDelimiter, SubstitutionBoundary,
+        reject_ambiguous_case_comment, reject_unplaced_case,
     },
     find_substitution, invalid_command_error,
     posix_lexical::{PosixLexicalState, SubstitutionKind},
@@ -214,6 +215,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         }
         let boundary = self.boundary_at(pos);
         if self.decrement_command_substitution_parenthesis_depth() {
+            reject_unplaced_case(self.chars, &boundary)?;
             self.posix_lexical.leave_command_substitution_region();
             self.reject_ambiguous_boundary(&boundary)?;
             self.posix_lexical.record_closed_command_substitution(pos);
@@ -231,12 +233,13 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             .last()
             .filter(|substitution| substitution.parenthesis_depth == 1)
             .map_or_else(
-                || SubstitutionBoundary::new(pos, None, false),
+                || SubstitutionBoundary::new(pos, None, false, false),
                 |substitution| {
                     SubstitutionBoundary::new(
                         pos,
                         Some(substitution.start),
                         substitution.case_nesting.saw_case(),
+                        substitution.case_nesting.has_unplaced_case(),
                     )
                 },
             )
