@@ -67,11 +67,30 @@ function Get-DowngradeRefusalMessage {
     # The package authors the refusal text itself, so read it from the built
     # MSI rather than copying it here: a copy would drift from
     # installer/Package.wxs, and the log must carry exactly this sentence for
-    # the attempt to count as a refusal.
-    $template = Get-MsiColumnValue `
-        -MsiPath $MsiPath `
-        -Query "SELECT `Description` FROM `LaunchCondition` WHERE `Condition` LIKE '%DOWNGRADE%'" `
-        -MissingMessage 'declares no downgrade launch condition.'
+    # the attempt to count as a refusal. The rank comparison is what refuses
+    # the downgrade, so its launch condition is the row that carries the
+    # sentence; the MajorUpgrade downgrade message belongs to a different
+    # check that never runs between equal numeric versions.
+    #
+    # Windows Installer's SQL has no LIKE operator, so the row is chosen in
+    # PowerShell: the query itself fails to parse rather than returning no
+    # rows, which is why the whole table is read here.
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($MsiPath, 0)
+    $view = $database.OpenView('SELECT `Condition`, `Description` FROM `LaunchCondition`')
+    [void]$view.Execute()
+    $template = $null
+    $record = $view.Fetch()
+    while ($null -ne $record) {
+        $condition = [string]$record.StringData(1)
+        if (($null -eq $template) -and ($condition -like '*NETSUKE_RELEASE_RANK*')) {
+            $template = [string]$record.StringData(2)
+        }
+        $record = $view.Fetch()
+    }
+    if ($null -eq $template) {
+        throw "MSI $MsiPath declares no release-rank launch condition."
+    }
     $productName = Get-MsiProperty -MsiPath $MsiPath -PropertyName ProductName
     return $template.Replace('[ProductName]', $productName)
 }
@@ -171,11 +190,17 @@ function Assert-NoRelatedProductInstalled {
     # A leftover installation from an earlier run of this fixture family has a
     # different ProductCode but the same UpgradeCode, so the final package
     # would upgrade it and the checks labelled clean install would still pass.
-    # RelatedProducts returns a StringList, which PowerShell enumerates with
-    # foreach.
+    # RelatedProducts returns a COM StringList, which PowerShell cannot
+    # enumerate with foreach: it would hand back the list itself as one opaque
+    # item and report every runner as dirty. Walk the list through its own
+    # Count and Item members instead.
     $installer = New-Object -ComObject WindowsInstaller.Installer
-    $relatedProducts = @($installer.RelatedProducts($UpgradeCode))
-    foreach ($productCode in $relatedProducts) {
+    $relatedProducts = $installer.RelatedProducts($UpgradeCode)
+    if ($null -eq $relatedProducts) {
+        return
+    }
+    for ($index = 1; $index -le $relatedProducts.Count; $index++) {
+        $productCode = $relatedProducts.Item($index)
         throw "Product $productCode related to upgrade code $UpgradeCode is already installed."
     }
 }

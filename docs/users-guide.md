@@ -360,7 +360,10 @@ $netsukeExecutable = Join-Path $netsukeDirectory 'netsuke.exe'
 if (-not (Test-Path -LiteralPath $netsukeExecutable -PathType Leaf)) {
     throw "Netsuke is not installed at $netsukeExecutable."
 }
-$environmentKey = Get-Item -LiteralPath 'HKCU:\Environment'
+$environmentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+if ($null -eq $environmentKey) {
+    throw 'User environment registry key not found.'
+}
 $userPathKind = if ($environmentKey.GetValueNames() -contains 'Path') {
     $environmentKey.GetValueKind('Path')
 } else {
@@ -372,6 +375,7 @@ if ($userEntries -notcontains $netsukeDirectory) {
     $newUserPath = (($userEntries + $netsukeDirectory) -join ';')
     $environmentKey.SetValue('Path', $newUserPath, $userPathKind)
 }
+$environmentKey.Dispose()
 if (($env:Path -split ';') -notcontains $netsukeDirectory) {
     $env:Path = "$env:Path;$netsukeDirectory"
 }
@@ -400,7 +404,10 @@ $netsukeExecutable = Join-Path $netsukeDirectory 'netsuke.exe'
 if (-not (Test-Path -LiteralPath $netsukeExecutable -PathType Leaf)) {
     throw "Netsuke is not installed at $netsukeExecutable."
 }
-$environmentKey = Get-Item -LiteralPath 'HKCU:\Environment'
+$environmentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+if ($null -eq $environmentKey) {
+    throw 'User environment registry key not found.'
+}
 $userPathKind = if ($environmentKey.GetValueNames() -contains 'Path') {
     $environmentKey.GetValueKind('Path')
 } else {
@@ -412,6 +419,7 @@ if ($userEntries -notcontains $netsukeDirectory) {
     $newUserPath = (($userEntries + $netsukeDirectory) -join ';')
     $environmentKey.SetValue('Path', $newUserPath, $userPathKind)
 }
+$environmentKey.Dispose()
 if (($env:Path -split ';') -notcontains $netsukeDirectory) {
     $env:Path = "$env:Path;$netsukeDirectory"
 }
