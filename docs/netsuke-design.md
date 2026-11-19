@@ -4337,12 +4337,18 @@ rejected from environment ingress by its normalized top-level spelling.
    system-scope fallback.
 
 4. **System scope**: System-wide configuration directories, consulted only when
-   no user file exists:
+   the user pass supplies no chain — when no user file exists, or when the
+   first candidate that loads is refused because it is the project
+   configuration file:
    - **Unix-like systems**:
      - Each directory in `$XDG_CONFIG_DIRS`, looking for
        `netsuke/config.toml` and `.netsuke.toml` (XDG Base Directory system
        config directories, defaulting to `/etc/xdg` when `XDG_CONFIG_DIRS` is
        unset)
+
+   A refused candidate is not adopted; the dependency's scan then runs in its
+   own order and reports whether the root it selects may donate policy
+   authority.
 
 The Netsuke-owned user pass decides which user file is retained first, and the
 candidate order `ConfigDiscovery` generates decides only when that pass finds

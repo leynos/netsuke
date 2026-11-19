@@ -11,11 +11,15 @@
 //! demand here: the loader opens the same parent first, so it reports that
 //! failure before the probe runs. The seam is what keeps the branch testable.
 //! The absent and dangling-link answers are also pinned against real
-//! directories by the cases in the sibling modules.
+//! directories by the cases in the sibling modules, and the production probe
+//! itself is driven through a recording delegate, so the answers discovery acts
+//! on are shown to come from the implementation production uses.
 
 use super::{Case, HomeArrangement};
 use crate::cli::discovery::discovery_env_source;
 use crate::cli::discovery::layers::ProjectIdentity;
+#[cfg(unix)]
+use crate::cli::discovery::layers::user_candidate::FsCandidateProbe;
 use crate::cli::discovery::layers::user_candidate::{
     AutomaticLayers, CandidateEntry, CandidateFailure, CandidateProbe, UnloadableCandidate,
     UserScopeTrace, automatic_base_layers_with_probe,
@@ -248,6 +252,81 @@ fn absent_entry_falls_through_to_the_system_scope() -> Result<()> {
     ensure!(
         paths == [expected],
         "the system file should be the only layer, got {paths:?}"
+    );
+    Ok(())
+}
+
+/// A probe that answers through the production implementation and records paths.
+///
+/// The scripted probe proves discovery's handling of each answer; this delegate
+/// proves the answer a real layout can produce actually comes from
+/// [`FsCandidateProbe`], so a discovery wiring defect that bypassed the
+/// production inspection would not go unnoticed.
+#[cfg(unix)]
+struct RecordingProbe {
+    inner: FsCandidateProbe,
+    probed: RefCell<Vec<PathBuf>>,
+}
+
+#[cfg(unix)]
+impl RecordingProbe {
+    /// Build a delegate with an empty record.
+    fn new() -> Self {
+        Self {
+            inner: FsCandidateProbe,
+            probed: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// Return the candidate paths the production probe was asked about.
+    fn probed(&self) -> Vec<PathBuf> {
+        self.probed.borrow().clone()
+    }
+}
+
+#[cfg(unix)]
+impl CandidateProbe for RecordingProbe {
+    fn probe(&self, path: &Path) -> io::Result<CandidateEntry> {
+        self.probed.borrow_mut().push(path.to_path_buf());
+        self.inner.probe(path)
+    }
+}
+
+/// The production probe supplies the answer discovery acts on.
+///
+/// A dangling `$HOME/.netsuke.toml` is the layout the dependency reports as
+/// absent, so discovery's rejection has to come from the production
+/// inspection. `CandidateFailure::ProbeFailed` cannot be reached this way:
+/// `load_user_candidate` calls `load_config_file_as_chain` first, and
+/// `ortho_config` opens the same parent directory, so any layout that makes the
+/// production probe fail makes the loader fail first and discovery reports that
+/// error instead. The scripted probe covers that branch; this delegate covers
+/// the answers a real layout can produce.
+#[cfg(unix)]
+#[rstest]
+fn production_probe_classifies_a_dangling_link_through_discovery() -> Result<()> {
+    let case = Case::new()?;
+    let probe = RecordingProbe::new();
+    let environment = case.environment(HomeArrangement::EmptyXdgConfigHome);
+    let candidate = case.home().join(".netsuke.toml");
+    // The target is relative so the link stays inside `$HOME`, which is the
+    // form the dependency resolves through a capability on the parent.
+    test_support::fs::symlink(Path::new("missing.toml"), &candidate)
+        .context("stage a link whose target does not exist")?;
+
+    let error = layers_with_probe(&probe, &environment)
+        .err()
+        .context("a dangling link must fail discovery rather than fall through")?;
+
+    let reason = reason_of(&error);
+    ensure!(
+        reason == Some(CandidateFailure::DanglingLink),
+        "the production probe must classify the link as dangling, got {reason:?}: {error}"
+    );
+    ensure!(
+        probe.probed().contains(&candidate),
+        "the production probe must be consulted about the staged candidate, got {:?}",
+        probe.probed()
     );
     Ok(())
 }

@@ -100,16 +100,19 @@ fn candidate_entry_metadata(path: &Path) -> io::Result<Option<Metadata>> {
 mod tests {
     //! Production-probe tests a real directory can express.
     //!
-    //! The absence branches are covered through the discovery cases. These
-    //! cases pin the opposite answer — an inspection that failed — because
-    //! folding it into absence is the defect the probe exists to prevent, and
-    //! it is the one branch the loader cannot report first here: the parent of
+    //! The absence branch is covered through the discovery cases. These cases
+    //! pin the three answers the production implementation maps on its own: a
+    //! regular file is present, a link whose target is missing is a symlink, and
+    //! an inspection that failed stays an error. The last one matters most
+    //! because folding it into absence is the defect the probe exists to
+    //! prevent, and it is the branch a real layout can stage here: the parent of
     //! the candidate is a regular file, so opening it fails outright.
 
-    use super::candidate_entry_metadata;
+    use super::{CandidateEntry, CandidateProbe, FsCandidateProbe, candidate_entry_metadata};
     use anyhow::{Context, Result, ensure};
     use rstest::rstest;
     use std::io;
+    use std::path::Path;
     use tempfile::tempdir;
 
     /// Report a parent that is not a directory instead of treating it as absent.
@@ -120,15 +123,94 @@ mod tests {
     #[rstest]
     fn unopenable_parent_is_an_error_rather_than_an_absent_entry() -> Result<()> {
         let home = tempdir().context("create home directory")?;
-        let blocking_parent = home.path().join(".config");
-        test_support::fs::write(&blocking_parent, "not a directory\n")
-            .context("stage a regular file where the XDG base expects a directory")?;
+        let candidate = stage_candidate_under_a_regular_file(home.path())?;
 
-        let candidate = blocking_parent.join("netsuke").join("config.toml");
         let error = candidate_entry_metadata(&candidate)
             .err()
             .context("an unopenable parent must report an error, not absence")?;
 
+        assert_not_a_directory(&error)
+    }
+
+    /// The production probe answers the same error the helper reports.
+    ///
+    /// This drives the trait method, not the helper: an implementation that
+    /// swallowed the inspection failure into `Absent` would look correct
+    /// through the helper alone.
+    #[rstest]
+    fn fs_probe_reports_an_unopenable_parent_as_an_error() -> Result<()> {
+        let home = tempdir().context("create home directory")?;
+        let candidate = stage_candidate_under_a_regular_file(home.path())?;
+
+        let error = FsCandidateProbe
+            .probe(&candidate)
+            .err()
+            .context("the production probe must report the failure, not absence")?;
+
+        assert_not_a_directory(&error)
+    }
+
+    /// A real regular file is reported present.
+    ///
+    /// The mapping is not a tautology: collapsing the `Some(_)` arm into the
+    /// `None` arm would report an installed candidate as absent and let
+    /// discovery fall through to a lower scope.
+    #[rstest]
+    fn fs_probe_reports_a_regular_file_as_present() -> Result<()> {
+        let home = tempdir().context("create home directory")?;
+        let candidate = home.path().join("netsuke").join("config.toml");
+        test_support::fs::create_dir_all(candidate.parent().context("candidate has a parent")?)
+            .context("create the candidate's directory")?;
+        test_support::fs::write(&candidate, "jobs = 2\n").context("write the candidate file")?;
+
+        let entry = FsCandidateProbe
+            .probe(&candidate)
+            .context("a regular file is inspectable")?;
+
+        ensure!(
+            entry == CandidateEntry::Present,
+            "a regular file must be reported present, got {entry:?}"
+        );
+        Ok(())
+    }
+
+    /// A link whose target is missing is reported as a symbolic link.
+    ///
+    /// `symlink_metadata` is what keeps this answer available: following the
+    /// link would report absence instead, and the fail-closed rejection would
+    /// never fire for the policy the user meant to override.
+    #[rstest]
+    fn fs_probe_reports_a_dangling_link_as_a_symlink() -> Result<()> {
+        let home = tempdir().context("create home directory")?;
+        let candidate = home.path().join(".netsuke.toml");
+        test_support::fs::symlink(Path::new("missing.toml"), &candidate)
+            .context("stage a link whose target does not exist")?;
+
+        let entry = FsCandidateProbe
+            .probe(&candidate)
+            .context("a dangling link is still an inspectable entry")?;
+
+        ensure!(
+            entry == CandidateEntry::Symlink,
+            "a link whose target is missing must be reported as a symlink, got {entry:?}"
+        );
+        Ok(())
+    }
+
+    /// Stage a candidate whose parent is a regular file rather than a directory.
+    ///
+    /// The caller keeps `home` alive: the staged parent lives inside it, so a
+    /// returned path whose temporary directory had been dropped would name
+    /// nothing and the probe would answer absence instead of failing.
+    fn stage_candidate_under_a_regular_file(home: &Path) -> Result<std::path::PathBuf> {
+        let blocking_parent = home.join(".config");
+        test_support::fs::write(&blocking_parent, "not a directory\n")
+            .context("stage a regular file where the XDG base expects a directory")?;
+        Ok(blocking_parent.join("netsuke").join("config.toml"))
+    }
+
+    /// Require an inspection failure to keep the filesystem's own error kind.
+    fn assert_not_a_directory(error: &io::Error) -> Result<()> {
         ensure!(
             error.kind() == io::ErrorKind::NotADirectory,
             "the inspection must keep the filesystem's own error kind, got {kind:?}",

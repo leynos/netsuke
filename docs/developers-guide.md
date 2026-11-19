@@ -12207,9 +12207,16 @@ adoption: `ProjectIdentity::candidate_is_trusted` resolves the candidate before
 comparing it with the classified project key through
 `ProjectKey::classify_candidate`, so a home directory reached through a link is
 recognized as the same file. A false answer means the pass does not adopt the
-candidate at all; the project pass loads it with its existing project
-quarantine, and the system layers still load. Reading the user scope first
-changes which candidates are considered, not how a loaded file is trusted.
+candidate's chain, and it stops there rather than trying a lower-priority
+candidate. What happens next depends on which identity failed. A definite
+project match is skipped by the fallback scan, so the system layers still load
+and the project pass appends the same chain under its existing project
+quarantine. An unresolved candidate is not skipped, because ruling it out as
+the project file is exactly what failed: the fallback scan may load it, in the
+dependency's own order, before reaching a system candidate, and it reports that
+chain as an untrusted root, so the authority to set platform policy is
+withheld. Reading the user scope first changes which candidates are considered
+and who may donate authority, not how a loaded file is trusted.
 
 Both passes retain their decisions for replay. `UserScopeTrace` records whether
 the user pass adopted a candidate or fell back, `ProjectScopeTrace` records
