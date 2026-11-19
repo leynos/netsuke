@@ -56,6 +56,21 @@ class ReleaseContext:
     resolver_should_upload_workflow_artifacts: bool
 
 
+class Denial(enum.StrEnum):
+    """Name the closed set of reasons publication may be refused.
+
+    A bounded vocabulary is what lets the adapter record a decision in the run
+    log and the job summary without echoing caller-supplied text: each member
+    is a fixed token, so no denial can widen into free-form content.
+    """
+
+    DRY_RUN = "dry_run"
+    PUBLISH_NOT_REQUESTED = "publish_not_requested"
+    REF_NOT_A_VERSION_TAG = "ref_not_a_version_tag"
+    RESOLVER_DECLINED = "resolver_declined"
+    RESOLVER_DRY_RUN = "resolver_dry_run"
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class ReleaseAuthorization:
     """Record the effective release mode and the reason for it."""
@@ -65,6 +80,22 @@ class ReleaseAuthorization:
     dry_run: bool
     should_upload_workflow_artifacts: bool
     reason: str
+    #: The denial codes behind ``reason``, in policy order. A decision that
+    #: authorized the write denies nothing, so the tuple is then empty.
+    denials: tuple[Denial, ...] = ()
+
+    @property
+    def reason_category(self) -> str:
+        """Render the bounded category an operator's run log can be read by.
+
+        Returns
+        -------
+        str
+            ``authorized``, or the denial codes in policy order joined by
+            commas. The value comes from :class:`Denial` alone, so it is
+            bounded by the policy's own vocabulary.
+        """
+        return ",".join(self.denials) if self.denials else "authorized"
 
 
 def _is_version_tag(ref: str) -> bool:
@@ -85,28 +116,39 @@ def _is_version_tag(ref: str) -> bool:
     return _VERSION_TAG.fullmatch(ref) is not None
 
 
-def _denials(context: ReleaseContext) -> list[str]:
+def _denials(context: ReleaseContext) -> list[tuple[Denial, str]]:
     """List every reason this run may not write to the release.
 
     The rules are cumulative so the reported reason explains the whole refusal;
-    an empty list means publication is authorized.
+    an empty list means publication is authorized. Each code is paired with the
+    sentence that explains it, so the bounded category and the human-readable
+    reason are decided together and cannot drift apart.
 
     Returns
     -------
-    list[str]
-        Human-readable denial reasons, in policy order.
+    list[tuple[Denial, str]]
+        Denial codes with their explanations, in policy order.
     """
-    denials: list[str] = []
+    denials: list[tuple[Denial, str]] = []
     if context.dry_run:
-        denials.append("the caller requested a dry run")
+        denials.append((Denial.DRY_RUN, "the caller requested a dry run"))
     if context.origin is Origin.REUSABLE and not context.publish:
-        denials.append("a reusable invocation requires publish=true")
+        denials.append((
+            Denial.PUBLISH_NOT_REQUESTED,
+            "a reusable invocation requires publish=true",
+        ))
     if not _is_version_tag(context.ref):
-        denials.append("the ref is not a v*.*.* tag")
+        denials.append((Denial.REF_NOT_A_VERSION_TAG, "the ref is not a v*.*.* tag"))
     if not context.resolver_should_publish:
-        denials.append("the release-mode resolver did not select publication")
+        denials.append((
+            Denial.RESOLVER_DECLINED,
+            "the release-mode resolver did not select publication",
+        ))
     if context.resolver_dry_run:
-        denials.append("the release-mode resolver requested a dry run")
+        denials.append((
+            Denial.RESOLVER_DRY_RUN,
+            "the release-mode resolver requested a dry run",
+        ))
     return denials
 
 
@@ -121,7 +163,8 @@ def authorize_release_writes(context: ReleaseContext) -> ReleaseAuthorization:
     -------
     ReleaseAuthorization
         The invocation origin, effective publication and dry-run flags, the
-        effective workflow-artefact upload flag, and a human-readable reason.
+        effective workflow-artefact upload flag, a human-readable reason, and
+        the denial codes that reason explains.
 
     Examples
     --------
@@ -147,7 +190,7 @@ def authorize_release_writes(context: ReleaseContext) -> ReleaseAuthorization:
     reason = (
         f"publication authorized for a {origin} release"
         if should_publish
-        else "publication denied: " + "; ".join(denials)
+        else "publication denied: " + "; ".join(message for _, message in denials)
     )
     # Diagnostic artefacts are a rehearsal aid, never a release write. A dry
     # run suppresses them, matching the input's documented contract, and
@@ -163,4 +206,5 @@ def authorize_release_writes(context: ReleaseContext) -> ReleaseAuthorization:
         dry_run=effective_dry_run,
         should_upload_workflow_artifacts=should_upload_workflow_artifacts,
         reason=reason,
+        denials=tuple(code for code, _ in denials),
     )

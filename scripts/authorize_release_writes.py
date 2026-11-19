@@ -9,8 +9,10 @@ The decision itself lives in ``scripts/release_write_policy.py``, which reads
 typed values and touches no environment, file, or workflow key. This module is
 the adapter the ``release_authorization`` step runs: it parses the raw reusable
 inputs and resolver outputs, classifies the invocation origin from the GitHub
-context, renders the decision for ``GITHUB_OUTPUT``, and reports a resolver
-override as a workflow annotation.
+context, and records the decision three times over: as ``GITHUB_OUTPUT`` values
+for later jobs, as a ``GITHUB_STEP_SUMMARY`` section for the operator, and as a
+``::notice`` annotation in the run log. Both records carry the policy's own
+fixed fields and a bounded reason category, so neither repeats caller text.
 
 Malformed inputs are refused here, at the boundary where a spelling can be
 checked, rather than being guessed at inside the policy.
@@ -155,33 +157,75 @@ def write_outputs(path: pathlib.Path, decision: policy.ReleaseAuthorization) -> 
             output.write(f"{key}={value}\n")
 
 
-def resolver_override_notice(
-    decision: policy.ReleaseAuthorization,
-    context: policy.ReleaseContext,
-) -> str | None:
-    """Describe a decision that overrode the resolver, or return ``None``.
+_NOTICE_TITLE = "Release authorization"
+_SUMMARY_HEADING = "### Release authorization"
 
-    Only a disagreement is worth an annotation. A resolver that already denied
-    publication needs no explanation in the log, and a run the policy and the
-    resolver both deny is ordinary.
+
+def _flag(*, value: bool) -> str:
+    """Render a decision flag as the spelling the workflow outputs use."""
+    return _TRUE if value else "false"
+
+
+def recorded_fields(
+    decision: policy.ReleaseAuthorization,
+) -> tuple[tuple[str, str], ...]:
+    """Name the fixed fields every decision record carries.
+
+    Both the annotation and the job summary read this tuple, so the two
+    surfaces cannot report different decisions. Every value is a boolean, the
+    origin, or a denial code, so no caller-supplied text can reach either
+    record.
 
     Returns
     -------
-    str | None
-        A workflow ``::notice`` line, or ``None`` when nothing was overridden.
+    tuple[tuple[str, str], ...]
+        Field names with their rendered values, in a stable order.
+
+    Examples
+    --------
+    >>> recorded_fields(
+    ...     policy.ReleaseAuthorization(
+    ...         policy.Origin.DIRECT, True, False, True, "authorized"
+    ...     )
+    ... )[1]
+    ('should-publish', 'true')
     """
-    overrides: list[str] = []
-    if context.resolver_should_publish and not decision.should_publish:
-        overrides.append("the resolver selected publication but the policy denied it")
-    if not context.resolver_dry_run and decision.dry_run:
-        overrides.append("the policy selected dry-run although the resolver did not")
-    if not overrides:
-        return None
     return (
-        "::notice title=Release authorization::"
-        + "; ".join(overrides)
-        + f". {decision.reason}"
+        ("origin", str(decision.origin)),
+        ("should-publish", _flag(value=decision.should_publish)),
+        ("dry-run", _flag(value=decision.dry_run)),
+        (
+            "should-upload-workflow-artifacts",
+            _flag(value=decision.should_upload_workflow_artifacts),
+        ),
+        ("reason-category", decision.reason_category),
     )
+
+
+def decision_record(decision: policy.ReleaseAuthorization) -> str:
+    """Render one decision as a single bounded log line.
+
+    Returns
+    -------
+    str
+        The fixed fields as ``name=value`` pairs, separated by semicolons.
+    """
+    return "; ".join(f"{name}={value}" for name, value in recorded_fields(decision))
+
+
+def write_summary(path: pathlib.Path, decision: policy.ReleaseAuthorization) -> None:
+    """Append the decision to the job summary, with fixed fields only.
+
+    The record is written for every decision, authorized or denied, so an
+    operator reads the outcome in the run summary rather than reconstructing it
+    from a later job's guard. A summary file that cannot be opened or written
+    propagates its error, so a run whose decision cannot be recorded fails
+    rather than reporting it nowhere.
+    """
+    lines = [_SUMMARY_HEADING, ""]
+    lines.extend(f"- {name}: `{value}`" for name, value in recorded_fields(decision))
+    with path.open("a", encoding="utf-8") as summary:
+        summary.write("\n".join(lines) + "\n")
 
 
 @Parameter(name="*")
@@ -244,9 +288,12 @@ class WorkflowInputs:
 @Parameter(name="*")
 @dataclasses.dataclass(frozen=True, slots=True)
 class OutputTarget:
-    """Name the workflow output file the decision is appended to."""
+    """Name the workflow files the decision is appended to."""
 
     output_path: typ.Annotated[str, Parameter(env_var="GITHUB_OUTPUT", required=True)]
+    summary_path: typ.Annotated[
+        str, Parameter(env_var="GITHUB_STEP_SUMMARY", required=True)
+    ]
 
 
 @app.default
@@ -255,10 +302,12 @@ def export_authorization(
     *,
     target: OutputTarget,
 ) -> None:
-    """Authorize the run, append the effective outputs, and report overrides.
+    """Authorize the run, then publish its outputs, summary, and annotation.
 
     A supported non-publishing request is a successful decision, not a failure,
-    so only a malformed input exits non-zero.
+    so only a malformed input exits non-zero. Every successful decision is
+    recorded three times over: as step outputs for later jobs, as a summary
+    section for the operator, and as a ``::notice`` annotation in the run log.
 
     Raises
     ------
@@ -269,14 +318,13 @@ def export_authorization(
     try:
         context = inputs.as_context()
     except ReleaseInputError as error:
-        print(f"::error title=Release authorization::{error}", file=sys.stderr)
+        print(f"::error title={_NOTICE_TITLE}::{error}", file=sys.stderr)
         raise SystemExit(2) from error
 
     decision = policy.authorize_release_writes(context)
     write_outputs(pathlib.Path(target.output_path), decision)
-    notice = resolver_override_notice(decision, context)
-    if notice is not None:
-        print(notice)
+    write_summary(pathlib.Path(target.summary_path), decision)
+    print(f"::notice title={_NOTICE_TITLE}::{decision_record(decision)}")
 
 
 if __name__ == "__main__":

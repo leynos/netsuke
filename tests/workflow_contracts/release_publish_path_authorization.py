@@ -14,6 +14,7 @@ import authorize_release_writes as adapter
 import release_write_policy as policy
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
+from release_publish_path_summary import check_summary_record
 from workflow_loading import job_steps, require_mapping, workflow_job
 
 AUTHORIZATION_STEP = "release_authorization"
@@ -384,4 +385,7 @@ def check_authorization_wiring(
         _check_env(step, violations)
         _check_step_order(release, violations)
         _check_gates(release, violations)
+        # The condition check proves the step runs; this check proves the run
+        # reaches the record, so a decision cannot be left unrecorded.
+        check_summary_record(violations)
     _check_publish_job_veto(release, violations)

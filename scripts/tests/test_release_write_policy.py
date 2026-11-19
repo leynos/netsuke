@@ -177,6 +177,25 @@ def test_allowed_reason_names_the_invocation_origin() -> None:
     assert decision.reason == "publication authorized for a direct release", (
         f"the reason should name the origin; got {decision.reason!r}"
     )
+    assert decision.reason_category == "authorized", (
+        "an authorized decision has no denial category; got "
+        f"{decision.reason_category!r}"
+    )
+
+
+def test_reason_category_names_every_denial_in_policy_order() -> None:
+    """Expose a bounded category beside the human-readable reason."""
+    decision = policy.authorize_release_writes(
+        dataclasses.replace(_BASE, origin=policy.Origin.REUSABLE, dry_run=True)
+    )
+
+    assert decision.reason_category == "dry_run,publish_not_requested", (
+        f"the category should name both denials; got {decision.reason_category!r}"
+    )
+    assert decision.denials == (
+        policy.Denial.DRY_RUN,
+        policy.Denial.PUBLISH_NOT_REQUESTED,
+    ), f"the decision should expose its denial codes; got {decision.denials!r}"
 
 
 @given(context=_CONTEXTS)

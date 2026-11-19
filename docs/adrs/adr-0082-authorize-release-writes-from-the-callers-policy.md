@@ -52,6 +52,8 @@ publish. Deciding that from the resolver's output alone conflates the two.
   filesystem, or workflow-key access.
 - The step's inputs arrive through `env:`, never interpolated into `run:`.
 - A malformed boolean writes an `::error` annotation and exits with status 2.
+- Every decision writes a bounded record to the job summary and a notice
+  annotation, unconditionally, and records only fixed fields.
 - The invocation origin is classified from `github.workflow_ref`, not from the
   event name alone.
 - Build diagnostic artefact upload is suppressed on a dry run. The
@@ -94,13 +96,23 @@ after `determine-release-modes` and before `validate_publish_ref`,
 writes `should-publish`, `dry-run`, `should-upload-workflow-artifacts`,
 `origin`, and `reason` to `GITHUB_OUTPUT`.
 
+Every decision is also recorded where a reader looks first. The adapter writes
+the origin, the effective publication, dry-run, and artefact-upload flags, and
+a bounded reason category to `GITHUB_STEP_SUMMARY`, and emits the same record
+as a `Release authorization` notice annotation. The category names the rules
+that refused publication, in policy order, or `authorized` when none did; the
+free text `reason` stays in the step outputs. Only fixed fields are recorded,
+so no caller-supplied text or secret reaches the summary or the log. The record
+is written unconditionally by the step's entry point, and a workflow contract
+reads that script's syntax tree to refuse a record a branch, loop, or handler
+can skip.
+
 The rule lives in `scripts/release_write_policy.py` as a pure function over
 typed value objects, and the step's adapter is
 `scripts/authorize_release_writes.py`, which parses the raw spellings,
-classifies the origin, renders the outputs, and reports a resolver override as
-a workflow notice. The split follows
-[ADR-0074](adr-0074-typed-records-for-release-policy-boundaries.md): the policy
-knows no field names, and the adapter owns decoding.
+classifies the origin, renders the outputs, and records the decision. The split
+follows [ADR-0074](adr-0074-typed-records-for-release-policy-boundaries.md):
+the policy knows no field names, and the adapter owns decoding.
 
 Origin classification fails closed. A run is direct only when it carries no
 reusable inputs, was triggered by a `push`, and names

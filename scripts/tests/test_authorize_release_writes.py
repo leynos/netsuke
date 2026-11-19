@@ -140,16 +140,22 @@ def test_outputs_name_the_decision_the_workflow_reads() -> None:
 
 def _run_cli(
     tmp_path: Path, **inputs: str
-) -> tuple[subprocess.CompletedProcess[str], Path]:
+) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
     """Run the step's entry point in a child process with a complete environment.
 
     Returns
     -------
-    tuple[subprocess.CompletedProcess[str], Path]
-        The child's completed process and the output file it was pointed at.
+    tuple[subprocess.CompletedProcess[str], Path, Path]
+        The child's completed process, the output file, and the job summary
+        file it was pointed at.
     """
     output = tmp_path / "github-output"
-    env = {"PATH": os.environ.get("PATH", ""), "GITHUB_OUTPUT": str(output)}
+    summary = tmp_path / "github-step-summary"
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "GITHUB_OUTPUT": str(output),
+        "GITHUB_STEP_SUMMARY": str(summary),
+    }
     env.update({f"INPUT_{name.upper()}": value for name, value in inputs.items()})
     completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed argv, no shell.
         [sys.executable, str(SCRIPT)],
@@ -159,7 +165,7 @@ def _run_cli(
         check=False,
         shell=False,
     )
-    return completed, output
+    return completed, output, summary
 
 
 def _read_outputs(output: Path) -> dict[str, str]:
@@ -194,7 +200,7 @@ def _publish_inputs(**overrides: str) -> dict[str, str]:
 
 def test_cli_writes_the_effective_outputs(tmp_path: Path) -> None:
     """Publish the decision where the workflow reads it and log the override."""
-    completed, output = _run_cli(tmp_path, **_publish_inputs())
+    completed, output, summary = _run_cli(tmp_path, **_publish_inputs())
     values = _read_outputs(output)
 
     assert completed.returncode == 0, (
@@ -209,14 +215,33 @@ def test_cli_writes_the_effective_outputs(tmp_path: Path) -> None:
     assert values["origin"] == policy.Origin.REUSABLE, (
         "the CLI must record the invocation origin"
     )
-    assert "::notice" in completed.stdout, (
-        "a resolver override must be visible in the workflow annotation log"
+    assert "::notice title=Release authorization::" in completed.stdout, (
+        "every decision must be visible in the workflow annotation log"
+    )
+    assert "reason-category=publish_not_requested" in completed.stdout, (
+        "the annotation must name the bounded reason category"
+    )
+    assert "reason-category" in summary.read_text(encoding="utf-8"), (
+        "the job summary must carry the same bounded decision record"
+    )
+
+
+def test_cli_records_an_authorized_decision_in_the_summary(tmp_path: Path) -> None:
+    """Record an authorized run too, not only the denials."""
+    completed, _, summary = _run_cli(tmp_path, **_publish_inputs(publish="true"))
+    recorded = summary.read_text(encoding="utf-8")
+
+    assert completed.returncode == 0, (
+        f"an authorized request should succeed; stderr was {completed.stderr!r}"
+    )
+    assert "- reason-category: `authorized`" in recorded, (
+        f"an authorized decision must be recorded; got {recorded!r}"
     )
 
 
 def test_cli_allows_a_supported_non_publishing_request(tmp_path: Path) -> None:
     """A denied publication is a supported decision, not a step failure."""
-    completed, output = _run_cli(tmp_path, **_publish_inputs(ref=BRANCH_REF))
+    completed, output, _ = _run_cli(tmp_path, **_publish_inputs(ref=BRANCH_REF))
     values = _read_outputs(output)
 
     assert completed.returncode == 0, (
@@ -242,7 +267,7 @@ def test_cli_rejects_a_malformed_input(
     tmp_path: Path, overrides: dict[str, str], name: str
 ) -> None:
     """A malformed input fails the step with a diagnostic, not a guess."""
-    completed, output = _run_cli(tmp_path, **_publish_inputs(**overrides))
+    completed, output, summary = _run_cli(tmp_path, **_publish_inputs(**overrides))
 
     assert completed.returncode == 2, (
         f"a malformed input must fail the step; stderr was {completed.stderr!r}"
@@ -255,4 +280,7 @@ def test_cli_rejects_a_malformed_input(
     )
     assert not output.exists(), (
         "a refused run must not publish step outputs for a decision it did not make"
+    )
+    assert not summary.exists(), (
+        "a refused run must not record a decision it never made"
     )

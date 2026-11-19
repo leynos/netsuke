@@ -3518,11 +3518,15 @@ text could not check: a command word built from a variable, including one
 reached through nested wrappers; a `gh` subcommand outside the two the contract
 has a rule for, whether built from a variable or quoted, which hides the call
 the `gh api` check looks for; and any command that would hand a run-time string
-to an interpreter. The job's reachability is computed independently in
-`release_publish_path_verification.py`, from the scenario table in
-`release_publish_path_scenarios.py`; that table includes a publisher failure
-and a publisher skip for each publisher, plus the realistic dry run in which
-both are skipped while the rehearsal job runs.
+to an interpreter. `release_publish_path_verification.py` judges the job's
+reachability from the scenario rows in `release_publish_path_scenarios.py`.
+Each row is a `Scenario` from `release_publish_path_scenario_model.py`, which
+derives the expected outputs by running the real
+`scripts/release_write_policy.py` policy through
+`scripts/authorize_release_writes.py`, so the contract holds the wiring to the
+rule a live run applies rather than to a second copy of it. The table includes
+a publisher failure and a publisher skip for each publisher, plus the realistic
+dry run in which both are skipped while the rehearsal job runs.
 
 ### Release-inventory verifier telemetry
 
@@ -5121,6 +5125,24 @@ walking the value themselves.
 pure checker shared by the release staging and mutation contracts. Keep
 workflow-specific parsing and assertions in each suite; production code must
 not import this checker.
+
+The release publish-path contract modules are test-only in the same way: they
+describe and mutate the release workflow's documents, and production code must
+not import them. `release_publish_path_scenario_model.py` owns `Scenario`,
+`Invocation`, and `needs_results`, and derives each scenario's expected outputs
+through `scripts/release_write_policy.py` and
+`scripts/authorize_release_writes.py`.
+`release_publish_path_metadata_outputs.py` owns `metadata_outputs` and
+`resolved_repo_name`, which evaluate the metadata job's declarations against
+the step answers a run may publish. `release_publish_path_authorization.py` owns
+`check_authorization_wiring` and the pinned step and script constants, so the
+authorization step's id, inputs, ordering, and gates are named in one place; it
+delegates the decision-record check to `release_publish_path_summary.py`, which
+reads the step's script as a syntax tree and requires the record to be written
+unconditionally. `release_publish_crates_io_mutations.py` owns
+`CRATES_IO_MUTATIONS`, the registry publisher's labelled mutations, which
+`release_publish_path_mutations.py` applies beside the other release-path
+mutations.
 
 `local_reference_inventory.py` inventories local composite actions and regular
 `.sh`, `.bash`, `.py`, and `.ps1` scripts recursively under `scripts/`, as well
