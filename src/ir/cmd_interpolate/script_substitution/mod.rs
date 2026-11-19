@@ -284,7 +284,16 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if let Some(region) = self.backtick_region
             && self.command_substitutions.len() == region.owner_depth
         {
-            return Ok(region.escapes_body_character(self.chars, pos));
+            let escapes = region.escapes_body_character(self.chars, pos);
+            // An escape that would consume the first character of a marker
+            // must be rejected here: the marker scan starts at that character,
+            // so letting the escape win would copy the rest of the internal
+            // token into the lowered script instead of failing closed. A body
+            // escape that is not taken leaves the marker to the ordinary scan.
+            if escapes && backslash_escapes_marker(self.chars, pos, false, None) {
+                return Err(invalid_command_error(self.template.to_owned()));
+            }
+            return Ok(escapes);
         }
         if self.active_quote_context() == ShellQuoteContext::SingleQuoted {
             return Ok(false);

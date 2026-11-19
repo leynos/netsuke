@@ -192,6 +192,23 @@ fn script_escaped_parenthesis_inside_backtick_body_stays_literal() {
     );
 }
 
+/// Reject a body backslash that would consume a marker's first character.
+///
+/// The marker scan starts at that character, so allowing the escape to win
+/// would copy the rest of the internal token into the lowered script instead
+/// of failing closed. Placeholders are never lowered inside a backtick body.
+#[test]
+fn script_escaped_marker_inside_backtick_body_is_rejected() {
+    let bindings = context_bindings(RecipeShell::Posix);
+    let command = format!("printf '%s' `printf %s \\{INS_TOKEN}`");
+    let error = interpolate_script_with_bindings(&command, &bindings)
+        .expect_err("an escaped marker must still be rejected inside a body");
+    assert!(
+        matches!(error, IrGenError::InvalidCommand { .. }),
+        "expected an invalid-command error for {command:?}, got {error:?}"
+    );
+}
+
 /// Keep a backtick body line continuation from ending the command line.
 ///
 /// The continued newline belongs to the body, so the command line is still
