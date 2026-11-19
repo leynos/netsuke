@@ -7,7 +7,9 @@ a loop, or a handler, so a decision cannot be made and then left unrecorded.
 
 The script is read as a syntax tree rather than as text. A textual search would
 accept a call that sits inside an ``if``, which is exactly the shape that lets
-an authorization decision escape its record.
+an authorization decision escape its record. The tree is read as strictly as
+the text would be read loosely: only a statement that *is* the writer call
+counts, so a call that an expression can short-circuit away is refused too.
 """
 
 import ast
@@ -20,9 +22,6 @@ if typ.TYPE_CHECKING:
 
 ENTRY_POINT = "export_authorization"
 SUMMARY_WRITER = "write_summary"
-#: Statements that can skip or repeat their body. A call inside one is not
-#: evidence that every run reaches it.
-_GUARDING_STATEMENTS = (ast.If, ast.Try, ast.While, ast.For, ast.AsyncFor)
 
 
 def default_script() -> pathlib.Path:
@@ -48,19 +47,22 @@ def called_name(node: ast.Call) -> str | None:
 
 
 def is_unconditional_call(statement: ast.stmt, name: str) -> bool:
-    """Return whether a statement calls ``name`` outside a guarding body.
+    """Return whether a statement is itself a call to ``name``.
+
+    Only an expression statement whose whole value is the call counts. A call
+    reached through ``ast.walk`` proves nothing: inside an ``if`` it may be
+    skipped, and inside ``False and f()`` it is never evaluated at all, so a
+    search that accepted it would report a record the run can omit.
 
     Returns
     -------
     bool
-        Whether the statement is not a guarding construct and calls ``name``.
+        Whether the statement is exactly a ``name`` call.
     """
-    if isinstance(statement, _GUARDING_STATEMENTS):
+    if not isinstance(statement, ast.Expr):
         return False
-    return any(
-        isinstance(node, ast.Call) and called_name(node) == name
-        for node in ast.walk(statement)
-    )
+    call = statement.value
+    return isinstance(call, ast.Call) and called_name(call) == name
 
 
 def check_summary_record(
@@ -69,9 +71,11 @@ def check_summary_record(
     """Require the entry point to call the summary writer unconditionally.
 
     The check reports a script that cannot be read or parsed, one that defines
-    no entry point, and one whose entry point reaches the writer only through a
-    guarding construct. Every reported violation is prefixed with
-    ``authorization.summary`` so a caller can tell it from the wiring checks.
+    no entry point, and one whose entry point never writes the record directly.
+    A writer call inside a branch, a loop, a handler, or a short-circuiting
+    expression is not a direct write, so each of those shapes is reported.
+    Every reported violation is prefixed with ``authorization.summary`` so a
+    caller can tell it from the wiring checks.
     """
     target = default_script() if script is None else script
     try:

@@ -3,7 +3,8 @@
 The contract in ``release_publish_path_summary`` reads the authorization
 script's syntax tree. These cases give it scripts it must accept and scripts it
 must refuse, so the check is shown to distinguish an unconditional record from
-one a branch can skip rather than merely to pass on the script of the day.
+one a branch, a loop, or a short-circuiting expression can skip rather than
+merely to pass on the script of the day.
 """
 
 import typing as typ
@@ -20,6 +21,7 @@ _GUARDED = (
     _ENTRY + "    if authorized(decision):\n        write_summary(path, decision)\n"
 )
 _LOOPED = _ENTRY + "    for path in paths:\n        write_summary(path, decision)\n"
+_SHORT_CIRCUITED = _ENTRY + "    False and write_summary(path, decision)\n"
 _NO_ENTRY = "def another_entry_point():\n    write_summary(path, decision)\n"
 
 
@@ -38,6 +40,12 @@ _NO_ENTRY = "def another_entry_point():\n    write_summary(path, decision)\n"
             "authorization.summary: the decision record must be written "
             "unconditionally",
             id="call-inside-loop",
+        ),
+        pytest.param(
+            _SHORT_CIRCUITED,
+            "authorization.summary: the decision record must be written "
+            "unconditionally",
+            id="short-circuited-call",
         ),
         pytest.param(
             _NO_ENTRY,
