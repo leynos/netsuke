@@ -9,6 +9,11 @@
 //! that report it fire only when an internal source position is out of range,
 //! and the only callers loop while that position is in range, so no manifest
 //! can reach it.
+//!
+//! The module is named for what it pins rather than for the module it
+//! complements: `tests/workflow_contracts/rust_module_layout_test.py` rejects
+//! sibling modules sharing a prefix unless the pair is recorded as a deliberate
+//! exception, and this pair is ordinary name symmetry rather than a group.
 
 use super::*;
 
