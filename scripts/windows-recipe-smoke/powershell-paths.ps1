@@ -77,8 +77,14 @@ function Test-QuotedScriptPlaceholderRejection {
             if (-not ($causesText -match 'Invalid command interpolation')) {
                 throw "The quoted script failure omitted its interpolation diagnostic: $causesText"
             }
-            if (-not ($causesText -match 'Write-Output' -and $causesText -match '__NETSUKE_INS_PLACEHOLDER__')) {
-                throw "The quoted script failure omitted its original template: $causesText"
+            if (-not ($causesText -match 'recipe marker inside a protected shell region')) {
+                throw "The quoted script failure omitted its rejection reason: $causesText"
+            }
+            # The rendered recipe can already contain a value resolved from the
+            # environment, so the diagnostic must name the failed syntax without
+            # echoing the template in either human or JSON output.
+            if ($causesText -match 'Write-Output' -or $causesText -match '__NETSUKE_INS_PLACEHOLDER__') {
+                throw "The quoted script failure repeated its rendered template: $causesText"
             }
             if (Test-Path -LiteralPath 'pwned') {
                 throw 'The rejected quoted script executed its path-derived payload.'
