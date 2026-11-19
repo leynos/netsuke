@@ -15,8 +15,7 @@ import re
 import typing as typ
 
 import pytest
-from release_publish_path_context import ScenarioRun
-from release_publish_path_scenario_table import SCENARIOS
+from release_publish_path_scenarios import SCENARIOS
 from release_publish_path_verification import check_verify_inventory
 from release_verify_inventory_command_words import (
     forbidden_executor_words,
@@ -73,7 +72,7 @@ from workflow_loading import (
 )
 
 if typ.TYPE_CHECKING:
-    from release_publish_path_scenarios import Scenario
+    from release_publish_path_scenario_model import Scenario
 
 #: The metadata outputs a publishing run declares. Only ``should_publish``
 #: reaches the verification guard, but the context is filled as a real run's
@@ -93,23 +92,6 @@ def _workflow() -> dict[str, object]:
 def _tag_publish() -> Scenario:
     """Return the scenario in which both publishers succeed."""
     return next(scenario for scenario in SCENARIOS if scenario.name == "tag-publish")
-
-
-def _tag_publish_results() -> dict[str, str]:
-    """Return every job's result on a publishing run, independent of the document.
-
-    The map is built from the scenario rather than derived from the workflow
-    under test: deriving it would let a mutation change the result the
-    reachability check compares against, which is the answer it exists to
-    challenge. The rehearsal is skipped on a publish run, so a guard that
-    depended on it would leave verification unreachable.
-
-    Returns
-    -------
-    dict[str, str]
-        Each job's result as a publishing run reports it.
-    """
-    return {**dict(_tag_publish().needs_results), "release": "skipped"}
 
 
 def _assert_gh_api_calls(steps: list[dict[str, object]]) -> None:
@@ -328,7 +310,8 @@ def _assert_complete_contract(
     violations: list[str] = []
     check_verify_inventory(
         workflow,
-        ScenarioRun(_tag_publish(), PUBLISH_OUTPUTS, _tag_publish_results()),
+        _tag_publish(),
+        PUBLISH_OUTPUTS,
         violations,
     )
     assert not violations, f"verify-job reachability contract: {violations}"

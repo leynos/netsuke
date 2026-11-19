@@ -1,13 +1,14 @@
-"""Prove dry runs reach release staging without publishing a release.
+"""Aggregate the release publish-path contract checks.
 
-``check_release_publish_path`` combines the caller's trigger and input
-contract, the staging job's needs and step order, the artifact and download
-names, and the publication gate into one list of violations. Each scenario in
-``release_publish_path_scenarios`` is then resolved by
-``release_publish_path_results`` and checked for the reachability it declares,
-so a rehearsal stays reachable after a failed package while no write job
-starts. ``release_publish_path_mutations_test.py`` proves every check reports
-its labelled regression.
+This module composes the checks that decide whether a release run may reach a
+write-enabled job: the authorization wiring, the metadata-output resolver, and
+the publication, verification and consumer-smoke paths. The authorization
+decision itself comes from ``scripts/authorize_release_writes.py`` through
+``release_publish_path_scenario_model``, so the contract checks the same rule a
+live run applies. The scenario table lives in
+``release_publish_path_scenarios``.
+
+Run via ``make test-workflow-contracts``.
 """
 
 import dataclasses
@@ -33,15 +34,19 @@ from release_publish_path_artifacts import (
     check_download_pattern,
     evaluate_field,
 )
+from release_publish_path_authorization import check_authorization_wiring
 from release_publish_path_consumer_smoke import (
     CONSUMER_SMOKE_ACTION_PATH,
     ConsumerSmokeCheck,
     check_consumer_smoke,
     check_smoke_publication_guard,
 )
-from release_publish_path_context import ScenarioRun, needs_context
 from release_publish_path_finalization import check_finalize_release
-from release_publish_path_metadata import metadata_outputs
+from release_publish_path_metadata_outputs import (
+    metadata_outputs,
+    resolved_repo_name,
+)
+from release_publish_path_native_smoke import check_native_smoke_job
 from release_publish_path_publication import (
     PublicationCheck,
     UploadPlanCheck,
@@ -50,18 +55,13 @@ from release_publish_path_publication import (
     check_upload_plan,
     step_runs,
 )
-from release_publish_path_results import resolve_results
-from release_publish_path_scenario_table import SCENARIOS
-from release_publish_path_scenarios import (
-    GITHUB_SHA,
-    MODE_OUTPUTS,
-    PACKAGE_UPLOAD,
+from release_publish_path_scenario_model import (
     REQUIRED_DRY_RUN_EVENTS,
-    STAGING_FORBIDDEN_NEEDS,
-    STAGING_NEEDS,
+    REQUIRED_NEEDS,
     Scenario,
+    job_contexts,
 )
-from release_publish_path_smoke import check_smoke_job
+from release_publish_path_scenarios import SCENARIOS
 from release_publish_path_verification import check_verify_inventory
 from release_write_authority_contract import check_publication_gate
 from workflow_loading import (
@@ -98,7 +98,7 @@ class ScenarioCheck:
 
     release: dict[str, object]
     build: dict[str, object]
-    outputs_by_mode: dict[str, dict[str, str]]
+    outputs: dict[str, str]
     scenario: Scenario
     violations: list[str]
     smoke_action: dict[str, object] | None = None
@@ -113,19 +113,6 @@ def _workflow_call_inputs(workflow: dict[str, object]) -> dict[str, object]:
     return require_mapping(call.get("inputs"), "workflow_call.inputs")
 
 
-def _stage_needs(
-    release_job: dict[str, object],
-    scenario: Scenario,
-    outputs: dict[str, str],
-    results: dict[str, str],
-) -> dict[str, object]:
-    """Build the declared needs context for one staging or publishing job."""
-    return needs_context(
-        job_names(release_job.get("needs", [])) or [],
-        ScenarioRun(scenario, outputs, results),
-    )
-
-
 def _check_caller(
     release: dict[str, object], caller: dict[str, object], violations: list[str]
 ) -> None:
@@ -133,6 +120,11 @@ def _check_caller(
     _check_caller_events(caller, violations)
 
     caller_job = workflow_job(caller, "release")
+    caller_inputs = require_mapping(caller_job.get("with"), "caller release.with")
+    if caller_inputs.get("dry-run") is not True:
+        violations.append("caller.dry-run: release-dry-run must pass true")
+    if "publish" in caller_inputs:
+        violations.append("caller.publish: dry-run caller must omit publish")
     publish = _workflow_call_inputs(release).get("publish")
     publish_input = require_mapping(publish, "release publish input")
     if publish_input.get("default") is not False:
@@ -148,7 +140,9 @@ def _check_caller_events(caller: dict[str, object], violations: list[str]) -> No
     raw_types = require_list(pull_request.get("types"), "caller pull_request.types")
     event_types = {str(event) for event in raw_types}
     scenario_events = {
-        scenario.event_action for scenario in SCENARIOS if scenario.mode == "dry-run"
+        scenario.event_action
+        for scenario in SCENARIOS
+        if scenario.arrival.event_name == "pull_request"
     }
     expected_events = REQUIRED_DRY_RUN_EVENTS
     if event_types != expected_events or scenario_events != expected_events:
@@ -199,19 +193,12 @@ def _check_release_staging(
 
 
 def _check_release_needs(release: dict[str, object], violations: list[str]) -> None:
-    """Require staging to depend on the builds, and on nothing that can refuse.
-
-    A dependency on packaging or admission would make a dry run unreachable
-    whenever either fails, which is the read-only lane's whole purpose.
-    """
+    """Require release staging to depend on every build and Windows smoke."""
     needs = job_names(workflow_job(release, "release").get("needs", [])) or []
     declared_needs = set(needs)
-    missing_needs = STAGING_NEEDS - declared_needs
+    missing_needs = REQUIRED_NEEDS - declared_needs
     if missing_needs:
         violations.append(f"release.needs: missing {sorted(missing_needs)!r}")
-    gated_needs = STAGING_FORBIDDEN_NEEDS & declared_needs
-    if gated_needs:
-        violations.append(f"release.needs: must not depend on {sorted(gated_needs)!r}")
 
 
 def _check_release_step_order(
@@ -233,29 +220,23 @@ def _check_release_step_order(
 
 
 def _check_scenario(check: ScenarioCheck) -> None:
-    """Evaluate dependency results, package uploads, and release staging.
-
-    The scenario's declared outcomes are propagated through the graph first, so
-    every guard below is evaluated against a run the workflow could produce
-    rather than against independently supplied results.
-    """
+    """Evaluate dependency results, package uploads, and release staging."""
     scenario = check.scenario
-    outputs = check.outputs_by_mode[scenario.mode]
-    run = resolve_results(check.release, scenario, outputs, check.violations)
-    check_smoke_job(check.release, run, check.violations)
+    outputs = check.outputs
+    check_native_smoke_job(check.release, scenario, outputs, check.violations)
     check_admission_enforcement(check.release, scenario, outputs, check.violations)
     check_build_uploads(
         check.release,
         check.build,
-        PackageUploadScenario(scenario.name, outputs, PACKAGE_UPLOAD[scenario.mode]),
+        PackageUploadScenario(
+            scenario.name,
+            outputs,
+            outputs.get("should_upload_package_artifacts") == "true",
+        ),
         check.violations,
     )
     release_job = workflow_job(check.release, "release")
-    contexts: dict[str, object] = {
-        "needs": _stage_needs(release_job, scenario, outputs, run.results),
-        "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
-    }
+    contexts = job_contexts(scenario, outputs, release_job)
     actual_release = evaluate_field(
         release_job.get("if", True),
         FieldEvaluation(
@@ -279,25 +260,18 @@ def _check_scenario(check: ScenarioCheck) -> None:
         outputs=outputs,
         violations=check.violations,
     )
-    check_publication_path(publication_check, run.results)
+    check_publication_path(publication_check)
     publisher_job = workflow_job(check.release, "publish-crates-io")
-    check_finalize_release(check.release, run, check.violations)
-    publisher_contexts: dict[str, object] = {
-        "needs": _stage_needs(publisher_job, scenario, outputs, run.results),
-        "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
-    }
-    check_crates_io_publication(
-        publisher_job, publication_check, publisher_contexts, run.results
-    )
-    check_verify_inventory(check.release, run, check.violations)
+    publisher_contexts = job_contexts(scenario, outputs, publisher_job)
+    check_crates_io_publication(publisher_job, publication_check, publisher_contexts)
+    check_verify_inventory(check.release, scenario, outputs, check.violations)
+    check_finalize_release(check.release, scenario, outputs, check.violations)
     check_consumer_smoke(
         ConsumerSmokeCheck(
             release=check.release,
             action=check.smoke_action,
             scenario=scenario,
             outputs=outputs,
-            results=run.results,
             violations=check.violations,
         )
     )
@@ -344,26 +318,16 @@ def check_release_publish_path(
     supplied = manifests if manifests is not None else ActionManifests()
     violations: list[str] = []
     _check_caller(release, caller, violations)
+    check_authorization_wiring(release, violations)
     check_publication_gate(release, caller, violations)
     check_admission_source_pin(release, violations)
-    outputs_by_mode = {
-        mode: metadata_outputs(release, mode, violations) for mode in MODE_OUTPUTS
-    }
-    check_smoke_publication_guard(release, outputs_by_mode, violations)
-    check_artifact_names(
-        release,
-        build,
-        outputs_by_mode["dry-run"].get("repo_name", REPO_ROOT.name),
-        violations,
-    )
-    check_download_pattern(
-        release,
-        outputs_by_mode["dry-run"].get("repo_name", REPO_ROOT.name),
-        violations,
-    )
+    repo_name = resolved_repo_name(release, violations)
+    check_artifact_names(release, build, repo_name, violations)
+    check_download_pattern(release, repo_name, violations)
     _check_release_needs(release, violations)
     _check_release_step_order(release, violations)
     _check_publisher_action(release, supplied.publisher, violations)
+    check_smoke_publication_guard(release, violations)
     smoke_action = (
         supplied.consumer_smoke
         if supplied.consumer_smoke is not None
@@ -374,7 +338,7 @@ def check_release_publish_path(
             ScenarioCheck(
                 release=release,
                 build=build,
-                outputs_by_mode=outputs_by_mode,
+                outputs=metadata_outputs(release, scenario, violations),
                 scenario=scenario,
                 violations=violations,
                 smoke_action=smoke_action,

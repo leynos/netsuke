@@ -1881,6 +1881,21 @@ either side.
   input and rejects carriage returns or line feeds before writing the resolved
   version. Its only dependency is Cyclopts `>=4.25.3,<5`; see
   `scripts/tests/test_resolve_wix_extension_version.py`.
+- `release.yml` owns the release-write authorization pair,
+  `release_write_policy.py` and `authorize_release_writes.py`. The policy is a
+  pure function over typed values and imports neither `cyclopts` nor any
+  workflow key; the adapter is what the `release_authorization` step runs, and
+  it parses the workflow's raw strings, classifies the invocation origin, and
+  renders the decision. Its inputs arrive through `env:` from the reusable
+  `publish` and `dry-run` inputs, `github.event_name`, `github.ref`,
+  `github.workflow_ref`, `github.repository`, and the `determine-release-modes`
+  outputs `should-publish`, `dry-run`, and `should-upload-workflow-artifacts`;
+  `GITHUB_OUTPUT` identifies the output file. A malformed input writes an
+  `::error` annotation and exits with status 2 instead of guessing a decision,
+  while a supported non-publishing request exits 0. The workflow never
+  interpolates these values into `run:`; see
+  `scripts/tests/test_release_write_policy.py` and
+  `scripts/tests/test_authorize_release_writes.py`.
 
 ### Linux glibc floor
 
@@ -3576,11 +3591,21 @@ the read-only lane unreachable. `publish-release` needs those five plus
 `package-crate` and `release-admission-canaries`, and its guard requires each
 of the seven to succeed, the run not to be cancelled, the gate to have enforced
 and admitted this commit, and `should_publish == 'true'`. The guards are
-derived from `determine-release-modes`, which also supplies `should_publish` to
-the artefact upload so the upload stage and the jobs agree about the mode. The
-registry job carries the same seven prerequisites and the same admission
-checks. Pull requests and dry runs therefore skip both publishers before
-requesting the `crates-io` environment or exchanging credentials.
+derived from the workflow's own authorization decision in
+`scripts/authorize_release_writes.py`, which reads the reusable `publish` and
+`dry-run` inputs, the trigger, `github.workflow_ref`, and the pinned
+`determine-release-modes` answers. The resolver alone is necessary but not
+sufficient: it reports `should-publish: true` for every push before it consults
+`publish`, so a reusable caller that inherited a push trigger would otherwise
+reach the write path having asked for no publication. A raw `dry-run: true` is
+an unconditional veto, a reusable invocation needs an explicit `publish: true`,
+the ref must be a `v*.*.*` tag, and only a direct tag push of `release.yml`
+itself may publish on the resolver's word alone. The same decision supplies
+`should_publish` to the artefact upload, so the upload stage and the jobs agree
+about the mode. The registry job carries the same seven prerequisites and the
+same admission checks. Pull requests and dry runs therefore skip both
+publishers before requesting the `crates-io` environment or exchanging
+credentials.
 
 `package-crate` packages the crate, records its candidate identity and archive
 digest, and uploads them as the `release-crate-package` artefact. Before the
@@ -3703,8 +3728,13 @@ The job's guard names every dependency result explicitly:
 if: >-
   !cancelled() &&
   needs.metadata.result == 'success' &&
+  needs.package-crate.result == 'success' &&
   needs.publish-crates-io.result == 'success' &&
   needs.publish-release.result == 'success' &&
+  needs.release-admission-canaries.result == 'success' &&
+  needs.release-admission-canaries.outputs.enforcement == 'true' &&
+  needs.release-admission-canaries.outputs.gate_outcome == 'success' &&
+  needs.release-admission-canaries.outputs.candidate_commit == github.sha &&
   needs.metadata.outputs.should_publish == 'true'
 ```
 
@@ -3722,25 +3752,27 @@ text could not check: a command word built from a variable, including one
 reached through nested wrappers; a `gh` subcommand outside the two the contract
 has a rule for, whether built from a variable or quoted, which hides the call
 the `gh api` check looks for; and any command that would hand a run-time string
-to an interpreter. The job's reachability is computed independently of its
-guard, from the scenario table in `release_publish_path_scenario_table.py`, and
-evaluated by `release_publish_path_verification.py`. The table varies each of
-the seven prerequisites through `failure`, `skipped`, and `cancelled`, adds the
-two `verify-release-inventory` outcomes, and keeps the realistic dry run in
-which both publishers are skipped while the rehearsal job runs.
+to an interpreter. `release_publish_path_verification.py` judges the job's
+reachability from the scenario rows in `release_publish_path_scenarios.py`,
+against the expected outputs of a correctly wired run rather than against the
+guard under test, so a guard that stops matching the model is a finding instead
+of an agreed answer. The table varies each of the seven prerequisites through
+`failure` and `skipped`, adds the `verify-release-inventory` outcomes, and
+keeps the realistic dry run in which both publishers are skipped while the
+rehearsal job runs.
 
-A scenario no longer names a downstream job's result directly.
-`release_publish_path_results.py` derives every result from the workflow's own
-`needs` and `if` edges, in dependency order, and reports a dependency cycle
-rather than looping. A job with no guard keeps GitHub's implicit rule and runs
-only when every dependency succeeded; a job with a guard is evaluated as
-written, which is how the rehearsal survives a failed package or admission. A
-cancelled run is modelled through `status.cancelled` while the results stay as
-the graph resolved them, so `!cancelled()` is the only clause that stops those
-scenarios; a dependency may still report `cancelled` on a run that continues,
-and that propagates as an ordinary non-successful result. Folding cancellation
-into every result instead would make all guards false for one reason and hide a
-guard that tested `!= 'failure'` rather than `== 'success'`.
+Each row is a `Scenario` from `release_publish_path_scenario_model.py`, which
+derives the expected outputs by running the real
+`scripts/release_write_policy.py` policy through
+`scripts/authorize_release_writes.py`, so the contract holds the wiring to the
+rule a live run applies rather than to a second copy of it. A row names its
+dependency results directly, and `needs_results()` refuses a name the table
+does not model, because a mistyped job name would otherwise leave the intended
+dependency at its default and assert the opposite of what the row's name says.
+Three further rows model a gate that reported a successful job without
+admitting this run: report-only admission, a non-successful gate outcome, and
+admission of another commit. Each is a publishing run whose publishers,
+verifier and finalizer must all stay shut.
 
 `release_publish_path_finalization.py` evaluates the job whose effect cannot be
 undone. Un-drafting is irreversible, so finalization has its own per-scenario
@@ -3750,12 +3782,10 @@ admission admits the candidate, and every one of its six declared dependencies
 succeeded. A guard that keeps every required clause and also names the
 rehearsal -- skipped on every publishing run -- is exact and permanently
 unreachable, and the oracle reports it by name, as it reports a guard that
-would finalize a run that should not.
-`release_publish_path_guard_properties_test.py` complements the table with
-generated runs: for any combination of prerequisite results, admission outputs,
-`should_publish`, and cancellation, every write job's guard must start exactly
-when the rule holds, and the write jobs are derived from the workflow's
-declared permissions.
+would finalize a run that should not. The admission outputs themselves come
+from the scenario, so a gate that observed, refused, or admitted another
+candidate is evaluated as the guard would see it rather than as a docstring
+claims it would.
 
 Three modules hold the mutation scaffolding.
 `release_admission_gate_contract.py` evaluates the gate's enforcement
@@ -5371,6 +5401,24 @@ walking the value themselves.
 pure checker shared by the release staging and mutation contracts. Keep
 workflow-specific parsing and assertions in each suite; production code must
 not import this checker.
+
+The release publish-path contract modules are test-only in the same way: they
+describe and mutate the release workflow's documents, and production code must
+not import them. `release_publish_path_scenario_model.py` owns `Scenario`,
+`Invocation`, and `needs_results`, and derives each scenario's expected outputs
+through `scripts/release_write_policy.py` and
+`scripts/authorize_release_writes.py`.
+`release_publish_path_metadata_outputs.py` owns `metadata_outputs` and
+`resolved_repo_name`, which evaluate the metadata job's declarations against
+the step answers a run may publish. `release_publish_path_authorization.py` owns
+`check_authorization_wiring` and the pinned step and script constants, so the
+authorization step's id, inputs, ordering, and gates are named in one place; it
+delegates the decision-record check to `release_publish_path_summary.py`, which
+reads the step's script as a syntax tree and requires the record to be written
+unconditionally. `release_publish_crates_io_mutations.py` owns
+`CRATES_IO_MUTATIONS`, the registry publisher's labelled mutations, which
+`release_publish_path_mutations.py` applies beside the other release-path
+mutations.
 
 `local_reference_inventory.py` inventories local composite actions and regular
 `.sh`, `.bash`, `.py`, and `.ps1` scripts recursively under `scripts/`, as well

@@ -1,186 +1,312 @@
-"""Model the finite release modes and dependency outcomes in workflow tests.
+"""Enumerate every release invocation the publish-path contract evaluates.
 
-A scenario names its mode, trigger event, each dependency's result, whether the
-run was cancelled, and the gate outputs it would publish. This module supplies
-the constants and helpers; ``release_publish_path_scenario_table`` lists the
-scenarios themselves, and that table is the input to the reachability and
-finalization checks.
+The value objects, the release-mode constants, and the resolver the policy reads
+live in ``release_publish_path_scenario_model``, so this module holds only the
+table: one row per invocation shape and dependency outcome the workflow must
+handle.
 """
 
-import dataclasses
-import typing as typ
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
-MODE_OUTPUTS = {
-    "dry-run": {
-        "should-publish": "false",
-        "dry-run": "true",
-        "should-upload-workflow-artifacts": "false",
-    },
-    "publish": {
-        "should-publish": "true",
-        "dry-run": "false",
-        "should-upload-workflow-artifacts": "true",
-    },
-    "neither": {
-        "should-publish": "false",
-        "dry-run": "false",
-        "should-upload-workflow-artifacts": "false",
-    },
-}
-PACKAGE_UPLOAD = {"dry-run": True, "publish": True, "neither": False}
-REQUIRED_DRY_RUN_EVENTS = {"opened", "synchronize", "reopened", "ready_for_review"}
-#: The commit every scenario releases. ``github.sha`` reports it and the gate
-#: publishes it as ``candidate_commit``, so only an admitted candidate matches.
-GITHUB_SHA = "a" * 40
-#: Every prerequisite a publishing job waits on. Both publishers wait on the
-#: same set by design -- a difference would let one lane publish bytes the
-#: other refuses.
-REQUIRED_NEEDS = {
-    "metadata",
-    "package-crate",
-    "build-linux",
-    "build-windows",
-    "build-macos",
-    "windows-native-recipe-smoke",
-    "release-admission-canaries",
-}
-CRATES_IO_NEEDS = REQUIRED_NEEDS
-#: The gate's outputs as a successful, candidate-matching run reports them.
-#: Only ``enforcement`` differs: a rehearsal observes, a publishing run enforces.
-ADMISSION_OUTPUTS = {
-    mode: {
-        "enforcement": "true" if mode == "publish" else "false",
-        "gate_outcome": "success",
-        "candidate_commit": GITHUB_SHA,
-    }
-    for mode in MODE_OUTPUTS
-}
-#: The rehearsal job's dependencies. Packaging and admission are absent by
-#: design, so a rehearsal stays reachable when either fails.
-STAGING_NEEDS = {
-    "metadata",
-    "build-linux",
-    "build-windows",
-    "build-macos",
-    "windows-native-recipe-smoke",
-}
-#: The dependencies a rehearsal must never acquire, because either would let a
-#: failure make the read-only lane unreachable.
-STAGING_FORBIDDEN_NEEDS = {"package-crate", "release-admission-canaries"}
-PUBLISHER_NEEDS = {"publish-crates-io", "publish-release"}
-#: The two terminal write jobs. A scenario declares their own outcomes
-#: directly, because no later job's result is derived from them.
-VERIFY_JOB = "verify-release-inventory"
-FINALIZE_JOB = "finalize-github-release"
-#: Verification holds write scope, so it carries publication's gate: packaging,
-#: enforcement, and both publishers, because it verifies what they produced. A
-#: failed, skipped, or report-only prerequisite leaves it unverified.
-VERIFY_NEEDS = {
-    "metadata",
-    "package-crate",
-    "release-admission-canaries",
-    *PUBLISHER_NEEDS,
-}
-#: The consumer smoke depends on the candidate's three stages and on nothing
-#: else. Finalization is one of them because an archive attached to a draft
-#: release needs a token to download, and the smoke deliberately holds none.
-CONSUMER_SMOKE_NEEDS = {"metadata", "package-crate", "finalize-github-release"}
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class Scenario:
-    """Describe the external release mode and dependency outcomes for one run."""
-
-    name: str
-    mode: str
-    event_action: str
-    needs_results: cabc.Mapping[str, str]
-    cancelled: bool
-    release_runs: bool
-    admission_outputs: dict[str, str] | None = None
-
-
-def admission_outputs(scenario: Scenario) -> dict[str, str]:
-    """Return the admission outputs the scenario's gate reports.
-
-    Returns
-    -------
-    dict[str, str]
-        The override when the scenario names one, else the mode's defaults.
-    """
-    if scenario.admission_outputs is not None:
-        return dict(scenario.admission_outputs)
-    return dict(ADMISSION_OUTPUTS[scenario.mode])
-
-
-def admits_candidate(scenario: Scenario) -> bool:
-    """Return whether the scenario's admission outputs admit its candidate."""
-    outputs = admission_outputs(scenario)
-    return (
-        outputs.get("enforcement") == "true"
-        and outputs.get("gate_outcome") == "success"
-        and outputs.get("candidate_commit") == GITHUB_SHA
-    )
-
-
-def _needs_results(
-    *,
-    smoke: str = "success",
-    outcomes: cabc.Mapping[str, str] | None = None,
-) -> dict[str, str]:
-    """Build a complete needs-result map from the selected outcomes.
-
-    Every dependency defaults to success, so a scenario names only the ones it
-    changes. ``outcomes`` is applied last and therefore wins over ``smoke``,
-    which keeps the smoke shortcut from silently overriding an explicit
-    outcome for the same job.
-
-    Returns
-    -------
-    dict[str, str]
-        One result per dependency named by the release scenarios.
-
-    Raises
-    ------
-    ValueError
-        If ``outcomes`` names a job the release scenarios do not model. Its
-        result would otherwise land beside the dependency the scenario meant to
-        change, leaving every real dependency at success and the scenario green
-        while testing nothing.
-    """
-    results = dict.fromkeys(
-        CRATES_IO_NEEDS
-        | PUBLISHER_NEEDS
-        | CONSUMER_SMOKE_NEEDS
-        | {VERIFY_JOB, FINALIZE_JOB},
-        "success",
-    )
-    results["windows-native-recipe-smoke"] = smoke
-    if outcomes is not None:
-        # A mistyped job name would otherwise add a result no job declares and
-        # leave the intended one at its default, so the scenario would assert
-        # the opposite of what its name says.
-        unknown = sorted(outcomes.keys() - results.keys())
-        if unknown:
-            msg = f"scenario names unknown dependenc(ies) {unknown}"
-            raise ValueError(msg)
-        results.update(outcomes)
-    return results
+from release_publish_path_scenario_model import (
+    BRANCH_REF,
+    CALLER_WORKFLOW_REF,
+    CRATES_IO_NEEDS,
+    DIRECT_WORKFLOW_REF,
+    GITHUB_SHA,
+    PUBLISHING_DRY_RUN,
+    PULL_REF,
+    TAG_REF,
+    Invocation,
+    Scenario,
+    needs_results,
+)
 
 
 def _prerequisite_scenarios(outcome: str) -> tuple[Scenario, ...]:
-    """Create one publishing scenario per prerequisite carrying *outcome*."""
+    """Create one publishing scenario for each failed or skipped prerequisite."""
     return tuple(
         Scenario(
             f"publish-{need}-{outcome}",
             "publish",
             "",
-            _needs_results(outcomes={need: outcome}),
+            needs_results(outcomes={need: outcome}),
             cancelled=False,
             release_runs=False,
         )
         for need in sorted(CRATES_IO_NEEDS)
     )
+
+
+def _reusable_push(name: str, invocation: Invocation) -> Scenario:
+    """Create a reusable invocation that inherited a push trigger."""
+    return Scenario(
+        name,
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=False,
+        invocation=invocation,
+    )
+
+
+SCENARIOS = (
+    Scenario(
+        "opened",
+        "dry-run",
+        "opened",
+        needs_results(smoke="skipped"),
+        cancelled=False,
+        release_runs=True,
+    ),
+    Scenario(
+        "synchronize",
+        "dry-run",
+        "synchronize",
+        needs_results(smoke="skipped"),
+        cancelled=False,
+        release_runs=True,
+    ),
+    Scenario(
+        "reopened",
+        "dry-run",
+        "reopened",
+        needs_results(smoke="skipped"),
+        cancelled=False,
+        release_runs=True,
+    ),
+    Scenario(
+        "ready-for-review",
+        "dry-run",
+        "ready_for_review",
+        needs_results(),
+        cancelled=False,
+        release_runs=True,
+    ),
+    Scenario(
+        # The realistic dry run: neither publisher runs, so the verification
+        # job must be skipped even though the release staging job runs.
+        "dry-run-publishers-skipped",
+        "dry-run",
+        "opened",
+        needs_results(
+            smoke="skipped",
+            outcomes={"publish-crates-io": "skipped", "publish-release": "skipped"},
+        ),
+        cancelled=False,
+        release_runs=True,
+    ),
+    Scenario(
+        "dry-run-failed-build",
+        "dry-run",
+        "opened",
+        needs_results(smoke="skipped", outcomes={"build-linux": "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "tag-publish",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "tag-publish-skipped-smoke",
+        "publish",
+        "",
+        needs_results(smoke="skipped"),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "tag-publish-failed-smoke",
+        "publish",
+        "",
+        needs_results(smoke="failure"),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "tag-publish-failed-build",
+        "publish",
+        "",
+        needs_results(outcomes={"build-linux": "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    _reusable_push(
+        "reusable-push-publish-false",
+        Invocation("false", "false", "push", TAG_REF, CALLER_WORKFLOW_REF),
+    ),
+    _reusable_push(
+        "reusable-push-omitted-inputs",
+        Invocation("", "", "push", TAG_REF, CALLER_WORKFLOW_REF),
+    ),
+    _reusable_push(
+        "reusable-push-publish-true",
+        Invocation("true", "false", "push", TAG_REF, CALLER_WORKFLOW_REF),
+    ),
+    Scenario(
+        "reusable-push-dry-run-overrides-publish",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=True,
+        invocation=Invocation("true", "true", "push", TAG_REF, CALLER_WORKFLOW_REF),
+    ),
+    _reusable_push(
+        "reusable-branch-push-publish-true",
+        Invocation("true", "false", "push", BRANCH_REF, CALLER_WORKFLOW_REF),
+    ),
+    Scenario(
+        "direct-trigger-dry-run-input",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=True,
+        invocation=Invocation("", "true", "push", TAG_REF, DIRECT_WORKFLOW_REF),
+    ),
+    Scenario(
+        "pull-request-publish-true",
+        "dry-run",
+        "opened",
+        needs_results(),
+        cancelled=False,
+        release_runs=True,
+        invocation=Invocation(
+            "true", "false", "pull_request", PULL_REF, CALLER_WORKFLOW_REF
+        ),
+    ),
+    Scenario(
+        "direct-push-resolver-dry-run",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=True,
+        resolver=PUBLISHING_DRY_RUN,
+    ),
+    Scenario(
+        # The gate ran and succeeded -- as an observation. Report-only
+        # admission cannot satisfy a real publishing gate.
+        "tag-publish-report-only-admission",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=False,
+        admission_outputs={
+            "enforcement": "false",
+            "gate_outcome": "success",
+            "candidate_commit": GITHUB_SHA,
+        },
+    ),
+    Scenario(
+        "tag-publish-failed-admission-gate",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=False,
+        admission_outputs={
+            "enforcement": "true",
+            "gate_outcome": "failure",
+            "candidate_commit": GITHUB_SHA,
+        },
+    ),
+    Scenario(
+        "tag-publish-mismatched-admission-candidate",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=False,
+        admission_outputs={
+            "enforcement": "true",
+            "gate_outcome": "success",
+            "candidate_commit": "b" * 40,
+        },
+    ),
+    Scenario(
+        "publish-crates-io-failure",
+        "publish",
+        "",
+        needs_results(outcomes={"publish-crates-io": "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "publish-crates-io-skipped",
+        "publish",
+        "",
+        needs_results(outcomes={"publish-crates-io": "skipped"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "publish-release-failure",
+        "publish",
+        "",
+        needs_results(outcomes={"publish-release": "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "publish-release-skipped",
+        "publish",
+        "",
+        needs_results(outcomes={"publish-release": "skipped"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    # A release left as a draft is not publicly downloadable, so a smoke that
+    # ran anyway would fail on a 404 rather than skip. These two cases are what
+    # make the finalization prerequisite observable: without them a guard that
+    # dropped the finalize result but kept the dependency would still agree
+    # with every other scenario.
+    Scenario(
+        "finalize-failure",
+        "publish",
+        "",
+        needs_results(outcomes={"finalize-github-release": "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "finalize-skipped",
+        "publish",
+        "",
+        needs_results(outcomes={"finalize-github-release": "skipped"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "neither-mode",
+        "neither",
+        "",
+        needs_results(),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "cancelled-ready-for-review",
+        "dry-run",
+        "ready_for_review",
+        needs_results(),
+        cancelled=True,
+        release_runs=False,
+    ),
+    Scenario(
+        "cancelled-publishing",
+        "publish",
+        "",
+        needs_results(),
+        cancelled=True,
+        release_runs=False,
+    ),
+    *_prerequisite_scenarios("failure"),
+    *_prerequisite_scenarios("skipped"),
+)

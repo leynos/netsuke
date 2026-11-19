@@ -45,12 +45,12 @@ cli.subcommand.graph.long_about = 将解析后的 Netsuke 清单投影为规范�
 cli.subcommand.generate.about = 生成 Ninja 清单但不运行 Ninja。
 cli.subcommand.generate.long_about = 将生成的 Ninja 清单写入标准输出，或写入用 `--output` 选定的文件。
 cli.subcommand.help.about = 打印顶层帮助，或打印指定主题的帮助。
-cli.subcommand.help.long_about = 没有主题时，此命令等价于 `--help`。使用 `help targets` 打印所选清单的目标和动作目录。
+cli.subcommand.help.long_about = 没有主题时，此命令等价于 `--help`。使用 `help targets` 打印所选清单的目标和操作目录。
 
 # Help catalogue headings and markers.
-cli.help.actions_heading = 动作：
+cli.help.actions_heading = 操作：
 cli.help.targets_heading = 目标：
-cli.help.targets.about = 列出所选清单中的目标和动作。
+cli.help.targets.about = 列出所选清单中的目标和操作。
 cli.help.targets.flag.edges.help = 在 JSON 输出中包含依赖边和原始配方。
 cli.help.default_marker = 默认
 cli.help.conditional_marker = 条件
@@ -98,7 +98,7 @@ runner.manifest.path_missing_name = 清单路径“{ $path }”没有文件名�
 cli.file.non_utf8 = 清单路径“{ $path }”不是有效的 UTF-8。
 runner.manifest.directory_label = 目录 `{ $directory }`
 runner.manifest.current_directory_label = 当前目录
-runner.manifest.default_not_declared = 清单默认值“{ $default }”未指定已声明的动作或目标。
+runner.manifest.default_not_declared = 清单默认值“{ $default }”未指定已声明的操作或目标。
 runner.context.network_policy = 无法构建网络策略。
 runner.context.load_manifest = 无法加载 { $path } 处的清单。
 runner.context.build_graph = 无法根据清单构建图。
@@ -199,14 +199,14 @@ ir.multiple_rules = 目标“{ $target }”必须只引用一条规则，却得�
 ir.empty_rule = 目标“{ $target }”必须引用一条规则。
 ir.duplicate_outputs = 检测到重复输出：{ $outputs }。
 ir.circular_dependency = 检测到循环依赖：{ $cycle }。
-ir.action_serialisation = 无法序列化动作：{ $details }。
+ir.action_serialisation = 无法序列化操作：{ $details }。
 ir.invalid_command = 命令中的插值无效：{ $snippet }。
 ir.ambiguous_substitution_boundary = 字符 { $position } 处的命令替换边界不明确；请将替换的右括号与后面的 '#' 分开。
 
 # Ninja 生成错误。
-ninja_gen.missing_action = 缺少构建边引用的动作“{ $id }”。
-ninja_gen.console_dependency_only = 构建边“{ $output }”无法选择控制台池，因为它的动作仅包含依赖项。
-ninja_gen.console_pool_conflict = 构建边“{ $output }”选择了控制台池，但它的动作请求自定义池“{ $pool }”。
+ninja_gen.missing_action = 缺少构建边引用的操作“{ $id }”。
+ninja_gen.console_dependency_only = 构建边“{ $output }”无法选择控制台池，因为它的操作仅包含依赖项。
+ninja_gen.console_pool_conflict = 构建边“{ $output }”选择了控制台池，但它的操作请求自定义池“{ $pool }”。
 ninja_gen.format = 无法格式化 Ninja 清单的输出。
 ninja_gen.dyndep_files_required = 此操作需要生成的 Ninja dyndep 文件；请使用 `netsuke build`、`netsuke clean` 或 `netsuke generate` 以生成这些文件。
 ninja_gen.reserved_output_path = 路径“{ $path }”已保留给 Netsuke 的串行依赖状态。

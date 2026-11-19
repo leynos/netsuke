@@ -81,9 +81,14 @@ tag push, and as a reusable workflow (`workflow_call`) with inputs `publish`,
 Its jobs are:
 
 1. `metadata` — resolves the repository name, the release modes through the
-   `determine-release-modes` shared action, the crate version through
-   `ensure-cargo-version` (with `check-tag` bound to `should-publish`), the WiX
-   extension version, and the binary name through `export-cargo-metadata`.
+   `determine-release-modes` shared action, the workflow's own release-write
+   authorization through `scripts/authorize_release_writes.py` (#1001), the
+   crate version through `ensure-cargo-version` (with `check-tag` bound to the
+   authorized `should-publish`), the WiX extension version, and the binary name
+   through `export-cargo-metadata`. The authorization decision is what the jobs
+   and outputs consume: the resolver reports `should-publish: true` for every
+   push before it consults the reusable `publish` input, so it is necessary but
+   not sufficient.
 2. `build-linux`, `build-windows`, `build-macos` — each a two-leg matrix
    calling `./.github/workflows/build-and-package.yml`, which compiles, packages
    (`.deb`, `.rpm`, `.msi`, `.pkg`), runs the release-help tooling, and
@@ -99,15 +104,15 @@ Its jobs are:
    with `dry-run: true`. It creates no release and uploads nothing. This job is
    the only remaining caller of that shared action.
 6. `publish-release` — added by #834 after this plan was drafted. It runs only
-   when `should_publish == 'true'`, holds `contents: write`, and creates the
-   draft release (`scripts/ensure_draft_release.py`), then runs the same
-   download and hoist sequence. Since #1066 it no longer calls the shared
-   action: it calls the repository's own
-   `./.github/actions/upload-declared-assets`, which selects the declared
-   payload, writes the declaration and the trusted digest record from the
-   staged bytes, retains both, and only then uploads the declared names without
-   ever replacing attached bytes. The checkout is pinned to the candidate
-   commit so those files are read at the revision the producers built.
+   when the authorized `should_publish == 'true'` and the run is not a dry run
+   (#1001), holds `contents: write`, and creates the draft release
+   (`scripts/ensure_draft_release.py`), then runs the same download and hoist
+   sequence. Since #1066 it no longer calls the shared action: it calls the
+   repository's own `./.github/actions/upload-declared-assets`, which selects
+   the declared payload, writes the declaration and the trusted digest record
+   from the staged bytes, retains both, and only then uploads the declared
+   names without ever replacing attached bytes. The checkout is pinned to the
+   candidate commit so those files are read at the revision the producers built.
 
 The two jobs are mutually exclusive: a dry run takes `release`, a tag push takes
 `publish-release`, and a job that needs a skipped job is itself skipped.
@@ -5538,6 +5543,51 @@ and pass, on the final wording.
   *Verification.* The full workflow-contract suite passes (2439 passed, 2
   skipped), and `make check-fmt` and `make lint-python` exit zero. Date/Author:
   2026-11-19, implementation agent.
+
+- [x] (2026-11-19) Merged `main` into the branch instead of rebasing, and
+  ported the admission-gate delta onto #1157's scenario model.
+
+  *Why a merge.* The branch carried 54 commits over a refactor of the same
+  release-path contract modules that #1157 landed on `main`. A rebase replays
+  that refactor commit by commit and re-resolves the same collision at every
+  step; a single merge resolves each file once. It also keeps every commit SHA,
+  so the review anchors written against them survive, and the push becomes a
+  plain fast-forward with no force.
+
+  *What #1157 subsumed.* `main` already carried the admission job, its
+  source-pin checkout, the metadata-output resolver, and a scenario table whose
+  expected outputs are the real `authorize_release_writes.py` policy. The
+  branch's own derivation layer -- `release_publish_path_results.py`,
+  `release_publish_path_context.py`, `release_publish_path_scenario_table.py`,
+  `release_publish_path_metadata.py`, `release_publish_path_smoke.py`, and
+  `release_publish_path_guard_properties_test.py` -- therefore duplicated a
+  landed design and was deleted rather than merged. The remaining unique value
+  of this branch is the write-side gating: the gate's declared
+  `enforcement`/`gate_outcome`/`candidate_commit` outputs, enforcement derived
+  from `should_publish`, the two-checkout source pin, the four admission
+  conjuncts on every writing job, and the contracts and mutations that hold
+  them.
+
+  *The seam.* `main` built a needs context at four separate call sites, none of
+  which carried the gate's outputs. `release_publish_path_scenario_model.py`
+  now owns `needs_entry` and `job_contexts`, which add the gate's outputs and
+  `github.sha` for every job's declared dependencies, so all four checks
+  evaluate the merged guards without duplicating the plumbing.
+
+  *Corrections the port forced.* The enforcement oracle compares the resolved
+  flag with the policy's `should_publish`, not the resolver's nominal mode: a
+  reusable push the policy narrows to a rehearsal must observe, and comparing
+  with `mode == "publish"` reported six false failures. The consumer smoke's
+  mode predicate still needs the one-shot static check first written for
+  `neither-mode`, because no realizable scenario can isolate it. And the merge
+  left two `MutationError` classes, so `pytest.raises` in
+  `release_publish_path_mutations_test.py` no longer caught the helper's
+  refusal; `release_mutation_support.py` is now the single vocabulary.
+
+  *Verification.* The focused release-path, verification, publication,
+  finalization, and mutation suites pass (361 cases), and the full
+  workflow-contract suite is re-run on the merged tree before the merge commit
+  is published. Date/Author: 2026-11-19, implementation agent.
 
 ## Surprises & discoveries
 

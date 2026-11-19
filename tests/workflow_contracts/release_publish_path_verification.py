@@ -9,11 +9,15 @@ computation from the job's own expression, so a guard that silently stops
 matching the scenarios is reported rather than agreed with.
 """
 
+import typing as typ
+
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_context import ScenarioRun, needs_context
-from release_publish_path_scenarios import GITHUB_SHA, VERIFY_NEEDS, admits_candidate
+from release_publish_path_scenario_model import VERIFY_NEEDS, job_contexts
 from workflow_loading import workflow_job
+
+if typ.TYPE_CHECKING:
+    from release_publish_path_scenario_model import Scenario
 
 VERIFY_JOB = "verify-release-inventory"
 #: Draft releases are visible only with write access, so the listing steps
@@ -31,7 +35,7 @@ def _declared_names(job: dict[str, object], violations: list[str]) -> list[str] 
 
 
 def check_verification_needs(job: dict[str, object], violations: list[str]) -> None:
-    """Require exactly metadata, the gate, and both publishers.
+    """Require exactly the packaged candidate, the gate and both publishers.
 
     The length comparison catches a repeated name, which set equality alone
     would accept and which GitHub treats as an error.
@@ -61,39 +65,27 @@ def check_verification_permissions(
         )
 
 
-def _verification_needs_context(
-    job: dict[str, object], run: ScenarioRun
-) -> dict[str, object]:
-    """Build the needs context from the job's declared dependencies."""
-    return needs_context(job_names(job.get("needs", [])) or [], run)
-
-
-def _should_verify(run: ScenarioRun) -> bool:
+def _should_verify(scenario: Scenario, outputs: dict[str, str]) -> bool:
     """Compute the independent reachability oracle for inventory verification."""
-    scenario = run.scenario
     return (
-        scenario.mode == "publish"
+        outputs.get("should_publish") == "true"
         and not scenario.cancelled
-        and admits_candidate(scenario)
-        and all(run.results.get(name) == "success" for name in VERIFY_NEEDS)
+        and scenario.admits_candidate
+        and all(scenario.needs_results.get(name) == "success" for name in VERIFY_NEEDS)
     )
 
 
 def check_verify_inventory(
     release: dict[str, object],
-    run: ScenarioRun,
+    scenario: Scenario,
+    outputs: dict[str, str],
     violations: list[str],
 ) -> None:
     """Verify the job's shape and its reachability for one scenario."""
-    scenario = run.scenario
     job = workflow_job(release, VERIFY_JOB)
     check_verification_needs(job, violations)
     check_verification_permissions(job, violations)
-    contexts: dict[str, object] = {
-        "needs": _verification_needs_context(job, run),
-        "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
-    }
+    contexts = job_contexts(scenario, outputs, job)
     actual = evaluate_field(
         job.get("if", True),
         FieldEvaluation(
@@ -103,7 +95,7 @@ def check_verify_inventory(
             job_level=True,
         ),
     )
-    expected = _should_verify(run)
+    expected = _should_verify(scenario, outputs)
     runs = actual is not MISSING and bool(actual)
     if runs != expected:
         violations.append(

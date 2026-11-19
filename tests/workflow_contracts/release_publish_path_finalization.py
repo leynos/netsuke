@@ -20,19 +20,16 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_context import ScenarioRun, needs_context
 from release_publish_path_publication import step_runs
-from release_publish_path_scenarios import (
-    FINALIZE_JOB,
-    GITHUB_SHA,
-    VERIFY_JOB,
-    admits_candidate,
-)
+from release_publish_path_scenario_model import ADMISSION_JOB, job_contexts
+from release_publish_path_verification import VERIFY_JOB
 from workflow_loading import job_steps, named_step, workflow_job
 
 if typ.TYPE_CHECKING:
-    from release_publish_path_scenarios import Scenario
+    from release_publish_path_scenario_model import Scenario
 
+#: The job that un-drafts the release once every other stage has agreed.
+FINALIZE_JOB = "finalize-github-release"
 #: The finalization step, named as the workflow spells it.
 FINALIZE_STEP = "Finalize the verified release"
 #: Every job finalization must wait on. Packaging supplies the identity it
@@ -41,7 +38,7 @@ FINALIZE_STEP = "Finalize the verified release"
 FINALIZE_NEEDS = {
     "metadata",
     "package-crate",
-    "release-admission-canaries",
+    ADMISSION_JOB,
     "publish-crates-io",
     "publish-release",
     VERIFY_JOB,
@@ -69,38 +66,29 @@ def check_finalization_needs(job: dict[str, object], violations: list[str]) -> N
         )
 
 
-def _should_finalize(run: ScenarioRun) -> bool:
+def _should_finalize(scenario: Scenario, outputs: dict[str, str]) -> bool:
     """Compute the independent reachability oracle for finalization."""
-    scenario = run.scenario
     return (
-        scenario.mode == "publish"
+        scenario.authorization.should_publish
         and not scenario.cancelled
-        and run.outputs.get("should_publish") == "true"
-        and admits_candidate(scenario)
-        and all(run.results.get(name) == "success" for name in FINALIZE_NEEDS)
+        and outputs.get("should_publish") == "true"
+        and scenario.admits_candidate
+        and all(
+            scenario.needs_results.get(name) == "success" for name in FINALIZE_NEEDS
+        )
     )
-
-
-def _finalize_contexts(job: dict[str, object], run: ScenarioRun) -> dict[str, object]:
-    """Build the guard context from the job's own declared dependencies."""
-    scenario = run.scenario
-    return {
-        "needs": needs_context(job_names(job.get("needs", [])) or [], run),
-        "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
-    }
 
 
 def check_finalize_release(
     release: dict[str, object],
-    run: ScenarioRun,
+    scenario: Scenario,
+    outputs: dict[str, str],
     violations: list[str],
 ) -> None:
     """Verify the job's shape and its reachability for one scenario."""
-    scenario = run.scenario
     job = workflow_job(release, FINALIZE_JOB)
     check_finalization_needs(job, violations)
-    contexts = _finalize_contexts(job, run)
+    contexts = job_contexts(scenario, outputs, job)
     actual = evaluate_field(
         job.get("if", True),
         FieldEvaluation(
@@ -110,7 +98,7 @@ def check_finalize_release(
             job_level=True,
         ),
     )
-    expected = _should_finalize(run)
+    expected = _should_finalize(scenario, outputs)
     runs = actual is not MISSING and bool(actual)
     if runs != expected:
         violations.append(
@@ -137,6 +125,7 @@ def _check_finalize_step(
 
 
 __all__ = (
+    "FINALIZE_JOB",
     "FINALIZE_NEEDS",
     "FINALIZE_STEP",
     "check_finalization_needs",

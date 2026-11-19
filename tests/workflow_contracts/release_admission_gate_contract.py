@@ -34,11 +34,11 @@ from release_admission_source_pin import (
     verifier_gate_command,
 )
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_scenarios import GITHUB_SHA
+from release_publish_path_scenario_model import GITHUB_SHA
 from workflow_loading import job_steps, require_mapping
 
 if typ.TYPE_CHECKING:
-    from release_publish_path_scenarios import Scenario
+    from release_publish_path_scenario_model import Scenario
 
 ENFORCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
 
@@ -130,7 +130,10 @@ def check_admission_enforcement(
     if value is MISSING:
         return
     resolved = _resolved_flag(value)
-    expected = scenario.mode == "publish"
+    # Enforcement follows the policy's publication decision, not the
+    # resolver's nominal mode: a reusable push the policy narrows to a
+    # rehearsal must observe even though the resolver said publish.
+    expected = metadata_outputs.get("should_publish") == "true"
     if resolved is None:
         violations.append(f"{label}: resolved to {value!r}, which is not a flag")
     elif resolved != expected:

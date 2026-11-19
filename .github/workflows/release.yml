@@ -95,13 +95,13 @@ jobs:
       package_license: ${{ steps.package_metadata.outputs.license }}
       package_description: ${{ steps.package_metadata.outputs.description }}
       package_manifest: ${{ steps.manifest_path.outputs.value }}
-      should_publish: ${{ steps.release_modes.outputs['should-publish'] }}
+      should_publish: ${{ steps.release_authorization.outputs['should-publish'] }}
       release_tag: ${{ steps.validate_publish_ref.outputs.release_tag }}
-      dry_run: ${{ steps.release_modes.outputs['dry-run'] }}
-      should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}
+      dry_run: ${{ steps.release_authorization.outputs['dry-run'] }}
+      should_upload_workflow_artifacts: ${{ steps.release_authorization.outputs['should-upload-workflow-artifacts'] }}
       should_upload_package_artifacts: >-
-        ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] == 'true' ||
-            steps.release_modes.outputs['dry-run'] == 'true' }}
+        ${{ steps.release_authorization.outputs['should-upload-workflow-artifacts'] == 'true' ||
+            steps.release_authorization.outputs['dry-run'] == 'true' }}
       wix_extension_version: ${{ steps.wix_extension_version.outputs.value }}
       repo_name: ${{ steps.repo_name.outputs.value }}
       # The commit every producer checks out and every later job binds its
@@ -149,9 +149,31 @@ jobs:
         name: Determine release modes
         uses: >-
           leynos/shared-actions/.github/actions/determine-release-modes@2f58fab140cc8dfe69756aaa6a3bbb987c426023
+      - id: release_authorization
+        name: Authorize release writes
+        # The pinned resolver answers `should-publish: true` for every push
+        # before it consults the reusable `publish` input, so it cannot decide
+        # on its own: a reusable caller that inherited a push trigger would
+        # otherwise reach the write path having asked for no publication. This
+        # step applies the caller's own policy over the resolver's answer.
+        # Every value arrives through `env`, because the inputs are
+        # caller-controlled and must never reach the script text.
+        shell: bash
+        env:
+          INPUT_PUBLISH: ${{ inputs.publish }}
+          INPUT_DRY_RUN: ${{ inputs.dry-run }}
+          INPUT_EVENT_NAME: ${{ github.event_name }}
+          INPUT_REF: ${{ github.ref }}
+          INPUT_WORKFLOW_REF: ${{ github.workflow_ref }}
+          INPUT_REPOSITORY: ${{ github.repository }}
+          INPUT_RESOLVER_SHOULD_PUBLISH: ${{ steps.release_modes.outputs['should-publish'] }}
+          INPUT_RESOLVER_DRY_RUN: ${{ steps.release_modes.outputs['dry-run'] }}
+          INPUT_RESOLVER_SHOULD_UPLOAD_WORKFLOW_ARTIFACTS: >-
+            ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}
+        run: uv run --no-project --python 3.14 scripts/authorize_release_writes.py
       - id: validate_publish_ref
         name: Validate publishing ref
-        if: steps.release_modes.outputs['should-publish'] == 'true'
+        if: steps.release_authorization.outputs['should-publish'] == 'true'
         shell: bash
         env:
           RELEASE_REF: ${{ github.ref }}
@@ -170,7 +192,7 @@ jobs:
         uses: >-
           leynos/shared-actions/.github/actions/ensure-cargo-version@ff1dd759dfffc0db3459e30e833f52437ee62b57
         with:
-          check-tag: ${{ fromJSON(steps.release_modes.outputs['should-publish']) }}
+          check-tag: ${{ fromJSON(steps.release_authorization.outputs['should-publish']) }}
       - id: wix_extension_version
         name: Resolve WiX extension version
         shell: bash
@@ -922,6 +944,7 @@ jobs:
       needs.build-windows.result == 'success' &&
       needs.build-macos.result == 'success' &&
       needs.windows-native-recipe-smoke.result == 'success' &&
+      needs.metadata.outputs.dry_run != 'true' &&
       needs.release-admission-canaries.result == 'success' &&
       needs.release-admission-canaries.outputs.enforcement == 'true' &&
       needs.release-admission-canaries.outputs.gate_outcome == 'success' &&

@@ -22,6 +22,7 @@ sections that match the features they use.
 | Optional          | Existing manifests           | Omit `console` to retain ordinary scheduling; it defaults to false.     |
 | Optional          | Scripts parsing stdout       | Tolerate the forwarding-failure warning on stdout.                      |
 | Optional          | Configured shell definitions | Declare `[[shells]]` only in operator configuration.                    |
+| Required          | Reusable release callers     | Pass `publish: true` to publish from a reusable call.                   |
 
 _Table 1: migration obligations for the beta series and console-pool option._
 
@@ -1317,6 +1318,34 @@ passes an abbreviated SHA, an uppercase spelling, a tag, or a branch name is
 refused at the checkout check rather than building bytes it cannot attribute to
 a commit.
 
+## Reusable release calls must request publication
+
+A reusable call to `release.yml` no longer publishes merely because a push
+trigger reached it. The workflow decides publication from the caller's own
+inputs: a caller that passes `dry-run: true` never publishes, even beside
+`publish: true`, and a caller must pass `publish: true` to authorize the draft
+release, its asset uploads, and the finalization that un-drafts it. An
+unauthorized run still builds, packages, and stages its artefacts, and the
+authorization step records the denial reason in its outputs.
+
+**Required for reusable callers that publish:** add `publish: true` to the
+caller job's `with:` block. A caller that relied on an inherited push trigger
+to publish now stops at the draft release instead of filling and publishing it.
+Callers that already passed `publish: true` need no change, and a direct
+`v*.*.*` tag push of `.github/workflows/release.yml` keeps its previous
+behaviour.
+
+Callers that only rehearse are unaffected: `publish` defaults to `false`, and
+`dry-run: true` still suppresses build diagnostic artefact uploads. Each run's
+authorization decision also appears in the job summary and as a
+`Release authorization` notice, with fixed fields and a bounded reason
+category, so a caller can confirm what the run decided without reading the
+step's outputs. The
+[users' guide](users-guide.md#choose-whether-a-reusable-release-call-publishes)
+states the rules, and
+[ADR-0082](adrs/adr-0082-authorize-release-writes-from-the-callers-policy.md)
+records the decision.
+
 ## Release publication requires packaging and enforced admission
 
 A publishing run now requires the `package-crate` and
@@ -1405,6 +1434,8 @@ owned sink and completion-ordering contract.
   not a project file.
 - [ ] Move any `contents`, `linecount`, `hash`, or `digest` read that leaves the
   workspace into it; those filters no longer resolve outside the root.
+- [ ] If a reusable call publishes the release, pass `publish: true`; a dry run
+  or an omitted `publish` never publishes.
 
 ## Common errors and fixes
 

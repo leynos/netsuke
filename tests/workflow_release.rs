@@ -42,25 +42,40 @@ fn behavioural_release_workflow_exports_bin_name() {
 }
 
 #[test]
-fn behavioural_release_workflow_wires_release_modes_outputs() {
+fn behavioural_release_workflow_authorizes_before_reading_release_modes() {
     let contents = workflow_contents("release.yml").expect("release workflow should be readable");
 
     assert!(
-        contents
-            .contains("check-tag: ${{ fromJSON(steps.release_modes.outputs['should-publish']) }}"),
-        "release workflow should gate tag checking on should-publish output"
+        contents.contains("id: release_authorization"),
+        "release workflow should decide release writes in a step of its own"
     );
     assert!(
-        contents.contains("should_publish: ${{ steps.release_modes.outputs['should-publish'] }}"),
-        "release workflow should capture should-publish output"
+        contents.contains("uv run --no-project --python 3.14 scripts/authorize_release_writes.py"),
+        "release workflow should run the release-write authorization policy"
     );
     assert!(
-        contents.contains("dry_run: ${{ steps.release_modes.outputs['dry-run'] }}"),
-        "release workflow should capture dry-run output"
+        contents.contains("INPUT_WORKFLOW_REF: ${{ github.workflow_ref }}"),
+        "release workflow should pass the workflow ref so a direct push is distinguishable"
     );
     assert!(
-        contents.contains("should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}"),
-        "release workflow should capture workflow artefact upload output"
+        contents.contains(
+            "check-tag: ${{ fromJSON(steps.release_authorization.outputs['should-publish']) }}"
+        ),
+        "release workflow should gate tag checking on the authorized should-publish output"
+    );
+    assert!(
+        contents.contains(
+            "should_publish: ${{ steps.release_authorization.outputs['should-publish'] }}"
+        ),
+        "release workflow should capture the authorized should-publish output"
+    );
+    assert!(
+        contents.contains("dry_run: ${{ steps.release_authorization.outputs['dry-run'] }}"),
+        "release workflow should capture the authorized dry-run output"
+    );
+    assert!(
+        contents.contains("should_upload_workflow_artifacts: ${{ steps.release_authorization.outputs['should-upload-workflow-artifacts'] }}"),
+        "release workflow should capture the authorized workflow artefact upload output"
     );
     assert!(
         contents.contains("should_upload_package_artifacts: >-"),
@@ -76,6 +91,10 @@ fn behavioural_release_workflow_wires_release_modes_outputs() {
     assert!(
         contents.contains("dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}"),
         "release asset upload should validate its plan on non-publishing runs"
+    );
+    assert!(
+        contents.contains("needs.metadata.outputs.dry_run != 'true'"),
+        "publish-release should refuse a release write while the run is a dry run"
     );
 }
 

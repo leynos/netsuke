@@ -12,6 +12,9 @@ mod cli_examples;
 #[path = "documentation_examples_tests/lint_examples.rs"]
 mod lint_examples;
 
+#[path = "documentation_examples_tests/release_publish_input.rs"]
+mod release_publish_input;
+
 #[path = "documentation_examples_tests/release_wix_extension.rs"]
 mod release_wix_extension;
 
@@ -68,6 +71,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-output-streams",
     "guide-project-anchor",
     "guide-project-config",
+    "guide-release-publish-input",
     "guide-release-wix-extension-version",
     "guide-serial-dependency-order-manifest",
     "guide-source-install",

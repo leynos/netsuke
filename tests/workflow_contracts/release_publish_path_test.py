@@ -1,77 +1,189 @@
-"""Prove dry runs reach release staging without publishing.
+"""Test the release publish-path contract and the authorization wiring.
 
-The release-path contract in :mod:`release_publish_path_contract` runs the
-whole scenario table, so it reports a broken guard, a dropped dependency, or a
-widened grant. What a table-driven run cannot show is that the checks were
-given the run the table meant: a scenario is checked against results the graph
-propagates, not against the outcomes it happens to name. These cases pin the
-pieces a green table run would otherwise leave implicit, so a regression in
-one of them fails here rather than passing as agreement with itself.
-
-The modules this one composes each own one link in that chain:
-
-- :mod:`release_publish_path_contract` runs the whole-workflow path check over
-  the release, caller, and package workflows.
-- :mod:`release_publish_path_scenarios` supplies ``_needs_results``, the
-  private builder of the results a scenario's declarations produce. It is
-  private because it is scaffolding for the scenarios, not part of the
-  contract, and the case below reaches it to show it refuses a dependency no
-  scenario models.
-- :mod:`release_publish_path_scenario_table` supplies ``SCENARIOS``, the named
-  outcomes the table asserts.
-- :mod:`release_publish_path_metadata` and
-  :mod:`release_publish_path_results` turn a workflow and a scenario into the
-  outputs and propagated results a run would see.
-- :mod:`release_publish_path_consumer_smoke` supplies the smoke oracle and the
-  job it reads.
-- :mod:`release_admission_gate_contract` supplies the checkout action, the
-  gate's script and isolation flags, and the verifier command the admission
-  job's checkout implies.
-- :mod:`workflow_loading` reads the release and package workflow documents.
-
-Each case names the link it holds:
-
-- :func:`test_a_scenario_cannot_name_an_unmodelled_dependency` shows that
-  ``_needs_results`` refuses an outcome for a job no scenario models.
-- :func:`test_a_relative_verifier_path_names_the_same_gate_command` shows that
-  the gate command built for the verifier path ``./gate`` is the same command
-  built for ``gate``.
-- :func:`test_the_smoke_oracle_reads_the_results_the_graph_resolves` shows
-  that the smoke oracle reads the resolved results rather than the scenario's
-  declared outcomes.
-- :func:`test_release_dry_run_reaches_the_staging_path` runs the contract over
-  every dry-run and publish scenario.
+The cases cover two promises: a dry run still reaches release staging without
+writing a release, and the authorization step closes every write gate for a run
+its policy denies. ``release_publish_path_authorization`` owns the wiring
+checks, ``release_publish_path_contract`` composes them with the publication
+paths, and both are exercised here against the real workflow.
 
 Run via ``make test-workflow-contracts``.
 """
 
+import copy
+
 import pytest
-from action_run_sources import action_sources
-from release_admission_gate_contract import (
-    CHECKOUT_ACTION,
-    GATE_SCRIPT,
-    UV_ISOLATION_FLAGS,
-    verifier_gate_command,
-)
-from release_publish_path_consumer_smoke import (
-    CONSUMER_SMOKE_ACTION_PATH,
-    ConsumerSmokeCheck,
-    check_consumer_smoke,
-    smoke_job,
+from release_publish_path_authorization import (
+    AUTHORIZATION_SCRIPT,
+    AUTHORIZATION_STEP,
+    check_authorization_wiring,
 )
 from release_publish_path_contract import (
     CALLER_WORKFLOW_PATH,
     check_release_publish_path,
 )
-from release_publish_path_metadata import metadata_outputs
-from release_publish_path_results import resolve_results
-from release_publish_path_scenario_table import SCENARIOS
-from release_publish_path_scenarios import _needs_results
+from release_publish_path_scenario_model import needs_results
 from workflow_loading import (
     PACKAGE_WORKFLOW_PATH,
     RELEASE_WORKFLOW_PATH,
+    job_steps,
     load_workflow,
+    require_mapping,
+    step_index_by_key,
 )
+
+
+def _metadata_step(release: dict[str, object], step_id: str) -> dict[str, object]:
+    """Return one step of the release workflow's metadata job."""
+    steps = job_steps(release, "metadata")
+    return steps[step_index_by_key(steps, "id", step_id)]
+
+
+#: Run bodies that name the policy without executing it. ``comment-only`` hides
+#: it behind ``#``; ``argument-only`` passes it to ``python -c`` as an argument;
+#: ``split-command`` wraps the expected words across two shell commands, which
+#: the runner executes as two separate lines rather than one invocation;
+#: ``suffixed-filename`` names a different file that a comment-stripping
+#: tokeniser would shorten to the expected path.
+_UNEXECUTED_RUNS = (
+    pytest.param(
+        f"uv run --no-project --python 3.14 python -c 'pass'  # {AUTHORIZATION_SCRIPT}",
+        id="comment-only",
+    ),
+    pytest.param(
+        f"uv run --no-project --python 3.14 python -c 'pass' {AUTHORIZATION_SCRIPT}",
+        id="argument-only",
+    ),
+    pytest.param(
+        f"uv run\n--no-project --python 3.14 {AUTHORIZATION_SCRIPT}",
+        id="split-command",
+    ),
+    pytest.param(
+        f"uv run --no-project --python 3.14 {AUTHORIZATION_SCRIPT}#disabled",
+        id="suffixed-filename",
+    ),
+)
+
+
+@pytest.mark.parametrize("run", _UNEXECUTED_RUNS)
+def test_the_authorization_step_must_execute_the_policy(run: str) -> None:
+    """Refuse a run body that names the policy without running it.
+
+    A membership test accepts a trailing comment, a script handed to
+    ``python -c`` as an argument, words split across two shell commands, and a
+    suffixed filename a comment-stripping tokeniser shortens to the expected
+    path, so the step would run something else while the policy's name stayed
+    in the workflow.
+    """
+    release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
+    step = _metadata_step(release, AUTHORIZATION_STEP)
+    step["run"] = run
+    violations: list[str] = []
+
+    check_authorization_wiring(release, violations)
+
+    assert any(v.startswith("authorization.run") for v in violations), (
+        "a mention that never executes the policy must not satisfy the "
+        f"authorization run check: {violations}"
+    )
+
+
+def test_the_authorization_step_id_must_match_exactly() -> None:
+    """Refuse an id that merely contains the expected one.
+
+    GitHub binds a step's outputs to its own id, so a step renamed to
+    ``release_authorization_unused`` still looks wired to a substring lookup
+    while no consumer reads its outputs.
+    """
+    release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
+    step = _metadata_step(release, AUTHORIZATION_STEP)
+    step["id"] = f"{AUTHORIZATION_STEP}_unused"
+    violations: list[str] = []
+
+    check_authorization_wiring(release, violations)
+
+    assert any(v.startswith("authorization.step") for v in violations), (
+        f"a renamed step id must not satisfy the lookup: {violations}"
+    )
+
+
+def test_the_step_order_check_refuses_a_decoy_id() -> None:
+    """Refuse ordering that a merely similar id in the right place satisfies.
+
+    A substring lookup finds ``release_authorization_unused`` where the real
+    step used to sit and reports the order as correct, even though the step that
+    decides writes now runs after the gates it is meant to close.
+    """
+    release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
+    steps = job_steps(release, "metadata")
+    index = step_index_by_key(steps, "id", AUTHORIZATION_STEP)
+    real = steps.pop(index)
+    decoy = copy.deepcopy(real)
+    decoy["id"] = f"{AUTHORIZATION_STEP}_unused"
+    steps.insert(index, decoy)
+    steps.append(real)
+    violations: list[str] = []
+
+    check_authorization_wiring(release, violations)
+
+    assert any(v.startswith("authorization.order") for v in violations), (
+        f"a decoy id before the gates must not satisfy the ordering check: {violations}"
+    )
+
+
+def test_the_authorization_step_id_must_be_unique() -> None:
+    """Refuse two steps sharing the decision's id.
+
+    GitHub cannot bind an output to an id declared twice, and a lookup that took
+    the first match could read a step the runner rejects outright.
+    """
+    release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
+    steps = job_steps(release, "metadata")
+    steps.append(copy.deepcopy(_metadata_step(release, AUTHORIZATION_STEP)))
+    violations: list[str] = []
+
+    check_authorization_wiring(release, violations)
+
+    assert any(v.startswith("authorization.step") for v in violations), (
+        f"a duplicated step id must be reported: {violations}"
+    )
+
+
+def test_the_authorization_step_must_run_unconditionally() -> None:
+    """Refuse a decision step that a condition can skip.
+
+    The gates are checked against synthetic outputs, so a step guarded by
+    ``${{ false }}`` would pass every other check while never writing them.
+    """
+    release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
+    step = _metadata_step(release, AUTHORIZATION_STEP)
+    step["if"] = "${{ false }}"
+    violations: list[str] = []
+
+    check_authorization_wiring(release, violations)
+
+    assert any(v.startswith("authorization.condition") for v in violations), (
+        f"a conditional decision step must be reported: {violations}"
+    )
+
+
+def test_the_version_gate_treats_a_string_true_as_enabled() -> None:
+    """Refuse version checking switched on by the string Actions would pass.
+
+    GitHub Actions materialises ``with:`` values as strings, so a ``check-tag``
+    of ``"true"`` enables the same check the boolean does. A gate that rejects
+    only ``True`` would leave a denied run checking the version tag.
+    """
+    release = copy.deepcopy(load_workflow(RELEASE_WORKFLOW_PATH))
+    step = _metadata_step(release, "ensure_version")
+    with_values = require_mapping(step.get("with"), "ensure_version.with")
+    with_values["check-tag"] = "${{ 'true' }}"
+    violations: list[str] = []
+
+    check_authorization_wiring(release, violations)
+
+    assert any(v.startswith("authorization.version-tag-gate") for v in violations), (
+        f"the string 'true' must be read as enabled version checking: {violations}"
+    )
 
 
 def test_a_scenario_cannot_name_an_unmodelled_dependency() -> None:
@@ -83,67 +195,7 @@ def test_a_scenario_cannot_name_an_unmodelled_dependency() -> None:
     mode the whole table exists to avoid.
     """
     with pytest.raises(ValueError, match="unknown dependenc"):
-        _needs_results(outcomes={"build-linx": "failure"})
-
-
-def test_a_relative_verifier_path_names_the_same_gate_command() -> None:
-    """Read ``./gate`` as the same verifier directory as ``gate``.
-
-    One rule validates the checkout's ``path`` and another rebuilds the gate
-    command from the same declaration. Comparing the raw spelling in one place
-    and the normalised spelling in the other made a correct workflow that
-    spelled the path ``./gate`` fail both, so the expectation is derived
-    through the same normalisation the validator applies.
-    """
-    steps: list[dict[str, object]] = [
-        {"uses": f"{CHECKOUT_ACTION}@v4", "with": {"path": "./gate"}}
-    ]
-    assert verifier_gate_command(steps) == (
-        f"uv run {UV_ISOLATION_FLAGS} --script gate/{GATE_SCRIPT}"
-    ), "a leading './' in the checkout path must not change the gate command"
-
-
-def test_the_smoke_oracle_reads_the_results_the_graph_resolves() -> None:
-    """Evaluate the smoke against propagated results, not declared outcomes.
-
-    ``publish-build-linux-failure`` declares every one of the smoke's
-    dependencies successful and fails only the build. The graph cannot produce
-    that: with the build failed, inventory verification and finalization are
-    skipped, so the smoke must not run. The job's guard is replaced with one
-    that reads no dependency, so only the oracle's expected value is observed.
-    An oracle reading the declared map still expects the smoke to run and
-    reports nothing, which is the agreement-with-itself this case rules out.
-    """
-    release = load_workflow(RELEASE_WORKFLOW_PATH)
-    violations: list[str] = []
-    outputs = metadata_outputs(release, "publish", violations)
-    scenario = next(
-        item for item in SCENARIOS if item.name == "publish-build-linux-failure"
-    )
-    run = resolve_results(release, scenario, outputs, violations)
-    assert scenario.needs_results["finalize-github-release"] == "success", (
-        "the scenario must declare the smoke's dependency successful for this "
-        "case to tell the two oracles apart"
-    )
-    assert run.results["finalize-github-release"] == "skipped", (
-        "the graph must resolve the failed build's dependants as skipped, got "
-        f"{run.results['finalize-github-release']!r}"
-    )
-    smoke_job(release, violations)["if"] = "!cancelled()"
-    check_consumer_smoke(
-        ConsumerSmokeCheck(
-            release=release,
-            action=action_sources().get(CONSUMER_SMOKE_ACTION_PATH),
-            scenario=scenario,
-            outputs=outputs,
-            results=run.results,
-            violations=violations,
-        )
-    )
-    assert any(
-        "consumer-smoke-job" in violation and "expected False" in violation
-        for violation in violations
-    ), f"the smoke must be reported as unreachable, got {violations!r}"
+        needs_results(outcomes={"build-linx": "failure"})
 
 
 def test_release_dry_run_reaches_the_staging_path() -> None:

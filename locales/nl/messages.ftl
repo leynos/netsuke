@@ -205,9 +205,9 @@ ir.invalid_command = Ongeldige interpolatie in de opdracht: { $snippet }.
 ir.ambiguous_substitution_boundary = Onduidelijke grens van opdrachtvervanging bij teken { $position }; scheid de afsluitende haak van de vervanging van de volgende '#'.
 
 # Fouten bij het genereren van Ninja.
-ninja_gen.missing_action = De actie ‘{ $id }’ waarnaar een bouwtak verwijst, ontbreekt.
-ninja_gen.console_dependency_only = De bouwtak ‘{ $output }’ kan de consolepool niet selecteren, omdat de actie alleen afhankelijkheden bevat.
-ninja_gen.console_pool_conflict = De bouwtak ‘{ $output }’ selecteert de consolepool, maar de actie vraagt om de aangepaste pool ‘{ $pool }’.
+ninja_gen.missing_action = De actie ‘{ $id }’ waarnaar een bouwkant verwijst, ontbreekt.
+ninja_gen.console_dependency_only = De bouwkant ‘{ $output }’ kan de consolepool niet selecteren, omdat de actie alleen afhankelijkheden bevat.
+ninja_gen.console_pool_conflict = De bouwkant ‘{ $output }’ selecteert de consolepool, maar de actie vraagt om de aangepaste pool ‘{ $pool }’.
 ninja_gen.format = De uitvoer van het Ninja-manifest kon niet worden opgemaakt.
 ninja_gen.dyndep_files_required = Deze bewerking vereist een gegenereerde Ninja-bundel; gebruik `netsuke build`, `netsuke clean` of `netsuke generate` om de dyndep-bestanden te materialiseren.
 ninja_gen.reserved_output_path = Het pad '{ $path }' is gereserveerd voor de seriële afhankelijkheidsstatus van Netsuke.

@@ -1,11 +1,10 @@
 """Check the isolated write-enabled half of release publication.
 
-Publication is the part of the graph that mutates a release, so it is checked
-apart from the rest: the job's needs, the step order, the draft guard, the
-upload plan that limits the transfer to declared assets, and the crates.io
-publisher, whose guard must agree with the outcome a scenario derives.
-``check_publication_path`` and ``check_crates_io_publication`` are called from
-the scenario loop in ``release_publish_path_contract``.
+The publication gate reads the ``should_publish`` output the authorization step
+decides, so a run the policy denies never reaches a write-enabled job. The
+scenario value objects come from ``release_publish_path_scenario_model``.
+
+Run via ``make test-workflow-contracts``.
 """
 
 import dataclasses
@@ -13,12 +12,10 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_context import ScenarioRun, needs_context
-from release_publish_path_scenarios import (
+from release_publish_path_scenario_model import (
     CRATES_IO_NEEDS,
-    GITHUB_SHA,
-    REQUIRED_NEEDS,
-    admits_candidate,
+    PUBLICATION_NEEDS,
+    job_contexts,
 )
 from workflow_loading import (
     job_steps,
@@ -29,7 +26,7 @@ from workflow_loading import (
 )
 
 if typ.TYPE_CHECKING:
-    from release_publish_path_scenarios import Scenario
+    from release_publish_path_scenario_model import Scenario
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -118,34 +115,23 @@ def _check_publication_step_order(
         )
 
 
-def _publication_needs(
-    job: dict[str, object],
-    check: PublicationCheck,
-    results: dict[str, str],
-) -> dict[str, object]:
-    """Resolve the packaging, build, smoke and admission jobs publication needs."""
+def _check_publication_dependencies(
+    job: dict[str, object], check: PublicationCheck
+) -> None:
+    """Require publication to wait on packaging, admission and the builds."""
     declared = job_names(job.get("needs", []))
     if declared is None:
         check.violations.append("publish-release.needs: dependencies must be job names")
-        return {}
-    required = REQUIRED_NEEDS
-    declared_needs = set(declared)
-    if declared_needs != required:
+        return
+    if set(declared) != PUBLICATION_NEEDS:
         check.violations.append(
             "publish-release.needs: expected metadata, packaging, build, smoke and "
             "admission dependencies"
         )
-    return needs_context(
-        sorted(required & declared_needs),
-        ScenarioRun(check.scenario, check.outputs, results),
-    )
 
 
 def _check_publication_job(
-    job: dict[str, object],
-    check: PublicationCheck,
-    contexts: dict[str, object],
-    results: dict[str, str],
+    job: dict[str, object], check: PublicationCheck, contexts: dict[str, object]
 ) -> bool:
     """Evaluate publication-job reachability and report a mismatched guard."""
     scenario = check.scenario
@@ -159,13 +145,16 @@ def _check_publication_job(
         ),
     )
     all_dependencies_succeeded = all(
-        results.get(name) == "success" for name in REQUIRED_NEEDS
+        scenario.needs_results[name] == "success" for name in PUBLICATION_NEEDS
     )
+    # The job also requires the gate's outputs: an admission that observed,
+    # refused, or admitted another commit leaves the run unauthorized even when
+    # every dependency reports success.
     expected_job = (
-        scenario.mode == "publish"
+        check.outputs.get("should_publish") == "true"
         and not scenario.cancelled
+        and scenario.admits_candidate
         and all_dependencies_succeeded
-        and admits_candidate(scenario)
     )
     publication_runs = actual_job is not MISSING and bool(actual_job)
     if publication_runs != expected_job:
@@ -187,7 +176,7 @@ def _check_draft_guard(
     draft_runs = step_runs(
         draft, contexts, check.violations, f"{scenario.name}.draft.guard"
     )
-    expected_draft = scenario.mode == "publish"
+    expected_draft = check.outputs.get("should_publish") == "true"
     if draft_runs != expected_draft:
         check.violations.append(
             f"{scenario.name}.draft: resolved to {draft_runs!r}, "
@@ -229,16 +218,13 @@ def _check_publication_steps(
     _check_publication_step_order(steps, check.violations)
 
 
-def check_publication_path(check: PublicationCheck, results: dict[str, str]) -> None:
+def check_publication_path(check: PublicationCheck) -> None:
     """Verify publish-job reachability and the draft and asset upload guards."""
     scenario = check.scenario
     job = workflow_job(check.release, "publish-release")
-    contexts: dict[str, object] = {
-        "needs": _publication_needs(job, check, results),
-        "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
-    }
-    publication_runs = _check_publication_job(job, check, contexts, results)
+    _check_publication_dependencies(job, check)
+    contexts = job_contexts(scenario, check.outputs, job)
+    publication_runs = _check_publication_job(job, check, contexts)
     steps = job_steps(check.release, "publish-release")
     _check_draft_guard(steps, check, contexts)
     if publication_runs:
@@ -260,15 +246,14 @@ def _check_crates_io_needs(job: dict[str, object], check: PublicationCheck) -> b
     return True
 
 
-def _crates_io_should_run(check: PublicationCheck, results: dict[str, str]) -> bool:
+def _crates_io_should_run(check: PublicationCheck) -> bool:
     """Compute the independent publishing oracle from the scenario prerequisites."""
     scenario = check.scenario
     return (
-        scenario.mode == "publish"
-        and not scenario.cancelled
+        not scenario.cancelled
         and check.outputs.get("should_publish") == "true"
-        and admits_candidate(scenario)
-        and all(results.get(name) == "success" for name in CRATES_IO_NEEDS)
+        and scenario.admits_candidate
+        and all(scenario.needs_results[name] == "success" for name in CRATES_IO_NEEDS)
     )
 
 
@@ -276,7 +261,6 @@ def check_crates_io_publication(
     job: dict[str, object],
     check: PublicationCheck,
     contexts: dict[str, object],
-    results: dict[str, str],
 ) -> None:
     """Require the OIDC publisher's seven dependencies and gated reachability."""
     if not _check_crates_io_needs(job, check):
@@ -292,7 +276,7 @@ def check_crates_io_publication(
             job_level=True,
         ),
     )
-    expected = _crates_io_should_run(check, results)
+    expected = _crates_io_should_run(check)
     runs = actual is not MISSING and bool(actual)
     if runs != expected:
         check.violations.append(

@@ -459,25 +459,24 @@ is attributed to `verify_evidence`, which is the operation that decided it.
 `tests/workflow_contracts/release_admission_gate_contract.py` evaluates the
 enforcement expression in every modelled scenario rather than matching its
 text, so either hard-coded mode is reported for the run that exposes it. Each
-scenario declares only the leaf outcomes whose failure it exists to exercise;
-`release_publish_path_results.py` derives every other job's result from the
-workflow's own dependency edges and guards, in dependency order, so a scenario
-cannot pair a successful publisher with the failed build it publishes. The
-derived results then drive one evaluation per job: the staging guard, the
-publication guard, the registry publisher, the inventory verifier, and
-`finalize-github-release`, whose six-job dependency set and guard are checked
-against an independent expectation rather than against their own wording.
-`tests/workflow_contracts/release_publication_gate_mutations.py` states
-twenty-one regressions — a removed dependency, a removed result or output
-check, either hard-coded mode, an `always()` publication bypass, an appended
-always-true disjunct that keeps every clause as a conjunct, a publisher
-declared with the `write-all` shorthand, a publisher inheriting write from the
-workflow, the gate and rehearsal adopting each other, and finalization adopting
-the rehearsal or dropping its verifier dependency — each with the diagnostics
-that must notice it. Effective scopes and the conjunction requirement are read
-by the same module, so a job's permissions and its guard are judged from what
-GitHub would actually honour rather than from the spelling the workflow
-happened to use.
+scenario declares the dependency outcomes it models, and
+`release_publish_path_scenario_model.py` derives the expected metadata outputs
+by running the release-write policy itself, so a scenario cannot pair a
+successful publisher with a mode the policy denies. The declared results then
+drive one evaluation per job: the staging guard, the publication guard, the
+registry publisher, the inventory verifier, and `finalize-github-release`,
+whose six-job dependency set and guard are checked against an independent
+expectation rather than against their own wording.
+`tests/workflow_contracts/release_publication_gate_mutations.py` states the
+regressions — a removed dependency, a removed result or output check, either
+hard-coded mode, an `always()` publication bypass, an appended always-true
+disjunct that keeps every clause as a conjunct, a publisher declared with the
+`write-all` shorthand, a publisher inheriting write from the workflow, the gate
+and rehearsal adopting each other, and finalization adopting the rehearsal or
+dropping its verifier dependency — each with the diagnostics that must notice
+it. Effective scopes and the conjunction requirement are read by the same
+module, so a job's permissions and its guard are judged from what GitHub would
+actually honour rather than from the spelling the workflow happened to use.
 
 ## Addendum (2026-11-17): The gate runs from this repository's own commit
 
