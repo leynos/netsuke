@@ -221,6 +221,21 @@ fn reserved_default_target_is_rejected(#[case] path: &str) -> Result<()> {
     Ok(())
 }
 
+/// A backslash is an ordinary filename character on Unix.
+///
+/// Normalizing through the platform path type would rewrite this spelling's
+/// separators on Windows; the comparison must stay component-based so a Unix
+/// name containing literal backslashes is not mistaken for the namespace.
+#[cfg(unix)]
+#[test]
+fn a_literal_backslash_does_not_name_a_reserved_namespace() -> Result<()> {
+    let mut graph = graph_with_edge(parallel_edge("all", &["dep"]));
+    graph.default_targets = vec![Utf8PathBuf::from(".netsuke\\phony\\force")];
+
+    generate_bundle(&graph).context("a literal backslash must not reach generated state")?;
+    Ok(())
+}
+
 #[test]
 fn unreserved_default_target_is_accepted() -> Result<()> {
     let mut graph = graph_with_edge(parallel_edge("all", &["dep"]));

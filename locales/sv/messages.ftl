@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = Det gick inte att behålla den genererade dyndep-filen (sökväg: { $path }).
 runner.io.dyndep.alias = Den genererade dyndep-sökvägen { $path } är en symbolisk länk, en kopplingspunkt eller inte en katalog; ersätt den med en riktig katalog.
 runner.io.dyndep.open = Det gick inte att öppna den genererade dyndep-katalogen { $path }.
+runner.io.phony.inspect = Det gick inte att inspektera det reserverade phony-tillståndet på { $path }.
+runner.io.phony.reset = Det gick inte att rensa det reserverade phony-tillståndet på { $path }.
 cli.about = Netsuke kompilerar YAML- + Jinja-manifest till Ninja-byggplaner.
 cli.long_about = Netsuke omvandlar YAML- + Jinja-manifest till reproducerbara Ninja-grafer och kör Ninja med säkra standardvärden.
 cli.usage = { $usage }

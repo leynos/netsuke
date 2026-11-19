@@ -69,9 +69,11 @@ touches the manifest name.
 ### Option C: keep the public output and add a permanently dirty prerequisite
 
 `build out: rule in | force` with `build force: phony` makes the edge run every
-time. This is sufficient for `always`, and insufficient for `phony`: the name
-is still a produced file, so a same-named directory remains an "up to date"
-output and is still removed by `clean`.
+time: while the force node is absent, Ninja treats its dependant as dirty
+through that implicit input even when the declared output already exists. This
+is sufficient for `always`, and insufficient for `phony`: the name is still a
+produced file, so `clean` removes it, including a user's same-named file or
+directory when one occupies that path.
 
 ### Option D: retarget the manifest name to the hidden path
 
@@ -220,10 +222,25 @@ No manifest change is required. Existing manifests gain corrected behaviour:
   re-running. `netsuke build` therefore removes a path found at that node
   before it invokes Ninja, and warns when it does; the path is inside a
   namespace reserved for generated state, so nothing a manifest declares is
-  lost. Generation does not inspect the filesystem, because emitting a Ninja
+  lost — provided the manifest does not name that node indirectly. Generation
+  rejects the literal and foldable spellings, but an absolute path, a `..` path
+  that leaves the working directory and returns, and a symbolic-link alias can
+  only be judged against that directory. The build therefore resolves every
+  declared path before it deletes anything and refuses the reset when one
+  resolves into a reserved namespace, so a spelling that names a force node its
+  manifest also declared is refused rather than destroyed. Resolution only
+  reads; the removal itself still goes through a verified directory handle.
+  Generation continues not to inspect the filesystem, because emitting a Ninja
   file is a pure translation of the graph, so a generated file run by hand
   under a directory holding a stray force node keeps the old behaviour until
   that path is removed.
+
+  _Amendment (2026-11-19)._ The alias check was added after review found that
+  lexical comparison over the graph's spelling accepted both an absolute path
+  and a parent-relative path that re-enters the workspace, either of which
+  would have deleted a declared output. The generator's purity is preserved:
+  the reservation rule stays with generation, and the working-directory
+  resolution lives in the runner's command layer.
 
 ## Architectural rationale
 

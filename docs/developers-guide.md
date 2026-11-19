@@ -1604,6 +1604,27 @@ node or a hidden output to the default targets, and never reuse the namespace
 for a user-visible path. See
 [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).
 
+Clearing the force node belongs to the command layer, not to generation.
+`src/runner/phony_state/mod.rs` opens the effective working directory, verifies
+that `.netsuke` and `.netsuke/phony` are real directories without following a
+link, and removes whatever occupies `force`; `netsuke generate` leaves the path
+alone because generation is a pure translation of the graph. The reservation
+check in `src/ninja_gen/reserved_paths/mod.rs` is pure for the same reason: it
+folds the graph's own spelling and reads nothing from disk. Namespace constants
+live there alone, and `force_run.rs` and `dyndep/staging.rs` import them.
+
+A spelling that needs the working directory cannot be judged by generation, so
+the build command judges it before it deletes anything.
+`GeneratedNinjaWithTargets` collects every path the graph named, and
+`reset_force_node` resolves each against the canonical working directory: the
+longest existing ancestor is canonicalized and the components that do not exist
+yet are folded onto it. That catches an absolute path, a `..` path that leaves
+the workspace and returns, and a symbolic-link alias, each of which names a
+declared output that the reset would otherwise destroy. Resolution only reads;
+the removal itself always goes through the verified namespace handles. A
+refused build reports the same reservation diagnostic generation uses, because
+it is the same rule.
+
 ## Adding a lint rule
 
 `netsuke check` is driven by a static registry in `src/lint/registry/mod.rs`.

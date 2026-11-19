@@ -77,6 +77,27 @@ const CLEAN_MANIFEST: &str = concat!(
     "defaults: [check, stamp]\n",
 );
 
+/// The force node, relative to the workspace.
+const FORCE_NODE: &str = ".netsuke/phony/force";
+
+/// Build a manifest whose always target declares the force node as its output.
+///
+/// The spelling is absolute, so only the runner's working-directory resolution
+/// can tell that it names generated state.
+fn alias_manifest(force_node: &str) -> String {
+    format!(
+        concat!(
+            "netsuke_version: '1.0.0'\n",
+            "targets:\n",
+            "  - name: '{force_node}'\n",
+            "    always: true\n",
+            "    command: echo run >> runs.log\n",
+            "defaults: ['{force_node}']\n",
+        ),
+        force_node = force_node,
+    )
+}
+
 /// Provide a temporary workspace, or skip when Ninja is unavailable.
 ///
 /// Only a failed Ninja probe is a skip: a probe answer means the scenario was
@@ -328,6 +349,46 @@ fn a_stray_force_node_is_cleared_before_the_build(
         workspace.lines("runs.log")?.len() == 2,
         "a stray force node must not suppress the always target: {:?}",
         workspace.lines("runs.log")?,
+    );
+    Ok(())
+}
+
+#[rstest]
+fn a_declared_alias_of_the_force_node_stops_the_build(
+    temp_workspace: Result<Option<TempDir>>,
+) -> Result<()> {
+    let Some(directory) = temp_workspace? else {
+        return Ok(());
+    };
+    let force_node = Utf8PathBuf::from_path_buf(directory.path().join(FORCE_NODE))
+        .map_err(|path| anyhow::anyhow!("force node path is not UTF-8: {}", path.display()))?;
+    let workspace = Workspace::new(directory)?;
+    workspace.write_manifest(&alias_manifest(force_node.as_str()))?;
+    workspace
+        .root
+        .create_dir_all(".netsuke/phony")
+        .context("create the reserved phony namespace")?;
+    workspace
+        .root
+        .write(FORCE_NODE, b"declared output")
+        .context("write the path the manifest declares")?;
+
+    let run = workspace.run(&["build"])?;
+    ensure!(
+        !run.success,
+        "a manifest declaring the force node under an absolute spelling must be refused",
+    );
+    ensure!(
+        run.stderr.contains("reserved"),
+        "the refusal must report the reservation, not a Ninja failure: {}",
+        run.stderr,
+    );
+    ensure!(
+        workspace
+            .root
+            .try_exists(FORCE_NODE)
+            .context("check the declared output")?,
+        "the refused reset must leave the declared output in place",
     );
     Ok(())
 }

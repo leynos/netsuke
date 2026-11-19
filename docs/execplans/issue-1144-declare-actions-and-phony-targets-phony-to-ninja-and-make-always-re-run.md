@@ -92,6 +92,18 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
       reserved-path
       normalization, default-target coverage, the stray force node, and the
       documentation wording findings.
+- [x] Second CodeRabbit review answered: separator-independent namespace
+      normalization, nofollow verification of the namespace, localized cleanup
+      contexts, and two documentation corrections.
+- [x] Third review's blocking finding fixed: a declared path that resolves to
+      the force node through an absolute spelling, a `..` re-entry, or a
+      symbolic-link alias now stops the reset instead of being deleted.
+      Regression tests cover each spelling, and properties compute the
+      expectation from the workspace rather than assuming an above-root path
+      is safe.
+- [x] Migration notice added to the v0.1.0 guide, `.netsuke/phony` added to its
+      reserved-namespace paragraph, and the command-layer boundary recorded in
+      the developers' guide and ADR-0084.
 - [ ] Gates rerun on the fixed tree and the review cleared.
 
 ## Surprises & discoveries
@@ -191,6 +203,42 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   regenerated and reviewed hunk by hunk: each shows the force statement, the
   hidden executable statement with the force implicit dependency, and the
   public alias.
+- The second review found that the normalized reserved path was rebuilt with
+  `Utf8PathBuf::push`, which inserts the platform separator. On Windows that
+  yields `.netsuke\phony\force`, which never matches the slash-separated
+  namespaces, so reservation would silently stop working there. Normalization
+  now joins the surviving `Normal` components with `/` and builds no path at
+  all; an absolute or prefixed path returns `None`, and a literal backslash
+  stays an ordinary character on Unix, which a `#[cfg(unix)]` test pins.
+- `open_dir_nofollow` alone accepts a directory symbolic link with the pinned
+  capability implementation, so opening `.netsuke/phony` that way would still
+  have let a link redirect the recursive removal. Each namespace component is
+  now inspected with `stat(..., FollowSymlinks::No)` first and refused unless
+  it is a real directory, mirroring the glob walker's documented literal-prefix
+  check. The `force` entry is removed through the verified handle, as a
+  relative name that cannot climb out.
+- The localization audit requires every declared key in every catalogue, so the
+  two new cleanup contexts could not be English-only. Both were translated into
+  all 35 catalogues, with the right-to-left marks preserved for `ar`, `fa` and
+  `he`. The refusal itself uses `io::ErrorKind::NotADirectory`, whose standard
+  library text supplies the reason without authoring an untranslated sentence.
+- Two documentation claims did not survive review. The ADR's Option C said a
+  same-named directory "remains up to date", which contradicts the force-node
+  behaviour that makes the edge dirty; the objection to that option is `clean`,
+  not freshness. The users' guide said `generate` leaves the working tree
+  untouched, which contradicts the dyndep sidecar materialization and pruning
+  documented elsewhere; the claim is now scoped to `.netsuke/phony/force`.
+- The third review's blocking finding showed that lexical comparison over the
+  graph's spelling cannot decide an alias. `/project/.netsuke/phony/force` and
+  `../project/.netsuke/phony/force` (from `/project`) both fold to nothing and
+  both name the node. A capability handle cannot help either: with the pinned
+  `cap-primitives`, `Dir::canonicalize` resolves through `openat2` with
+  `RESOLVE_BENEATH`, so any `..` that leaves the workspace root fails rather
+  than returning to it. Resolution therefore needs the absolute working
+  directory, which is why `reset_force_node` resolves the selected `-C` path
+  once and canonicalizes the longest existing ancestor of each declared path
+  against it. The read is confined to this comparison; the removal itself still
+  goes through the verified namespace handles.
 
 ## Decision log
 
@@ -215,6 +263,27 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
 - `netsuke build` clears a path left at `.netsuke/phony/force` before invoking
   Ninja. The generator stays a pure translation of the graph, and the removal
   belongs to the command that owns build state.
+- The reservation rule is split by what each layer can know.
+  `ninja_gen/reserved_paths/mod.rs` owns the namespace constants and the pure
+  folding of a graph spelling. The runner owns working-directory resolution,
+  because it already selects the directory Ninja runs in and can read the
+  filesystem without making generation impure. A declared path the runner
+  cannot judge either way is not refused; only a resolution that lands in a
+  reserved namespace stops the reset.
+- The alias refusal reuses `ninja_gen.reserved_output_path` rather than adding
+  a third message, so users meet one explanation for one rule and no new
+  translation sweep is needed.
+- The normalized reserved-path comparison is a `/`-joined string of the
+  surviving components, never a rebuilt `Utf8PathBuf`, so the match is
+  independent of the platform separator. A path that is absolute, carries a
+  prefix, or climbs above its root is not treated as reserved.
+- The reset opens `.netsuke` and `.netsuke/phony` only after inspecting each
+  with `stat(..., FollowSymlinks::No)`, and refuses either component when it is
+  a symbolic link or not a directory. Removal happens through that verified
+  handle, so a link cannot redirect a recursive delete outside the namespace.
+- Both cleanup contexts are localized Fluent keys carrying `$path`
+  (`runner.io.phony.inspect` and `runner.io.phony.reset`), and the refusal uses
+  `io::ErrorKind::NotADirectory` rather than authored English prose.
 
 ## Acceptance criteria
 
@@ -249,11 +318,18 @@ Verification that has actually run: the generation-side suite in
 `tests/phony_always_runtime_tests.rs` with `NETSUKE_REQUIRE_NINJA=1`, the
 `dyndep::tests::paths` matrix, and `tests/ninja_gen_unit_tests.rs` all pass.
 
-The commit gates were then run as one sequential batch. `make check-fmt`,
-`make lint`, `make typecheck`, `make doc-coverage`, `make markdownlint`,
-`make nixie` and `NETSUKE_REQUIRE_NINJA=1 make test` each exited 0; the test
-gate ran all 6050 nextest cases with 9 environment-gated skips and passed every
-doctest target. Doc-comment coverage measured 98% against the 80% threshold.
+The commit gates were then run as one sequential batch on the final tree.
+`make check-fmt`, `make lint`, `make typecheck`, `make doc-coverage`,
+`make markdownlint`, `make nixie`, `make test-workflow-contracts` and
+`NETSUKE_REQUIRE_NINJA=1 make test` each exited 0; the test gate ran all 6102
+nextest cases with 9 environment-gated skips and passed every doctest target.
+Doc-comment coverage measured 98% against the 80% threshold.
+
+Two earlier drafts recorded 6050 and 6065 cases. Both were real measurements of
+earlier trees: the first before the runtime and generation suites added for
+this change were in the same batch, the second before the third review's alias
+tests existed. A count belongs to the tree its batch ran on, so 6102 is the
+figure for the tree that ships.
 
 The first review then raised shape questions the generation tests could not
 answer, and the fixes changed executable behaviour:
@@ -266,6 +342,36 @@ answer, and the fixes changed executable behaviour:
 - `netsuke build` removes a stray path at the force node before Ninja runs, with
   a unit test for each path type and a real-Ninja test that pre-creates the
   node, builds twice, and requires the forced recipe to run both times.
+
+The second review found two portability and safety gaps in that reset, and both
+fixes are in the shipping code:
+
+- Reserved-path matching no longer rebuilds a path, so the comparison holds on
+  Windows, and a Unix filename containing literal backslashes stays a filename.
+- The namespace is verified without following symbolic links before anything is
+  removed, so a link planted at `.netsuke` or `.netsuke/phony` cannot redirect
+  the recursive delete into the workspace.
+
+Its remaining findings were documentation: Option C's freshness wording in
+ADR-0084 and the scope of the `generate` no-mutation claim in the users' guide.
+
+The third review found one blocking defect and several documentation gaps, and
+all of it is addressed:
+
+- The reset deleted the force node before checking whether the manifest had
+  declared that exact path under another spelling. It now resolves every
+  declared path against the canonical working directory and refuses the reset
+  when one lands in a reserved namespace.
+  `src/ninja_gen/reserved_paths/tests.rs` pins the pure folding, and
+  `src/runner/phony_state/tests.rs` covers an absolute alias, a `..` re-entry,
+  a symbolic-link alias, an unrelated path, and properties that derive the
+  expected answer from the workspace. One property states the converse
+  explicitly: `../<workspace>/...` re-enters the workspace, so an above-root
+  path is not automatically safe.
+- The v0.1.0 migration guide gained the phony and always notice and names
+  `.netsuke/phony` in its reserved-namespace paragraph.
+- The developers' guide records the `src/runner/phony_state` boundary, and
+  ADR-0084 carries an amendment for the alias guard.
 
 Retrospective: the largest avoidable detour was diagnosing two failing text
 assertions whose premises were wrong rather than whose implementation was. One

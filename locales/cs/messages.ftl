@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = Nepodařilo se použít uchování vygenerovaného dyndep (cesta: { $path }).
 runner.io.dyndep.alias = Vygenerovaná cesta dyndep { $path } je symbolický odkaz, spojení nebo není adresář; nahraďte ji skutečným adresářem.
 runner.io.dyndep.open = Nepodařilo se otevřít vygenerovaný adresář dyndep { $path }.
+runner.io.phony.inspect = Nepodařilo se zkontrolovat vyhrazený stav phony (cesta: { $path }).
+runner.io.phony.reset = Nepodařilo se vymazat vyhrazený stav phony (cesta: { $path }).
 cli.about = Netsuke překládá manifesty YAML + Jinja na plány sestavení pro Ninju.
 cli.long_about = Netsuke převádí manifesty YAML + Jinja na reprodukovatelné grafy Ninja a spouští Ninju s bezpečným výchozím nastavením.
 cli.usage = { $usage }

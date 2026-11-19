@@ -67,10 +67,14 @@ mod display_edge;
 pub(crate) use display_edge::DisplayEdge;
 mod edge_metadata;
 mod force_run;
+// Only in-crate tests compare the force node's component spelling against this
+// constant; production code reaches it through `force_run` itself.
+#[cfg(test)]
 pub(crate) use force_run::FORCE_PATH;
 mod named_action;
 mod order;
 mod progress_label;
+pub(crate) mod reserved_paths;
 pub(crate) use named_action::NamedAction;
 use order::{ordered_default_targets, ordered_edges};
 /// Generate a Ninja build file as a string.

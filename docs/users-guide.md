@@ -1026,9 +1026,16 @@ the dependants.
 Both lowerings depend on a shared force node, `.netsuke/phony/force`, whose
 dirtiness is its absence from disk. `netsuke build` removes any file,
 directory, or symbolic link left at that path before it invokes Ninja, and
-warns when it does, so a stray path cannot quietly stop forced work.
-`netsuke generate` leaves the working tree untouched: if you run the generated
-file by hand, remove that path yourself.
+warns when it does, so a stray path cannot quietly stop forced work. Removal
+happens only through a real directory: if `.netsuke` or `.netsuke/phony` is a
+symbolic link or another kind of entry, the build refuses instead of following
+it. The build also refuses the removal when a declared path resolves to that
+node or its namespace — an absolute path, a `..` path that returns to the
+working directory, or a symbolic-link alias — because removing the entry would
+destroy the output the manifest named. `netsuke generate` leaves
+`.netsuke/phony/force` alone, because generation is a pure translation of the
+graph; running the generated file by hand therefore requires that path to be
+absent, so remove it yourself first.
 
 The flags are independent. An entry in `actions` is implicitly phony and not
 always; it may also set `always: true`, though the phony lowering already runs
@@ -1207,8 +1214,11 @@ using it if retention has removed any of its sidecars. The paths
 any user graph path, including outputs, inputs, implicit dependencies,
 order-only dependencies, and default targets; they are reserved for
 Netsuke-generated gates, sidecars, and the hidden outputs and force node of
-phony work. A spelling that resolves into one of those namespaces, such as
-`./.netsuke/phony/force`, is rejected too.
+phony work. A spelling that folds into one of those namespaces, such as
+`./.netsuke/phony/force`, is rejected during generation. Before it clears the
+force node, `netsuke build` also resolves every declared path against the
+working directory, so an absolute path, a `..` path that re-enters the
+workspace, or a symbolic-link alias is refused rather than deleted.
 
 When migrating an existing manifest, see the
 [v0.1.0 migration guide](v0-1-0-migration-guide.md#opting-into-serial-dependency-ordering)

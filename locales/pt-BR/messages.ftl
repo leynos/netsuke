@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = Não foi possível aplicar a retenção do dyndep gerado em { $path }.
 runner.io.dyndep.alias = O caminho dyndep gerado { $path } é um link simbólico, uma junção ou não é um diretório; substitua-o por um diretório real.
 runner.io.dyndep.open = Falha ao abrir o diretório dyndep gerado { $path }.
+runner.io.phony.inspect = Não foi possível inspecionar o estado phony reservado em { $path }.
+runner.io.phony.reset = Não foi possível limpar o estado phony reservado em { $path }.
 cli.about = O Netsuke compila manifestos YAML + Jinja em planos de build do Ninja.
 cli.long_about = O Netsuke transforma manifestos YAML + Jinja em grafos do Ninja reproduzíveis e executa o Ninja com padrões seguros.
 cli.usage = { $usage }
