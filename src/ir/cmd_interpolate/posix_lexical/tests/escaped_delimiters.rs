@@ -164,19 +164,19 @@ fn backslash_parity_before_a_delimiter_marker(#[case] backslashes: usize) {
     for marker in [INS_TOKEN, OUTS_TOKEN] {
         let source = format!("{}{marker}", "\\".repeat(backslashes));
         let rendered = render_word(&source, &bindings);
-        if backslashes % 2 == 1 {
+        if !backslashes.is_multiple_of(2) {
             assert!(
                 matches!(&rendered, Err(EscapeBeforeMarker)),
                 "an odd backslash count must leave the last escape active"
             );
             continue;
         }
-        let rendered = rendered.expect("an even backslash count must render");
-        let terminator = rendered_terminator(&rendered)
+        let rendered_word = rendered.expect("an even backslash count must render");
+        let terminator = rendered_terminator(&rendered_word)
             .expect("an even backslash count must render one delimiter word");
         assert_eq!(
             terminator.text,
-            format!("{}{path}", "\\".repeat(backslashes / 2)),
+            format!("{}{path}", "\\".repeat(backslashes.div_euclid(2))),
             "each escaped pair must render one literal backslash before the path"
         );
         assert!(
@@ -185,7 +185,7 @@ fn backslash_parity_before_a_delimiter_marker(#[case] backslashes: usize) {
         );
         assert_eq!(
             terminator.end,
-            rendered.chars().count(),
+            rendered_word.chars().count(),
             "the reparse must consume the whole rendered word"
         );
     }
@@ -228,7 +228,7 @@ proptest! {
         for marker in [INS_TOKEN, OUTS_TOKEN] {
             let source = format!("{}{marker}", "\\".repeat(backslashes));
             let rendered = render_word(&source, &bindings);
-            if backslashes % 2 == 1 {
+            if !backslashes.is_multiple_of(2) {
                 prop_assert!(
                     matches!(&rendered, Err(EscapeBeforeMarker)),
                     "an odd backslash count must be rejected for path {:?}",
@@ -236,18 +236,18 @@ proptest! {
                 );
                 continue;
             }
-            let rendered = rendered.expect("an even backslash count must render");
-            let terminator = rendered_terminator(&rendered)
+            let rendered_word = rendered.expect("an even backslash count must render");
+            let terminator = rendered_terminator(&rendered_word)
                 .expect("the rendered delimiter must parse as one word");
             prop_assert_eq!(
                 &terminator.text,
-                &format!("{}{path}", "\\".repeat(backslashes / 2))
+                &format!("{}{path}", "\\".repeat(backslashes.div_euclid(2)))
             );
             prop_assert!(
                 terminator.is_quoted,
                 "a hostile path must render a quoted delimiter"
             );
-            prop_assert_eq!(terminator.end, rendered.chars().count());
+            prop_assert_eq!(terminator.end, rendered_word.chars().count());
         }
     }
 }
