@@ -634,3 +634,51 @@ apart on it. The split keeps each module within the workspace's 400-line limit.
 Regressions run through both traversals in
 `src/ir/cmd_interpolate/tests/heredoc/` and through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
+
+## Amendment — 2026-11-19: Heredoc bodies start at their command line (#991)
+
+POSIX starts a queued heredoc body after the unquoted newline that ends the
+command line declaring it. The tracker previously started the body at any
+newline while a declaration was pending, including one inside a quoted
+argument. That newline is argument text the shell keeps reading through, so
+starting the body there consumed the closing quote as body content and left the
+traversal inside a quote the shell had already closed. A marker after the real
+terminator was then lowered with the double-quoted path encoding even though
+the shell read it outside quotes: a path whose semicolon is escaped in the
+unquoted encoding stayed bare in the double-quoted one, and the shell ran the
+commands embedded in it.
+
+Each queue entry now records the `FrameId` of the shell region that declared it.
+`enter_command_substitution_region` allocates a fresh identifier for every
+`$()` or backtick body, so a declaration inside that region is owned by it and
+a declaration whose region has closed is owned by an identifier no longer on
+the stack. Both traversals classify each newline through their own
+`newline_context` and offer it to one entry point,
+`PosixLexicalState::activate_pending_heredoc`. An unquoted newline in the
+owning region starts the body; a quoted newline in the owning region leaves it
+waiting for the closing quote's line; and any other combination fails closed.
+That covers a newline in another region, inside backticks, inside `$(( ))`,
+inside an open `${ }`, or after the declaring region has closed. Refusal is
+reported as `IrGenError::InvalidCommand` through
+`invalid_heredoc_boundary_error`, whose snippet names the rejected boundary, on
+the same channel and in the same form as the existing delimiter rejections. The
+snippet is diagnostic data, not translated prose: the localized
+`ir.invalid_command` message supplies the translated envelope, so a new
+rejection variant needs no locale entry in any catalogue.
+
+A newline that ends a comment is routed through the same entry point rather
+than activating the queue inside the lexical state, so comment text stays
+copied verbatim while its terminating newline takes the shared decision. The
+decision runs before the traversal copies the character, so a refusal leaves
+the traversal's quote state and accumulated output untouched. The end of the
+script is not treated as a boundary: a body that never reaches its terminator
+is copied literally and is not reported. PowerShell has no heredoc tracking and
+is unaffected.
+
+The region identifiers and the refusal reasons live in the new
+`posix_lexical/diagnostics.rs` child, beside `declaration.rs`, `delimiter.rs`,
+and `parameter_expansion.rs`, keeping each module within the workspace's
+400-line limit. Regressions for both traversals are in
+`src/ir/cmd_interpolate/tests/heredoc/boundary_tests.rs`; the quoted-newline
+injection path runs through real Ninja and `/bin/sh` in
+`tests/ninja_dollar_escaping_tests/heredoc.rs`.

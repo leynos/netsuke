@@ -21,7 +21,7 @@ mod posix_lexical;
 mod script_substitution;
 mod substitution;
 
-use posix_lexical::DelimiterRejection;
+use posix_lexical::{DelimiterRejection, HeredocActivationRejection};
 use script_substitution::ScriptSubstitutionTraversal;
 use substitution::SubstitutionTraversal;
 
@@ -210,9 +210,13 @@ pub(crate) fn interpolate_script_with_bindings(
     substitute_script(template, bindings)
 }
 
-/// Builds the diagnostic for a command rejected during placeholder expansion.
-fn invalid_command_error(command: String) -> IrGenError {
-    let snippet = command.chars().take(160).collect();
+/// Builds the invalid-command diagnostic for one rejected interpolation form.
+///
+/// The snippet argument carries the reason so the existing localized message
+/// names the offending syntax. Every fail-closed path shares this construction,
+/// which keeps their diagnostics on one channel without a locale entry per
+/// internal variant.
+fn invalid_command_snippet_error(command: String, snippet: String) -> IrGenError {
     let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
     IrGenError::InvalidCommand {
         command,
@@ -221,20 +225,23 @@ fn invalid_command_error(command: String) -> IrGenError {
     }
 }
 
+/// Builds the diagnostic for a command rejected during placeholder expansion.
+fn invalid_command_error(command: String) -> IrGenError {
+    let snippet = command.chars().take(160).collect();
+    invalid_command_snippet_error(command, snippet)
+}
+
 /// Builds the diagnostic for a heredoc delimiter the tracker cannot model.
-///
-/// The rejection reason occupies the snippet argument so the existing localized
-/// message names the offending syntax. That keeps the fail-closed path on the
-/// same diagnostic channel as other interpolation rejections without adding a
-/// locale entry per internal variant.
 fn invalid_heredoc_delimiter_error(command: String, reason: DelimiterRejection) -> IrGenError {
-    let snippet = reason.description().to_owned();
-    let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
-    IrGenError::InvalidCommand {
-        command,
-        snippet,
-        message,
-    }
+    invalid_command_snippet_error(command, reason.description().to_owned())
+}
+
+/// Builds the diagnostic for a heredoc body the tracker cannot start safely.
+fn invalid_heredoc_boundary_error(
+    command: String,
+    reason: HeredocActivationRejection,
+) -> IrGenError {
+    invalid_command_snippet_error(command, reason.description().to_owned())
 }
 
 /// Report whether `command` satisfies the selected shell's command syntax boundary.

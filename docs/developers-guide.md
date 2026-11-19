@@ -9220,22 +9220,25 @@ counts as plain text and in how it reports "not a declaration" to its caller.
 the sibling `delimiters.rs`, keeps each file inside the 400-line limit without
 introducing a second shell parser. The tests follow the same shape:
 `src/ir/cmd_interpolate/tests/heredoc/` is a directory module holding the
-shared assertions in `support.rs` and the delimiter, expansion, and property
-test groups, and `tests/ninja_dollar_escaping_tests/heredoc.rs` checks the same
-contract end to end by running the generated Ninja build through a real child
-shell.
+shared assertions in `support.rs` and the boundary, delimiter, expansion, and
+property test groups, and `tests/ninja_dollar_escaping_tests/heredoc.rs` checks
+the same contract end to end by running the generated Ninja build through a
+real child shell.
 
 The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. Its
-`declaration.rs` child parses and queues one heredoc declaration, and its
-`delimiter.rs` child owns the delimiter word's quoting grammar; the split keeps
-each module inside the workspace's 400-line limit. The parent module copies
-those comments and heredoc bodies byte-for-byte, so internal marker tokens in
-them are not expanded and can remain in the generated recipe; markers in
-heredoc delimiters are expanded. It queues declarations FIFO, including quoted
-delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
-surrounding quote context. This is a command-interpolation helper, not a
-general shell parser, and is not intended for reuse outside that boundary.
+`declaration.rs` child parses and queues one heredoc declaration and owns the
+copied body that compares each line against it; its `delimiter.rs` child owns
+the delimiter word's quoting grammar; and its `diagnostics.rs` child owns the
+shell-region identifiers and the refusal reasons shared by delimiter parsing
+and body activation. The split keeps each module inside the workspace's
+400-line limit. The parent module copies those comments and heredoc bodies
+byte-for-byte, so internal marker tokens in them are not expanded and can
+remain in the generated recipe; markers in heredoc delimiters are expanded. It
+queues declarations FIFO, including quoted delimiters and `<<-` tab-stripping
+delimiters, so their text cannot change the surrounding quote context. This is
+a command-interpolation helper, not a general shell parser, and is not intended
+for reuse outside that boundary.
 
 The helper ends an unquoted POSIX word only at a space, tab, newline, or one of
 the operator characters `;`, `&`, `|`, `(`, `)`, `<`, and `>`. The `SourceChar`
@@ -9266,6 +9269,31 @@ backslash-escaped `\$` or backslash-escaped backtick is accepted, because the
 shell removes the escape and performs no expansion on the result; single quotes
 remain the spelling to recommend, since they are the only context in which no
 escape is needed.
+
+`PosixLexicalState::activate_pending_heredoc` is the one entry point that
+decides whether a queued body may start at a newline. Each queue entry records
+the `FrameId` of the shell region that declared it, and
+`enter_command_substitution_region` allocates a fresh identifier for every
+`$()` or backtick body it opens, so a declaration inside that region is owned
+by it and a declaration whose region has already closed is owned by an
+identifier no longer on the stack. Both traversals classify the newline first: a
+`NewlineContext::CommandLine` in the owning region starts the body, a
+`QuotedArgument` in the owning region leaves it waiting, and any other
+combination fails closed with a `HeredocActivationRejection` naming the region
+mismatch, backtick body, arithmetic expansion, or parameter expansion.
+Activation runs before the traversal copies or interprets the character, so a
+refusal leaves quote state and output untouched. The
+`InertCharacterOutcome::CommentEnded` result routes a comment's closing newline
+through the same entry point instead of letting the lexical state activate the
+queue directly; the comment itself is still copied verbatim. Rejections map
+through `invalid_heredoc_boundary_error` to `IrGenError::InvalidCommand` with
+the reason in the snippet, exactly as delimiter rejections do. The snippet is
+diagnostic data rather than translated prose: the localized
+`ir.invalid_command` message supplies the translated envelope, so a new
+rejection variant adds no locale entry to any catalogue. Regressions for both
+traversals are in `src/ir/cmd_interpolate/tests/heredoc/boundary_tests.rs`, and
+the quoted-newline injection path runs through real Ninja in
+`tests/ninja_dollar_escaping_tests/heredoc.rs`.
 
 The rendered word is reparsed under the same grammar after marker lowering, so
 a path that would split the word, or introduce a rejected form, fails closed;
