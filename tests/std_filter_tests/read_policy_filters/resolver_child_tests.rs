@@ -4,8 +4,8 @@
 //! the child is an `#[ignore]`d test in this binary that the parent re-runs
 //! under an injected `openat2` fault. Keeping it in its own module separates
 //! the two responsibilities: this module asserts what the filters render, and
-//! `resolver_fallback_tests` asserts that the resolver which rendered them had
-//! actually fallen back.
+//! `resolver_fallback_tests` with `resolver_trace` assert that the resolver
+//! which rendered them had actually fallen back.
 //!
 //! The child renders every filter under every policy and checks the documented
 //! outcome, including the case that would hang rather than fail if the open
@@ -17,9 +17,8 @@ use camino::Utf8Path;
 use minijinja::ErrorKind;
 use test_support::fluent::normalize_fluent_isolates;
 
-use super::resolver_fallback_tests::{
-    CASES, CHILD_MARKER, control_fixture_name, link_fixture_name,
-};
+use super::resolver_fallback_tests::{CASES, CHILD_MARKER};
+use super::resolver_trace::{control_fixture_name, link_fixture_name};
 use super::{
     FilterCase, Policy, ReadTarget, create_symlink, fallible, rejection, render_case,
     require_real_symlink, write_fixture,

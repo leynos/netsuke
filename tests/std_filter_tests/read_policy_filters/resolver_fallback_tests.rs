@@ -8,12 +8,12 @@
 //! its `Yes` default, so the manual resolver dereferenced the final link and
 //! the bounded readers consumed the target despite `follow_symlinks=false`.
 //!
-//! This module runs an ignored child copy of the test binary under `strace`,
-//! injects `EPERM` for `openat2`, and correlates the trace with the fixtures
-//! the child reads. The parent never mutates its own environment: the marker
-//! that lets the child run is set on the child `Command` only. The child's own
-//! assertions live in `resolver_child_tests`, so this module holds only the
-//! harness: the spawn, the availability probe and the trace correlation.
+//! This module runs an ignored child copy of the test binary under `strace`
+//! and injects `EPERM` for `openat2`. The parent never mutates its own
+//! environment: the marker that lets the child run is set on the child
+//! `Command` only. The child's own assertions live in `resolver_child_tests`,
+//! and what the resulting trace must show lives in `resolver_trace`, so this
+//! module holds only the spawn, the availability probe and the deadline.
 //!
 //! `strace` is a Linux tracing tool, and the injected fault is a Linux syscall
 //! fault, so the module is compiled on Linux alone. macOS always uses the
@@ -26,7 +26,8 @@ use cap_std::{ambient_authority, fs::Dir};
 use tempfile::tempdir;
 use test_support::bounded_process::output_within;
 
-use super::{CONTENTS, DIGEST, FilterCase, HASH, LINECOUNT, Policy};
+use super::resolver_trace::{assert_trace, trace_expectations};
+use super::{CONTENTS, DIGEST, FilterCase, HASH, LINECOUNT};
 
 /// The file-reading filters, in the order the fixture table exercises them.
 pub(super) const CASES: [FilterCase; 4] = [CONTENTS, LINECOUNT, HASH, DIGEST];
@@ -49,70 +50,6 @@ const CHILD_TEST: &str =
 /// The child starts a fresh test process and reads a handful of tiny files; the
 /// allowance is for a loaded host, not for the work itself.
 const CHILD_DEADLINE: Duration = Duration::from_secs(180);
-
-/// What the manual resolver is expected to do with one traced basename.
-#[derive(Clone, Copy, Debug)]
-enum TracePath {
-    /// The final component is a link the no-follow policy refuses.
-    RefusedLink,
-    /// The final component is a link the opt-in resolves.
-    FollowedLink,
-    /// The final component is an ordinary file.
-    RegularFile,
-}
-
-/// One fixture the child reads and the trace must account for.
-#[derive(Clone, Debug)]
-struct TraceExpectation {
-    /// Fixture basename the trace must mention.
-    name: String,
-    /// What the manual resolver must do with that basename.
-    path: TracePath,
-}
-
-impl TraceExpectation {
-    /// The expectations for `case` and `policy`.
-    fn for_symlink(case: FilterCase, policy: Policy) -> Self {
-        Self {
-            name: link_fixture_name(case, policy),
-            path: if policy.follows() {
-                TracePath::FollowedLink
-            } else {
-                TracePath::RefusedLink
-            },
-        }
-    }
-
-    /// The expectation for the regular-file control of `case`.
-    fn for_control(case: FilterCase) -> Self {
-        Self {
-            name: control_fixture_name(case),
-            path: TracePath::RegularFile,
-        }
-    }
-}
-
-/// The basename of the symlink fixture for `case` under `policy`.
-pub(super) fn link_fixture_name(case: FilterCase, policy: Policy) -> String {
-    format!("link_{}_{}", case.name, policy.suffix())
-}
-
-/// The basename of the regular-file control for `case`.
-pub(super) fn control_fixture_name(case: FilterCase) -> String {
-    format!("control_{}", case.name)
-}
-
-/// Every fixture the traced child reads, in trace-correlation order.
-fn trace_expectations() -> Vec<TraceExpectation> {
-    let mut expectations = Vec::with_capacity(CASES.len() * (Policy::ALL.len() + 1));
-    for case in CASES {
-        for policy in Policy::ALL {
-            expectations.push(TraceExpectation::for_symlink(case, policy));
-        }
-        expectations.push(TraceExpectation::for_control(case));
-    }
-    expectations
-}
 
 /// Prove the no-follow policy under the manual resolver.
 ///
@@ -175,77 +112,6 @@ fn traced_child(exe: &Path, trace: &Path) -> Command {
         // environment is untouched.
         .env(CHILD_MARKER, "1");
     command
-}
-
-/// Assert that `trace` shows the manual resolver handling `expectation`.
-fn assert_trace(trace: &str, expectation: &TraceExpectation) -> Result<()> {
-    let quoted = format!("\"{}\"", expectation.name);
-    let openat2_refused = trace.lines().any(|line| {
-        line.contains("openat2(") && line.contains(&quoted) && line.contains("= -1 EPERM")
-    });
-    ensure!(
-        openat2_refused,
-        "the injected fault did not refuse an openat2 for {}:\n{}",
-        expectation.name,
-        trace_excerpt(trace, &quoted)
-    );
-
-    let manual = trace_excerpt(trace, &quoted);
-    ensure!(
-        trace
-            .lines()
-            .any(|line| line.contains("openat(") && line.contains(&quoted)),
-        "the manual resolver did not open {} after openat2 was refused:\n{manual}",
-        expectation.name
-    );
-
-    match expectation.path {
-        TracePath::RefusedLink => {
-            ensure!(
-                trace.lines().any(|line| line.contains("openat(")
-                    && line.contains(&quoted)
-                    && line.contains("= -1 ELOOP")),
-                "the manual resolver did not refuse the link {} with ELOOP:\n{manual}",
-                expectation.name
-            );
-            ensure!(
-                !trace
-                    .lines()
-                    .any(|line| line.contains("readlinkat(") && line.contains(&quoted)),
-                "the manual resolver dereferenced the refused link {}:\n{manual}",
-                expectation.name
-            );
-        }
-        TracePath::FollowedLink => {
-            ensure!(
-                trace
-                    .lines()
-                    .any(|line| line.contains("readlinkat(") && line.contains(&quoted)),
-                "the opt-in did not dereference the link {}:\n{manual}",
-                expectation.name
-            );
-        }
-        TracePath::RegularFile => {
-            ensure!(
-                trace.lines().any(|line| line.contains("openat(")
-                    && line.contains(&quoted)
-                    && !line.contains("= -1 ")),
-                "the manual resolver did not open the regular file {}:\n{manual}",
-                expectation.name
-            );
-        }
-    }
-    Ok(())
-}
-
-/// Return the trace lines mentioning `needle`, for failure diagnostics.
-fn trace_excerpt(trace: &str, needle: &str) -> String {
-    let relevant: Vec<&str> = trace.lines().filter(|line| line.contains(needle)).collect();
-    if relevant.is_empty() {
-        "<no trace lines>".to_owned()
-    } else {
-        relevant.join("\n")
-    }
 }
 
 /// Report why the manual-resolver harness cannot run, if it cannot.

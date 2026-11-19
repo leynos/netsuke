@@ -185,6 +185,16 @@ impl Policy {
     }
 }
 
+/// Open `root` as an ambient capability for fixture setup.
+///
+/// Every fixture helper needs the workspace root as a directory capability
+/// before it can create or inspect an entry, and the same ambient open with a
+/// purpose-named failure would otherwise be repeated in each of them.
+fn fixture_dir(root: &Utf8Path, purpose: &str) -> Result<Dir> {
+    Dir::open_ambient_dir(root, ambient_authority())
+        .with_context(|| format!("open workspace root {root} to {purpose}"))
+}
+
 /// Assert that `link` really is a symlink, failing setup when it is not.
 ///
 /// The metadata read does not follow the link, so a regular file sitting at the
@@ -193,8 +203,7 @@ impl Policy {
 /// not substitute a regular file, which here would invert the assertion — the
 /// filters would be expected to reject a perfectly ordinary file.
 pub(super) fn require_real_symlink(root: &Utf8Path, link: &Utf8Path) -> Result<()> {
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open workspace root {root} to stat the symlink fixture"))?;
+    let dir = fixture_dir(root, "stat the symlink fixture")?;
     let name = link
         .file_name()
         .with_context(|| format!("symlink fixture {link} has no file name"))?;
@@ -229,8 +238,7 @@ pub(super) fn require_real_junction(root: &Utf8Path, link: &Utf8Path) -> Result<
     /// is what distinguishes a junction from the plain directory it points at.
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
 
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open workspace root {root} to stat the junction fixture"))?;
+    let dir = fixture_dir(root, "stat the junction fixture")?;
     let name = link
         .file_name()
         .with_context(|| format!("junction fixture {link} has no file name"))?;
@@ -252,8 +260,7 @@ pub(super) fn write_fixture(
     name: &str,
     contents: &[u8],
 ) -> Result<camino::Utf8PathBuf> {
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open workspace root {root} to write {name}"))?;
+    let dir = fixture_dir(root, &format!("write {name}"))?;
     dir.write(name, contents)
         .with_context(|| format!("write fixture {name}"))?;
     Ok(root.join(name))
@@ -275,8 +282,7 @@ pub(super) fn create_symlink(
     link: &str,
     target: &str,
 ) -> Result<camino::Utf8PathBuf> {
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open workspace root {root} to create symlink {link}"))?;
+    let dir = fixture_dir(root, &format!("create symlink {link}"))?;
     dir.symlink(target, link)
         .with_context(|| format!("create fixture symlink {link} -> {target}"))?;
     Ok(root.join(link))
@@ -290,8 +296,7 @@ pub(super) fn create_symlink(
 /// rather than returning a rejection.
 #[cfg(unix)]
 pub(super) fn create_fifo(root: &Utf8Path, name: &str) -> Result<camino::Utf8PathBuf> {
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open workspace root {root} to create the FIFO fixture"))?;
+    let dir = fixture_dir(root, "create the FIFO fixture")?;
     mknodat(
         &dir,
         name,
@@ -375,5 +380,8 @@ mod resolver_child_tests;
 
 #[cfg(target_os = "linux")]
 mod resolver_fallback_tests;
+
+#[cfg(target_os = "linux")]
+mod resolver_trace;
 
 mod unknown_kwargs_tests;

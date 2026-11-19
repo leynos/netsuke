@@ -55,12 +55,26 @@ fn skip_without_junction_support(case: FilterCase) {
     );
 }
 
+/// The default and explicit `false` policies must both refuse a final symlink.
+///
+/// The two spellings are the same policy, so one table asserts both: a caller
+/// that omits `follow_symlinks` and a caller that writes `false` must reach the
+/// same refusal.
+///
+/// Native Linux resolves this through `openat2`, where the raw `O_NOFOLLOW`
+/// flag already refuses the link. The manual resolver consults cap-std's
+/// logical policy instead, so a caller that omits `FollowSymlinks::No` reads
+/// the target on macOS and on every fallback path; `resolver_fallback_tests`
+/// forces that resolver and provides the pre-fix failure evidence.
 #[rstest]
 #[case::contents(CONTENTS)]
 #[case::linecount(LINECOUNT)]
 #[case::hash(HASH)]
 #[case::digest(DIGEST)]
-fn reading_filters_reject_symlinks_by_default(#[case] case: FilterCase) -> Result<()> {
+fn reading_filters_reject_symlinks(
+    #[case] case: FilterCase,
+    #[values(Policy::Omitted, Policy::FollowFalse)] policy: Policy,
+) -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
     let Some(link) = fallible::file_symlink_fixture(&root)? else {
         skip_without_symlink_support(case);
@@ -71,14 +85,14 @@ fn reading_filters_reject_symlinks_by_default(#[case] case: FilterCase) -> Resul
         case,
         render_case(
             case,
-            "symlink",
+            &format!("symlink_{}", policy.suffix()),
             ReadTarget::new(&root, &link, 1024),
-            &case.template(),
+            &policy.template(case),
         )?,
     )?;
     ensure!(
         err.kind() == ErrorKind::InvalidOperation,
-        "{}: should report InvalidOperation for a symlink but was {:?}",
+        "{}: should report InvalidOperation for a symlink under {policy:?} but was {:?}",
         case.name,
         err.kind()
     );
@@ -122,60 +136,6 @@ fn follow_symlinks_opt_in_reads_the_link_target(#[case] case: FilterCase) -> Res
     Ok(())
 }
 
-/// The Windows default policy must refuse a junction through the same open
-/// that yields the handle.
-///
-/// A junction is a directory-shaped reparse point: reading it back as text
-/// renders the target's file names, so a policy that let the open traverse it
-/// would silently expose a directory the caller never asked for. This case is
-/// the Windows half of the same-handle guarantee, where the decision comes
-/// from the opened handle's reparse-point attribute rather than from a
-/// pre-open `symlink_metadata` lookup that a concurrent replace could defeat.
-/// The explicit spelling of the default policy must refuse a final symlink.
-///
-/// Native Linux resolves this through `openat2`, where the raw `O_NOFOLLOW`
-/// flag already refuses the link. The manual resolver consults cap-std's
-/// logical policy instead, so a caller that omits `FollowSymlinks::No` reads
-/// the target on macOS and on every fallback path. This case pins the
-/// documented `follow_symlinks=false` spelling at the same boundary as the
-/// omitted default; `resolver_fallback_tests` forces the manual resolver and
-/// provides the pre-fix failure evidence.
-#[rstest]
-#[case::contents(CONTENTS)]
-#[case::linecount(LINECOUNT)]
-#[case::hash(HASH)]
-#[case::digest(DIGEST)]
-fn reading_filters_reject_symlinks_when_follow_is_false(#[case] case: FilterCase) -> Result<()> {
-    let (_temp, root) = fallible::filter_workspace()?;
-    let Some(link) = fallible::file_symlink_fixture(&root)? else {
-        skip_without_symlink_support(case);
-        return Ok(());
-    };
-    require_real_symlink(&root, &link)?;
-    let err = rejection(
-        case,
-        render_case(
-            case,
-            "symlink_false",
-            ReadTarget::new(&root, &link, 1024),
-            &Policy::FollowFalse.template(case),
-        )?,
-    )?;
-    ensure!(
-        err.kind() == ErrorKind::InvalidOperation,
-        "{}: should report InvalidOperation for a symlink but was {:?}",
-        case.name,
-        err.kind()
-    );
-    let message = normalize_fluent_isolates(&err.to_string());
-    ensure!(
-        message.contains("not a regular file") || message.contains("symbolic links"),
-        "{}: error should explain the rejection: {message}",
-        case.name
-    );
-    Ok(())
-}
-
 /// A regular file must read normally under every spelling of the policy.
 ///
 /// The symlink cases prove a rejection; this case proves the rejection is
@@ -209,6 +169,15 @@ fn reading_filters_read_regular_files_under_every_policy(
     Ok(())
 }
 
+/// The Windows default policy must refuse a junction through the same open
+/// that yields the handle.
+///
+/// A junction is a directory-shaped reparse point: reading it back as text
+/// renders the target's file names, so a policy that let the open traverse it
+/// would silently expose a directory the caller never asked for. This case is
+/// the Windows half of the same-handle guarantee, where the decision comes
+/// from the opened handle's reparse-point attribute rather than from a
+/// pre-open `symlink_metadata` lookup that a concurrent replace could defeat.
 #[cfg(windows)]
 #[rstest]
 #[case::contents(CONTENTS)]
