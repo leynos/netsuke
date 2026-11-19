@@ -149,6 +149,30 @@ temporary build file.
     violation, fixed before the green run.
   - [x] Pushed and opened the draft pull request (#1163), whose description
     carries `Closes #1146`.
+  - [x] A fifth review round found two blockers and two verification gaps;
+    all are addressed:
+    - the Windows jobs failed on `unused import: super::*` in
+      `exit_status_tests::classification`, because every item in the module
+      was `#[cfg(unix)]` while the imports were not. The module declaration
+      is now `#[cfg(unix)]` and the eight per-item attributes are gone;
+    - CodeScene flagged `runner_diagnostics.rs` for string-heavy function
+      arguments once the launch assertions joined it. The launch cases and
+      their assertions moved to the sibling `launch_diagnostics` module, and
+      each matrix row now states one `Invocation` value while the program and
+      its operating-system cause travel as one `LaunchDiagnostic`. Both
+      modules measure 10.00, and the split also keeps every module under the
+      400-line limit;
+    - the real-Ninja command-list tests now assert the numeric status in the
+      summary: `(exit status 1)` in human output and in the JSON message. A
+      real Ninja exits 1 when a recipe fails, whatever the recipe returned;
+    - the non-executable JSON case was already covered by four rows of the
+      launch matrix, which run `build` and `clean` under both progress
+      policies and assert the `Permission denied` cause through the JSON
+      renderer. The rows are unchanged and pass.
+  - [x] The reported `402 lines` for `src/runner/process/mod.rs` does not
+    reproduce: the file is 396 lines at this commit, at the base, and on
+    `main`, and the full `make lint` at `33ee15394` was green. The figure is
+    re-checked by the lint gate of this round rather than repaired blind.
 
 ## Plan of work
 
