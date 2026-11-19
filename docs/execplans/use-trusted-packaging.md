@@ -5523,7 +5523,7 @@ and pass, on the final wording.
   that could observe the smoke's mode predicate. `neither-mode` publishes
   nothing, so the graph also skips `finalize-github-release`, whose success the
   guard already requires; the guard is false with or without
-  `needs.metadata.outputs.should_publish == 'true'`, and no realisable run
+  `needs.metadata.outputs.should_publish == 'true'`, and no realizable run
   reaches a state where the predicate alone decides. The claim was true of the
   declared-outcome oracle and became vacuous under the resolved one.
 
