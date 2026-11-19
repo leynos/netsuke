@@ -5442,6 +5442,74 @@ and pass, on the final wording.
   `lint-whitaker` 3214 under a full compile-admission pool, which is queue
   latency rather than a defect. Date/Author: 2026-11-19, implementation agent.
 
+- [x] (2026-11-19) Closed the review's test-coverage gap, and the uv-resolution
+  bypass the same workspace boundary exposes.
+
+  *Coverage gap.* The scenario table declares each prerequisite's outcome, but
+  the consumer-smoke oracle evaluated those declarations rather than the graph,
+  so a scenario could agree with itself: `publish-build-linux-failure` fails
+  the build while declaring the smoke's own dependency successful.
+  `resolve_results` already propagates results through the graph, so
+  `check_consumer_smoke` now takes them, and `_needs_context` and
+  `_should_smoke` both read the propagated map. A named case pins the
+  distinction by replacing the smoke job's guard with `!cancelled()`: the
+  declared map expects the smoke to run and the resolved map forbids it, so
+  only the resolved oracle passes. This is the "require the downstream results"
+  half of the reviewer's rollout condition; the producer link remains the
+  documented interim block that #598 supplies.
+
+  *The other clock input in the same directory.* `setup-uv` defaults its
+  working directory to the workspace root, which the candidate checkout owns,
+  and resolves an unset `version` from a `uv.toml` or `pyproject.toml` there.
+  The action's commit pins the installer's code, not the uv binary it
+  downloads, so candidate content could choose the tool that runs a gate
+  holding the job's token. All ten setup steps now name `version: '0.13.2'`,
+  recorded once as `PINNED_UV_VERSION`, and `_check_setup_uv_pins` in the
+  source-pin contract requires the input in every job rather than admission
+  alone. The mutation `admission-uv-unpinned` removes it and must report
+  `release-admission-canaries.setup-uv`; the metrics contract's expectation for
+  the admission step gained the input so the two contracts agree.
+
+  *Isolation proved by resolution, not only by text.* The uv-isolation module
+  now builds a wheel by hand, serves it offline, and requires the PEP 723
+  script's dependency to install and report its own identity under
+  `--no-config --no-project`; it also exports the flags' environment aliases
+  (`UV_NO_CONFIG`, `UV_NO_PROJECT`) to show they cannot rescue an unflagged
+  command. The handcrafted wheel's name carries no hyphen because uv rejected
+  `admission-probe-dependency-0.1.0-py3-none-any.whl` with "Python tag must not
+  start with a digit" -- a probe-construction detail, not a property of the
+  boundary, and recorded as such beside the constant.
+
+  *Clock coverage.* `..._wall_clock.py` is new. Its unit table requires
+  `read_wall_clock` to flag a refused read, a word, the empty string, `nan`,
+  `inf` and `-inf` as unusable while keeping zero, a negative moment, a
+  fraction, and an exponent form usable, because zero is a real instant and
+  `nan` compares false with every bound. End-to-end cases spoil each of the
+  three wall-clock invocations in a fresh-evidence run -- the check's read
+  (invocation 8), the admission's re-read (11), and the closing read (12) --
+  and require `failure`/`unknown` with the operation's trace sequence.
+  `..._freshness_properties.py` now scripts `(seconds, is_unusable)` pairs and
+  gains a named case requiring `unknown` at both decisions. Removing the
+  `is_unusable` refusal in `_classify_freshness` failed all eight end-to-end
+  cases, and removing the `math.isfinite` guard failed the `nan`/`inf`/`-inf`
+  rows, so both layers are observed rather than assumed.
+
+  *Guide accuracy.* The same round corrected the guide's account of observation
+  mode. Producer attribution is enforcement-only, so a rehearsal can record
+  `outcome=success` on evidence an enforcing run refuses with
+  `untrusted_evidence`; the earlier paragraph claimed both modes refused it.
+  The runtime-test section names the new module and explains what it pins, and
+  the recipe and `release_admission_runtime_gate_test.py` now list twenty-five
+  modules in the same order.
+
+  *Verification.* `make check-fmt`, `make lint-python`, and `make markdownlint`
+  exit zero, 85 focused workflow-contract tests pass, and
+  `make test-release-admission` passes all 218 cases. `make fmt` ran first
+  because Ruff wanted four files reformatted and moved two typing-only imports
+  behind `TYPE_CHECKING`; pylint then rejected the five-argument end-to-end
+  test, whose two scripted positions are now one tuple parameter. Date/Author:
+  2026-11-19, implementation agent.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
@@ -6235,6 +6303,18 @@ and pass, on the final wording.
   Impact: a validator shared by several consumers answers only the weakest
   question they all need; each consumer that imposes a format must add its own
   refusal. Date/Author: 2026-11-08, implementation agent.
+
+- Observation: **pinning an action's SHA does not pin the tool it installs when
+  the action accepts a tool version input.** Evidence: `astral-sh/setup-uv` was
+  SHA-pinned at every step, and the source-pin contract proved which uv version
+  it installed by nothing at all; `setup-uv` defaults its working directory to
+  the workspace root — the candidate checkout — and resolves an unset `version`
+  from a `uv.toml` or `pyproject.toml` it finds there. Impact: a candidate
+  could choose the interpreter of the gate that judges it while every "pinned
+  action" assertion passed. The durable rule is that every action with a
+  tool-version input is an unpinned dependency until that input is set, and the
+  check belongs across the whole workflow rather than at the one step a review
+  noticed. Date/Author: 2026-11-19, implementation agent.
 
 ## Decision log
 

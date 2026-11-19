@@ -3042,21 +3042,32 @@ under the `release-admission-metrics` artefact name. The summary and upload
 steps retain the result on failure; dry-run policy still controls whether an
 artefact is uploaded. The workflow provisions Python before running the gate's
 monotonic duration timing helpers, using Python 3.14 through the SHA-pinned
-`astral-sh/setup-uv` action.
+`astral-sh/setup-uv` action. Every `setup-uv` step in the workflow also names
+`version: '0.13.2'`: the action's commit pins its own code, not the uv binary
+it installs, and an unset version is resolved from `uv.toml` or
+`pyproject.toml` in its working directory — the workspace root, which the
+candidate checkout owns. Naming the release keeps candidate content from
+choosing which uv runs a gate that holds the job's token, and
+`tests/workflow_contracts/release_admission_source_pin.py` requires the value
+rather than trusting the comment.
 
 The gate has two modes, and the workflow derives which one applies rather than
 configuring it. `NETSUKE_RELEASE_ADMISSION_ENFORCE` is set from
 `needs.metadata.outputs.should_publish`: `false` (observation) on a rehearsal,
 `true` (enforcement) on a publishing run. Observation records the same
 fail-closed decision — including `outcome=failure` and a refusing
-`error_category` when no producer has supplied evidence, or when the supplied
-document cannot be attributed to a trusted producer — writes the gate outputs
+`error_category` when the evidence is missing, malformed, stale, about another
+candidate, or reports an unsuccessful upstream result — writes the gate outputs
 and summary, and then exits successfully, so a missing producer cannot make the
-read-only lane unreachable. Enforcement exits non-zero after recording the same
-bounded result. Both modes run the gate; only the exit status differs. An
-environment value such as `fresh` is not evidence and must never substitute for
-a real evidence producer, and any value that is neither `true` nor `false`
-fails closed as an unknown gate result.
+read-only lane unreachable. Producer attribution is the one check that is
+enforcement-only: a rehearsal reads and reports the manifest it was given,
+because an unattributable upload in a dry run is a rehearsal input rather than
+a publication decision, so an observation run can record `outcome=success` on
+evidence an enforcing run would refuse with `untrusted_evidence`. Enforcement
+exits non-zero after recording the same bounded result. Both modes run the
+gate; only the exit status differs. An environment value such as `fresh` is not
+evidence and must never substitute for a real evidence producer, and any value
+that is neither `true` nor `false` fails closed as an unknown gate result.
 
 The four jobs that hold `contents: write`, `packages: write`, or
 `id-token: write` require the gate explicitly. Each declares
@@ -6135,7 +6146,7 @@ Python gate. It uses the repository's Python 3.14 baseline and provisions
 `pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
 `cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
 `cyclopts==4.25.3` for the entry point the tests import. The target runs the
-twenty-four runtime modules with `python -m pytest`, `-c /dev/null`,
+twenty-five runtime modules with `python -m pytest`, `-c /dev/null`,
 `--rootdir=.`, and `-p no:cacheprovider`, so the test run is isolated from
 repository-local pytest configuration and cache state:
 
@@ -6154,6 +6165,7 @@ repository-local pytest configuration and cache state:
 - `scripts/tests/test_release_admission_status_translation.py`
 - `scripts/tests/test_release_admission_runner_contract.py`
 - `scripts/tests/test_release_admission_metric_degradation.py`
+- `scripts/tests/test_release_admission_wall_clock.py`
 - `scripts/tests/test_release_admission_manifest_parsing.py`
 - `scripts/tests/test_release_admission_evidence_reading.py`
 - `scripts/tests/test_release_admission_freshness_recheck.py`
@@ -6190,6 +6202,18 @@ counter so no duration decides a case about freshness. Each case also asserts
 which readings it was actually served, so a gate that stopped re-reading the
 window fails there instead of passing for want of a second reading.
 
+`..._wall_clock.py` covers the case where the wall clock answers with something
+that is not a moment. `commands.read_wall_clock` returns a reading together
+with an unusable flag, because the zero fallback it reports is also a real
+instant: a refused read, a word, and the non-finite values `float` accepts all
+travel as `0.0` with the flag set, while zero, a negative moment, and an
+exponent form travel with it clear. `nan` is the dangerous one, since every
+comparison against it is false and a window test that accepted it would admit
+an unbounded document. End-to-end cases spoil each of the run's two wall-clock
+reads in turn -- the check's observation and the admission's re-read -- and
+require `failure`/`unknown` at the operation that asked, so a gate that started
+treating an unusable reading as an instant fails here rather than admitting.
+
 `..._freshness_properties.py` states the same relation over generated windows
 rather than at the named edges. It draws the issue instant, the window length,
 and both readings, then requires the check to admit exactly the readings inside
@@ -6197,7 +6221,9 @@ the window, admission to require both readings inside it, and a refusal at the
 check never to be converted into an admission. It reaches the production
 decisions through the injected clock and filesystem ports, so both edges of the
 window, and a clock that moves backwards between the readings, are exercised
-without a child process.
+without a child process. A named case beside the property scripts the unusable
+flag at each position, requiring `unknown` at both the check and the decision
+rather than the `stale_evidence` an epoch fallback would produce.
 
 `..._bounded_guards.py` pins the two refusals that narrow a value before
 anything is published on it. The maximum evidence age must be plain bounded
