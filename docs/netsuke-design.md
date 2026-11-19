@@ -4218,17 +4218,20 @@ project directory, the scan would otherwise return the file the user pass just
 refused and the system layers would never load. A project file reached only
 through a project root is still returned, since it cannot outrank a system
 candidate, and the project second pass appends the skipped chain with project
-quarantine. It does not call `compose_layers()`, because that call returns a
-flattened layer list without reporting which candidate root supplied it, and
-root provenance is what decides whether an occurrence may declare executable
-policy. The restricted walk registers no selector environment variable and
-injects no explicit path, so every candidate it visits is an operator-location
-candidate or the project root; explicit `--config` and `NETSUKE_CONFIG`
-selection remains on its own untrusted path. If the retained chain does not
-include the project-scope file, a second pass loads that file directly and
-appends its layers. Thus, this walk does not merge every scope, and it does not
-by itself establish project/user/system precedence. Environment variables and
-CLI arguments then override the file layers.
+quarantine. A candidate that neither resolves nor literally spells the project
+path is treated as unresolved: it stays in the walk, but the chain it supplies
+is loaded without operator authority, so an identity that cannot be established
+never grants trust. It does not call `compose_layers()`, because that call
+returns a flattened layer list without reporting which candidate root supplied
+it, and root provenance is what decides whether an occurrence may declare
+executable policy. The restricted walk registers no selector environment
+variable and injects no explicit path, so every candidate it visits is an
+operator-location candidate or the project root; explicit `--config` and
+`NETSUKE_CONFIG` selection remains on its own untrusted path. If the retained
+chain does not include the project-scope file, a second pass loads that file
+directly and appends its layers. Thus, this walk does not merge every scope,
+and it does not by itself establish project/user/system precedence. Environment
+variables and CLI arguments then override the file layers.
 
 The user pass exists because OrthoConfig 0.10.0 probes `XDG_CONFIG_DIRS` before
 its home fallbacks, so a valid system file would otherwise suppress a user file
