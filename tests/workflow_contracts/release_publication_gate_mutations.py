@@ -6,8 +6,9 @@ negation, hard-code the enforcement mode in either direction, smuggle an
 ``always()`` onto the publication guard, disjoin
 the guard from an always-true clause, add a publisher whose scopes arrive as a
 ``write-all`` shorthand or through the workflow level, let the rehearsal adopt
-the gate, let publication adopt the rehearsal, or grant the rehearsal a write
-scope the publisher model does not name. The admission job's own mutations,
+the gate, let publication adopt the rehearsal, grant the rehearsal a write
+scope the publisher model does not name, or let `setup-uv` resolve the uv
+release from the candidate's own project files. The admission job's mutations,
 which collapse its two checkouts or move the gate step out of the candidate
 checkout, live in :mod:`release_admission_checkout_mutations` and are merged
 below. The expected diagnostics name the scenario or the structural rule that
@@ -25,6 +26,7 @@ from release_admission_gate_contract import (
     ADMISSION_JOB,
     ADMISSION_STEP_ID,
     ENFORCE_VARIABLE,
+    SETUP_UV_ACTION,
 )
 from release_mutation_support import MutationError, MutationIssue, replace_once
 from workflow_loading import job_steps, require_list, require_mapping, workflow_job
@@ -143,6 +145,7 @@ GATE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "workflow-default-moves-gate": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
     "gate-run-splits-the-command": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
     "gate-run-without-uv-isolation": (("static", f"{ADMISSION_JOB}.checkout.gate"),),
+    "admission-uv-unpinned": (("static", f"{ADMISSION_JOB}.setup-uv"),),
 }
 
 
@@ -186,6 +189,36 @@ def _admission_environment(release: dict[str, object]) -> dict[str, object]:
 def _set_enforcement(release: dict[str, object], literal: str) -> None:
     """Configure enforcement beside the release mode instead of deriving it."""
     _admission_environment(release)[ENFORCE_VARIABLE] = literal
+
+
+def _admission_uv_unpinned(release: dict[str, object]) -> None:
+    """Install whatever uv release the candidate's project files resolve.
+
+    `setup-uv` defaults its working directory to the workspace root, which the
+    candidate checkout owns, and an unset ``version`` resolves from a
+    ``uv.toml`` or ``pyproject.toml`` it finds there. A candidate can then pick
+    the uv release that runs a gate holding this job's token. The action commit
+    stays pinned: this is the input that decides the binary, not the installer.
+
+    Raises
+    ------
+    MutationError
+        If the admission job's setup step already names no version, so the
+        input this mutation removes is absent and the case cannot be stated.
+    """
+    step = next(
+        (
+            item
+            for item in job_steps(release, ADMISSION_JOB)
+            if str(item.get("uses", "")).startswith(f"{SETUP_UV_ACTION}@")
+        ),
+        None,
+    )
+    if step is None:
+        raise MutationError(MutationIssue.PATTERN_MISMATCH, SETUP_UV_ACTION)
+    declared = require_mapping(step.get("with"), f"{ADMISSION_JOB} setup-uv inputs")
+    if declared.pop("version", None) is None:
+        raise MutationError(MutationIssue.PATTERN_MISMATCH, "version")
 
 
 def _always_publication_guard(release: dict[str, object]) -> None:
@@ -323,6 +356,7 @@ GATE_MUTATIONS: dict[str, cabc.Callable[[dict[str, object]], None]] = {
     "finalize-adopts-rehearsal": _finalize_adopts_rehearsal,
     "force-observation-enforcement": lambda release: _set_enforcement(release, "false"),
     "force-enforced-rehearsal": lambda release: _set_enforcement(release, "true"),
+    "admission-uv-unpinned": _admission_uv_unpinned,
     "always-publication-guard": _always_publication_guard,
     "positive-cancellation-publication-guard": _cancelled_publication_guard,
     "staging-adopts-admission": _staging_adopts_admission,

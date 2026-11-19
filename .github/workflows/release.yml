@@ -116,6 +116,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           enable-cache: false
       - id: repo_name
         name: Determine repository name
@@ -187,6 +188,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           enable-cache: false
       - id: package_metadata
         name: Read Linux package metadata from Cargo.toml
@@ -453,6 +455,13 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          # The candidate checkout owns the workspace root, and setup-uv
+          # resolves an unpinned release from `uv.toml` or `pyproject.toml`
+          # there. Naming the release keeps the candidate from choosing which
+          # uv runs a gate that holds this job's token. Every setup-uv step in
+          # this workflow pins it for the same reason, and the workflow
+          # contract requires the pin rather than only this comment.
+          version: '0.13.2'
           enable-cache: false
       # No producer uploads this artefact yet (#598 supplies it, together with
       # the downstream canaries admission is to require). Failing here would
@@ -592,6 +601,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           enable-cache: false
       - id: package_crate
         name: Package the crate and record its identity
@@ -715,6 +725,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           enable-cache: false
       - name: Download the package-crate candidate
         uses: >-
@@ -817,6 +828,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           # The hoist script is stdlib-only and runs with --no-project, so a
           # restored cache buys nothing and adds an unnecessary supply-chain
           # input to the staging rehearsal.
@@ -955,6 +967,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           # These helpers are stdlib-only, so restoring a dependency cache
           # adds an unnecessary supply-chain input.
           enable-cache: false
@@ -1129,6 +1142,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           # The release helpers are stdlib-only, so a dependency cache would add
           # an unnecessary supply-chain input.
           enable-cache: false
@@ -1261,6 +1275,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           # The adapter pins its two direct dependencies exactly in a PEP 723
           # block; their transitive closure still resolves on every attempt, so
           # the pins narrow the graph rather than freeze it. A restored package
@@ -1344,6 +1359,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           # The smoke helpers are stdlib-only, so a restored dependency cache
           # would add a supply-chain input and buy nothing.
           enable-cache: false

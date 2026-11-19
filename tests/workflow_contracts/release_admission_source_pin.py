@@ -23,6 +23,13 @@ rule, live in :mod:`release_admission_checkout_inputs`; this module composes
 them with the order and gate-step rules. The enforcement mode that the write
 jobs consume is checked separately in :mod:`release_admission_gate_contract`.
 
+The same workspace root decides more than the gate's command. `setup-uv`
+defaults its `working-directory` to the workspace root and, when no `version`
+input is set, resolves the uv release from a `uv.toml` or `pyproject.toml` it
+finds there -- files the candidate supplies. The release workflow therefore
+names the uv release on every setup step, and this module requires it, so the
+tool that runs the gate cannot be chosen by the content the gate judges.
+
 Run via ``make test-workflow-contracts``.
 """
 
@@ -36,11 +43,21 @@ from release_admission_checkout_inputs import (
     check_verifier_inputs,
     normalise_gate_path,
 )
-from workflow_loading import job_steps, workflow_job
+from workflow_loading import job_steps, require_mapping, workflow_job
 
 ADMISSION_JOB = "release-admission-canaries"
 ADMISSION_STEP_ID = "release_admission"
 CHECKOUT_ACTION = "actions/checkout"
+#: The action that installs uv. Its `version` input is the release it installs;
+#: left unset, it resolves one from the working directory's project files.
+SETUP_UV_ACTION = "astral-sh/setup-uv"
+#: The uv release every setup step installs. A pinned action commit fixes the
+#: installer's code, not the uv binary it downloads: without this input the
+#: release is whatever the action resolves at run time, and a candidate's
+#: `uv.toml` or `pyproject.toml` at the workspace root is one of the inputs it
+#: resolves from. The value is the release the repository's own Python gates
+#: run, so a local pass and a CI pass use the same uv.
+PINNED_UV_VERSION = "0.13.2"
 #: The gate's entry point, relative to the root of the checkout that supplies
 #: it. The gate step must name the pinned verifier's copy of this path.
 GATE_SCRIPT = ".github/scripts/release_admission.py"
@@ -72,6 +89,10 @@ def check_admission_source_pin(
     directory: running it from the verifier would fetch the candidate from this
     repository instead.
 
+    The tool that runs the gate is part of that boundary, so every `setup-uv`
+    step in the workflow must name the uv release it installs rather than let
+    the action resolve one from project files the candidate supplies.
+
     Parameters
     ----------
     release
@@ -79,6 +100,7 @@ def check_admission_source_pin(
     violations
         Collector for the job's findings.
     """
+    _check_setup_uv_pins(release, violations)
     steps = job_steps(release, ADMISSION_JOB)
     label = f"{ADMISSION_JOB}.checkout"
     checkouts = _checkout_indexes(steps)
@@ -162,6 +184,43 @@ def _declares_path(step: dict[str, object]) -> bool:
     """Return whether the step's inputs include a ``path``."""
     declared = step.get("with")
     return isinstance(declared, dict) and "path" in declared
+
+
+def _check_setup_uv_pins(release: dict[str, object], violations: list[str]) -> None:
+    """Require every uv setup step to name the release it installs.
+
+    `setup-uv` resolves an unset `version` from its working directory: its
+    default is the workspace root, where the candidate checkout sits, and it
+    reads `uv.toml` and `pyproject.toml` from there. Candidate content could
+    therefore choose the uv binary that runs a gate holding the job's token.
+    The check covers every job rather than the admission job alone because the
+    same checkout shape and the same resolution order decide each one.
+
+    Parameters
+    ----------
+    release
+        Parsed release workflow.
+    violations
+        Collector for the findings.
+    """
+    jobs = require_mapping(release.get("jobs"), "release.jobs")
+    for name, job in jobs.items():
+        # A job that calls a reusable workflow declares no steps of its own,
+        # so there is nothing here for this rule to hold.
+        steps = job.get("steps") if isinstance(job, dict) else None
+        for step in steps if isinstance(steps, list) else ():
+            if not isinstance(step, dict):
+                continue
+            if not str(step.get("uses", "")).startswith(f"{SETUP_UV_ACTION}@"):
+                continue
+            declared = step.get("with")
+            version = declared.get("version") if isinstance(declared, dict) else None
+            if version != PINNED_UV_VERSION:
+                violations.append(
+                    f"{name}.setup-uv: must name version {PINNED_UV_VERSION!r} "
+                    f"so candidate project files cannot choose the uv release, "
+                    f"got {version!r}"
+                )
 
 
 def _gate_index(steps: list[dict[str, object]], violations: list[str]) -> int | None:
@@ -305,6 +364,8 @@ __all__ = (
     "GATE_REF",
     "GATE_REPOSITORY",
     "GATE_SCRIPT",
+    "PINNED_UV_VERSION",
+    "SETUP_UV_ACTION",
     "UV_ISOLATION_FLAGS",
     "check_admission_source_pin",
     "verifier_gate_command",

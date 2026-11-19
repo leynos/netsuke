@@ -12,6 +12,7 @@ import typing as typ
 
 from action_references import require_external_action_sha
 from release_admission_gate_contract import GATE_SCRIPT, verifier_gate_command
+from release_admission_source_pin import PINNED_UV_VERSION
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
     REPO_ROOT,
@@ -258,8 +259,14 @@ def _assert_admission_job_contract(parts: WorkflowParts) -> None:
     )
     assert python_step.get("with") == {
         "python-version": "3.14",
+        # The candidate checkout is the workspace root, so an unpinned setup-uv
+        # would resolve its own release from the content the gate judges.
+        "version": PINNED_UV_VERSION,
         "enable-cache": False,
-    }, "the admission Python installation must use the pinned baseline without a cache"
+    }, (
+        "the admission Python installation must use the pinned baseline and uv "
+        "release without a cache"
+    )
     admission_step = parts.admission_step
     assert (
         require_mapping(admission_step.get("env"), "release admission step environment")
