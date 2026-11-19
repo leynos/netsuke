@@ -131,6 +131,12 @@ fn reading_filters_reject_a_fifo_when_follow_is_false(#[case] case: FilterCase) 
 /// rejected component; under the `true` opt-in the link is resolved and the
 /// non-blocking open reaches the regular-file check. The opt-in arm is the one
 /// that would hang if `O_NONBLOCK` were conditional on the policy.
+///
+/// The no-follow arms assert against the regular-file diagnostic rather than
+/// merely accepting either wording. A resolver that followed the link would
+/// reach the regular-file check, which reports "not a regular file" exactly as
+/// a correct rejection of the FIFO would, so accepting that message would let
+/// the dereference pass for the refusal it is meant to be.
 #[rstest]
 #[case::contents_default(CONTENTS, Policy::Omitted)]
 #[case::contents_false(CONTENTS, Policy::FollowFalse)]
@@ -176,8 +182,14 @@ fn reading_filters_reject_a_symlink_to_a_fifo(
         );
     } else {
         ensure!(
-            message.contains("not a regular file") || message.contains("symbolic links"),
-            "{}: error should explain the rejection: {message}",
+            !message.contains("not a regular file"),
+            "{}: the link should be refused before its target is opened; \
+             the regular-file diagnostic means it was followed: {message}",
+            case.name
+        );
+        ensure!(
+            message.contains("symbolic links"),
+            "{}: error should explain the symlink rejection: {message}",
             case.name
         );
     }
