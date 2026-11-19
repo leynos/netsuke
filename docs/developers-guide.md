@@ -1881,6 +1881,21 @@ either side.
   input and rejects carriage returns or line feeds before writing the resolved
   version. Its only dependency is Cyclopts `>=4.25.3,<5`; see
   `scripts/tests/test_resolve_wix_extension_version.py`.
+- `release.yml` owns the release-write authorization pair,
+  `release_write_policy.py` and `authorize_release_writes.py`. The policy is a
+  pure function over typed values and imports neither `cyclopts` nor any
+  workflow key; the adapter is what the `release_authorization` step runs, and
+  it parses the workflow's raw strings, classifies the invocation origin, and
+  renders the decision. Its inputs arrive through `env:` from the reusable
+  `publish` and `dry-run` inputs, `github.event_name`, `github.ref`,
+  `github.workflow_ref`, `github.repository`, and the `determine-release-modes`
+  outputs `should-publish`, `dry-run`, and `should-upload-workflow-artifacts`;
+  `GITHUB_OUTPUT` identifies the output file. A malformed input writes an
+  `::error` annotation and exits with status 2 instead of guessing a decision,
+  while a supported non-publishing request exits 0. The workflow never
+  interpolates these values into `run:`; see
+  `scripts/tests/test_release_write_policy.py` and
+  `scripts/tests/test_authorize_release_writes.py`.
 
 ### Linux glibc floor
 
@@ -3318,7 +3333,7 @@ the separate GitHub release writer after their prerequisites succeed.
 | `package-crate`               | `metadata`                                                  | `contents: read`                    | always                         |
 | `publish-crates-io`           | all six validation jobs and `package-crate`                 | `contents: read`, `id-token: write` | `should_publish == 'true'`     |
 | `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: read`                    | `dry_run == 'true'`            |
-| `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | `should_publish == 'true'`     |
+| `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | published, not dry run         |
 | `verify-release-inventory`    | `metadata`, `publish-crates-io`, `publish-release`          | `contents: write`                   | both publishers succeeded      |
 | `finalize-github-release`     | `metadata`, `package-crate`, both publishers, the verifier  | `contents: write`                   | every prerequisite succeeded   |
 | `consumer-smoke`              | `metadata`, `package-crate`, `finalize-github-release`      | `contents: read`                    | every prerequisite succeeded   |
@@ -3345,8 +3360,17 @@ authority over the release it is checking.
 
 `release` and `publish-release` carry the same five-job dependency list and
 mutually exclusive guards, so a run is a rehearsal or a publication and never
-both. The guards are derived from `determine-release-modes`, which also supplies
-`should_publish` to the artefact upload so the upload stage and the jobs agree
+both. The guards are derived from the workflow's own authorization decision in
+`scripts/authorize_release_writes.py`, which reads the reusable `publish` and
+`dry-run` inputs, the trigger, `github.workflow_ref`, and the pinned
+`determine-release-modes` answers. The resolver alone is necessary but not
+sufficient: it reports `should-publish: true` for every push before it consults
+`publish`, so a reusable caller that inherited a push trigger would otherwise
+reach the write path having asked for no publication. A raw `dry-run: true` is
+an unconditional veto, a reusable invocation needs an explicit `publish: true`,
+the ref must be a `v*.*.*` tag, and only a direct tag push of `release.yml`
+itself may publish on the resolver's word alone. The same decision supplies
+`should_publish` to the artefact upload, so the upload stage and the jobs agree
 about the mode. The registry job has seven prerequisites: `metadata`,
 `package-crate`, all three platform builds, `windows-native-recipe-smoke`, and
 `release-admission-canaries`. Its job-level condition requires every
@@ -3494,11 +3518,15 @@ text could not check: a command word built from a variable, including one
 reached through nested wrappers; a `gh` subcommand outside the two the contract
 has a rule for, whether built from a variable or quoted, which hides the call
 the `gh api` check looks for; and any command that would hand a run-time string
-to an interpreter. The job's reachability is computed independently in
-`release_publish_path_verification.py`, from the scenario table in
-`release_publish_path_scenarios.py`; that table includes a publisher failure
-and a publisher skip for each publisher, plus the realistic dry run in which
-both are skipped while the rehearsal job runs.
+to an interpreter. `release_publish_path_verification.py` judges the job's
+reachability from the scenario rows in `release_publish_path_scenarios.py`.
+Each row is a `Scenario` from `release_publish_path_scenario_model.py`, which
+derives the expected outputs by running the real
+`scripts/release_write_policy.py` policy through
+`scripts/authorize_release_writes.py`, so the contract holds the wiring to the
+rule a live run applies rather than to a second copy of it. The table includes
+a publisher failure and a publisher skip for each publisher, plus the realistic
+dry run in which both are skipped while the rehearsal job runs.
 
 ### Release-inventory verifier telemetry
 
@@ -5097,6 +5125,24 @@ walking the value themselves.
 pure checker shared by the release staging and mutation contracts. Keep
 workflow-specific parsing and assertions in each suite; production code must
 not import this checker.
+
+The release publish-path contract modules are test-only in the same way: they
+describe and mutate the release workflow's documents, and production code must
+not import them. `release_publish_path_scenario_model.py` owns `Scenario`,
+`Invocation`, and `needs_results`, and derives each scenario's expected outputs
+through `scripts/release_write_policy.py` and
+`scripts/authorize_release_writes.py`.
+`release_publish_path_metadata_outputs.py` owns `metadata_outputs` and
+`resolved_repo_name`, which evaluate the metadata job's declarations against
+the step answers a run may publish. `release_publish_path_authorization.py` owns
+`check_authorization_wiring` and the pinned step and script constants, so the
+authorization step's id, inputs, ordering, and gates are named in one place; it
+delegates the decision-record check to `release_publish_path_summary.py`, which
+reads the step's script as a syntax tree and requires the record to be written
+unconditionally. `release_publish_crates_io_mutations.py` owns
+`CRATES_IO_MUTATIONS`, the registry publisher's labelled mutations, which
+`release_publish_path_mutations.py` applies beside the other release-path
+mutations.
 
 `local_reference_inventory.py` inventories local composite actions and regular
 `.sh`, `.bash`, `.py`, and `.ps1` scripts recursively under `scripts/`, as well

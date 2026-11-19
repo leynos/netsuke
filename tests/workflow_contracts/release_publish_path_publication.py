@@ -1,11 +1,18 @@
-"""Check the isolated write-enabled half of release publication."""
+"""Check the isolated write-enabled half of release publication.
+
+The publication gate reads the ``should_publish`` output the authorization step
+decides, so a run the policy denies never reaches a write-enabled job. The
+scenario value objects come from ``release_publish_path_scenario_model``.
+
+Run via ``make test-workflow-contracts``.
+"""
 
 import dataclasses
 import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_scenarios import CRATES_IO_NEEDS, REQUIRED_NEEDS
+from release_publish_path_scenario_model import CRATES_IO_NEEDS, REQUIRED_NEEDS
 from workflow_loading import (
     job_steps,
     named_step,
@@ -15,7 +22,7 @@ from workflow_loading import (
 )
 
 if typ.TYPE_CHECKING:
-    from release_publish_path_scenarios import Scenario
+    from release_publish_path_scenario_model import Scenario
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -146,7 +153,7 @@ def _check_publication_job(
         scenario.needs_results[name] == "success" for name in REQUIRED_NEEDS
     )
     expected_job = (
-        scenario.mode == "publish"
+        check.outputs.get("should_publish") == "true"
         and not scenario.cancelled
         and all_dependencies_succeeded
     )
@@ -170,7 +177,7 @@ def _check_draft_guard(
     draft_runs = step_runs(
         draft, contexts, check.violations, f"{scenario.name}.draft.guard"
     )
-    expected_draft = scenario.mode == "publish"
+    expected_draft = check.outputs.get("should_publish") == "true"
     if draft_runs != expected_draft:
         check.violations.append(
             f"{scenario.name}.draft: resolved to {draft_runs!r}, "
@@ -247,8 +254,7 @@ def _crates_io_should_run(check: PublicationCheck) -> bool:
     """Compute the independent publishing oracle from the scenario prerequisites."""
     scenario = check.scenario
     return (
-        scenario.mode == "publish"
-        and not scenario.cancelled
+        not scenario.cancelled
         and check.outputs.get("should_publish") == "true"
         and all(scenario.needs_results[name] == "success" for name in CRATES_IO_NEEDS)
     )

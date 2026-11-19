@@ -79,9 +79,14 @@ tag push, and as a reusable workflow (`workflow_call`) with inputs `publish`,
 Its jobs are:
 
 1. `metadata` — resolves the repository name, the release modes through the
-   `determine-release-modes` shared action, the crate version through
-   `ensure-cargo-version` (with `check-tag` bound to `should-publish`), the WiX
-   extension version, and the binary name through `export-cargo-metadata`.
+   `determine-release-modes` shared action, the workflow's own release-write
+   authorization through `scripts/authorize_release_writes.py` (#1001), the
+   crate version through `ensure-cargo-version` (with `check-tag` bound to the
+   authorized `should-publish`), the WiX extension version, and the binary name
+   through `export-cargo-metadata`. The authorization decision is what the jobs
+   and outputs consume: the resolver reports `should-publish: true` for every
+   push before it consults the reusable `publish` input, so it is necessary but
+   not sufficient.
 2. `build-linux`, `build-windows`, `build-macos` — each a two-leg matrix
    calling `./.github/workflows/build-and-package.yml`, which compiles, packages
    (`.deb`, `.rpm`, `.msi`, `.pkg`), runs the release-help tooling, and
@@ -97,15 +102,15 @@ Its jobs are:
    with `dry-run: true`. It creates no release and uploads nothing. This job is
    the only remaining caller of that shared action.
 6. `publish-release` — added by #834 after this plan was drafted. It runs only
-   when `should_publish == 'true'`, holds `contents: write`, and creates the
-   draft release (`scripts/ensure_draft_release.py`), then runs the same
-   download and hoist sequence. Since #1066 it no longer calls the shared
-   action: it calls the repository's own
-   `./.github/actions/upload-declared-assets`, which selects the declared
-   payload, writes the declaration and the trusted digest record from the
-   staged bytes, retains both, and only then uploads the declared names without
-   ever replacing attached bytes. The checkout is pinned to the candidate
-   commit so those files are read at the revision the producers built.
+   when the authorized `should_publish == 'true'` and the run is not a dry run
+   (#1001), holds `contents: write`, and creates the draft release
+   (`scripts/ensure_draft_release.py`), then runs the same download and hoist
+   sequence. Since #1066 it no longer calls the shared action: it calls the
+   repository's own `./.github/actions/upload-declared-assets`, which selects
+   the declared payload, writes the declaration and the trusted digest record
+   from the staged bytes, retains both, and only then uploads the declared
+   names without ever replacing attached bytes. The checkout is pinned to the
+   candidate commit so those files are read at the revision the producers built.
 
 The two jobs are mutually exclusive: a dry run takes `release`, a tag push takes
 `publish-release`, and a job that needs a skipped job is itself skipped.

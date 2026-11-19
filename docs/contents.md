@@ -364,6 +364,8 @@ operator, user, and contributor references are easier to find.
   Optional named contention classes lowered through the existing scheduler.
 - [ADR-0081: Maturity policy schema](adrs/adr-0081-maturity-policy-schema.md):
   Shallow-end policy composition and rule-to-feature requirements.
+- [ADR-0082: Authorize release writes from the caller's policy](adrs/adr-0082-authorize-release-writes-from-the-callers-policy.md):
+  Reusable release inputs bind publication whatever trigger reached the run.
 
 ## Proposals
 

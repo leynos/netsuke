@@ -13,11 +13,11 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_scenarios import VERIFY_NEEDS
+from release_publish_path_scenario_model import VERIFY_NEEDS
 from workflow_loading import workflow_job
 
 if typ.TYPE_CHECKING:
-    from release_publish_path_scenarios import Scenario
+    from release_publish_path_scenario_model import Scenario
 
 VERIFY_JOB = "verify-release-inventory"
 #: Draft releases are visible only with write access, so the listing steps
@@ -90,10 +90,10 @@ def _verification_needs_context(
     return needs
 
 
-def _should_verify(scenario: Scenario) -> bool:
+def _should_verify(scenario: Scenario, outputs: dict[str, str]) -> bool:
     """Compute the independent reachability oracle for inventory verification."""
     return (
-        scenario.mode == "publish"
+        outputs.get("should_publish") == "true"
         and not scenario.cancelled
         and all(scenario.needs_results.get(name) == "success" for name in VERIFY_NEEDS)
     )
@@ -123,7 +123,7 @@ def check_verify_inventory(
             job_level=True,
         ),
     )
-    expected = _should_verify(scenario)
+    expected = _should_verify(scenario, outputs)
     runs = actual is not MISSING and bool(actual)
     if runs != expected:
         violations.append(

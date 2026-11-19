@@ -16,7 +16,7 @@ from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_fi
 from workflow_loading import workflow_job
 
 if typ.TYPE_CHECKING:
-    from release_publish_path_scenarios import Scenario
+    from release_publish_path_scenario_model import Scenario
 
 
 def check_native_smoke_job(
@@ -53,8 +53,12 @@ def check_native_smoke_job(
         ),
     )
     metadata_succeeded = scenario.needs_results["metadata"] == "success"
+    # The guard reads the decision's effective output, not the scenario's
+    # nominal mode: a publish-shaped invocation whose authorization still
+    # leaves the run in dry-run mode must skip the smoke exactly as a plain
+    # dry run does.
     should_run = metadata_succeeded and (
-        scenario.mode != "dry-run" or scenario.event_action == "ready_for_review"
+        outputs.get("dry_run") != "true" or scenario.event_action == "ready_for_review"
     )
     if value is MISSING or bool(value) != should_run:
         violations.append(

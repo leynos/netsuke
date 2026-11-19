@@ -4528,8 +4528,20 @@ full observability policy are documented in
 policy decides from frozen slotted records at each boundary where an external
 record shape arrives, while adapters and CLIs own field names and decoding, as
 [ADR-0074](adrs/adr-0074-typed-records-for-release-policy-boundaries.md)
-records. This automated pipeline guarantees parity across Windows, Linux, and
-macOS through the shared actions.
+records. Publication authority is the workflow's own decision rather than the
+resolver's: the `release_authorization` step runs between
+`determine-release-modes` and every consumer of its answer, and it resolves the
+reusable `publish` and `dry-run` inputs against the trigger before any job
+holding `contents: write` may run. A requested dry run is an unconditional
+veto, a reusable caller must pass `publish: true`, and only a direct `v*.*.*`
+tag push of `release.yml` may publish on the resolver's word alone; a malformed
+input refuses the step instead of guessing. `publish-release` therefore runs
+only when the authorized `should_publish` output is true and the run is not a
+dry run. The rule is a pure function in `scripts/release_write_policy.py`, the
+step's adapter is `scripts/authorize_release_writes.py`, and
+[ADR-0082](adrs/adr-0082-authorize-release-writes-from-the-callers-policy.md)
+records the decision. This automated pipeline guarantees parity across Windows,
+Linux, and macOS through the shared actions.
 
 ### 8.7 Release Notes
 

@@ -96,6 +96,43 @@ The workflow supplies `7` when the value is omitted or empty. The resolved
 version is used for Windows WiX packaging. The Python resolver rejects an
 unexpectedly empty value and values containing carriage returns or line feeds.
 
+### Choose whether a reusable release call publishes
+
+A reusable call does not publish unless the caller asks it to. The `publish`
+input defaults to `false`, so a caller that only stages a rehearsal keeps a
+draft release untouched. Pass `publish: true` to authorize the release write:
+
+<!-- tested-example: guide-release-publish-input -->
+
+```yaml
+with:
+  publish: true
+```
+
+These rules decide whether a run may write:
+
+- A caller that passes `dry-run: true` never publishes. This veto applies even
+  when `publish: true` is also set.
+- A reusable caller must pass `publish: true` to publish. This holds even when
+  the caller inherits a `push` trigger, so a tag or branch push reaching the
+  workflow does not by itself authorize a release write.
+- A direct `v*.*.*` tag push of `.github/workflows/release.yml` keeps its
+  existing publishing behaviour and needs no inputs.
+
+Authorization governs the draft release and its assets: the release write, the
+asset upload, and the finalization that un-drafts it all wait on the authorized
+decision. A run that is not authorized still builds, packages, and stages its
+artefacts. The authorization step reports every decision, authorized or denied,
+in its step outputs, in the run's job summary, and in a `Release authorization`
+notice annotation. The summary and the notice carry fixed fields only: the
+invocation origin, the effective publication, dry-run, and artefact-upload
+flags, and a bounded reason category. The human-readable reason stays in the
+step outputs. A dry run suppresses the build diagnostic artefacts, because they
+are a rehearsal aid rather than a release write. It still retains the
+`package-crate` job's bounded operation telemetry, because the job that
+consumes the packaged archive runs separately and diagnoses a failure from that
+retained record rather than from the run log.
+
 Before the `package-crate` job uploads its artefact, the action validates the
 retained candidate offline. It requires the package identity, the single
 recorded `.crate`, its SHA-256 digest, and the `Cargo.toml` at the archive's
