@@ -275,16 +275,46 @@ fn project_scope_layer_is_not_appended_twice_via_symlink_alias() -> Result<()> {
 }
 
 /// Scanning stored canonical layer paths does not normalize each inherited layer.
+///
+/// Discovery normalizes the project key and each candidate the walk classifies,
+/// neither of which grows with the length of a chain. Stored layer paths are
+/// already canonical, so re-normalizing them would make the count depend on the
+/// chain's depth; comparing a shallow chain with a deep one in the same isolated
+/// environment pins that it does not.
 #[test]
-fn project_layer_scan_normalizes_only_the_project_key() -> Result<()> {
+fn project_layer_scan_does_not_normalize_each_inherited_layer() -> Result<()> {
+    let shallow = normalization_calls_for_chain(1)?;
+    let deep = normalization_calls_for_chain(4)?;
+
+    ensure!(
+        shallow == deep,
+        "normalization must not grow with chain depth: {shallow} calls for one inherited file, {deep} for four"
+    );
+    Ok(())
+}
+
+/// Write a chain of `depth` inherited files under a fresh project root and scan it.
+///
+/// Returns the number of normalization calls the scan made. Every fixture roots
+/// the scan in an isolated environment, so the candidate set is identical and
+/// only the chain's length differs between calls.
+fn normalization_calls_for_chain(depth: usize) -> Result<usize> {
     let temp = tempdir().context("create temp dir")?;
     let project_dir = temp.path().join("project");
     test_support::fs::create_dir(&project_dir).context("create project dir")?;
-    test_support::fs::write(project_dir.join("base.toml"), "jobs = 7\n")
-        .context("write inherited config")?;
+    for index in 1..=depth {
+        let contents = if index < depth {
+            format!("extends = \"base{next}.toml\"\n", next = index + 1)
+        } else {
+            "jobs = 7\n".to_owned()
+        };
+        let name = format!("base{index}.toml");
+        test_support::fs::write(project_dir.join(&name), contents)
+            .with_context(|| format!("write {name}"))?;
+    }
     test_support::fs::write(
         project_dir.join(".netsuke.toml"),
-        "extends = \"base.toml\"\njson = true\n",
+        "extends = \"base1.toml\"\njson = true\n",
     )
     .context("write project config")?;
     let normalizer = CountingPathNormalizer::default();
@@ -293,15 +323,10 @@ fn project_layer_scan_normalizes_only_the_project_key() -> Result<()> {
         .context("collect inherited project layers")?;
 
     ensure!(
-        layers.len() == 2,
-        "expected inherited and project layers: {layers:?}"
+        layers.len() == 1 + depth,
+        "expected one layer per file for a chain of {depth}: {layers:?}"
     );
-    ensure!(
-        normalizer.calls() == 1,
-        "only the expected project path should be normalized, got {} calls",
-        normalizer.calls()
-    );
-    Ok(())
+    Ok(normalizer.calls())
 }
 
 mod authority;

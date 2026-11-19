@@ -19,6 +19,7 @@ use crate::cli::discovery::layers::user_candidate::{
     AutomaticLayers, CandidateEntry, CandidateFailure, CandidateProbe, UnloadableCandidate,
     UserScopeTrace, automatic_base_layers_with_probe,
 };
+use crate::cli::discovery::paths::FsPathNormalizer;
 use crate::cli::test_support::TestEnv;
 use crate::localization::{LocalizedMessage, keys};
 use anyhow::{Context, Result, ensure};
@@ -75,7 +76,13 @@ impl CandidateProbe for ScriptedProbe {
 
 /// Run the automatic discovery pass with `probe` against `env`.
 fn layers_with_probe(probe: &dyn CandidateProbe, env: &TestEnv) -> OrthoResult<AutomaticLayers> {
-    automatic_base_layers_with_probe(probe, None, discovery_env_source(env), None)
+    automatic_base_layers_with_probe(
+        probe,
+        None,
+        discovery_env_source(env),
+        &FsPathNormalizer,
+        None,
+    )
 }
 
 /// Return the closed failure payload carried by a rejection.
