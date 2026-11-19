@@ -9,7 +9,9 @@ use super::super::invalid_heredoc_delimiter_error;
 use super::super::posix_lexical::{
     EscapeBeforeMarker, HeredocDeclaration, PosixCharacter, SourceChar, backslash_escapes_marker,
 };
-use super::{IrGenError, MarkerProtection, SubstitutionTraversal, invalid_command_error};
+use super::{
+    IrGenError, MarkerProtection, QuoteContext, SubstitutionTraversal, invalid_command_error,
+};
 
 impl SubstitutionTraversal<'_, '_> {
     /// Preserve POSIX shell syntax while lowering context-safe recipe markers.
@@ -31,7 +33,7 @@ impl SubstitutionTraversal<'_, '_> {
         if let Some(next) = self.append_unquoted_posix_lexical_character(pos, ch)? {
             return Ok(next);
         }
-        if ch == '`' && !self.matches_single_quote_context() {
+        if ch == '`' && !self.matches_literal_quote_context() {
             self.toggle_backtick_region();
             self.output.push(ch);
             return Ok(pos + 1);
@@ -122,7 +124,10 @@ impl SubstitutionTraversal<'_, '_> {
             .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))?;
         match declaration {
             HeredocDeclaration::NotADeclaration => {}
-            HeredocDeclaration::Copied(next) => return Ok(Some(next)),
+            HeredocDeclaration::Copied(next) => {
+                self.posix_lexical.reset_ansi_c_lookbehind();
+                return Ok(Some(next));
+            }
             HeredocDeclaration::Rejected(reason) => {
                 return Err(invalid_heredoc_delimiter_error(
                     self.template.to_owned(),
@@ -143,9 +148,11 @@ impl SubstitutionTraversal<'_, '_> {
     }
 
     /// Classify POSIX backticks and command substitutions as protected regions.
-    pub(super) const fn posix_marker_protection(&self, _pos: usize) -> MarkerProtection {
+    pub(super) fn posix_marker_protection(&self, _pos: usize) -> MarkerProtection {
         MarkerProtection::from_protected_region(
-            self.in_backticks || self.is_in_command_substitution(),
+            self.in_backticks
+                || self.is_in_command_substitution()
+                || matches!(self.active_quote_context(), QuoteContext::AnsiC),
         )
     }
 
@@ -169,6 +176,7 @@ impl SubstitutionTraversal<'_, '_> {
         let Some(next) = self.chars.get(pos + 1).copied() else {
             return Ok(None);
         };
+        self.posix_lexical.observe_ansi_c_escaped_character(next);
         self.output.push(ch);
         self.output.push(next);
         Ok(Some(pos + 2))

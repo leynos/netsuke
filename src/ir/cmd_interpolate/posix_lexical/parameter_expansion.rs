@@ -12,7 +12,8 @@
 //! including a heredoc declared on it, so marker lowering would resume in body
 //! lines the shell still expands.
 
-use super::{PosixLexicalState, SourceChar, is_shell_word_boundary, is_unescaped_character};
+use super::boundary::{is_shell_word_boundary, is_unescaped_character};
+use super::{PosixLexicalState, SourceChar};
 
 impl PosixLexicalState {
     /// Record the `${ }` nesting one character of plain text opens or closes.
@@ -91,6 +92,7 @@ impl PosixLexicalState {
         self.enclosing_parameter_expansion_depths
             .push(self.parameter_expansion_depth);
         self.parameter_expansion_depth = 0;
+        self.reset_ansi_c_lookbehind();
     }
 
     /// Resume the enclosing region's `${ }` count as one region closes.
@@ -102,6 +104,7 @@ impl PosixLexicalState {
         if let Some(enclosing) = self.enclosing_parameter_expansion_depths.pop() {
             self.parameter_expansion_depth = enclosing;
         }
+        self.reset_ansi_c_lookbehind();
     }
 
     /// Close one open `${ }` expansion when an unescaped brace ends it.

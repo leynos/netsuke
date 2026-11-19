@@ -2929,13 +2929,20 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   rejects a marker that directly follows an unpaired backslash, because that
   backslash would escape the first character of the substituted path; write
   `\\{{ outs }}` to keep one literal backslash, or place the marker inside
-  single quotes. In PowerShell `command:` and `script:` recipes, markers are
-  valid only at unquoted sites. Netsuke rejects markers in single-quoted
-  strings, double-quoted strings, here-strings, `$()`, and immediately after a
-  backtick. Netsuke rejects markers in the raw native-command region after
-  PowerShell's `--%` stop-parsing token. That region ends at a newline or
-  pipeline character; a semicolon does not end it, and scanning resumes after
-  the boundary. Only ASCII double quotes are modelled for pipeline detection; a
+  single quotes. On POSIX and Bash routes, Netsuke also rejects a marker inside
+  a Bash ANSI-C string (`$'…'`), because a backslash controls the character
+  after it there and the ordinary single-quoted encoding can close the string
+  early. Marker-free `$'…'` text is copied unchanged, and a marker after its
+  closing quote is encoded for its unquoted site; use an unquoted,
+  single-quoted, or double-quoted site for a marker that must appear alongside
+  ANSI-C text. See [ADR-0027](adrs/adr-0027-command-placeholder-contract.md).
+  In PowerShell `command:` and `script:` recipes, markers are valid only at
+  unquoted sites. Netsuke rejects markers in single-quoted strings,
+  double-quoted strings, here-strings, `$()`, and immediately after a backtick.
+  Netsuke rejects markers in the raw native-command region after PowerShell's
+  `--%` stop-parsing token. That region ends at a newline or pipeline
+  character; a semicolon does not end it, and scanning resumes after the
+  boundary. Only ASCII double quotes are modelled for pipeline detection; a
   single quote, backtick, or typographic quote in the raw region makes later
   markers fail closed. The path text otherwise reaches the native command
   literally instead of being interpreted as Netsuke's quoted path literal.

@@ -7,7 +7,9 @@
 use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, find_script_substitution,
     invalid_command_error,
-    posix_lexical::{PosixCharacter, PosixLexicalState, SourceChar, backslash_escapes_marker},
+    posix_lexical::{
+        AnsiCCharacter, PosixCharacter, PosixLexicalState, SourceChar, backslash_escapes_marker,
+    },
 };
 
 mod delimiters;
@@ -47,6 +49,18 @@ enum ShellQuoteContext {
     SingleQuoted,
     /// Temporarily close and reopen double quotes around a word-quoted path.
     DoubleQuoted,
+    /// Reject markers because Bash reads the region as an ANSI-C string.
+    ///
+    /// A backslash escapes the next character here, so the ordinary
+    /// single-quoted binding cannot preserve a path.
+    AnsiC,
+}
+
+impl ShellQuoteContext {
+    /// Report whether shell syntax is inert in this quoting mode.
+    const fn is_literal(self) -> bool {
+        matches!(self, Self::SingleQuoted | Self::AnsiC)
+    }
 }
 
 impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
@@ -105,6 +119,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             return Ok(Some(next));
         }
         if self.is_escaped {
+            self.posix_lexical.observe_ansi_c_escaped_character(ch);
             self.output.push(ch);
             self.is_escaped = false;
             return Ok(Some(pos + 1));
@@ -163,7 +178,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch)? {
             return Ok(Some(next));
         }
-        if self.update_quote_context(ch) {
+        if self.update_quote_context(pos, ch) {
             self.output.push(ch);
             return Ok(Some(pos + 1));
         }
@@ -202,7 +217,12 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.
-    fn update_quote_context(&mut self, ch: char) -> bool {
+    ///
+    /// A dollar followed by a quote opens a Bash ANSI-C string, so that
+    /// transition is decided before the ordinary quote rules run. Its body still
+    /// reaches the substitution path, where a marker is rejected; only the
+    /// delimiters are consumed as quoting syntax here.
+    fn update_quote_context(&mut self, pos: usize, ch: char) -> bool {
         if let Some(outer_context) = self.backtick_outer_context {
             if ch == '`' {
                 self.quote_context = outer_context;
@@ -212,7 +232,15 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             return false;
         }
 
+        let opens_ansi_c = self.posix_lexical.observe_ansi_c_character(
+            AnsiCCharacter::new(self.chars, pos, ch),
+            self.active_quote_context() == ShellQuoteContext::Unquoted,
+        );
         let quote_context = self.active_quote_context_mut();
+        if opens_ansi_c {
+            *quote_context = ShellQuoteContext::AnsiC;
+            return true;
+        }
         match (*quote_context, ch) {
             (ShellQuoteContext::Unquoted, '\'') => {
                 *quote_context = ShellQuoteContext::SingleQuoted;
@@ -222,7 +250,8 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
                 *quote_context = ShellQuoteContext::DoubleQuoted;
                 true
             }
-            (ShellQuoteContext::SingleQuoted, '\'') | (ShellQuoteContext::DoubleQuoted, '"') => {
+            (ShellQuoteContext::SingleQuoted | ShellQuoteContext::AnsiC, '\'')
+            | (ShellQuoteContext::DoubleQuoted, '"') => {
                 *quote_context = ShellQuoteContext::Unquoted;
                 true
             }
@@ -245,17 +274,31 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.output.push(ch);
             return Ok(pos + 1);
         };
-        if self.backtick_outer_context.is_some() || self.is_in_command_substitution() {
+        if self.is_placeholder_unsafe() {
             return Err(invalid_command_error(self.template.to_owned()));
         }
         let context = match self.active_quote_context() {
             ShellQuoteContext::Unquoted => QuoteContext::Unquoted,
             ShellQuoteContext::SingleQuoted => QuoteContext::Single('\''),
             ShellQuoteContext::DoubleQuoted => QuoteContext::Double('"'),
+            // An ANSI-C site is rejected above, so this arm is unreachable. It
+            // keeps the mapping total without claiming the binding is safe.
+            ShellQuoteContext::AnsiC => QuoteContext::AnsiC,
         };
         self.output
             .push_str(self.bindings.substitution(placeholder, context));
         Ok(pos + skip)
+    }
+
+    /// Report whether a placeholder here cannot be lowered safely.
+    ///
+    /// Backticks, nested command substitutions, and ANSI-C strings all read
+    /// path text by rules the prepared bindings do not model, so a marker in
+    /// any of them is rejected instead of encoded.
+    fn is_placeholder_unsafe(&self) -> bool {
+        self.backtick_outer_context.is_some()
+            || self.is_in_command_substitution()
+            || self.active_quote_context() == ShellQuoteContext::AnsiC
     }
 
     /// Return whether the innermost active substitution is arithmetic.

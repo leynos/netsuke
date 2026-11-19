@@ -201,7 +201,7 @@ impl ScriptSubstitutionTraversal<'_, '_> {
     fn starts_command_substitution(&self, pos: usize, ch: char) -> bool {
         matches!(
             (ch, self.chars.get(pos + 1), self.active_quote_context()),
-            ('$', Some('('), context) if context != ShellQuoteContext::SingleQuoted
+            ('$', Some('('), context) if !context.is_literal()
         )
     }
 

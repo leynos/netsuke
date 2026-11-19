@@ -9,6 +9,12 @@ use std::collections::VecDeque;
 
 use super::find_substitution;
 
+mod ansi_c;
+
+pub(super) use ansi_c::AnsiCCharacter;
+
+mod boundary;
+
 mod declaration;
 
 mod delimiter;
@@ -32,6 +38,11 @@ pub(super) struct PosixLexicalState {
     enclosing_parameter_expansion_depths: Vec<usize>,
     /// Record the `)` that closed the most recent command substitution.
     closed_command_substitution: Option<usize>,
+    /// Record whether a live `$` may open an ANSI-C string at the next quote.
+    pending_ansi_c_opener: bool,
+    /// Record whether the previous significant unquoted character was a `$`
+    /// awaiting the second half of a `$$` pair.
+    unpaired_dollar: bool,
 }
 
 /// Retain one heredoc delimiter and the rules that select its terminator.
@@ -214,6 +225,8 @@ impl PosixLexicalState {
             parameter_expansion_depth: 0,
             enclosing_parameter_expansion_depths: Vec::new(),
             closed_command_substitution: None,
+            pending_ansi_c_opener: false,
+            unpaired_dollar: false,
         }
     }
 
@@ -232,6 +245,7 @@ impl PosixLexicalState {
         character: &mut PosixCharacter<'_, '_>,
     ) -> bool {
         if self.in_comment {
+            self.reset_ansi_c_lookbehind();
             character.output.push(character.ch);
             if character.ch == '\n' {
                 self.in_comment = false;
@@ -239,20 +253,27 @@ impl PosixLexicalState {
             }
             return true;
         }
-        let Some(body) = self.heredoc_body.as_mut() else {
+        if self.heredoc_body.is_none() {
             return false;
-        };
-        character.output.push(character.ch);
-        if body.consume(SourceChar::new(character.ch)) {
-            self.heredoc_body = None;
-            self.begin_next_heredoc();
+        }
+        self.reset_ansi_c_lookbehind();
+        if let Some(body) = self.heredoc_body.as_mut() {
+            character.output.push(character.ch);
+            if body.consume(SourceChar::new(character.ch)) {
+                self.heredoc_body = None;
+                self.begin_next_heredoc();
+            }
         }
         true
     }
 
     /// Begin a POSIX comment after its opening number sign is copied.
+    ///
+    /// Comment text is inert, so a dollar before the number sign cannot pair
+    /// with one after the comment ends.
     pub(super) const fn begin_comment(&mut self) {
         self.in_comment = true;
+        self.reset_ansi_c_lookbehind();
     }
 
     /// Report whether the traversal is inside a POSIX comment.
@@ -341,51 +362,4 @@ impl HeredocBody {
         self.line.pop();
         true
     }
-}
-
-/// Report whether `pos` follows a boundary where POSIX permits a comment.
-///
-/// POSIX starts a comment only where a token may start: at the beginning of
-/// input or after an unescaped separator. Every other character is word data,
-/// so Unicode spaces, carriage return, vertical tab, and form feed do not
-/// begin a comment and do not stop quote tracking. A `)` that closes a command
-/// substitution also remains in the surrounding word, so the caller passes its
-/// position as `closed_substitution` to suppress that false boundary.
-fn is_shell_word_boundary(chars: &[char], pos: usize, closed_substitution: Option<usize>) -> bool {
-    let Some(previous_pos) = preceding_shell_character(chars, pos) else {
-        return true;
-    };
-    if closed_substitution == Some(previous_pos) {
-        return false;
-    }
-    is_unescaped_character(chars, pos)
-        && is_unescaped_character(chars, previous_pos)
-        && chars
-            .get(previous_pos)
-            .is_some_and(|previous| SourceChar::new(*previous).is_word_terminator())
-}
-
-/// Find the preceding shell character after removing unquoted line continuations.
-fn preceding_shell_character(chars: &[char], pos: usize) -> Option<usize> {
-    let mut end = pos;
-    loop {
-        let previous = end.checked_sub(1)?;
-        if chars.get(previous) != Some(&'\n') || is_unescaped_character(chars, previous) {
-            return Some(previous);
-        }
-        end = previous.checked_sub(1)?;
-    }
-}
-
-/// Report whether the character at `pos` is not escaped by a backslash run.
-fn is_unescaped_character(chars: &[char], pos: usize) -> bool {
-    chars
-        .get(..pos)
-        .into_iter()
-        .flatten()
-        .rev()
-        .take_while(|character| **character == '\\')
-        .count()
-        .rem_euclid(2)
-        == 0
 }

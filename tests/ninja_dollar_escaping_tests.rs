@@ -415,3 +415,7 @@ mod scripts;
 /// Backslashes immediately before a path marker, executed through Ninja.
 #[path = "ninja_dollar_escaping_tests/backslash.rs"]
 mod backslash;
+
+/// Markers inside Bash ANSI-C quoting, rejected at the public lowering boundary.
+#[path = "ninja_dollar_escaping_tests/ansi_c.rs"]
+mod ansi_c;
