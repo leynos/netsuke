@@ -113,9 +113,21 @@ def _configuration(max_age: int) -> configuration.Configuration:
 
 
 def _decide(
-    issued_at: float, max_age: int, readings: cabc.Sequence[float]
+    issued_at: float, max_age: int, readings: cabc.Sequence[tuple[float, bool]]
 ) -> tuple[policy.Classification, policy.Classification]:
-    """Return the freshness check's and the admission decision's verdicts."""
+    """Return the freshness check's and the admission decision's verdicts.
+
+    Each scripted reading is the ``(seconds, is_unusable)`` pair the gate's own
+    clock seam returns, because the flag rather than the number is what carries
+    "this is not a moment". Scripting a bare number would leave every case
+    unable to express a reading the gate must refuse.
+
+    Returns
+    -------
+    tuple[policy.Classification, policy.Classification]
+        The freshness check's verdict and the admission decision's verdict, in
+        the order the gate reaches them.
+    """
     remaining = list(readings)
 
     def read_wall_clock() -> tuple[float, bool]:
@@ -123,7 +135,7 @@ def _decide(
         if not remaining:
             message = "the gate read the clock more often than this case scripts"
             raise AssertionError(message)
-        return remaining.pop(0), False
+        return remaining.pop(0)
 
     gate = admission_evidence.AdmissionEvidence(
         _configuration(max_age),
@@ -196,7 +208,7 @@ def test_a_reading_outside_the_window_is_never_admitted(
 ) -> None:
     """Require both decisions to refuse exactly when their reading is outside."""
     issued_at, max_age, first, second = case
-    checked, admitted = _decide(issued_at, max_age, [first, second])
+    checked, admitted = _decide(issued_at, max_age, [(first, False), (second, False)])
     first_is_fresh = _inside_window(first - issued_at, max_age)
     second_is_fresh = _inside_window(second - issued_at, max_age)
 
@@ -221,3 +233,33 @@ def test_a_reading_outside_the_window_is_never_admitted(
             "expiry at the decision must keep its own category; "
             f"issued_at={issued_at}, max_age={max_age}, readings={first}, {second}"
         )
+
+
+def test_an_unusable_reading_refuses_rather_than_name_an_instant() -> None:
+    """Refuse both decisions when the clock reports a reading it cannot use.
+
+    An unusable reading arrives as the same zero fallback a reading of the
+    epoch does, so only the flag can tell them apart: a gate that read the
+    number alone would judge every document against 1970 and refuse it as
+    stale, which is the right verdict for the wrong reason and the wrong
+    category for an operator to act on. The first reading is asked when the
+    check observes the document and the second when admission re-reads the
+    window, so the case scripts each position separately and requires the
+    ``unknown`` category at both.
+    """
+    issued_at = 1_700_000_000.0
+    max_age = 60
+    unchecked, _ = _decide(issued_at, max_age, [(0.0, True), (issued_at, False)])
+    assert (unchecked.outcome, unchecked.error_category) == (
+        policy.Outcome.FAILURE,
+        policy.ErrorCategory.UNKNOWN,
+    ), "an unusable reading at the check must refuse it with the unknown category"
+
+    observed, admitted = _decide(issued_at, max_age, [(issued_at, False), (0.0, True)])
+    assert observed.outcome == policy.Outcome.SUCCESS, (
+        "the second reading belongs to the decision, so the check must pass first"
+    )
+    assert (admitted.outcome, admitted.error_category) == (
+        policy.Outcome.FAILURE,
+        policy.ErrorCategory.UNKNOWN,
+    ), "an unusable reading at the decision must refuse the admission"

@@ -35,6 +35,7 @@ RUNTIME_MODULES = (
     "scripts/tests/test_release_admission_status_translation.py",
     "scripts/tests/test_release_admission_runner_contract.py",
     "scripts/tests/test_release_admission_metric_degradation.py",
+    "scripts/tests/test_release_admission_wall_clock.py",
     "scripts/tests/test_release_admission_manifest_parsing.py",
     "scripts/tests/test_release_admission_evidence_reading.py",
     "scripts/tests/test_release_admission_freshness_recheck.py",
