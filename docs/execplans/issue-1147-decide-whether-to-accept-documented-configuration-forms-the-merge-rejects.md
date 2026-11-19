@@ -201,6 +201,13 @@ list form.
   and the orientation section now names `normalized_components`,
   `parse_environment_bool`, `BOOLEAN_PATHS`, and the
   `src/cli/config/policies.rs` location.
+- [x] (2026-11-20) Review round three: the Figment description. The
+  orientation section listed Booleans, numbers, arrays, and strings, which read
+  as an exhaustive set. Figment's `Value::from_str` also parses floats and
+  `{key=value}` dictionaries, so both the plan and the developers' guide now
+  describe the recognized forms as non-exhaustive and name the string fallback.
+  The ADR and decision D6 say "value parsing" where they had said "scalar
+  parsing", because arrays and dictionaries are values too.
 
 ## Surprises & discoveries
 
@@ -261,9 +268,9 @@ list form.
   Date/Author: 2026-11-18, agent.
 - D6. Document environment-side trimming instead of forcing the environment
   layer to preserve policy whitespace. Rationale: the trim is Figment's
-  ordinary scalar parsing and already applies to every string-valued
-  environment variable; removing it for four policy keys would add a second
-  special-case list and make `NETSUKE_LOCALE=" en-GB "` behave unlike
+  ordinary value parsing and already applies to every string-valued environment
+  variable; removing it for four policy keys would add a second special-case
+  list and make `NETSUKE_LOCALE=" en-GB "` behave unlike
   `NETSUKE_COLOR=" always "`. Accepting the trim keeps one rule for all
   environment strings, and the file layer still rejects whitespace.
   Date/Author: 2026-11-18, agent.
@@ -344,9 +351,9 @@ The environment layer is `src/cli/environment/mod.rs::EnvironmentLayer`.
 and lowercases each component. The five single-component paths in
 `BOOLEAN_PATHS` are parsed by `parse_environment_bool`, which accepts exactly
 `true`, `false`, `1`, and `0` with no trimming and no case folding; every other
-path keeps Figment's own value parsing, which recognizes `true`/`false` as
-Booleans, integers as numbers, serialized JSON arrays as arrays, and everything
-else as strings.
+path keeps Figment's own value parsing, which recognizes values including
+Booleans, numbers, arrays, dictionaries, and quoted strings; anything it cannot
+parse becomes a string.
 
 The early diagnostic-mode resolver is `src/cli/diag/mod.rs`. It reads the key
 naming the `json` path through an injected `EnvProvider`, trying the canonical

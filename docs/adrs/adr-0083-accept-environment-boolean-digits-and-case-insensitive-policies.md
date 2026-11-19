@@ -93,7 +93,7 @@ accepts spellings the guide does not document.
 
 `src/cli/environment/mod.rs` exposes one strict parser for the four accepted
 spellings. The environment layer applies it only to the exact five Boolean
-configuration paths and otherwise keeps Figment's ordinary scalar parsing, so
+configuration paths and otherwise keeps Figment's ordinary value parsing, so
 `jobs=1` stays a number. A spelling outside the four is kept as raw text, which
 makes the full merge fail deserialization rather than coercing the value.
 
@@ -114,8 +114,8 @@ serialization continues to emit the canonical lowercase spelling. The
 deserializer does not trim, matching the command-line contract: a quoted file
 value such as `color = " always "` is rejected. The environment value parser
 trims unquoted scalars before this point, so `NETSUKE_COLOR=' always '` is
-accepted; that trim is Figment's ordinary scalar parsing, not part of the
-policy contract, and applies to every string-valued environment variable.
+accepted; that trim is Figment's ordinary value parsing, not part of the policy
+contract, and applies to every string-valued environment variable.
 
 The merge composes layers and deserializes the masked JSON once. A valid value
 in a higher layer therefore masks an invalid value in a lower layer; the
