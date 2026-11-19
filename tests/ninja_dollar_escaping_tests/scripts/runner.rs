@@ -85,11 +85,17 @@ pub(super) fn lower_script(case: &ScriptCase) -> Result<GeneratedCommand> {
 ///
 /// A case that reaches the shell has already passed lowering, so a non-zero
 /// exit is a failure of the generated command and reported with its stderr.
+/// The child environment is cleared and given a fixed `PATH`: a
+/// non-interactive shell sources `BASH_ENV` whenever `/bin/sh` is Bash, so an
+/// inherited hook could run before the generated command and change what the
+/// case observes.
 #[cfg(unix)]
 pub(super) fn run_script(command: &GeneratedCommand) -> Result<ScriptRun> {
     let workspace = tempfile::tempdir()?;
     let output = Command::new("/bin/sh")
         .args(["-ec", command.as_str()])
+        .env_clear()
+        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
         .current_dir(workspace.path())
         .output()
         .context("run the generated script command")?;

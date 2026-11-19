@@ -81,11 +81,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Append the substitution or source character beginning at `pos`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when a pending heredoc body cannot
-    /// start at the newline's command-line boundary.
     pub(super) fn append_substitution_at_position(
         &mut self,
         pos: usize,
@@ -102,8 +97,13 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
 
         let substitution = find_script_substitution(self.chars, pos);
         let next = self.append_substitution_or_character(pos, ch, substitution)?;
-        if ch == '\n' {
-            self.start_pending_heredoc_after(self.newline_context())?;
+        // Only a newline that ends the command line starts a queued heredoc.
+        // Quoted text and a backtick body do not end it: the shell starts the
+        // body at the newline token after the declaring command, and a newline
+        // inside those regions belongs to their own text, so starting the body
+        // there would copy the rest of the command line as inert heredoc data.
+        if ch == '\n' && self.is_plain_script_text() {
+            self.posix_lexical.begin_pending_heredoc_after_newline();
         }
         Ok(next)
     }
@@ -446,3 +446,4 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         self.output
     }
 }
+// refused_by: merge_ladder_exhausted · collision: none (1 contested hunk(s), neither side deleted the other's lines)

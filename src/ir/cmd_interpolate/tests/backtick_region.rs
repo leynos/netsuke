@@ -131,6 +131,8 @@ enum Case {
     ContinuationInUnquotedBody,
     /// A continued newline in double-quoted body text keeps the line open.
     ContinuationInDoubleQuotedBody,
+    /// A literal newline in a single-quoted body does not end the command line.
+    LiteralNewlineInSingleQuotedBody,
     /// A top-level backtick outside quotes restores script-level unquoted text.
     TopLevelBacktickUnquoted,
     /// A top-level backtick in a quoted word restores unquoted script text.
@@ -179,6 +181,9 @@ impl Case {
             }
             Self::ContinuationInDoubleQuotedBody => {
                 format!("cat <<EOF `\"echo x \\\ny\"` {INS_TOKEN}\nEOF\n")
+            }
+            Self::LiteralNewlineInSingleQuotedBody => {
+                format!("cat <<EOF `printf '%s' 'x\\\ny'` {INS_TOKEN}\npayload\nEOF\n")
             }
             Self::TopLevelBacktickUnquoted => format!("printf '%s' `printf x` {INS_TOKEN}"),
             Self::TopLevelBacktickAfterDoubleQuoted => {
@@ -230,6 +235,7 @@ impl Case {
             Self::QuotedParenthesisInDoubleQuotedBody => "a quoted ) in a double-quoted body",
             Self::ContinuationInUnquotedBody => "a line continuation in an unquoted body",
             Self::ContinuationInDoubleQuotedBody => "a line continuation in a quoted body",
+            Self::LiteralNewlineInSingleQuotedBody => "a literal newline in a single-quoted body",
             Self::TopLevelBacktickUnquoted => "a top-level backtick outside quotes",
             Self::TopLevelBacktickAfterDoubleQuoted => "a quoted top-level backtick",
             Self::TopLevelBacktickInsideDoubleQuotes => "a top-level backtick inside quotes",
@@ -336,6 +342,7 @@ fn script_marker_after_backtick_in_command_substitution_uses_owning_region(
 #[case::quoted_parenthesis_double(Case::QuotedParenthesisInDoubleQuotedBody)]
 #[case::continuation_unquoted(Case::ContinuationInUnquotedBody)]
 #[case::continuation_double_quoted(Case::ContinuationInDoubleQuotedBody)]
+#[case::literal_newline_single_quoted(Case::LiteralNewlineInSingleQuotedBody)]
 #[case::top_level_unquoted(Case::TopLevelBacktickUnquoted)]
 #[case::top_level_after_double_quoted(Case::TopLevelBacktickAfterDoubleQuoted)]
 #[case::top_level_inside_double_quotes(Case::TopLevelBacktickInsideDoubleQuotes)]
