@@ -15,7 +15,6 @@ use super::runner_diagnostics::{
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use serde_json::Value;
-use std::fs;
 use tempfile::tempdir;
 
 /// One command-line invocation a rendering matrix case exercises.
@@ -235,6 +234,7 @@ fn absent_ninja_override_names_the_configured_path() -> Result<()> {
 fn non_executable_ninja_is_reported_as_a_launch_failure(
     #[case] invocation: Invocation,
 ) -> Result<()> {
+    use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
     let temp = workspace_with_minimal_manifest("a non-executable Ninja")?;

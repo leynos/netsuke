@@ -169,6 +169,11 @@ temporary build file.
       launch matrix, which run `build` and `clean` under both progress
       policies and assert the `Permission denied` cause through the JSON
       renderer. The rows are unchanged and pass.
+    - the hosted Windows jobs then found the same class of defect in the new
+      module: `use std::fs;` served only the Unix-only non-executable case, so
+      it moved into that case's body. Both Windows jobs had failed on it, and
+      neither the Linux gates nor the cross-compile proxy can see it (the
+      proxy aborts earlier, in a dependency's build script).
   - [x] The reported `402 lines` for `src/runner/process/mod.rs` does not
     reproduce: the file is 396 lines at this commit, at the base, and on
     `main`, and the full `make lint` at `33ee15394` was green. The figure is
