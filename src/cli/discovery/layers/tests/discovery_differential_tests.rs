@@ -8,7 +8,7 @@
 //! equivalence honest for missing, malformed, inherited, and successful files.
 
 use super::super::super::paths::{FailingPathNormalizer, FsPathNormalizer, PathNormalizer};
-use super::super::{ProjectKey, config_discovery, first_automatic_chain};
+use super::super::{ProjectIdentity, ProjectKey, config_discovery, first_automatic_chain};
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use ortho_config::{ConfigDiscovery, DiscoveryLayersOutcome, MapEnv, MergeLayer, SharedEnvSource};
@@ -73,7 +73,8 @@ fn restricted_outcome(
 ) -> Result<FlatLayers, String> {
     // These cases reach the project file only through a project root, so no
     // user-scope candidate needs skipping: the walk still mirrors ortho's.
-    first_automatic_chain(discovery, &[], normalizer, project_key)
+    let identity = ProjectIdentity::new(normalizer, project_key);
+    first_automatic_chain(discovery, &[], identity)
         .map(|(layers, _)| flatten(layers))
         .map_err(|error| error.to_string())
 }
@@ -243,9 +244,9 @@ fn unresolved_candidate_chain_is_not_trusted() -> Result<()> {
     );
     let project_key = ProjectKey::classify(&FsPathNormalizer, &project_dir.join(".netsuke.toml"));
 
-    let (layers, is_trusted) =
-        first_automatic_chain(&discovery, &[], &FailingPathNormalizer, Some(&project_key))
-            .map_err(|error| anyhow::anyhow!("{error}"))?;
+    let identity = ProjectIdentity::new(&FailingPathNormalizer, Some(&project_key));
+    let (layers, is_trusted) = first_automatic_chain(&discovery, &[], identity)
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
 
     ensure!(
         !layers.is_empty(),

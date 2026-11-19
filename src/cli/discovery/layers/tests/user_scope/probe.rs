@@ -15,6 +15,7 @@
 
 use super::{Case, HomeArrangement};
 use crate::cli::discovery::discovery_env_source;
+use crate::cli::discovery::layers::ProjectIdentity;
 use crate::cli::discovery::layers::user_candidate::{
     AutomaticLayers, CandidateEntry, CandidateFailure, CandidateProbe, UnloadableCandidate,
     UserScopeTrace, automatic_base_layers_with_probe,
@@ -80,8 +81,7 @@ fn layers_with_probe(probe: &dyn CandidateProbe, env: &TestEnv) -> OrthoResult<A
         probe,
         None,
         discovery_env_source(env),
-        &FsPathNormalizer,
-        None,
+        ProjectIdentity::new(&FsPathNormalizer, None),
     )
 }
 

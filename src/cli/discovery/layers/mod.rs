@@ -28,13 +28,13 @@ pub(super) use super::project_policy::{
 };
 
 mod project_key;
-use project_key::{CandidateIdentity, ProjectKey};
+use project_key::{ProjectIdentity, ProjectKey};
 
 mod trace;
 pub(in crate::cli::discovery) use trace::{AutomaticTrace, ProjectScopeTrace};
 
 pub(super) mod user_candidate;
-use user_candidate::{AutomaticLayers, automatic_base_layers, candidate_is_trusted};
+use user_candidate::{AutomaticLayers, automatic_base_layers};
 
 /// Authority evidence for one discovered root.
 ///
@@ -91,22 +91,22 @@ pub(super) fn config_discovery(
 /// project pass appends the same chain with project quarantine, which is the
 /// composition the refusal rule already promises.
 ///
-/// `normalizer` is the seam that classified `project_key`, so a candidate and
-/// the key it is compared with are resolved through the same view.
+/// `identity` pairs the project key with the resolution seam that classified it,
+/// so a candidate and the key it is compared with are resolved through the same
+/// view.
 pub(super) fn first_automatic_chain(
     discovery: &ConfigDiscovery,
     user_candidates: &[PathBuf],
-    normalizer: &impl PathNormalizer,
-    project_key: Option<&ProjectKey>,
+    identity: ProjectIdentity<'_>,
 ) -> OrthoResult<(Vec<MergeLayer<'static>>, bool)> {
     let mut optional_errors = Vec::new();
     for candidate in discovery.candidates() {
-        if is_refused_user_candidate(project_key, user_candidates, normalizer, &candidate) {
+        if is_refused_user_candidate(identity, user_candidates, &candidate) {
             continue;
         }
         match load_config_file_as_chain(&candidate) {
             Ok(Some(chain)) => {
-                let is_trusted = candidate_is_trusted(&candidate, normalizer, project_key);
+                let is_trusted = identity.candidate_is_trusted(&candidate);
                 return Ok((chain_layers(chain), is_trusted));
             }
             Ok(None) => {}
@@ -135,17 +135,14 @@ pub(super) fn first_automatic_chain(
 /// the project file: skipping it could drop an ordinary user chain, so it stays
 /// in the walk and is loaded untrusted instead.
 fn is_refused_user_candidate(
-    project_key: Option<&ProjectKey>,
+    identity: ProjectIdentity<'_>,
     user_candidates: &[PathBuf],
-    normalizer: &impl PathNormalizer,
     candidate: &Path,
 ) -> bool {
-    project_key.is_some_and(|key| {
-        !key.is_ambiguous()
-            && key.classify_candidate(normalizer, candidate) == CandidateIdentity::Project
-    }) && user_candidates
-        .iter()
-        .any(|user_candidate| user_candidate.as_path() == candidate)
+    identity.candidate_is_project_file(candidate)
+        && user_candidates
+            .iter()
+            .any(|user_candidate| user_candidate.as_path() == candidate)
 }
 
 /// Flatten a file layer chain into owned merge layers.
@@ -186,11 +183,12 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
     let project_key = project_file
         .as_deref()
         .map(|path| ProjectKey::classify(normalizer, path));
+    let identity = ProjectIdentity::new(normalizer, project_key.as_ref());
     let AutomaticLayers {
         layers: file_layers,
         is_trusted_root,
         user_scope,
-    } = match automatic_base_layers(directory, env_source, normalizer, project_key.as_ref()) {
+    } = match automatic_base_layers(directory, env_source, identity) {
         Ok(found) => found,
         // The pass failed before it reached a decision, so there is no
         // user-scope outcome to replay; discovery telemetry records the

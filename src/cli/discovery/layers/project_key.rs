@@ -29,6 +29,63 @@ pub(super) enum CandidateIdentity {
     Other,
 }
 
+/// The project key paired with the resolution seam that classified it.
+///
+/// Discovery compares every candidate with the key through the same normalizer
+/// that produced the key, so the two can never be resolved by different views of
+/// the filesystem. Carrying the pair as one value keeps that invariant visible
+/// in the signatures rather than in a comment, and keeps the helpers that need
+/// both within a readable parameter list.
+#[derive(Clone, Copy)]
+pub(in crate::cli::discovery) struct ProjectIdentity<'a> {
+    /// Resolution seam that classified `project_key`.
+    normalizer: &'a dyn PathNormalizer,
+    /// Key for the project configuration file, when discovery has one.
+    project_key: Option<&'a ProjectKey>,
+}
+
+impl<'a> ProjectIdentity<'a> {
+    /// Pair `normalizer` with the key it classified.
+    pub(super) const fn new(
+        normalizer: &'a dyn PathNormalizer,
+        project_key: Option<&'a ProjectKey>,
+    ) -> Self {
+        Self {
+            normalizer,
+            project_key,
+        }
+    }
+
+    /// Report whether `candidate` is a definite match for the project file.
+    ///
+    /// Only a definite match may be skipped from the fallback scan, because the
+    /// project pass loads the same chain again with project quarantine. An
+    /// ambiguous key identifies no candidate at all, and an unresolvable one is
+    /// only *possibly* the project file: skipping it could drop an ordinary user
+    /// chain, so it stays in the walk and is loaded untrusted instead.
+    pub(super) fn candidate_is_project_file(&self, candidate: &Path) -> bool {
+        self.project_key.is_some_and(|key| {
+            !key.is_ambiguous()
+                && key.classify_candidate(self.normalizer, candidate) == CandidateIdentity::Project
+        })
+    }
+
+    /// Report whether `candidate` provably names a file other than the project one.
+    ///
+    /// The project configuration is not a user file, because a project can
+    /// influence it wherever it is read from. Trust is granted only to a
+    /// candidate that provably names another file: an ambiguous key or an
+    /// unresolvable candidate cannot rule the project file out, so both fail
+    /// closed. A literal spelling that identifies the project file is the one
+    /// resolution failure that still counts as a match.
+    pub(super) fn candidate_is_trusted(&self, candidate: &Path) -> bool {
+        self.project_key.is_none_or(|key| {
+            !key.is_ambiguous()
+                && key.classify_candidate(self.normalizer, candidate) == CandidateIdentity::Other
+        })
+    }
+}
+
 /// Normalized comparison key for the project configuration file.
 pub(in crate::cli::discovery) struct ProjectKey {
     /// Normalized key, or the literal spelling when resolution failed.
@@ -88,7 +145,7 @@ impl ProjectKey {
     /// ambiguity flag already refuses.
     pub(super) fn classify_candidate(
         &self,
-        normalizer: &impl PathNormalizer,
+        normalizer: &(impl PathNormalizer + ?Sized),
         path: &Path,
     ) -> CandidateIdentity {
         match normalizer.normalize(path) {
