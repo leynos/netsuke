@@ -83,6 +83,15 @@ fn rejection_reason(error: &IrGenError) -> &'static str {
     format!("echo \\{INS_TOKEN}"),
     "escape sequence before a recipe marker"
 )]
+// A heredoc declaration renders its delimiter word through the same escape
+// check, so the declaration path must report the escape reason rather than
+// copy the word and lower the marker into the shell's heredoc data.
+#[case::escape_before_marker_heredoc_delimiter(
+    Lowering::Script,
+    RecipeShell::Posix,
+    format!("cat <<\\{INS_TOKEN}"),
+    "escape sequence before a recipe marker"
+)]
 #[case::here_string(
     Lowering::Command,
     RecipeShell::PowerShell,
@@ -94,6 +103,15 @@ fn rejection_reason(error: &IrGenError) -> &'static str {
     RecipeShell::PowerShell,
     format!("cmd /c --% type {INS_TOKEN}"),
     "recipe marker inside raw native command arguments"
+)]
+// A PowerShell backtick escapes the character after it, so a backtick directly
+// before a marker would decide how the lowered value is read. The lexical path
+// must reject it instead of copying the pair through.
+#[case::escape_before_marker_power_shell(
+    Lowering::Command,
+    RecipeShell::PowerShell,
+    format!("echo `{INS_TOKEN}"),
+    "escape sequence before a recipe marker"
 )]
 #[case::unmatched_backtick(
     Lowering::Command,

@@ -31,44 +31,45 @@ fn chained_error(messages: &[String]) -> anyhow::Error {
     })
 }
 
+/// Compute the cause sequence the documented rule selects.
+///
+/// The report prints the outermost message above the chain, so the chain
+/// beneath it starts at index 1. A message equal to that printed line, or to
+/// the cause kept immediately before it, is dropped.
+///
+/// Stating the rule here, independently of `distinct_causes`, lets the property
+/// assert the whole sequence rather than only that no bad cause survives. The
+/// weaker form passed vacuously for a deduplication that returned nothing: for
+/// `["alpha", "beta"]` the documented answer is `["beta"]`, but every
+/// "nothing unwanted survived" assertion also holds for an empty result.
+fn documented_causes(messages: &[String]) -> Vec<String> {
+    let mut causes = Vec::new();
+    let Some((outer, tail)) = messages.split_first() else {
+        return causes;
+    };
+    let mut previous = outer;
+    for message in tail {
+        if message != outer && message != previous {
+            previous = message;
+            causes.push(message.clone());
+        }
+    }
+    causes
+}
+
 proptest! {
-    /// Deduplication keeps every invariant for any chain shape.
+    /// Deduplication keeps exactly the documented causes for any chain shape.
     #[test]
-    fn distinct_causes_keeps_its_invariants(messages in chain_messages()) {
+    fn distinct_causes_returns_the_documented_sequence(messages in chain_messages()) {
         let error = chained_error(&messages);
-        let outer = error.to_string();
         let causes = distinct_causes(&error);
 
-        prop_assert!(
-            causes.iter().all(|cause| cause != &outer),
-            "a cause equal to the outer message survived: {causes:?}"
+        prop_assert_eq!(
+            causes,
+            documented_causes(&messages),
+            "the reported causes must match the documented rule for {:?}",
+            messages
         );
-        prop_assert!(
-            causes
-                .windows(2)
-                .all(|pair| matches!(pair, [left, right] if left != right)),
-            "two adjacent causes are equal: {causes:?}"
-        );
-        prop_assert!(
-            causes.iter().all(|cause| !cause.is_empty()),
-            "an empty cause survived: {causes:?}"
-        );
-        prop_assert!(
-            causes
-                .iter()
-                .all(|cause| messages.iter().any(|message| message == cause)),
-            "a cause was invented rather than kept: {causes:?}"
-        );
-
-        // Walking the input once for each kept cause proves the output is an
-        // order-preserving subsequence, not a reordering of the same values.
-        let mut remaining = messages.iter();
-        for cause in &causes {
-            prop_assert!(
-                remaining.any(|message| message == cause),
-                "the causes are not an ordered subsequence: {causes:?} of {messages:?}"
-            );
-        }
     }
 
     /// A chain links exactly the messages it was built from.
