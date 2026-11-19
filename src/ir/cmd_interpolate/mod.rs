@@ -364,3 +364,6 @@ mod lexical_boundary_tests;
 
 #[cfg(test)]
 mod backslash_marker_tests;
+
+#[cfg(test)]
+mod rejection_paths;

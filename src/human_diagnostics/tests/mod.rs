@@ -11,6 +11,7 @@ use strip_ansi_escapes::strip;
 use tracing_subscriber::filter::LevelFilter;
 
 mod cause_chain;
+mod properties;
 mod runner_diagnostics;
 
 /// Remove bidi isolates and terminal wrapping from localized output.

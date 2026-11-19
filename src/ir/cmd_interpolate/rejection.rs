@@ -83,15 +83,29 @@ fn invalid_command_message(command: String, reason: &'static str) -> IrGenError 
 #[cfg(test)]
 mod tests {
     //! Prove a rejection names its syntax without quoting the recipe.
+    //!
+    //! The tables bind every variant to the exact fixed text it renders, so a
+    //! swapped or emptied description fails even though the type system already
+    //! rules out quoting the command.
 
-    use super::{RejectionReason, invalid_command_error};
+    use super::super::posix_lexical::DelimiterRejection;
+    use super::{RejectionReason, invalid_command_error, invalid_heredoc_delimiter_error};
     use crate::ir::IrGenError;
+    use proptest::prelude::*;
+    use rstest::rstest;
+
+    /// A token that must never reach the rendered message.
+    const SECRET: &str = "s3cr3t-value";
+
+    /// Build a rejected command that embeds [`SECRET`].
+    fn secret_command() -> String {
+        format!("echo {SECRET} `")
+    }
 
     /// The message must carry the reason and never the rejected command.
     #[test]
     fn rejection_message_omits_the_command() {
-        const SECRET: &str = "s3cr3t-value";
-        let command = format!("echo {SECRET} `");
+        let command = secret_command();
         let error = invalid_command_error(command.clone(), RejectionReason::UnmatchedBacktick);
         let rendered = error.to_string();
         assert!(
@@ -109,5 +123,127 @@ mod tests {
             ),
             "the reason field must carry the bounded description: {error:?}"
         );
+    }
+
+    /// Every variant must reach the message with its own fixed description.
+    ///
+    /// The description is also asserted exactly, so swapping two variants or
+    /// returning a constant string fails at the table row that changed.
+    #[rstest]
+    #[case::protected_region(
+        RejectionReason::MarkerInProtectedRegion,
+        "recipe marker inside a protected shell region"
+    )]
+    #[case::here_string(
+        RejectionReason::MarkerInHereString,
+        "recipe marker inside a PowerShell here-string"
+    )]
+    #[case::raw_argument(
+        RejectionReason::MarkerInRawArgument,
+        "recipe marker inside raw native command arguments"
+    )]
+    #[case::escape_before_marker(
+        RejectionReason::EscapeBeforeMarker,
+        "escape sequence before a recipe marker"
+    )]
+    #[case::unsupported_position(
+        RejectionReason::UnsupportedMarkerPosition,
+        "recipe marker at an unsupported source position"
+    )]
+    #[case::unmatched_backtick(RejectionReason::UnmatchedBacktick, "unmatched backtick")]
+    #[case::unparseable(RejectionReason::UnparseableCommand, "unparseable shell syntax")]
+    fn every_rejection_reason_renders_its_fixed_text(
+        #[case] reason: RejectionReason,
+        #[case] expected: &str,
+    ) {
+        let command = secret_command();
+        let error = invalid_command_error(command.clone(), reason);
+        let rendered = error.to_string();
+        assert!(
+            matches!(
+                &error,
+                IrGenError::InvalidCommand { reason: actual, .. } if actual == &expected
+            ),
+            "the reason field must carry {expected:?}: {error:?}"
+        );
+        assert!(
+            rendered.contains(expected),
+            "the rendered message must name {expected:?}: {rendered}"
+        );
+        assert!(
+            !rendered.contains(&command) && !rendered.contains(SECRET),
+            "the rendered message must not quote the command: {rendered}"
+        );
+    }
+
+    /// Every delimiter rejection must keep its own fixed description.
+    #[rstest]
+    #[case::missing(
+        DelimiterRejection::MissingDelimiter,
+        "unsupported heredoc delimiter syntax: missing delimiter"
+    )]
+    #[case::unclosed_quote(
+        DelimiterRejection::UnclosedQuote,
+        "unsupported heredoc delimiter syntax: unclosed quote"
+    )]
+    #[case::trailing_backslash(
+        DelimiterRejection::TrailingBackslash,
+        "unsupported heredoc delimiter syntax: trailing backslash"
+    )]
+    #[case::line_continuation(
+        DelimiterRejection::LineContinuation,
+        "unsupported heredoc delimiter syntax: line continuation"
+    )]
+    #[case::expansion(
+        DelimiterRejection::UnsupportedExpansion,
+        "unsupported heredoc delimiter syntax: expansion"
+    )]
+    #[case::command_substitution(
+        DelimiterRejection::UnsupportedCommandSubstitution,
+        "unsupported heredoc delimiter syntax: command substitution"
+    )]
+    #[case::rendered_delimiter(
+        DelimiterRejection::RenderedDelimiterInvalid,
+        "unsupported heredoc delimiter syntax: rendered delimiter"
+    )]
+    fn every_delimiter_rejection_renders_its_fixed_text(
+        #[case] reason: DelimiterRejection,
+        #[case] expected: &str,
+    ) {
+        let command = format!("cat <<{SECRET}\nbody\n");
+        let error = invalid_heredoc_delimiter_error(command.clone(), reason);
+        let rendered = error.to_string();
+        assert!(
+            matches!(
+                &error,
+                IrGenError::InvalidCommand { reason: actual, .. } if actual == &expected
+            ),
+            "the reason field must carry {expected:?}: {error:?}"
+        );
+        assert!(
+            rendered.contains(expected),
+            "the rendered message must name {expected:?}: {rendered}"
+        );
+        assert!(
+            !rendered.contains(&command) && !rendered.contains(SECRET),
+            "the rendered message must not quote the command: {rendered}"
+        );
+    }
+
+    proptest! {
+        /// Never quote a token embedded in a rejected command.
+        ///
+        /// The named test above is the readable example; this property covers
+        /// arbitrary token text, including characters that a naive formatter
+        /// might treat as markup.
+        #[test]
+        fn rejection_never_quotes_a_token_from_the_command(secret in "[a-z0-9]{4,12}") {
+            let command = format!("echo {secret} `");
+            let error = invalid_command_error(command.clone(), RejectionReason::UnmatchedBacktick);
+            let rendered = error.to_string();
+            prop_assert!(!rendered.contains(&secret), "the token leaked: {rendered}");
+            prop_assert!(!rendered.contains(&command), "the command leaked: {rendered}");
+            prop_assert!(rendered.contains("unmatched backtick"));
+        }
     }
 }
