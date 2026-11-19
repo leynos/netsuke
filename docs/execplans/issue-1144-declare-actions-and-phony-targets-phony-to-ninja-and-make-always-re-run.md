@@ -327,16 +327,25 @@ Verification that has actually run: the generation-side suite in
 The commit gates were then run as one sequential batch on the final tree.
 `make check-fmt`, `make lint`, `make typecheck`, `make doc-coverage`,
 `make markdownlint`, `make nixie`, `make test-workflow-contracts` and
-`NETSUKE_REQUIRE_NINJA=1 make test` each exited 0; the test gate ran all 6107
+`NETSUKE_REQUIRE_NINJA=1 make test` each exited 0; the test gate ran all 6216
 nextest cases with 9 environment-gated skips and passed every doctest target.
 Doc-comment coverage measured 98% against the 80% threshold.
 
-Earlier drafts recorded 6050, 6065 and 6102 cases. Each was a real measurement
-of an earlier tree: the first before the runtime and generation suites added
-for this change were in the same batch, the second before the third review's
-alias tests existed, and 6102 before the fourth review's namespace-open and
-outside-link tests were added. A count belongs to the tree its batch ran on, so
-6107 is the figure for the tree that ships.
+Earlier drafts recorded 6050, 6065, 6102 and 6107 cases. Each was a real
+measurement of an earlier tree: the first before the runtime and generation
+suites added for this change were in the same batch, the second before the
+third review's alias tests existed, 6102 before the fourth review's
+namespace-open and outside-link tests were added, and 6107 before the branch
+was rebased onto `main`, whose own commits added cases. A count belongs to the
+tree its batch ran on, so 6216 is the figure for the tree that ships.
+
+The rebase needed one repair beyond conflict resolution.
+`src/runner/dyndep/publication.rs` had gained a shared
+`runner::path_helpers::open_effective_dir` on this branch while `main` kept a
+local copy and, separately, replaced the publication struct's `Dir` field with
+a lease. Resolving the overlap kept the shared helper but left the old
+`cap_std::fs_utf8::Dir` import behind, which `-D warnings` rejected as unused.
+The import is gone; the module has no remaining use for the type.
 
 The first review then raised shape questions the generation tests could not
 answer, and the fixes changed executable behaviour:
