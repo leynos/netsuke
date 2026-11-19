@@ -233,8 +233,6 @@ fn command_rejection(command: &str, shell: RecipeShell) -> Option<RejectionReaso
         .then_some(RejectionReason::UnparseableCommand)
 }
 
-
-
 /// Identifies the private token emitted for a Netsuke recipe marker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Placeholder {

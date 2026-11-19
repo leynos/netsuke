@@ -9817,9 +9817,10 @@ through the same entry point instead of letting the lexical state activate the
 queue directly; the comment itself is still copied verbatim. Rejections map
 through `invalid_heredoc_boundary_error`, beside the delimiter rejection in
 `rejection.rs`, to `IrGenError::InvalidCommand` with the reason as bounded
-fixed text, exactly as delimiter rejections do. Regressions for both
-traversals are in
-`src/ir/cmd_interpolate/tests/heredoc/boundary_tests.rs`, and the
+fixed text, exactly as delimiter rejections do. That text is fixed English
+inside the localized sentence rather than translated prose, so a new rejection
+variant adds no locale entry to any catalogue. Regressions for both traversals
+are in `src/ir/cmd_interpolate/tests/heredoc/boundary_tests.rs`, and the
 quoted-newline injection path runs through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
 
