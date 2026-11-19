@@ -16,7 +16,8 @@ the resolvers they share.
 import dataclasses
 import typing as typ
 
-import authorize_release_writes as policy
+import authorize_release_writes as adapter
+import release_write_policy as policy
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -143,6 +144,10 @@ class Scenario:
     def policy_context(self) -> policy.ReleaseContext:
         """Build the pure policy context for this scenario.
 
+        The raw values are handed to the same adapter the workflow step runs, so
+        the contract exercises the parsing and origin classification a live run
+        performs instead of reproducing them.
+
         Returns
         -------
         policy.ReleaseContext
@@ -150,7 +155,7 @@ class Scenario:
         """
         arrival = self.arrival
         resolver = self.resolver_outputs
-        return policy.ReleaseContext(
+        return adapter.WorkflowInputs(
             publish=arrival.publish,
             dry_run=arrival.dry_run,
             event_name=arrival.event_name,
@@ -162,7 +167,7 @@ class Scenario:
             resolver_should_upload_workflow_artifacts=resolver[
                 "should-upload-workflow-artifacts"
             ],
-        )
+        ).as_context()
 
     @property
     def authorization(self) -> policy.ReleaseAuthorization:

@@ -1,4 +1,11 @@
-"""Check the isolated write-enabled half of release publication."""
+"""Check the isolated write-enabled half of release publication.
+
+The publication gate reads the ``should_publish`` output the authorization step
+decides, so a run the policy denies never reaches a write-enabled job. The
+scenario value objects come from ``release_publish_path_scenario_model``.
+
+Run via ``make test-workflow-contracts``.
+"""
 
 import dataclasses
 import typing as typ

@@ -1,4 +1,15 @@
-"""Prove dry runs reach release staging without publishing a release."""
+"""Aggregate the release publish-path contract checks.
+
+This module composes the checks that decide whether a release run may reach a
+write-enabled job: the authorization wiring, the metadata-output resolver, and
+the publication, verification and consumer-smoke paths. The authorization
+decision itself comes from ``scripts/authorize_release_writes.py`` through
+``release_publish_path_scenario_model``, so the contract checks the same rule a
+live run applies. The scenario table lives in
+``release_publish_path_scenarios``.
+
+Run via ``make test-workflow-contracts``.
+"""
 
 import dataclasses
 

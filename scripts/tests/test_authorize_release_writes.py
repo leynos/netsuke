@@ -1,287 +1,175 @@
-"""Specify the release-write authorization boundary.
+"""Specify the release-authorization adapter and its command-line boundary.
 
-The pinned ``determine-release-modes`` action answers ``should-publish: true``
-for every ``push`` before it consults the reusable ``publish`` input. A reusable
-caller that inherits a push trigger therefore reaches ``publish-release`` unless
-the workflow takes its own decision. These rows pin that decision: raw
-``dry-run: true`` is an unconditional veto, a reusable invocation needs an
-explicit ``publish: true``, and only a direct tag push of this workflow may
-publish on the resolver's word alone.
+``scripts/authorize_release_writes.py`` translates the workflow step's raw
+environment into the typed context ``release_write_policy`` decides over, then
+renders the decision for ``GITHUB_OUTPUT``. Two contracts meet here: a raw
+spelling GitHub cannot emit is refused at this boundary instead of being
+guessed at, and the step's command-line entry point writes the outputs, the
+notice, and the exit status the workflow reads.
 
-The two Hypothesis properties are the security claims rather than samples of
-them: no combination of context and resolver output lets a raw dry run publish,
-and no reusable invocation without ``publish: true`` publishes. The named rows
-keep the protocol edges readable beside those properties.
+The command-line tests spawn a child process with a complete environment.
+That keeps the parent test process's environment untouched, which the
+repository's testing standard requires, and exercises the same entry point a
+live run uses.
 """
 
 import dataclasses
-import typing as typ
+import os
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - the CLI boundary.
+import sys
+from pathlib import Path
 
-import authorize_release_writes as policy
+import authorize_release_writes as adapter
 import pytest
-from hypothesis import given
-from hypothesis import strategies as st
-
-if typ.TYPE_CHECKING:
-    from pathlib import Path
+import release_write_policy as policy
 
 REPOSITORY = "leynos/netsuke"
 TAG_REF = "refs/tags/v1.2.3"
 BRANCH_REF = "refs/heads/main"
 DIRECT_WORKFLOW = f"{REPOSITORY}/.github/workflows/release.yml@{TAG_REF}"
 OTHER_WORKFLOW = f"{REPOSITORY}/.github/workflows/nightly.yml@{TAG_REF}"
-_BASELINE = {
-    "publish": "",
-    "dry_run": "",
-    "event_name": "push",
-    "ref": TAG_REF,
-    "workflow_ref": DIRECT_WORKFLOW,
-    "repository": REPOSITORY,
-    "resolver_should_publish": "true",
-    "resolver_dry_run": "false",
-    "resolver_should_upload_workflow_artifacts": "true",
-}
-
-_BOOLEAN = st.sampled_from(["", "true", "false"])
-_CONTEXTS = st.builds(
-    policy.ReleaseContext,
-    publish=_BOOLEAN,
-    dry_run=_BOOLEAN,
-    event_name=st.sampled_from(["push", "pull_request", "workflow_dispatch", ""]),
-    ref=st.sampled_from([TAG_REF, BRANCH_REF, "", "refs/tags/v1.2"]),
-    workflow_ref=st.sampled_from([DIRECT_WORKFLOW, OTHER_WORKFLOW, "", "release.yml"]),
-    repository=st.sampled_from([REPOSITORY, ""]),
-    resolver_should_publish=_BOOLEAN,
-    resolver_dry_run=_BOOLEAN,
-    resolver_should_upload_workflow_artifacts=_BOOLEAN,
-)
-
-
-def _context(**overrides: str) -> policy.ReleaseContext:
-    """Build a policy context from a safe direct-push baseline plus overrides."""
-    values: dict[str, str] = dict(_BASELINE)
-    values.update(overrides)
-    return policy.ReleaseContext(**values)
-
-
-def _expected(
-    *, should_publish: str, dry_run: str, origin: str, upload: str
-) -> dict[str, str]:
-    """Name the workflow output values a matrix row expects."""
-    return {
-        "should-publish": should_publish,
-        "dry-run": dry_run,
-        "origin": origin,
-        "should-upload-workflow-artifacts": upload,
-    }
-
-
-_DIRECT_WRITE = _expected(
-    should_publish="true", dry_run="false", origin=policy.DIRECT, upload="true"
-)
-_REUSABLE_DENIED = _expected(
-    should_publish="false", dry_run="false", origin=policy.REUSABLE, upload="true"
-)
-_DENIED_WITH_ARTEFACTS = _expected(
-    should_publish="false", dry_run="true", origin=policy.REUSABLE, upload="false"
-)
+SCRIPT = Path(__file__).resolve().parents[1] / "authorize_release_writes.py"
 
 
 @pytest.mark.parametrize(
-    ("overrides", "expected"),
+    ("value", "expected"),
     [
-        pytest.param({}, _DIRECT_WRITE, id="direct-tag-push"),
-        pytest.param(
-            {"publish": "false", "workflow_ref": OTHER_WORKFLOW},
-            _REUSABLE_DENIED,
-            id="reusable-tag-push-publish-false",
-        ),
-        pytest.param(
-            {"workflow_ref": OTHER_WORKFLOW},
-            _REUSABLE_DENIED,
-            id="reusable-tag-push-materialized-false",
-        ),
-        pytest.param(
-            {"publish": "true", "workflow_ref": OTHER_WORKFLOW},
-            _expected(
-                should_publish="true",
-                dry_run="false",
-                origin=policy.REUSABLE,
-                upload="true",
-            ),
-            id="reusable-tag-push-publish-true",
-        ),
-        pytest.param(
-            {"publish": "true", "dry_run": "true", "workflow_ref": OTHER_WORKFLOW},
-            _DENIED_WITH_ARTEFACTS,
-            id="reusable-dry-run-overrides-publish-true",
-        ),
-        pytest.param(
-            {"publish": "true", "dry_run": "true"},
-            _DENIED_WITH_ARTEFACTS,
-            id="raw-dry-run-vetoes-publish",
-        ),
-        pytest.param(
-            {"publish": "true", "ref": BRANCH_REF, "workflow_ref": OTHER_WORKFLOW},
-            _REUSABLE_DENIED,
-            id="reusable-branch-push-publish-true",
-        ),
-        pytest.param(
-            {"publish": "true", "workflow_ref": "release.yml"},
-            _expected(
-                should_publish="true",
-                dry_run="false",
-                origin=policy.REUSABLE,
-                upload="true",
-            ),
-            id="unparsable-workflow-ref-applies-reusable-policy",
-        ),
-        pytest.param(
-            {"publish": "false", "workflow_ref": ""},
-            _REUSABLE_DENIED,
-            id="missing-workflow-ref-fails-closed",
-        ),
-        pytest.param(
-            {"event_name": "pull_request"},
-            _REUSABLE_DENIED,
-            id="pull-request-without-dry-run-input-is-reusable",
-        ),
-        pytest.param(
-            {"resolver_should_publish": "false"},
-            _expected(
-                should_publish="false",
-                dry_run="false",
-                origin=policy.DIRECT,
-                upload="true",
-            ),
-            id="resolver-does-not-select-publication",
-        ),
-        pytest.param(
-            {"resolver_dry_run": "true"},
-            _expected(
-                should_publish="false",
-                dry_run="true",
-                origin=policy.DIRECT,
-                upload="false",
-            ),
-            id="resolver-dry-run-vetoes-publication",
-        ),
-        pytest.param(
-            {"resolver_should_upload_workflow_artifacts": "false"},
-            _expected(
-                should_publish="true",
-                dry_run="false",
-                origin=policy.DIRECT,
-                upload="false",
-            ),
-            id="resolver-upload-flag-is-forwarded",
-        ),
+        pytest.param("", False, id="absent"),
+        pytest.param("true", True, id="true"),
+        pytest.param("false", False, id="false"),
     ],
 )
-def test_authorization_matrix(
-    overrides: dict[str, str],
-    expected: dict[str, str],
-) -> None:
-    """Resolve each protocol edge to its effective workflow outputs."""
-    outputs = policy.render_outputs(
-        policy.authorize_release_writes(_context(**overrides))
-    )
-    actual = {key: outputs[key] for key in expected}
-
-    assert actual == expected, (
-        f"{overrides!r} should render {expected!r}; got {actual!r}"
-    )
-
-
-def test_denied_reason_names_the_reusable_publish_requirement() -> None:
-    """Report why an inherited push did not authorize a release write."""
-    decision = policy.authorize_release_writes(_context(workflow_ref=OTHER_WORKFLOW))
-
-    assert "reusable" in decision.reason, (
-        f"the denial must name the reusable rule; got {decision.reason!r}"
-    )
-    assert "publish=true" in decision.reason, (
-        f"the denial must name the publish requirement; got {decision.reason!r}"
-    )
-
-
-def test_allowed_reason_names_the_invocation_origin() -> None:
-    """Report which origin authorized the write, so the log is auditable."""
-    decision = policy.authorize_release_writes(_context())
-
-    assert decision.reason == "publication authorized for a direct release", (
-        f"the reason should name the origin; got {decision.reason!r}"
+def test_supported_spellings_parse_to_flags(value: str, *, expected: bool) -> None:
+    """Parse the only values GitHub materializes for a boolean input."""
+    assert adapter.parse_boolean("publish", value) is expected, (
+        f"{value!r} should parse to {expected!r}"
     )
 
 
 @pytest.mark.parametrize(
-    ("field", "value"),
+    "value",
     [
-        pytest.param("publish", "yes", id="publish-yes"),
-        pytest.param("publish", "1", id="publish-one"),
-        pytest.param("dry_run", "TRUE", id="dry-run-uppercase"),
-        pytest.param("dry_run", "on", id="dry-run-on"),
+        pytest.param("yes", id="yes"),
+        pytest.param("1", id="one"),
+        pytest.param("TRUE", id="uppercase"),
+        pytest.param("on", id="on"),
     ],
 )
-def test_malformed_raw_inputs_are_rejected(field: str, value: str) -> None:
+def test_malformed_spellings_are_refused(value: str) -> None:
     """Refuse a spelling GitHub cannot emit instead of guessing its meaning."""
-    with pytest.raises(policy.ReleasePolicyError, match=field.replace("_", "-")):
-        policy.authorize_release_writes(_context(**{field: value}))
+    with pytest.raises(adapter.ReleaseInputError, match="publish"):
+        adapter.parse_boolean("publish", value)
 
 
-@given(context=_CONTEXTS)
-def test_raw_dry_run_true_always_denies_writes(
-    context: policy.ReleaseContext,
+_DIRECT_FACTS = adapter.InvocationFacts(
+    has_caller_inputs=False,
+    event_name="push",
+    ref=TAG_REF,
+    workflow_ref=DIRECT_WORKFLOW,
+    repository=REPOSITORY,
+)
+
+
+@pytest.mark.parametrize(
+    ("facts", "expected"),
+    [
+        pytest.param(_DIRECT_FACTS, policy.Origin.DIRECT, id="direct-tag-push"),
+        pytest.param(
+            dataclasses.replace(
+                _DIRECT_FACTS, has_caller_inputs=True, workflow_ref=OTHER_WORKFLOW
+            ),
+            policy.Origin.REUSABLE,
+            id="materialized-caller-inputs",
+        ),
+        pytest.param(
+            dataclasses.replace(
+                _DIRECT_FACTS, event_name="pull_request", ref="refs/pull/1/merge"
+            ),
+            policy.Origin.REUSABLE,
+            id="non-push-event",
+        ),
+        pytest.param(
+            dataclasses.replace(_DIRECT_FACTS, workflow_ref=OTHER_WORKFLOW),
+            policy.Origin.REUSABLE,
+            id="other-workflow",
+        ),
+        pytest.param(
+            dataclasses.replace(_DIRECT_FACTS, workflow_ref="release.yml"),
+            policy.Origin.REUSABLE,
+            id="unparsable-workflow-ref-fails-closed",
+        ),
+        pytest.param(
+            dataclasses.replace(_DIRECT_FACTS, ref=""),
+            policy.Origin.REUSABLE,
+            id="missing-ref-fails-closed",
+        ),
+        pytest.param(
+            dataclasses.replace(_DIRECT_FACTS, repository=""),
+            policy.Origin.REUSABLE,
+            id="missing-repository-fails-closed",
+        ),
+    ],
+)
+def test_origin_classification(
+    facts: adapter.InvocationFacts, expected: policy.Origin
 ) -> None:
-    """No other input or resolver answer can turn a raw dry run into a write."""
-    decision = policy.authorize_release_writes(
-        dataclasses.replace(context, dry_run="true")
-    )
-
-    assert decision.should_publish is False, (
-        "a raw dry-run request must deny release writes for every context"
-    )
-    assert decision.dry_run is True, (
-        "a raw dry-run request must keep the run in dry-run mode"
+    """Classify only this workflow's own tag push as direct."""
+    assert adapter.classify_origin(facts) is expected, (
+        f"{facts!r} should classify as {expected!r}"
     )
 
 
-@given(context=_CONTEXTS)
-def test_reusable_without_publish_true_always_denies_writes(
-    context: policy.ReleaseContext,
-) -> None:
-    """A reusable invocation publishes only when it explicitly asks to."""
-    decision = policy.authorize_release_writes(
-        dataclasses.replace(context, publish="false", repository=REPOSITORY)
+def test_outputs_name_the_decision_the_workflow_reads() -> None:
+    """Render the workflow's keys from the policy's typed decision."""
+    decision = policy.ReleaseAuthorization(
+        origin=policy.Origin.REUSABLE,
+        should_publish=False,
+        dry_run=True,
+        should_upload_workflow_artifacts=False,
+        reason="publication denied: the caller requested a dry run",
     )
 
-    assert decision.should_publish is False, (
-        "a reusable invocation without publish=true must deny release writes"
+    outputs = adapter.render_outputs(decision)
+
+    assert outputs["should-publish"] == "false", (
+        "the rendered decision must deny publication"
     )
-    assert decision.origin == policy.REUSABLE, (
-        "a materialized publish input proves the run is reusable"
-    )
+    assert outputs["dry-run"] == "true", "the rendered decision must record dry-run"
+    assert outputs["origin"] == "reusable", "the rendered decision must name the origin"
 
 
 def _run_cli(
-    monkeypatch: pytest.MonkeyPatch, output: Path, **inputs: str
-) -> dict[str, str]:
-    """Run the CLI against the given environment and return its step outputs.
+    tmp_path: Path, **inputs: str
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    """Run the step's entry point in a child process with a complete environment.
 
-    ``monkeypatch`` is the seam the scripting standards prescribe for a script
-    that reads its inputs from the environment, and pytest restores every
-    variable when the test ends. The policy itself is tested purely; only this
-    adapter test needs the environment of the process it runs in.
+    Returns
+    -------
+    tuple[subprocess.CompletedProcess[str], Path]
+        The child's completed process and the output file it was pointed at.
+    """
+    output = tmp_path / "github-output"
+    env = {"PATH": os.environ.get("PATH", ""), "GITHUB_OUTPUT": str(output)}
+    env.update({f"INPUT_{name.upper()}": value for name, value in inputs.items()})
+    completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed argv, no shell.
+        [sys.executable, str(SCRIPT)],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        shell=False,
+    )
+    return completed, output
+
+
+def _read_outputs(output: Path) -> dict[str, str]:
+    """Read the step outputs the child wrote.
 
     Returns
     -------
     dict[str, str]
-        The step outputs the adapter wrote, keyed by their declared names.
+        The written outputs, keyed by their declared names.
     """
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
-    for name, value in inputs.items():
-        monkeypatch.setenv(f"INPUT_{name.upper()}", value)
-    policy.app([], result_action="return_value")
     return dict(
         line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines()
     )
@@ -304,53 +192,67 @@ def _publish_inputs(**overrides: str) -> dict[str, str]:
     return values
 
 
-def test_cli_writes_the_effective_outputs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_writes_the_effective_outputs(tmp_path: Path) -> None:
     """Publish the decision where the workflow reads it and log the override."""
-    values = _run_cli(monkeypatch, tmp_path / "github-output", **_publish_inputs())
+    completed, output = _run_cli(tmp_path, **_publish_inputs())
+    values = _read_outputs(output)
 
+    assert completed.returncode == 0, (
+        f"a supported request should succeed; stderr was {completed.stderr!r}"
+    )
     assert values["should-publish"] == "false", (
         "the CLI must write the policy's effective decision"
     )
     assert values["dry-run"] == "false", (
         "the CLI must write the effective dry-run decision"
     )
-    assert values["origin"] == policy.REUSABLE, (
+    assert values["origin"] == policy.Origin.REUSABLE, (
         "the CLI must record the invocation origin"
     )
-    assert "::notice" in capsys.readouterr().out, (
+    assert "::notice" in completed.stdout, (
         "a resolver override must be visible in the workflow annotation log"
     )
 
 
-def test_cli_allows_a_supported_non_publishing_request(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_allows_a_supported_non_publishing_request(tmp_path: Path) -> None:
     """A denied publication is a supported decision, not a step failure."""
-    values = _run_cli(
-        monkeypatch,
-        tmp_path / "github-output",
-        **_publish_inputs(ref=BRANCH_REF),
-    )
+    completed, output = _run_cli(tmp_path, **_publish_inputs(ref=BRANCH_REF))
+    values = _read_outputs(output)
 
+    assert completed.returncode == 0, (
+        f"a non-publishing request is supported; stderr was {completed.stderr!r}"
+    )
     assert values["should-publish"] == "false", (
         "a non-publishing reusable request must be recorded, not refused"
     )
 
 
+@pytest.mark.parametrize(
+    ("overrides", "name"),
+    [
+        pytest.param({"publish": "sometimes"}, "publish", id="publish-spelling"),
+        pytest.param(
+            {"resolver_should_publish": "yes"},
+            "resolver should-publish",
+            id="resolver-spelling",
+        ),
+    ],
+)
 def test_cli_rejects_a_malformed_input(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, overrides: dict[str, str], name: str
 ) -> None:
     """A malformed input fails the step with a diagnostic, not a guess."""
-    with pytest.raises(SystemExit) as exit_info:
-        _run_cli(
-            monkeypatch,
-            tmp_path / "github-output",
-            **_publish_inputs(publish="sometimes"),
-        )
+    completed, output = _run_cli(tmp_path, **_publish_inputs(**overrides))
 
-    assert exit_info.value.code == 2, "a malformed input must fail the step"
-    assert "::error" in capsys.readouterr().err, (
+    assert completed.returncode == 2, (
+        f"a malformed input must fail the step; stderr was {completed.stderr!r}"
+    )
+    assert "::error" in completed.stderr, (
         "the failure must be visible as a workflow error annotation"
+    )
+    assert name in completed.stderr, (
+        f"the annotation must name the offending input {name!r}"
+    )
+    assert not output.exists(), (
+        "a refused run must not publish step outputs for a decision it did not make"
     )

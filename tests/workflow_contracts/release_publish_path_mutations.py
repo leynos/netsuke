@@ -1,4 +1,12 @@
-"""Build labelled workflow mutations for the release-path contract."""
+"""Build labelled workflow mutations for the release-path contract.
+
+Each mutation is a named, plausible defect the contract must report, including
+the #1001 authorization mutations that reopen a write path for a run the policy
+denies. The crates.io mutations are dispatched from
+``release_publish_crates_io_mutations`` so that catalogue keeps one home.
+
+Run via ``make test-workflow-contracts``.
+"""
 
 import copy
 import dataclasses

@@ -9,7 +9,7 @@ misjudge.
 
 import typing as typ
 
-import authorize_release_writes as policy
+import authorize_release_writes as adapter
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
 from release_publish_path_authorization import AUTHORIZATION_STEP, RESOLVER_STEP
 from workflow_loading import REPO_ROOT, require_mapping, workflow_job
@@ -34,7 +34,7 @@ def _step_contexts(scenario: Scenario) -> dict[str, object]:
         "steps": {
             RESOLVER_STEP: {"outputs": dict(scenario.resolver_outputs)},
             AUTHORIZATION_STEP: {
-                "outputs": policy.render_outputs(scenario.authorization)
+                "outputs": adapter.render_outputs(scenario.authorization)
             },
         }
     }

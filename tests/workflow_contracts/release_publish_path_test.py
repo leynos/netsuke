@@ -1,4 +1,13 @@
-"""Prove dry runs reach release staging without publishing."""
+"""Test the release publish-path contract and the authorization wiring.
+
+The cases cover two promises: a dry run still reaches release staging without
+writing a release, and the authorization step closes every write gate for a run
+its policy denies. ``release_publish_path_authorization`` owns the wiring
+checks, ``release_publish_path_contract`` composes them with the publication
+paths, and both are exercised here against the real workflow.
+
+Run via ``make test-workflow-contracts``.
+"""
 
 import copy
 

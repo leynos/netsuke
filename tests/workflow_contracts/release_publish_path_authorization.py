@@ -10,7 +10,8 @@ gates it feeds, and the job-level dry-run veto.
 
 import shlex
 
-import authorize_release_writes as policy
+import authorize_release_writes as adapter
+import release_write_policy as policy
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
 from workflow_loading import job_steps, require_mapping, workflow_job
@@ -42,17 +43,13 @@ EXPECTED_INPUTS = {
 #: publication anyway, so this is exactly the reported vulnerability: every gate
 #: downstream of the resolver must close.
 _DENIED_BUT_SELECTED = policy.ReleaseContext(
-    publish="false",
-    dry_run="false",
-    event_name="push",
+    publish=False,
+    dry_run=False,
+    origin=policy.Origin.REUSABLE,
     ref="refs/tags/v1.2.3",
-    workflow_ref=(
-        "leynos/netsuke/.github/workflows/release-dry-run.yml@refs/heads/main"
-    ),
-    repository="leynos/netsuke",
-    resolver_should_publish="true",
-    resolver_dry_run="false",
-    resolver_should_upload_workflow_artifacts="true",
+    resolver_should_publish=True,
+    resolver_dry_run=False,
+    resolver_should_upload_workflow_artifacts=True,
 )
 
 
@@ -209,20 +206,41 @@ def _gate_context() -> dict[str, object]:
         "needs": {},
         "steps": {
             RESOLVER_STEP: {"outputs": dict(_resolver_outputs())},
-            AUTHORIZATION_STEP: {"outputs": policy.render_outputs(decision)},
+            AUTHORIZATION_STEP: {"outputs": adapter.render_outputs(decision)},
         },
     }
 
 
 def _resolver_outputs() -> dict[str, str]:
-    """Return the resolver's answer for the denied run's push trigger."""
+    """Return the resolver's answer for the denied run's push trigger.
+
+    The resolver answers in workflow output spelling, which is what the metadata
+    job reads even though the policy holds the same answers as typed flags.
+
+    Returns
+    -------
+    dict[str, str]
+        The resolver outputs the denied run's gates evaluate.
+    """
+    context = _DENIED_BUT_SELECTED
     return {
-        "should-publish": _DENIED_BUT_SELECTED.resolver_should_publish,
-        "dry-run": _DENIED_BUT_SELECTED.resolver_dry_run,
-        "should-upload-workflow-artifacts": (
-            _DENIED_BUT_SELECTED.resolver_should_upload_workflow_artifacts
+        "should-publish": _flag(value=context.resolver_should_publish),
+        "dry-run": _flag(value=context.resolver_dry_run),
+        "should-upload-workflow-artifacts": _flag(
+            value=context.resolver_should_upload_workflow_artifacts
         ),
     }
+
+
+def _flag(*, value: bool) -> str:
+    """Render one resolver flag in workflow output spelling.
+
+    Returns
+    -------
+    str
+        ``"true"`` or ``"false"``.
+    """
+    return "true" if value else "false"
 
 
 def _check_step_order(release: dict[str, object], violations: list[str]) -> None:

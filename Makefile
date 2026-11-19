@@ -374,9 +374,11 @@ test-workflow-contracts: ## Validate the CV-005 contracts and the GitHub Actions
 		pytest scripts/tests/test_authorize_release_writes.py \
 			scripts/tests/test_ensure_draft_release.py \
 			scripts/tests/test_install_orthohelp.py \
+			scripts/tests/test_release_write_policy.py \
 			scripts/tests/test_report_glibc_floor.py \
 			scripts/tests/test_resolve_wix_extension_version.py \
 			scripts/authorize_release_writes.py scripts/ensure_draft_release.py \
+			scripts/release_write_policy.py \
 			scripts/install_orthohelp.py \
 			scripts/report_glibc_floor.py scripts/resolve_wix_extension_version.py \
 			scripts/hoist_binstall_archives.py \
