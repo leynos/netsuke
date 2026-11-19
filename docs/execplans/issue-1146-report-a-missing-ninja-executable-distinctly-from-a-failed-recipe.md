@@ -46,6 +46,9 @@ temporary build file.
 - [x] Phase 3b: quick start, users' guide, design document, and developers'
   guide updated.
 - [ ] Phase 3c: run the full gate set and clear CodeRabbit review.
+  - [ ] The last step is the reviewer's approval of the merge candidate; the
+    gates and every review finding are complete, and this item is what still
+    keeps the plan open.
   - [x] `make check-fmt`, `make lint`, and `make doc-coverage` (98.29%).
   - [x] `make test` was run far enough to expose one regression in the bounded
     legacy-recipe telemetry classifier; both new `RunnerError` variants now map
@@ -225,6 +228,17 @@ temporary build file.
       `runner_diagnostics` as the owner of the shared fixtures;
     - the users' guide lists `launch` and `exit_status` in the
       `error_category` label set and says which category means what.
+  - [x] Re-ran the whole gate set on `bf7058ce8`: check-fmt, lint,
+    doc-coverage (98.30%), test (6163 passed, 9 skipped), workflow contracts,
+    documentation contracts, markdownlint (0 issues in 238 files), nixie, and
+    typecheck, with the content binding unchanged. Two earlier attempts of this
+    round were red: a Markdown wrap in the users' guide that `check-fmt`
+    rejected, then the spelling gate's `parameterised` → `parameterized`.
+  - [x] The pre-merge documentation check found two gaps, both addressed:
+    `docs/netsuke-design.md` now records why the exit summary renders the
+    status through the command layer's exit-status and signal suffixes rather
+    than `ExitStatus`'s English, platform-defined `Display`; and this plan
+    names the reviewer's approval as the one step Phase 3c still waits on.
 
 ## Plan of work
 

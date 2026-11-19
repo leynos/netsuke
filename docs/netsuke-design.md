@@ -3253,6 +3253,15 @@ status and names the tool when the operation was not `build`. Neither summary
 repeats the temporary build file, because that path identifies Netsuke's own
 implementation detail rather than the fault.
 
+The exit summary renders the status through the command layer's existing
+`stdlib.command.exit_status_suffix` and `stdlib.command.signal_suffix`
+catalogue entries rather than embedding `ExitStatus`'s `Display`. That text is
+English-only and platform-defined — Unix says "exit status" and Windows says
+"exit code" — so echoing it would leave an untranslated fragment inside every
+localized summary and word it differently per platform. The raw status text
+survives in the cause chain, where the legacy `ninja exited with …` wording is
+preserved.
+
 The `ninja_subprocess` span and its spawn and exit events carry
 `env_override_count` and `path_overridden`, derived from the prepared
 `Command`, so an environment-caused failure is diagnosable from the logs alone.
