@@ -192,6 +192,27 @@ fn script_escaped_parenthesis_inside_backtick_body_stays_literal() {
     );
 }
 
+/// Keep a backtick body line continuation from ending the command line.
+///
+/// The continued newline belongs to the body, so the command line is still
+/// open and the heredoc queued before the backtick has not started. Treating
+/// the newline as an ordinary one would copy the rest of the line, including
+/// the marker, as heredoc data.
+#[rstest]
+#[case::unquoted_body("cat <<EOF `echo x \\\ny` {marker}\nEOF\n")]
+#[case::double_quoted_body("cat <<EOF `\"echo x \\\ny\"` {marker}\nEOF\n")]
+fn script_backtick_body_line_continuation_keeps_the_command_line_open(#[case] template: &str) {
+    let bindings = context_bindings(RecipeShell::Posix);
+    let command = template.replace("{marker}", INS_TOKEN);
+    let actual = interpolate_script_with_bindings(&command, &bindings)
+        .expect("a line continuation inside a body must not start the heredoc");
+    assert_eq!(
+        actual,
+        command.replace(INS_TOKEN, "UNQ"),
+        "a marker on the command line in {command:?} must still be lowered"
+    );
+}
+
 /// Prove that `\'` inside a body's single quotes does not escape the quote.
 ///
 /// With the quote closed, the `)` that follows is unquoted in the body, so it

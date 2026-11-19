@@ -665,7 +665,9 @@ escaped backtick therefore does not end the region. Every other escape belongs
 to the body's own quoting: in unquoted body text a backslash makes the next
 character literal, so an escaped `)` cannot close a frame, and in the body's
 single quotes a backslash has no special meaning, so it cannot swallow the
-quote that closes them.
+quote that closes them. A backslash before a newline continues the line in
+unquoted and double-quoted body text, so that newline still belongs to the open
+command line and must not start a heredoc body queued earlier on it.
 
 Nesting that would leave the saved context without its owner fails closed with
 `IrGenError::InvalidCommand`; it is not approximated. Two shapes are rejected:
