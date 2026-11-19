@@ -405,15 +405,23 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   `)` that closes a command or arithmetic expansion also stays in the
   surrounding word, so `#` immediately after it does not start a comment. A `)`
   that terminates a `case` pattern is an operator instead, and the two are
-  lexically identical without the `case` grammar, so a substitution whose
+  lexically identical without the `case` grammar. The scanner therefore tracks
+  `case ... esac` at the command positions the shell keeps open: the start of
+  the substitution, after an operator or newline, inside a brace group or
+  function body, behind a `time` option, and behind a `coproc` name. A pattern
+  terminator then no longer closes the substitution, and a substitution whose
   source contains `case` is rejected when a `)` is immediately followed by `#`.
-  PowerShell permits markers only at unquoted sites and rejects other
-  shell-sensitive contexts. Longer identifiers such as `$input` and `$output`,
-  and non-placeholder text inside backticks, remain unchanged. A scalar command
-  is emitted unchanged, but still undergoes marker lowering and backend
-  conversion such as escaping and validation. On Unix and the explicit Windows
-  Bash compatibility route, a list is lowered to brace groups that evaluate
-  each entry through a shell-quoted `eval` payload and are joined by `&&`. The
+  A `case` written where the scanner's word model cannot place it, such as
+  behind a quoted `coproc` name, fails closed when a whole-word `in` precedes
+  the closer and a path marker follows, so a pattern terminator is never
+  mistaken for the closer while a marker depends on the answer. PowerShell
+  permits markers only at unquoted sites and rejects other shell-sensitive
+  contexts. Longer identifiers such as `$input` and `$output`, and
+  non-placeholder text inside backticks, remain unchanged. A scalar command is
+  emitted unchanged, but still undergoes marker lowering and backend conversion
+  such as escaping and validation. On Unix and the explicit Windows Bash
+  compatibility route, a list is lowered to brace groups that evaluate each
+  entry through a shell-quoted `eval` payload and are joined by `&&`. The
   literal `command_isolation` field selects `shared` or `isolated` and defaults
   to `shared`. Only `isolated` is serialized; omitting `shared` preserves
   legacy action hashes, while `isolated` contributes to action identity. The

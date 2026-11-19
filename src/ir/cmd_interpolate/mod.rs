@@ -15,6 +15,8 @@ use std::cell::Cell;
 use super::IrGenError;
 use crate::recipe_shell::RecipeShell;
 
+mod case_nesting;
+
 mod command_substitution;
 
 mod posix_lexical;
@@ -129,15 +131,39 @@ thread_local! {
     static BINDING_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
 }
 
+
+#[cfg(test)]
+thread_local! {
+    static BINDING_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
+
+#[cfg(test)]
+thread_local! {
+    static BINDING_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
+
+#[cfg(test)]
+thread_local! {
+    static BINDING_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
 /// Count one binding preparation in test builds.
 #[cfg(test)]
 fn record_binding_preparation() {
     BINDING_PREPARATIONS.with(|count| count.set(count.get() + 1));
 }
 
+
+
+
 /// Skip binding-preparation counting outside test builds.
 #[cfg(not(test))]
 const fn record_binding_preparation() {}
+
+
+
 
 /// Reset the test-only count of binding preparations on this thread.
 #[cfg(test)]

@@ -126,12 +126,12 @@ fn case_real_closer_preserves_quote_context_by_rejecting() {
 // chose to repeat, would accept this recipe and encode a later marker for the
 // wrong context.
 #[test]
-fn case_substitution_real_closer_deep_in_long_recipe_fails_closed() {
+fn case_substitution_real_closer_beyond_diagnostic_snippet_fails_closed() {
     let padding = format!("echo {} $(case x in x) :;; esac)", "x".repeat(200));
     let (template, _) = inert_comment_case(&padding, None);
     assert_both_reject(
         &template,
-        "an ambiguous case boundary deep in a long recipe must fail closed",
+        "an ambiguous case boundary beyond the snippet must fail closed",
     );
 }
 
@@ -143,7 +143,7 @@ fn case_substitution_real_closer_deep_in_long_recipe_fails_closed() {
 // syntax made the boundary ambiguous. The position must still be exact deep
 // inside a long recipe, where a bounded prefix could not have reported it.
 #[test]
-fn ambiguous_boundary_diagnostic_reports_position_in_long_recipe() {
+fn ambiguous_boundary_diagnostic_reports_position_past_the_snippet_limit() {
     let padding = format!("echo {} $(case x in x) :;; esac)", "x".repeat(200));
     let (template, _) = inert_comment_case(&padding, None);
     let boundary = template
@@ -154,7 +154,7 @@ fn ambiguous_boundary_diagnostic_reports_position_in_long_recipe() {
 
     for interpolate in both_interpolators() {
         let error = interpolate(&template, &bindings)
-            .expect_err("an ambiguous boundary deep in a long recipe must fail closed");
+            .expect_err("an ambiguous boundary past the snippet limit must fail closed");
         let IrGenError::AmbiguousSubstitutionBoundary { position, message } = error else {
             panic!("unexpected error: {error:?}");
         };
@@ -213,6 +213,109 @@ fn case_substitution_inside_outer_quotes_fails_closed() {
     );
 }
 
+// Verify a marker in a double-quoted substitution's case arm stays protected.
+//
+// The reported trigger pairs the enclosing double quotes with a `case` arm
+// inside `$( )`. The pattern terminator must leave the substitution open, so
+// the marker in the arm is refused rather than encoded with the outer
+// double-quote context. Lowering it there would place executable shell syntax
+// inside the substitution body the shell evaluates.
+#[test]
+fn case_body_marker_inside_outer_quotes_is_refused() {
+    let template = format!("echo \"$(case x in x) echo {INS_TOKEN} ;; esac)\"");
+    let bindings = hostile_posix_bindings();
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &bindings)
+            .expect_err("a marker in an outer-quoted case arm must stay protected");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+    }
+}
+
+// Verify a case inside a brace group keeps its pattern terminator distinct.
+//
+// `{ case ...; }` is the POSIX grouping form a trusted script may use to keep
+// a case construct together inside `$( )`. The `case` keyword is the first word
+// of a command there, so it opens a construct exactly as it would at the start
+// of the substitution. A tracker that models only separators and a fixed list
+// of compound-command keywords misses it, reads the pattern terminator as the
+// substitution closer, and lowers the arm's marker for the outer quote context.
+#[test]
+fn case_inside_a_brace_group_keeps_the_substitution_open() {
+    let template = format!("echo \"$( {{ case x in x) echo {INS_TOKEN} ;; esac; }} )\"");
+    let bindings = hostile_posix_bindings();
+
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &bindings)
+            .expect_err("a marker in a brace-grouped case arm must stay protected");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+    }
+}
+
+// Verify a case in a function body keeps the substitution protection active.
+//
+// A function definition inside `$( )` puts its body in a brace group. The
+// `case` keyword follows the body's `{`, which stands in command position, and
+// the arm's marker must remain inside the substitution. This is the shape a
+// trusted script uses when it factors a case arm into a helper before calling
+// it from the substitution.
+#[test]
+fn case_in_a_function_body_keeps_the_substitution_open() {
+    let template =
+        format!("echo \"$( helper() {{ case x in x) echo {INS_TOKEN} ;; esac; }}; helper )\"");
+    let bindings = hostile_posix_bindings();
+
+    let error = interpolate_script_with_bindings(&template, &bindings)
+        .expect_err("a marker in a function-scoped case arm must stay protected");
+    assert!(
+        matches!(error, IrGenError::InvalidCommand { .. }),
+        "the marker must not be lowered for the outer quote context: {error:?}"
+    );
+}
+
+// Verify a brace-grouped case substitution without a marker is accepted.
+//
+// Recognizing `{` as a command-position word must not reject the group form
+// itself. The substitution here has no marker and its real closer is not
+// followed by `#`, so its text must survive interpolation unchanged.
+#[test]
+fn brace_grouped_case_substitution_without_markers_is_accepted() {
+    let template = "echo \"$( { case x in x) printf y ;; esac; } )\"";
+    let bindings = bindings();
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(template, &bindings)
+                .expect("a case inside a brace group is supported shell syntax"),
+            template,
+            "a brace-grouped case substitution must be left unchanged: {template}"
+        );
+    }
+}
+
+// Verify a marker after a brace-grouped case substitution is still lowered.
+//
+// The group form must keep the substitution open only while the case runs. A
+// marker after the substitution's own closer is ordinary outer text, so the
+// tracker must not leave the construct open past the real `)`.
+#[test]
+fn marker_after_a_brace_grouped_case_substitution_is_lowered() {
+    let template = format!("echo \"$( {{ case x in x) printf y ;; esac; }} )\" {OUTS_TOKEN}");
+    let expected = "echo \"$( { case x in x) printf y ;; esac; } )\" output";
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(&template, &bindings())
+                .expect("a marker after the grouped substitution must be lowered"),
+            expected,
+            "a marker after the grouped substitution must lower to its path"
+        );
+    }
+}
+
 // Verify a `case` inside a nested group still finds its pattern terminator.
 //
 // `case` opens at the parenthesis depth of the group that contains it, so the
@@ -261,3 +364,4 @@ fn case_spelled_inside_a_comment_fails_closed() {
         "a whole-word 'case' inside a comment must still fail closed",
     );
 }
+// weave: run 'weave explain src/ir/cmd_interpolate/posix_lexical/tests/case/boundary.rs' for per-hunk detail, 'weave check' to verify your resolution

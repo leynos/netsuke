@@ -5,8 +5,9 @@
 //! helpers own that nesting state, keeping the parent traversal within the
 //! repository's module-size cap.
 
+use super::super::case_nesting::{CaseNesting, CaseObservation};
 use super::super::command_substitution::{
-    CaseNesting, CaseObservation, SubstitutionBoundary, reject_ambiguous_case_comment,
+    SubstitutionBoundary, reject_ambiguous_case_comment, reject_unplaced_case,
 };
 use super::super::posix_lexical::SubstitutionKind;
 use super::super::{RejectionReason, invalid_command_error};
@@ -124,6 +125,7 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             return Ok(None);
         };
         if is_closed {
+            reject_unplaced_case(self.chars, &boundary)?;
             self.posix_lexical.leave_command_substitution_region();
             reject_ambiguous_case_comment(self.chars, &boundary)?;
             self.posix_lexical.record_closed_command_substitution(pos);
@@ -141,12 +143,13 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             .last()
             .filter(|substitution| substitution.parenthesis_depth == 1)
             .map_or_else(
-                || SubstitutionBoundary::new(pos, None, false),
+                || SubstitutionBoundary::new(pos, None, false, false),
                 |substitution| {
                     SubstitutionBoundary::new(
                         pos,
                         Some(substitution.start),
                         substitution.case_nesting.saw_case(),
+                        substitution.case_nesting.has_unplaced_case(),
                     )
                 },
             )
