@@ -76,6 +76,10 @@ impl Document {
     }
 
     /// Read the document at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the file cannot be read.
     pub fn read(path: &Path) -> Result<Self> {
         let text =
             test_fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
@@ -83,11 +87,13 @@ impl Document {
     }
 
     /// Borrow the text under contract.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.text
     }
 
     /// Return the text with runs of whitespace collapsed to single spaces.
+    #[must_use]
     pub fn collapsed(&self) -> Self {
         Self {
             text: self.text.split_whitespace().collect::<Vec<_>>().join(" "),
@@ -98,6 +104,10 @@ impl Document {
     ///
     /// A section runs to the next second-level heading, so a contract cannot be
     /// satisfied by prose from a neighbouring section.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the document does not contain `heading`.
     pub fn collapsed_section(&self, heading: &str) -> Result<Self> {
         let start = self
             .text
@@ -126,6 +136,10 @@ impl Document {
     ///
     /// The diagnostic names both the promise the group breaks and the fragment
     /// that is missing, so a failure does not send the reader hunting.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error naming the broken promise and the missing fragment.
     pub fn ensure_all(&self, groups: &[RequiredProse]) -> Result<()> {
         for group in groups {
             for fragment in group.fragments {
@@ -140,6 +154,7 @@ impl Document {
     }
 
     /// Report whether the text contains `fragment`.
+    #[must_use]
     pub fn contains(&self, fragment: &str) -> bool {
         self.text.contains(fragment)
     }
@@ -150,6 +165,7 @@ impl Document {
     /// the directory it explains can sit on different lines of one wrapped
     /// paragraph, so a line-scoped search would reject prose that reads
     /// correctly.
+    #[must_use]
     pub fn paragraphs_naming(&self, needle: &str) -> Vec<&str> {
         self.text
             .split("\n\n")
@@ -168,6 +184,11 @@ impl Document {
 /// naming the 32-bit path must either attribute it to that release or present
 /// it as the old location being cleaned up; checking only the first paragraph
 /// would let a later one send beta5 users back to the 32-bit directory.
+///
+/// # Errors
+///
+/// Returns an error naming the document, the missing location, or the
+/// paragraph that names the legacy directory without qualifying it.
 pub fn assert_every_document_names_the_windows_install_locations() -> Result<()> {
     for path in READMES.into_iter().chain([USERS_GUIDE]) {
         let document = Document::read(Path::new(path))?;
@@ -201,6 +222,7 @@ pub fn assert_every_document_names_the_windows_install_locations() -> Result<()>
 /// as "remove" qualifies a mention only when it sits next to the directory, so
 /// "add the 32-bit directory and remove the native one" is rejected: the
 /// removal is of the replacement, not of the location being retired.
+#[must_use]
 pub fn qualifies_legacy_install(paragraph: &str) -> bool {
     let nearby_clauses = legacy_install_neighbourhood(paragraph);
     let is_attributed = paragraph.contains("v0.1.0-beta4")

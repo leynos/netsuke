@@ -13,6 +13,10 @@ use anyhow::{Context, Result};
 use roxmltree::{Document, Node};
 
 /// Find the first descendant element with the given tag name and attribute.
+///
+/// # Errors
+///
+/// Returns an error when the document holds no such element.
 pub fn find_element<'a, 'input>(
     document: &'a Document<'input>,
     tag_name: &str,
@@ -30,6 +34,10 @@ pub fn find_element<'a, 'input>(
 }
 
 /// Find the first child element with the given tag name.
+///
+/// # Errors
+///
+/// Returns an error when `parent` has no such child.
 pub fn find_child<'a, 'input>(
     parent: Node<'a, 'input>,
     tag_name: &str,
@@ -41,6 +49,7 @@ pub fn find_child<'a, 'input>(
 }
 
 /// Read an element's attributes as a sorted map.
+#[must_use]
 pub fn comparable_attributes(node: Node<'_, '_>) -> BTreeMap<String, String> {
     node.attributes()
         .map(|attribute| (attribute.name().to_owned(), attribute.value().to_owned()))
@@ -48,6 +57,11 @@ pub fn comparable_attributes(node: Node<'_, '_>) -> BTreeMap<String, String> {
 }
 
 /// Return the registry search that reads the installed release rank.
+///
+/// # Errors
+///
+/// Returns an error when the document declares no release-rank property or
+/// that property holds no `RegistrySearch` child.
 pub fn rank_search<'a, 'input>(document: &'a Document<'input>) -> Result<Node<'a, 'input>> {
     let property = find_element(document, "Property", "Id", "PREVIOUS_NETSUKE_RELEASE_RANK")?;
     find_child(property, "RegistrySearch")

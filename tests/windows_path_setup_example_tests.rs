@@ -194,7 +194,7 @@ fn stage_binary(install: &Path) -> Result<()> {
 fn run_wrapper(wrapper: &Path, example: &Path, program_files_root: &Path) -> Result<Output> {
     let mut last_error = None;
     for shell in ["pwsh", "powershell"] {
-        let output = Command::new(shell)
+        let attempt = Command::new(shell)
             .args(["-NoProfile", "-NonInteractive", "-File"])
             .arg(wrapper)
             .arg("-ExamplePath")
@@ -205,14 +205,16 @@ fn run_wrapper(wrapper: &Path, example: &Path, program_files_root: &Path) -> Res
             .env("ProgramFiles", program_files_root)
             .env("ProgramFiles(x86)", program_files_root)
             .output();
-        match output {
-            Ok(output) => return Ok(output),
+        match attempt {
+            Ok(captured) => return Ok(captured),
             Err(error) => last_error = Some(error),
         }
     }
     Err(last_error
-        .map(anyhow::Error::from)
-        .unwrap_or_else(|| anyhow::anyhow!("no PowerShell executable was available"))
+        .map_or_else(
+            || anyhow::anyhow!("no PowerShell executable was available"),
+            anyhow::Error::from,
+        )
         .context("run the documented PATH setup"))
 }
 
