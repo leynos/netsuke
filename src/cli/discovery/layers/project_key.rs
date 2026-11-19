@@ -10,6 +10,25 @@ use super::super::paths::PathNormalizer;
 use camino::Utf8Path;
 use std::path::{Path, PathBuf};
 
+/// Closed answer to whether a candidate root is the project configuration file.
+///
+/// The three states keep identification and trust apart. A definite project
+/// match may be skipped from the fallback scan, because the project pass loads
+/// it again with project quarantine. `Other` is the only state that may donate
+/// operator authority. `Unresolved` is neither: it cannot prove the candidate
+/// is the project file, so skipping it could drop an ordinary user chain, and
+/// it cannot prove the candidate is something else, so granting authority would
+/// be a guess.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CandidateIdentity {
+    /// The candidate resolves to, or literally spells, the project file.
+    Project,
+    /// The candidate could not be resolved and is not the literal key.
+    Unresolved,
+    /// The candidate provably names a different file.
+    Other,
+}
+
 /// Normalized comparison key for the project configuration file.
 pub(in crate::cli::discovery) struct ProjectKey {
     /// Normalized key, or the literal spelling when resolution failed.
@@ -52,20 +71,32 @@ impl ProjectKey {
         self.matches_path(path.as_std_path())
     }
 
-    /// Report whether a candidate root is the project configuration file.
+    /// Classify a candidate root against the project configuration file.
     ///
     /// Candidate paths arrive in the spelling their scope produced, while the
     /// key holds a resolved path. Resolving the candidate the same way keeps a
     /// differently-cased or short-name spelling from looking distinct on a
     /// case-insensitive filesystem, and resolves a link to the project file so
-    /// it cannot be mistaken for an independent user file. A candidate that
-    /// cannot be resolved is compared literally, which is the only evidence
-    /// left and still identifies an exactly-spelled project path.
-    pub(super) fn matches_candidate(&self, normalizer: &impl PathNormalizer, path: &Path) -> bool {
-        normalizer.normalize(path).map_or_else(
-            |_| self.matches_path(path),
-            |resolved| self.matches_path(&resolved),
-        )
+    /// it cannot be mistaken for an independent user file. An exact literal
+    /// spelling is still identified when resolution fails, because that is the
+    /// only evidence left and it names the project path itself.
+    ///
+    /// A candidate that neither resolves nor matches literally is reported as
+    /// [`CandidateIdentity::Unresolved`] rather than as a plain miss. Collapsing
+    /// it into a miss would let an identity that cannot be established grant
+    /// operator authority, which is the silent trust upgrade the key's own
+    /// ambiguity flag already refuses.
+    pub(super) fn classify_candidate(
+        &self,
+        normalizer: &impl PathNormalizer,
+        path: &Path,
+    ) -> CandidateIdentity {
+        match normalizer.normalize(path) {
+            Ok(resolved) if self.matches_path(&resolved) => CandidateIdentity::Project,
+            Ok(_) => CandidateIdentity::Other,
+            Err(_) if self.matches_path(path) => CandidateIdentity::Project,
+            Err(_) => CandidateIdentity::Unresolved,
+        }
     }
 
     /// Report whether a plain path is literally the project configuration file.

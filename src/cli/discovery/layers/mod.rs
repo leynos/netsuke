@@ -21,14 +21,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::diagnostics::{BoundedConfigPath, ProjectLayerDeduplication};
-use super::paths::{FsPathNormalizer, PathNormalizer, project_scope_file};
+use super::paths::{PathNormalizer, project_scope_file};
 use super::project_policy::scope_project_chain;
 pub(super) use super::project_policy::{
     ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
 };
 
 mod project_key;
-use project_key::ProjectKey;
+use project_key::{CandidateIdentity, ProjectKey};
 
 mod trace;
 pub(in crate::cli::discovery) use trace::{AutomaticTrace, ProjectScopeTrace};
@@ -90,19 +90,23 @@ pub(super) fn config_discovery(
 /// walk and the system layers would never load. Skipping it is safe because the
 /// project pass appends the same chain with project quarantine, which is the
 /// composition the refusal rule already promises.
+///
+/// `normalizer` is the seam that classified `project_key`, so a candidate and
+/// the key it is compared with are resolved through the same view.
 pub(super) fn first_automatic_chain(
     discovery: &ConfigDiscovery,
-    project_key: Option<&ProjectKey>,
     user_candidates: &[PathBuf],
+    normalizer: &impl PathNormalizer,
+    project_key: Option<&ProjectKey>,
 ) -> OrthoResult<(Vec<MergeLayer<'static>>, bool)> {
     let mut optional_errors = Vec::new();
     for candidate in discovery.candidates() {
-        if is_refused_user_candidate(project_key, user_candidates, &candidate) {
+        if is_refused_user_candidate(project_key, user_candidates, normalizer, &candidate) {
             continue;
         }
         match load_config_file_as_chain(&candidate) {
             Ok(Some(chain)) => {
-                let is_trusted = candidate_is_trusted(&candidate, project_key);
+                let is_trusted = candidate_is_trusted(&candidate, normalizer, project_key);
                 return Ok((chain_layers(chain), is_trusted));
             }
             Ok(None) => {}
@@ -124,16 +128,21 @@ pub(super) fn first_automatic_chain(
 /// candidate, because the dependency lists project roots last, and returning it
 /// preserves the project-only composition path.
 ///
-/// An ambiguous key is never a match. It withholds every candidate's authority
-/// without identifying any of them, so treating it as a match would skip the
-/// system candidates too and drop the layers this rule protects.
+/// Neither an ambiguous key nor an unresolvable candidate is a match. The key's
+/// ambiguity withholds every candidate's authority without identifying any of
+/// them, so treating it as a match would skip the system candidates too. A
+/// candidate whose identity cannot be established is likewise only *possibly*
+/// the project file: skipping it could drop an ordinary user chain, so it stays
+/// in the walk and is loaded untrusted instead.
 fn is_refused_user_candidate(
     project_key: Option<&ProjectKey>,
     user_candidates: &[PathBuf],
+    normalizer: &impl PathNormalizer,
     candidate: &Path,
 ) -> bool {
     project_key.is_some_and(|key| {
-        !key.is_ambiguous() && key.matches_candidate(&FsPathNormalizer, candidate)
+        !key.is_ambiguous()
+            && key.classify_candidate(normalizer, candidate) == CandidateIdentity::Project
     }) && user_candidates
         .iter()
         .any(|user_candidate| user_candidate.as_path() == candidate)
@@ -181,7 +190,7 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
         layers: file_layers,
         is_trusted_root,
         user_scope,
-    } = match automatic_base_layers(directory, env_source, project_key.as_ref()) {
+    } = match automatic_base_layers(directory, env_source, normalizer, project_key.as_ref()) {
         Ok(found) => found,
         // The pass failed before it reached a decision, so there is no
         // user-scope outcome to replay; discovery telemetry records the

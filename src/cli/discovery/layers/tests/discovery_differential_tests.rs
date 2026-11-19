@@ -7,7 +7,7 @@
 //! layers in the same order, or fail identically. These tests keep that
 //! equivalence honest for missing, malformed, inherited, and successful files.
 
-use super::super::super::paths::FsPathNormalizer;
+use super::super::super::paths::{FailingPathNormalizer, FsPathNormalizer, PathNormalizer};
 use super::super::{ProjectKey, config_discovery, first_automatic_chain};
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -68,11 +68,12 @@ fn legacy_outcome(discovery: &ConfigDiscovery) -> Result<FlatLayers, String> {
 /// Produce the restricted walk's outcome in the same comparable shape.
 fn restricted_outcome(
     discovery: &ConfigDiscovery,
+    normalizer: &impl PathNormalizer,
     project_key: Option<&ProjectKey>,
 ) -> Result<FlatLayers, String> {
     // These cases reach the project file only through a project root, so no
     // user-scope candidate needs skipping: the walk still mirrors ortho's.
-    first_automatic_chain(discovery, project_key, &[])
+    first_automatic_chain(discovery, &[], normalizer, project_key)
         .map(|(layers, _)| flatten(layers))
         .map_err(|error| error.to_string())
 }
@@ -87,7 +88,7 @@ fn compare_outcomes(project_dir: &Path, root: &Path) -> Result<(FlatLayers, Flat
     let discovery = scanner(project_dir, root);
     let project_key = ProjectKey::classify(&FsPathNormalizer, &project_dir.join(".netsuke.toml"));
     let legacy = legacy_outcome(&discovery);
-    let restricted = restricted_outcome(&discovery, Some(&project_key));
+    let restricted = restricted_outcome(&discovery, &FsPathNormalizer, Some(&project_key));
     match (&legacy, &restricted) {
         (Ok(legacy_layers), Ok(restricted_layers)) => {
             ensure!(
@@ -138,7 +139,7 @@ fn malformed_configuration_matches_ortho_discovery() -> Result<()> {
     let project_key = ProjectKey::classify(&FsPathNormalizer, &project_dir.join(".netsuke.toml"));
 
     let legacy = legacy_outcome(&discovery);
-    let restricted = restricted_outcome(&discovery, Some(&project_key));
+    let restricted = restricted_outcome(&discovery, &FsPathNormalizer, Some(&project_key));
 
     ensure!(
         legacy.is_err() && restricted.is_err(),
@@ -202,7 +203,7 @@ fn successful_configuration_matches_ortho_discovery() -> Result<()> {
     let project_key = ProjectKey::classify(&FsPathNormalizer, &project_dir.join(".netsuke.toml"));
 
     let legacy = legacy_outcome(&discovery);
-    let restricted = restricted_outcome(&discovery, Some(&project_key));
+    let restricted = restricted_outcome(&discovery, &FsPathNormalizer, Some(&project_key));
 
     ensure!(
         legacy == restricted,
@@ -216,6 +217,43 @@ fn successful_configuration_matches_ortho_discovery() -> Result<()> {
     ensure!(
         loaded.ends_with("netsuke/config.toml") && layers.len() == 1,
         "the xdg candidate should supply the only layer, got {layers:?}"
+    );
+    Ok(())
+}
+
+/// A chain loaded through an unresolvable candidate must not donate authority.
+///
+/// The walk still returns the chain, because the file itself loaded: only the
+/// candidate's identity is in doubt. Withholding trust is the fail-closed
+/// answer, matching the ambiguous-key rule, and it must not degrade into
+/// dropping a layer the composition would otherwise keep.
+#[test]
+fn unresolved_candidate_chain_is_not_trusted() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let project_dir = temp.path().join("project");
+    let xdg_home = temp.path().join("xdg-home");
+    test_support::fs::create_dir(&project_dir).context("create project dir")?;
+    test_support::fs::create_dir_all(xdg_home.join("netsuke")).context("create xdg config dir")?;
+    test_support::fs::write(xdg_home.join("netsuke/config.toml"), "jobs = 2\n")
+        .context("write operator config")?;
+
+    let discovery = config_discovery(
+        Some(&project_dir),
+        isolated_env_with_xdg(temp.path(), &xdg_home),
+    );
+    let project_key = ProjectKey::classify(&FsPathNormalizer, &project_dir.join(".netsuke.toml"));
+
+    let (layers, is_trusted) =
+        first_automatic_chain(&discovery, &[], &FailingPathNormalizer, Some(&project_key))
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+
+    ensure!(
+        !layers.is_empty(),
+        "the operator configuration should still supply a layer"
+    );
+    ensure!(
+        !is_trusted,
+        "a candidate whose identity cannot be established must not donate operator authority"
     );
     Ok(())
 }

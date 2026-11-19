@@ -14,7 +14,7 @@ use crate::cli::discovery::layers::ProjectKey;
 use crate::cli::discovery::layers::user_candidate::{
     AutomaticLayers, CandidateEntry, UserScopeTrace, automatic_base_layers_with_probe,
 };
-use crate::cli::discovery::paths::FsPathNormalizer;
+use crate::cli::discovery::paths::{FailingPathNormalizer, FsPathNormalizer, PathNormalizer};
 use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
@@ -48,15 +48,30 @@ fn run_with_project_key(
     project_file: &Path,
     directory: Option<&Path>,
 ) -> ortho_config::OrthoResult<AutomaticLayers> {
+    let project_key = ProjectKey::classify(&FsPathNormalizer, project_file);
+    run_with_normalizer(env, &FsPathNormalizer, Some(&project_key), directory)
+}
+
+/// Run the automatic pass with an explicit normalizer and project key.
+///
+/// Passing them separately lets a case classify the key through the real
+/// filesystem while candidate comparisons use a different resolution seam,
+/// which is how an unresolvable *candidate* is isolated from an ambiguous key.
+fn run_with_normalizer(
+    env: &TestEnv,
+    normalizer: &impl PathNormalizer,
+    project_key: Option<&ProjectKey>,
+    directory: Option<&Path>,
+) -> ortho_config::OrthoResult<AutomaticLayers> {
     // The user file is present, so the loader answers before the presence probe
     // is consulted; the probe only has to exist.
     let probe = ScriptedProbe::new(Answer::Entry(CandidateEntry::Absent));
-    let project_key = ProjectKey::classify(&FsPathNormalizer, project_file);
     automatic_base_layers_with_probe(
         &probe,
         directory,
         discovery_env_source(env),
-        Some(&project_key),
+        normalizer,
+        project_key,
     )
 }
 
@@ -160,6 +175,45 @@ fn project_file_candidate_reached_through_a_link_is_not_adopted() -> Result<()> 
         found.user_scope == UserScopeTrace::Fallback,
         "a candidate that resolves to the project file must not be adopted, got {:?}",
         found.user_scope
+    );
+    Ok(())
+}
+
+/// A user candidate whose identity cannot be established is not adopted.
+///
+/// Trust is granted only to a candidate that provably names another file. The
+/// project key resolves under the real normalizer, so this case isolates the
+/// candidate: it cannot be ruled out as the project file, and adopting it would
+/// grant operator authority on a guess. Refusing it is still decisive, so the
+/// dependency scan supplies the base chain instead.
+#[rstest]
+fn unresolvable_user_candidate_is_not_adopted() -> Result<()> {
+    let case = Case::new()?;
+    let user_file = write_config(&case.home().join(".netsuke.toml"), "jobs = 4\n")?;
+    let project_dir = case.base("elsewhere")?;
+    let project_file = write_config(&project_dir.join(".netsuke.toml"), "jobs = 9\n")?;
+    let project_key = ProjectKey::classify(&FsPathNormalizer, &project_file);
+
+    let found = run_with_normalizer(
+        &case.environment(HomeArrangement::EmptyXdgConfigHome),
+        &FailingPathNormalizer,
+        Some(&project_key),
+        None,
+    )
+    .context("an unresolvable candidate must not fail discovery")?;
+
+    ensure!(
+        found.user_scope == UserScopeTrace::Fallback,
+        "a candidate whose identity cannot be established must not be adopted, got {:?}",
+        found.user_scope
+    );
+    ensure!(
+        !found.is_trusted_root,
+        "a chain whose candidate cannot be ruled out as the project file must not report a trusted root"
+    );
+    ensure!(
+        user_file != project_file,
+        "the fixture must keep the two paths distinct"
     );
     Ok(())
 }

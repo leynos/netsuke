@@ -21,8 +21,8 @@ use std::sync::Arc;
 use tracing::debug;
 
 use super::super::diagnostics::path_hash;
-use super::super::paths::{FsPathNormalizer, SanitisedUserBases, user_scope_candidates};
-use super::project_key::ProjectKey;
+use super::super::paths::{PathNormalizer, SanitisedUserBases, user_scope_candidates};
+use super::project_key::{CandidateIdentity, ProjectKey};
 use super::{chain_layers, config_discovery, first_automatic_chain};
 use crate::localization::{LocalizedMessage, keys};
 
@@ -95,6 +95,9 @@ impl UserScopeTrace {
 /// and drop the restrictions they set. An adopted user chain is rooted in the
 /// user's own file rather than in a project root, so it reports a trusted root.
 ///
+/// `normalizer` is the same resolution seam that classified `project_key`, so
+/// the key and every candidate are compared through one view of the filesystem.
+///
 /// # Errors
 ///
 /// Returns an error when a present user candidate cannot be loaded, or when the
@@ -102,9 +105,16 @@ impl UserScopeTrace {
 pub(super) fn automatic_base_layers(
     directory: Option<&Path>,
     env_source: SharedEnvSource,
+    normalizer: &impl PathNormalizer,
     project_key: Option<&ProjectKey>,
 ) -> OrthoResult<AutomaticLayers> {
-    automatic_base_layers_with_probe(&FsCandidateProbe, directory, env_source, project_key)
+    automatic_base_layers_with_probe(
+        &FsCandidateProbe,
+        directory,
+        env_source,
+        normalizer,
+        project_key,
+    )
 }
 
 /// Load the automatic discovery chain, consulting `probe` about user candidates.
@@ -123,10 +133,11 @@ pub(super) fn automatic_base_layers_with_probe(
     probe: &dyn CandidateProbe,
     directory: Option<&Path>,
     env_source: SharedEnvSource,
+    normalizer: &impl PathNormalizer,
     project_key: Option<&ProjectKey>,
 ) -> OrthoResult<AutomaticLayers> {
     let user_candidates = user_scope_candidates(env_source.as_ref());
-    if let Some(found) = user_scope_base_layers(probe, &user_candidates, project_key)? {
+    if let Some(found) = user_scope_base_layers(probe, &user_candidates, normalizer, project_key)? {
         return Ok(found);
     }
     // The dependency filters only empty base values, so its scan would resolve a
@@ -136,7 +147,7 @@ pub(super) fn automatic_base_layers_with_probe(
     let fallback_env: SharedEnvSource = Arc::new(SanitisedUserBases::new(env_source));
     let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), fallback_env);
     let (layers, is_trusted_root) =
-        first_automatic_chain(&discovery, project_key, &user_candidates)?;
+        first_automatic_chain(&discovery, &user_candidates, normalizer, project_key)?;
     Ok(AutomaticLayers {
         layers,
         is_trusted_root,
@@ -153,7 +164,8 @@ pub(super) fn automatic_base_layers_with_probe(
 /// sets would stop applying to a file the project itself controls. Refusing it
 /// is decisive — the dependency scan runs instead of a lower-priority candidate
 /// being tried — so a project file cannot silently promote a different user
-/// file over the system layers.
+/// file over the system layers. A candidate whose identity cannot be established
+/// is refused for the same reason: it cannot be ruled out as the project file.
 ///
 /// The adoption decision travels back with the layers for replay; nothing is
 /// logged here, because the tracing filter is not yet raised.
@@ -167,13 +179,14 @@ pub(super) fn automatic_base_layers_with_probe(
 fn user_scope_base_layers(
     probe: &dyn CandidateProbe,
     user_candidates: &[PathBuf],
+    normalizer: &impl PathNormalizer,
     project_key: Option<&ProjectKey>,
 ) -> OrthoResult<Option<AutomaticLayers>> {
     for candidate in user_candidates {
         let Some(chain) = load_user_candidate(probe, candidate)? else {
             continue;
         };
-        if !candidate_is_trusted(candidate, project_key) {
+        if !candidate_is_trusted(candidate, normalizer, project_key) {
             return Ok(None);
         }
         return Ok(Some(AutomaticLayers {
@@ -198,9 +211,20 @@ fn user_scope_base_layers(
 /// identity test the dependency scan applies. A false answer both withholds
 /// operator authority and prevents adoption, because a project-scoped file must
 /// not displace the system layers.
-pub(super) fn candidate_is_trusted(candidate: &Path, project_key: Option<&ProjectKey>) -> bool {
-    !project_key.is_some_and(|key| {
-        key.is_ambiguous() || key.matches_candidate(&FsPathNormalizer, candidate)
+///
+/// Trust is granted only to a candidate that provably names another file. An
+/// ambiguous key or an unresolvable candidate cannot rule the project file out,
+/// so both fail closed rather than fall back to a literal miss; a literal
+/// spelling that identifies the project file is the one resolution failure that
+/// still counts as a match.
+pub(super) fn candidate_is_trusted(
+    candidate: &Path,
+    normalizer: &impl PathNormalizer,
+    project_key: Option<&ProjectKey>,
+) -> bool {
+    project_key.is_none_or(|key| {
+        !key.is_ambiguous()
+            && key.classify_candidate(normalizer, candidate) == CandidateIdentity::Other
     })
 }
 
