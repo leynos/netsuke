@@ -10,7 +10,6 @@ use super::super::process::{self, DyndepPublicationLease};
 use crate::cli::Cli;
 use crate::ninja_gen::{GeneratedDyndep, GeneratedNinja};
 use anyhow::Result;
-use cap_std::fs_utf8::Dir;
 
 /// Publication lease that protects one serial bundle while a command consumes it.
 ///
