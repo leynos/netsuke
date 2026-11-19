@@ -38,55 +38,61 @@ const SENTINEL_PATH: &str = "%SystemRoot%\\netsuke-path-sentinel";
 ///
 /// It passes `-ExamplePath` to the script, owns the registry key for the
 /// duration of the run, and reports the three observations the assertions use.
+///
+/// Its variables carry a `$wrapper` prefix because the documented script is
+/// dot-sourced into this scope so that its failures propagate unchanged. A
+/// script that declares `$environmentKey` — both documented fences do — would
+/// otherwise replace the wrapper's handle, and the `Dispose()` call at the end
+/// of the script would close the key the wrapper still needs to read.
 const WRAPPER: &str = r#"
 param([Parameter(Mandatory)][string]$ExamplePath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$environmentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-if ($null -eq $environmentKey) {
+$wrapperKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+if ($null -eq $wrapperKey) {
     throw 'User environment registry key not found.'
 }
-$hadPath = $environmentKey.GetValueNames() -contains 'Path'
-$originalValue = if ($hadPath) {
-    [string]$environmentKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+$wrapperHadPath = $wrapperKey.GetValueNames() -contains 'Path'
+$wrapperOriginalValue = if ($wrapperHadPath) {
+    [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
 } else {
     ''
 }
-$originalKind = if ($hadPath) {
-    $environmentKey.GetValueKind('Path')
+$wrapperOriginalKind = if ($wrapperHadPath) {
+    $wrapperKey.GetValueKind('Path')
 } else {
     [Microsoft.Win32.RegistryValueKind]::ExpandString
 }
-Write-Output "ORIGINAL=$originalValue"
+Write-Output "ORIGINAL=$wrapperOriginalValue"
 try {
-    $environmentKey.SetValue(
+    $wrapperKey.SetValue(
         'Path',
         '%SystemRoot%\netsuke-path-sentinel',
         [Microsoft.Win32.RegistryValueKind]::ExpandString
     )
     . $ExamplePath
-    $stored = [string]$environmentKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-    Write-Output "RESULT=$stored"
-    Write-Output "KIND=$($environmentKey.GetValueKind('Path'))"
+    $wrapperStored = [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+    Write-Output "RESULT=$wrapperStored"
+    Write-Output "KIND=$($wrapperKey.GetValueKind('Path'))"
 }
 finally {
     # Record what the script left behind before restoring it. A run that threw
     # never reaches the RESULT line, so LEFTOVER is the only evidence of
     # whether it changed the value on the way out.
-    $leftover = [string]$environmentKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-    Write-Output "LEFTOVER=$leftover"
-    if ($hadPath) {
-        $environmentKey.SetValue('Path', $originalValue, $originalKind)
+    $wrapperLeftover = [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+    Write-Output "LEFTOVER=$wrapperLeftover"
+    if ($wrapperHadPath) {
+        $wrapperKey.SetValue('Path', $wrapperOriginalValue, $wrapperOriginalKind)
     } else {
-        $environmentKey.DeleteValue('Path', $false)
+        $wrapperKey.DeleteValue('Path', $false)
     }
-    $restored = if ($environmentKey.GetValueNames() -contains 'Path') {
-        [string]$environmentKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+    $wrapperRestored = if ($wrapperKey.GetValueNames() -contains 'Path') {
+        [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
     } else {
         ''
     }
-    Write-Output "RESTORED=$restored"
-    $environmentKey.Dispose()
+    Write-Output "RESTORED=$wrapperRestored"
+    $wrapperKey.Dispose()
 }
 "#;
 
