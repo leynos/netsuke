@@ -87,7 +87,12 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
 
         let substitution = find_script_substitution(self.chars, pos);
         let next = self.append_substitution_or_character(pos, ch, substitution)?;
-        if ch == '\n' {
+        // Only a newline that ends the command line starts a queued heredoc.
+        // Quoted text and a backtick body do not end it: the shell starts the
+        // body at the newline token after the declaring command, and a newline
+        // inside those regions belongs to their own text, so starting the body
+        // there would copy the rest of the command line as inert heredoc data.
+        if ch == '\n' && self.is_plain_script_text() {
             self.posix_lexical.begin_pending_heredoc_after_newline();
         }
         Ok(next)
