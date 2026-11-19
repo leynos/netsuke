@@ -218,6 +218,35 @@ makes its failure branch testable rather than in the path module. The
 2026-11-16 addendum's references to `paths::candidate_entry_metadata` and
 `paths::SanitisedUserBases` name those helpers before this split.
 
+## Amendment — 2026-11-19: the fallback scan skips a refused candidate
+
+The 2026-11-18 amendment made the refusal decisive and relied on the dependency
+scan to compose the system file with the project chain. That holds only while
+the scan reaches a system candidate first. `ortho_config` 0.10.0 lists the
+`XDG_CONFIG_HOME` base candidates before `XDG_CONFIG_DIRS`, so when
+`XDG_CONFIG_HOME` names the project directory the scan returns the project file
+the user pass just refused, and the system layers never load. The refusal was
+decisive at the user-pass boundary only.
+
+[`first_automatic_chain`] now takes the user candidate list the pass derived,
+and its [`is_refused_user_candidate`] predicate skips a candidate that is both
+a definite identity match for the project configuration file and one of those
+derived locations. A project file reached only through a project root still
+wins the walk: the dependency lists project roots last, so it cannot outrank a
+system candidate, and returning it keeps the project-only composition path. An
+ambiguous key never matches, because it withholds every candidate's authority
+without identifying any of them, so treating it as a match would skip the
+system candidates too. The skipped chain is not lost: the project pass loads it
+with the project quarantine already required above and appends it after the
+system layers.
+
+`tests/cli_tests/config_discovery_env_provenance/user_project_overlap.rs` pins
+the layout end to end, requiring a system `env_block_var` entry to keep
+blocking while the project value still applies.
+
+[`first_automatic_chain`]: ../../src/cli/discovery/layers/mod.rs
+[`is_refused_user_candidate`]: ../../src/cli/discovery/layers/mod.rs
+
 ## Related documents
 
 - [`docs/developers-guide.md`](../developers-guide.md)

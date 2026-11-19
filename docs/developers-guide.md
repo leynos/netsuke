@@ -12144,6 +12144,21 @@ When no usable user candidate exists, `layers/mod.rs::first_automatic_chain`
 runs, which is what still reaches system scope and the project roots and then
 appends the project chain.
 
+That fallback scan must not return the candidate the user pass refused. The
+dependency lists the `XDG_CONFIG_HOME` base candidates before every system
+candidate, so when that base is the project directory the scan would return the
+project file first and the system layers would never load.
+`layers/mod.rs::is_refused_user_candidate` therefore skips a candidate that is
+both a definite identity match for the project configuration file and one of
+the locations `user_scope_candidates` derived. Neither condition is sufficient
+alone. A project file reached only through a project root still wins the walk,
+because the dependency lists project roots last and returning it keeps the
+project-only composition path. An ambiguous key withholds every candidate's
+authority without identifying any of them, so treating it as a match would skip
+the system candidates too. Skipping the candidate loses nothing: the project
+pass loads the same chain with the project quarantine and appends it after the
+system layers.
+
 The dependency filters only empty base values, so its own scan would still
 resolve a relative one against the working directory. The fallback therefore
 receives `paths/sanitised.rs::SanitisedUserBases`, an `EnvSource` view that
