@@ -34,6 +34,26 @@ function Test-PathPlaceholderScript {
     }
 }
 
+# Bind the quoted-script failure to the bounded reason and to the disclosure
+# rule: the diagnostic must name the refused syntax without echoing the
+# rendered recipe, which may already contain an environment-resolved value.
+function Assert-QuotedScriptRejection {
+    param(
+        [Parameter(Mandatory)]
+        [string]$CausesText
+    )
+
+    if (-not ($CausesText -match 'Invalid command interpolation')) {
+        throw "The quoted script failure omitted its interpolation diagnostic: $CausesText"
+    }
+    if (-not ($CausesText -match 'recipe marker inside a protected shell region')) {
+        throw "The quoted script failure omitted its rejection reason: $CausesText"
+    }
+    if ($CausesText -match 'Write-Output' -or $CausesText -match '__NETSUKE_INS_PLACEHOLDER__') {
+        throw "The quoted script failure repeated its rendered template: $CausesText"
+    }
+}
+
 function Test-QuotedScriptPlaceholderRejection {
     param(
         [Parameter(Mandatory)]
@@ -74,18 +94,7 @@ function Test-QuotedScriptPlaceholderRejection {
             }
             $causes = @($diagnostics.diagnostics[0].causes | ForEach-Object { [string]$_ })
             $causesText = [string]::Join([Environment]::NewLine, [string[]]$causes)
-            if (-not ($causesText -match 'Invalid command interpolation')) {
-                throw "The quoted script failure omitted its interpolation diagnostic: $causesText"
-            }
-            if (-not ($causesText -match 'recipe marker inside a protected shell region')) {
-                throw "The quoted script failure omitted its rejection reason: $causesText"
-            }
-            # The rendered recipe can already contain a value resolved from the
-            # environment, so the diagnostic must name the failed syntax without
-            # echoing the template in either human or JSON output.
-            if ($causesText -match 'Write-Output' -or $causesText -match '__NETSUKE_INS_PLACEHOLDER__') {
-                throw "The quoted script failure repeated its rendered template: $causesText"
-            }
+            Assert-QuotedScriptRejection -CausesText $causesText
             if (Test-Path -LiteralPath 'pwned') {
                 throw 'The rejected quoted script executed its path-derived payload.'
             }
