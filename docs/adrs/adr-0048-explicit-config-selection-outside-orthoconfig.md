@@ -206,6 +206,18 @@ project value still applies.
 
 [`candidate_is_trusted`]: ../../src/cli/discovery/layers/user_candidate.rs
 
+## Amendment — 2026-11-19
+
+The decisions above are unchanged; their helpers now live in
+single-responsibility modules. `paths/sanitised.rs` owns `SanitisedUserBases`,
+`is_usable_base`, and the user base key list, so the environment view and the
+predicate it shares with the candidate derivation cannot drift apart.
+`layers/user_candidate/probe.rs` owns `CandidateProbe`, `FsCandidateProbe`, and
+`candidate_entry_metadata`, so the presence probe sits beside the trait that
+makes its failure branch testable rather than in the path module. The
+2026-11-16 addendum's references to `paths::candidate_entry_metadata` and
+`paths::SanitisedUserBases` name those helpers before this split.
+
 ## Related documents
 
 - [`docs/developers-guide.md`](../developers-guide.md)
