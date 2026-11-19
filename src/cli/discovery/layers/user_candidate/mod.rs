@@ -12,7 +12,7 @@
 //! label the fail-closed branch without reading error text.
 
 use ortho_config::{
-    EnvSource, FileLayerChain, MergeLayer, OrthoError, OrthoResult, SharedEnvSource,
+    FileLayerChain, MergeLayer, OrthoError, OrthoResult, SharedEnvSource,
     load_config_file_as_chain,
 };
 use std::fmt;
@@ -126,7 +126,8 @@ pub(super) fn automatic_base_layers_with_probe(
     env_source: SharedEnvSource,
     project_key: Option<&ProjectKey>,
 ) -> OrthoResult<AutomaticLayers> {
-    if let Some(found) = user_scope_base_layers(probe, env_source.as_ref(), project_key)? {
+    let user_candidates = user_scope_candidates(env_source.as_ref());
+    if let Some(found) = user_scope_base_layers(probe, &user_candidates, project_key)? {
         return Ok(found);
     }
     // The dependency filters only empty base values, so its scan would resolve a
@@ -135,7 +136,8 @@ pub(super) fn automatic_base_layers_with_probe(
     // load configuration from wherever the tool happened to run.
     let fallback_env: SharedEnvSource = Arc::new(SanitisedUserBases::new(env_source));
     let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), fallback_env);
-    let (layers, is_trusted_root) = first_automatic_chain(&discovery, project_key)?;
+    let (layers, is_trusted_root) =
+        first_automatic_chain(&discovery, project_key, &user_candidates)?;
     Ok(AutomaticLayers {
         layers,
         is_trusted_root,
@@ -165,14 +167,14 @@ pub(super) fn automatic_base_layers_with_probe(
 /// the system policy it was meant to override.
 fn user_scope_base_layers(
     probe: &dyn CandidateProbe,
-    env_source: &dyn EnvSource,
+    user_candidates: &[PathBuf],
     project_key: Option<&ProjectKey>,
 ) -> OrthoResult<Option<AutomaticLayers>> {
-    for candidate in user_scope_candidates(env_source) {
-        let Some(chain) = load_user_candidate(probe, &candidate)? else {
+    for candidate in user_candidates {
+        let Some(chain) = load_user_candidate(probe, candidate)? else {
             continue;
         };
-        if !candidate_is_trusted(&candidate, project_key) {
+        if !candidate_is_trusted(candidate, project_key) {
             return Ok(None);
         }
         return Ok(Some(AutomaticLayers {
@@ -181,7 +183,7 @@ fn user_scope_base_layers(
             // reports one; the field still distinguishes the fallback's root.
             is_trusted_root: true,
             user_scope: UserScopeTrace::Adopted {
-                path_hash: path_hash(&candidate),
+                path_hash: path_hash(candidate),
             },
         }));
     }

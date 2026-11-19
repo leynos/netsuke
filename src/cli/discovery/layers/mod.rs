@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::diagnostics::{BoundedConfigPath, ProjectLayerDeduplication};
-use super::paths::{PathNormalizer, project_scope_file};
+use super::paths::{FsPathNormalizer, PathNormalizer, project_scope_file};
 use super::project_policy::scope_project_chain;
 pub(super) use super::project_policy::{
     ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
@@ -82,12 +82,24 @@ pub(super) fn config_discovery(
 /// order, a missing candidate continues to the next one, and the first chain
 /// found wins. Load errors are retained only for the no-chain case, matching
 /// the optional-error handling the previous single call produced.
+///
+/// One candidate is skipped: a user-scope location that the user pass already
+/// refused because it is the project configuration file. The dependency lists
+/// the `XDG_CONFIG_HOME` base candidates before every system candidate, so when
+/// that base is the project directory the project file would otherwise win this
+/// walk and the system layers would never load. Skipping it is safe because the
+/// project pass appends the same chain with project quarantine, which is the
+/// composition the refusal rule already promises.
 pub(super) fn first_automatic_chain(
     discovery: &ConfigDiscovery,
     project_key: Option<&ProjectKey>,
+    user_candidates: &[PathBuf],
 ) -> OrthoResult<(Vec<MergeLayer<'static>>, bool)> {
     let mut optional_errors = Vec::new();
     for candidate in discovery.candidates() {
+        if is_refused_user_candidate(project_key, user_candidates, &candidate) {
+            continue;
+        }
         match load_config_file_as_chain(&candidate) {
             Ok(Some(chain)) => {
                 let is_trusted = candidate_is_trusted(&candidate, project_key);
@@ -101,6 +113,30 @@ pub(super) fn first_automatic_chain(
         .into_iter()
         .next()
         .map_or_else(|| Ok((Vec::new(), true)), Err)
+}
+
+/// Report whether the scan must skip a candidate the user pass already refused.
+///
+/// Two conditions must both hold. The candidate must be a definite identity
+/// match for the project configuration file, and it must be one of the
+/// user-scope locations the user pass itself derived. A candidate reached only
+/// through a project root still wins the walk: it cannot outrank a system
+/// candidate, because the dependency lists project roots last, and returning it
+/// preserves the project-only composition path.
+///
+/// An ambiguous key is never a match. It withholds every candidate's authority
+/// without identifying any of them, so treating it as a match would skip the
+/// system candidates too and drop the layers this rule protects.
+fn is_refused_user_candidate(
+    project_key: Option<&ProjectKey>,
+    user_candidates: &[PathBuf],
+    candidate: &Path,
+) -> bool {
+    project_key.is_some_and(|key| {
+        !key.is_ambiguous() && key.matches_candidate(&FsPathNormalizer, candidate)
+    }) && user_candidates
+        .iter()
+        .any(|user_candidate| user_candidate.as_path() == candidate)
 }
 
 /// Flatten a file layer chain into owned merge layers.
