@@ -152,6 +152,10 @@ mod schema_version;
 #[path = "assert_cmd_tests/runner_diagnostics.rs"]
 mod runner_diagnostics;
 
+/// Cover launch diagnostics for every subcommand and rendering mode.
+#[path = "assert_cmd_tests/launch_diagnostics.rs"]
+mod launch_diagnostics;
+
 /// Cover failed-recipe diagnostics at the same process boundary.
 #[path = "assert_cmd_tests/ninja_exit_diagnostics.rs"]
 mod ninja_exit_diagnostics;
