@@ -261,15 +261,31 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         Ok(true)
     }
 
-    /// Report whether the backslash at `pos` escapes the next body character.
+    /// Report whether the backslash at `pos` quotes the next body character.
     ///
-    /// The shell finds the closing backtick before it parses the body's quotes,
-    /// so inside a body a backslash protects `$`, `` ` `` and `\` even where the
-    /// body's own quoting would make a backslash literal. Limiting the escapes
-    /// this way keeps `\'` inside a body's single quotes from swallowing the
-    /// quote that closes them.
+    /// The shell finds the closing backtick before it parses the body, so a
+    /// backslash protects a following dollar sign, backtick, or backslash even
+    /// where the body's own quoting would make a backslash literal. Every other
+    /// escape belongs to the body's own quoting, which this traversal already
+    /// tracks: an unquoted body lets a backslash quote the next character, the
+    /// body's double quotes also protect their own closing delimiter, and its
+    /// single quotes give a backslash no special meaning. Keeping the shell's
+    /// escapes separate from the body's is what stops an escaped apostrophe
+    /// from swallowing the quote that closes a single-quoted body.
     fn backtick_body_escapes(&self, pos: usize) -> bool {
-        matches!(self.chars.get(pos + 1), Some('$' | '`' | '\\'))
+        let Some(next) = self.chars.get(pos + 1) else {
+            return false;
+        };
+        let Some(region) = self.backtick_region else {
+            return false;
+        };
+        match region.body_context {
+            ShellQuoteContext::SingleQuoted => matches!(next, '$' | '`' | '\\'),
+            ShellQuoteContext::DoubleQuoted => matches!(next, '$' | '`' | '\\' | '"'),
+            // A body backslash that continues a line removes the newline, but
+            // the traversal still needs to see it so line-scoped tracking runs.
+            ShellQuoteContext::Unquoted => *next != '\n',
+        }
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.

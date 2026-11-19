@@ -661,9 +661,11 @@ region that opened it.
 Because the shell locates the closing backtick before it parses the body, a
 backslash inside the body protects a following dollar sign, backtick, or
 backslash even where the body's own quoting would make a backslash literal. An
-escaped backtick therefore does not end the region, and a backslash before an
-apostrophe is not an escape, so it cannot swallow the quote that closes a
-body's single quote.
+escaped backtick therefore does not end the region. Every other escape belongs
+to the body's own quoting: in unquoted body text a backslash makes the next
+character literal, so an escaped `)` cannot close a frame, and in the body's
+single quotes a backslash has no special meaning, so it cannot swallow the
+quote that closes them.
 
 Nesting that would leave the saved context without its owner fails closed with
 `IrGenError::InvalidCommand`; it is not approximated. Two shapes are rejected:

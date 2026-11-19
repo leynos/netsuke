@@ -9176,8 +9176,12 @@ context applies only while no `$()` frame is open inside it: once one is, the
 frame's own quoting governs, and the body context resumes when that frame
 closes. Inside the body a backslash protects a following dollar sign, backtick,
 or backslash before the body's quote state is consulted, because the shell
-finds the closing backtick before it parses the body's quotes; a backslash
-before an apostrophe is therefore not an escape.
+finds the closing backtick before it parses the body's quotes. Every other
+escape follows the body's own quoting: in unquoted body text a backslash makes
+the next character literal, so an escaped `)` never reaches the delimiter
+check, and in the body's double quotes it also protects the closing quote. In
+the body's single quotes a backslash has no effect, so it cannot swallow the
+quote that closes them.
 `script_substitution/delimiters.rs` rejects an unquoted `)` that would pop the
 region owning an open backtick, and the closing backtick itself rejects a depth
 that no longer matches its owner; both produce `IrGenError::InvalidCommand`.

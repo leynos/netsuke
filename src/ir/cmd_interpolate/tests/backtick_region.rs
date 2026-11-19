@@ -173,6 +173,25 @@ fn script_escaped_backtick_inside_quoted_body_does_not_end_the_region() {
     );
 }
 
+/// Keep an escaped `)` inside an unquoted backtick body from closing a frame.
+///
+/// The body is a command in its own right, where a backslash makes the `)`
+/// literal. Reading it as a closer would pop the frame that owns the open
+/// backtick and reject a script the shell accepts.
+#[test]
+fn script_escaped_parenthesis_inside_backtick_body_stays_literal() {
+    let bindings = context_bindings(RecipeShell::Posix);
+    let template = r"printf '%s' $(printf %s `printf \)`) {marker}";
+    let command = template.replace("{marker}", INS_TOKEN);
+    let actual = interpolate_script_with_bindings(&command, &bindings)
+        .expect("an escaped ) in an unquoted body must stay literal");
+    assert_eq!(
+        actual,
+        command.replace(INS_TOKEN, "UNQ"),
+        "a marker after the escaped ) in {command:?} must stay unquoted"
+    );
+}
+
 /// Prove that `\'` inside a body's single quotes does not escape the quote.
 ///
 /// With the quote closed, the `)` that follows is unquoted in the body, so it
