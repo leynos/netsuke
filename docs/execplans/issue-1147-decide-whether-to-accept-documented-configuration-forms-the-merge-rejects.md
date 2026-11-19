@@ -344,8 +344,9 @@ The environment layer is `src/cli/environment/mod.rs::EnvironmentLayer`.
 and lowercases each component. The five single-component paths in
 `BOOLEAN_PATHS` are parsed by `parse_environment_bool`, which accepts exactly
 `true`, `false`, `1`, and `0` with no trimming and no case folding; every other
-path keeps Figment's own scalar parsing, which recognizes `true`/`false` as
-Booleans, integers as numbers, and everything else as strings.
+path keeps Figment's own value parsing, which recognizes `true`/`false` as
+Booleans, integers as numbers, serialized JSON arrays as arrays, and everything
+else as strings.
 
 The early diagnostic-mode resolver is `src/cli/diag/mod.rs`. It reads the key
 naming the `json` path through an injected `EnvProvider`, trying the canonical
