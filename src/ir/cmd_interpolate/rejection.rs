@@ -230,14 +230,46 @@ mod tests {
         );
     }
 
+    /// A token that also occurs inside the fixed reason is not a disclosure.
+    ///
+    /// `"back"` occurs in `"unmatched backtick"`, so a test cannot assert its
+    /// absence from the message. It can still assert that the command is
+    /// absent and that the fixed reason supplies the only occurrence.
+    #[test]
+    fn a_token_shared_with_the_reason_is_not_disclosed() {
+        let token = "back";
+        let command = format!("echo {token} `");
+        let error = invalid_command_error(command.clone(), RejectionReason::UnmatchedBacktick);
+        let rendered = error.to_string();
+        assert!(
+            !rendered.contains(&command),
+            "the rejection must not quote the command: {rendered}"
+        );
+        assert!(
+            matches!(
+                error,
+                IrGenError::InvalidCommand { reason, .. } if reason == "unmatched backtick"
+            ),
+            "the reason field must carry the bounded description: {error:?}"
+        );
+        assert_eq!(
+            rendered.matches(token).count(),
+            "unmatched backtick".matches(token).count(),
+            "the token must not add an occurrence beyond the fixed reason: {rendered}"
+        );
+    }
+
     proptest! {
         /// Never quote a token embedded in a rejected command.
         ///
-        /// The named test above is the readable example; this property covers
+        /// The named tests are the readable examples; this property covers
         /// arbitrary token text, including characters that a naive formatter
-        /// might treat as markup.
+        /// might treat as markup. A fixed sentinel keeps a generated token from
+        /// colliding with fixed words in the reason, which would make an
+        /// absence assertion fail without any disclosure.
         #[test]
-        fn rejection_never_quotes_a_token_from_the_command(secret in "[a-z0-9]{4,12}") {
+        fn rejection_never_quotes_a_token_from_the_command(token in "[a-z0-9]{4,12}") {
+            let secret = format!("netsuke-secret-{token}");
             let command = format!("echo {secret} `");
             let error = invalid_command_error(command.clone(), RejectionReason::UnmatchedBacktick);
             let rendered = error.to_string();
