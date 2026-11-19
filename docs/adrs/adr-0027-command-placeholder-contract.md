@@ -668,8 +668,17 @@ own quote state, including when the backtick body contains nested quotes.
 An open backtick body is its own shell region, so the traversal tracks the
 body's own quoting there. A `)` inside a single- or double-quoted part of the
 body is literal data, as the shell reads it; only an unquoted `)` may close a
-`$()` frame. The body's quoting is discarded when the closing backtick restores
-the region that opened it.
+`$()` frame. A `$()` opened inside the body is then the innermost region and
+carries its own quoting until it closes, after which the body's context applies
+again. The body's quoting is discarded when the closing backtick restores the
+region that opened it.
+
+Because the shell locates the closing backtick before it parses the body, a
+backslash inside the body protects a following dollar sign, backtick, or
+backslash even where the body's own quoting would make a backslash literal. An
+escaped backtick therefore does not end the region, and a backslash before an
+apostrophe is not an escape, so it cannot swallow the quote that closes a
+body's single quote.
 
 Nesting that would leave the saved context without its owner fails closed with
 `IrGenError::InvalidCommand`; it is not approximated. Two shapes are rejected:

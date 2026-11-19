@@ -9730,7 +9730,13 @@ recorded depth selects, so a script-level backtick writes the script field
 while a backtick inside `$( … )` writes that substitution's field, and the body
 context is discarded. Because the body is its own shell region, its quoting
 decides delimiter classification while the backtick is open, so a quoted `)`
-inside the body stays literal and only an unquoted one closes a frame.
+inside the body stays literal and only an unquoted one closes a frame. The body
+context applies only while no `$()` frame is open inside it: once one is, the
+frame's own quoting governs, and the body context resumes when that frame
+closes. Inside the body a backslash protects a following dollar sign, backtick,
+or backslash before the body's quote state is consulted, because the shell
+finds the closing backtick before it parses the body's quotes; a backslash
+before an apostrophe is therefore not an escape.
 `script_substitution/delimiters.rs` rejects an unquoted `)` that would pop the
 region owning an open backtick, and the closing backtick itself rejects a depth
 that no longer matches its owner; both produce `IrGenError::InvalidCommand`.
