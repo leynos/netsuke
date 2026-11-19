@@ -6,6 +6,7 @@
 //! in [`support`]; the named cases and the generated cases stay apart only so
 //! each file fits the workspace's module-size limit.
 
+mod boundary_tests;
 mod delimiter_tests;
 mod expansion_tests;
 mod property_tests;

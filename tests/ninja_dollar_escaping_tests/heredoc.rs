@@ -91,6 +91,57 @@ fn heredoc_body_continuation_does_not_expose_an_expanding_body() -> Result<()> {
     Ok(())
 }
 
+// Verify a quoted newline cannot move a marker outside its quotes.
+//
+// POSIX starts a queued heredoc body after the newline that ends the declaring
+// command line. A newline inside a double-quoted argument is part of that
+// argument, so the body must wait for the closing quote's line. Starting the
+// body early consumes the closing quote, leaves the scanner in a quote the
+// shell has closed, and encodes the unquoted marker after the terminator with
+// double-quoted escaping. The semicolon case then runs `touch <sentinel>`
+// outside the quotes. The backtick case is a control whose double-quoted form
+// stays inert once the backtick is escaped.
+//
+// These cases require Unix, `/bin/sh`, and `ninja`; the traversal is POSIX
+// script lowering, so PowerShell's separate traversal is out of scope.
+#[cfg(unix)]
+#[rstest]
+#[case::semicolon("x\"; touch {sentinel}; echo \"y")]
+#[case::backtick("a`>{sentinel}`b")]
+fn multiline_quoted_argument_keeps_later_markers_unquoted(#[case] payload: &str) -> Result<()> {
+    let sentinel = "NETSUKE_TEST_MULTILINE_SENTINEL";
+    let input_path = payload.replace("{sentinel}", sentinel);
+    let manifest = manifest::from_str(&format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: '{input_path}'\n    script: |\n      true <<EOF \"argument\n      continues\" > /dev/null\n      body\n      EOF\n      printf '%s' {{{{ ins }}}} > {{{{ outs }}}}\n      printf '%s' {{{{ outs }}}} >> {{{{ outs }}}}\n"
+    ))?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+
+    let workspace = NinjaWorkspace::create(&ninja)?;
+    workspace
+        .directory
+        .write(input_path.as_str(), "input contents")
+        .context("write the quoted-argument input")?;
+
+    run_ninja_target(&workspace, &[])?;
+    ensure!(
+        !workspace.directory.exists(sentinel),
+        "a marker after the command line must not run a quoted argument's command"
+    );
+    let actual = workspace
+        .directory
+        .read_to_string("out")
+        .context("read quoted-argument output")?;
+    let expected = format!("{input_path}out");
+    ensure!(
+        actual == expected,
+        "expected the unquoted path text followed by the output name, got {actual:?}"
+    );
+    Ok(())
+}
+
 // Verify an arithmetic left shift survives lowering and reaches the shell.
 //
 // A tracker that reads `<<` as a heredoc operator consumes the rest of the

@@ -13,6 +13,17 @@ use super::super::*;
 #[derive(Clone, Copy)]
 pub(super) struct Recipe<'a>(pub(super) &'a str);
 
+/// Path whose unquoted encoding differs from its double-quoted encoding.
+///
+/// The semicolon is safe only when the unquoted encoder has closed the word
+/// with single quotes. The double-quoted encoding escapes quotes, dollars,
+/// backticks, and backslashes but leaves a semicolon bare, so inserting that
+/// form outside quotes would run the embedded commands.
+pub(super) const HOSTILE_PATH: &str = "x\"; touch injected; echo \"y";
+
+/// The encoding an unquoted insertion site requires for [`HOSTILE_PATH`].
+pub(super) const HOSTILE_UNQUOTED: &str = "x'\"; touch injected; echo \"y'";
+
 /// The exact text both traversals must produce, and the rule it demonstrates.
 pub(super) struct Lowering<'a> {
     /// The text every traversal must lower the recipe to.
@@ -67,5 +78,41 @@ pub(super) fn assert_both_traversals_lower_with(
     ] {
         let lowered = result.expect(lowering.rule);
         assert_eq!(lowered, lowering.text, "{}", lowering.rule);
+    }
+}
+
+/// Build bindings whose paths expose a wrong quote-context encoding.
+///
+/// Both positions carry the hostile path so a marker placed after a heredoc
+/// body reveals whether the traversal still believes the shell is inside the
+/// multiline argument's quotes.
+pub(super) fn hostile_bindings() -> CommandBindings {
+    CommandBindings::new(
+        &[Utf8PathBuf::from(HOSTILE_PATH)],
+        &[Utf8PathBuf::from(HOSTILE_PATH)],
+        RecipeShell::Posix,
+    )
+}
+
+/// Assert both traversals reject a heredoc boundary they cannot place safely.
+///
+/// The rejection must use the dedicated heredoc diagnostic rather than any
+/// invalid-command error: a caller reading the message has to be able to tell
+/// that the scanner declined to place a pending body.
+pub(super) fn assert_both_traversals_reject_heredoc_boundary(recipe: Recipe<'_>, rule: &str) {
+    let bindings = CommandBindings::new(&[], &[], RecipeShell::Posix);
+    for result in [
+        substitute(recipe.0, &bindings),
+        substitute_script(recipe.0, &bindings),
+    ] {
+        let error = result.expect_err(rule);
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "{rule}: expected an invalid-command error, got {error:?}"
+        );
+        assert!(
+            error.to_string().contains("unsupported heredoc boundary"),
+            "{rule}: the diagnostic must name the rejected boundary: {error}"
+        );
     }
 }

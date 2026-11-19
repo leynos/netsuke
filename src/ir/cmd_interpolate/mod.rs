@@ -21,7 +21,7 @@ mod posix_lexical;
 mod script_substitution;
 mod substitution;
 
-use posix_lexical::DelimiterRejection;
+use posix_lexical::{DelimiterRejection, HeredocActivationRejection};
 use script_substitution::ScriptSubstitutionTraversal;
 use substitution::SubstitutionTraversal;
 
@@ -228,6 +228,24 @@ fn invalid_command_error(command: String) -> IrGenError {
 /// same diagnostic channel as other interpolation rejections without adding a
 /// locale entry per internal variant.
 fn invalid_heredoc_delimiter_error(command: String, reason: DelimiterRejection) -> IrGenError {
+    let snippet = reason.description().to_owned();
+    let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
+    IrGenError::InvalidCommand {
+        command,
+        snippet,
+        message,
+    }
+}
+
+/// Builds the diagnostic for a heredoc body the tracker cannot start safely.
+///
+/// The rejection reason occupies the snippet argument exactly as the delimiter
+/// rejection does, so both fail-closed heredoc paths reach a caller through the
+/// invalid-command channel and name the rejected construct.
+fn invalid_heredoc_boundary_error(
+    command: String,
+    reason: HeredocActivationRejection,
+) -> IrGenError {
     let snippet = reason.description().to_owned();
     let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
     IrGenError::InvalidCommand {
