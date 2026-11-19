@@ -60,6 +60,7 @@ mod graph;
 mod help;
 mod ninja;
 mod path_helpers;
+mod phony_state;
 mod process;
 mod recipe_shell;
 pub use build_targets::BuildTargets;
@@ -79,6 +80,7 @@ pub use recipe_shell::telemetry::{
 use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
 use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
+use phony_state::reset_force_node;
 use recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 
 /// Runtime dependencies shared by command dispatch handlers.
@@ -226,6 +228,9 @@ fn execute_build(
         BuildTargets::new(&args.targets)
     };
 
+    // Ninja reads the force node's absence as "permanently dirty", so a
+    // leftover path there would quietly turn off every forced edge.
+    reset_force_node(cli)?;
     let build_file = process::create_temp_ninja_file(&ninja)?;
     let build_path = build_file.as_path();
     let ninja_program = context.ninja_program;

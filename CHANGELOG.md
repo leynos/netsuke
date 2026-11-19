@@ -102,12 +102,15 @@
 
 ### Fixed
 
-- Run every action, and every target declaring `phony: true`, on each build even
-  when a file or directory of the same name exists, and stop `netsuke clean`
-  from removing that path. A phony executable edge now publishes its name as a
-  native Ninja `phony` alias over a hidden output under `.netsuke/phony`; an
-  `always: true` edge gains a shared, permanently dirty prerequisite, so its
-  recipe re-runs while an unchanged output still prunes downstream work
+- Run every action, and every target declaring `phony: true`, every time it is
+  reached, even when a file or directory of the same name exists, and stop
+  `netsuke clean` from removing that path. A phony executable edge now
+  publishes its name as a native Ninja `phony` alias over a hidden output under
+  `.netsuke/phony`; an `always: true` edge gains a shared, permanently dirty
+  prerequisite, so its recipe re-runs while an output whose modification time
+  is unchanged still prunes downstream work. `netsuke build` clears a stray
+  path left at that prerequisite's reserved name, so it cannot silently turn
+  forcing off
   ([#1144](https://github.com/leynos/netsuke/issues/1144), [ADR-0084](docs/adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md))
 
 ### Security

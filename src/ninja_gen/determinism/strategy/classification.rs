@@ -12,6 +12,7 @@
 //! them has not exercised that path.
 
 use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
+use crate::ninja_gen::edge_metadata::{self, EdgeClass};
 use std::collections::BTreeSet;
 
 /// Every combination of `BuildEdge::always` and `Action::restat`, as a mask.
@@ -47,9 +48,12 @@ pub(crate) struct Classification {
     pub(crate) always_edges: usize,
     /// Edges whose `phony` field is set.
     ///
-    /// An executable edge with this flag set lowers to a hidden output plus a
-    /// native `phony` alias, so the count is non-vacuity evidence for that
-    /// branch rather than a tally of a field the emitter ignores.
+    /// This is a raw flag count. An executable edge with the flag set lowers
+    /// to a hidden output plus a native `phony` alias; a dependency-only
+    /// action ignores the flag because it already renders as Ninja's built-in
+    /// `phony` rule. Only the executable edges in this count are evidence that
+    /// the hidden-output branch was reached, which [`Self::phony_edges`] does
+    /// not distinguish.
     pub(crate) phony_flag_edges: usize,
     /// Actions marked `restat`.
     pub(crate) restat_actions: usize,
@@ -61,10 +65,12 @@ pub(crate) struct Classification {
     /// mask with the bit numbered `2 * always + restat` set.
     ///
     /// `DisplayEdge` emits the edge-level `restat` override only when
-    /// `edge.always && !action_restat`, and never on a hidden phony statement,
-    /// so a run missing a bit has not exercised that branch's whole truth
-    /// table. A mask rather than four flags because a run-wide tally merges by
-    /// union.
+    /// `edge.always && !action_restat` and only on a public statement; an
+    /// executable `phony` edge hides its recipe behind an alias and clears the
+    /// inherited `restat` instead. Bit 2 therefore counts only edges that
+    /// render publicly, so the mask cannot claim that branch was exercised when
+    /// no generated statement carried it. A mask rather than four flags because
+    /// a run-wide tally merges by union.
     pub(crate) always_restat_seen: u8,
 }
 
@@ -114,6 +120,16 @@ impl Classification {
                 .len(),
             always_restat_seen: edges.iter().fold(0u8, |mask, edge| {
                 let restat = action_of(edge).is_some_and(|action| action.restat);
+                let class = edge_metadata::classify(edge, is_dependency_only(edge));
+                let is_hidden_override =
+                    edge.always && !restat && class == EdgeClass::ExecutablePhony;
+                if is_hidden_override {
+                    // Bit 2 exists to show a generated statement carried the
+                    // edge-level `restat` override. A hidden phony statement
+                    // clears the inherited value instead, so this edge is no
+                    // evidence for it.
+                    return mask;
+                }
                 mask | combination_bit(edge.always, restat)
             }),
         }

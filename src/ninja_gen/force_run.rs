@@ -19,7 +19,7 @@ use std::fmt::Write;
 /// Reserved namespace for generated phony and always state.
 pub(super) const PHONY_NAMESPACE: &str = ".netsuke/phony";
 /// Permanently dirty prerequisite shared by every forced edge.
-pub(super) const FORCE_PATH: &str = ".netsuke/phony/force";
+pub(crate) const FORCE_PATH: &str = ".netsuke/phony/force";
 /// Schema tag incorporated into every hidden-output identity.
 const PHONY_SCHEMA: &str = "netsuke-phony-v1";
 /// Prefix distinguishing a hidden output from the force node.

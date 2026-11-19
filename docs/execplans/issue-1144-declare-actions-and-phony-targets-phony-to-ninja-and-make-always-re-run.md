@@ -88,7 +88,11 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
 - [x] Backend lowering implemented.
 - [x] Runtime end-to-end tests added.
 - [x] Documentation and ADR updated.
-- [ ] Gates run and CodeRabbit cleared.
+- [x] First CodeRabbit review answered: inherited `restat` clearing,
+      reserved-path
+      normalization, default-target coverage, the stray force node, and the
+      documentation wording findings.
+- [ ] Gates rerun on the fixed tree and the review cleared.
 
 ## Surprises & discoveries
 
@@ -103,10 +107,12 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   generator already draws it and documents that the emitter ignores it.
 - `tests/features/ninja.feature` asserts `build clean:` as a substring, which
   the new alias `build clean: phony .netsuke/phony/edge-…` still satisfies.
-- The localized `ninja_gen.reserved_output_path` message still names "serial
-  dependency state". Updating all 35 catalogues is out of scope and the skill
-  guidance forbids inventing translations; the users' guide and ADR name the
-  reserved namespaces precisely.
+- The localized `ninja_gen.reserved_output_path` message named the serial
+  dependency state, which is wrong for the phony namespace. The English
+  catalogues (`en-US` source and `en-GB`) now say "generated build state"; the
+  other 33 catalogues keep the earlier wording until a dedicated translation
+  change, because inventing translations is forbidden. The ADR records that gap
+  and the users' guide names all three namespaces precisely.
 - A manifest that declares only `actions` still has to declare `targets`; its
   absence fails compilation with `missing field 'targets'`. The runtime-test
   fixture therefore writes `targets: []`.
@@ -129,6 +135,37 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   now names it. The assertion was updated rather than the lowering, because the
   ordering is the contract: implicit dependencies, then the force node, then the
   `||` marker.
+- Path reservation had to compare normalized spellings. `./.netsuke/phony/force`
+  and `out/../.netsuke/phony/force` reach the same Ninja node as the literal
+  path, so the check folds `.`, empty, and `..` components before matching and
+  runs over every edge field plus the default targets. A `..` that would climb
+  above the root cannot resolve to a reserved path and is accepted.
+- A stray path at `.netsuke/phony/force` makes the no-input phony node look
+  present, and Ninja then treats every forced edge as clean. Generation cannot
+  repair that without inspecting the filesystem, which the determinism claim
+  forbids, so `netsuke build` removes the path before it invokes Ninja. The
+  `generate` command stays pure and cannot clear it for a hand-run file.
+- The hidden statement inherits the action rule's bindings, so an action that
+  sets `restat = 1` would otherwise carry it onto a path that is never written,
+  and Ninja would prune dependants whose work was never up to date. The hidden
+  statement now clears the inherited value with an empty `restat =` binding,
+  the same way the pool writer clears an inherited console pool.
+- The Whitaker suite's `no_std_fs_operations` lint rejected a locally written
+  execute-bit probe in `test_support::ninja`. The crate already owns that
+  wrapper: `test_support::fs::is_executable_file` is the ambient filesystem
+  boundary, so the resolver delegates to it on Unix instead of duplicating the
+  mode check. This is the reuse case the boundary module exists for, and it
+  avoided a new exemption rather than requiring one.
+- The spelling gate reads unbackticked `restat` as a typo for `restart`, while
+  backticked `restat` is left alone. One ADR sentence had used the word as
+  prose. Marking the identifier as code fixed the gate without an entry in
+  `typos.local.toml`, which is the right place only when an identifier must
+  appear unquoted.
+- The determinism strategy's `always_restat_seen` bit exists to prove the
+  public `restat` override was exercised. A hidden phony statement never
+  carries that override, so those edges no longer set the bit, while the raw
+  `phony` flag count stays a raw count because a dependency-only flagged edge
+  never takes the hidden branch either.
 - The first gate batch was red for three mechanical reasons, all fixed before
   rerunning: `missing_const_for_fn` on `classify` and `edge_needs_force`, and
   the two BDD expectations above. A red batch whose failures are expectations
@@ -161,7 +198,15 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
 - The alias is `build <explicit> | <implicit>: phony <hidden>`; it deliberately
   carries no force dependency because the hidden output is already dirty.
 - `restat` is suppressed on hidden statements and retained on public non-phony
-  `always` statements.
+  `always` statements. An inherited rule-level `restat = 1` is cleared with an
+  empty binding on the hidden statement.
+- Reserved namespaces are matched against a lexically normalized path, over
+  every edge path field and the default targets. A path that climbs above its
+  root with `..` is not reserved, and the check says so once instead of falling
+  back to the raw spelling for that case.
+- `netsuke build` clears a path left at `.netsuke/phony/force` before invoking
+  Ninja. The generator stays a pure translation of the graph, and the removal
+  belongs to the command that owns build state.
 
 ## Acceptance criteria
 
@@ -202,9 +247,25 @@ The commit gates were then run as one sequential batch. `make check-fmt`,
 gate ran all 6050 nextest cases with 9 environment-gated skips and passed every
 doctest target. Doc-comment coverage measured 98% against the 80% threshold.
 
+The first review then raised shape questions the generation tests could not
+answer, and the fixes changed executable behaviour:
+
+- A hidden statement now clears an inherited rule-level `restat`, so an
+  `always`-style action cannot prune dependants through a path that is never
+  written.
+- Reserved-path matching normalizes spelling and covers the default targets, so
+  a manifest cannot forge generated state through `./` or `..` spellings.
+- `netsuke build` removes a stray path at the force node before Ninja runs, with
+  a unit test for each path type and a real-Ninja test that pre-creates the
+  node, builds twice, and requires the forced recipe to run both times.
+
 Retrospective: the largest avoidable detour was diagnosing two failing text
 assertions whose premises were wrong rather than whose implementation was. One
 set `Action::description` and expected an edge-level binding; the other
 asserted a `phony dep` spelling the emitter never produced. Both were fixed by
 correcting the expectation, and both are now recorded under Surprises so a
-follow-on reader does not re-derive them.
+follow-on reader does not re-derive them. The second lesson is that a review
+comment about Ninja semantics deserves an experiment before an edit: the stray
+force node was confirmed on the real binary before the reset command was
+chosen, which is why its documented behaviour matches what Ninja does rather
+than what the finding assumed.

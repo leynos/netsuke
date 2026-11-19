@@ -119,8 +119,10 @@ The hidden output is the edge's only produced path, so no user path can make it
 look up to date, and `ninja -t clean` — which skips `phony` outputs — leaves a
 same-named user path alone. Progress metadata (`description`, `pool`) stays on
 the hidden statement, which is the statement that runs the recipe. `restat` is
-suppressed there: the hidden path is never written, so a restat claim on it
-could not prune anything.
+suppressed there, and a rule-level `restat = 1` the action sets is cleared with
+an empty `restat =` binding: an edge inherits its rule's bindings, and the
+hidden path is never written, so a surviving `restat` claim could only prune
+dependants whose work was never up to date.
 
 Implicit outputs join the alias, `build out | out.d: phony <hidden>`, and stay
 off the hidden statement.
@@ -135,15 +137,21 @@ build out: check in | .netsuke/phony/force
   restat = 1
 ```
 
-The edge-level `restat = 1` is kept exactly as before. It is what tells Ninja
-to compare the output's modification time after the run, so a recipe that
-rewrites an unchanged file still prunes its dependants.
+The edge-level `restat = 1` is kept exactly as before. Ninja records each
+output's modification time after the run and treats an output whose time did
+not change as clean, so a recipe that leaves the output's time alone prunes its
+dependants. Rewriting the file, even with identical bytes, updates the time and
+rebuilds them.
 
 ### Shared details
 
 - `.netsuke/phony/force` is declared once, as
   `build .netsuke/phony/force: phony`, and only when a rendered edge consumes
   it.
+- `netsuke build` removes any path left at `.netsuke/phony/force` before it
+  invokes Ninja: the node is dirty only while that path is absent, and the
+  removal belongs to the command that owns build state rather than to the pure
+  generator.
 - The hidden identity hashes the explicit outputs and then the implicit
   outputs, NUL-separated within a group and separated by `U+0001` between
   groups, under the schema tag `netsuke-phony-v1`. Path validation already
@@ -176,11 +184,16 @@ rewrites an unchanged file still prunes its dependants.
 No manifest change is required. Existing manifests gain corrected behaviour:
 
 - An action or `phony: true` target that a same-named path used to suppress now
-  runs on every `netsuke build`.
-- `netsuke clean` no longer removes a user path whose name matches such an
-  entry, and now removes the generated `.netsuke/phony/edge-*` outputs instead.
+  runs every time the target is reached.
+- `netsuke clean` no longer removes a user path whose name matches an
+  executable phony entry, and now removes the generated `.netsuke/phony/edge-*`
+  outputs instead.
 - An `always: true` target that used to be skipped when up to date now re-runs.
-  Its dependants still rebuild only when the recipe changes the output.
+  Its dependants still rebuild only when the recipe changes the output's
+  modification time.
+- A path an older Netsuke run declared as an executable phony edge's output is
+  no longer declared, so `netsuke clean` will not remove it. Delete any such
+  stale build product once, before relying on `clean` to clear the workspace.
 - Generated Ninja text changes shape for these edges. The determinism guarantee
   is unchanged: for one graph, environment, platform, shell selection, and
   Netsuke version, the emitted bundle is still byte-identical. Manifests that
@@ -192,13 +205,25 @@ No manifest change is required. Existing manifests gain corrected behaviour:
   that inspects the generated file for modification times of an action name
   must interpret the alias instead; users interact with the manifest name, not
   the generated statement.
-- The localized reserved-namespace message still names only the serial
-  dependency state. The users' guide and this record name all three namespaces
-  precisely, and the catalogue text is left for a dedicated translation change.
+- The English reserved-namespace message now names generated build state rather
+  than serial dependency state, which covers all three namespaces. The other
+  catalogues retain the earlier wording until a dedicated translation change,
+  so their readers still see a message written for the serial namespace alone.
+  The users' guide and this record name all three namespaces precisely.
 - `netsuke clean` removes the hidden outputs but not the now-empty
   `.netsuke/phony` directory.
 - Ninja creates the `.netsuke/phony` directory when it first runs a hidden
   recipe, so a build that skips every such edge never creates it.
+- The force node is a real path in the build directory. If a file, directory,
+  or symbolic link exists at `.netsuke/phony/force`, Ninja finds the phony
+  node's output present and treats the forced edges as clean, so they stop
+  re-running. `netsuke build` therefore removes a path found at that node
+  before it invokes Ninja, and warns when it does; the path is inside a
+  namespace reserved for generated state, so nothing a manifest declares is
+  lost. Generation does not inspect the filesystem, because emitting a Ninja
+  file is a pure translation of the graph, so a generated file run by hand
+  under a directory holding a stray force node keeps the old behaviour until
+  that path is removed.
 
 ## Architectural rationale
 

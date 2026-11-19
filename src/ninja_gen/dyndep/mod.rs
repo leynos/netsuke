@@ -79,6 +79,7 @@ use crate::ninja_gen::{
     write_action_rules,
 };
 use crate::recipe_shell::InterpreterExecutable;
+use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use std::fmt::Write as _;
 
 /// Reserved state namespace for serial gate paths.
@@ -257,37 +258,75 @@ fn generate_bundle_inner(
     })
 }
 
-/// Reject user outputs or dependencies that collide with a reserved
+/// Reject user outputs, dependencies, or defaults that collide with a reserved
 /// generated-state namespace.
+///
+/// Default targets are checked as well as edge paths: a `default` statement
+/// naming `.netsuke/phony/force` would make a generated-state node a build
+/// root, and naming `.netsuke/phony/edge-...` would expose a hidden statement.
 pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenError> {
-    for edge in graph.edges() {
-        for path in edge
-            .explicit_outputs
+    let edge_paths = graph.edges().flat_map(|edge| {
+        edge.explicit_outputs
             .iter()
             .chain(&edge.implicit_outputs)
             .chain(&edge.inputs)
             .chain(&edge.implicit_deps)
             .chain(&edge.order_only_deps)
-        {
-            let as_str = path.as_str();
-            let is_reserved = [SERIAL_NAMESPACE, DYNDEP_NAMESPACE, PHONY_NAMESPACE]
-                .iter()
-                .any(|namespace| {
-                    as_str == *namespace
-                        || as_str
-                            .strip_prefix(namespace)
-                            .is_some_and(|suffix| suffix.starts_with('/'))
-                });
-            if is_reserved {
-                return Err(NinjaGenError::ReservedOutputPath {
-                    path: path.clone(),
-                    message: localization::message(keys::NINJA_GEN_RESERVED_OUTPUT_PATH)
-                        .with_arg("path", as_str),
-                });
-            }
+    });
+    for path in edge_paths.chain(&graph.default_targets) {
+        if is_reserved_path(path) {
+            return Err(NinjaGenError::ReservedOutputPath {
+                path: path.clone(),
+                message: localization::message(keys::NINJA_GEN_RESERVED_OUTPUT_PATH)
+                    .with_arg("path", path.as_str()),
+            });
         }
     }
     Ok(())
+}
+
+/// Return whether `path` names a location inside a reserved namespace.
+///
+/// Ninja compares paths textually, so `.netsuke//serial/x` and
+/// `./.netsuke/serial/x` name the same file as `.netsuke/serial/x` without
+/// matching it as a string. Normalizing `.` and empty components first keeps a
+/// spelling variant from shadowing generated state.
+fn is_reserved_path(path: &Utf8Path) -> bool {
+    let Some(normalized) = normalize_lexically(path) else {
+        // Only a path that climbs above its root lands here, and such a path
+        // cannot reach generated state inside the build tree.
+        return false;
+    };
+    let candidate = normalized.as_str();
+    [SERIAL_NAMESPACE, DYNDEP_NAMESPACE, PHONY_NAMESPACE]
+        .iter()
+        .any(|namespace| {
+            candidate == *namespace
+                || candidate
+                    .strip_prefix(namespace)
+                    .is_some_and(|suffix| suffix.starts_with('/'))
+        })
+}
+
+/// Resolve `.` and empty components and fold `..` where it can be applied.
+///
+/// Returns `None` when a leading `..` climbs above the path's root. Such a path
+/// cannot resolve inside the build tree, so it cannot name the generated state
+/// that lives there.
+fn normalize_lexically(path: &Utf8Path) -> Option<String> {
+    let mut normalized = Utf8PathBuf::new();
+    for component in path.components() {
+        match component {
+            Utf8Component::CurDir => {}
+            Utf8Component::ParentDir => {
+                if !normalized.pop() {
+                    return None;
+                }
+            }
+            other => normalized.push(other.as_str()),
+        }
+    }
+    Some(normalized.into_string())
 }
 
 #[cfg(test)]

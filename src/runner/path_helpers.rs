@@ -1,7 +1,7 @@
 //! Path resolution helpers for the runner module.
 //!
-//! Centralises manifest and output path logic so the main runner module stays
-//! focused on command dispatch.
+//! Centralises manifest, output, and working-directory logic so the main
+//! runner module stays focused on command dispatch.
 
 use crate::cli::Cli;
 use crate::localization::{self, keys};
@@ -58,6 +58,31 @@ pub(super) fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path
     } else {
         Cow::Borrowed(path)
     }
+}
+
+/// Open the working directory Ninja will run in, through a capability handle.
+///
+/// `-C/--directory` behaves like a working directory change for the child
+/// process, so any command that inspects or clears generated build state must
+/// resolve paths against the same directory rather than the caller's process
+/// working directory.
+///
+/// # Errors
+///
+/// Returns an error when the directory cannot be opened.
+pub(super) fn open_effective_dir(cli: &Cli) -> Result<Dir> {
+    cli.directory.as_ref().map_or_else(
+        || {
+            Dir::open_ambient_dir(".", ambient_authority())
+                .context(localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR))
+        },
+        |dir| {
+            Dir::open_ambient_dir(dir.as_str(), ambient_authority()).with_context(|| {
+                localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR)
+                    .with_arg("path", dir.as_str())
+            })
+        },
+    )
 }
 
 /// Verify the selected manifest exists, reporting `PipelineStage::ManifestIngestion`

@@ -64,15 +64,26 @@ decision that added the label.
 
 No manifest needs an edit, but two shapes now behave as their names promised.
 
-An action, and any target declaring `phony: true`, runs on every build even
-when a file or directory of that name exists. Previously such a path made the
-edge look up to date, so the recipe was skipped after its first run.
-`netsuke clean` now leaves that path alone and removes the generated output
-under `.netsuke/phony` instead.
+An action or target declaring `phony: true` with a recipe runs every time it is
+reached, even when a file or directory of that name exists. Previously such a
+path made the edge look up to date, so the recipe was skipped after its first
+run. `netsuke clean` now leaves that path alone and removes the generated
+output under `.netsuke/phony` instead. A dependency-only aggregate has no
+recipe and no generated recipe output; it keeps its dependency-only `phony`
+form whether or not it declares the flag.
+
+A recipe that previously wrote a file at its declared name left that file
+behind as the edge's declared output. `netsuke clean` no longer removes it, and
+will not remove it after the upgrade either, because the generated
+`.netsuke/phony` output does not replace the old path. Identify stale build
+products from earlier runs and delete only the ones you have confirmed the
+recipe created. Do not delete unrelated files that merely share a target's name.
 
 A target declaring `always: true` re-runs on every invocation even when its
-inputs and output are unchanged. A dependant still rebuilds only when the
-`always` recipe changed what it wrote.
+inputs and output are unchanged. Ninja records the output's modification time
+after the run: an unchanged time lets it skip an otherwise up-to-date
+dependant, while a recipe that rewrites identical bytes still advances the time
+and rebuilds that dependant.
 
 Because the generated Ninja text changes shape for these edges, a manifest that
 compares `netsuke generate` output against a stored copy must update that copy.

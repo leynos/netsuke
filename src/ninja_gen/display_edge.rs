@@ -66,6 +66,13 @@ impl DisplayEdge<'_> {
     /// materialized, so re-statting it cannot prune any downstream edge.
     fn write_hidden(&self, output: &mut Formatter<'_>, hidden: &Utf8PathBuf) -> fmt::Result {
         self.write_build_line(output, std::slice::from_ref(hidden), false)?;
+        if self.action_restat {
+            // The action's rule declares `restat = 1`, and Ninja lets an edge
+            // inherit it. Leaving it in force here would let a never-created
+            // hidden output prune the next run's dependants, so clear it the
+            // same way `write_pool` clears an inherited console pool.
+            writeln!(output, "  restat =")?;
+        }
         self.write_description(output)?;
         self.write_pool(output)?;
         writeln!(output)
