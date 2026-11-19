@@ -5,14 +5,17 @@
 Read this guide when upgrading a manifest from v0.1.x to v0.2.0. Two changes
 are observable: `netsuke check` becomes standard, and a `{{ ins }}` or
 `{{ outs }}` marker directly after an unpaired backslash is rejected in POSIX
-and Bash recipes.
+and Bash recipes. Readers upgrading from a pre-beta5 build should also note the
+two changes carried over from the v0.1.0 beta series.
 
 ## Impact at a glance
 
 | Priority | Area                   | What to do                                                |
 | -------- | ---------------------- | --------------------------------------------------------- |
 | Required | POSIX and Bash recipes | Rewrite a marker that directly follows a single backslash |
+| Required | Pre-beta5 Rust matches | Bind `reason` instead of the removed `snippet` field.     |
 | Optional | `netsuke check`        | Start using the linter now that every build includes it   |
+| Optional | Scripts parsing stderr | Tolerate the additional cause lines in human output.      |
 
 _Table 1: Obligations when moving from v0.1.x to v0.2.0._
 
@@ -84,6 +87,70 @@ Suppression comments name the rules they silence and must include a reason;
 there is no blanket disable. The complete rule list, policy options, and JSON
 output contract are in the
 [users' guide](users-guide.md#lint-a-manifest-with-netsuke-check).
+
+## 3. Note changes carried over from the v0.1.0 beta series
+
+Two changes recorded in the v0.1.0 migration guide arrived in `v0.1.0-beta5`,
+before the v0.1.x baseline this guide starts from. They are repeated here for
+readers upgrading from an earlier beta; a v0.1.x to v0.2.0 upgrade needs no
+action for them unless a script parses human stderr.
+
+### Human-mode failure causes
+
+The `v0.1.0-beta5` pre-release prints the ordinary cause chain beneath the
+context line in default human output for graph, interpolation, and
+Ninja-generation failures. A missing rule therefore reports both the enclosing
+build step and the failing reference. A cause that repeats the context line or
+the cause above it is omitted, so each message appears once.
+
+An interpolation rejection names the refused syntax, such as
+`unmatched backtick`, instead of quoting the recipe. A rendered recipe can
+contain a value resolved from the environment, so repeating it would disclose
+that value. JSON output already listed the same chain in its `causes` array, so
+the two modes agree at the same depth, except that human output omits a message
+repeated by the layer above it.
+
+No action is needed unless a script parses human-readable standard error; such
+a script must tolerate the additional cause lines. See
+[Interpret failures](users-guide.md#interpret-failures).
+
+### `InvalidCommand` carries a fixed rejection reason
+
+The `v0.1.0-beta5` pre-release changes `IrGenError::InvalidCommand`: its
+`snippet: String` field is replaced by `reason: &'static str`. A rejection now
+names the syntax it refused instead of quoting the rejected command, because a
+rendered recipe can contain a value resolved from the environment. A pattern
+match that binds or destructures `snippet` must change to bind the new field or
+ignore it.
+
+Before:
+
+```rust,no_run
+use netsuke::ir::IrGenError;
+
+fn describe(err: IrGenError) -> String {
+    match err {
+        IrGenError::InvalidCommand { snippet, .. } => snippet,
+        other => other.to_string(),
+    }
+}
+```
+
+After:
+
+```rust,no_run
+use netsuke::ir::IrGenError;
+
+fn describe(err: IrGenError) -> String {
+    match err {
+        IrGenError::InvalidCommand { reason, .. } => reason.to_owned(),
+        other => other.to_string(),
+    }
+}
+```
+
+The variant still carries the rejected command in its `command` field for
+callers that inspect it; its `Display` renders the localized message alone.
 
 ## What does not need to change
 

@@ -9386,6 +9386,27 @@ variables `$ins` and `$outs` are not Netsuke markers and must pass through as
 shell text for the backend to escape. Keep the constants and their recognition
 limited to this two-stage recipe pipeline and its direct IR recipe tests.
 
+The private `src/ir/cmd_interpolate/rejection.rs` module owns the reasons a
+recipe command or heredoc delimiter can be refused. `command_rejection` in
+`src/ir/cmd_interpolate/mod.rs` replaces the former Boolean
+`is_valid_command_for_shell` and returns `Option<RejectionReason>` instead, so
+a refusal names the rule it broke rather than only reporting that one broke.
+The private `RejectionReason` enum is deliberately coarse: each variant names a
+class of rejection whose remedy is to move or remove a marker, and maps to a
+fixed `&'static str` description. The two module-level constructors are
+`invalid_command_error` for an interpolation rejection and
+`invalid_heredoc_delimiter_error` for a delimiter the tracker cannot model;
+both insert the bounded description into the localized `ir.invalid_command`
+message.
+
+`IrGenError::InvalidCommand` retains the rejected command for callers that
+inspect it, but its `Display` renders the localized message alone. The field
+that reaches the message is typed `&'static str`, so rendered recipe text
+cannot be placed in it, and the rejected command never reaches human or JSON
+output. This matters because `env()` runs while the manifest is rendered: a
+command that reaches this guard may already contain a value resolved from the
+environment.
+
 ### Command interpolation contract
 
 The scanner recognizes only the internal `INS_TOKEN` and `OUTS_TOKEN` tokens
