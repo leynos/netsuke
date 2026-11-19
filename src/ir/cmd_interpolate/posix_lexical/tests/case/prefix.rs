@@ -72,6 +72,53 @@ fn quoted_coproc_name_before_a_case_fails_closed() {
     }
 }
 
+// Verify a line-continued keyword behind a quoted `coproc` name fails closed.
+//
+// Bash deletes a backslash-newline pair before parsing, so `c` + continuation +
+// `ase` spells the keyword and `i` + continuation + `n` completes the header.
+// The tracker reads both spellings; the raw-source check must read them the same
+// way, or an unplaced `case` goes unrecognized and the arm's marker is lowered
+// for the outer quote context.
+#[rstest]
+#[case::continued_case("coproc \"jobs\" c\\\nase x in x)")]
+#[case::continued_in("coproc \"jobs\" case x i\\\nn x)")]
+fn continued_keywords_behind_a_quoted_coproc_name_fail_closed(#[case] substitution: &str) {
+    let template = format!("echo \"$({substitution} echo {INS_TOKEN} ;; esac)\"");
+    let bindings = hostile_bash_bindings();
+
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &bindings).expect_err(
+            "a line-continued case header behind a quoted coproc name must fail closed",
+        );
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+    }
+}
+
+// Verify a continued `case` used as argument data is not rejected.
+//
+// The guard still needs a whole-word `in` after the keyword, so argument data
+// that merely spells the keyword with a continuation must keep interpolating.
+// Rejecting it would make the continuation-aware scan stricter than the
+// construct it is guarding.
+#[test]
+fn continued_case_argument_with_a_later_marker_is_accepted() {
+    let template = format!("echo \"$(echo c\\\nase)\" {OUTS_TOKEN}");
+    let expected = "echo \"$(echo c\\\nase)\" output";
+    let bindings = bash_bindings();
+
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(&template, &bindings)
+                .expect("continued argument data must not fail closed"),
+            expected,
+            "the marker after the substitution must lower to its path"
+        );
+    }
+}
+
 // Verify `case` passed as an argument is not mistaken for a construct.
 //
 // The fail-closed check needs a whole-word `in` after the keyword, because the

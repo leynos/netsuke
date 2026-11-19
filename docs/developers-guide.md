@@ -9305,11 +9305,13 @@ A `)` that terminates a `case` pattern is an operator, so a `#` immediately
 after it starts a comment, while the `)` that closes `$()` stays in the
 surrounding word and leaves the same `#` as word data. The two are lexically
 identical without the `case` grammar, so `CaseNesting` in
-`src/ir/cmd_interpolate/case_nesting.rs` counts `case` and `esac` reserved
+`src/ir/cmd_interpolate/case_nesting/mod.rs` counts `case` and `esac` reserved
 words inside each substitution and keeps the substitution open across pattern
-terminators; the `)` that finally closes it is the one checked. When that
-closer is immediately followed by `#` and the substitution's source contains
-`case`, both POSIX traversals fail closed with
+terminators; the `)` that finally closes it is the one checked. Its sibling
+`state.rs` holds the tracker's small state values: the keywords seen, the open
+compound-command prefix, and the role a completed word plays. When that closer
+is immediately followed by `#` and the substitution's source contains `case`,
+both POSIX traversals fail closed with
 `IrGenError::AmbiguousSubstitutionBoundary` rather than guessing a quote
 context. The check over-approximates on purpose: it scans the raw source, so a
 `case` inside quotes or a comment also triggers it, and it does not consult the
@@ -9348,7 +9350,9 @@ recorded, and `reject_unplaced_case` in `command_substitution.rs` fails closed
 once the substitution's source also holds a whole-word `in` before the closer
 and a Netsuke marker follows that closer. Both conditions matter: the shell
 requires `in` before the first pattern terminator, and a later marker is what
-makes the quote-context decision observable at all. The check
+makes the quote-context decision observable at all. Both keywords are matched
+as Bash reads them: a backslash-newline pair is deleted before parsing, so `c`
+followed by a continuation and `ase` still spells `case`. The check
 over-approximates, so argument data such as `grep case in file` followed by a
 later marker is rejected too, and so is a `case` behind an assignment or
 redirection prefix. The shell reads the latter as a syntax error, so the

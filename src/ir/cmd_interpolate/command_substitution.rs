@@ -236,16 +236,54 @@ fn contains_keyword(chars: &[char], start: usize, end: usize, keyword: &[char]) 
 }
 
 /// Report whether `keyword` appears at `pos` as a whole word.
+///
+/// Bash deletes a backslash-newline pair before it parses, so `c`, a
+/// continuation, then `ase` spells `case`, and the same holds for `in`. The
+/// scan therefore steps over those pairs inside the keyword and on both sides
+/// of it, matching the word the shell would build rather than the characters
+/// the file contains. A continuation that joins the keyword to a neighbouring
+/// word is joined here too, so it does not count as a word of its own.
 fn is_keyword_at(chars: &[char], pos: usize, keyword: &[char]) -> bool {
-    if chars.get(pos..pos + keyword.len()) != Some(keyword) {
-        return false;
+    let mut cursor = pos;
+    for expected in keyword {
+        cursor = skip_line_continuations(chars, cursor);
+        if chars.get(cursor) != Some(expected) {
+            return false;
+        }
+        cursor += 1;
     }
-    let starts_word = pos == 0
-        || chars
-            .get(pos - 1)
-            .is_some_and(|ch| SourceChar::new(*ch).is_word_terminator());
+    let starts_word = previous_effective_char(chars, pos).is_none_or(|index| {
+        chars
+            .get(index)
+            .is_some_and(|ch| SourceChar::new(*ch).is_word_terminator())
+    });
+    let after = skip_line_continuations(chars, cursor);
     let ends_word = chars
-        .get(pos + keyword.len())
+        .get(after)
         .is_none_or(|ch| SourceChar::new(*ch).is_word_terminator());
     starts_word && ends_word
+}
+
+/// Return the first index at or after `pos` that no continuation hides.
+///
+/// A backslash immediately followed by a newline is deleted before parsing, so
+/// the character the shell reads next is the one after the pair.
+fn skip_line_continuations(chars: &[char], mut pos: usize) -> usize {
+    while chars.get(pos) == Some(&'\\') && chars.get(pos + 1) == Some(&'\n') {
+        pos += 2;
+    }
+    pos
+}
+
+/// Return the index of the character that really precedes `pos`.
+///
+/// Continuations are deleted before parsing, so a keyword preceded by one is
+/// preceded by the character before the pair, which decides whether it starts a
+/// word. Returning `None` means the position opens the source.
+fn previous_effective_char(chars: &[char], pos: usize) -> Option<usize> {
+    let mut end = pos;
+    while end >= 2 && chars.get(end - 1) == Some(&'\n') && chars.get(end - 2) == Some(&'\\') {
+        end -= 2;
+    }
+    end.checked_sub(1)
 }
