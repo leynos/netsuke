@@ -1,9 +1,12 @@
 diff --git a/src/ir/cmd_interpolate/mod.rs b/src/ir/cmd_interpolate/mod.rs
 --- a/src/ir/cmd_interpolate/mod.rs
 +++ b/src/ir/cmd_interpolate/mod.rs
-@@ -120,4 +120,4 @@ pub(crate) fn interpolate_command_with_bindings(
+@@ -187,7 +187,7 @@ pub(crate) fn interpolate_command_with_bindings(
+     bindings: &CommandBindings,
  ) -> Result<String, IrGenError> {
      let interpolated = substitute(template, bindings)?;
--    if !is_valid_command_for_shell(&interpolated, bindings.shell) {
-+    if !is_valid_command_for_shell(template, bindings.shell) {
-         return Err(invalid_command_error(interpolated));
+-    if let Some(reason) = command_rejection(&interpolated, bindings.shell) {
++    if let Some(reason) = command_rejection(template, bindings.shell) {
+         return Err(invalid_command_error(interpolated, reason));
+     }
+     Ok(interpolated)
