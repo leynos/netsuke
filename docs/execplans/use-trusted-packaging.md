@@ -5404,6 +5404,44 @@ and pass, on the final wording.
   only afterwards would have repeated this discovery on every candidate.
   Date/Author: 2026-11-18, implementation agent.
 
+- [x] (2026-11-19) Reconciled the remaining pre-merge warning and answered the
+  security question it raised. CodeRabbit's Developer Documentation row named
+  four runtime-test helpers the developers' guide did not describe, so
+  `ecfa3d0e1` adds a paragraph to the "Release-admission runtime tests" section
+  covering `gate_environment` (which drops inherited
+  `NETSUKE_RELEASE_ADMISSION_*` and `GIT_*` names, prepends the cmd-mox shim
+  directory, and applies case overrides last), the candidate-bound manifest
+  builders, the two-repository layout, and the workflow-contract validator
+  loader. CodeRabbit's reply confirmed the row resolved at that commit and that
+  the guide's twenty-four-module list still matches the
+  `test-release-admission` recipe in the same order.
+
+  *What the reply then raised.* It argued that the uv isolation flags were only
+  checked statically, and that proving the boundary needed a run against a
+  hostile candidate checkout. The earlier finding asked only for `--no-config`
+  and a matching contract, so the claim overstated its own history; the
+  underlying concern was still right, because a text comparison cannot show
+  that a flag changes uv's behaviour. A probe settled the design: an unparsable
+  `uv.toml` (`index-url = 123`) is refused when uv reads it, and a
+  `requires-python = ">=99"` project is refused when uv honours it, while a
+  plain script runs under both flags in about a second with no network access.
+  `f610a237f` adds `release_admission_uv_isolation_test.py`, which runs the
+  workflow's *own* gate command over a candidate holding both traps and
+  requires the probe's sentinel, plus one negative control per flag that drops
+  only that flag and requires the matching refusal. The command comes from
+  `verifier_gate_command`, so moving the verifier checkout moves the test with
+  it.
+
+  *Gates.* The full set ran on `f610a237f`. The first launch was cut short by
+  the session ending at `doc-coverage`, so the remaining eight targets were
+  re-run from that point: `check-fmt`, `typecheck`, `lint-clippy`,
+  `lint-whitaker`, `lint-python`, `github-actions-lint`, `doc-coverage`
+  (98.29%), `test-nextest`, `doctest`, `test-workflow-contracts`,
+  `test-documentation-contracts`, `markdownlint`, `nixie`, and
+  `test-release-admission` each exit zero. `typecheck` took 2488 seconds and
+  `lint-whitaker` 3214 under a full compile-admission pool, which is queue
+  latency rather than a defect. Date/Author: 2026-11-19, implementation agent.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
