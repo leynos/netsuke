@@ -111,7 +111,8 @@ output contract are in the
 
 ## Common errors and fixes
 
-- **Error:** `Invalid command interpolation: <template>`
+- **Error:** `Invalid command interpolation: escape sequence before a recipe
+  marker`
   - **Fix:** the template contains a marker directly after a single backslash.
     Write `\\{{ outs }}` for a literal backslash, or place the marker inside
     single quotes.

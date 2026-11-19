@@ -287,9 +287,10 @@ Ausgewogene, vom Autor geschriebene Befehlssubstitutionen bleiben aktiv.
 
 Dieses POSIX-Manifest wird zurückgewiesen, bevor Ninja ausgeführt wird. Führen
 Sie `netsuke --locale en-GB generate` aus, um die Ursache zu sehen: Die
-menschenlesbare Standardfehlerausgabe nennt `Invalid command interpolation:`
-gefolgt vom problematischen Ausschnitt. `--json` meldet dieselbe Ursache im
-strukturierten Diagnosedokument:
+menschenlesbare Standardfehlerausgabe nennt
+`Invalid command interpolation: unmatched backtick`. Die Diagnose wiederholt
+niemals das Rezept, dessen gerenderter Text bereits einen aus der Umgebung
+aufgelösten Wert enthalten kann.
 
 ```yaml
 netsuke_version: '1.0.0'

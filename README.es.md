@@ -291,9 +291,9 @@ sustituciones equilibradas escritas por el autor siguen activas.
 
 Este manifiesto POSIX se rechaza antes de ejecutar Ninja. Ejecute
 `netsuke --locale en-GB generate` para ver la causa: la salida legible
-predeterminada indica `Invalid command interpolation:` seguido del fragmento
-problemático. `--json` informa la misma causa en el documento de diagnóstico
-estructurado:
+predeterminada indica `Invalid command interpolation: unmatched backtick`. El
+diagnóstico nunca repite la receta, cuyo texto renderizado puede contener ya un
+valor resuelto desde el entorno.
 
 ```yaml
 netsuke_version: '1.0.0'

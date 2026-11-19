@@ -42,8 +42,14 @@
   now prints its ordinary `anyhow` causes beneath the context line,
   deduplicated against that line and against consecutive repeats, so the
   default output discloses the same messages JSON mode reports in `causes`.
-  Diagnostic selection, context-line suppression, circular-dependency
-  rendering, and JSON output are unchanged
+  Interpolation rejections name the failed syntax, such as
+  `unmatched backtick`, instead of quoting the recipe, whose rendered text may
+  already contain a value resolved from the environment. Diagnostic selection,
+  context-line suppression, circular-dependency rendering, and JSON output are
+  unchanged ([#1145](https://github.com/leynos/netsuke/issues/1145)).
+- **Breaking:** `IrGenError::InvalidCommand` replaces its `snippet` field with a
+  bounded `reason`, so a rejection can name the failed syntax without quoting a
+  command that may contain a permitted `env()` value
   ([#1145](https://github.com/leynos/netsuke/issues/1145)).
 - **Breaking:** `generate` now resolves the Windows Bash compatibility runtime
   and writes its absolute path. When no `bash.exe` is available it fails with a

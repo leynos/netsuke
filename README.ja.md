@@ -256,8 +256,9 @@ NetsukeはPOSIXとBashのバッククォートによるコマンド置換内、�
 
 このPOSIXマニフェストはNinjaの実行前に拒否されます。原因を見るには
 `netsuke --locale en-GB generate` を実行します。既定の人間向け出力は
-`Invalid command interpolation:` に続いて問題の箇所を表示します。 `--json`
-は同じ原因を構造化診断ドキュメントで報告します。
+`Invalid command interpolation: unmatched backtick` と表示します。診断は
+レシピを繰り返しません。レンダリング済みのレシピには、環境から解決された
+値がすでに含まれている可能性があるためです。
 
 ```yaml
 netsuke_version: '1.0.0'

@@ -308,8 +308,9 @@ change. Balanced author-written command substitutions remain live.
 
 This POSIX manifest is rejected before Ninja runs. Run
 `netsuke --locale en-GB generate` to see the cause: the default human output
-names `Invalid command interpolation:` followed by the offending snippet.
-`--json` reports the same cause in the structured diagnostic document:
+names `Invalid command interpolation: unmatched backtick`. The diagnostic never
+repeats the recipe, whose rendered text may already contain a value resolved
+from the environment.
 
 <!-- tested-example: readme-backtick-rejection-manifest -->
 

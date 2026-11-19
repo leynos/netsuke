@@ -2789,7 +2789,7 @@ Netsuke reports failures at the earliest stage that can identify them:
 
 - YAML failures include locations when the parser provides them.
 - Schema failures identify unknown or malformed fields.
-- Jinja failures identify missing variables or invalid helpers.
+- Jinja failures identify undefined variables or invalid helpers.
 - IR failures report missing rules, duplicate outputs, and dependency cycles
   before Ninja starts. See
   [Dependency and build-graph semantics](#dependency-and-build-graph-semantics)
@@ -2844,6 +2844,11 @@ A cause is omitted when it repeats the context line or the cause above it, so
 each distinct message appears once. Default and `--verbose` output disclose the
 same causes; verbose mode adds tracing and timing rather than deepening the
 diagnostic. JSON mode reports the same messages in the `causes` array.
+
+An interpolation rejection names the syntax it refused, such as
+`unmatched backtick`, rather than quoting the recipe. A rendered command may
+already contain a value resolved from the environment, so repeating it would
+disclose that value in default human output.
 
 YAML parse failures include a line and column and draw a labelled snippet that
 quotes the offending line, so the snippet replaces the context line rather than

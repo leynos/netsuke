@@ -3604,10 +3604,19 @@ enrichment:
    modes therefore agree at the same depth; `IrGenError` and `NinjaGenError`
    gain no selection branch.
 
-   The fallback cannot widen disclosure. A resource budget rejects with a
+   The fallback widens how much human output shows, not what any one message
+   may contain. It renders the same causes JSON mode reports, so the two modes
+   agree at the same depth and the disclosure boundary is the message text
+   itself. That matters because `env()` runs while the manifest is rendered:
+   any cause that quoted a rendered recipe could carry a value the operator
+   permitted. Interpolation rejections therefore name the failed syntax — an
+   unmatched backtick, a marker in a protected region, an unmodelled heredoc
+   delimiter — and never quote the command. `IrGenError::InvalidCommand`
+   retains the rejected command for callers that inspect it, but its reason is
+   fixed text and `Display` uses the localized message alone, so the retained
+   string cannot reach either output mode. A resource budget rejects with a
    constant-size `RunnerError` before a report is built, and a blocked `env()`
-   lookup reports a fixed message without the variable's name or value. Only
-   the bounded messages the chain already carries reach the rendering. A
+   lookup reports a fixed message without the variable's name or value. A
    missing manifest is itself a `RunnerError`, so it prints its diagnostic code
    and recovery help rather than a bare context line. A circular-dependency
    failure keeps a separate branch that prints the bounded cycle rendering and

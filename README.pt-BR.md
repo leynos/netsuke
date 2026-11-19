@@ -279,8 +279,9 @@ autor continuam ativas.
 
 Este manifesto POSIX é rejeitado antes da execução do Ninja. Execute
 `netsuke --locale en-GB generate` para ver a causa: a saída legível padrão
-informa `Invalid command interpolation:`, seguida do trecho problemático.
-`--json` relata a mesma causa no documento de diagnóstico estruturado:
+informa `Invalid command interpolation: unmatched backtick`. O diagnóstico
+nunca repete a receita, cujo texto renderizado pode já conter um valor
+resolvido a partir do ambiente.
 
 ```yaml
 netsuke_version: '1.0.0'

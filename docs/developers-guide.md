@@ -980,12 +980,16 @@ refusal stays attributable in a project with more than one manifest. Both
 branches are pinned by a test, and the CLI exercises them against the real
 binary.
 
-Budget truncation and the fixed blocked-`env()` message are produced before
-this boundary, and the fallback renders only what the chain already contains. A
-missing manifest is a `RunnerError`, so it prints its own diagnostic code and
-help rather than a bare context line. Circular dependencies keep a separate
-branch: its bounded rendering is what keeps manifest target names out of the
-tracing event.
+The fallback renders the same causes JSON mode reports, so its disclosure
+boundary is the message text: `env()` runs while the manifest is rendered, and
+a cause that quoted a recipe could carry a permitted value. Budget truncation
+and the fixed blocked-`env()` message are produced before this boundary, and
+interpolation rejections name the failed syntax rather than quoting the command
+— `IrGenError::InvalidCommand` keeps the rejected command for callers that
+inspect it, but never renders it. A missing manifest is a `RunnerError`, so it
+prints its own diagnostic code and help rather than a bare context line.
+Circular dependencies keep a separate branch: its bounded rendering is what
+keeps manifest target names out of the tracing event.
 
 The glyph theme comes from `human_diagnostics::theme_for`, which derives it
 from the resolved `OutputPrefs` rather than reading `NO_COLOR` itself, so the
