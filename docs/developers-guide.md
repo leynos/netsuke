@@ -3064,10 +3064,11 @@ enforcement-only: a rehearsal reads and reports the manifest it was given,
 because an unattributable upload in a dry run is a rehearsal input rather than
 a publication decision, so an observation run can record `outcome=success` on
 evidence an enforcing run would refuse with `untrusted_evidence`. Enforcement
-exits non-zero after recording the same bounded result. Both modes run the
-gate; only the exit status differs. An environment value such as `fresh` is not
-evidence and must never substitute for a real evidence producer, and any value
-that is neither `true` nor `false` fails closed as an unknown gate result.
+exits non-zero after recording a refusal. Observation exits successfully even
+when it records a refusal; both modes still run the gate and write its outputs.
+An environment value such as `fresh` is not evidence and must never substitute
+for a real evidence producer, and any value that is neither `true` nor `false`
+fails closed as an unknown gate result.
 
 The four jobs that hold `contents: write`, `packages: write`, or
 `id-token: write` require the gate explicitly. Each declares
