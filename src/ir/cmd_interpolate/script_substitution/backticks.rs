@@ -54,16 +54,19 @@ impl BacktickRegion {
     /// backslash no special meaning. Keeping the shell's escapes separate from
     /// the body's is what stops an escaped apostrophe from swallowing the quote
     /// that closes a single-quoted body.
+    ///
+    /// A backslash before a newline is a line continuation in the first two
+    /// contexts: the newline is removed rather than ending the command line, so
+    /// it must not start a heredoc body that is still queued from an earlier
+    /// word. Inside the body's single quotes the newline is literal data.
     pub(super) fn escapes_body_character(&self, chars: &[char], pos: usize) -> bool {
         let Some(next) = chars.get(pos + 1) else {
             return false;
         };
         match self.body_context {
             ShellQuoteContext::SingleQuoted => matches!(next, '$' | '`' | '\\'),
-            ShellQuoteContext::DoubleQuoted => matches!(next, '$' | '`' | '\\' | '"'),
-            // A body backslash that continues a line removes the newline, but
-            // the traversal still needs to see it so line-scoped tracking runs.
-            ShellQuoteContext::Unquoted => *next != '\n',
+            ShellQuoteContext::DoubleQuoted => matches!(next, '$' | '`' | '\\' | '"' | '\n'),
+            ShellQuoteContext::Unquoted => true,
         }
     }
 }
