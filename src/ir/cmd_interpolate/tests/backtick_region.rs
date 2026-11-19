@@ -4,7 +4,8 @@
 //! it. These cases pin that the closing backtick restores that region rather
 //! than the script-level field, which would make a later marker use the wrong
 //! path encoding. They also pin that nesting which closes a region before its
-//! backtick fails closed instead of corrupting the enclosing quote state.
+//! backtick fails closed instead of corrupting the enclosing quote state, and
+//! that the body's own quoting and escapes decide which delimiters are data.
 
 use super::*;
 use rstest::rstest;
@@ -29,6 +30,44 @@ fn context_bindings(shell: RecipeShell) -> CommandBindings {
             unquoted: "OUNQ".to_owned(),
         },
     }
+}
+
+/// Name the placeholder a case lowers.
+#[derive(Clone, Copy)]
+enum Marker {
+    /// The `$in` marker.
+    Ins,
+    /// The `$out` marker.
+    Outs,
+}
+
+impl Marker {
+    /// Return the source token this marker is written as.
+    const fn token(self) -> &'static str {
+        match self {
+            Self::Ins => INS_TOKEN,
+            Self::Outs => OUTS_TOKEN,
+        }
+    }
+
+    /// Return the sentinel the binding emits for `encoding`.
+    const fn sentinel(self, encoding: Encoding) -> &'static str {
+        match (self, encoding) {
+            (Self::Ins, Encoding::Unquoted) => "UNQ",
+            (Self::Ins, Encoding::DoubleQuoted) => "DBL",
+            (Self::Outs, Encoding::Unquoted) => "OUNQ",
+            (Self::Outs, Encoding::DoubleQuoted) => "ODBL",
+        }
+    }
+}
+
+/// Name the shell quoting a lowered marker must be encoded for.
+#[derive(Clone, Copy)]
+enum Encoding {
+    /// The marker sits outside quotes.
+    Unquoted,
+    /// The marker sits inside double quotes.
+    DoubleQuoted,
 }
 
 /// Name the quoting of the enclosing string and of the backtick body.
@@ -62,271 +101,271 @@ impl QuoteLayout {
     }
 }
 
-/// Restore a backtick's saved context to the `$()` region that opened it.
+/// State what lowering must do with one case.
+#[derive(Clone, Copy)]
+enum Outcome {
+    /// Lower successfully, encoding the marker for this context.
+    Lowers(Encoding),
+    /// Fail closed with `IrGenError::InvalidCommand`.
+    Rejects,
+}
+
+/// Name one script shape that the backtick ownership rules must handle.
+#[derive(Clone, Copy)]
+enum Case {
+    /// A backslash escapes the backtick, so the region continues.
+    EscapedBacktickInQuotedBody,
+    /// An escaped `)` in unquoted body text is literal, not a closer.
+    EscapedParenthesisInUnquotedBody,
+    /// An escape that would consume a marker's first character is rejected.
+    EscapedMarkerInUnquotedBody,
+    /// A `$()` opened inside a quoted body closes its own frame.
+    NestedSubstitutionInQuotedBody,
+    /// A backslash does not escape the quote that closes a body's single quote.
+    BackslashBeforeBodyQuote,
+    /// A `)` inside a body's single quotes is data.
+    QuotedParenthesisInSingleQuotedBody,
+    /// A `)` inside a body's double quotes is data.
+    QuotedParenthesisInDoubleQuotedBody,
+    /// A continued newline in unquoted body text keeps the line open.
+    ContinuationInUnquotedBody,
+    /// A continued newline in double-quoted body text keeps the line open.
+    ContinuationInDoubleQuotedBody,
+    /// A top-level backtick outside quotes restores script-level unquoted text.
+    TopLevelBacktickUnquoted,
+    /// A top-level backtick in a quoted word restores unquoted script text.
+    TopLevelBacktickAfterDoubleQuoted,
+    /// A top-level backtick inside double quotes restores that quoting.
+    TopLevelBacktickInsideDoubleQuotes,
+    /// A `$()` inside a backtick may close before the backtick does.
+    SubstitutionInsideBacktickClosesFirst,
+    /// Two `$()` levels inside a backtick restore the outermost region.
+    TwoLevelSubstitutionInsideBacktick,
+    /// A `$()` that closes before the backtick it owns is rejected.
+    FrameClosesBeforeBacktick,
+    /// A backtick that closes before the `$()` it opened is rejected.
+    BacktickClosesBeforeSubstitution,
+    /// A marker inside a still-open body is rejected.
+    MarkerInsideOpenBacktick,
+}
+
+impl Case {
+    /// Return the script template this case lowers.
+    fn command(self) -> String {
+        match self {
+            Self::EscapedBacktickInQuotedBody => {
+                format!(r"printf '%s' `printf '%s' '\`'` {INS_TOKEN}")
+            }
+            Self::EscapedParenthesisInUnquotedBody => {
+                format!(r"printf '%s' $(printf %s `printf \)`) {INS_TOKEN}")
+            }
+            Self::EscapedMarkerInUnquotedBody => {
+                format!("printf '%s' `printf %s \\{INS_TOKEN}`")
+            }
+            Self::NestedSubstitutionInQuotedBody => {
+                format!(r#"printf '%s' `printf '%s' "$(printf x)"` {INS_TOKEN}"#)
+            }
+            Self::BackslashBeforeBodyQuote => {
+                format!(r"printf '%s' $(printf %s `printf '%s' 'x\' )` {INS_TOKEN}")
+            }
+            Self::QuotedParenthesisInSingleQuotedBody => {
+                format!("printf '%s' $(printf %s `printf ')'`) {INS_TOKEN}")
+            }
+            Self::QuotedParenthesisInDoubleQuotedBody => {
+                format!("printf '%s' $(printf %s `printf \")\"`) {INS_TOKEN}")
+            }
+            Self::ContinuationInUnquotedBody => {
+                format!("cat <<EOF `echo x \\\ny` {INS_TOKEN}\nEOF\n")
+            }
+            Self::ContinuationInDoubleQuotedBody => {
+                format!("cat <<EOF `\"echo x \\\ny\"` {INS_TOKEN}\nEOF\n")
+            }
+            Self::TopLevelBacktickUnquoted => format!("printf '%s' `printf x` {INS_TOKEN}"),
+            Self::TopLevelBacktickAfterDoubleQuoted => {
+                format!("printf '%s' \"`printf x`\" {INS_TOKEN}")
+            }
+            Self::TopLevelBacktickInsideDoubleQuotes => {
+                format!("printf '%s' \"`printf x` {INS_TOKEN}\"")
+            }
+            Self::SubstitutionInsideBacktickClosesFirst => {
+                format!("printf '%s' `echo $(date)` {INS_TOKEN}")
+            }
+            Self::TwoLevelSubstitutionInsideBacktick => {
+                format!("printf '%s' $(printf %s \"$(printf %s \"`printf x`\")\") {INS_TOKEN}")
+            }
+            Self::FrameClosesBeforeBacktick => {
+                format!("printf '%s' $(printf %s `printf x) printf y` {INS_TOKEN}")
+            }
+            Self::BacktickClosesBeforeSubstitution => {
+                format!("printf '%s' `printf %s $(printf x` {INS_TOKEN}")
+            }
+            Self::MarkerInsideOpenBacktick => {
+                format!("printf '%s' $(printf %s `printf x {INS_TOKEN}")
+            }
+        }
+    }
+
+    /// State what lowering must do with this case.
+    const fn outcome(self) -> Outcome {
+        match self {
+            Self::EscapedMarkerInUnquotedBody
+            | Self::BackslashBeforeBodyQuote
+            | Self::FrameClosesBeforeBacktick
+            | Self::BacktickClosesBeforeSubstitution
+            | Self::MarkerInsideOpenBacktick => Outcome::Rejects,
+            Self::TopLevelBacktickInsideDoubleQuotes => Outcome::Lowers(Encoding::DoubleQuoted),
+            _ => Outcome::Lowers(Encoding::Unquoted),
+        }
+    }
+
+    /// Describe this case in a failure message.
+    const fn description(self) -> &'static str {
+        match self {
+            Self::EscapedBacktickInQuotedBody => "an escaped backtick in a quoted body",
+            Self::EscapedParenthesisInUnquotedBody => "an escaped ) in an unquoted body",
+            Self::EscapedMarkerInUnquotedBody => "a backslash before a marker",
+            Self::NestedSubstitutionInQuotedBody => "a $() inside a double-quoted backtick body",
+            Self::BackslashBeforeBodyQuote => "a backslash before a body's closing quote",
+            Self::QuotedParenthesisInSingleQuotedBody => "a quoted ) in a single-quoted body",
+            Self::QuotedParenthesisInDoubleQuotedBody => "a quoted ) in a double-quoted body",
+            Self::ContinuationInUnquotedBody => "a line continuation in an unquoted body",
+            Self::ContinuationInDoubleQuotedBody => "a line continuation in a quoted body",
+            Self::TopLevelBacktickUnquoted => "a top-level backtick outside quotes",
+            Self::TopLevelBacktickAfterDoubleQuoted => "a quoted top-level backtick",
+            Self::TopLevelBacktickInsideDoubleQuotes => "a top-level backtick inside quotes",
+            Self::SubstitutionInsideBacktickClosesFirst => "a $() nested inside a backtick",
+            Self::TwoLevelSubstitutionInsideBacktick => "two $() levels inside a backtick",
+            Self::FrameClosesBeforeBacktick => "a $() that outlives its own backtick",
+            Self::BacktickClosesBeforeSubstitution => "a backtick that closes before its $()",
+            Self::MarkerInsideOpenBacktick => "a marker inside an open backtick body",
+        }
+    }
+}
+
+/// Encode each marker after a backtick for the region that owns it.
 ///
-/// The enclosing substitution opens at script level, so the marker after it is
-/// outside quotes when the outer string is unquoted and inside double quotes
-/// when the whole substitution sits in one. Either way the marker's encoding
-/// comes from the region that owns it, not from the innermost frame the
-/// backtick happened to open in.
+/// The enclosing substitution opens at script level, so the marker after the
+/// backtick belongs to that script region: outside quotes when the outer
+/// string is unquoted, inside them when the whole substitution sits in one.
 #[rstest]
 #[case::ins_unquoted_outer_unquoted_body(
     RecipeShell::Posix,
-    INS_TOKEN,
+    Marker::Ins,
     QuoteLayout::NoQuotes,
-    "UNQ"
+    Encoding::Unquoted
 )]
 #[case::ins_unquoted_outer_quoted_body(
     RecipeShell::Posix,
-    INS_TOKEN,
+    Marker::Ins,
     QuoteLayout::BodyQuoted,
-    "UNQ"
+    Encoding::Unquoted
 )]
 #[case::ins_quoted_outer_unquoted_body(
     RecipeShell::Posix,
-    INS_TOKEN,
+    Marker::Ins,
     QuoteLayout::OuterQuoted,
-    "DBL"
+    Encoding::DoubleQuoted
 )]
-#[case::ins_quoted_outer_quoted_body(RecipeShell::Posix, INS_TOKEN, QuoteLayout::BothQuoted, "DBL")]
+#[case::ins_quoted_outer_quoted_body(
+    RecipeShell::Posix,
+    Marker::Ins,
+    QuoteLayout::BothQuoted,
+    Encoding::DoubleQuoted
+)]
 #[case::outs_unquoted_outer_quoted_body(
     RecipeShell::Posix,
-    OUTS_TOKEN,
+    Marker::Outs,
     QuoteLayout::BodyQuoted,
-    "OUNQ"
+    Encoding::Unquoted
 )]
 #[case::outs_quoted_outer_unquoted_body(
     RecipeShell::Posix,
-    OUTS_TOKEN,
+    Marker::Outs,
     QuoteLayout::OuterQuoted,
-    "ODBL"
+    Encoding::DoubleQuoted
 )]
 #[case::bash_unquoted_outer_quoted_body(
     RecipeShell::Bash,
-    INS_TOKEN,
+    Marker::Ins,
     QuoteLayout::BodyQuoted,
-    "UNQ"
+    Encoding::Unquoted
 )]
 #[case::bash_quoted_outer_quoted_body(
     RecipeShell::Bash,
-    OUTS_TOKEN,
+    Marker::Outs,
     QuoteLayout::BothQuoted,
-    "ODBL"
+    Encoding::DoubleQuoted
 )]
 fn script_marker_after_backtick_in_command_substitution_uses_owning_region(
     #[case] shell: RecipeShell,
-    #[case] marker: &str,
+    #[case] marker: Marker,
     #[case] layout: QuoteLayout,
-    #[case] expected: &str,
+    #[case] expected: Encoding,
 ) {
     let substitution = format!("$(printf %s {})", layout.body());
+    let token = marker.token();
     let template = if layout.is_outer_quoted() {
-        format!("printf '%s' \"{substitution} {marker}\"")
+        format!("printf '%s' \"{substitution} {token}\"")
     } else {
-        format!("printf '%s' {substitution} {marker}")
+        format!("printf '%s' {substitution} {token}")
     };
 
     let actual = interpolate_script_with_bindings(&template, &context_bindings(shell))
         .expect("a backtick that closes in its owning $() must lower");
     assert_eq!(
         actual,
-        template.replace(marker, expected),
-        "a marker after {template:?} must use its own region's encoding"
+        template.replace(token, marker.sentinel(expected)),
+        "a marker after {template:?} must use the owning region's encoding"
     );
 }
 
-/// Keep a quoted `)` inside a backtick body literal rather than a closer.
+/// Lower or reject one script shape and pin the marker's encoding.
 ///
-/// The body is its own shell region, so a `)` inside its quotes is data. Only
-/// an unquoted `)` may be read as closing the frame that owns the backtick.
+/// Each case names a shell rule that a backtick body exercises: which
+/// delimiters its own quoting protects, which escapes it honours, and which
+/// nesting it forbids. A lowering case must leave the marker after the
+/// substitution encoded for the region that owns it; a rejection case must
+/// fail closed with `IrGenError::InvalidCommand` rather than guess.
 #[rstest]
-#[case::single_quoted_body("printf '%s' $(printf %s `printf ')'`) {marker}")]
-#[case::double_quoted_body("printf '%s' $(printf %s `printf \")\"`) {marker}")]
-fn script_quoted_parenthesis_inside_backtick_body_stays_literal(#[case] template: &str) {
-    let command = template.replace("{marker}", INS_TOKEN);
-    let actual = interpolate_script_with_bindings(&command, &context_bindings(RecipeShell::Posix))
-        .expect("a quoted ) in a backtick body must stay literal");
-    assert_eq!(
-        actual,
-        command.replace(INS_TOKEN, "UNQ"),
-        "a quoted ) in {command:?} must not close the owning $()"
-    );
-}
-
-/// Keep an escaped backtick inside a quoted body from ending the region.
-///
-/// The shell finds the closing backtick before it parses the body's quotes, so
-/// a backslash escapes the backtick even inside the body's single quotes.
-/// Ending the region there would restore the outer context early and leave the
-/// trailing `'` to open script-level single quoting, which encodes a later
-/// marker with the single-quoted form that does not quote a `;`.
-#[test]
-fn script_escaped_backtick_inside_quoted_body_does_not_end_the_region() {
+#[case::escaped_backtick(Case::EscapedBacktickInQuotedBody)]
+#[case::escaped_parenthesis(Case::EscapedParenthesisInUnquotedBody)]
+#[case::escaped_marker(Case::EscapedMarkerInUnquotedBody)]
+#[case::nested_substitution(Case::NestedSubstitutionInQuotedBody)]
+#[case::backslash_before_body_quote(Case::BackslashBeforeBodyQuote)]
+#[case::quoted_parenthesis_single(Case::QuotedParenthesisInSingleQuotedBody)]
+#[case::quoted_parenthesis_double(Case::QuotedParenthesisInDoubleQuotedBody)]
+#[case::continuation_unquoted(Case::ContinuationInUnquotedBody)]
+#[case::continuation_double_quoted(Case::ContinuationInDoubleQuotedBody)]
+#[case::top_level_unquoted(Case::TopLevelBacktickUnquoted)]
+#[case::top_level_after_double_quoted(Case::TopLevelBacktickAfterDoubleQuoted)]
+#[case::top_level_inside_double_quotes(Case::TopLevelBacktickInsideDoubleQuotes)]
+#[case::substitution_closes_first(Case::SubstitutionInsideBacktickClosesFirst)]
+#[case::two_level_substitution(Case::TwoLevelSubstitutionInsideBacktick)]
+#[case::frame_closes_before_backtick(Case::FrameClosesBeforeBacktick)]
+#[case::backtick_closes_before_substitution(Case::BacktickClosesBeforeSubstitution)]
+#[case::marker_inside_open_backtick(Case::MarkerInsideOpenBacktick)]
+fn script_body_rules_follow_the_owning_shell_region(#[case] case: Case) {
     let bindings = context_bindings(RecipeShell::Posix);
-    let command = format!(r"printf '%s' `printf '%s' '\`'` {INS_TOKEN}");
-    let actual = interpolate_script_with_bindings(&command, &bindings)
-        .expect("an escaped backtick in a body must not end the region");
-    assert_eq!(
-        actual,
-        command.replace(INS_TOKEN, "UNQ"),
-        "a marker after the escaped backtick in {command:?} must stay unquoted"
-    );
-}
-
-/// Keep an escaped `)` inside an unquoted backtick body from closing a frame.
-///
-/// The body is a command in its own right, where a backslash makes the `)`
-/// literal. Reading it as a closer would pop the frame that owns the open
-/// backtick and reject a script the shell accepts.
-#[test]
-fn script_escaped_parenthesis_inside_backtick_body_stays_literal() {
-    let bindings = context_bindings(RecipeShell::Posix);
-    let template = r"printf '%s' $(printf %s `printf \)`) {marker}";
-    let command = template.replace("{marker}", INS_TOKEN);
-    let actual = interpolate_script_with_bindings(&command, &bindings)
-        .expect("an escaped ) in an unquoted body must stay literal");
-    assert_eq!(
-        actual,
-        command.replace(INS_TOKEN, "UNQ"),
-        "a marker after the escaped ) in {command:?} must stay unquoted"
-    );
-}
-
-/// Reject a body backslash that would consume a marker's first character.
-///
-/// The marker scan starts at that character, so allowing the escape to win
-/// would copy the rest of the internal token into the lowered script instead
-/// of failing closed. Placeholders are never lowered inside a backtick body.
-#[test]
-fn script_escaped_marker_inside_backtick_body_is_rejected() {
-    let bindings = context_bindings(RecipeShell::Posix);
-    let command = format!("printf '%s' `printf %s \\{INS_TOKEN}`");
-    let error = interpolate_script_with_bindings(&command, &bindings)
-        .expect_err("an escaped marker must still be rejected inside a body");
-    assert!(
-        matches!(error, IrGenError::InvalidCommand { .. }),
-        "expected an invalid-command error for {command:?}, got {error:?}"
-    );
-}
-
-/// Keep a backtick body line continuation from ending the command line.
-///
-/// The continued newline belongs to the body, so the command line is still
-/// open and the heredoc queued before the backtick has not started. Treating
-/// the newline as an ordinary one would copy the rest of the line, including
-/// the marker, as heredoc data.
-#[rstest]
-#[case::unquoted_body("cat <<EOF `echo x \\\ny` {marker}\nEOF\n")]
-#[case::double_quoted_body("cat <<EOF `\"echo x \\\ny\"` {marker}\nEOF\n")]
-fn script_backtick_body_line_continuation_keeps_the_command_line_open(#[case] template: &str) {
-    let bindings = context_bindings(RecipeShell::Posix);
-    let command = template.replace("{marker}", INS_TOKEN);
-    let actual = interpolate_script_with_bindings(&command, &bindings)
-        .expect("a line continuation inside a body must not start the heredoc");
-    assert_eq!(
-        actual,
-        command.replace(INS_TOKEN, "UNQ"),
-        "a marker on the command line in {command:?} must still be lowered"
-    );
-}
-
-/// Prove that `\'` inside a body's single quotes does not escape the quote.
-///
-/// With the quote closed, the `)` that follows is unquoted in the body, so it
-/// would close the frame that owns the open backtick and the crossing shape is
-/// rejected. If the backslash swallowed the apostrophe instead, the `)` would
-/// stay inside single quotes and the script would be accepted.
-#[test]
-fn script_backslash_does_not_escape_a_backtick_body_quote() {
-    let bindings = context_bindings(RecipeShell::Posix);
-    let command = format!(r"printf '%s' $(printf %s `printf '%s' 'x\' )` {INS_TOKEN}");
-    let error = interpolate_script_with_bindings(&command, &bindings)
-        .expect_err("the body's single quote must close at the apostrophe after the backslash");
-    assert!(
-        matches!(error, IrGenError::InvalidCommand { .. }),
-        "expected an invalid-command error for {command:?}, got {error:?}"
-    );
-}
-
-/// Close a `$()` opened inside a double-quoted backtick body.
-///
-/// The frame is the innermost region once opened, so its own unquoted `)`
-/// closes it even though the body around it is double-quoted.
-#[test]
-fn script_command_substitution_inside_quoted_backtick_body_closes_its_frame() {
-    let bindings = context_bindings(RecipeShell::Posix);
-    let command = format!(r#"printf '%s' `printf '%s' "$(printf x)"` {INS_TOKEN}"#);
-    let actual = interpolate_script_with_bindings(&command, &bindings)
-        .expect("a $() inside a quoted backtick body must close its own frame");
-    assert_eq!(
-        actual,
-        command.replace(INS_TOKEN, "UNQ"),
-        "a marker after the nested substitution in {command:?} must stay unquoted"
-    );
-}
-
-/// Restore a top-level backtick's context into its surrounding quote region.
-#[rstest]
-#[case::unquoted("printf '%s' `printf x` {marker}", "UNQ")]
-#[case::after_double_quoted("printf '%s' \"`printf x`\" {marker}", "UNQ")]
-#[case::inside_double_quotes("printf '%s' \"`printf x` {marker}\"", "DBL")]
-fn script_marker_after_top_level_backtick_uses_its_surrounding_quotes(
-    #[case] template: &str,
-    #[case] expected: &str,
-) {
-    let command = template.replace("{marker}", INS_TOKEN);
-    let actual = interpolate_script_with_bindings(&command, &context_bindings(RecipeShell::Posix))
-        .expect("a top-level backtick region must lower");
-    assert_eq!(
-        actual,
-        command.replace(INS_TOKEN, expected),
-        "a marker after {command:?} must use its surrounding quotes"
-    );
-}
-
-/// Keep a `$()` opened inside a backtick valid while it closes first.
-#[test]
-fn script_command_substitution_inside_backtick_restores_script_context() {
-    let bindings = context_bindings(RecipeShell::Posix);
-    let template = format!("printf '%s' `echo $(date)` {INS_TOKEN}");
-    let actual = interpolate_script_with_bindings(&template, &bindings)
-        .expect("a $() that closes before its backtick must remain supported");
-    assert_eq!(
-        actual, "printf '%s' `echo $(date)` UNQ",
-        "a nested $() that closes before its backtick must leave script level unquoted"
-    );
-}
-
-/// Restore the innermost region's context after two levels of `$()` nesting.
-#[test]
-fn script_two_level_command_substitution_inside_backtick_restores_outer_context() {
-    let bindings = context_bindings(RecipeShell::Posix);
-    let template = format!("printf '%s' $(printf %s \"$(printf %s \"`printf x`\")\") {INS_TOKEN}");
-    let actual = interpolate_script_with_bindings(&template, &bindings)
-        .expect("a backtick that closes at its own depth must lower");
-    assert_eq!(
-        actual, "printf '%s' $(printf %s \"$(printf %s \"`printf x`\")\") UNQ",
-        "the script level must remain unquoted after nested substitutions"
-    );
-}
-
-/// Reject nesting that closes a shell region before the backtick it owns.
-///
-/// The saved context belongs to the region that opened the backtick. Closing
-/// that region first leaves the saved state with no owner, so there is no
-/// correct region to restore it into and the script must fail closed.
-#[rstest]
-#[case::frame_closes_before_its_backtick("printf '%s' $(printf %s `printf x) printf y` {marker}")]
-#[case::backtick_closes_before_its_nested_substitution(
-    "printf '%s' `printf %s $(printf x` {marker}"
-)]
-#[case::marker_inside_open_backtick("printf '%s' $(printf %s `printf x {marker}")]
-fn script_backtick_nesting_that_crosses_its_owner_is_rejected(#[case] template: &str) {
-    let command = template.replace("{marker}", INS_TOKEN);
-    let error = interpolate_script_with_bindings(&command, &context_bindings(RecipeShell::Posix))
-        .expect_err("mismatched backtick and $() nesting must fail closed");
-    assert!(
-        matches!(error, IrGenError::InvalidCommand { .. }),
-        "expected an invalid-command error for {command:?}, got {error:?}"
-    );
+    let command = case.command();
+    match case.outcome() {
+        Outcome::Lowers(encoding) => {
+            let actual = interpolate_script_with_bindings(&command, &bindings)
+                .unwrap_or_else(|error| panic!("{} must lower: {error:?}", case.description()));
+            assert_eq!(
+                actual,
+                command.replace(INS_TOKEN, Marker::Ins.sentinel(encoding)),
+                "{} must encode the marker for its own region",
+                case.description()
+            );
+        }
+        Outcome::Rejects => {
+            let error = interpolate_script_with_bindings(&command, &bindings)
+                .expect_err("this nesting must fail closed");
+            assert!(
+                matches!(error, IrGenError::InvalidCommand { .. }),
+                "{} must fail closed, got {error:?}",
+                case.description()
+            );
+        }
+    }
 }
