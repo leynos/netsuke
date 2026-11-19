@@ -2878,16 +2878,21 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   region. A heredoc in a `script:` recipe has its own boundary: a marker in the
   delimiter word is interpolated, while a marker in the body is copied
   literally, because the body is inert text. The body ends at the line that
-  spells the delimiter, so a marker on a later line is interpolated again. A
-  `<<-` heredoc allows a tab-indented delimiter line, and Netsuke strips the
-  leading tabs before comparing it. The delimiter word ends only where the
-  shell's token rule ends it: at an ASCII space, tab, or newline, or at one of
-  `;`, `&`, `|`, `(`, `)`, `<`, and `>`. A non-ASCII space, carriage return,
-  vertical tab, or form feed stays part of the delimiter, so the closing line
-  must spell the complete word. For a delimiter written `EOF` followed by a
-  no-break space and `X`, a body line spelling only `EOF` stays body text, and
-  the heredoc ends only at the line spelling all three components. Netsuke
-  rejects a delimiter form it cannot model rather than guessing; see
+  spells the delimiter, so a marker on a later line is interpolated again. The
+  body starts only at the unquoted newline that ends the command line declaring
+  it, so a newline inside a quoted argument on that line does not start it.
+  Netsuke rejects a declaration whose body would have to start at a newline
+  inside `$()`, backticks, `$(( ))`, an open `${ }`, or a substitution region
+  that has already closed, rather than guess where that body ends. A `<<-`
+  heredoc allows a tab-indented delimiter line, and Netsuke strips the leading
+  tabs before comparing it. The delimiter word ends only where the shell's
+  token rule ends it: at an ASCII space, tab, or newline, or at one of `;`, `&`,
+  `|`, `(`, `)`, `<`, and `>`. A non-ASCII space, carriage return, vertical
+  tab, or form feed stays part of the delimiter, so the closing line must spell
+  the complete word. For a delimiter written `EOF` followed by a no-break space
+  and `X`, a body line spelling only `EOF` stays body text, and the heredoc
+  ends only at the line spelling all three components. Netsuke rejects a
+  delimiter form it cannot model rather than guessing; see
   [Heredoc delimiters and bodies](#heredoc-delimiters-and-bodies). Netsuke also
   rejects a marker that directly follows an unpaired backslash, because that
   backslash would escape the first character of the substituted path; write
@@ -2992,6 +2997,15 @@ boundaries:
   the substitution itself sits inside an open `${ }`.
 - A `<<` inside a `$(( ))` arithmetic expansion is a left shift, not a heredoc,
   so arithmetic expressions pass through unchanged.
+- A body starts only at the unquoted newline that ends its declaring command
+  line. A newline inside a quoted argument is part of that argument, so the
+  body waits for the line that closes the quote. A newline inside `$()`,
+  backticks, `$(( ))`, an open `${ }`, or a substitution region that has
+  already closed cannot be placed at the declaring line, so a pending body
+  there is rejected with an invalid-command diagnostic naming the rejected
+  boundary rather than started in the wrong place. The end of the script is not
+  a boundary: a body that never reaches its terminator is not reported, and the
+  remaining text is copied literally, so keep the terminator inside the script.
 
 ## Compatibility links for the imported `rstest-bdd` guides
 
