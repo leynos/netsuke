@@ -16,12 +16,19 @@ use super::IrGenError;
 use crate::recipe_shell::RecipeShell;
 
 mod command_substitution;
+
 mod posix_lexical;
+
 mod rejection;
+
 mod script_substitution;
+
 mod substitution;
 
-use rejection::{RejectionReason, invalid_command_error, invalid_heredoc_delimiter_error};
+use rejection::{
+    RejectionReason, invalid_command_error, invalid_heredoc_boundary_error,
+    invalid_heredoc_delimiter_error,
+};
 use script_substitution::ScriptSubstitutionTraversal;
 use substitution::SubstitutionTraversal;
 
@@ -225,6 +232,8 @@ fn command_rejection(command: &str, shell: RecipeShell) -> Option<RejectionReaso
         .is_none()
         .then_some(RejectionReason::UnparseableCommand)
 }
+
+
 
 /// Identifies the private token emitted for a Netsuke recipe marker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

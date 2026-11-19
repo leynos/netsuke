@@ -12,7 +12,9 @@
 //! including a heredoc declared on it, so marker lowering would resume in body
 //! lines the shell still expands.
 
-use super::{PosixLexicalState, SourceChar, is_shell_word_boundary, is_unescaped_character};
+use super::{
+    FrameId, PosixLexicalState, SourceChar, is_shell_word_boundary, is_unescaped_character,
+};
 
 impl PosixLexicalState {
     /// Record the `${ }` nesting one character of plain text opens or closes.
@@ -59,6 +61,15 @@ impl PosixLexicalState {
             && is_shell_word_boundary(chars, pos, self.closed_command_substitution)
     }
 
+    /// Report whether plain text currently sits inside an open `${ }` expansion.
+    ///
+    /// A parameter expansion may span a newline, which is not a command-line
+    /// boundary. A pending heredoc cannot be placed there, so activation must
+    /// fail closed rather than treat the newline as the declaring line's end.
+    pub(in crate::ir::cmd_interpolate) const fn is_in_parameter_expansion(&self) -> bool {
+        self.parameter_expansion_depth > 0
+    }
+
     /// End a POSIX comment at a delimiter rather than at a newline.
     pub(in crate::ir::cmd_interpolate) const fn end_comment(&mut self) {
         self.in_comment = false;
@@ -87,10 +98,17 @@ impl PosixLexicalState {
     /// its own command list. The enclosing count is saved rather than
     /// discarded: the region's own braces are balanced within it, so the outer
     /// count must be exactly what it was once the region closes.
+    ///
+    /// The region also receives a fresh identifier, pushed with the saved
+    /// count so both unwind together. A heredoc declared inside the region is
+    /// owned by that identifier, and only a newline seen while it is current
+    /// can start the body.
     pub(in crate::ir::cmd_interpolate) fn enter_command_substitution_region(&mut self) {
         self.enclosing_parameter_expansion_depths
             .push(self.parameter_expansion_depth);
         self.parameter_expansion_depth = 0;
+        let frame = FrameId::allocate(&mut self.next_frame_id);
+        self.frame_stack.push(frame);
     }
 
     /// Resume the enclosing region's `${ }` count as one region closes.
@@ -102,6 +120,7 @@ impl PosixLexicalState {
         if let Some(enclosing) = self.enclosing_parameter_expansion_depths.pop() {
             self.parameter_expansion_depth = enclosing;
         }
+        self.frame_stack.pop();
     }
 
     /// Close one open `${ }` expansion when an unescaped brace ends it.

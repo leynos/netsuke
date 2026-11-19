@@ -6,8 +6,11 @@
 
 use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, RejectionReason,
-    find_script_substitution, invalid_command_error,
-    posix_lexical::{PosixCharacter, PosixLexicalState, SourceChar, backslash_escapes_marker},
+    find_script_substitution, invalid_command_error, invalid_heredoc_boundary_error,
+    posix_lexical::{
+        HeredocBoundary, InertCharacterOutcome, NewlineContext, PosixCharacter, PosixLexicalState,
+        SourceChar, backslash_escapes_marker,
+    },
 };
 
 mod delimiters;
@@ -70,6 +73,11 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Append the substitution or source character beginning at `pos`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a pending heredoc body cannot
+    /// start at the newline's command-line boundary.
     pub(super) fn append_substitution_at_position(
         &mut self,
         pos: usize,
@@ -87,12 +95,49 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         let substitution = find_script_substitution(self.chars, pos);
         let next = self.append_substitution_or_character(pos, ch, substitution)?;
         if ch == '\n' {
-            self.posix_lexical.begin_pending_heredoc_after_newline();
+            self.start_pending_heredoc_after(self.newline_context())?;
         }
         Ok(next)
     }
 
+    /// Describe what the newline at the current position is part of.
+    ///
+    /// Only an unquoted newline in the region that declared the heredoc is a
+    /// body boundary. A quoted newline is argument text the shell keeps
+    /// reading through; the nested-region answers let activation fail closed.
+    fn newline_context(&self) -> NewlineContext {
+        if self.backtick_outer_context.is_some() {
+            return NewlineContext::BacktickBody;
+        }
+        if self.is_in_arithmetic_expansion() {
+            return NewlineContext::ArithmeticExpansion;
+        }
+        if self.posix_lexical.is_in_parameter_expansion() {
+            return NewlineContext::ParameterExpansion;
+        }
+        if !self.is_plain_script_text() {
+            return NewlineContext::QuotedArgument;
+        }
+        NewlineContext::CommandLine
+    }
+
+    /// Start the queued heredoc body if this newline is its command-line end.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a queued declaration cannot be
+    /// placed at the newline's region or context.
+    fn start_pending_heredoc_after(&mut self, context: NewlineContext) -> Result<(), IrGenError> {
+        let boundary = HeredocBoundary::new(self.posix_lexical.current_frame_id(), context);
+        self.posix_lexical
+            .activate_pending_heredoc(boundary)
+            .map_err(|reason| invalid_heredoc_boundary_error(self.template.to_owned(), reason))
+    }
+
     /// Process source characters that do not require placeholder substitution.
+    ///
+    /// A newline that ends a comment is offered to the pending-heredoc queue
+    /// here, because the comment is copied without further inspection.
     ///
     /// # Errors
     ///
@@ -103,8 +148,13 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         pos: usize,
         ch: char,
     ) -> Result<Option<usize>, IrGenError> {
-        if let Some(next) = self.copy_inert_character(pos, ch) {
-            return Ok(Some(next));
+        match self.copy_inert_character(pos, ch) {
+            Some(InertCharacterOutcome::CommentEnded) => {
+                self.start_pending_heredoc_after(self.newline_context())?;
+                return Ok(Some(pos + 1));
+            }
+            Some(InertCharacterOutcome::Consumed) => return Ok(Some(pos + 1)),
+            Some(InertCharacterOutcome::NotInert) | None => {}
         }
         if self.is_escaped {
             self.output.push(ch);
@@ -125,24 +175,24 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
 
     /// Copy a character the scanner treats as inert, ending any comment it closes.
     ///
-    /// Comment text and heredoc bodies are copied without inspection, so the
-    /// traversal is the only part of the pass that can tell the tracker which
-    /// newline ended a comment.
-    fn copy_inert_character(&mut self, pos: usize, ch: char) -> Option<usize> {
-        let ends_comment = self.posix_lexical.in_comment() && ch == '\n';
+    /// Comment text and heredoc bodies are copied without inspection. The
+    /// newline that ends a comment is reported back to the caller, which owns
+    /// the same pending-heredoc decision an ordinary newline takes.
+    fn copy_inert_character(&mut self, pos: usize, ch: char) -> Option<InertCharacterOutcome> {
         let mut character = PosixCharacter {
             chars: self.chars,
             pos,
             ch,
             output: &mut self.output,
         };
-        if !self.posix_lexical.append_inert_character(&mut character) {
-            return None;
-        }
-        if ends_comment {
+        let outcome = self.posix_lexical.append_inert_character(&mut character);
+        if matches!(outcome, InertCharacterOutcome::CommentEnded) {
             self.end_case_comment();
         }
-        Some(pos + 1)
+        match outcome {
+            InertCharacterOutcome::Consumed | InertCharacterOutcome::CommentEnded => Some(outcome),
+            InertCharacterOutcome::NotInert => None,
+        }
     }
 
     /// Copy a character that opens a comment, a substitution, or a quote region.
@@ -305,3 +355,4 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         self.output
     }
 }
+// weave: run 'weave explain src/ir/cmd_interpolate/script_substitution/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

@@ -9,7 +9,7 @@
 //! themselves.
 
 use super::IrGenError;
-use super::posix_lexical::DelimiterRejection;
+use super::posix_lexical::{DelimiterRejection, HeredocActivationRejection};
 use crate::localization::{self, keys};
 
 /// Explain why a recipe command failed interpolation validation.
@@ -63,6 +63,18 @@ pub(super) fn invalid_command_error(command: String, reason: RejectionReason) ->
 pub(super) fn invalid_heredoc_delimiter_error(
     command: String,
     reason: DelimiterRejection,
+) -> IrGenError {
+    invalid_command_message(command, reason.description())
+}
+
+/// Build the diagnostic for a heredoc body the tracker cannot start safely.
+///
+/// The body boundary fails closed for the same reason the delimiter parser
+/// does, so the rejection joins the same localized message and names the
+/// boundary that could not be placed rather than quoting the recipe.
+pub(super) fn invalid_heredoc_boundary_error(
+    command: String,
+    reason: HeredocActivationRejection,
 ) -> IrGenError {
     invalid_command_message(command, reason.description())
 }
