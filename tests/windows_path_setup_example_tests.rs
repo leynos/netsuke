@@ -166,10 +166,16 @@ fn run_documented_example(root: &tempfile::TempDir, example: &DocumentedExample)
 
 /// Create the directory the examples treat as the install root.
 ///
+/// The examples read the program files directory from the environment and
+/// append `netsuke` to it, so the staged install sits one level below the
+/// temporary root the wrapper exports as every program files variable. Placing
+/// it anywhere else would make the examples look at a directory this test never
+/// populates.
+///
 /// The directory is returned because the assertions compare the stored value
 /// against it.
-fn install_directory(root: &Path) -> Result<PathBuf> {
-    let install = root.join("ProgramFiles").join("netsuke");
+fn install_directory(program_files_root: &Path) -> Result<PathBuf> {
+    let install = program_files_root.join("netsuke");
     test_fs::create_dir_all(&install)
         .with_context(|| format!("create install directory {}", install.display()))?;
     Ok(install)
