@@ -67,6 +67,7 @@ mod display_edge;
 pub(crate) use display_edge::DisplayEdge;
 mod edge_metadata;
 mod force_run;
+pub(crate) use force_run::FORCE_PATH;
 mod named_action;
 mod order;
 mod progress_label;

@@ -5,8 +5,8 @@
 //! This module covers the orthogonal question of what a path may contain. Each
 //! graph position is swept because the checks live at different layers: some
 //! reject during string generation, some only in bundle generation, and the
-//! reserved-namespace check runs over every edge path field. Default targets
-//! are not checked against the reserved namespaces.
+//! reserved-namespace check runs over every edge path field and over the
+//! graph's default targets.
 
 use super::{graph_with_edge, parallel_edge, serial_edge};
 use crate::ir::BuildEdge;
@@ -195,6 +195,38 @@ fn reserved_namespace_is_rejected(
         matches!(err, NinjaGenError::ReservedOutputPath { .. }),
         "expected ReservedOutputPath, got {err:?}"
     );
+    Ok(())
+}
+
+#[rstest]
+#[case::exact(".netsuke/phony/force")]
+#[case::child(".netsuke/phony/edge-0123456789abcdef")]
+#[case::serial(".netsuke/serial/x")]
+#[case::dyndep(".netsuke/dyndep/x")]
+#[case::empty_segment(".netsuke//phony/force")]
+#[case::dot_prefix("./.netsuke/phony/force")]
+#[case::dot_segment(".netsuke/./phony/force")]
+#[case::parent_round_trip("out/../.netsuke/phony/force")]
+fn reserved_default_target_is_rejected(#[case] path: &str) -> Result<()> {
+    let mut graph = graph_with_edge(parallel_edge("all", &["dep"]));
+    graph.default_targets = vec![Utf8PathBuf::from(path)];
+
+    let err = generate_bundle(&graph)
+        .err()
+        .context("a reserved default target must be rejected")?;
+    ensure!(
+        matches!(err, NinjaGenError::ReservedOutputPath { .. }),
+        "expected ReservedOutputPath for {path}, got {err:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn unreserved_default_target_is_accepted() -> Result<()> {
+    let mut graph = graph_with_edge(parallel_edge("all", &["dep"]));
+    graph.default_targets = vec![Utf8PathBuf::from("./out/all")];
+
+    generate_bundle(&graph)?;
     Ok(())
 }
 

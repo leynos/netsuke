@@ -5,12 +5,12 @@
 //! the outer runner boundary and injecting the resulting `Dir` into the
 //! materializer. Only `runner` command handlers may call this module.
 
+use super::super::path_helpers::open_effective_dir;
 use super::super::process::{self, DyndepPublicationLease};
 use crate::cli::Cli;
-use crate::localization::{self, keys};
 use crate::ninja_gen::{GeneratedDyndep, GeneratedNinja};
-use anyhow::{Context, Result};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use anyhow::Result;
+use cap_std::fs_utf8::Dir;
 
 /// Publication lease that protects one serial bundle while a command consumes it.
 ///
@@ -54,20 +54,4 @@ pub(in crate::runner) fn prune_dyndep_bundle(
         publication.lease.prune(current)?;
     }
     Ok(())
-}
-
-/// Open the effective Ninja working directory through the runner capability seam.
-fn open_effective_dir(cli: &Cli) -> Result<Dir> {
-    cli.directory.as_ref().map_or_else(
-        || {
-            Dir::open_ambient_dir(".", ambient_authority())
-                .context(localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR))
-        },
-        |dir| {
-            Dir::open_ambient_dir(dir.as_str(), ambient_authority()).with_context(|| {
-                localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR)
-                    .with_arg("path", dir.as_str())
-            })
-        },
-    )
 }

@@ -16,14 +16,15 @@
 
 #![cfg(unix)]
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use mockable::{DefaultEnv, Env};
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
 use test_support::netsuke::{NetsukeRun, run_netsuke_in_with_env};
-use test_support::ninja::ninja_integration_workspace;
+use test_support::ninja::{
+    NinjaWorkspaceError, ninja_integration_workspace, resolve_ninja_program,
+};
 
 /// The `PATH` recipes see: a host utility directory, not the test runner's.
 const RECIPE_PATH: &str = "/usr/bin:/bin";
@@ -77,9 +78,23 @@ const CLEAN_MANIFEST: &str = concat!(
 );
 
 /// Provide a temporary workspace, or skip when Ninja is unavailable.
+///
+/// Only a failed Ninja probe is a skip: a probe answer means the scenario was
+/// expected to run, so failing to create its workspace is a real error rather
+/// than an environment gap.
 #[fixture]
-fn temp_workspace() -> Option<TempDir> {
-    ninja_integration_workspace().ok()
+fn temp_workspace() -> Result<Option<TempDir>> {
+    match ninja_integration_workspace() {
+        Ok(directory) => Ok(Some(directory)),
+        Err(
+            NinjaWorkspaceError::ProbeSpawn(_)
+            | NinjaWorkspaceError::ProbeFailed(_)
+            | NinjaWorkspaceError::ProbeTimeout(_),
+        ) => Ok(None),
+        Err(error @ NinjaWorkspaceError::Workspace(_)) => {
+            Err(error).context("create the Ninja integration workspace")
+        }
+    }
 }
 
 /// How a test shadows a logical target's name with a real user path.
@@ -191,23 +206,18 @@ impl Workspace {
     }
 }
 
-/// Resolve `ninja` to an absolute path from the ambient `PATH`.
+/// Resolve `ninja` to the absolute executable the probe already ran.
 ///
-/// The child process receives a minimal `PATH`, so the program is named to it
-/// explicitly instead of being searched for. Probing the host's own `PATH` is
-/// the one read this test takes from ambient state, and it is a read.
+/// Sharing the fixture crate's resolver is what keeps the probe and the child
+/// launch on one executable: both walk `PATH` with the same executability rule
+/// and the same resolution of relative entries. The child receives a minimal
+/// `PATH`, so the program is named to it explicitly instead of being searched
+/// for.
 fn resolve_ninja() -> Result<Utf8PathBuf> {
-    let search = DefaultEnv
-        .os_string("PATH")
-        .context("PATH must be set to locate ninja")?;
-    for directory in std::env::split_paths(&search) {
-        let candidate = directory.join("ninja");
-        if candidate.is_file() {
-            return Utf8PathBuf::from_path_buf(candidate)
-                .map_err(|path| anyhow::anyhow!("ninja path is not UTF-8: {}", path.display()));
-        }
-    }
-    bail!("ninja must be on PATH for the phony and always runtime tests")
+    let program = resolve_ninja_program()
+        .context("ninja must be on PATH for the phony and always runtime tests")?;
+    Utf8PathBuf::from_path_buf(program)
+        .map_err(|path| anyhow::anyhow!("ninja path is not UTF-8: {}", path.display()))
 }
 
 #[rstest]
@@ -216,11 +226,11 @@ fn resolve_ninja() -> Result<Utf8PathBuf> {
 #[case::phony_target_over_a_directory(PHONY_TARGET_MANIFEST, Shadow::Directory)]
 #[case::phony_target_over_a_file(PHONY_TARGET_MANIFEST, Shadow::File)]
 fn a_logical_target_runs_despite_a_same_named_user_path(
-    temp_workspace: Option<TempDir>,
+    temp_workspace: Result<Option<TempDir>>,
     #[case] manifest: &str,
     #[case] shadow: Shadow,
 ) -> Result<()> {
-    let Some(directory) = temp_workspace else {
+    let Some(directory) = temp_workspace? else {
         return Ok(());
     };
     let workspace = Workspace::new(directory)?;
@@ -251,8 +261,10 @@ fn a_logical_target_runs_despite_a_same_named_user_path(
 }
 
 #[rstest]
-fn always_reruns_and_restat_prunes_its_downstream(temp_workspace: Option<TempDir>) -> Result<()> {
-    let Some(directory) = temp_workspace else {
+fn always_reruns_and_restat_prunes_its_downstream(
+    temp_workspace: Result<Option<TempDir>>,
+) -> Result<()> {
+    let Some(directory) = temp_workspace? else {
         return Ok(());
     };
     let workspace = Workspace::new(directory)?;
@@ -285,10 +297,46 @@ fn always_reruns_and_restat_prunes_its_downstream(temp_workspace: Option<TempDir
 }
 
 #[rstest]
-fn clean_preserves_user_paths_and_removes_real_outputs(
-    temp_workspace: Option<TempDir>,
+fn a_stray_force_node_is_cleared_before_the_build(
+    temp_workspace: Result<Option<TempDir>>,
 ) -> Result<()> {
-    let Some(directory) = temp_workspace else {
+    let Some(directory) = temp_workspace? else {
+        return Ok(());
+    };
+    let workspace = Workspace::new(directory)?;
+    workspace.write_manifest(ALWAYS_MANIFEST)?;
+    workspace
+        .root
+        .create_dir_all(".netsuke/phony")
+        .context("create the reserved phony namespace")?;
+    workspace
+        .root
+        .write(".netsuke/phony/force", b"stray")
+        .context("write a stray force node")?;
+
+    workspace.build()?;
+    ensure!(
+        !workspace
+            .root
+            .try_exists(".netsuke/phony/force")
+            .context("check the force node after the build")?,
+        "a stray path at the force node must not survive the build",
+    );
+
+    workspace.build()?;
+    ensure!(
+        workspace.lines("runs.log")?.len() == 2,
+        "a stray force node must not suppress the always target: {:?}",
+        workspace.lines("runs.log")?,
+    );
+    Ok(())
+}
+
+#[rstest]
+fn clean_preserves_user_paths_and_removes_real_outputs(
+    temp_workspace: Result<Option<TempDir>>,
+) -> Result<()> {
+    let Some(directory) = temp_workspace? else {
         return Ok(());
     };
     let workspace = Workspace::new(directory)?;

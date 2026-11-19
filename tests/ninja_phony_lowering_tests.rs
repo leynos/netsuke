@@ -204,6 +204,28 @@ fn hidden_statement_keeps_bindings_but_suppresses_restat() {
 }
 
 #[rstest]
+fn hidden_statement_clears_an_inherited_restat() {
+    // The action's rule carries `restat = 1`, and an edge inherits its rule's
+    // bindings unless it overrides them. The hidden statement must clear it:
+    // its output is never created, so a surviving `restat` would let Ninja
+    // treat the next invocation's dependants as up to date.
+    let graph = graph_of(command_action("true", true), edge("a", "out", true, false));
+
+    let ninja = generate_posix(&graph);
+    let hidden = hidden_output(&ninja);
+    let block = statement(&ninja, &format!("build {hidden}: "));
+
+    assert!(
+        block.lines().any(|line| line.trim_end() == "  restat ="),
+        "the hidden statement must clear the rule's inherited restat: {block}"
+    );
+    assert!(
+        !block.lines().any(|line| line.trim() == "restat = 1"),
+        "the hidden statement must not re-state a restat override: {block}"
+    );
+}
+
+#[rstest]
 #[case::edge_supplied_restat(false, true)]
 #[case::action_supplied_restat(true, false)]
 fn always_edge_keeps_its_output_and_reports_restat(

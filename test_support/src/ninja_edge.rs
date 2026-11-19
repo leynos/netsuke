@@ -11,6 +11,9 @@
 
 use anyhow::{Context, Result};
 
+/// Prefix of the hidden output an executable `phony` edge relays to.
+const HIDDEN_PREFIX: &str = ".netsuke/phony/edge-";
+
 /// Return whether the named output edge selects Ninja's console pool.
 ///
 /// The lookup is scoped to the selected `build` statement, so a pool binding
@@ -142,13 +145,15 @@ fn edge_index_for(lines: &[&str], output: &str) -> Result<usize> {
 /// Return the hidden output a generated `phony` alias relays to.
 ///
 /// Only the shape the generator emits qualifies: `build <names>: phony
-/// <hidden>` with a single dependency. A dependency-only aggregate renders as
-/// `build <names>: phony | <deps>`, whose first dependency slot is empty, so it
-/// is not mistaken for a relay.
+/// <hidden>` with a single dependency under `.netsuke/phony/edge-`. Requiring
+/// the prefix keeps an unrelated `phony` statement with one dependency from
+/// being followed. A dependency-only aggregate renders as
+/// `build <names>: phony | <deps>`, whose first dependency slot is empty, so
+/// it is not mistaken for a relay either.
 fn phony_relay_output(line: &str) -> Option<String> {
     let dependencies = line.strip_prefix("build ")?.split_once(": ")?.1;
     match ninja_output_tokens(dependencies).as_slice() {
-        [rule, relay] if rule == "phony" && !relay.is_empty() => Some(relay.clone()),
+        [rule, relay] if rule == "phony" && relay.starts_with(HIDDEN_PREFIX) => Some(relay.clone()),
         _ => None,
     }
 }
@@ -265,6 +270,20 @@ mod tests {
         ensure!(
             edge_pool_bindings(ninja, "lint")? == vec!["pool = console".to_owned()],
             "a phony alias must report the bindings of the statement it relays to"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn phony_alias_outside_the_hidden_namespace_is_not_followed() -> Result<()> {
+        let ninja = concat!(
+            "build real: command\n  pool = console\n\n",
+            "build alias: phony real\n",
+        );
+
+        ensure!(
+            edge_pool_bindings(ninja, "alias")?.is_empty(),
+            "only a .netsuke/phony/edge- relay is a generated alias"
         );
         Ok(())
     }

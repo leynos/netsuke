@@ -7,14 +7,16 @@ use super::{DependencyOrder, Recipe, StringOrList, Vars};
 /// A single build target.
 ///
 /// Targets describe the files produced by a rule and their dependencies. A
-/// `phony` target names a logical operation rather than a file: the backend
-/// publishes the name as a Ninja `phony` alias over a hidden output, so an
-/// existing file or directory of that name neither suppresses the recipe nor is
-/// removed by `clean`. An `always` target keeps its declared output but gains a
-/// permanently dirty prerequisite, so the recipe runs even when its inputs are
-/// unchanged. `console` asks Ninja to run an executable edge in its serial
-/// console pool, which can make long-running output visible sooner at the cost
-/// of serializing other console edges.
+/// target marked `phony: true` names a logical operation rather than a file:
+/// the backend publishes the name as a Ninja `phony` alias over a hidden
+/// output, so an existing file or directory of that name neither suppresses the
+/// recipe nor is removed by `clean`. The same lowering applies to every
+/// `actions` entry, and a target whose recipe has no command is already a
+/// dependency-only phony node whatever this flag says. An `always` target keeps
+/// its declared output but gains a permanently dirty prerequisite, so the
+/// recipe runs even when its inputs are unchanged. `console` asks Ninja to run
+/// an executable edge in its serial console pool, which can make long-running
+/// output visible sooner at the cost of serializing other console edges.
 #[expect(
     clippy::struct_excessive_bools,
     reason = "manifest controls are independent and may be combined"

@@ -96,8 +96,10 @@ pub(super) fn for_edge<'a>(
 /// Classify one edge from its recipe shape and its `phony` flag.
 ///
 /// A dependency-only action already renders as Ninja's `phony` rule, so its
-/// edge flag cannot add another lowering.
-const fn classify(edge: &BuildEdge, is_dependency_only: bool) -> EdgeClass {
+/// edge flag cannot add another lowering. The determinism strategy reads the
+/// same classification so its coverage flags describe the statements that are
+/// actually emitted rather than the raw flags.
+pub(super) const fn classify(edge: &BuildEdge, is_dependency_only: bool) -> EdgeClass {
     if is_dependency_only {
         EdgeClass::DependencyOnly
     } else if edge.phony {
