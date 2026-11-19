@@ -7,7 +7,6 @@
 use super::*;
 use rstest::{fixture, rstest};
 
-#[cfg(unix)]
 fn fake_ninja_script(script: &str) -> anyhow::Result<(tempfile::TempDir, camino::Utf8PathBuf)> {
     use test_support::exec::write_exec_with_content;
 
@@ -24,7 +23,6 @@ fn fake_ninja_script(script: &str) -> anyhow::Result<(tempfile::TempDir, camino:
 /// missing program then reaches `spawn` exactly as it would in a real run. The
 /// request is assembled here rather than in a helper so the fixture stays
 /// local to its callers.
-#[cfg(unix)]
 fn run_classification_build(
     program: &Utf8Path,
     build_file: &Utf8Path,
@@ -51,7 +49,6 @@ fn run_classification_build(
 /// The file owner is returned beside the path because dropping it deletes the
 /// file. Callers must bind it for at least as long as they use the path, since
 /// command configuration canonicalises an existing build file.
-#[cfg(unix)]
 #[fixture]
 fn temporary_build_file() -> anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)> {
     let file = tempfile::NamedTempFile::new()?;
@@ -64,7 +61,6 @@ fn temporary_build_file() -> anyhow::Result<(tempfile::NamedTempFile, camino::Ut
 ///
 /// The public conversion must not lose `NotFound` or the raw OS code, because
 /// existing callers branch on those values.
-#[cfg(unix)]
 #[rstest]
 fn missing_program_is_classified_as_a_spawn_failure(
     temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,
@@ -113,7 +109,6 @@ fn missing_program_is_classified_as_a_spawn_failure(
 }
 
 /// An ordinary nonzero exit is classified as an exit failure with its status.
-#[cfg(unix)]
 #[rstest]
 fn unsuccessful_exit_is_classified_with_its_status(
     temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,
@@ -145,7 +140,6 @@ fn unsuccessful_exit_is_classified_with_its_status(
 }
 
 /// A signal-terminated Ninja is still an exit failure, and keeps its signal.
-#[cfg(unix)]
 #[rstest]
 fn signal_terminated_ninja_is_classified_as_an_exit_failure(
     temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,
@@ -177,7 +171,6 @@ fn signal_terminated_ninja_is_classified_as_an_exit_failure(
 /// The missing-program case cannot protect this category, because it fails
 /// inside `spawn`. An unusable working directory fails while the command is
 /// configured, and must stay distinct so the runner does not blame the program.
-#[cfg(unix)]
 #[rstest]
 fn configuration_failure_is_classified_as_io(
     temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,
@@ -205,7 +198,6 @@ fn configuration_failure_is_classified_as_io(
     Ok(())
 }
 
-#[cfg(unix)]
 #[rstest]
 fn build_and_tool_execution_preserve_operation_labels(
     temporary_build_file: anyhow::Result<(tempfile::NamedTempFile, camino::Utf8PathBuf)>,

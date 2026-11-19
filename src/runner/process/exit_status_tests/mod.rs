@@ -183,4 +183,8 @@ fn exit_failure_uses_one_target_resolution_for_error_and_tracing(
     }
 }
 
+// Every classification case builds a fake Ninja with a POSIX shell script, so
+// the module is declared once here rather than gating each item. That keeps
+// its shared imports used on every platform that compiles it.
+#[cfg(unix)]
 mod classification;
