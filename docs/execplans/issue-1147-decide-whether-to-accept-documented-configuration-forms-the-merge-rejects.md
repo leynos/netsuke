@@ -5,7 +5,10 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
+
+Every milestone is delivered and validated; the only remaining step is the pull
+request merge.
 
 Branch:
 `issue-1147-decide-whether-to-accept-documented-configuration-forms-the-merge-rejects`
@@ -186,6 +189,18 @@ list form.
   guide record the behaviour. Red probe: with the snapshot scan disabled, four
   of the nine alias cases fail and the others still pass, so the suite is not
   vacuous.
+- [x] (2026-11-19) Rebased onto `origin/main` at `59637f56f`, which lands the
+  release write-authorization work. One conflict: both sides appended an
+  ADR-0082 entry to `docs/contents.md`. Resolved by keeping both entries and
+  renumbering this branch's record to ADR-0083, along with its references in
+  the changelog, contents index, CLI design document, migration guide, and this
+  plan.
+- [x] (2026-11-19) Review documentation corrections. The review found the
+  orientation section still describing the pre-change resolver, and the users'
+  guide's list-variable rule not excluding `shells`. Both are corrected here,
+  and the orientation section now names `normalized_components`,
+  `parse_environment_bool`, `BOOLEAN_PATHS`, and the
+  `src/cli/config/policies.rs` location.
 
 ## Surprises & discoveries
 
@@ -275,6 +290,11 @@ list form.
   same entry as before. Duplicate spellings of one key are a merge error, and
   the resolver answers from the canonical entry until that error is reported in
   the selected mode. Date/Author: 2026-11-19, agent.
+- D10. Renumber this branch's ADR to 0083 rather than reusing 0082. Rationale:
+  main allocated ADR-0082 to the release write-authorization decision after
+  this branch opened, and two records sharing a serial would make the contents
+  index ambiguous. The next free number keeps both records addressable and
+  costs only reference updates. Date/Author: 2026-11-19, agent.
 
 ## Outcomes & retrospective
 
@@ -318,27 +338,37 @@ environment, and explicit command-line overrides. `ortho_config` merges the
 JSON objects and deserializes the result once, so a higher layer's value masks
 a lower layer's value.
 
-The environment layer is `src/cli/environment/mod.rs::EnvironmentLayer`. It
-normalizes `NETSUKE_` keys (ASCII case and surrounding whitespace) and splits on
-`__` into nested map components. Each value is parsed with Figment's
-`Value::from_str`, which recognizes `true`/`false` as Booleans, integers as
-numbers, and everything else as strings. That is why `NETSUKE_JSON=1` reaches
-the Boolean field as an integer.
+The environment layer is `src/cli/environment/mod.rs::EnvironmentLayer`.
+`normalized_components` in that module trims surrounding whitespace, strips the
+`NETSUKE_` prefix without regard to ASCII case, splits the remainder on `__`,
+and lowercases each component. The five single-component paths in
+`BOOLEAN_PATHS` are parsed by `parse_environment_bool`, which accepts exactly
+`true`, `false`, `1`, and `0` with no trimming and no case folding; every other
+path keeps Figment's own scalar parsing, which recognizes `true`/`false` as
+Booleans, integers as numbers, and everything else as strings.
 
-The early diagnostic-mode resolver is `src/cli/diag/mod.rs`. It reads the exact
-`NETSUKE_JSON` key through an injected `EnvProvider`, accepts `true`, `false`,
-`1`, and `0`, and otherwise reports an `OrthoError::Validation`. It runs before
-the full merge so failures can be reported in the requested output mode.
+The early diagnostic-mode resolver is `src/cli/diag/mod.rs`. It reads the key
+naming the `json` path through an injected `EnvProvider`, trying the canonical
+`NETSUKE_JSON` entry first and then scanning the snapshot with the same
+`normalized_components` function the merge uses. It parses the value with the
+shared `parse_environment_bool` and otherwise reports an
+`OrthoError::Validation`. It runs before the full merge so failures can be
+reported in the requested output mode, and sharing both functions keeps the
+mode it selects identical to the mode the merge would select.
 
-The four display policies live in `src/cli/config/mod.rs` with canonical
+The four display policies live in `src/cli/config/policies.rs` with canonical
 spellings in `src/cli/config/policy_definitions.rs`. Their `FromStr`
 implementations use `parse_policy`, which compares with `eq_ignore_ascii_case`.
-Their `Deserialize` is derived with `rename_all = "kebab-case"`, which is
-case-sensitive. The same enums are serialized into the CLI override layer, so
+Their `Deserialize` implementations delegate to that `FromStr`, so a
+configuration file accepts the same case-insensitive spellings as the command
+line, while `rename_all = "kebab-case"` keeps serialized output canonical and
+lowercase. The same enums are serialized into the CLI override layer, so
 canonical lowercase output matters.
 
 Relevant tests are `src/cli/environment/tests/mod.rs`,
-`src/cli/config/tests.rs`, `src/cli/diag/mod.rs`'s test module,
+`src/cli/config/tests.rs`, the diagnostic-side modules
+`src/cli/diag/alias_tests.rs` and `src/cli/diag/quarantined_policy_tests.rs`
+plus the inline test module in `src/cli/diag/mod.rs`,
 `tests/cli_tests/merge/mod.rs`, `tests/cli_tests/merge_diag.rs`,
 `tests/cli_tests/merge_diag_proptests.rs`, and the binary-level
 `tests/logging_stderr/json.rs`.

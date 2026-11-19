@@ -6517,7 +6517,7 @@ That slice is a maintained boundary, not an accident:
   `src/cli/config/mod.rs` re-exports it so the public configuration shape and
   the build-script schema remain unchanged.
 - `src/cli/config/policies.rs` owns the four display-policy enums and their
-  `FromStr`-delegating `Deserialize` implementations, which
+  case-insensitive, `FromStr`-delegating `Deserialize` implementations, which
   `src/cli/config/mod.rs` re-exports. It is an included submodule of
   `config/mod.rs`, so the slice above did not need to name it.
 - `src/cli/validation.rs` holds the shared limits and error constructor that
@@ -11523,6 +11523,21 @@ The projection is closed — only `NETSUKE_CONFIG`, `HOME`, `USERPROFILE`,
 `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`, and `LOCALAPPDATA` appear — so
 it is not a general environment-copy helper; `EnvironmentLayer` alone
 enumerates the full `NETSUKE_*` value environment.
+
+`EnvironmentLayer` shares its key normalization with the early diagnostic-mode
+resolver. `normalized_components` in `src/cli/environment/mod.rs` trims
+surrounding whitespace, strips the `NETSUKE_` prefix without regard to ASCII
+case, splits on `__`, and lowercases each component, and `src/cli/diag/mod.rs`
+calls that same function before the merge, so a spelling such as `netsuke_json`
+selects the same output mode before and after it. Exactly the five
+single-component paths listed in `BOOLEAN_PATHS` (`verbose`, `json`,
+`fetch_default_deny`, `trust_project_fetch_policy`, and `no_input`) are parsed
+by `parse_environment_bool`, which accepts exactly `true`, `false`, `1`, and
+`0`, with no trimming and no case folding. Every other path keeps Figment's
+ordinary scalar parsing, and Figment trims surrounding whitespace from an
+unquoted environment scalar but not from a quoted file value. The decision is
+recorded in
+[ADR-0083](adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md).
 
 `explicit_config_path_with_env` is the crate-internal seam for explicit
 config-file selection. It evaluates the precedence chain in this order:

@@ -2217,8 +2217,10 @@ and `1` are usable. A configuration file keeps strict Boolean typing, so
 Policy values accept any ASCII casing in a file and in the environment, as
 described in [Policy values and parsing](#policy-values-and-parsing).
 
-List-valued variables accept a scalar, which becomes a one-element list, or a
-serialized JSON array. For example, `NETSUKE_DEFAULT_TARGETS=hello.txt` and
+List-valued variables, except `shells`, accept a scalar, which becomes a
+one-element list, or a serialized JSON array. The `shells` key is file-only, so
+`NETSUKE_SHELLS` and any nested `NETSUKE_SHELLS__...` spelling are rejected
+rather than read as a list. For example, `NETSUKE_DEFAULT_TARGETS=hello.txt` and
 `NETSUKE_DEFAULT_TARGETS='["hello.txt","world.txt"]'` both work. An indexed
 variable such as `NETSUKE_DEFAULT_TARGETS__0=hello.txt` is not a list form: the
 double underscore nests a map, and the merge rejects it with an invalid-type
