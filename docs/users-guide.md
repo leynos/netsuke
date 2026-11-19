@@ -2244,13 +2244,17 @@ Every actual Ninja build invocation records three bounded series in the drained
 `metrics snapshot`:
 
 - `netsuke_runner_ninja_build_executions_total` — a counter labelled with
-  `outcome` (`success` or `error`), `error_category` (`none` or `io`), and
-  `console_scheduling` (`enabled` or `disabled`).
+  `outcome` (`success` or `error`), `error_category` (`none`, `io`, `launch`, or
+  `exit_status`), and `console_scheduling` (`enabled` or `disabled`).
 - `netsuke_runner_ninja_build_execution_duration_seconds` — a histogram with
   the same three labels, recording wall-clock duration in seconds.
 - `netsuke_runner_ninja_build_console_edges_total` — a counter labelled with
   `outcome` only, adding the number of console-enabled user edges in the
   attempted graph.
+
+`error_category` is `launch` when Ninja never started, `exit_status` when it
+ran and reported a failed recipe, and `io` for any other input or output fault,
+such as a pipe the runner could not read. It is `none` on success.
 
 `console_scheduling` is `enabled` when the graph declares at least one
 console-pool edge and `disabled` otherwise. The edge counter counts the

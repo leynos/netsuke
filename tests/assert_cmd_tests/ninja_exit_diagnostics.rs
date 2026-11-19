@@ -3,7 +3,8 @@
 //! The exit diagnostic's whole promise is about what an operator sees: it
 //! states that Ninja reported a failure, carries Ninja's status, and does not
 //! blame the temporary build file. The launch diagnostic lives beside this
-//! module in `runner_diagnostics`, which owns the shared process helpers.
+//! module in `launch_diagnostics`; `runner_diagnostics` owns the shared
+//! process helpers.
 
 use super::generated_build_file::names_generated_build_file;
 use super::runner_diagnostics::{

@@ -24,6 +24,7 @@ sections that match the features they use.
 | Optional                                   | Configured shell definitions | Declare `[[shells]]` only in operator configuration.                    |
 | Required                                   | Reusable release callers     | Pass `publish: true` to publish from a reusable call.                   |
 | Review if automation parses Netsuke errors | Ninja failure diagnostics    | Match the two diagnostic codes instead of the old summary text.         |
+| Required                                   | `RunnerError` matches        | Add arms for `NinjaSpawnFailed` and `NinjaFailed`, or a wildcard arm.   |
 
 _Table 1: migration obligations for the beta series and console-pool option._
 
@@ -1390,6 +1391,10 @@ the new values. See
 [Read a Ninja failure in human and JSON mode](users-guide.md#read-a-ninja-failure-in-human-and-json-mode)
 for the fields and the remedies.
 
+The change also breaks compilation for an exhaustive `match` on the public
+`RunnerError`: it is not `#[non_exhaustive]`, so its two new variants must gain
+arms, or the match needs a wildcard arm.
+
 ## What does not need to change
 
 The convenience wrappers keep their child-process behaviour: the child inherits
@@ -1424,6 +1429,8 @@ owned sink and completion-ordering contract.
 - [ ] If automation parses `netsuke` errors, match
   `netsuke::runner::ninja_spawn_failed` and `netsuke::runner::ninja_failed`
   rather than the old summary text.
+- [ ] If you match `RunnerError` exhaustively, add arms for its
+  `NinjaSpawnFailed` and `NinjaFailed` variants, or a wildcard arm.
 - [ ] Write project `env_block_var` and `fetch_block_host` values as arrays.
 - [ ] If you declare `[[shells]]`, declare it in system or user configuration,
   not a project file.

@@ -148,7 +148,7 @@ fn generate_writes_file() -> Result<()> {
 #[path = "assert_cmd_tests/schema_version.rs"]
 mod schema_version;
 
-/// Cover launch diagnostics at the missing-manifest process boundary.
+/// Provide the shared process fixtures and cover the missing-manifest diagnostic.
 #[path = "assert_cmd_tests/runner_diagnostics.rs"]
 mod runner_diagnostics;
 

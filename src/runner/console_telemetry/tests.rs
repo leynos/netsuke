@@ -126,88 +126,94 @@ fn invocation_records_bounded_scheduling_outcome_and_duration(
     );
 }
 
-/// A Ninja that never started is recorded as a launch failure.
+/// The recorded failure categories a Ninja invocation can report.
 ///
-/// The spawn variant is the only one that means the program was never
-/// executed, so a consumer watching launch failures cannot distinguish it from
-/// an ordinary I/O fault once the categories are conflated. The snapshot is
-/// matched by its exact label set, which is what rejects an `io` label.
-#[rstest]
-fn launch_failure_records_the_launch_error_category() {
-    let recorder = DebuggingRecorder::new();
-    let snapshotter = recorder.snapshotter();
-    let clock = FixedMonotonicClock::with_elapsed(BUILD_ELAPSED);
-    let (result, events) = metrics::with_local_recorder(&recorder, || {
-        with_test_subscriber(LevelFilter::INFO, |captured| {
-            let result = instrument_ninja_build(&clock, 0, || {
-                Err::<(), _>(NinjaInvocationError::spawn(
-                    camino::Utf8Path::new("ninja"),
-                    io::Error::new(io::ErrorKind::NotFound, "private process detail"),
-                ))
-            });
-            (result, captured.snapshot())
-        })
-    });
-    assert!(
-        matches!(result, Err(NinjaInvocationError::Spawn { .. })),
-        "the typed launch failure should be returned unchanged"
-    );
-    let snapshot = snapshotter.snapshot().into_vec();
-    assert_metrics(
-        &snapshot,
-        0,
-        [
-            ("console_scheduling", "disabled"),
-            ("outcome", "error"),
-            ("error_category", "launch"),
-        ],
-    );
-    assert!(
-        events
-            .iter()
-            .any(|event| event.contains("error_category=\"launch\"")),
-        "the build event should name the launch category: {events:?}"
-    );
+/// Each variant owns both the failure a case records and the assertions that
+/// distinguish it, so a future failure class adds one variant instead of
+/// another copy of the recorder, clock and snapshot scaffolding.
+#[derive(Clone, Copy, Debug)]
+enum RecordedFailure {
+    /// The selected program could not be started.
+    Launch,
+    /// Ninja started and reported an unsuccessful status.
+    ExitStatus,
+    /// Another process input/output fault.
+    Io,
 }
 
-/// A recipe Ninja ran and that failed is not recorded as an I/O failure.
+impl RecordedFailure {
+    /// Build the typed invocation failure this category describes.
+    fn construct(self) -> NinjaInvocationError {
+        match self {
+            Self::Launch => NinjaInvocationError::spawn(
+                camino::Utf8Path::new("ninja"),
+                io::Error::new(io::ErrorKind::NotFound, "private process detail"),
+            ),
+            Self::ExitStatus => NinjaInvocationError::exit(
+                NinjaExitError::new(exit_status(7), "build", None)
+                    .expect("an unsuccessful status should construct a failure"),
+            ),
+            Self::Io => NinjaInvocationError::io(io::Error::other("private process detail")),
+        }
+    }
+
+    /// Name the bounded `error_category` label this failure records.
+    fn label(self) -> &'static str {
+        match self {
+            Self::Launch => "launch",
+            Self::ExitStatus => "exit_status",
+            Self::Io => "io",
+        }
+    }
+
+    /// Report whether the returned error kept this category's variant.
+    ///
+    /// A label check alone would pass a classifier that renamed every variant
+    /// to the expected category, so the variant itself must survive.
+    fn is_preserved_in(self, error: &NinjaInvocationError) -> bool {
+        match self {
+            Self::Launch => matches!(error, NinjaInvocationError::Spawn { .. }),
+            Self::ExitStatus => matches!(error, NinjaInvocationError::Exit(_)),
+            Self::Io => matches!(error, NinjaInvocationError::Io(_)),
+        }
+    }
+}
+
+/// Each typed failure records its own bounded category and survives unchanged.
 ///
-/// Both variants surface through the same `io::Error` shape, so only the typed
-/// failure can tell a metric consumer which one happened.
+/// All three variants reach the metric consumer through the same error shape,
+/// so only the typed failure can say which one happened. The snapshot is
+/// matched by its exact label set, which is what rejects a wrong category.
 #[rstest]
-fn unsuccessful_exit_records_a_non_io_error_category() {
+#[case::launch(RecordedFailure::Launch)]
+#[case::exit_status(RecordedFailure::ExitStatus)]
+#[case::io(RecordedFailure::Io)]
+fn failure_records_its_error_category(#[case] failure: RecordedFailure) {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     let clock = FixedMonotonicClock::with_elapsed(BUILD_ELAPSED);
     let (result, events) = metrics::with_local_recorder(&recorder, || {
         with_test_subscriber(LevelFilter::INFO, |captured| {
-            let result = instrument_ninja_build(&clock, 0, || {
-                Err::<(), _>(NinjaInvocationError::exit(
-                    NinjaExitError::new(exit_status(7), "build", None)
-                        .expect("an unsuccessful status should construct a failure"),
-                ))
-            });
+            let result = instrument_ninja_build(&clock, 0, || Err::<(), _>(failure.construct()));
             (result, captured.snapshot())
         })
     });
+    let error = result.expect_err("the typed failure should be returned unchanged");
     assert!(
-        matches!(result, Err(NinjaInvocationError::Exit(_))),
-        "the typed exit failure should be returned unchanged"
+        failure.is_preserved_in(&error),
+        "the {} failure should keep its variant: {error:?}",
+        failure.label()
     );
-    let snapshot = snapshotter.snapshot().into_vec();
-    assert_metrics(
-        &snapshot,
-        0,
-        [
-            ("console_scheduling", "disabled"),
-            ("outcome", "error"),
-            ("error_category", "exit_status"),
-        ],
-    );
+    let labels = [
+        ("console_scheduling", "disabled"),
+        ("outcome", "error"),
+        ("error_category", failure.label()),
+    ];
+    assert_metrics(&snapshotter.snapshot().into_vec(), 0, labels);
+    let expected = format!("error_category={:?}", failure.label());
     assert!(
-        events
-            .iter()
-            .any(|event| event.contains("error_category=\"exit_status\"")),
-        "the build event should name the exit-status category: {events:?}"
+        events.iter().any(|event| event.contains(&expected)),
+        "the build event should name the {} category: {events:?}",
+        failure.label()
     );
 }

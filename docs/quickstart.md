@@ -192,6 +192,14 @@ Install Ninja using the system's package manager:
 - **macOS (Homebrew):** `brew install ninja`
 - **Windows (Chocolatey):** `choco install ninja`
 
+A Ninja that is on `PATH` but cannot be executed, such as a copy that lost its
+executable bit, fails the same way. Check the file's permissions and restore
+them, or select an executable Ninja program:
+
+```sh
+chmod +x /path/to/ninja
+```
+
 If Ninja is installed somewhere off `PATH`, or the executable is named
 differently, set `NETSUKE_NINJA` to its full path:
 

@@ -206,6 +206,25 @@ temporary build file.
     issues in 238 files), nixie, and typecheck. The start and end content
     binding matched, and the push was a `--force-with-lease` over SSH whose
     remote head equals the local head.
+  - [x] A seventh review round reported six inline findings and one outside-diff
+    finding; all seven are applied:
+    - the quick start now says that a Ninja which is on `PATH` but not
+      executable fails the same way, and shows how to restore its permissions;
+    - the migration guide records that `RunnerError` is not
+      `#[non_exhaustive]`, so its two new variants break exhaustive matches;
+      the impact table and the checklist carry the same obligation;
+    - the Italian build-failure summary says "errore durante la build" rather
+      than "errore di compilazione", matching the glossary's narrower sense of
+      compilation;
+    - the three failure-category telemetry tests are one parameterized
+      `rstest` over a `RecordedFailure` enum, so each case keeps its own
+      constructor, label and variant predicate without repeating the recorder
+      scaffolding;
+    - the `assert_cmd_tests` module index and the `ninja_exit_diagnostics`
+      header now name `launch_diagnostics` as the owner of the launch cases and
+      `runner_diagnostics` as the owner of the shared fixtures;
+    - the users' guide lists `launch` and `exit_status` in the
+      `error_category` label set and says which category means what.
 
 ## Plan of work
 
