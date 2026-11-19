@@ -32,50 +32,16 @@ const RECIPE_PATH: &str = "/usr/bin:/bin";
 /// An action, which Netsuke treats as an implicitly phony operation.
 ///
 /// `targets` is required even when the manifest declares none.
-const ACTION_MANIFEST: &str = concat!(
-    "netsuke_version: '1.0.0'\n",
-    "actions:\n",
-    "  - name: check\n",
-    "    command: echo run >> runs.log\n",
-    "targets: []\n",
-    "defaults: [check]\n",
-);
+const ACTION_MANIFEST: &str = include_str!("data/phony_action.yml");
 
 /// A target that declares itself phony in the manifest.
-const PHONY_TARGET_MANIFEST: &str = concat!(
-    "netsuke_version: '1.0.0'\n",
-    "targets:\n",
-    "  - name: check\n",
-    "    phony: true\n",
-    "    command: echo run >> runs.log\n",
-    "defaults: [check]\n",
-);
+const PHONY_TARGET_MANIFEST: &str = include_str!("data/phony_target.yml");
 
 /// An always target whose output keeps its modification time, plus a consumer.
-const ALWAYS_MANIFEST: &str = concat!(
-    "netsuke_version: '1.0.0'\n",
-    "targets:\n",
-    "  - name: always-stamp\n",
-    "    always: true\n",
-    "    command: test -f always-stamp || echo stamp > always-stamp; echo run >> runs.log\n",
-    "  - name: consumer\n",
-    "    sources: [always-stamp]\n",
-    "    command: echo consumer >> consumer.log; echo consumer > consumer\n",
-    "defaults: [consumer]\n",
-);
+const ALWAYS_MANIFEST: &str = include_str!("data/phony_always.yml");
 
 /// A phony action named after a user directory, plus a real always output.
-const CLEAN_MANIFEST: &str = concat!(
-    "netsuke_version: '1.0.0'\n",
-    "actions:\n",
-    "  - name: check\n",
-    "    command: echo run >> runs.log\n",
-    "targets:\n",
-    "  - name: stamp\n",
-    "    always: true\n",
-    "    command: echo run >> runs.log; echo stamp > stamp\n",
-    "defaults: [check, stamp]\n",
-);
+const CLEAN_MANIFEST: &str = include_str!("data/phony_clean.yml");
 
 /// The force node, relative to the workspace.
 const FORCE_NODE: &str = ".netsuke/phony/force";
@@ -85,17 +51,7 @@ const FORCE_NODE: &str = ".netsuke/phony/force";
 /// The spelling is absolute, so only the runner's working-directory resolution
 /// can tell that it names generated state.
 fn alias_manifest(force_node: &str) -> String {
-    format!(
-        concat!(
-            "netsuke_version: '1.0.0'\n",
-            "targets:\n",
-            "  - name: '{force_node}'\n",
-            "    always: true\n",
-            "    command: echo run >> runs.log\n",
-            "defaults: ['{force_node}']\n",
-        ),
-        force_node = force_node,
-    )
+    include_str!("data/phony_alias.yml").replace("{force_node}", force_node)
 }
 
 /// Provide a temporary workspace, or skip when Ninja is unavailable.

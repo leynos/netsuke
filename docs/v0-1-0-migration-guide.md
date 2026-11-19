@@ -1221,13 +1221,16 @@ and [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md).
 
 An action or target declaring `phony: true` with a recipe, and a target
 declaring `always: true`, now run every time they are reached. No manifest
-needs an edit: the names meant this all along, and both lowerings publish into
-the reserved `.netsuke/phony` namespace. Because the generated Ninja text
-changes shape for these edges, a manifest that compares `netsuke generate`
-output against a stored copy must update that copy. The
+needs an edit for that reason: the names meant this all along, and both
+lowerings publish into the reserved `.netsuke/phony` namespace. A manifest that
+already declares a target or output inside `.netsuke/phony` must move it,
+because that spelling now names generated state and generation rejects it.
+Because the generated Ninja text changes shape for these edges, a manifest that
+compares `netsuke generate` output against a stored copy must update that copy.
+See the
 [v0.1.1 migration guide](v0-1-1-migration-guide.md#expect-phony-and-always-work-to-run)
-records what changes for files left behind by earlier runs and how
-`netsuke clean` treats them. The
+for what changes for files left behind by earlier runs and how `netsuke clean`
+treats them. The
 [users' guide](users-guide.md#rely-on-phony-and-always-work-running) documents
 the behaviour, and
 [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md)

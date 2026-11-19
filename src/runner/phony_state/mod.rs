@@ -82,20 +82,44 @@ pub(in crate::runner) fn reset_force_node(cli: &Cli, declared: &[Utf8PathBuf]) -
 ///
 /// Text alone cannot answer this for every spelling: `../project/force` and
 /// `/abs/project/force` may name the very node about to be removed, and an
-/// alias through a symbolic link names it without saying so. The longest
-/// existing ancestor is therefore canonicalized against `workspace` — an
-/// absolute path with links resolved — and the components that do not exist yet
-/// are applied to it. The result is then compared with the workspace and given
-/// to the same reservation rule generation applies.
+/// alias through a symbolic link names it without saying so. Two resolutions
+/// run, because they answer different questions:
+///
+/// - The whole path, following its final component when that is a link, says
+///   whether the declaration reaches into the namespace at all.
+/// - The parent alone, keeping the final component as written, says whether the
+///   entry about to be removed is the one declared. Following the link there
+///   would describe the link's target instead of the entry, so a declared
+///   absolute alias whose link points outside the workspace would otherwise
+///   escape the check.
+///
+/// Both use the longest existing ancestor, canonicalized against `workspace`,
+/// with the components that do not exist yet folded onto it. The results are
+/// given to the same reservation rule generation applies.
 ///
 /// Canonicalization only reads: the removal itself still goes through the
 /// verified namespace handles, so this check can never redirect a deletion.
 fn resolves_into_reserved_state(workspace: &Utf8Path, path: &Utf8Path) -> bool {
     is_reserved_path(path)
-        || resolved_target(workspace, path)
-            .as_deref()
-            .and_then(|resolved| resolved.strip_prefix(workspace).ok())
-            .is_some_and(is_reserved_path)
+        || within_namespace(workspace, resolved_target(workspace, path).as_deref())
+        || within_namespace(workspace, declared_entry(workspace, path).as_deref())
+}
+
+/// Resolve `path`'s parent and keep its final component as written.
+///
+/// A path with no final component — one that ends in `..` or in a separator —
+/// names no entry, so there is nothing separate from the full resolution above.
+fn declared_entry(workspace: &Utf8Path, path: &Utf8Path) -> Option<Utf8PathBuf> {
+    let parent = path.parent()?;
+    let name = path.file_name()?;
+    resolved_target(workspace, parent).map(|directory| directory.join(name))
+}
+
+/// Report whether an already-resolved path names reserved state in `workspace`.
+fn within_namespace(workspace: &Utf8Path, resolved: Option<&Utf8Path>) -> bool {
+    resolved
+        .and_then(|candidate| candidate.strip_prefix(workspace).ok())
+        .is_some_and(is_reserved_path)
 }
 
 /// Resolve `path` against the workspace, folding the components not yet on disk.
@@ -159,10 +183,16 @@ fn alias_refusal(path: &Utf8Path) -> Error {
 /// Returns `Ok(None)` when the entry is absent, because a namespace that does
 /// not exist holds no stray state. A symbolic link or a non-directory entry is
 /// refused: removal beneath such a path could reach a file outside the
-/// reserved namespace. `open_dir_nofollow` alone accepts a directory symlink
-/// with the pinned capability implementation, so the entry is inspected
-/// without following it first, and opened without following it second. That
-/// mirrors the glob walker's literal-prefix check.
+/// reserved namespace.
+///
+/// The open itself refuses a link as the final component — `O_NOFOLLOW` on
+/// Unix, a reparse-point check on the opened handle on Windows — so a link
+/// swapped in between the inspection and the open makes the open fail rather
+/// than yielding a handle that points elsewhere. The inspection that precedes
+/// it is still needed: it distinguishes absence from refusal, and it reports a
+/// non-directory entry with the namespace's own diagnostic. A test pins the
+/// primitive's guarantee, so a dependency change that dropped it would fail
+/// here rather than silently weakening the reset.
 ///
 /// # Errors
 ///

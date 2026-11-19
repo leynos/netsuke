@@ -4,84 +4,29 @@
 //! The reset runs on every build, so a manifest path that names the force node
 //! indirectly — an absolute path, a `..` that returns to the workspace, or a
 //! symbolic-link alias — must stop the removal instead of being destroyed by
-//! it. The properties below compute their expectation from the workspace
-//! itself, so they cannot quietly assume that a path climbing above the working
-//! directory is safe.
+//! it. The example cases live here; the properties in [`properties`] compute
+//! their expectation from the workspace itself, so they cannot quietly assume
+//! that a path climbing above the working directory is safe.
+
+mod properties;
+mod support;
 
 use super::{
     FORCE_ENTRY, NAMESPACE_LEAF, NAMESPACE_PARENT, open_verified_dir, remove_path,
-    reset_force_node, resolves_into_reserved_state,
+    resolves_into_reserved_state,
 };
-use crate::cli::Cli;
 use crate::ninja_gen::FORCE_PATH;
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use proptest::prelude::*;
 use rstest::rstest;
+use support::{force_node_exists, namespace, reset, stray_force_node, workspace};
 use tempfile::TempDir;
 
-/// A temporary workspace opened as a capability handle.
-struct Workspace {
-    /// Owns the temporary directory for the test's lifetime.
-    _directory: TempDir,
-    /// Canonical absolute path of the same directory.
-    root: Utf8PathBuf,
-    /// Capability handle rooted at [`Self::root`].
-    dir: Dir,
-}
-
-/// Create a fresh temporary workspace.
-fn workspace() -> Result<Workspace> {
-    let directory = TempDir::new().context("create a temporary workspace")?;
-    let path = Utf8Path::from_path(directory.path()).context("workspace path is UTF-8")?;
-    let root = path
-        .canonicalize_utf8()
-        .context("canonicalize the temporary workspace")?;
-    let dir = Dir::open_ambient_dir(&root, ambient_authority())
-        .context("open the temporary workspace")?;
-    Ok(Workspace {
-        _directory: directory,
-        root,
-        dir,
-    })
-}
-
-/// Create the phony namespace and return a handle to it.
-fn namespace(root: &Dir) -> Result<Dir> {
-    root.create_dir_all(Utf8Path::new(NAMESPACE_PARENT).join(NAMESPACE_LEAF))
-        .context("create the phony namespace")?;
-    open_verified_dir(root, NAMESPACE_PARENT, Utf8Path::new(NAMESPACE_PARENT))?
-        .context("the namespace parent must exist")?
-        .open_dir(NAMESPACE_LEAF)
-        .context("open the phony namespace")
-}
-
-/// Write a stray entry at the force node.
-fn stray_force_node(root: &Dir) -> Result<()> {
-    namespace(root)?
-        .write(FORCE_ENTRY, b"stray")
-        .context("write a stray force node")
-}
-
-/// Run the reset with `root` as the working directory and `declared` as the
-/// manifest's paths.
-fn reset(root: &Utf8Path, declared: &[Utf8PathBuf]) -> Result<()> {
-    let cli = Cli {
-        directory: Some(root.to_owned()),
-        ..Cli::default()
-    };
-    reset_force_node(&cli, declared)
-}
-
-/// Report whether an entry still occupies the force node.
-///
-/// The force node's parent is an ancestor of every path inside the namespace,
-/// so the verified namespace handle answers for the node itself without
-/// following a link that might have replaced it.
-fn force_node_exists(dir: &Dir) -> Result<bool> {
-    Ok(namespace(dir)?.try_exists(FORCE_ENTRY)?)
-}
+#[cfg(unix)]
+use cap_primitives::fs::open_dir_nofollow;
+#[cfg(unix)]
+use std::path::Path;
 
 #[test]
 fn the_component_constants_compose_the_force_path() {
@@ -304,94 +249,108 @@ fn an_unrelated_declared_path_allows_the_reset() -> Result<()> {
     Ok(())
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+/// The verified open refuses a link as the final component.
+///
+/// The reset's safety against a link swapped in after the inspection rests on
+/// this guarantee from the capability primitive, not on the inspection itself.
+/// Pinning the primitive here means a dependency change that dropped the
+/// refusal fails this test rather than silently weakening every reset.
+#[cfg(unix)]
+#[test]
+fn the_namespace_open_primitive_refuses_a_link() -> Result<()> {
+    let workspace = workspace()?;
+    workspace
+        .dir
+        .create_dir("real")
+        .context("create a link target")?;
+    workspace
+        .dir
+        .symlink("real", "state")
+        .context("link a directory alias")?;
+    let handle = workspace
+        .dir
+        .as_cap_std()
+        .try_clone()
+        .context("clone the workspace handle")?
+        .into_std_file();
+    let outcome = open_dir_nofollow(&handle, Path::new("state"));
+    ensure!(
+        outcome.is_err(),
+        "the verified open must refuse a link as its final component",
+    );
+    Ok(())
+}
 
-    /// An absolute path into the namespace is always reserved.
-    ///
-    /// The oracle is the workspace's own absolute path, so the property holds
-    /// regardless of where the temporary directory lives.
-    #[test]
-    fn absolute_namespace_paths_are_reserved(
-        tail in prop::sample::select(vec![
-            "phony", "phony/force", "phony/edge-abc", "serial/deadbeef", "dyndep/x.dd",
-        ]),
-    ) {
-        let workspace = workspace().expect("create a temporary workspace");
-        let declared = workspace.root.join(format!(".netsuke/{tail}"));
-        prop_assert!(resolves_into_reserved_state(&workspace.root, &declared));
-    }
+/// A link at the `phony` leaf is refused, not followed.
+///
+/// Both namespace components go through the same verified open, so the leaf
+/// needs its own case: `.netsuke` may be real while `phony` is the link.
+#[cfg(unix)]
+#[test]
+fn a_symlinked_phony_leaf_is_refused() -> Result<()> {
+    let workspace = workspace()?;
+    let display = Utf8Path::new(NAMESPACE_PARENT).join(NAMESPACE_LEAF);
+    workspace
+        .dir
+        .create_dir_all(Utf8Path::new(NAMESPACE_PARENT).join("data"))
+        .context("create a link target")?;
+    workspace
+        .dir
+        .symlink("data", &display)
+        .context("link the phony leaf to another directory")?;
+    let netsuke = open_verified_dir(
+        &workspace.dir,
+        NAMESPACE_PARENT,
+        Utf8Path::new(NAMESPACE_PARENT),
+    )?
+    .context("the namespace parent must exist")?;
+    let refused = open_verified_dir(&netsuke, NAMESPACE_LEAF, &display);
+    ensure!(
+        refused.is_err(),
+        "a linked phony leaf could point outside the reserved namespace",
+    );
+    Ok(())
+}
 
-    /// A climb that returns to the workspace's own namespace is reserved.
-    ///
-    /// `d0/d1/../..` lands on the workspace, so the tail names the same node
-    /// the literal spelling does. This is the case a check over the graph's
-    /// spelling alone cannot see, and it must not be assumed harmless.
-    #[test]
-    fn a_returning_climb_is_reserved(
-        depth in 1usize..4,
-        inner in prop::sample::select(vec![
-            "phony/force", "phony/edge-abc", "serial/deadbeef", "dyndep/x.dd",
-        ]),
-    ) {
-        let workspace = workspace().expect("create a temporary workspace");
-        let prefix = (0..depth)
-            .map(|level| format!("d{level}"))
-            .collect::<Vec<String>>()
-            .join("/");
-        let declared = Utf8PathBuf::from(format!(
-            "{prefix}/{climb}.netsuke/{inner}",
-            climb = "../".repeat(depth),
-        ));
-        prop_assert!(
-            resolves_into_reserved_state(&workspace.root, &declared),
-            "{declared} resolves into the workspace namespace",
-        );
-    }
+/// An absolute declaration that is itself a link out of the workspace is
+/// refused.
+///
+/// Following the final component would describe the link's target instead of
+/// the entry that occupies the force node, so the parent is resolved and the
+/// entry name kept as written. Deleting here would destroy an output the
+/// manifest declared.
+#[cfg(unix)]
+#[test]
+fn an_absolute_alias_through_a_link_stops_the_reset() -> Result<()> {
+    let workspace = workspace()?;
+    let outside = TempDir::new().context("create a directory outside the workspace")?;
+    let outside_path = Utf8Path::from_path(outside.path()).context("the outside path is UTF-8")?;
+    let outside_dir = Dir::open_ambient_dir(outside_path, ambient_authority())
+        .context("open the outside directory")?;
+    outside_dir
+        .write("kept", b"outside")
+        .context("write the link target")?;
 
-    /// Climbing above the workspace and back into it is reserved.
-    ///
-    /// `../<workspace name>/...` names the workspace itself, so the property
-    /// that a path climbing above the working directory is safe would be wrong.
-    #[test]
-    fn a_climb_above_the_root_that_reenters_is_reserved(
-        inner in prop::sample::select(vec![
-            "phony/force", "phony/edge-abc", "serial/deadbeef", "dyndep/x.dd",
-        ]),
-    ) {
-        let workspace = workspace().expect("create a temporary workspace");
-        let name = workspace.root.file_name().expect("workspace has a name");
-        let declared = Utf8PathBuf::from(format!("../{name}/.netsuke/{inner}"));
-        prop_assert!(
-            resolves_into_reserved_state(&workspace.root, &declared),
-            "{declared} re-enters the workspace",
-        );
-    }
-
-    /// A climb that leaves the workspace stays unreserved.
-    ///
-    /// The expectation is computed from the resolved location, not from the
-    /// number of `..` components: only paths landing inside this workspace's
-    /// namespaces may be refused.
-    #[test]
-    fn a_climb_into_another_tree_is_not_reserved(
-        name in "[a-z][a-z0-9]{0,6}",
-    ) {
-        let workspace = workspace().expect("create a temporary workspace");
-        let declared = Utf8PathBuf::from(format!("../not-{name}/.netsuke/phony/force"));
-        prop_assert!(
-            !resolves_into_reserved_state(&workspace.root, &declared),
-            "{declared} lands outside the workspace",
-        );
-    }
-
-    /// Ordinary relative names are never reserved.
-    #[test]
-    fn ordinary_names_are_not_reserved(
-        segments in prop::collection::vec("[a-z][a-z0-9_-]{0,7}", 1..4),
-    ) {
-        let workspace = workspace().expect("create a temporary workspace");
-        let declared = Utf8PathBuf::from(segments.join("/"));
-        prop_assert!(!resolves_into_reserved_state(&workspace.root, &declared));
-    }
+    // The link content is relative because the capability API refuses an
+    // absolute target; climbing three levels leaves the workspace and the
+    // target exists, so following the final component really does land
+    // outside it.
+    let name = outside_path
+        .file_name()
+        .context("the outside directory has a name")?;
+    let target = format!("../../../{name}/kept");
+    namespace(&workspace.dir)?
+        .symlink(&target, FORCE_ENTRY)
+        .context("link the force node outside the workspace")?;
+    let declared = vec![workspace.root.join(FORCE_PATH)];
+    let outcome = reset(&workspace.root, &declared);
+    ensure!(
+        outcome.is_err(),
+        "a declared link out of the workspace must stop the reset",
+    );
+    ensure!(
+        force_node_exists(&workspace.dir)?,
+        "the refused reset must leave the declared entry in place",
+    );
+    Ok(())
 }

@@ -1,0 +1,9 @@
+netsuke_version: '1.0.0'
+targets:
+  - name: always-stamp
+    always: true
+    command: test -f always-stamp || echo stamp > always-stamp; echo run >> runs.log
+  - name: consumer
+    sources: [always-stamp]
+    command: echo consumer >> consumer.log; echo consumer > consumer
+defaults: [consumer]
