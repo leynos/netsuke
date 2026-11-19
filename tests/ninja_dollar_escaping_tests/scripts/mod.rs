@@ -1,37 +1,29 @@
 //! Script recipe integration cases for Ninja dollar escaping.
 //!
 //! The byte-preservation cases for the POSIX `printf %b` transport live in
-//! the [`transport`] submodule, so each file stays within the module size
-//! limit.
+//! the [`transport`] submodule, the lowering and execution helpers in the
+//! [`runner`] submodule, and the typed table data in the [`cases`] submodule,
+//! so each file stays within the module size limit.
 
 use super::*;
 
-// Only the Unix-gated transport case decodes a Bash command line, so on Windows
+// Only the Unix-gated execution cases decode a Bash command line, so on Windows
 // these items would be unused and `-D warnings` would reject the test build.
-#[cfg(unix)]
-use netsuke::ninja_gen::{InterpreterExecutable, generate_with_interpreter};
 #[cfg(unix)]
 use test_support::shell_transport::{INTERPRETER_PATH, decode_bash_transport};
 
-mod transport;
-
-/// Generate Ninja text for `shell`, binding an interpreter for the Bash route.
-///
-/// The renderer refuses an unbound Bash interpreter, so this case binds the
-/// absolute fixture path the composition suite also uses. The path is never
-/// executed: only the rendered script is decoded and run under the host shell.
 #[cfg(unix)]
-fn generate_for(shell: RecipeShell, graph: &BuildGraph) -> Result<String> {
-    match shell {
-        RecipeShell::Bash => {
-            let executable =
-                InterpreterExecutable::from_absolute_path(Utf8PathBuf::from(INTERPRETER_PATH))?;
-            Ok(generate_with_interpreter(graph, shell, &executable)?)
-        }
-        RecipeShell::Posix => Ok(generate_with_shell(graph, shell)?),
-        RecipeShell::PowerShell => bail!("this suite covers only the POSIX lexis"),
-    }
-}
+use cases::{Comment, HostileSite, Marker};
+use cases::{ControlCharacter, UnsafePath};
+#[cfg(unix)]
+use runner::{GeneratedCommand, ScriptCase, generate_for, lower_script, run_script};
+
+mod cases;
+
+#[cfg(unix)]
+mod runner;
+
+mod transport;
 
 /// Verify script `$in` and `$out` become literal shell variables in Ninja.
 #[rstest]
@@ -125,36 +117,26 @@ fn escaped_script_marker_is_rejected() -> Result<()> {
 /// Verify a double-quoted script marker cannot create a second POSIX command.
 #[cfg(unix)]
 #[rstest]
-#[case::apostrophe("# unmatched apostrophe '")]
-#[case::double_quote("# unmatched double quote \"")]
-fn quoted_script_marker_cannot_inject_a_command_boundary(#[case] comment: &str) -> Result<()> {
+#[case::apostrophe(Comment::Apostrophe)]
+#[case::double_quote(Comment::DoubleQuote)]
+fn quoted_script_marker_cannot_inject_a_command_boundary(#[case] comment: Comment) -> Result<()> {
     let output_path = "x\"; touch injected; echo \"y";
-    let manifest = manifest::from_str(&format!(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: '{output_path}'\n    script: |\n      {comment}\n      echo \"{{{{ outs }}}}\"\n"
-    ))?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-    let commands = ninja_commands(&ninja, output_path)?;
-    let workspace = tempfile::tempdir()?;
-    let output = Command::new("/bin/sh")
-        .args(["-ec", &commands])
-        .current_dir(workspace.path())
-        .output()
-        .context("run the generated script command")?;
+    let case = ScriptCase {
+        target: output_path.to_owned(),
+        manifest: format!(
+            "netsuke_version: '1.0.0'\ntargets:\n  - name: '{output_path}'\n    script: |\n      {}\n      echo \"{{{{ outs }}}}\"\n",
+            comment.line()
+        ),
+    };
+    let command = lower_script(&case)?;
+    let run = run_script(&command)?;
     ensure!(
-        output.status.success(),
-        "generated script command failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    ensure!(
-        output.stdout == format!("{output_path}\n").as_bytes(),
+        run.output.stdout == format!("{output_path}\n").as_bytes(),
         "script marker must remain one argument, got: {}",
-        String::from_utf8_lossy(&output.stdout)
+        String::from_utf8_lossy(&run.output.stdout)
     );
     ensure!(
-        !workspace.path().join("injected").exists(),
+        !run.workspace.path().join("injected").exists(),
         "double-quoted marker must not execute the injected touch command"
     );
     Ok(())
@@ -169,40 +151,32 @@ fn quoted_script_marker_cannot_inject_a_command_boundary(#[case] comment: &str) 
 /// it, so the corruption is observable as a command boundary.
 #[cfg(unix)]
 #[rstest]
-#[case::outputs("a; touch injected; echo b", None, "{{ outs }}")]
-#[case::inputs("out", Some("a; touch injected; echo b"), "{{ ins }}")]
+#[case::outputs(HostileSite::OutputPath, Marker::Outs)]
+#[case::inputs(HostileSite::InputPath, Marker::Ins)]
 fn backtick_inside_command_substitution_cannot_unquote_a_script_marker(
-    #[case] target: &str,
-    #[case] source: Option<&str>,
-    #[case] marker: &str,
+    #[case] site: HostileSite,
+    #[case] marker: Marker,
 ) -> Result<()> {
-    let source_line = source.map_or_else(String::new, |path| format!("    sources: '{path}'\n"));
-    let manifest = manifest::from_str(&format!(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: '{target}'\n{source_line}    script: |\n      printf '%s\\n' $(printf %s \"`printf x`\") {marker}\n"
-    ))?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-    let commands = ninja_commands(&ninja, target)?;
-    let workspace = tempfile::tempdir()?;
-    let output = Command::new("/bin/sh")
-        .args(["-ec", &commands])
-        .current_dir(workspace.path())
-        .output()
-        .context("run the generated script command")?;
+    let source_line = site
+        .source()
+        .map_or_else(String::new, |path| format!("    sources: '{path}'\n"));
+    let case = ScriptCase {
+        target: site.target().to_owned(),
+        manifest: format!(
+            "netsuke_version: '1.0.0'\ntargets:\n  - name: '{}'\n{source_line}    script: |\n      printf '%s\\n' $(printf %s \"`printf x`\") {}\n",
+            site.target(),
+            marker.token()
+        ),
+    };
+    let command = lower_script(&case)?;
+    let run = run_script(&command)?;
     ensure!(
-        output.status.success(),
-        "generated script command failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    ensure!(
-        output.stdout == b"x\na; touch injected; echo b\n",
+        run.output.stdout == b"x\na; touch injected; echo b\n",
         "the marker after $() must stay one argument, got: {}",
-        String::from_utf8_lossy(&output.stdout)
+        String::from_utf8_lossy(&run.output.stdout)
     );
     ensure!(
-        !workspace.path().join("injected").exists(),
+        !run.workspace.path().join("injected").exists(),
         "a marker after $() must not execute the injected touch command"
     );
     Ok(())
@@ -238,25 +212,15 @@ fn non_ascii_space_before_hash_keeps_the_marker_quoted(#[case] shell: RecipeShel
         RecipeShell::Posix | RecipeShell::PowerShell => binding,
     };
 
-    let workspace = tempfile::tempdir()?;
-    let output = Command::new("/bin/sh")
-        .args(["-ec", &script])
-        .current_dir(workspace.path())
-        .output()
-        .context("run the generated script command")?;
-    ensure!(
-        output.status.success(),
-        "generated script command failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let run = run_script(&GeneratedCommand::new(script))?;
     let expected = "x\u{00a0}#\necho x\"; touch injected; echo \"y\n";
     ensure!(
-        output.stdout == expected.as_bytes(),
+        run.output.stdout == expected.as_bytes(),
         "a no-break space must not end the word before '#', got: {}",
-        String::from_utf8_lossy(&output.stdout)
+        String::from_utf8_lossy(&run.output.stdout)
     );
     ensure!(
-        !workspace.path().join("injected").exists(),
+        !run.workspace.path().join("injected").exists(),
         "the quote after a non-separator must keep the marker from executing the injected touch"
     );
     Ok(())
@@ -297,12 +261,12 @@ fn mismatched_backtick_and_command_substitution_nesting_is_rejected() -> Result<
 
 /// Verify that command control characters cannot inject Ninja syntax.
 #[rstest]
-#[case::newline("echo safe\nbuild injected: action")]
-#[case::carriage_return("echo safe\rbuild injected: action")]
-fn command_control_characters_are_rejected(#[case] command: &str) -> Result<()> {
+#[case::newline(ControlCharacter::Newline)]
+#[case::carriage_return(ControlCharacter::CarriageReturn)]
+fn command_control_characters_are_rejected(#[case] character: ControlCharacter) -> Result<()> {
     let result = generate_posix(&graph(
         Recipe::Command {
-            command: command.into(),
+            command: character.command().into(),
             isolation: netsuke::ast::CommandIsolation::Shared,
         },
         "in",
@@ -317,20 +281,20 @@ fn command_control_characters_are_rejected(#[case] command: &str) -> Result<()> 
 
 /// Verify that Ninja-unsafe path characters are rejected during generation.
 #[rstest]
-#[case::dollar("input$file")]
-#[case::colon("input:file")]
-#[case::pipe("input|file")]
-#[case::tab("input\tfile")]
-#[case::nul("input\0file")]
-#[case::carriage_return("input\rfile")]
-#[case::newline("input\nfile")]
-fn unsafe_paths_are_rejected(#[case] input: &str) -> Result<()> {
+#[case::dollar(UnsafePath::Dollar)]
+#[case::colon(UnsafePath::Colon)]
+#[case::pipe(UnsafePath::Pipe)]
+#[case::tab(UnsafePath::Tab)]
+#[case::nul(UnsafePath::Nul)]
+#[case::carriage_return(UnsafePath::CarriageReturn)]
+#[case::newline(UnsafePath::Newline)]
+fn unsafe_paths_are_rejected(#[case] path: UnsafePath) -> Result<()> {
     let result = generate_posix(&graph(
         Recipe::Command {
             command: format!("cat {INS_TOKEN} > {OUTS_TOKEN}").into(),
             isolation: netsuke::ast::CommandIsolation::Shared,
         },
-        input,
+        path.text(),
         "out",
     )?);
     ensure!(
