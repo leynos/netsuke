@@ -96,6 +96,36 @@ The workflow supplies `7` when the value is omitted or empty. The resolved
 version is used for Windows WiX packaging. The Python resolver rejects an
 unexpectedly empty value and values containing carriage returns or line feeds.
 
+### Choose whether a reusable release call publishes
+
+A reusable call does not publish unless the caller asks it to. The `publish`
+input defaults to `false`, so a caller that only stages a rehearsal keeps a
+draft release untouched. Pass `publish: true` to authorize the release write:
+
+<!-- tested-example: guide-release-publish-input -->
+
+```yaml
+with:
+  publish: true
+```
+
+These rules decide whether a run may write:
+
+- A caller that passes `dry-run: true` never publishes. This veto applies even
+  when `publish: true` is also set.
+- A reusable caller must pass `publish: true` to publish. This holds even when
+  the caller inherits a `push` trigger, so a tag or branch push reaching the
+  workflow does not by itself authorize a release write.
+- A direct `v*.*.*` tag push of `.github/workflows/release.yml` keeps its
+  existing publishing behaviour and needs no inputs.
+
+Authorization governs the draft release and its assets: the release write, the
+asset upload, and the finalization that un-drafts it all wait on the authorized
+decision. A run that is not authorized still builds, packages, and stages its
+artefacts, and its job summary records why publication was denied. Diagnostic
+artefact upload is suppressed on a dry run, because staging and diagnostics are
+rehearsal aids rather than release writes.
+
 Before the `package-crate` job uploads its artefact, the action validates the
 retained candidate offline. It requires the package identity, the single
 recorded `.crate`, its SHA-256 digest, and the `Cargo.toml` at the archive's

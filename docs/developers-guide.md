@@ -1881,6 +1881,21 @@ either side.
   input and rejects carriage returns or line feeds before writing the resolved
   version. Its only dependency is Cyclopts `>=4.25.3,<5`; see
   `scripts/tests/test_resolve_wix_extension_version.py`.
+- `release.yml` owns the release-write authorization pair,
+  `release_write_policy.py` and `authorize_release_writes.py`. The policy is a
+  pure function over typed values and imports neither `cyclopts` nor any
+  workflow key; the adapter is what the `release_authorization` step runs, and
+  it parses the workflow's raw strings, classifies the invocation origin, and
+  renders the decision. Its inputs arrive through `env:` from the reusable
+  `publish` and `dry-run` inputs, `github.event_name`, `github.ref`,
+  `github.workflow_ref`, `github.repository`, and the `determine-release-modes`
+  outputs `should-publish`, `dry-run`, and `should-upload-workflow-artifacts`;
+  `GITHUB_OUTPUT` identifies the output file. A malformed input writes an
+  `::error` annotation and exits with status 2 instead of guessing a decision,
+  while a supported non-publishing request exits 0. The workflow never
+  interpolates these values into `run:`; see
+  `scripts/tests/test_release_write_policy.py` and
+  `scripts/tests/test_authorize_release_writes.py`.
 
 ### Linux glibc floor
 
