@@ -282,8 +282,16 @@ fn skip_line_continuations(chars: &[char], mut pos: usize) -> usize {
 /// word. Returning `None` means the position opens the source.
 fn previous_effective_char(chars: &[char], pos: usize) -> Option<usize> {
     let mut end = pos;
-    while end >= 2 && chars.get(end - 1) == Some(&'\n') && chars.get(end - 2) == Some(&'\\') {
+    while ends_with_continuation(chars, end) {
         end -= 2;
     }
     end.checked_sub(1)
+}
+
+/// Report whether a backslash-continued newline ends at `end`.
+///
+/// The pair is deleted before parsing, so an index that follows one really
+/// follows the character before it.
+fn ends_with_continuation(chars: &[char], end: usize) -> bool {
+    end >= 2 && chars.get(end - 1) == Some(&'\n') && chars.get(end - 2) == Some(&'\\')
 }
