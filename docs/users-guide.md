@@ -2789,7 +2789,8 @@ Netsuke reports failures at the earliest stage that can identify them:
 
 - YAML failures include locations when the parser provides them.
 - Schema failures identify unknown or malformed fields.
-- Jinja failures identify undefined variables or invalid helpers.
+- Jinja failures report undefined values or invalid helpers, with the template
+  position.
 - IR failures report missing rules, duplicate outputs, and dependency cycles
   before Ninja starts. See
   [Dependency and build-graph semantics](#dependency-and-build-graph-semantics)
