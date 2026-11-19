@@ -91,6 +91,49 @@ fn heredoc_body_continuation_does_not_expose_an_expanding_body() -> Result<()> {
     Ok(())
 }
 
+// Verify a paired backslash before a delimiter marker keeps the body quoted.
+//
+// Two backslashes are consumed as one escaped backslash, so the marker's path
+// encoding follows a literal backslash and the rendered delimiter is quoted.
+// The body therefore keeps `$HOME`, a backtick expansion, and the internal
+// marker token as bytes: a tracker that lost the quoting would execute them.
+// The terminator spells the quote-removed word, one literal backslash followed
+// by the hostile path, and the command after it must still run.
+#[cfg(unix)]
+#[test]
+fn paired_backslashes_before_a_delimiter_marker_quote_the_body() -> Result<()> {
+    let input_path = "\"; touch injected; #";
+    let manifest = manifest::from_str(&format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: '{input_path}'\n    script: |\n      cat <<\\\\{{{{ ins }}}} > {{{{ outs }}}}\n      $HOME `printf BACKTICK` {{{{ ins }}}}\n      \\\"; touch injected; #\n      printf '%s' after >> {{{{ outs }}}}\n"
+    ))?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+
+    let workspace = NinjaWorkspace::create(&ninja)?;
+    workspace
+        .directory
+        .write(input_path, "input contents")
+        .context("write the hostile heredoc input")?;
+
+    run_ninja_target(&workspace, &[])?;
+    ensure!(
+        !workspace.directory.exists("injected"),
+        "the hostile path must stay delimiter data"
+    );
+    let actual = workspace
+        .directory
+        .read_to_string("out")
+        .context("read quoted heredoc output")?;
+    let expected = format!("$HOME `printf BACKTICK` {INS_TOKEN}\nafter");
+    ensure!(
+        actual == expected,
+        "expected the quoted body bytes and trailing command, got {actual:?}"
+    );
+    Ok(())
+}
+
 // Verify an arithmetic left shift survives lowering and reaches the shell.
 //
 // A tracker that reads `<<` as a heredoc operator consumes the rest of the

@@ -186,29 +186,55 @@ fn unsupported_heredoc_delimiters_are_rejected_in_both_traversals(#[case] recipe
     }
 }
 
-// Verify a delimiter marker that renders as several shell words is rejected.
+// Verify a delimiter marker that renders outside one shell word is rejected.
 //
 // A marker expands to every bound path, joined by a blank. Inside a heredoc
 // delimiter that blank ends the word, so the shell would read a different
 // delimiter from the one the tracker recorded and the body boundary would move.
-// Rejecting the declaration keeps the boundary honest instead of guessing which
-// word the shell keeps.
-#[test]
-fn a_delimiter_marker_rendering_as_multiple_words_is_rejected() {
-    let bindings = CommandBindings::new(
-        &[Utf8PathBuf::from("first"), Utf8PathBuf::from("second")],
-        &[],
-        RecipeShell::Posix,
-    );
-    let template = format!("cat <<{INS_TOKEN}\nbody\nfirst second\necho {OUTS_TOKEN}");
+// The reparse must consume the whole rendered word, so a repeated marker that
+// joins two multi-path bindings fails for the same reason. Rejecting the
+// declaration keeps the boundary honest instead of guessing which word the
+// shell keeps.
+#[rstest]
+#[case::input_marker(
+    vec![Utf8PathBuf::from("first"), Utf8PathBuf::from("second")],
+    Vec::new(),
+    format!("cat <<{INS_TOKEN}\nbody\nfirst second\necho {OUTS_TOKEN}")
+)]
+#[case::output_marker(
+    Vec::new(),
+    vec![Utf8PathBuf::from("first"), Utf8PathBuf::from("second")],
+    format!("cat <<{OUTS_TOKEN}\nbody\nfirst second\necho {INS_TOKEN}")
+)]
+#[case::repeated_input_marker(
+    vec![Utf8PathBuf::from("first"), Utf8PathBuf::from("second")],
+    Vec::new(),
+    format!("cat <<{INS_TOKEN}{INS_TOKEN}\nbody\nfirst secondfirst second")
+)]
+fn a_delimiter_marker_rendering_as_multiple_words_is_rejected(
+    #[case] inputs: Vec<Utf8PathBuf>,
+    #[case] outputs: Vec<Utf8PathBuf>,
+    #[case] template: String,
+) {
+    let bindings = CommandBindings::new(&inputs, &outputs, RecipeShell::Posix);
     for result in [
         substitute(&template, &bindings),
         substitute_script(&template, &bindings),
     ] {
         let error = result.expect_err("a multi-word rendered delimiter must be rejected");
-        assert!(
-            error.to_string().contains("rendered delimiter"),
-            "the diagnostic must name the rendered delimiter: {error}"
+        let IrGenError::InvalidCommand {
+            command, snippet, ..
+        } = &error
+        else {
+            panic!("expected an invalid-command error, got {error:?}");
+        };
+        assert_eq!(
+            command, &template,
+            "the rejection must report the original template"
+        );
+        assert_eq!(
+            snippet, "unsupported heredoc delimiter syntax: rendered delimiter",
+            "the diagnostic must name the rendered delimiter"
         );
     }
 }
