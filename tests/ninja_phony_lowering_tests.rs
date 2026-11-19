@@ -12,7 +12,7 @@
 //! statement that is emitted only when some edge consumes it.
 
 use camino::Utf8PathBuf;
-use netsuke::ast::{CommandIsolation, Recipe};
+use netsuke::ast::{CommandIsolation, Recipe, StringOrList};
 use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder, EdgeOutputVisibility};
 use netsuke::ninja_gen::{
     NinjaGenError, RecipeShell, generate, generate_bundle, generate_with_shell,
@@ -26,11 +26,14 @@ const FORCE_STATEMENT: &str = "build .netsuke/phony/force: phony";
 /// Prefix of the hidden output that carries an executable `phony` edge.
 const HIDDEN_PREFIX: &str = ".netsuke/phony/edge-";
 
-/// Build an executable shared-isolation command action.
-fn command_action(command: &str, restat: bool) -> Action {
+/// Build an action that runs `command` under shared isolation.
+///
+/// Every action in this suite differs only in its recipe and `restat` flag, so
+/// one constructor keeps the metadata defaults from being restated per case.
+fn action_with(command: StringOrList, restat: bool) -> Action {
     Action {
         recipe: Recipe::Command {
-            command: command.into(),
+            command,
             isolation: CommandIsolation::Shared,
         },
         description: None,
@@ -41,19 +44,14 @@ fn command_action(command: &str, restat: bool) -> Action {
     }
 }
 
+/// Build an executable shared-isolation command action.
+fn command_action(command: &str, restat: bool) -> Action {
+    action_with(command.into(), restat)
+}
+
 /// Build an action that lowers to Ninja's built-in `phony` rule.
 fn dependency_only_action() -> Action {
-    Action {
-        recipe: Recipe::Command {
-            command: netsuke::ast::StringOrList::Empty,
-            isolation: CommandIsolation::Shared,
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    }
+    action_with(StringOrList::Empty, false)
 }
 
 /// Build a single-output edge over one explicit input.

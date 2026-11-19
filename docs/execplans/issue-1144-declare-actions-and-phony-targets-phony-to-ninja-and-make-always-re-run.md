@@ -161,6 +161,14 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   prose. Marking the identifier as code fixed the gate without an entry in
   `typos.local.toml`, which is the right place only when an identifier must
   appear unquoted.
+- The CodeScene delta gate, which is advisory rather than a required check,
+  flagged three changed files. The two `Action` builders in
+  `tests/ninja_phony_lowering_tests.rs` restated the same struct literal, so
+  they now share one constructor and the file scores 10.00. The remaining
+  findings were "String Heavy Function Arguments" in the Ninja-text lookup
+  helpers and in the BDD steps, where the strings are the subject under test;
+  both files carry a narrowly scoped, reasoned rule-set entry in
+  `.codescene/code-health-rules.json`, and `cs check` reports 10.00 for each.
 - The determinism strategy's `always_restat_seen` bit exists to prove the
   public `restat` override was exercised. A hidden phony statement never
   carries that override, so those edges no longer set the bit, while the raw
