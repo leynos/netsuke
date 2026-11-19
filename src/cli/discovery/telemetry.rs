@@ -79,7 +79,7 @@ fn candidate_failure(
 /// match is exhaustive, so adding a rejection reason forces a decision about
 /// how it is counted instead of silently reusing another label. The values are
 /// deliberately stable strings; consumers filter the discovery series on them.
-fn candidate_failure_label(reason: CandidateFailure) -> &'static str {
+const fn candidate_failure_label(reason: CandidateFailure) -> &'static str {
     match reason {
         CandidateFailure::DanglingLink => "dangling_link",
         CandidateFailure::PresentWithoutLayer => "present_without_layer",

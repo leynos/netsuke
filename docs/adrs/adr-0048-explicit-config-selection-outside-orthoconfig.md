@@ -204,7 +204,7 @@ The users' guide and the migration guide state the resulting behaviour, and
 end by requiring a system `env_block_var` entry to keep blocking while the
 project value still applies.
 
-[`candidate_is_trusted`]: ../../src/cli/discovery/layers/user_candidate.rs
+[`candidate_is_trusted`]: ../../src/cli/discovery/layers/user_candidate/mod.rs
 
 ## Amendment — 2026-11-19
 

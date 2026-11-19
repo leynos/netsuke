@@ -12117,8 +12117,8 @@ therefore suppresses `$HOME/.config/netsuke/config.toml` or
 directly. That ordering is unsafe for Netsuke, whose user configuration carries
 operator fetch and environment policy.
 
-`src/cli/discovery/paths.rs::user_scope_candidates` derives the user subset in
-preference order from the injected `SharedEnvSource`:
+`src/cli/discovery/paths/mod.rs::user_scope_candidates` derives the user subset
+in preference order from the injected `SharedEnvSource`:
 `$XDG_CONFIG_HOME/netsuke/config.toml`, `$XDG_CONFIG_HOME/.netsuke.toml`,
 `%APPDATA%` and `%LOCALAPPDATA%` equivalents, then
 `$HOME/.config/netsuke/config.toml`, `$HOME/.config/.netsuke.toml`, and
@@ -12130,9 +12130,9 @@ current drive, and `HOME` outranks `USERPROFILE`. The pass never reads
 is `None`, so mirroring it would add an ambient lookup without changing
 behaviour.
 
-`src/cli/discovery/layers/user_candidate.rs` loads those candidates before the
-dependency's own walk. An absent candidate is skipped, a load error is returned
-immediately, and the first successful chain that is not the project
+`src/cli/discovery/layers/user_candidate/mod.rs` loads those candidates before
+the dependency's own walk. An absent candidate is skipped, a load error is
+returned immediately, and the first successful chain that is not the project
 configuration becomes the base layers. A candidate that is the project
 configuration — `$HOME/.netsuke.toml` when the tool runs from `$HOME`, or any
 user location that resolves to the project file — is refused rather than
@@ -12803,7 +12803,7 @@ comparison, and tests alongside the main discovery flow:
   the `ConfigLoadFailureKind` enum used to classify a load failure without
   retaining error text. The de-duplication event records discovered, project,
   and appended layer counts after filtering without exposing paths.
-- `discovery/paths.rs` — `normalized_path_key` resolves a path to a
+- `discovery/paths/mod.rs` — `normalized_path_key` resolves a path to a
   comparable, canonicalized form and returns canonicalization errors to its
   caller. The discovery-side `comparison_key` fallback uses the original path
   literally when resolution fails, continues discovery, and emits a bounded
