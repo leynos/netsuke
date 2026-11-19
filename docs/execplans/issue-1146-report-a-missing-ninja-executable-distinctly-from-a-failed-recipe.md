@@ -195,6 +195,17 @@ temporary build file.
       section, an impact row and a checklist item, and
       `docs/developers-guide.md` documents the `runner::failure_diagnostic`
       module beside `runner::process::invocation_error`.
+  - [x] Rebased onto `59637f56f` after #1157 advanced `main`. The only conflict
+    was the impact table in `docs/v0-1-0-migration-guide.md`: `main` added the
+    "Reusable release callers" row while this branch added the "Review if
+    automation parses Netsuke errors" row, so the resolution keeps both and
+    widens the priority column to the longer label.
+  - [x] Re-ran the full gate set on the rebased candidate `b18cf2467`:
+    check-fmt, lint, doc-coverage (98.30%, 6895/7014), test (6162 passed, 9
+    skipped), workflow contracts, documentation contracts, markdownlint (0
+    issues in 238 files), nixie, and typecheck. The start and end content
+    binding matched, and the push was a `--force-with-lease` over SSH whose
+    remote head equals the local head.
 
 ## Plan of work
 
