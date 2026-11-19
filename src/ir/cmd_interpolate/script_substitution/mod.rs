@@ -10,10 +10,13 @@ use super::{
     posix_lexical::{PosixCharacter, PosixLexicalState, SourceChar, backslash_escapes_marker},
 };
 
+mod backticks;
+
 mod delimiters;
 
 mod heredoc;
 
+use backticks::{BacktickRegion, toggle_quote_context};
 use delimiters::ScriptCommandSubstitution;
 
 /// Track quote context while interpolating one POSIX or Bash script.
@@ -40,65 +43,13 @@ pub(super) struct ScriptSubstitutionTraversal<'template, 'bindings> {
 
 /// Describe the quoting mode that controls placeholder substitution.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum ShellQuoteContext {
+pub(super) enum ShellQuoteContext {
     /// Permit direct word-quoted substitution.
     Unquoted,
     /// Use the binding encoded for an existing POSIX single-quoted literal.
     SingleQuoted,
     /// Temporarily close and reopen double quotes around a word-quoted path.
     DoubleQuoted,
-}
-
-/// Record the shell region that opened a backtick command substitution.
-///
-/// A backtick saves the quote context of the region around it and restores that
-/// context when the closing backtick arrives. The saved context therefore
-/// belongs to the region at the recorded `$()` depth, not to the script-level
-/// field: restoring it at script level would leave a later marker outside the
-/// substitution using the quoting of the backtick body, which for an unquoted
-/// path can leave a command separator executable.
-#[derive(Clone, Copy)]
-struct BacktickRegion {
-    /// Quote context to restore when the closing backtick is reached.
-    outer_context: ShellQuoteContext,
-    /// `$()` frame depth at the opening backtick; zero means script level.
-    owner_depth: usize,
-    /// Quoting of the backtick body itself.
-    ///
-    /// The body is its own shell region: quotes in it protect delimiters, but
-    /// they belong to the body rather than to the region the backtick will
-    /// restore. Tracking them separately keeps a quoted `)` inside the body
-    /// literal instead of letting it close the owning `$()`.
-    body_context: ShellQuoteContext,
-}
-
-impl BacktickRegion {
-    /// Update the body's own quoting and report whether `ch` was a delimiter.
-    const fn toggle_body_quote(&mut self, ch: char) -> bool {
-        toggle_quote_context(&mut self.body_context, ch)
-    }
-}
-
-/// Apply one quote delimiter to `context` and report whether `ch` was one.
-///
-/// A quote delimiter only closes the quote it opened, so a `"` inside single
-/// quotes and a `'` inside double quotes are ordinary characters.
-const fn toggle_quote_context(context: &mut ShellQuoteContext, ch: char) -> bool {
-    match (*context, ch) {
-        (ShellQuoteContext::Unquoted, '\'') => {
-            *context = ShellQuoteContext::SingleQuoted;
-            true
-        }
-        (ShellQuoteContext::Unquoted, '"') => {
-            *context = ShellQuoteContext::DoubleQuoted;
-            true
-        }
-        (ShellQuoteContext::SingleQuoted, '\'') | (ShellQuoteContext::DoubleQuoted, '"') => {
-            *context = ShellQuoteContext::Unquoted;
-            true
-        }
-        _ => false,
-    }
 }
 
 impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
@@ -250,7 +201,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if let Some(region) = self.backtick_region
             && self.command_substitutions.len() == region.owner_depth
         {
-            return Ok(self.backtick_body_escapes(pos));
+            return Ok(region.escapes_body_character(self.chars, pos));
         }
         if self.active_quote_context() == ShellQuoteContext::SingleQuoted {
             return Ok(false);
@@ -259,33 +210,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             return Err(invalid_command_error(self.template.to_owned()));
         }
         Ok(true)
-    }
-
-    /// Report whether the backslash at `pos` quotes the next body character.
-    ///
-    /// The shell finds the closing backtick before it parses the body, so a
-    /// backslash protects a following dollar sign, backtick, or backslash even
-    /// where the body's own quoting would make a backslash literal. Every other
-    /// escape belongs to the body's own quoting, which this traversal already
-    /// tracks: an unquoted body lets a backslash quote the next character, the
-    /// body's double quotes also protect their own closing delimiter, and its
-    /// single quotes give a backslash no special meaning. Keeping the shell's
-    /// escapes separate from the body's is what stops an escaped apostrophe
-    /// from swallowing the quote that closes a single-quoted body.
-    fn backtick_body_escapes(&self, pos: usize) -> bool {
-        let Some(next) = self.chars.get(pos + 1) else {
-            return false;
-        };
-        let Some(region) = self.backtick_region else {
-            return false;
-        };
-        match region.body_context {
-            ShellQuoteContext::SingleQuoted => matches!(next, '$' | '`' | '\\'),
-            ShellQuoteContext::DoubleQuoted => matches!(next, '$' | '`' | '\\' | '"'),
-            // A body backslash that continues a line removes the newline, but
-            // the traversal still needs to see it so line-scoped tracking runs.
-            ShellQuoteContext::Unquoted => *next != '\n',
-        }
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.
@@ -315,11 +239,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             return Ok(true);
         }
         if ch == '`' && *quote_context != ShellQuoteContext::SingleQuoted {
-            self.backtick_region = Some(BacktickRegion {
-                outer_context: *quote_context,
-                owner_depth,
-                body_context: ShellQuoteContext::Unquoted,
-            });
+            self.backtick_region = Some(BacktickRegion::new(*quote_context, owner_depth));
             return Ok(true);
         }
         Ok(false)
