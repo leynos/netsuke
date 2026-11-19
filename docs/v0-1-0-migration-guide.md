@@ -1336,7 +1336,7 @@ Callers that already passed `publish: true` need no change, and a direct
 behaviour.
 
 Callers that only rehearse are unaffected: `publish` defaults to `false`, and
-`dry-run: true` still suppresses diagnostic artefact uploads. The
+`dry-run: true` still suppresses build diagnostic artefact uploads. The
 [users' guide](users-guide.md#choose-whether-a-reusable-release-call-publishes)
 states the rules, and
 [ADR-0082](adrs/adr-0082-authorize-release-writes-from-the-callers-policy.md)

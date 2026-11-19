@@ -54,7 +54,9 @@ publish. Deciding that from the resolver's output alone conflates the two.
 - A malformed boolean writes an `::error` annotation and exits with status 2.
 - The invocation origin is classified from `github.workflow_ref`, not from the
   event name alone.
-- Diagnostic artefact upload is suppressed on a dry run.
+- Build diagnostic artefact upload is suppressed on a dry run. The
+  `package-crate` job's bounded operation telemetry is a separate record that a
+  rehearsal still retains, because its consumer is a later job.
 
 ## Options considered
 

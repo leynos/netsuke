@@ -123,9 +123,11 @@ Authorization governs the draft release and its assets: the release write, the
 asset upload, and the finalization that un-drafts it all wait on the authorized
 decision. A run that is not authorized still builds, packages, and stages its
 artefacts, and the authorization step records its decision and the reason for
-any denial in its outputs rather than in the job summary. Diagnostic artefact
-upload is suppressed on a dry run, because staging and diagnostics are
-rehearsal aids rather than release writes.
+any denial in its outputs rather than in the job summary. A dry run suppresses
+the build diagnostic artefacts, because they are a rehearsal aid rather than a
+release write. It still retains the `package-crate` job's bounded operation
+telemetry, because the job that consumes the packaged archive runs separately
+and diagnoses a failure from that retained record rather than from the run log.
 
 Before the `package-crate` job uploads its artefact, the action validates the
 retained candidate offline. It requires the package identity, the single
