@@ -5,10 +5,42 @@ whole scenario table, so it reports a broken guard, a dropped dependency, or a
 widened grant. What a table-driven run cannot show is that the checks were
 given the run the table meant: a scenario is checked against results the graph
 propagates, not against the outcomes it happens to name. These cases pin the
-pieces a green table run would otherwise leave implicit -- the scenario table's
-own refusal of an unmodelled dependency, the verifier path's normalisation, and
-the consumer-smoke oracle reading the resolved results -- so a regression in
+pieces a green table run would otherwise leave implicit, so a regression in
 one of them fails here rather than passing as agreement with itself.
+
+The modules this one composes each own one link in that chain:
+
+- :mod:`release_publish_path_contract` runs the whole-workflow path check over
+  the release, caller, and package workflows.
+- :mod:`release_publish_path_scenarios` supplies ``_needs_results``, the
+  private builder of the results a scenario's declarations produce. It is
+  private because it is scaffolding for the scenarios, not part of the
+  contract, and the case below reaches it to show it refuses a dependency no
+  scenario models.
+- :mod:`release_publish_path_scenario_table` supplies ``SCENARIOS``, the named
+  outcomes the table asserts.
+- :mod:`release_publish_path_metadata` and
+  :mod:`release_publish_path_results` turn a workflow and a scenario into the
+  outputs and propagated results a run would see.
+- :mod:`release_publish_path_consumer_smoke` supplies the smoke oracle and the
+  job it reads.
+- :mod:`release_admission_gate_contract` supplies the checkout action, the
+  gate's script and isolation flags, and the verifier command the admission
+  job's checkout implies.
+- :mod:`workflow_loading` reads the release and package workflow documents.
+
+Each case names the link it holds:
+
+- :func:`test_a_scenario_cannot_name_an_unmodelled_dependency` shows that
+  ``_needs_results`` refuses an outcome for a job no scenario models.
+- :func:`test_a_relative_verifier_path_names_the_same_gate_command` shows that
+  the gate command built for the verifier path ``./gate`` is the same command
+  built for ``gate``.
+- :func:`test_the_smoke_oracle_reads_the_results_the_graph_resolves` shows
+  that the smoke oracle reads the resolved results rather than the scenario's
+  declared outcomes.
+- :func:`test_release_dry_run_reaches_the_staging_path` runs the contract over
+  every dry-run and publish scenario.
 
 Run via ``make test-workflow-contracts``.
 """
