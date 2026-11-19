@@ -97,6 +97,16 @@ configuration paths and otherwise keeps Figment's ordinary scalar parsing, so
 `jobs=1` stays a number. A spelling outside the four is kept as raw text, which
 makes the full merge fail deserialization rather than coercing the value.
 
+The same module exposes the key normalization the merge applies: trim the
+surrounding whitespace, strip the `NETSUKE_` prefix ignoring ASCII case, split
+on the double underscore, and lowercase each component. The early resolver in
+`src/cli/diag/mod.rs` calls that function rather than repeating the rule, so it
+reads `netsuke_json` exactly as the merge does. The canonical spelling is still
+consulted first, which keeps a case-insensitive platform resolving the same
+entry as before; an environment carrying two spellings of one key is a
+duplicate-key merge error, and the early resolver answers from the canonical
+entry until that error is reported.
+
 `src/cli/config/policies.rs` implements `Deserialize` for `ColourPolicy`,
 `EmojiPolicy`, `ProgressPolicy`, and `AccessibilityPolicy` by reading a string
 and delegating to `FromStr`. The error names the accepted spellings, and
@@ -139,11 +149,13 @@ deserialization with an invalid-type error.
 
 ## Known risks and limitations
 
-- The early `NETSUKE_JSON` resolver reads the exact variable name, while the
-  environment layer normalizes ASCII case and surrounding whitespace in keys.
-  An alias such as `netsuke_json=1` therefore reaches the full merge but not
-  the early resolver. This difference is recorded here and does not affect the
-  canonical spelling.
+- The early `NETSUKE_JSON` resolver and the merge share one key-normalization
+  function, so an alias such as `netsuke_json=1` selects the diagnostic mode in
+  both passes, including when the merge then fails. The resolver scans the
+  injected snapshot, so an entry it cannot decode as UTF-8 is skipped rather
+  than rejected; the merge reports that entry under its own non-UTF-8 rule.
+- The snapshot scan is linear in the number of environment entries. That is a
+  one-off cost at startup, and the canonical lookup short-circuits it.
 - `src/cli/l10n/mod.rs::parse_bool_hint` remains a third, lenient reader that
   accepts `yes`, `on`, `no`, and `off` before full parsing. It only selects a
   startup message language and never decides whether configuration is accepted.

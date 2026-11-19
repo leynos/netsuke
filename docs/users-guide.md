@@ -2554,6 +2554,12 @@ typing, so `json = 1` is rejected there. An explicit `--json` flag takes
 precedence and bypasses parsing a lower-priority environment value. For example,
 `NETSUKE_JSON=1 netsuke …` enables JSON output.
 
+Environment keys are matched without regard to ASCII case, and surrounding
+whitespace is trimmed, so `netsuke_json=1` selects JSON exactly as
+`NETSUKE_JSON=1` does. This holds for the diagnostic mode chosen before the
+configuration merge as well as for the merged value, so a configuration error
+found during the merge is reported in the mode the variable selects.
+
 The following command deliberately selects a missing manifest:
 
 <!-- tested-example: guide-json-command -->

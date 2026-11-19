@@ -171,6 +171,21 @@ list form.
   `docs/v0-1-0-migration-guide.md`, where both sides' entries survive. Main
   changed no source, test, or manifest file this branch touches, so no branch
   work needed to adopt a new pattern or helper.
+- [x] (2026-11-19) Review assessment: the three Whitaker
+  `no_unwrap_or_else_panic` sites it named at `0c9aca0` were already replaced by
+  `bd7de32e2`; neither file contains `unwrap_or_else` at the current head. The
+  second finding was real: the early JSON resolver read only `NETSUKE_JSON`, so
+  `netsuke_json=1` reached the merge but not the mode chosen before it.
+- [x] (2026-11-19) `EP-M5` shared key normalization. The merge's
+  normalization became `normalized_components` in `src/cli/environment/mod.rs`,
+  and the resolver in `src/cli/diag/mod.rs` calls it instead of repeating the
+  rule. `src/cli/diag/alias_tests.rs` compares the resolver with
+  `merge_with_cached_file_layers` for the canonical, lower-case, mixed-case,
+  and whitespace-trimmed spellings, for the same spellings when the merge then
+  fails, and for three keys that name other paths. ADR-0082 and the users'
+  guide record the behaviour. Red probe: with the snapshot scan disabled, four
+  of the nine alias cases fail and the others still pass, so the suite is not
+  vacuous.
 
 ## Surprises & discoveries
 
@@ -251,6 +266,15 @@ list form.
   sandbox preparation and each test states only what makes it distinct. The
   masking case stays a named `rstest` row rather than a merged body, so the
   layering contract remains visible. Date/Author: 2026-11-18, agent.
+- D9. Share the merge's key normalization with the early resolver rather than
+  documenting the alias difference as a limitation. Rationale: the two passes
+  make the same decision about whether to print human or JSON diagnostics, so a
+  spelling the merge accepts and the resolver ignores makes a merge failure
+  print human output for a user who asked for JSON. The canonical spelling is
+  still consulted first, which leaves a case-insensitive platform resolving the
+  same entry as before. Duplicate spellings of one key are a merge error, and
+  the resolver answers from the canonical entry until that error is reported in
+  the selected mode. Date/Author: 2026-11-19, agent.
 
 ## Outcomes & retrospective
 
@@ -362,6 +386,7 @@ Trace chain:
 ```plaintext
 REQ-bool-env -> EP-M1 -> tests/cli_tests/merge/env_value_forms/mod.rs
 REQ-bool-agree -> EP-M1/EP-M3 -> tests/cli_tests/merge_diag.rs
+REQ-json-key-agree -> EP-M5 -> src/cli/diag/alias_tests.rs
 REQ-policy-case -> EP-M2/EP-M3 -> tests/cli_tests/merge/env_value_forms/mod.rs
 REQ-indexed-reject -> EP-M3 -> tests/cli_tests/merge/env_value_forms/mod.rs
 REQ-tests -> EP-M3 -> tests/logging_stderr/json.rs
@@ -384,6 +409,11 @@ rejected otherwise.
   for exactly `{true, false, 1, 0}` and a string for anything else.
 - `INV-bool-agree`: for any raw `NETSUKE_JSON` value, the early resolver and the
   full merge either both succeed or both fail.
+- `INV-key-agree` (added 2026-11-19): for any environment key whose
+  normalization yields the single `json` path, the early resolver reads the
+  same value the merge reads, so both select the same diagnostic mode,
+  including when the merge then fails. Keys that normalize to any other path
+  leave the mode to the configuration files.
 - `INV-policy-set`: a policy value is accepted exactly when
   `parse_policy(value, definitions)` is `Some`.
 - `INV-policy-canonical`: serializing any policy writes its canonical lowercase
@@ -419,6 +449,18 @@ rejected otherwise.
   the same success or rejection verdict. Non-vacuity: the generated set
   includes at least one accepted and one rejected spelling, and the
   `--json`-masked case is exercised separately.
+- Obligation: `INV-key-agree`.
+  Method: parameterized `rstest` cases that run the real resolver and the real
+  cached merge over one injected environment. Rationale: the two passes are
+  separate code, and only running both binds them together. Domain: the
+  canonical, lower-case, mixed-case, and whitespace-trimmed spellings; the same
+  spellings with a merge rejection beside them; and `NETSUKE_JSONX`,
+  `NETSUKE_JSON__NESTED`, and `NETSUKE_VERBOSE` as controls. Artefact:
+  `src/cli/diag/alias_tests.rs`. Evidence:
+  `cargo nextest run -p netsuke-build --lib -E 'test(cli::diag)'` passes all 22
+  cases. Non-vacuity: disabling the snapshot scan fails four alias cases while
+  the three controls still pass, so the controls do not stand in for the alias
+  cases and the scan is what the alias cases exercise.
 - Obligation: `INV-policy-set`.
   Method: parameterized and property tests over all policy definitions.
   Rationale: the spellings are a finite set and `FromStr` already defines the
