@@ -166,12 +166,95 @@ impl Document {
     /// paragraph, so a line-scoped search would reject prose that reads
     /// correctly.
     #[must_use]
-    pub fn paragraphs_naming(&self, needle: &str) -> Vec<&str> {
+    pub fn paragraphs_naming(&self, needle: &str) -> Vec<Paragraph<'_>> {
         self.text
             .split("\n\n")
             .filter(|paragraph| paragraph.contains(needle))
+            .map(Paragraph::new)
             .collect()
     }
+}
+
+/// One Markdown paragraph read for the install-location contracts.
+///
+/// The contracts judge whole paragraphs rather than lines, so the rule that
+/// qualifies a mention of the retired directory belongs to the paragraph it
+/// judges rather than to a free function that could be handed any text.
+#[derive(Clone, Copy, Debug)]
+pub struct Paragraph<'a> {
+    text: &'a str,
+}
+
+impl<'a> Paragraph<'a> {
+    /// Wrap `text` as one paragraph.
+    #[must_use]
+    pub fn new(text: &'a str) -> Self {
+        Self { text }
+    }
+
+    /// Borrow the paragraph text.
+    #[must_use]
+    pub fn as_str(self) -> &'a str {
+        self.text
+    }
+
+    /// Report whether the paragraph correctly qualifies the legacy 32-bit
+    /// install location.
+    ///
+    /// Attributing the directory to v0.1.0-beta4 is not enough on its own: an
+    /// instruction to add it to `PATH` stays wrong however it is labelled, so a
+    /// paragraph that both names the directory and tells the reader to add it is
+    /// rejected even when the release attribution is present. Cleanup wording such
+    /// as "remove" qualifies a mention only when it sits next to the directory, so
+    /// "add the 32-bit directory and remove the native one" is rejected: the
+    /// removal is of the replacement, not of the location being retired.
+    #[must_use]
+    pub fn qualifies_legacy_install(self) -> bool {
+        let nearby_clauses = self.clauses_naming_the_legacy_path();
+        let is_attributed = self.text.contains("v0.1.0-beta4")
+            || nearby_clauses
+                .iter()
+                .any(|clause| mentions_any(clause, &LEGACY_CLEANUP_MARKERS));
+        let instructs_use = nearby_clauses
+            .iter()
+            .any(|clause| mentions_any(clause, &LEGACY_PATH_INSTRUCTIONS));
+        is_attributed && !instructs_use
+    }
+
+    /// Return every clause that names the legacy directory, and one clause to
+    /// either side of each.
+    ///
+    /// Both rules are clause-scoped rather than paragraph-scoped. A correct
+    /// paragraph may still say "add the manual page" about something else, and a
+    /// paragraph that says "remove the native path" is talking about the
+    /// replacement rather than the directory being retired; only wording next to
+    /// the legacy directory decides whether that mention is qualified. The window
+    /// reaches one clause to either side because an instruction or a cleanup
+    /// sentence may name the directory once and then refer to it as "that
+    /// directory".
+    fn clauses_naming_the_legacy_path(self) -> Vec<&'a str> {
+        let clauses: Vec<&str> = self.text.split(&CLAUSE_TERMINATORS[..]).collect();
+        clauses
+            .iter()
+            .enumerate()
+            .filter(|(_, clause)| clause.contains(LEGACY_WINDOWS_INSTALL_LOCATION))
+            .flat_map(|(index, _)| {
+                let start = index.saturating_sub(1);
+                let end = (index + 2).min(clauses.len());
+                clauses.get(start..end).unwrap_or_default().to_vec()
+            })
+            .collect()
+    }
+}
+
+/// Whether `text` contains any of `words` as a whole word, ignoring case.
+fn mentions_any(text: &str, words: &[&str]) -> bool {
+    text.split(|character: char| !character.is_alphanumeric())
+        .any(|candidate| {
+            words
+                .iter()
+                .any(|word| candidate.eq_ignore_ascii_case(word))
+        })
 }
 
 /// Check that every README and the guide name both Windows install locations
@@ -204,70 +287,12 @@ pub fn assert_every_document_names_the_windows_install_locations() -> Result<()>
         );
         for paragraph in legacy_paragraphs {
             ensure!(
-                qualifies_legacy_install(paragraph),
+                paragraph.qualifies_legacy_install(),
                 "{path} mentions {LEGACY_WINDOWS_INSTALL_LOCATION} without attributing it \
-                 to v0.1.0-beta4 or naming it as the old location to clean up: {paragraph}"
+                 to v0.1.0-beta4 or naming it as the old location to clean up: {}",
+                paragraph.as_str()
             );
         }
     }
     Ok(())
-}
-
-/// Whether a paragraph correctly qualifies the legacy 32-bit install location.
-///
-/// Attributing the directory to v0.1.0-beta4 is not enough on its own: an
-/// instruction to add it to `PATH` stays wrong however it is labelled, so a
-/// paragraph that both names the directory and tells the reader to add it is
-/// rejected even when the release attribution is present. Cleanup wording such
-/// as "remove" qualifies a mention only when it sits next to the directory, so
-/// "add the 32-bit directory and remove the native one" is rejected: the
-/// removal is of the replacement, not of the location being retired.
-#[must_use]
-pub fn qualifies_legacy_install(paragraph: &str) -> bool {
-    let nearby_clauses = legacy_install_neighbourhood(paragraph);
-    let is_attributed = paragraph.contains("v0.1.0-beta4")
-        || nearby_clauses.iter().any(|clause| {
-            let lower = clause.to_lowercase();
-            LEGACY_CLEANUP_MARKERS
-                .iter()
-                .any(|marker| lower.contains(marker))
-        });
-    let instructs_use = nearby_clauses.iter().any(|clause| {
-        LEGACY_PATH_INSTRUCTIONS
-            .iter()
-            .any(|verb| contains_word(clause, verb))
-    });
-    is_attributed && !instructs_use
-}
-
-/// Return every clause that names the legacy directory, and one clause to
-/// either side of each.
-///
-/// Both rules are clause-scoped rather than paragraph-scoped. A correct
-/// paragraph may still say "add the manual page" about something else, and a
-/// paragraph that says "remove the native path" is talking about the
-/// replacement rather than the directory being retired; only wording next to
-/// the legacy directory decides whether that mention is qualified. The window
-/// reaches one clause to either side because an instruction or a cleanup
-/// sentence may name the directory once and then refer to it as "that
-/// directory".
-fn legacy_install_neighbourhood(paragraph: &str) -> Vec<&str> {
-    let clauses: Vec<&str> = paragraph.split(&CLAUSE_TERMINATORS[..]).collect();
-    clauses
-        .iter()
-        .enumerate()
-        .filter(|(_, clause)| clause.contains(LEGACY_WINDOWS_INSTALL_LOCATION))
-        .flat_map(|(index, _)| {
-            let start = index.saturating_sub(1);
-            let end = (index + 2).min(clauses.len());
-            clauses.get(start..end).unwrap_or_default().to_vec()
-        })
-        .collect()
-}
-
-/// Whether `paragraph` contains `word` as a whole word, ignoring case.
-fn contains_word(paragraph: &str, word: &str) -> bool {
-    paragraph
-        .split(|character: char| !character.is_alphanumeric())
-        .any(|candidate| candidate.eq_ignore_ascii_case(word))
 }

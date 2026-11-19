@@ -12,8 +12,8 @@ use std::path::Path;
 
 use anyhow::Result;
 use windows_installation_docs::{
-    Document, LEGACY_WINDOWS_INSTALL_LOCATION, RequiredProse, USERS_GUIDE,
-    assert_every_document_names_the_windows_install_locations, qualifies_legacy_install,
+    Document, LEGACY_WINDOWS_INSTALL_LOCATION, Paragraph, RequiredProse, USERS_GUIDE,
+    assert_every_document_names_the_windows_install_locations,
 };
 
 /// Verify the beta5 migration note covers the move and its manual steps.
@@ -84,7 +84,7 @@ fn attributed_legacy_mention_is_accepted() {
                      v0.1.0-beta4 MSI installs to \
                      `C:\\Program Files (x86)\\netsuke`.";
     assert!(
-        qualifies_legacy_install(paragraph),
+        Paragraph::new(paragraph).qualifies_legacy_install(),
         "an attributed mention without a PATH instruction must be accepted: {paragraph}"
     );
 }
@@ -98,7 +98,7 @@ fn legacy_path_instruction_is_rejected_despite_attribution() {
     let paragraph = "The v0.1.0-beta4 MSI installs to \
                      `C:\\Program Files (x86)\\netsuke`; add that directory to `PATH`.";
     assert!(
-        !qualifies_legacy_install(paragraph),
+        !Paragraph::new(paragraph).qualifies_legacy_install(),
         "a paragraph that adds the legacy directory to PATH must be rejected: {paragraph}"
     );
 }
@@ -110,7 +110,7 @@ fn legacy_path_instruction_spanning_a_sentence_boundary_is_rejected() {
     let paragraph = "The v0.1.0-beta4 MSI installs to \
                      `C:\\Program Files (x86)\\netsuke`. Add it to `PATH`.";
     assert!(
-        !qualifies_legacy_install(paragraph),
+        !Paragraph::new(paragraph).qualifies_legacy_install(),
         "an instruction in the next sentence must still be rejected: {paragraph}"
     );
 }
@@ -128,7 +128,7 @@ fn cleanup_wording_away_from_the_legacy_path_does_not_qualify_it() {
                      The beta2 MSI installed to \
                      `C:\\Program Files (x86)\\netsuke`.";
     assert!(
-        !qualifies_legacy_install(paragraph),
+        !Paragraph::new(paragraph).qualifies_legacy_install(),
         "cleanup of the native directory must not qualify the legacy one: {paragraph}"
     );
 }
@@ -139,7 +139,7 @@ fn cleanup_wording_beside_the_legacy_path_qualifies_it() {
     let paragraph = "Remove the stale `C:\\Program Files (x86)\\netsuke` \
                      directory after upgrading.";
     assert!(
-        qualifies_legacy_install(paragraph),
+        Paragraph::new(paragraph).qualifies_legacy_install(),
         "cleanup of the legacy directory must qualify it: {paragraph}"
     );
 }
@@ -160,7 +160,7 @@ fn crlf_line_endings_keep_paragraphs_intact() {
     assert!(
         paragraphs
             .first()
-            .is_some_and(|paragraph| { paragraph.contains("and a later MSI moves it.") }),
+            .is_some_and(|paragraph| { paragraph.as_str().contains("and a later MSI moves it.") }),
         "the paragraph should keep its wrapped continuation: {paragraphs:?}"
     );
 }
