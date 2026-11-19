@@ -33,6 +33,8 @@ tool that runs the gate cannot be chosen by the content the gate judges.
 Run via ``make test-workflow-contracts``.
 """
 
+import typing as typ
+
 from release_admission_checkout_inputs import (
     CANDIDATE_REF,
     CANDIDATE_REPOSITORY,
@@ -44,6 +46,9 @@ from release_admission_checkout_inputs import (
     normalise_gate_path,
 )
 from workflow_loading import job_steps, require_mapping, workflow_job
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 ADMISSION_JOB = "release-admission-canaries"
 ADMISSION_STEP_ID = "release_admission"
@@ -203,24 +208,43 @@ def _check_setup_uv_pins(release: dict[str, object], violations: list[str]) -> N
     violations
         Collector for the findings.
     """
+    for name, step in _setup_uv_steps(release):
+        declared = step.get("with")
+        version = declared.get("version") if isinstance(declared, dict) else None
+        if version != PINNED_UV_VERSION:
+            violations.append(
+                f"{name}.setup-uv: must name version {PINNED_UV_VERSION!r} "
+                f"so candidate project files cannot choose the uv release, "
+                f"got {version!r}"
+            )
+
+
+def _setup_uv_steps(
+    release: dict[str, object],
+) -> cabc.Iterator[tuple[str, dict[str, object]]]:
+    """Yield every job's uv setup steps, labelled with the job's name.
+
+    A job that calls a reusable workflow declares no steps of its own, so it
+    contributes nothing here.
+
+    Yields
+    ------
+    tuple[str, dict[str, object]]
+        Each job's name and one of its ``setup-uv`` steps, in declaration order.
+    """
     jobs = require_mapping(release.get("jobs"), "release.jobs")
     for name, job in jobs.items():
-        # A job that calls a reusable workflow declares no steps of its own,
-        # so there is nothing here for this rule to hold.
-        steps = job.get("steps") if isinstance(job, dict) else None
-        for step in steps if isinstance(steps, list) else ():
-            if not isinstance(step, dict):
-                continue
-            if not str(step.get("uses", "")).startswith(f"{SETUP_UV_ACTION}@"):
-                continue
-            declared = step.get("with")
-            version = declared.get("version") if isinstance(declared, dict) else None
-            if version != PINNED_UV_VERSION:
-                violations.append(
-                    f"{name}.setup-uv: must name version {PINNED_UV_VERSION!r} "
-                    f"so candidate project files cannot choose the uv release, "
-                    f"got {version!r}"
-                )
+        for step in _mapping_steps(job):
+            if str(step.get("uses", "")).startswith(f"{SETUP_UV_ACTION}@"):
+                yield str(name), step
+
+
+def _mapping_steps(job: object) -> list[dict[str, object]]:
+    """Return the step mappings a job declares, and none for a job without."""
+    steps = job.get("steps") if isinstance(job, dict) else None
+    if not isinstance(steps, list):
+        return []
+    return [step for step in steps if isinstance(step, dict)]
 
 
 def _gate_index(steps: list[dict[str, object]], violations: list[str]) -> int | None:
