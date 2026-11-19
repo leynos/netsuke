@@ -46,7 +46,7 @@ proptest! {
         prop_assert!(
             causes
                 .windows(2)
-                .all(|pair| pair[0] != pair[1]),
+                .all(|pair| matches!(pair, [left, right] if left != right)),
             "two adjacent causes are equal: {causes:?}"
         );
         prop_assert!(
