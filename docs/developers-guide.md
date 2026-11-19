@@ -13699,6 +13699,28 @@ a specific status, can construct the source without running a process. Its
 accessors expose the status and operation label, which the runner uses to
 choose between the build and tool summaries.
 
+### Module: `runner::failure_diagnostic`
+
+`src/runner/failure_diagnostic.rs` maps a typed `NinjaInvocationError` to the
+`RunnerError` the runner reports. It sits beside the runner dispatch rather
+than inside it so the mapping has one home and the dispatch module stays within
+the repository's module-size limit.
+
+A `Spawn` failure becomes `RunnerError::NinjaSpawnFailed`, naming the attempted
+program and offering the installation and `NETSUKE_NINJA` remedies. An `Exit`
+failure becomes `RunnerError::NinjaFailed`, carrying the status and the
+operation label. Neither inherits the invocation context: that context names
+the temporary build file, which says nothing about what went wrong. The
+unclassified `Io` failure keeps the context, because the invocation details are
+where an operator has to look.
+
+`localized_status` renders the status through the command layer's catalogue
+suffixes, so a signal is worded as a signal and an exit code as an exit code in
+the active locale. `ExitStatus`'s own `Display` is English-only and
+platform-defined, so embedding it would leave an untranslated fragment inside
+an otherwise localized summary; the raw status stays in the cause chain for
+callers that need it.
+
 ### Module: `runner::process::redaction`
 
 `src/runner/process/redaction.rs` owns the argument-redaction boundary that

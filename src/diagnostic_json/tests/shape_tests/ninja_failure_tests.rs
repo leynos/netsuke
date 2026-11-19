@@ -119,3 +119,36 @@ fn exit_failure_json_reports_status_and_attribution(en_localizer: EnLocalizer) -
     );
     Ok(())
 }
+
+/// A signal-terminated Ninja publishes the signal suffix, not an exit status.
+///
+/// `ExitStatus::code` is `None` for a signal, so formatting the status the way
+/// an ordinary exit is formatted would either invent a status or fall back to
+/// the platform's English wording. The summary must select the catalogue's
+/// signal suffix instead, and must not claim a numeric exit status.
+#[cfg(unix)]
+#[rstest]
+fn signal_terminated_exit_json_reports_the_signal_suffix(en_localizer: EnLocalizer) -> Result<()> {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+
+    let _en_localizer = en_localizer;
+    let document = render_diagnostic_json(&ninja_exit_failure(ExitStatus::from_raw(15))?)?;
+    let value = serde_json::from_str::<Value>(&document)?;
+    let diagnostic = first_diagnostic(&value)?;
+
+    ensure!(
+        string_field(diagnostic, "code")? == "netsuke::runner::ninja_failed",
+        "the signal failure's code should stay stable: {document}"
+    );
+    let message = without_isolation(string_field(diagnostic, "message")?);
+    ensure!(
+        message == "Ninja reported a build failure (terminated by signal).",
+        "the summary should report the terminating signal: {message:?} in {document}"
+    );
+    ensure!(
+        !message.contains("exit status"),
+        "a signal-terminated summary must not claim an exit status: {message:?}"
+    );
+    Ok(())
+}

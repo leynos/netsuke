@@ -126,6 +126,50 @@ fn invocation_records_bounded_scheduling_outcome_and_duration(
     );
 }
 
+/// A Ninja that never started is recorded as a launch failure.
+///
+/// The spawn variant is the only one that means the program was never
+/// executed, so a consumer watching launch failures cannot distinguish it from
+/// an ordinary I/O fault once the categories are conflated. The snapshot is
+/// matched by its exact label set, which is what rejects an `io` label.
+#[rstest]
+fn launch_failure_records_the_launch_error_category() {
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let clock = FixedMonotonicClock::with_elapsed(BUILD_ELAPSED);
+    let (result, events) = metrics::with_local_recorder(&recorder, || {
+        with_test_subscriber(LevelFilter::INFO, |captured| {
+            let result = instrument_ninja_build(&clock, 0, || {
+                Err::<(), _>(NinjaInvocationError::spawn(
+                    camino::Utf8Path::new("ninja"),
+                    io::Error::new(io::ErrorKind::NotFound, "private process detail"),
+                ))
+            });
+            (result, captured.snapshot())
+        })
+    });
+    assert!(
+        matches!(result, Err(NinjaInvocationError::Spawn { .. })),
+        "the typed launch failure should be returned unchanged"
+    );
+    let snapshot = snapshotter.snapshot().into_vec();
+    assert_metrics(
+        &snapshot,
+        0,
+        [
+            ("console_scheduling", "disabled"),
+            ("outcome", "error"),
+            ("error_category", "launch"),
+        ],
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.contains("error_category=\"launch\"")),
+        "the build event should name the launch category: {events:?}"
+    );
+}
+
 /// A recipe Ninja ran and that failed is not recorded as an I/O failure.
 ///
 /// Both variants surface through the same `io::Error` shape, so only the typed

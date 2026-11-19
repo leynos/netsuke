@@ -178,6 +178,23 @@ temporary build file.
     reproduce: the file is 396 lines at this commit, at the base, and on
     `main`, and the full `make lint` at `33ee15394` was green. The figure is
     re-checked by the lint gate of this round rather than repaired blind.
+  - [x] A sixth round reconciled the CodeRabbit pre-merge table against the
+    current head. Three rows were still valid and are addressed here:
+    - the telemetry `launch` category had no test, so
+      `launch_failure_records_the_launch_error_category` drives
+      `instrument_ninja_build` with a spawn failure and asserts the exact
+      `launch` label set in the snapshot and the event. That also makes the
+      pull-request description's claim that the telemetry tests pin each
+      failure category true;
+    - the signal branch of `localized_status` had no rendering test, so
+      `signal_terminated_exit_json_reports_the_signal_suffix` builds a real
+      signal status through the production fixture and asserts the localized
+      `(terminated by signal)` summary and the absence of a numeric exit
+      status. The case is Unix-only because only Unix statuses carry signals;
+    - `docs/v0-1-0-migration-guide.md` now signposts both diagnostics with a
+      section, an impact row and a checklist item, and
+      `docs/developers-guide.md` documents the `runner::failure_diagnostic`
+      module beside `runner::process::invocation_error`.
 
 ## Plan of work
 
