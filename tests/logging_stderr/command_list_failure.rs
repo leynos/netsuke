@@ -9,6 +9,7 @@ use cap_std::fs_utf8::Dir;
 use netsuke::runner::NINJA_ENV;
 use serde_json::Value;
 use tempfile::TempDir;
+use test_support::fluent::normalize_fluent_isolates;
 use test_support::ninja::ninja_integration_workspace;
 
 fn failing_command_list_workspace(first_entry: &str) -> Result<Option<TempDir>> {
@@ -113,6 +114,13 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
         stderr.contains("Ninja reported a build failure"),
         "the summary should report Ninja's failure rather than the build file: {stderr}"
     );
+    // A real Ninja reports a failed recipe as its own exit status of 1, which
+    // is what the summary must carry: the recipe's code is not observable here.
+    ensure!(
+        normalize_fluent_isolates(&stderr)
+            .contains("Ninja reported a build failure (exit status 1)"),
+        "the summary should report the status the real Ninja exited with: {stderr}"
+    );
     ensure!(
         !stderr.contains("with build file"),
         "the summary must not name the temporary build file: {stderr}"
@@ -166,6 +174,15 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
         .and_then(Value::as_array)
         .and_then(|entries| entries.first())
         .context("JSON document should contain a diagnostic")?;
+    let message = diagnostic
+        .get("message")
+        .and_then(Value::as_str)
+        .context("JSON diagnostic should carry its localized summary")?;
+    ensure!(
+        normalize_fluent_isolates(message)
+            .contains("Ninja reported a build failure (exit status 1)"),
+        "the JSON summary should report the status the real Ninja exited with: {message}"
+    );
     let command_list_cause = diagnostic
         .get("causes")
         .and_then(Value::as_array)
