@@ -70,6 +70,8 @@ class ConsumerSmokeCheck:
         The release mode, event, and dependency outcomes being resolved.
     outputs
         The metadata outputs the guard expression reads.
+    results
+        The dependency results the scenario's outcomes resolve to.
     violations
         The violations collected so far, appended to in place.
     """
@@ -78,43 +80,44 @@ class ConsumerSmokeCheck:
     action: dict[str, object] | None
     scenario: Scenario
     outputs: dict[str, str]
+    results: dict[str, str]
     violations: list[str]
 
 
 def _needs_context(
-    job: dict[str, object], scenario: Scenario, outputs: dict[str, str]
+    job: dict[str, object],
+    scenario: Scenario,
+    outputs: dict[str, str],
+    results: dict[str, str],
 ) -> dict[str, object]:
     """Build the needs context from the job's declared dependencies.
 
     Read from the job rather than from ``CONSUMER_SMOKE_NEEDS`` so a mutated
     dependency list is evaluated as written and reports its own result, instead
-    of being silently replaced by the oracle's expectation.
+    of being silently replaced by the oracle's expectation. The result comes
+    from ``results``, the propagated graph, so a prerequisite that fails far
+    upstream is evaluated as failed rather than as its declared outcome.
 
     Returns
     -------
     dict[str, object]
-        A needs entry per declared dependency, carrying its scenario result.
+        A needs entry per declared dependency, carrying its resolved result.
     """
     needs: dict[str, object] = {}
     for name in job_names(job.get("needs", [])) or []:
-        dependency: dict[str, object] = {
-            "result": scenario.needs_results.get(name, "skipped")
-        }
+        dependency: dict[str, object] = {"result": results.get(name, "skipped")}
         if name == "metadata":
             dependency["outputs"] = outputs
         needs[name] = dependency
     return needs
 
 
-def _should_smoke(scenario: Scenario) -> bool:
+def _should_smoke(scenario: Scenario, results: dict[str, str]) -> bool:
     """Compute the independent reachability oracle for the consumer smoke."""
     return (
         scenario.mode == "publish"
         and not scenario.cancelled
-        and all(
-            scenario.needs_results.get(name) == "success"
-            for name in CONSUMER_SMOKE_NEEDS
-        )
+        and all(results.get(name) == "success" for name in CONSUMER_SMOKE_NEEDS)
     )
 
 
@@ -132,7 +135,7 @@ def check_consumer_smoke(check: ConsumerSmokeCheck) -> None:
     check_smoke_compilation(job, check.action, check.violations)
     check_smoke_failure_visibility(job, check.action, check.violations)
     contexts: dict[str, object] = {
-        "needs": _needs_context(job, check.scenario, check.outputs),
+        "needs": _needs_context(job, check.scenario, check.outputs, check.results),
         "status": {"cancelled": check.scenario.cancelled},
         "github": {"event": {"action": check.scenario.event_action}},
     }
@@ -145,7 +148,7 @@ def check_consumer_smoke(check: ConsumerSmokeCheck) -> None:
             job_level=True,
         ),
     )
-    expected = _should_smoke(check.scenario)
+    expected = _should_smoke(check.scenario, check.results)
     runs = actual is not MISSING and bool(actual)
     if runs != expected:
         check.violations.append(

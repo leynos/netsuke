@@ -296,6 +296,7 @@ def _check_scenario(check: ScenarioCheck) -> None:
             action=check.smoke_action,
             scenario=scenario,
             outputs=outputs,
+            results=run.results,
             violations=check.violations,
         )
     )
