@@ -634,3 +634,34 @@ apart on it. The split keeps each module within the workspace's 400-line limit.
 Regressions run through both traversals in
 `src/ir/cmd_interpolate/tests/heredoc/` and through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
+
+## Addendum — 2026-11-19: Heredoc delimiter escape regression coverage (#988)
+
+A follow-up security finding (ID `e271961c-a57f-47ec-a2a9-85a95aa443c7`,
+fingerprint `257158009af9723fe849205b8d68104d8b3d3533815b545f1c133b9f9724ed30`)
+reported that heredoc delimiter rendering appends the ordinary path encoding
+after a retained active backslash, so the backslash can escape the encoding's
+opening quote and let path text become shell syntax. The 2026-11-01 addendum
+above already rejects that shape at the delimiter site, and the renderer fails
+before it extends the caller's output buffer, so no path text reaches the
+script. This addendum records the verification and the decisions it reaffirms;
+it changes no production behaviour.
+
+Rejection, rather than a delimiter-specific encoder, remains the decision. An
+encoder would have to reproduce the shell's quote removal and still render a
+word the terminator line can match, and the binding decides whether the
+backslash is active, so no encoding can be selected safely at that site. The
+full-consumption reparse in `rendered_terminator` is a second, independent
+check: a rendered word that leaves text outside the parsed word is rejected as
+`unsupported heredoc delimiter syntax: rendered delimiter`, which also covers a
+marker that renders as several words. An odd backslash count is rejected and an
+even count decodes to literal backslashes before the marker; a single-quoted
+backslash remains literal and leaves the marker eligible.
+
+Coverage now pins both markers, both traversals, both POSIX-compatible shells,
+unquoted, double-quoted, and mid-word delimiters, a backslash-parity table, and
+a bounded property over shell-metacharacter paths. A CLI case proves the
+rejection happens before Ninja starts, and a real-Ninja case proves paired
+backslashes keep the body quoted. The general verified-transformation model
+that would replace these case analyses remains deferred to
+[RFC 0036](../rfcs/rfc-0036-shell-parsing-and-verified-transformations.md).
