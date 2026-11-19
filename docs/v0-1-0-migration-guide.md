@@ -1325,8 +1325,8 @@ trigger reached it. The workflow decides publication from the caller's own
 inputs: a caller that passes `dry-run: true` never publishes, even beside
 `publish: true`, and a caller must pass `publish: true` to authorize the draft
 release, its asset uploads, and the finalization that un-drafts it. An
-unauthorized run still builds, packages, and stages its artefacts, and records
-why publication was denied.
+unauthorized run still builds, packages, and stages its artefacts, and the
+authorization step records the denial reason in its outputs.
 
 **Required for reusable callers that publish:** add `publish: true` to the
 caller job's `with:` block. A caller that relied on an inherited push trigger

@@ -122,8 +122,9 @@ These rules decide whether a run may write:
 Authorization governs the draft release and its assets: the release write, the
 asset upload, and the finalization that un-drafts it all wait on the authorized
 decision. A run that is not authorized still builds, packages, and stages its
-artefacts, and its job summary records why publication was denied. Diagnostic
-artefact upload is suppressed on a dry run, because staging and diagnostics are
+artefacts, and the authorization step records its decision and the reason for
+any denial in its outputs rather than in the job summary. Diagnostic artefact
+upload is suppressed on a dry run, because staging and diagnostics are
 rehearsal aids rather than release writes.
 
 Before the `package-crate` job uploads its artefact, the action validates the
