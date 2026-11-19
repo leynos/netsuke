@@ -661,7 +661,10 @@ That covers a newline in another region, inside backticks, inside `$(( ))`,
 inside an open `${ }`, or after the declaring region has closed. Refusal is
 reported as `IrGenError::InvalidCommand` through
 `invalid_heredoc_boundary_error`, whose snippet names the rejected boundary, on
-the same channel and in the same form as the existing delimiter rejections.
+the same channel and in the same form as the existing delimiter rejections. The
+snippet is diagnostic data, not translated prose: the localized
+`ir.invalid_command` message supplies the translated envelope, so a new
+rejection variant needs no locale entry in any catalogue.
 
 A newline that ends a comment is routed through the same entry point rather
 than activating the queue inside the lexical state, so comment text stays

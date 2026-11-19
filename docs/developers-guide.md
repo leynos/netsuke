@@ -9241,10 +9241,12 @@ refusal leaves quote state and output untouched. The
 through the same entry point instead of letting the lexical state activate the
 queue directly; the comment itself is still copied verbatim. Rejections map
 through `invalid_heredoc_boundary_error` to `IrGenError::InvalidCommand` with
-the reason in the snippet, exactly as delimiter rejections do. Regressions for
-both traversals are in
-`src/ir/cmd_interpolate/tests/heredoc/boundary_tests.rs`, and the
-quoted-newline injection path runs through real Ninja in
+the reason in the snippet, exactly as delimiter rejections do. The snippet is
+diagnostic data rather than translated prose: the localized
+`ir.invalid_command` message supplies the translated envelope, so a new
+rejection variant adds no locale entry to any catalogue. Regressions for both
+traversals are in `src/ir/cmd_interpolate/tests/heredoc/boundary_tests.rs`, and
+the quoted-newline injection path runs through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
 
 The rendered word is reparsed under the same grammar after marker lowering, so
