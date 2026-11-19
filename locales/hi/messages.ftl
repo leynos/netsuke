@@ -205,7 +205,7 @@ ir.empty_rule = लक्ष्य “{ $target }” को किसी नि�
 ir.duplicate_outputs = दोहरे निर्गम मिले: { $outputs }।
 ir.circular_dependency = चक्रीय निर्भरता मिली: { $cycle }।
 ir.action_serialisation = क्रिया का क्रमांकन नहीं हो सका: { $details }।
-ir.invalid_command = आदेश में अमान्य प्रक्षेपण: { $snippet }।
+ir.invalid_command = आदेश में अमान्य प्रक्षेपण: { $reason }।
 ir.ambiguous_substitution_boundary = वर्ण { $position } पर अस्पष्ट कमांड प्रतिस्थापन सीमा; प्रतिस्थापन के समापन कोष्ठक को अगले '#' से अलग करें।
 
 # Ninja निर्माण की त्रुटियाँ।

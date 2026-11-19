@@ -4,7 +4,8 @@ mod assignments;
 mod comments;
 
 use super::super::super::{
-    INS_TOKEN, IrGenError, OUTS_TOKEN, QuoteContext, find_substitution, invalid_command_error,
+    INS_TOKEN, IrGenError, OUTS_TOKEN, QuoteContext, RejectionReason, find_substitution,
+    invalid_command_error,
 };
 use super::super::{MarkerProtection, SubstitutionTraversal};
 use super::tokens::PowerShellSourceCharacter;
@@ -186,9 +187,10 @@ impl SubstitutionTraversal<'_, '_> {
                 self.output.push('@');
                 Ok(Some(pos + 2))
             }
-            HereStringCharacter::Placeholder => {
-                Err(invalid_command_error(self.template.to_owned()))
-            }
+            HereStringCharacter::Placeholder => Err(invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::MarkerInHereString,
+            )),
         }
     }
 
@@ -314,7 +316,10 @@ impl SubstitutionTraversal<'_, '_> {
             return Ok(None);
         }
         if find_substitution(self.chars, pos + 1).is_some() {
-            return Err(invalid_command_error(self.template.to_owned()));
+            return Err(invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::EscapeBeforeMarker,
+            ));
         }
         let Some(next) = self.chars.get(pos + 1) else {
             return Ok(None);

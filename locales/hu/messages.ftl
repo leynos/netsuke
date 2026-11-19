@@ -205,7 +205,7 @@ ir.empty_rule = A(z) „{ $target }” célnak szabályra kell hivatkoznia.
 ir.duplicate_outputs = Ismétlődő kimenetek találhatók: { $outputs }.
 ir.circular_dependency = Körkörös függőség található: { $cycle }.
 ir.action_serialisation = A műveletet nem sikerült sorosítani: { $details }.
-ir.invalid_command = Érvénytelen behelyettesítés a parancsban: { $snippet }.
+ir.invalid_command = Érvénytelen behelyettesítés a parancsban: { $reason }.
 ir.ambiguous_substitution_boundary = Kétértelmű parancshelyettesítési határ a(z) { $position }. karakternél; válassza el a helyettesítés záró zárójelét a következő '#'-tól.
 
 # A Ninja-fájlok előállításának hibái.

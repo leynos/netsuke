@@ -125,9 +125,9 @@ mod tests {
     fn invalid_command_error() -> IrGenError {
         IrGenError::InvalidCommand {
             command: "echo {{ ins }}".into(),
-            snippet: "echo {{ ins }}".into(),
+            reason: "unmatched backtick",
             message: localization::message(keys::IR_INVALID_COMMAND)
-                .with_arg("snippet", "echo {{ ins }}"),
+                .with_arg("reason", "unmatched backtick"),
         }
     }
 

@@ -204,7 +204,7 @@ ir.empty_rule = 目標「{ $target }」必須參照一條規則。
 ir.duplicate_outputs = 偵測到重複的輸出：{ $outputs }。
 ir.circular_dependency = 偵測到循環相依：{ $cycle }。
 ir.action_serialisation = 無法序列化動作：{ $details }。
-ir.invalid_command = 命令中的插值無效：{ $snippet }。
+ir.invalid_command = 命令中的插值無效：{ $reason }。
 ir.ambiguous_substitution_boundary = 字元 { $position } 處的命令替換邊界不明確；請將替換的右括號與後面的 '#' 分開。
 
 # Ninja 產生錯誤。

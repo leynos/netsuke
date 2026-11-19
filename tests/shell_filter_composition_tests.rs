@@ -7,7 +7,7 @@
 //! the argv the interpreter actually produced.
 //!
 //! The obligation exists because two guards downstream are weaker than they
-//! look. `is_valid_command_for_shell` returns `true` unconditionally for
+//! look. `command_rejection` returns `None` unconditionally for
 //! PowerShell, so nothing on that path checks the generated text at all; and
 //! the command-list renderer wraps each entry in a canonical `'...'` for its
 //! `eval` payload, which is a *second* layer of POSIX quoting applied to text

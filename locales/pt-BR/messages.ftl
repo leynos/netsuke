@@ -206,7 +206,7 @@ ir.empty_rule = O alvo "{ $target }" deve referenciar uma regra.
 ir.duplicate_outputs = Saídas duplicadas detectadas: { $outputs }.
 ir.circular_dependency = Dependência circular detectada: { $cycle }.
 ir.action_serialisation = Não foi possível serializar a ação: { $details }.
-ir.invalid_command = Interpolação de comando inválida: { $snippet }.
+ir.invalid_command = Interpolação de comando inválida: { $reason }.
 ir.ambiguous_substitution_boundary = Limite ambíguo de substituição de comando no caractere { $position }; separe o parêntese de fechamento da substituição do '#' seguinte.
 
 # Erros de geração do Ninja.

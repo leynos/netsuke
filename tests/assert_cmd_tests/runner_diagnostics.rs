@@ -154,6 +154,57 @@ targets:
     Ok(())
 }
 
+/// A permitted `env()` value must stay out of an interpolation diagnostic.
+///
+/// `env()` runs while the manifest is rendered, so an allowed value is already
+/// inside the recipe text before interpolation validates it. Quoting the
+/// rejected command would therefore publish the value in the default human
+/// output, which is the disclosure the blocked-lookup test above cannot catch.
+#[cfg(unix)]
+#[test]
+fn permitted_environment_value_stays_out_of_the_interpolation_diagnostic() -> Result<()> {
+    const VARIABLE: &str = "NETSUKE_SECRET_VALUE";
+    const SECRET: &str = "s3cr3t-value";
+    let manifest = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: hello\n",
+        "    command: \"echo {{ env('NETSUKE_SECRET_VALUE') }} `\"\n",
+    );
+    ensure!(
+        manifest.contains(VARIABLE),
+        "the test manifest must resolve a permitted variable"
+    );
+    let temp = tempdir().context("create permitted-environment workspace")?;
+    fs::write(temp.path().join("Netsukefile"), manifest)
+        .context("write permitted-environment manifest")?;
+
+    let output = create_netsuke_command(temp.path())
+        .env(VARIABLE, SECRET)
+        .args(["--locale", "en-GB", "generate"])
+        .output()
+        .context("run generate with a permitted environment lookup")?;
+    ensure!(
+        !output.status.success(),
+        "the unmatched backtick must fail generate, got status {:?}",
+        output.status
+    );
+    let stderr = String::from_utf8(output.stderr).context("diagnostic stderr is UTF-8")?;
+    ensure!(
+        stderr.contains("Invalid command interpolation: unmatched backtick"),
+        "stderr must name the failed syntax: {stderr}"
+    );
+    ensure!(
+        !stderr.contains(SECRET),
+        "stderr must not disclose the permitted variable's value: {stderr}"
+    );
+    ensure!(
+        !stderr.contains(VARIABLE),
+        "stderr must not repeat the manifest expression: {stderr}"
+    );
+    Ok(())
+}
+
 /// Stage the minimal manifest in a fresh workspace.
 pub(super) fn workspace_with_minimal_manifest(context: &str) -> Result<TempDir> {
     let temp = tempdir().with_context(|| format!("create workspace for {context}"))?;

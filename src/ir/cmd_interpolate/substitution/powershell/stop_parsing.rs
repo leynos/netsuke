@@ -1,6 +1,6 @@
 //! Track raw native-command arguments after PowerShell's `--%` token.
 
-use super::super::super::{IrGenError, find_substitution, invalid_command_error};
+use super::super::super::{IrGenError, RejectionReason, find_substitution, invalid_command_error};
 use super::super::SubstitutionTraversal;
 use super::tokens::PowerShellSourceCharacter;
 
@@ -86,7 +86,10 @@ impl SubstitutionTraversal<'_, '_> {
         character: PowerShellSourceCharacter<'_>,
     ) -> Result<usize, IrGenError> {
         if find_substitution(self.chars, character.position()).is_some() {
-            return Err(invalid_command_error(self.template.to_owned()));
+            return Err(invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::MarkerInRawArgument,
+            ));
         }
         if matches!(character.value(), '\'' | '`') {
             self.power_shell_lexical.note_unmodelled_syntax();

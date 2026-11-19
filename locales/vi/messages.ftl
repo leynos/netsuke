@@ -205,7 +205,7 @@ ir.empty_rule = Đích “{ $target }” phải tham chiếu một quy tắc.
 ir.duplicate_outputs = Phát hiện đầu ra trùng lặp: { $outputs }.
 ir.circular_dependency = Phát hiện phụ thuộc vòng: { $cycle }.
 ir.action_serialisation = Không tuần tự hoá được hành động: { $details }.
-ir.invalid_command = Nội suy không hợp lệ trong lệnh: { $snippet }.
+ir.invalid_command = Nội suy không hợp lệ trong lệnh: { $reason }.
 ir.ambiguous_substitution_boundary = Ranh giới thay thế lệnh không rõ ràng tại ký tự { $position }; hãy tách dấu ngoặc đóng của phần thay thế khỏi '#' theo sau.
 
 # Lỗi khi tạo tệp Ninja.

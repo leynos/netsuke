@@ -119,32 +119,31 @@ fn case_real_closer_preserves_quote_context_by_rejecting() {
     );
 }
 
-// Verify the guard still fires beyond the truncated diagnostic snippet.
+// Verify the guard still fires deep inside a long recipe.
 //
-// The invalid-command diagnostic quotes only the first 160 characters of the
-// recipe, so a boundary that sits later must still be found by the traversal.
-// Reading the boundary from the truncated message instead of the source would
-// accept this recipe and encode a later marker for the wrong context.
+// The traversal must find the ambiguous closer in the source text, wherever it
+// sits. Deciding from a bounded prefix, or from whatever text a diagnostic
+// chose to repeat, would accept this recipe and encode a later marker for the
+// wrong context.
 #[test]
-fn case_substitution_real_closer_beyond_diagnostic_snippet_fails_closed() {
+fn case_substitution_real_closer_deep_in_long_recipe_fails_closed() {
     let padding = format!("echo {} $(case x in x) :;; esac)", "x".repeat(200));
     let (template, _) = inert_comment_case(&padding, None);
     assert_both_reject(
         &template,
-        "an ambiguous case boundary beyond the snippet must fail closed",
+        "an ambiguous case boundary deep in a long recipe must fail closed",
     );
 }
 
 // Verify the boundary diagnostic reports a location instead of the recipe.
 //
-// The invalid-command diagnostic quotes only the first 160 characters, so a
-// longer recipe loses the boundary it is trying to report. The ambiguity
-// diagnostic instead carries the one-based character offset, and it must not
-// quote the recipe at all: the rejected text is exactly the text the scanner
-// could not classify, and copying it into a log line would reproduce whatever
-// shell syntax made the boundary ambiguous.
+// The ambiguity diagnostic carries the one-based character offset rather than
+// any recipe text: the rejected text is exactly the text the scanner could not
+// classify, and copying it into a log line would reproduce whatever shell
+// syntax made the boundary ambiguous. The position must still be exact deep
+// inside a long recipe, where a bounded prefix could not have reported it.
 #[test]
-fn ambiguous_boundary_diagnostic_reports_position_past_the_snippet_limit() {
+fn ambiguous_boundary_diagnostic_reports_position_in_long_recipe() {
     let padding = format!("echo {} $(case x in x) :;; esac)", "x".repeat(200));
     let (template, _) = inert_comment_case(&padding, None);
     let boundary = template
@@ -155,7 +154,7 @@ fn ambiguous_boundary_diagnostic_reports_position_past_the_snippet_limit() {
 
     for interpolate in both_interpolators() {
         let error = interpolate(&template, &bindings)
-            .expect_err("an ambiguous boundary past the snippet limit must fail closed");
+            .expect_err("an ambiguous boundary deep in a long recipe must fail closed");
         let IrGenError::AmbiguousSubstitutionBoundary { position, message } = error else {
             panic!("unexpected error: {error:?}");
         };

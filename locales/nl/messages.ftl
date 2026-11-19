@@ -205,7 +205,7 @@ ir.empty_rule = Doel ‘{ $target }’ moet naar een regel verwijzen.
 ir.duplicate_outputs = Dubbele uitvoer aangetroffen: { $outputs }.
 ir.circular_dependency = Circulaire afhankelijkheid aangetroffen: { $cycle }.
 ir.action_serialisation = De actie kon niet worden geserialiseerd: { $details }.
-ir.invalid_command = Ongeldige interpolatie in de opdracht: { $snippet }.
+ir.invalid_command = Ongeldige interpolatie in de opdracht: { $reason }.
 ir.ambiguous_substitution_boundary = Onduidelijke grens van opdrachtvervanging bij teken { $position }; scheid de afsluitende haak van de vervanging van de volgende '#'.
 
 # Fouten bij het genereren van Ninja.

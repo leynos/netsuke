@@ -205,7 +205,7 @@ ir.empty_rule = היעד „{ $target }” חייב להפנות לכלל.
 ir.duplicate_outputs = זוהו פלטים כפולים: { $outputs }.
 ir.circular_dependency = זוהתה תלות מעגלית: { $cycle }.
 ir.action_serialisation = לא ניתן היה לבצע סריאליזציה לפעולה: { $details }.
-ir.invalid_command = שיבוץ לא תקין בפקודה: { $snippet }.
+ir.invalid_command = שיבוץ לא תקין בפקודה: { $reason }.
 ir.ambiguous_substitution_boundary = גבול החלפת פקודה דו-משמעי בתו { $position }; הפרידו את סוגר הסגירה של ההחלפה מתו ה-'#' הבא.
 
 # שגיאות ביצירת קובצי Ninja.

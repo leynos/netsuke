@@ -205,7 +205,7 @@ ir.empty_rule = Ціль «{ $target }» має посилатися на пра
 ir.duplicate_outputs = Виявлено повторювані вихідні файли: { $outputs }.
 ir.circular_dependency = Виявлено циклічну залежність: { $cycle }.
 ir.action_serialisation = Не вдалося серіалізувати дію: { $details }.
-ir.invalid_command = Некоректна підстановка в команді: { $snippet }.
+ir.invalid_command = Некоректна підстановка в команді: { $reason }.
 ir.ambiguous_substitution_boundary = Неоднозначна межа підстановки команди на символі { $position }; відокремте закривну дужку підстановки від наступного '#'.
 
 # Помилки створення файлів Ninja.

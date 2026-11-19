@@ -205,7 +205,7 @@ ir.empty_rule = Cel „{ $target }” musi odwoływać się do reguły.
 ir.duplicate_outputs = Wykryto zduplikowane wyjścia: { $outputs }.
 ir.circular_dependency = Wykryto zależność cykliczną: { $cycle }.
 ir.action_serialisation = Nie udało się zserializować działania: { $details }.
-ir.invalid_command = Nieprawidłowa interpolacja w poleceniu: { $snippet }.
+ir.invalid_command = Nieprawidłowa interpolacja w poleceniu: { $reason }.
 ir.ambiguous_substitution_boundary = Niejednoznaczna granica podstawienia polecenia na znaku { $position }; oddziel zamykający nawias podstawienia od następnego '#'.
 
 # Błędy generowania plików Ninja.

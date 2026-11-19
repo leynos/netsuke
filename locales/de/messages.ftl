@@ -205,7 +205,7 @@ ir.empty_rule = Das Ziel „{ $target }“ muss eine Regel referenzieren.
 ir.duplicate_outputs = Doppelte Ausgaben erkannt: { $outputs }.
 ir.circular_dependency = Zyklische Abhängigkeit erkannt: { $cycle }.
 ir.action_serialisation = Die Aktion konnte nicht serialisiert werden: { $details }.
-ir.invalid_command = Ungültige Befehlsinterpolation: { $snippet }.
+ir.invalid_command = Ungültige Befehlsinterpolation: { $reason }.
 ir.ambiguous_substitution_boundary = Mehrdeutige Grenze der Befehlsersetzung bei Zeichen { $position }; trennen Sie die schließende Klammer der Ersetzung vom folgenden '#'.
 
 # Fehler bei der Ninja-Erzeugung.

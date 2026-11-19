@@ -6,7 +6,6 @@
 //! encoded for their insertion context; PowerShell accepts markers only at
 //! unquoted sites. Called by [`super::from_manifest`] during IR lowering.
 
-use crate::localization::{self, keys};
 use crate::shell_word;
 use camino::Utf8PathBuf;
 
@@ -18,10 +17,11 @@ use crate::recipe_shell::RecipeShell;
 
 mod command_substitution;
 mod posix_lexical;
+mod rejection;
 mod script_substitution;
 mod substitution;
 
-use posix_lexical::DelimiterRejection;
+use rejection::{RejectionReason, invalid_command_error, invalid_heredoc_delimiter_error};
 use script_substitution::ScriptSubstitutionTraversal;
 use substitution::SubstitutionTraversal;
 
@@ -187,8 +187,8 @@ pub(crate) fn interpolate_command_with_bindings(
     bindings: &CommandBindings,
 ) -> Result<String, IrGenError> {
     let interpolated = substitute(template, bindings)?;
-    if !is_valid_command_for_shell(&interpolated, bindings.shell) {
-        return Err(invalid_command_error(interpolated));
+    if let Some(reason) = command_rejection(&interpolated, bindings.shell) {
+        return Err(invalid_command_error(interpolated, reason));
     }
     Ok(interpolated)
 }
@@ -210,39 +210,20 @@ pub(crate) fn interpolate_script_with_bindings(
     substitute_script(template, bindings)
 }
 
-/// Builds the diagnostic for a command rejected during placeholder expansion.
-fn invalid_command_error(command: String) -> IrGenError {
-    let snippet = command.chars().take(160).collect();
-    let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
-    IrGenError::InvalidCommand {
-        command,
-        snippet,
-        message,
-    }
-}
-
-/// Builds the diagnostic for a heredoc delimiter the tracker cannot model.
+/// Name the boundary `command` failed for the selected shell, if any.
 ///
-/// The rejection reason occupies the snippet argument so the existing localized
-/// message names the offending syntax. That keeps the fail-closed path on the
-/// same diagnostic channel as other interpolation rejections without adding a
-/// locale entry per internal variant.
-fn invalid_heredoc_delimiter_error(command: String, reason: DelimiterRejection) -> IrGenError {
-    let snippet = reason.description().to_owned();
-    let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
-    IrGenError::InvalidCommand {
-        command,
-        snippet,
-        message,
-    }
-}
-
-/// Report whether `command` satisfies the selected shell's command syntax boundary.
-fn is_valid_command_for_shell(command: &str, shell: RecipeShell) -> bool {
+/// Returns the reason rather than a Boolean so the diagnostic can say which
+/// rule rejected the command without repeating it.
+fn command_rejection(command: &str, shell: RecipeShell) -> Option<RejectionReason> {
     if shell == RecipeShell::PowerShell {
-        return true;
+        return None;
     }
-    !has_unmatched_backticks(command) && shlex::split(command).is_some()
+    if has_unmatched_backticks(command) {
+        return Some(RejectionReason::UnmatchedBacktick);
+    }
+    shlex::split(command)
+        .is_none()
+        .then_some(RejectionReason::UnparseableCommand)
 }
 
 /// Identifies the private token emitted for a Netsuke recipe marker.

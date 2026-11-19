@@ -208,7 +208,7 @@ ir.empty_rule = Target '{ $target }' must reference a rule.
 ir.duplicate_outputs = Duplicate outputs detected: { $outputs }.
 ir.circular_dependency = Circular dependency detected: { $cycle }.
 ir.action_serialisation = Failed to serialise action: { $details }.
-ir.invalid_command = Invalid command interpolation: { $snippet }.
+ir.invalid_command = Invalid command interpolation: { $reason }.
 ir.ambiguous_substitution_boundary = Ambiguous command substitution boundary at character { $position }; separate the substitution closer from a following '#'.
 
 # Ninja generation errors.
