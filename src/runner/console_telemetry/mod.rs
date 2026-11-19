@@ -3,9 +3,10 @@
 //! This runner-only boundary accepts a graph aggregate and an invocation
 //! closure. It emits no paths, identifiers, commands, or process error text.
 
+use super::process::NinjaInvocationError;
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use monotony::MonotonicClock;
-use std::{io, sync::Once, time::Duration};
+use std::{sync::Once, time::Duration};
 use tracing::field;
 
 /// Metric counting actual runner-owned Ninja build invocations.
@@ -30,14 +31,19 @@ pub(in crate::runner) const fn scheduling_label(console_edge_count: usize) -> &'
 /// Count configured user edges in the attempted build graph, rather than
 /// inferring which edges Ninja actually executed or how long they occupied its pool.
 ///
+/// The closure keeps the typed invocation error so the recorded category can
+/// tell a failed launch from an unsuccessful exit and from any other process
+/// failure; flattening it into an [`std::io::Error`] first would lose that
+/// distinction.
+///
 /// # Errors
 ///
-/// Returns the invocation's I/O error unchanged when Ninja execution fails.
+/// Returns the invocation's error unchanged when Ninja execution fails.
 pub(in crate::runner) fn instrument_ninja_build<T>(
     clock: &dyn MonotonicClock,
     console_edge_count: usize,
-    invoke: impl FnOnce() -> io::Result<T>,
-) -> io::Result<T> {
+    invoke: impl FnOnce() -> Result<T, NinjaInvocationError>,
+) -> Result<T, NinjaInvocationError> {
     describe_metrics();
     let console_scheduling = scheduling_label(console_edge_count);
     let span = tracing::info_span!(
@@ -64,13 +70,12 @@ fn record_result<T>(
     span: &tracing::Span,
     console_edge_count: usize,
     elapsed: Duration,
-    result: &io::Result<T>,
+    result: &Result<T, NinjaInvocationError>,
 ) {
     let console_scheduling = scheduling_label(console_edge_count);
-    let (outcome, error_category) = if result.is_ok() {
-        ("success", "none")
-    } else {
-        ("error", "io")
+    let (outcome, error_category) = match result {
+        Ok(_) => ("success", "none"),
+        Err(error) => ("error", failure_category(error)),
     };
     span.record("outcome", outcome);
     span.record("error_category", error_category);
@@ -91,6 +96,19 @@ fn record_result<T>(
     .record(elapsed);
     counter!(NINJA_BUILD_CONSOLE_EDGES_TOTAL, "outcome" => outcome)
         .increment(u64::try_from(console_edge_count).unwrap_or(u64::MAX));
+}
+
+/// Return the fixed telemetry category for one typed Ninja failure.
+///
+/// The three categories mirror the classification the runner uses to choose a
+/// diagnostic, so a metric consumer can tell a launch failure from a recipe
+/// that ran and failed without reading process error text.
+const fn failure_category(error: &NinjaInvocationError) -> &'static str {
+    match error {
+        NinjaInvocationError::Spawn { .. } => "launch",
+        NinjaInvocationError::Exit(_) => "exit_status",
+        NinjaInvocationError::Io(_) => "io",
+    }
 }
 
 /// Register the fixed Ninja-build metric descriptions once per process.

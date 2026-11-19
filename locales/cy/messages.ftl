@@ -106,6 +106,10 @@ runner.context.build_graph = Methwyd â llunio graff o'r maniffest.
 runner.context.generate_ninja = Methwyd â chreu'r maniffest Ninja.
 runner.context.render_graph = Methwyd â rendro arteffact y graff.
 runner.help.targets_edges_require_json = Mae'r opsiwn --edges yn gofyn am --json ar y lefel uchaf.
+runner.ninja.spawn_failed = Methwyd cychwyn y rhaglen Ninja `{ $program }`.
+runner.ninja.spawn_failed.help = Gosodwch Ninja a sicrhewch fod `{ $program }` yn weithredadwy, neu gosodwch NETSUKE_NINJA i lwybr rhaglen Ninja weithredadwy.
+runner.ninja.build_failed = Adroddodd Ninja fethiant adeiladu { $status }.
+runner.ninja.tool_failed = Adroddodd offeryn Ninja `{ $tool }` fethiant { $status }.
 
 runner.io.create_temp_file = Methwyd â chreu'r ffeil Ninja dros dro.
 runner.io.write_temp_ninja = Methwyd ag ysgrifennu i'r ffeil Ninja dros dro.

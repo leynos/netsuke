@@ -9,20 +9,22 @@ sections that match the features they use.
 
 ## Impact at a glance
 
-| Priority          | Area                         | What to do                                                              |
-| ----------------- | ---------------------------- | ----------------------------------------------------------------------- |
-| Required          | Checkout source builds       | Use the pinned Rust toolchain before building from a checkout.          |
-| Required          | Linux checkout builds        | Install the pinned `mold` linker before building from a checkout.       |
-| Review if enabled | Manifest scheduling          | Opt in only where immediate console output is useful.                   |
-| Required          | `Target` literals            | Add `description` and `console` to every literal.                       |
-| Required          | `BuildEdge` literals         | Add `output_visibility` to every literal.                               |
-| Review if enabled | Rust `Action.pool` choices   | Move console scheduling onto the edge; keep custom pools off it.        |
-| Required          | `NinjaGenError` matches      | Add arms for the two new console variants.                              |
-| Required          | File-reading filters         | Move reads that leave the workspace into it, or name a path beneath it. |
-| Optional          | Existing manifests           | Omit `console` to retain ordinary scheduling; it defaults to false.     |
-| Optional          | Scripts parsing stdout       | Tolerate the forwarding-failure warning on stdout.                      |
-| Optional          | Configured shell definitions | Declare `[[shells]]` only in operator configuration.                    |
-| Required          | Reusable release callers     | Pass `publish: true` to publish from a reusable call.                   |
+| Priority                                   | Area                         | What to do                                                              |
+| ------------------------------------------ | ---------------------------- | ----------------------------------------------------------------------- |
+| Required                                   | Checkout source builds       | Use the pinned Rust toolchain before building from a checkout.          |
+| Required                                   | Linux checkout builds        | Install the pinned `mold` linker before building from a checkout.       |
+| Review if enabled                          | Manifest scheduling          | Opt in only where immediate console output is useful.                   |
+| Required                                   | `Target` literals            | Add `description` and `console` to every literal.                       |
+| Required                                   | `BuildEdge` literals         | Add `output_visibility` to every literal.                               |
+| Review if enabled                          | Rust `Action.pool` choices   | Move console scheduling onto the edge; keep custom pools off it.        |
+| Required                                   | `NinjaGenError` matches      | Add arms for the two new console variants.                              |
+| Required                                   | File-reading filters         | Move reads that leave the workspace into it, or name a path beneath it. |
+| Optional                                   | Existing manifests           | Omit `console` to retain ordinary scheduling; it defaults to false.     |
+| Optional                                   | Scripts parsing stdout       | Tolerate the forwarding-failure warning on stdout.                      |
+| Optional                                   | Configured shell definitions | Declare `[[shells]]` only in operator configuration.                    |
+| Required                                   | Reusable release callers     | Pass `publish: true` to publish from a reusable call.                   |
+| Review if automation parses Netsuke errors | Ninja failure diagnostics    | Match the two diagnostic codes instead of the old summary text.         |
+| Required                                   | `RunnerError` matches        | Add arms for `NinjaSpawnFailed` and `NinjaFailed`, or a wildcard arm.   |
 
 _Table 1: migration obligations for the beta series and console-pool option._
 
@@ -1368,6 +1370,31 @@ See
 for the labels, the fallback condition, and what forwarding loss does and does
 not change.
 
+## Read the new Ninja failure diagnostics
+
+A Ninja that cannot be started and a Ninja that ran and reported a failed
+recipe now carry separate diagnostics. Automation that matches the previous
+summary text must change:
+
+- A missing or non-executable Ninja reports
+  `netsuke::runner::ninja_spawn_failed` instead of the previous
+  `running ninja with build file …` summary. Its message names the program that
+  was attempted, and its help offers both remedies: install Ninja, or set
+  `NETSUKE_NINJA`.
+- A failed recipe reports `netsuke::runner::ninja_failed`, and its summary
+  carries the status Ninja exited with.
+
+Neither summary names the temporary build file. Under `--json`, `code` is now
+set for both, where the invocation-context diagnostic left it null. Automation
+that expects `code: null`, or that matches the old summary text, must accept
+the new values. See
+[Read a Ninja failure in human and JSON mode](users-guide.md#read-a-ninja-failure-in-human-and-json-mode)
+for the fields and the remedies.
+
+The change also breaks compilation for an exhaustive `match` on the public
+`RunnerError`: it is not `#[non_exhaustive]`, so its two new variants must gain
+arms, or the match needs a wildcard arm.
+
 ## What does not need to change
 
 The convenience wrappers keep their child-process behaviour: the child inherits
@@ -1399,6 +1426,11 @@ owned sink and completion-ordering contract.
   errors.
 - [ ] If a script parses `netsuke` stdout, tolerate the
   `netsuke: warning: failed to forward child stderr` line.
+- [ ] If automation parses `netsuke` errors, match
+  `netsuke::runner::ninja_spawn_failed` and `netsuke::runner::ninja_failed`
+  rather than the old summary text.
+- [ ] If you match `RunnerError` exhaustively, add arms for its
+  `NinjaSpawnFailed` and `NinjaFailed` variants, or a wildcard arm.
 - [ ] Write project `env_block_var` and `fetch_block_host` values as arrays.
 - [ ] If you declare `[[shells]]`, declare it in system or user configuration,
   not a project file.

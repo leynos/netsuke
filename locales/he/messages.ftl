@@ -106,6 +106,10 @@ runner.context.build_graph = לא ניתן היה לבנות גרף מהמניפ
 runner.context.generate_ninja = לא ניתן היה ליצור את מניפסט Ninja.
 runner.context.render_graph = לא ניתן היה לעבד את תוצר הגרף.
 runner.help.targets_edges_require_json = האפשרות --edges מחייבת --json ברמה העליונה.
+runner.ninja.spawn_failed = לא ניתן היה להפעיל את תוכנית Ninja `{ $program }`.
+runner.ninja.spawn_failed.help = התקינו את Ninja וודאו שניתן להפעיל את `{ $program }`, או הגדירו את NETSUKE_NINJA לנתיב של קובץ Ninja בר-הפעלה.
+runner.ninja.build_failed = ‏Ninja דיווח על כשל בנייה { $status }.
+runner.ninja.tool_failed = כלי Ninja `{ $tool }` דיווח על כשל { $status }.
 
 runner.io.create_temp_file = לא ניתן היה ליצור את קובץ Ninja הזמני.
 runner.io.write_temp_ninja = לא ניתן היה לכתוב לקובץ Ninja הזמני.

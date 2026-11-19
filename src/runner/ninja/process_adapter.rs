@@ -5,6 +5,7 @@
 //! a `Cli` use these wrappers; process requests remain parser-independent and
 //! callers without CLI state construct `NinjaProcessOptions` directly.
 
+use super::super::process::NinjaInvocationError;
 use super::super::process::command_list_targets::CommandListTargetIndex;
 use super::super::{BuildTargets, CommandEnv, StderrMode, process};
 use crate::cli::Cli;
@@ -52,13 +53,17 @@ pub fn run_ninja(
 
 /// Invoke Ninja while retaining target names for command-list failure reports.
 ///
+/// The silent build path returns the typed failure so the runner can
+/// distinguish a launch failure from an unsuccessful exit.
+///
 /// # Errors
 ///
-/// Returns an [`std::io::Error`] if Ninja cannot execute successfully.
+/// Returns a typed failure when Ninja cannot be spawned, a child stream is
+/// unavailable, or Ninja exits unsuccessfully.
 pub(in crate::runner) fn run_ninja_with_command_list_targets(
     request: process::NinjaBuildRequest<'_>,
     command_list_targets: &CommandListTargetIndex,
-) -> std::io::Result<()> {
+) -> Result<(), NinjaInvocationError> {
     process::run_ninja_with_command_list_targets(request, None, command_list_targets)
 }
 
@@ -76,8 +81,24 @@ pub fn run_ninja_tool(
     build_file: &Utf8Path,
     tool: &str,
 ) -> std::io::Result<()> {
+    run_ninja_tool_typed(program, cli, build_file, tool)
+        .map_err(NinjaInvocationError::into_io_error)
+}
+
+/// Invoke a Ninja tool and keep the typed failure for the silent clean path.
+///
+/// # Errors
+///
+/// Returns a typed failure when option validation, the launch, a child stream,
+/// or Ninja's exit status fails.
+pub(in crate::runner) fn run_ninja_tool_typed(
+    program: &Utf8Path,
+    cli: &Cli,
+    build_file: &Utf8Path,
+    tool: &str,
+) -> Result<(), NinjaInvocationError> {
     let options = ninja_process_options(cli)?;
-    process::run_ninja_tool_with(&process::NinjaToolRequest {
+    process::run_ninja_tool_with_typed(&process::NinjaToolRequest {
         program,
         options: &options,
         build_file,

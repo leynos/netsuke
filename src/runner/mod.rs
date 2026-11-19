@@ -12,16 +12,19 @@ mod console_telemetry;
 mod dispatch;
 mod dyndep;
 mod error;
+mod failure_diagnostic;
 mod manifest_structure_telemetry;
 mod reporter;
+#[cfg(test)]
+pub(crate) mod test_fixtures;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::display_plan::DisplayPlan;
 use crate::localization::keys;
 use crate::manifest;
-use crate::ninja_gen::command_list::COMMAND_LIST_FAILURE_PREFIX;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use anyhow::{Context, Result};
 pub use camino::{Utf8Path, Utf8PathBuf};
+use failure_diagnostic::ninja_failure;
 // `check_diagnostics` predates the move under `check/`; keep the public path.
 #[cfg(feature = "lint")]
 pub use check::diagnostics as check_diagnostics;
@@ -63,12 +66,10 @@ pub use build_targets::BuildTargets;
 #[cfg(feature = "lint")]
 pub use check::telemetry::{CHECK_DURATION, CHECK_TOTAL};
 pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
-#[cfg(doctest)]
-pub use process::doc;
 pub use process::{
     CommandEnv, FORWARD_FAILURE_LABELS, FORWARD_FAILURES_TOTAL, MAX_RETAINED_DYNDEP_FILES,
-    NINJA_STATUS_OVERSIZED_LINES_TOTAL, NinjaBuildRequest, NinjaJobCount, NinjaProcessOptions,
-    NinjaToolRequest, StderrMode, run_ninja_tool_with, run_ninja_with,
+    NINJA_STATUS_OVERSIZED_LINES_TOTAL, NinjaBuildRequest, NinjaExitError, NinjaJobCount,
+    NinjaProcessOptions, NinjaToolRequest, StderrMode, run_ninja_tool_with, run_ninja_with,
 };
 pub use recipe_shell::telemetry::{
     BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
@@ -252,15 +253,7 @@ fn execute_build(
             ninja::run_ninja_with_command_list_targets(build_request, &command_list_targets)
         }
     });
-    ninja_result.map_err(|error| {
-        // Keep marker text in the CLI's outer context.
-        let error_context = if error.to_string().contains(COMMAND_LIST_FAILURE_PREFIX) {
-            format!("{}: {error}", ctx())
-        } else {
-            ctx()
-        };
-        anyhow::Error::new(error).context(error_context)
-    })?;
+    ninja_result.map_err(|error| ninja_failure(error, ctx))?;
     context
         .reporter
         .report_complete(keys::STATUS_TOOL_BUILD.into());
@@ -333,7 +326,7 @@ fn execute_ninja_tool(
             context.ninja_program, tool.name, build_path
         )
     };
-    if context.progress_enabled {
+    let tool_result = if context.progress_enabled {
         let options = ninja::ninja_process_options(cli)?;
         let mut on_task_progress = reporter::on_task_progress_callback(context.reporter);
         process::run_ninja_tool_with_status(
@@ -347,10 +340,10 @@ fn execute_ninja_tool(
             },
             &mut on_task_progress,
         )
-        .with_context(ctx)?;
     } else {
-        run_ninja_tool(context.ninja_program, cli, build_path, tool.name).with_context(ctx)?;
-    }
+        ninja::run_ninja_tool_typed(context.ninja_program, cli, build_path, tool.name)
+    };
+    tool_result.map_err(|error| ninja_failure(error, ctx))?;
     if tool.prune_after_success {
         prune_dyndep_bundle(cli, &dyndep_files, &publication)?;
     }

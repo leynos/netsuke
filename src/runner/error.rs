@@ -51,6 +51,45 @@ pub enum RunnerError {
         help: LocalizedMessage,
     },
 
+    /// The selected Ninja executable could not be started.
+    ///
+    /// The OS error stays in the cause chain, so a reader sees both what was
+    /// attempted and why it failed without the runner having to guess which of
+    /// absence, permissions, or an invalid image applies.
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::runner::ninja_spawn_failed))]
+    NinjaSpawnFailed {
+        /// The program exactly as configured, before citation escaping.
+        program: String,
+        /// Localized summary naming the attempted program.
+        message: LocalizedMessage,
+        /// Localized hint naming the installation and configuration remedies.
+        #[help]
+        help: LocalizedMessage,
+        /// The launch failure reported by the operating system.
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Ninja ran but reported an unsuccessful exit status.
+    ///
+    /// The full status travels as the source, so a programmatic caller can tell
+    /// an ordinary exit code from a Unix signal, and any command-list
+    /// attribution stays readable in the cause chain.
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::runner::ninja_failed))]
+    NinjaFailed {
+        /// The status Ninja exited with, signals included.
+        status: std::process::ExitStatus,
+        /// Invocation that failed: `build` or the Ninja tool name.
+        operation: String,
+        /// Localized summary naming the status.
+        message: LocalizedMessage,
+        /// The exit failure, carrying the legacy text and any attribution.
+        #[source]
+        source: super::NinjaExitError,
+    },
+
     /// The graph-bearing help catalogue requires machine-readable output.
     #[error("{message}")]
     #[diagnostic(code(netsuke::runner::help_targets_edges_require_json))]

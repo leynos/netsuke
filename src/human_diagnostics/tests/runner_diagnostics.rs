@@ -2,7 +2,7 @@
 
 use super::*;
 use rstest::rstest;
-use test_support::{EnLocalizer, en_localizer};
+use test_support::{EnLocalizer, en_localizer, exit_status};
 
 /// Build the runner's own missing-manifest failure with the runner context.
 fn runner_failure() -> anyhow::Error {
@@ -163,6 +163,125 @@ fn runner_failures_outrank_manifest_failures_in_one_chain() -> Result<()> {
     ensure!(
         !rendered.contains("declares an unsupported schema"),
         "the manifest diagnostic must not replace the runner diagnostic: {rendered}"
+    );
+    Ok(())
+}
+
+/// Build the launch failure for a Ninja that is not installed.
+///
+/// The binary crate cannot see the library's crate-private `ninja_failure`
+/// mapper, so this fixture assembles the diagnostic the way the mapper does.
+/// The end-to-end CLI tests are what prove the mapper itself still routes a
+/// launch failure here without the invocation context.
+fn ninja_spawn_failure() -> anyhow::Error {
+    anyhow::Error::new(runner::RunnerError::NinjaSpawnFailed {
+        program: String::from("ninja"),
+        message: localization::message(keys::RUNNER_NINJA_SPAWN_FAILED)
+            .with_arg("program", "ninja"),
+        help: localization::message(keys::RUNNER_NINJA_SPAWN_FAILED_HELP)
+            .with_arg("program", "ninja"),
+        source: std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "No such file or directory (os error 2)",
+        ),
+    })
+}
+
+/// Build an unsuccessful exit carrying command-list attribution.
+///
+/// The status phrase comes from the same catalogue suffix the mapper uses, so
+/// this fixture cannot drift from the production summary wording.
+fn ninja_exit_failure() -> anyhow::Error {
+    let status = exit_status(7);
+    let status_text = localization::message(keys::COMMAND_EXIT_STATUS_SUFFIX)
+        .with_arg("status", 7)
+        .to_string();
+    anyhow::Error::new(runner::RunnerError::NinjaFailed {
+        status,
+        operation: String::from("build"),
+        message: localization::message(keys::RUNNER_NINJA_BUILD_FAILED)
+            .with_arg("status", status_text),
+        source: runner::NinjaExitError::new(
+            status,
+            "build",
+            Some(String::from("action 0123, entry 2")),
+        )
+        .expect("an unsuccessful status should construct a failure"),
+    })
+}
+
+/// A launch failure names the program, offers remedies, and keeps the OS cause.
+///
+/// Selecting the outer invocation context instead of the diagnostic would drop
+/// the stable code and the help text, and would name the temporary build file
+/// rather than the program, so the negative assertions fail with it.
+#[rstest]
+fn ninja_spawn_failures_render_program_help_and_os_cause(en_localizer: EnLocalizer) -> Result<()> {
+    let _en_localizer = en_localizer;
+    let rendered = render_failure(
+        &ninja_spawn_failure(),
+        &theme_for(presentation_style(false, true)),
+    )
+    .context("a Ninja launch failure should render a diagnostic")?;
+    let flattened = flatten_localized_text(&rendered);
+    ensure!(
+        flattened.contains("netsuke::runner::ninja_spawn_failed"),
+        "the rendered diagnostic must carry the launch failure's stable code: {rendered}"
+    );
+    ensure!(
+        flattened.contains("Could not start the Ninja program `ninja`."),
+        "the rendered diagnostic must name the attempted program: {rendered}"
+    );
+    ensure!(
+        flattened.contains("NETSUKE_NINJA"),
+        "the rendered diagnostic must offer the configuration remedy: {rendered}"
+    );
+    ensure!(
+        flattened.contains("No such file or directory"),
+        "the rendered diagnostic must keep the operating system cause: {rendered}"
+    );
+    ensure!(
+        !flattened.contains("with build file"),
+        "the rendered diagnostic must not name the temporary build file: {rendered}"
+    );
+    Ok(())
+}
+
+/// An unsuccessful exit names its status and keeps the attribution cause.
+///
+/// Reverting to the invocation context would replace the summary with the
+/// temporary build file, so both the status and the attribution assertions
+/// fail against that behaviour.
+#[rstest]
+fn ninja_exit_failures_render_status_and_attribution(en_localizer: EnLocalizer) -> Result<()> {
+    let _en_localizer = en_localizer;
+    let rendered = render_failure(
+        &ninja_exit_failure(),
+        &theme_for(presentation_style(false, true)),
+    )
+    .context("a Ninja exit failure should render a diagnostic")?;
+    let flattened = flatten_localized_text(&rendered);
+    ensure!(
+        flattened.contains("netsuke::runner::ninja_failed"),
+        "the rendered diagnostic must carry the exit failure's stable code: {rendered}"
+    );
+    // The summary is localized, so it no longer carries the platform-defined
+    // `ExitStatus` wording; only the cause chain does.
+    ensure!(
+        flattened.contains("Ninja reported a build failure (exit status 7)."),
+        "the rendered diagnostic must report Ninja's status: {rendered}"
+    );
+    ensure!(
+        flattened.contains(&format!("ninja exited with {}", exit_status(7))),
+        "the cause chain must keep the platform's raw status: {rendered}"
+    );
+    ensure!(
+        flattened.contains("action 0123, entry 2"),
+        "the rendered diagnostic must keep command-list attribution: {rendered}"
+    );
+    ensure!(
+        !flattened.contains("with build file"),
+        "the rendered diagnostic must not name the temporary build file: {rendered}"
     );
     Ok(())
 }

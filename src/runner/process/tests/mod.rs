@@ -183,6 +183,7 @@ fn command_list_failure_duration_uses_the_injected_monotonic_clock() {
     let snapshotter = recorder.snapshotter();
 
     let execution = CommandExecutionContext {
+        program: Utf8Path::new("sh"),
         operation: "build",
         stderr_mode: StderrMode::Suppress,
         captures_ninja_failure_output: false,
@@ -230,6 +231,7 @@ fn large_stdout_cannot_supply_command_list_attribution() -> anyhow::Result<()> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let execution = CommandExecutionContext {
+        program: Utf8Path::new("sh"),
         operation: "build",
         stderr_mode: StderrMode::Suppress,
         // Only a Ninja build can relay a subcommand's stderr through stdout.
@@ -243,12 +245,20 @@ fn large_stdout_cannot_supply_command_list_attribution() -> anyhow::Result<()> {
         anyhow::bail!("a failing command should return an error");
     };
 
-    if error
-        .to_string()
-        .contains("netsuke command-list failure: action ")
-    {
-        anyhow::bail!("stdout must not supply command-list attribution: {error}");
-    }
+    // A launch failure would also carry no attribution text, so the exit
+    // variant must be established before the attribution check means anything.
+    let NinjaInvocationError::Exit(exit) = &error else {
+        anyhow::bail!("a shell that ran and exited must be an exit failure, got {error:?}");
+    };
+    anyhow::ensure!(
+        exit.status().code() == Some(1),
+        "the fixture exits with status 1, got {:?}",
+        exit.status()
+    );
+    anyhow::ensure!(
+        exit.to_string() == format!("ninja exited with {}", exit.status()),
+        "stdout must not supply command-list attribution: {exit}"
+    );
     Ok(())
 }
 

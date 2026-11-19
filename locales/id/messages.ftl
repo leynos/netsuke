@@ -106,6 +106,10 @@ runner.context.build_graph = Graf tidak dapat dibangun dari manifes.
 runner.context.generate_ninja = Manifes Ninja tidak dapat dihasilkan.
 runner.context.render_graph = Artefak graf tidak dapat dirender.
 runner.help.targets_edges_require_json = Opsi --edges memerlukan --json pada tingkat teratas.
+runner.ninja.spawn_failed = Tidak dapat memulai program Ninja `{ $program }`.
+runner.ninja.spawn_failed.help = Pasang Ninja dan pastikan `{ $program }` dapat dieksekusi, atau setel NETSUKE_NINJA ke jalur executable Ninja.
+runner.ninja.build_failed = Ninja melaporkan kegagalan build { $status }.
+runner.ninja.tool_failed = Alat Ninja `{ $tool }` melaporkan kegagalan { $status }.
 
 runner.io.create_temp_file = Berkas Ninja sementara tidak dapat dibuat.
 runner.io.write_temp_ninja = Berkas Ninja sementara tidak dapat ditulis.

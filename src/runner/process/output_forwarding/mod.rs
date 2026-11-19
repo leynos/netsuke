@@ -6,6 +6,7 @@ use super::{
     failure_attribution::{
         CommandListFailure, NinjaFailureOutputTail, forward_stderr_with_attribution,
     },
+    invocation_error::NinjaInvocationError,
     streaming::{
         ForwardFailure, ForwardFailureKind, ForwardRoute, ForwardStats, ForwardStream,
         forward_child_output, forward_child_output_with_ninja_status, record_failure,
@@ -91,14 +92,18 @@ pub(super) fn spawn_and_stream_output(
     status_observer: Option<StatusObserver<'_>>,
     stderr_mode: StderrMode,
     captures_ninja_failure_output: bool,
-) -> io::Result<(ExitStatus, Option<CommandListFailure>)> {
+) -> Result<(ExitStatus, Option<CommandListFailure>), NinjaInvocationError> {
     let Some(stdout) = child.stdout.take() else {
         terminate_child(&mut child, "stdout pipe unavailable");
-        return Err(io::Error::other("child process missing stdout pipe"));
+        return Err(NinjaInvocationError::io(io::Error::other(
+            "child process missing stdout pipe",
+        )));
     };
     let Some(stderr) = child.stderr.take() else {
         terminate_child(&mut child, "stderr pipe unavailable");
-        return Err(io::Error::other("child process missing stderr pipe"));
+        return Err(NinjaInvocationError::io(io::Error::other(
+            "child process missing stderr pipe",
+        )));
     };
 
     // Tracing spans are thread-local, so the forwarding thread starts outside

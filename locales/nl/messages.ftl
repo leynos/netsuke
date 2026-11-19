@@ -106,6 +106,10 @@ runner.context.build_graph = De graaf kon niet uit het manifest worden opgebouwd
 runner.context.generate_ninja = Het Ninja-manifest kon niet worden gegenereerd.
 runner.context.render_graph = Het graafartefact kon niet worden weergegeven.
 runner.help.targets_edges_require_json = De optie --edges vereist --json op het hoogste niveau.
+runner.ninja.spawn_failed = Kon het Ninja-programma `{ $program }` niet starten.
+runner.ninja.spawn_failed.help = Installeer Ninja en zorg ervoor dat `{ $program }` uitvoerbaar is, of stel NETSUKE_NINJA in op het pad van een uitvoerbaar Ninja-bestand.
+runner.ninja.build_failed = Ninja meldde een buildfout { $status }.
+runner.ninja.tool_failed = Het Ninja-hulpprogramma `{ $tool }` meldde een fout { $status }.
 
 runner.io.create_temp_file = Het tijdelijke Ninja-bestand kon niet worden aangemaakt.
 runner.io.write_temp_ninja = Het tijdelijke Ninja-bestand kon niet worden geschreven.

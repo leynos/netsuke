@@ -14,6 +14,7 @@ use anyhow::bail;
 use metrics_util::{MetricKind, debugging::DebugValue};
 use proptest::prelude::*;
 use std::path::PathBuf;
+use test_support::exit_status;
 
 /// Assert that `snapshot` records one histogram sample with exactly `labels`.
 fn assert_histogram(snapshot: &Snapshot, name: &str, labels: &[(&str, &str)]) {
@@ -88,6 +89,31 @@ fn manifest_not_found_error() -> anyhow::Error {
             .with_arg("manifest_name", "Netsukefile")
             .with_arg("directory", "the current directory"),
         help: localization::message(keys::RUNNER_MANIFEST_NOT_FOUND_HELP),
+    })
+}
+
+/// Construct one Ninja launch failure with its OS cause.
+fn ninja_spawn_failure_error() -> anyhow::Error {
+    anyhow::Error::new(RunnerError::NinjaSpawnFailed {
+        program: String::from("ninja"),
+        message: localization::message(keys::RUNNER_NINJA_SPAWN_FAILED)
+            .with_arg("program", "ninja"),
+        help: localization::message(keys::RUNNER_NINJA_SPAWN_FAILED_HELP)
+            .with_arg("program", "ninja"),
+        source: std::io::Error::new(std::io::ErrorKind::NotFound, "controlled launch failure"),
+    })
+}
+
+/// Construct one Ninja exit failure carrying the legacy cause text.
+fn ninja_exit_failure_error() -> anyhow::Error {
+    let status = exit_status(7);
+    anyhow::Error::new(RunnerError::NinjaFailed {
+        status,
+        operation: String::from("build"),
+        message: localization::message(keys::RUNNER_NINJA_BUILD_FAILED)
+            .with_arg("status", status.to_string()),
+        source: crate::runner::NinjaExitError::new(status, "build", None)
+            .expect("an unsuccessful status should construct a failure"),
     })
 }
 
@@ -176,6 +202,8 @@ fn legacy_recipe_operation_records_bounded_ninja_tool_failure_telemetry() {
         anyhow::Error::new(std::io::Error::other("controlled Ninja I/O failure")),
         "ninja_io",
     );
+    assert_controlled_failure(ninja_spawn_failure_error(), "ninja_io");
+    assert_controlled_failure(ninja_exit_failure_error(), "ninja_io");
 }
 
 proptest! {

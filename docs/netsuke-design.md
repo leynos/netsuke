@@ -3233,9 +3233,34 @@ two streams. In JSON diagnostics mode the request carries
 carries only the versioned result document and stderr only the diagnostic
 document, keeping both machine-readable. The runner derives the policy from the
 CLI's JSON setting via `StderrMode::from_json_enabled(cli.json)`; the process
-layer consumes the request's `stderr_mode` field and never re-derives it. A
-non-zero exit status or failure to spawn the process is reported as an
-`io::Error` for the CLI to surface.
+layer consumes the request's `stderr_mode` field and never re-derives it.
+
+A non-zero exit status or a failure to spawn the process is classified at the
+operation that produced it. The process core returns
+`NinjaInvocationError::{Spawn, Exit, Io}` to the runner, which maps a spawn or
+exit failure to its own diagnostic and attaches invocation context only to the
+unclassified I/O case. An `io::ErrorKind` cannot separate a failed launch from
+another `NotFound` source, which is why the classification is made where the
+operation is known rather than reconstructed from the error kind.
+
+The public process helpers keep their `io::Result` contracts by converting the
+typed failure back: a spawn failure returns its original error, so `kind()` and
+`raw_os_error()` are unchanged, and an exit failure keeps the legacy
+`ninja exited with …` text. The runner's diagnostics are distinct for the two
+faults. A launch failure names the program Netsuke tried to run and offers the
+installation and `NETSUKE_NINJA` remedies. An exit failure reports Ninja's
+status and names the tool when the operation was not `build`. Neither summary
+repeats the temporary build file, because that path identifies Netsuke's own
+implementation detail rather than the fault.
+
+The exit summary renders the status through the command layer's existing
+`stdlib.command.exit_status_suffix` and `stdlib.command.signal_suffix`
+catalogue entries rather than embedding `ExitStatus`'s `Display`. That text is
+English-only and platform-defined — Unix says "exit status" and Windows says
+"exit code" — so echoing it would leave an untranslated fragment inside every
+localized summary and word it differently per platform. The raw status text
+survives in the cause chain, where the legacy `ninja exited with …` wording is
+preserved.
 
 The `ninja_subprocess` span and its spawn and exit events carry
 `env_override_count` and `path_overridden`, derived from the prepared

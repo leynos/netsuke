@@ -106,6 +106,10 @@ runner.context.build_graph = Grafen kunne ikke bygges ut fra manifestet.
 runner.context.generate_ninja = Ninja-manifestet kunne ikke lages.
 runner.context.render_graph = Grafartefaktet kunne ikke gjengis.
 runner.help.targets_edges_require_json = Alternativet --edges krever --json på øverste nivå.
+runner.ninja.spawn_failed = Kunne ikke starte Ninja-programmet `{ $program }`.
+runner.ninja.spawn_failed.help = Installer Ninja og sørg for at `{ $program }` kan kjøres, eller sett NETSUKE_NINJA til banen til en kjørbar Ninja.
+runner.ninja.build_failed = Ninja rapporterte en byggefeil { $status }.
+runner.ninja.tool_failed = Ninja-verktøyet `{ $tool }` rapporterte en feil { $status }.
 
 runner.io.create_temp_file = Den midlertidige Ninja-filen kunne ikke opprettes.
 runner.io.write_temp_ninja = Den midlertidige Ninja-filen kunne ikke skrives.

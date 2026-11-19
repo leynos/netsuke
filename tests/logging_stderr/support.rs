@@ -48,13 +48,15 @@ impl<'message> CommandListDiagnostics<'message> {
         Self { message }
     }
 
-    /// Return the rendered human error line carrying command-list attribution.
+    /// Return the human diagnostic line carrying command-list attribution.
+    ///
+    /// The attribution is a cause of the exit diagnostic rather than part of
+    /// the summary line, so the search is for the cause text alone: no
+    /// `Error:` prefix shares a line with `ninja exited with` any more.
     pub(super) fn human_error_fragment(&self) -> Option<&'message str> {
-        self.message.lines().find(|line| {
-            line.contains("Error:")
-                && line.contains("ninja exited with")
-                && line.contains(FAILURE_PREFIX)
-        })
+        self.message
+            .lines()
+            .find(|line| line.contains("ninja exited with") && line.contains(FAILURE_PREFIX))
     }
 
     /// Return a stable human error fragment with its fingerprint replaced.

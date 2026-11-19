@@ -9,6 +9,7 @@ use cap_std::fs_utf8::Dir;
 use netsuke::runner::NINJA_ENV;
 use serde_json::Value;
 use tempfile::TempDir;
+use test_support::fluent::normalize_fluent_isolates;
 use test_support::ninja::ninja_integration_workspace;
 
 fn failing_command_list_workspace(first_entry: &str) -> Result<Option<TempDir>> {
@@ -70,6 +71,9 @@ fn run_failing_build(temp: &TempDir, arguments: &[&str]) -> Result<std::process:
     assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
         .env(NINJA_ENV, "ninja")
+        // The assertion below searches localized text, so an inherited
+        // developer or CI locale must not decide whether it passes.
+        .env("NETSUKE_LOCALE", "en-GB")
         .args(arguments)
         .output()
         .context("run failing command-list build")
@@ -102,6 +106,25 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
         contains_target_clause(human_error, "target \"result.txt\""),
         "human diagnostics should name the resolved target: {human_error}"
     );
+    ensure!(
+        stderr.contains("netsuke::runner::ninja_failed"),
+        "the human diagnostic should carry the exit failure's stable code: {stderr}"
+    );
+    ensure!(
+        stderr.contains("Ninja reported a build failure"),
+        "the summary should report Ninja's failure rather than the build file: {stderr}"
+    );
+    // A real Ninja reports a failed recipe as its own exit status of 1, which
+    // is what the summary must carry: the recipe's code is not observable here.
+    ensure!(
+        normalize_fluent_isolates(&stderr)
+            .contains("Ninja reported a build failure (exit status 1)"),
+        "the summary should report the status the real Ninja exited with: {stderr}"
+    );
+    ensure!(
+        !stderr.contains("with build file"),
+        "the summary must not name the temporary build file: {stderr}"
+    );
     insta::assert_snapshot!(
         "command_list_failure_human_diagnostic",
         diagnostics
@@ -118,28 +141,26 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
-    let Some(temp) = failing_command_list_workspace("echo first > {{ outs }}")? else {
-        return Ok(());
-    };
-    let output = run_failing_build(&temp, &["--json", "build"])?;
+/// Assert the JSON document's attribution and return its first diagnostic.
+///
+/// The returned pair is the diagnostic object and the normalized command-list
+/// cause, which the caller projects into its snapshot. Splitting them out keeps
+/// the test's own body to the assertions about the document as a whole.
+fn json_failure_attribution<'a>(
+    diagnostics: &'a Value,
+    stderr: &str,
+) -> Result<(&'a Value, String)> {
+    let rendered = diagnostics.to_string();
     ensure!(
-        !output.status.success(),
-        "a failing list entry must fail the build"
-    );
-    let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
-    let diagnostics: Value = serde_json::from_str(&stderr).context("stderr should be JSON")?;
-    ensure!(
-        identifies_entry(&diagnostics.to_string(), 2),
+        identifies_entry(&rendered, 2),
         "JSON diagnostics should retain bounded entry attribution: {diagnostics}"
     );
     ensure!(
-        contains_full_fingerprint(&stderr),
+        contains_full_fingerprint(stderr),
         "JSON diagnostics should retain the full action fingerprint: {stderr}"
     );
     ensure!(
-        contains_target_clause(&diagnostics.to_string(), "target \"result.txt\""),
+        contains_target_clause(&rendered, "target \"result.txt\""),
         "JSON diagnostics should name the resolved target: {diagnostics}"
     );
     ensure!(
@@ -151,6 +172,15 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
         .and_then(Value::as_array)
         .and_then(|entries| entries.first())
         .context("JSON document should contain a diagnostic")?;
+    let message = diagnostic
+        .get("message")
+        .and_then(Value::as_str)
+        .context("JSON diagnostic should carry its localized summary")?;
+    ensure!(
+        normalize_fluent_isolates(message)
+            .contains("Ninja reported a build failure (exit status 1)"),
+        "the JSON summary should report the status the real Ninja exited with: {message}"
+    );
     let command_list_cause = diagnostic
         .get("causes")
         .and_then(Value::as_array)
@@ -164,6 +194,22 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
     let normalized_cause = CommandListDiagnostics::new(command_list_cause)
         .normalized_failure_marker_fragment()
         .context("JSON command-list cause should have a stable marker fragment")?;
+    Ok((diagnostic, normalized_cause))
+}
+
+#[test]
+fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
+    let Some(temp) = failing_command_list_workspace("echo first > {{ outs }}")? else {
+        return Ok(());
+    };
+    let output = run_failing_build(&temp, &["--json", "build"])?;
+    ensure!(
+        !output.status.success(),
+        "a failing list entry must fail the build"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
+    let diagnostics: Value = serde_json::from_str(&stderr).context("stderr should be JSON")?;
+    let (diagnostic, normalized_cause) = json_failure_attribution(&diagnostics, &stderr)?;
     let schema_version = diagnostics
         .get("schema_version")
         .context("JSON document should include its schema version")?;

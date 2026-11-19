@@ -177,10 +177,58 @@ exists. A different manifest path can be specified with `-f`:
 netsuke -f path/to/manifest.yml
 ```
 
-### "ninja: command not found"
+### "Could not start the Ninja program"
+
+Netsuke reports a Ninja it cannot start as
+`netsuke::runner::ninja_spawn_failed`, naming the program it attempted:
+
+```text
+Could not start the Ninja program `ninja`.
+```
 
 Install Ninja using the system's package manager:
 
 - **Ubuntu/Debian:** `sudo apt install ninja-build`
 - **macOS (Homebrew):** `brew install ninja`
 - **Windows (Chocolatey):** `choco install ninja`
+
+A Ninja that is on `PATH` but cannot be executed, such as a copy that lost its
+executable bit, fails the same way. Check the file's permissions and restore
+them, or select an executable Ninja program:
+
+```sh
+chmod +x /path/to/ninja
+```
+
+If Ninja is installed somewhere off `PATH`, or the executable is named
+differently, set `NETSUKE_NINJA` to its full path:
+
+```sh
+NETSUKE_NINJA=/opt/ninja/bin/ninja netsuke build
+```
+
+PowerShell sets the variable for the current session instead:
+
+```powershell
+$env:NETSUKE_NINJA = 'C:\tools\ninja\ninja.exe'
+netsuke build
+```
+
+### "Ninja reported a build failure"
+
+When Ninja runs but a recipe fails, the summary reports Ninja's exit status:
+
+```text
+Ninja reported a build failure (exit status 1).
+```
+
+In human mode Ninja's own output, including the failing command, appears above
+the summary. JSON mode drains that output so stderr stays one machine-readable
+document, keeping only the command-list attribution Netsuke recovers from the
+output tail. For a tool subcommand the summary names the tool instead:
+
+```text
+Ninja tool `clean` reported a failure (exit status 1).
+```
+
+The temporary build file Netsuke generated is not named in either case.
