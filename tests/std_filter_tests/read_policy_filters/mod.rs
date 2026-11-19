@@ -14,10 +14,13 @@ use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::context;
 
-// Only `create_fifo` builds one, and only Unix has FIFOs to build.
-#[cfg(unix)]
+// Only `create_fifo` builds one, and it needs `mknodat`, which rustix offers
+// on Linux alone: macOS has `mknod` but no `*at` form of it. The FIFO cases
+// are therefore a Linux lane, and the macOS read-policy lane covers the
+// symlink policy without them.
+#[cfg(target_os = "linux")]
 use anyhow::anyhow;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use rustix::fs::{Dev, FileType as RxFileType, Mode, mknodat};
 
 pub(super) use super::support::fallible;
@@ -168,9 +171,10 @@ impl Policy {
     ///
     /// The FIFO cases and the manual-resolver cases ask this question; the
     /// cross-platform file-type table spells each expected outcome out per
-    /// case instead. Windows compiles neither caller, so the method is Unix
-    /// only for the same reason `Self::ALL` is Linux only.
-    #[cfg(unix)]
+    /// case instead. Both callers are Linux test modules, so the method is
+    /// gated like `Self::ALL`: Windows and macOS compile neither caller and
+    /// would otherwise see it as dead code.
+    #[cfg(target_os = "linux")]
     pub(super) fn follows(self) -> bool {
         self == Self::FollowTrue
     }
@@ -273,10 +277,14 @@ pub(super) fn write_fixture(
 /// [`require_real_symlink`] before rendering, because a host that silently
 /// substituted a regular file would invert a rejection assertion.
 ///
+/// Only the Linux harness modules create a link explicitly; the cross-platform
+/// file-type tables go through `fallible::file_symlink_fixture`, so the helper
+/// is gated with its callers.
+///
 /// # Errors
 ///
 /// Returns the setup error when the link cannot be created.
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub(super) fn create_symlink(
     root: &Utf8Path,
     link: &str,
@@ -294,7 +302,10 @@ pub(super) fn create_symlink(
 /// one for reading blocks until a writer appears unless the open carries
 /// `O_NONBLOCK`, so a policy that omits the flag wedges the calling thread
 /// rather than returning a rejection.
-#[cfg(unix)]
+///
+/// `mknodat` is a Linux entry point in rustix, so the fixture — and the FIFO
+/// module that owns its cases — is Linux only.
+#[cfg(target_os = "linux")]
 pub(super) fn create_fifo(root: &Utf8Path, name: &str) -> Result<camino::Utf8PathBuf> {
     let dir = fixture_dir(root, "create the FIFO fixture")?;
     mknodat(
@@ -370,7 +381,8 @@ mod budget_tests;
 
 mod confinement_tests;
 
-#[cfg(unix)]
+// The FIFO fixture needs `mknodat`, which rustix offers on Linux alone.
+#[cfg(target_os = "linux")]
 mod fifo_tests;
 
 mod file_type_tests;

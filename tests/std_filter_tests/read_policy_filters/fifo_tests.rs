@@ -8,9 +8,13 @@
 //! is refused under the no-follow policy and resolved without blocking under
 //! the opt-in.
 //!
-//! The module is Unix-only: Windows names pipes through a separate object
-//! namespace, and the file-reading boundary refuses a reparse point there
-//! before the type of its target can matter.
+//! The module is Linux-only. It builds its fixture with `mknodat`, which
+//! rustix exposes on Linux alone; macOS has no `*at` form of `mknod`. Windows
+//! names pipes through a separate object namespace, and the file-reading
+//! boundary refuses a reparse point there before the type of its target can
+//! matter. The macOS read-policy lane therefore covers the symlink policy
+//! without the FIFO cases, which assert the non-blocking open rather than the
+//! link decision this change is about.
 use anyhow::{Result, ensure};
 use minijinja::ErrorKind;
 use rstest::rstest;
