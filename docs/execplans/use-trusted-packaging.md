@@ -5510,6 +5510,35 @@ and pass, on the final wording.
   test, whose two scripted positions are now one tuple parameter. Date/Author:
   2026-11-19, implementation agent.
 
+- [x] (2026-11-19) Restored the mutation that the resolved oracle had silently
+  retired.
+
+  *Symptom.* Hosted `build-test` failed on `badae75ae` at
+  `remove-consumer-smoke-publish-guard`: the case expected
+  `neither-mode.consumer-smoke-job:` and the contract reported nothing. The
+  failure reproduced locally, and a probe confirmed the pristine document
+  reported zero violations for that label as well.
+
+  *Cause.* Propagating graph results, the fix above, removed the only scenario
+  that could observe the smoke's mode predicate. `neither-mode` publishes
+  nothing, so the graph also skips `finalize-github-release`, whose success the
+  guard already requires; the guard is false with or without
+  `needs.metadata.outputs.should_publish == 'true'`, and no realisable run
+  reaches a state where the predicate alone decides. The claim was true of the
+  declared-outcome oracle and became vacuous under the resolved one.
+
+  *Fix.* `check_smoke_publication_guard` evaluates the guard once, outside the
+  scenario loop, against the publishing and neither modes' resolved outputs
+  with every declared dependency successful and the run uncancelled. Only the
+  mode predicate can then decide, so the predicate is pinned in both
+  directions: a publishing run must smoke and a run that publishes nothing must
+  not. The expectation moved to `("static", "consumer-smoke-job.guard")`, and
+  `_needs_context` lost the `scenario` parameter it never read.
+
+  *Verification.* The full workflow-contract suite passes (2439 passed, 2
+  skipped), and `make check-fmt` and `make lint-python` exit zero. Date/Author:
+  2026-11-19, implementation agent.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
@@ -6315,6 +6344,19 @@ and pass, on the final wording.
   tool-version input is an unpinned dependency until that input is set, and the
   check belongs across the whole workflow rather than at the one step a review
   noticed. Date/Author: 2026-11-19, implementation agent.
+
+- Observation: **making an oracle stricter can retire a mutation's claim
+  silently, and the mutation test is what notices.** Evidence:
+  `remove-consumer-smoke-publish-guard` was caught only because the oracle read
+  a scenario's *declared* dependency outcomes. Once the smoke was judged
+  against the graph, the scenario it named — `neither-mode` — also skipped
+  finalization, so the guard was false before the removed clause was consulted.
+  The contract still reported nothing after the regression was reintroduced,
+  and the hosted `build-test` run was the first place it showed. Impact: when a
+  reachability oracle starts reading resolved results, any clause that the
+  resolved graph makes redundant needs a check of its own, driven by the two
+  contexts that differ in that clause alone. Date/Author: 2026-11-19,
+  implementation agent.
 
 ## Decision log
 

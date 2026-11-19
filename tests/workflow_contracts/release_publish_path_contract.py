@@ -37,6 +37,7 @@ from release_publish_path_consumer_smoke import (
     CONSUMER_SMOKE_ACTION_PATH,
     ConsumerSmokeCheck,
     check_consumer_smoke,
+    check_smoke_publication_guard,
 )
 from release_publish_path_context import ScenarioRun, needs_context
 from release_publish_path_finalization import check_finalize_release
@@ -348,6 +349,7 @@ def check_release_publish_path(
     outputs_by_mode = {
         mode: metadata_outputs(release, mode, violations) for mode in MODE_OUTPUTS
     }
+    check_smoke_publication_guard(release, outputs_by_mode, violations)
     check_artifact_names(
         release,
         build,

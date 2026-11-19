@@ -86,7 +86,6 @@ class ConsumerSmokeCheck:
 
 def _needs_context(
     job: dict[str, object],
-    scenario: Scenario,
     outputs: dict[str, str],
     results: dict[str, str],
 ) -> dict[str, object]:
@@ -121,6 +120,68 @@ def _should_smoke(scenario: Scenario, results: dict[str, str]) -> bool:
     )
 
 
+#: The release modes whose metadata outputs set the smoke's guard, each paired
+#: with whether a run that reports them must smoke. Only the mode differs
+#: between the two, so a guard that stopped reading it agrees with one of them.
+PUBLICATION_GUARD_CASES = (
+    ("publish", True),
+    ("neither", False),
+)
+
+
+def check_smoke_publication_guard(
+    release: dict[str, object],
+    outputs_by_mode: dict[str, dict[str, str]],
+    violations: list[str],
+) -> None:
+    """Require the guard to admit a publishing run and refuse a rehearsal.
+
+    Every dependency is reported successful and the run is not cancelled, so no
+    clause except the mode predicate can decide the result. This is the one
+    property the scenario table cannot reach: a run that publishes nothing also
+    skips ``finalize-github-release``, whose success the guard already requires,
+    so the graph makes the guard false whether or not it reads the mode. Without
+    this check the predicate could be deleted and every scenario would still
+    agree with the oracle.
+
+    The check runs once rather than per scenario, because it compares two modes
+    that no single scenario reports.
+    """
+    jobs = release.get("jobs")
+    job = jobs.get(CONSUMER_SMOKE_JOB) if isinstance(jobs, dict) else None
+    if not isinstance(job, dict):
+        # A workflow with no smoke job is refused once per scenario by
+        # ``check_consumer_smoke``; there is no guard here to judge, and
+        # reporting it again would name this check rather than that absence.
+        return
+    succeeded = dict.fromkeys(job_names(job.get("needs", [])) or [], "success")
+    for mode, expected in PUBLICATION_GUARD_CASES:
+        outputs = outputs_by_mode[mode]
+        contexts: dict[str, object] = {
+            "needs": _needs_context(job, outputs, succeeded),
+            "status": {"cancelled": False},
+            "github": {"event": {"action": ""}},
+        }
+        actual = evaluate_field(
+            job.get("if", True),
+            FieldEvaluation(
+                contexts=contexts,
+                violations=violations,
+                label=f"{CONSUMER_SMOKE_JOB}.guard",
+                job_level=True,
+            ),
+        )
+        if actual is MISSING:
+            return
+        runs = bool(actual)
+        if runs != expected:
+            violations.append(
+                f"{CONSUMER_SMOKE_JOB}.guard: with should_publish="
+                f"{outputs.get('should_publish')!r} the guard must resolve to "
+                f"{expected!r}, got {runs!r}"
+            )
+
+
 def check_consumer_smoke(check: ConsumerSmokeCheck) -> None:
     """Verify the job's shape and its reachability for one scenario."""
     job = smoke_job(check.release, check.violations)
@@ -135,7 +196,7 @@ def check_consumer_smoke(check: ConsumerSmokeCheck) -> None:
     check_smoke_compilation(job, check.action, check.violations)
     check_smoke_failure_visibility(job, check.action, check.violations)
     contexts: dict[str, object] = {
-        "needs": _needs_context(job, check.scenario, check.outputs, check.results),
+        "needs": _needs_context(job, check.outputs, check.results),
         "status": {"cancelled": check.scenario.cancelled},
         "github": {"event": {"action": check.scenario.event_action}},
     }
@@ -182,6 +243,7 @@ __all__ = [
     "check_smoke_failure_visibility",
     "check_smoke_needs",
     "check_smoke_privileges",
+    "check_smoke_publication_guard",
     "smoke_job",
     "steps_of",
 ]
