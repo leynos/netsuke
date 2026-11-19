@@ -11534,9 +11534,10 @@ single-component paths listed in `BOOLEAN_PATHS` (`verbose`, `json`,
 `fetch_default_deny`, `trust_project_fetch_policy`, and `no_input`) are parsed
 by `parse_environment_bool`, which accepts exactly `true`, `false`, `1`, and
 `0`, with no trimming and no case folding. Every other path keeps Figment's
-ordinary scalar parsing, and Figment trims surrounding whitespace from an
-unquoted environment scalar but not from a quoted file value. The decision is
-recorded in
+ordinary value parsing, which recognizes `true`/`false` as Booleans, integers
+as numbers, serialized JSON arrays as arrays, and everything else as strings,
+and Figment trims surrounding whitespace from an unquoted environment scalar
+but not from a quoted file value. The decision is recorded in
 [ADR-0083](adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md).
 
 `explicit_config_path_with_env` is the crate-internal seam for explicit
