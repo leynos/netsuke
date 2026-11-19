@@ -54,6 +54,11 @@ whitespace, and a `)` that closes a substitution immediately before `#` fails
 closed when the substitution source contains the `case` reserved word. The
 POSIX comment and heredoc boundary amendment below states the contract.
 
+Amended on 2026-11-18 for issue #1000. A closing backtick now restores its
+saved quote context into the `$()` or script region that opened it, and nesting
+that would leave that region closed is rejected. The addendum below states the
+ownership rule.
+
 ## Date
 
 2026-09-19
@@ -634,3 +639,59 @@ apart on it. The split keeps each module within the workspace's 400-line limit.
 Regressions run through both traversals in
 `src/ir/cmd_interpolate/tests/heredoc/` and through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
+
+## Addendum — 2026-11-18: Backtick quote state belongs to its opening region (#1000)
+
+A legacy backtick command substitution saves the quote context of the shell
+region that opened it. `ScriptSubstitutionTraversal` records that region's
+`$()` frame depth beside the saved context and restores through the region the
+depth selects, rather than writing the saved context into the script-level
+field. A backtick at script level records depth zero and still restores the
+script level; a backtick opened inside a `$( … )` restores that substitution's
+own quote state, including when the backtick body contains nested quotes.
+
+An open backtick body is its own shell region, so the traversal tracks the
+body's own quoting there. A `)` inside a single- or double-quoted part of the
+body is literal data, as the shell reads it; only an unquoted `)` may close a
+`$()` frame. A `$()` opened inside the body is then the innermost region and
+carries its own quoting until it closes, after which the body's context applies
+again. The body's quoting is discarded when the closing backtick restores the
+region that opened it.
+
+Because the shell locates the closing backtick before it parses the body, a
+backslash inside the body protects a following dollar sign, backtick, or
+backslash even where the body's own quoting would make a backslash literal. An
+escaped backtick therefore does not end the region. Every other escape belongs
+to the body's own quoting: in unquoted body text a backslash makes the next
+character literal, so an escaped `)` cannot close a frame, and in the body's
+single quotes a backslash has no special meaning, so it cannot swallow the
+quote that closes them. A backslash before a newline continues the line in
+unquoted and double-quoted body text, so that newline still belongs to the open
+command line and must not start a heredoc body queued earlier on it. A literal
+newline in the body's single quotes is body data for the same reason: the shell
+begins a queued heredoc only at the newline token that ends the declaring
+command, so no newline inside a backtick body, nor inside quoted script text,
+starts one.
+
+Nesting that would leave the saved context without its owner fails closed with
+`IrGenError::InvalidCommand`; it is not approximated. Two shapes are rejected:
+an unquoted `)` that would close the `$()` region owning an open backtick, and
+a closing backtick seen while an inner `$()` frame is still open. Before this
+amendment the first shape popped the frame, so the later backtick restored into
+the script-level field. A marker after the substitution could then take the
+double-quoted path encoding while the shell read it unquoted, leaving a
+semicolon in a caller-supplied path executable.
+
+This is distinct from the #629 marker invariant recorded under *Backtick
+handling is two mechanisms at two different strengths*. #629 rejects a marker
+inside a backtick or `$( … )`; this addendum fixes where the region state is
+restored after that protected region closes. Supported syntax is unchanged: a
+`$()` opened inside a backtick remains valid while it closes first, and
+top-level backticks still restore the script level.
+
+The Bash route decodes the same POSIX script and runs it under `/bin/sh`, so
+the rule covers both routes. PowerShell does not use
+`ScriptSubstitutionTraversal` and is outside this change. The execution
+regressions are Unix-only, use `/bin/sh`, and require Ninja; Linux continuous
+integration sets `NETSUKE_REQUIRE_NINJA=1`, so a missing Ninja fails the run
+instead of skipping the case.

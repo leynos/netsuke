@@ -10,10 +10,13 @@ use super::{
     posix_lexical::{PosixCharacter, PosixLexicalState, SourceChar, backslash_escapes_marker},
 };
 
+mod backticks;
+
 mod delimiters;
 
 mod heredoc;
 
+use backticks::{BacktickRegion, toggle_quote_context};
 use delimiters::ScriptCommandSubstitution;
 
 /// Track quote context while interpolating one POSIX or Bash script.
@@ -29,7 +32,7 @@ pub(super) struct ScriptSubstitutionTraversal<'template, 'bindings> {
     /// Record the active ordinary POSIX shell quoting mode.
     quote_context: ShellQuoteContext,
     /// Restore the outer quoting mode after a backtick command substitution.
-    backtick_outer_context: Option<ShellQuoteContext>,
+    backtick_region: Option<BacktickRegion>,
     /// Track POSIX comments and heredocs whose text must remain lexically inert.
     posix_lexical: PosixLexicalState,
     /// Preserve a character escaped by a preceding backslash.
@@ -40,7 +43,7 @@ pub(super) struct ScriptSubstitutionTraversal<'template, 'bindings> {
 
 /// Describe the quoting mode that controls placeholder substitution.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum ShellQuoteContext {
+pub(super) enum ShellQuoteContext {
     /// Permit direct word-quoted substitution.
     Unquoted,
     /// Use the binding encoded for an existing POSIX single-quoted literal.
@@ -62,7 +65,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             bindings,
             output: String::with_capacity(template.len()),
             quote_context: ShellQuoteContext::Unquoted,
-            backtick_outer_context: None,
+            backtick_region: None,
             posix_lexical: PosixLexicalState::new(),
             is_escaped: false,
             command_substitutions: Vec::new(),
@@ -84,7 +87,12 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
 
         let substitution = find_script_substitution(self.chars, pos);
         let next = self.append_substitution_or_character(pos, ch, substitution)?;
-        if ch == '\n' {
+        // Only a newline that ends the command line starts a queued heredoc.
+        // Quoted text and a backtick body do not end it: the shell starts the
+        // body at the newline token after the declaring command, and a newline
+        // inside those regions belongs to their own text, so starting the body
+        // there would copy the rest of the command line as inert heredoc data.
+        if ch == '\n' && self.is_plain_script_text() {
             self.posix_lexical.begin_pending_heredoc_after_newline();
         }
         Ok(next)
@@ -163,7 +171,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch)? {
             return Ok(Some(next));
         }
-        if self.update_quote_context(ch) {
+        if self.update_quote_context(ch)? {
             self.output.push(ch);
             return Ok(Some(pos + 1));
         }
@@ -192,7 +200,24 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     /// Returns an invalid-command error when the escape would modify a marker
     /// lowered immediately after it.
     fn starts_escape(&self, pos: usize, ch: char) -> Result<bool, IrGenError> {
-        if ch != '\\' || self.active_quote_context() == ShellQuoteContext::SingleQuoted {
+        if ch != '\\' {
+            return Ok(false);
+        }
+        if let Some(region) = self.backtick_region
+            && self.command_substitutions.len() == region.owner_depth
+        {
+            let escapes = region.escapes_body_character(self.chars, pos);
+            // An escape that would consume the first character of a marker
+            // must be rejected here: the marker scan starts at that character,
+            // so letting the escape win would copy the rest of the internal
+            // token into the lowered script instead of failing closed. A body
+            // escape that is not taken leaves the marker to the ordinary scan.
+            if escapes && backslash_escapes_marker(self.chars, pos, false, None) {
+                return Err(invalid_command_error(self.template.to_owned()));
+            }
+            return Ok(escapes);
+        }
+        if self.active_quote_context() == ShellQuoteContext::SingleQuoted {
             return Ok(false);
         }
         if backslash_escapes_marker(self.chars, pos, false, None) {
@@ -202,36 +227,52 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.
-    fn update_quote_context(&mut self, ch: char) -> bool {
-        if let Some(outer_context) = self.backtick_outer_context {
-            if ch == '`' {
-                self.quote_context = outer_context;
-                self.backtick_outer_context = None;
-                return true;
-            }
-            return false;
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a closing backtick is reached at a
+    /// different `$()` depth from the one that opened it. Its saved context then
+    /// has no owning region left to restore, and guessing one would describe the
+    /// script-level quotes from state that came from another region.
+    fn update_quote_context(&mut self, ch: char) -> Result<bool, IrGenError> {
+        if let Some(region) = self.backtick_region
+            && ch == '`'
+        {
+            self.close_backtick_region(region)?;
+            return Ok(true);
+        }
+        if let Some(region) = self.backtick_region.as_mut()
+            && self.command_substitutions.len() == region.owner_depth
+        {
+            return Ok(region.toggle_body_quote(ch));
         }
 
+        let owner_depth = self.command_substitutions.len();
         let quote_context = self.active_quote_context_mut();
-        match (*quote_context, ch) {
-            (ShellQuoteContext::Unquoted, '\'') => {
-                *quote_context = ShellQuoteContext::SingleQuoted;
-                true
-            }
-            (ShellQuoteContext::Unquoted, '"') => {
-                *quote_context = ShellQuoteContext::DoubleQuoted;
-                true
-            }
-            (ShellQuoteContext::SingleQuoted, '\'') | (ShellQuoteContext::DoubleQuoted, '"') => {
-                *quote_context = ShellQuoteContext::Unquoted;
-                true
-            }
-            (ShellQuoteContext::Unquoted | ShellQuoteContext::DoubleQuoted, '`') => {
-                self.backtick_outer_context = Some(*quote_context);
-                true
-            }
-            _ => false,
+        if toggle_quote_context(quote_context, ch) {
+            return Ok(true);
         }
+        if ch == '`' && *quote_context != ShellQuoteContext::SingleQuoted {
+            self.backtick_region = Some(BacktickRegion::new(*quote_context, owner_depth));
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    /// Restore a closing backtick's saved quote context into its owning region.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when the active `$()` depth no longer
+    /// matches the depth recorded at the opening backtick, which means a frame
+    /// opened or closed on the wrong side of the backtick.
+    fn close_backtick_region(&mut self, region: BacktickRegion) -> Result<(), IrGenError> {
+        if self.command_substitutions.len() == region.owner_depth {
+            *self.active_quote_context_mut() = region.outer_context;
+            self.backtick_region = None;
+            return Ok(());
+        }
+        Err(invalid_command_error(self.template.to_owned()))
     }
 
     /// Append a safe replacement or reject a placeholder in a protected region.
@@ -245,7 +286,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.output.push(ch);
             return Ok(pos + 1);
         };
-        if self.backtick_outer_context.is_some() || self.is_in_command_substitution() {
+        if self.backtick_region.is_some() || self.is_in_command_substitution() {
             return Err(invalid_command_error(self.template.to_owned()));
         }
         let context = match self.active_quote_context() {
@@ -270,8 +311,18 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             .is_some_and(delimiters::ScriptCommandSubstitution::is_arithmetic)
     }
 
-    /// Return the quote context of the innermost command substitution when active.
+    /// Return the quote context that governs the next source character.
+    ///
+    /// An open backtick body governs only while no `$()` frame has been opened
+    /// inside it: once one is, that frame is the innermost region and carries
+    /// its own quoting. The context the backtick will restore is recorded
+    /// separately and is not consulted until the closing backtick.
     fn active_quote_context(&self) -> ShellQuoteContext {
+        if let Some(region) = self.backtick_region
+            && self.command_substitutions.len() == region.owner_depth
+        {
+            return region.body_context;
+        }
         self.command_substitutions
             .last()
             .map_or(self.quote_context, |substitution| {

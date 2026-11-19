@@ -9210,6 +9210,36 @@ split out for the same reason: it holds the quote-context queries and updates,
 each of which has to name the innermost active shell region rather than the
 traversal's own state, because a substitution carries its own quote context.
 
+`script_substitution/backticks.rs` owns the backtick region as a private record
+of the saved quote context, the `$()` frame depth that opened it, and the
+body's own quote context, together with the escape rule the body obeys. The
+closing backtick restores the saved context through the region the recorded
+depth selects, so a script-level backtick writes the script field while a
+backtick inside `$( … )` writes that substitution's field, and the body context
+is discarded. Because the body is its own shell region, its quoting decides
+delimiter classification while the backtick is open, so a quoted `)` inside the
+body stays literal and only an unquoted one closes a frame. The body context
+applies only while no `$()` frame is open inside it: once one is, the frame's
+own quoting governs, and the body context resumes when that frame closes.
+Inside the body a backslash protects a following dollar sign, backtick, or
+backslash before the body's quote state is consulted, because the shell finds
+the closing backtick before it parses the body's quotes. Every other escape
+follows the body's own quoting: in unquoted body text a backslash makes the
+next character literal, so an escaped `)` never reaches the delimiter check,
+and in the body's double quotes it also protects the closing quote. A backslash
+before a newline continues the line in both of those contexts, so the newline
+is consumed before the pending-heredoc check runs. In the body's single quotes
+a backslash has no effect, so it cannot swallow the quote that closes them. A
+newline anywhere inside the body, quoted or not, leaves a queued heredoc
+pending: `append_substitution_at_position` starts the body only when the
+character is plain script text, so quoted script text and backtick bodies
+cannot start it before the shell would. `script_substitution/delimiters.rs`
+rejects an unquoted `)` that would pop the region owning an open backtick, and
+the closing backtick itself rejects a depth that no longer matches its owner;
+both produce `IrGenError::InvalidCommand`. The command traversal in
+`substitution/posix.rs` keeps its boolean `in_backticks` toggle instead and
+does not share this record, so command lowering is unchanged.
+
 Heredoc declaration handling is also shared rather than duplicated: the helper
 decides what a declaration is, and each traversal supplies only the context
 around it. `substitution/posix.rs` performs that step for
@@ -9217,13 +9247,13 @@ around it. `substitution/posix.rs` performs that step for
 the same for the `script:` traversal, which differs only in which quote context
 counts as plain text and in how it reports "not a declaration" to its caller.
 `script_substitution.rs` is now `script_substitution/mod.rs`; that split, like
-the sibling `delimiters.rs`, keeps each file inside the 400-line limit without
-introducing a second shell parser. The tests follow the same shape:
-`src/ir/cmd_interpolate/tests/heredoc/` is a directory module holding the
-shared assertions in `support.rs` and the delimiter, expansion, and property
-test groups, and `tests/ninja_dollar_escaping_tests/heredoc.rs` checks the same
-contract end to end by running the generated Ninja build through a real child
-shell.
+the sibling `delimiters.rs` and `backticks.rs`, keeps each file inside the
+400-line limit without introducing a second shell parser. The tests follow the
+same shape: `src/ir/cmd_interpolate/tests/heredoc/` is a directory module
+holding the shared assertions in `support.rs` and the delimiter, expansion, and
+property test groups, and `tests/ninja_dollar_escaping_tests/heredoc.rs` checks
+the same contract end to end by running the generated Ninja build through a
+real child shell.
 
 The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. Its
