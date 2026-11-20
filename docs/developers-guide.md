@@ -9966,26 +9966,30 @@ the next one in command position.
 Bash also keeps command position open inside a compound command's prefix, so
 the tracker models the two word forms it can read: an unquoted option word after
 `time` (`time -p case ...`) and a name after `coproc`
-(`coproc jobs case ...`). A quoted or expanded word in either slot is opaque
-because quoting hides its text, and so is a command prefixed by an assignment
-or a redirection. A `case` word seen where the tracker expected an argument is
-recorded, and `reject_unplaced_case` in `command_substitution.rs` fails closed
-once the substitution's source also holds a whole-word `in` before the closer
-and a Netsuke marker follows that closer. Both conditions matter: the shell
-requires `in` before the first pattern terminator, and a later marker is what
-makes the quote-context decision observable at all. Both keywords are matched
-as Bash reads them: a backslash-newline pair is deleted before parsing, so `c`
-followed by a continuation and `ase` still spells `case`. The check
-over-approximates, so argument data such as `grep case in file` followed by a
-later marker is rejected too, and so is a `case` behind an assignment or
-redirection prefix. The shell reads the latter as a syntax error, so the
-alternative is not a silently different context. An `esac` also closes only the
-construct open at its own depth, so a pattern spelled `esac` does not end an
-outer case. The tracker takes comments from the traversal rather than inferring
-them from `#`, because comment text is copied verbatim and is never offered to
-it: the traversal reports the comment's start and the newline that ends it, so a
-`case` on the line after a comment still opens its construct. PowerShell has no
-`case` patterns and keeps its unquoted-only rule. The regressions live in
+(`coproc jobs case ...`). Bash still reads a following `esac` as the terminator
+when the word after `coproc` is the coprocess's command rather than a name:
+`case x in x) coproc printf esac` is accepted, and the `)` after it closes the
+substitution, so the tracker keeps command position open there too. A quoted or
+expanded word in either slot is opaque because quoting hides its text, and so
+is a command prefixed by an assignment or a redirection. A `case` word seen
+where the tracker expected an argument is recorded, and `reject_unplaced_case`
+in `command_substitution.rs` fails closed once the substitution's source also
+holds a whole-word `in` before the closer and a Netsuke marker follows that
+closer. Both conditions matter: the shell requires `in` before the first
+pattern terminator, and a later marker is what makes the quote-context decision
+observable at all. Both keywords are matched as Bash reads them: a
+backslash-newline pair is deleted before parsing, so `c` followed by a
+continuation and `ase` still spells `case`. The check over-approximates, so
+argument data such as `grep case in file` followed by a later marker is
+rejected too, and so is a `case` behind an assignment or redirection prefix.
+The shell reads the latter as a syntax error, so the alternative is not a
+silently different context. An `esac` also closes only the construct open at
+its own depth, so a pattern spelled `esac` does not end an outer case. The
+tracker takes comments from the traversal rather than inferring them from `#`,
+because comment text is copied verbatim and is never offered to it: the
+traversal reports the comment's start and the newline that ends it, so a `case`
+on the line after a comment still opens its construct. PowerShell has no `case`
+patterns and keeps its unquoted-only rule. The regressions live in
 `src/ir/cmd_interpolate/posix_lexical/tests/case/`: `boundary.rs` covers the
 `)#` ambiguity, the operator-versus-word distinction, and the brace-group,
 `time`-option, and `coproc`-name command positions, and `tracker.rs` covers

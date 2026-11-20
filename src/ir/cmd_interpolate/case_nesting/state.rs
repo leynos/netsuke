@@ -72,7 +72,9 @@ pub(super) enum PrefixSlot {
 ///
 /// The roles are the transition labels of the tracker's small state machine, so
 /// classifying and applying stay separate: each new command position adds one
-/// variant here, one arm in [`CaseNesting::apply_role`], and one regression.
+/// variant here, one arm in
+/// [`CaseNesting::apply_role`](super::CaseNesting::apply_role), and one
+/// regression.
 #[derive(Clone, Copy)]
 pub(super) enum WordRole {
     /// A `case` keyword in command position: open a construct.

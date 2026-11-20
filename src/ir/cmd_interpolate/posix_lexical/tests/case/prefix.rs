@@ -51,6 +51,29 @@ fn case_behind_a_coproc_name_keeps_the_substitution_open() {
     }
 }
 
+// Verify a `coproc` simple command's `esac` still ends the case.
+//
+// When no compound command follows `coproc`, the next word is that coprocess's
+// command rather than a name, but Bash still reads the following `esac` as the
+// case terminator: `case x in x) coproc printf esac` is accepted, and the `)`
+// that follows closes the substitution. Keeping command position open after the
+// command word is therefore what matches the shell here, and the marker after
+// the substitution must lower as ordinary outer text.
+#[test]
+fn coproc_simple_command_keeps_the_case_terminator_a_keyword() {
+    let template = format!("echo \"$(case x in x) coproc printf esac)\" {OUTS_TOKEN}");
+    let expected = "echo \"$(case x in x) coproc printf esac)\" output";
+
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(&template, &bash_bindings())
+                .expect("Bash accepts this case and closes the substitution after it"),
+            expected,
+            "the marker after the real closer must lower to its path"
+        );
+    }
+}
+
 // Verify a quoted `coproc` name cannot hide a `case` from the guard.
 //
 // Bash accepts a quoted name, and a quoted word is not word data, so the
