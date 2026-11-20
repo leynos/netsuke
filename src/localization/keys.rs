@@ -128,6 +128,7 @@ define_keys! {
     IR_ACTION_SERIALISATION => "ir.action_serialisation",
     IR_INVALID_COMMAND => "ir.invalid_command",
     IR_AMBIGUOUS_SUBSTITUTION_BOUNDARY => "ir.ambiguous_substitution_boundary",
+    IR_UNFINISHED_POWER_SHELL_REGION => "ir.unfinished_power_shell_region",
     NINJA_GEN_MISSING_ACTION => "ninja_gen.missing_action",
     NINJA_GEN_CONSOLE_DEPENDENCY_ONLY => "ninja_gen.console_dependency_only",
     NINJA_GEN_CONSOLE_POOL_CONFLICT => "ninja_gen.console_pool_conflict",

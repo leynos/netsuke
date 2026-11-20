@@ -130,6 +130,12 @@
   Linux hosts without `openat2` the target was dereferenced and read despite
   `follow_symlinks: false`. Both the policy and the platform flag now refuse
   the link (CWE-59) ([#1009](https://github.com/leynos/netsuke/issues/1009))
+- Validate a shared PowerShell command list as the single script PowerShell
+  parses. An entry that leaves a quoted string, here-string, block comment, or
+  `$()` substitution open, or that ends in a backtick escape, is now rejected
+  instead of letting the next entry's path literal be reclassified as
+  executable syntax (CWE-78)
+  ([#993](https://github.com/leynos/netsuke/issues/993))
 
 <!-- markdownlint-disable-next-line MD024 -->
 ### Fixed

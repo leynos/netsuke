@@ -207,6 +207,7 @@ ir.circular_dependency = Chaidh eisimeileachd chuairteach a lorg: { $cycle }.
 ir.action_serialisation = Cha b' urrainnear an gnìomh a shreathachadh: { $details }.
 ir.invalid_command = Cur a-steach mì-dhligheach san àithne: { $reason }.
 ir.ambiguous_substitution_boundary = Crìoch mhì-chinnteach air ionadachadh àithne aig caractar { $position }; dealaich bratach dùnaidh an ionadachaidh bhon '#' a leanas.
+ir.unfinished_power_shell_region = Tha inntrig { $entry } liosta òrdughan PowerShell a' crìochnachadh am broinn { $region }; dùin e, co-aonaich an inntrig leis an ath fhear, no suidhich 'command_isolation: isolated' airson liosta nan òrdughan.
 
 # Mearachdan dèanamh Ninja.
 ninja_gen.missing_action = Tha an gnìomh “{ $id }” air a bheil oir togail a' toirt iomradh a dhìth.

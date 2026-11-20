@@ -2805,18 +2805,24 @@ Netsuke is PowerShell. The second step invokes:
 
 The fixture exercises the Windows PowerShell legacy-recipe contract, including
 target discovery, scalar and script recipes, ordered-list state and failure,
-path quoting, and the large-recipe response-file transport. It also proves the
-trusted interpreter binding: `powershell-paths.ps1` compiles decoy
-`powershell.exe` programs, places them in the current directory and first on
-`PATH`, and requires both a small and an oversize recipe to produce their real
-output without writing the decoy marker. `bash.ps1` requires `generate` to fail
-with `PATH contains no bash.exe` and to leave no plan behind when Bash is
-selected without a runtime. Because `Add-Type` rejects
-`-OutputType ConsoleApplication` under PowerShell 7.1 and later,
-`powershell-paths.ps1` compiles the decoys with the .NET Framework C# compiler,
-`%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, falling back to
-the 32-bit `Framework` directory. The native smoke run therefore needs a
-Windows host carrying that compiler, which the Windows images provide; the
+path quoting, the shared-list boundary check, and the large-recipe
+response-file transport. A positive target places a closed here-string in the
+first entry and an ordinary marker in the second, proving the marker is still
+interpolated, while a separate manifest with an open single quote in entry one
+must fail with the new interpolation diagnostic and must not create the `pwned`
+sentinel. The native rejection check is Windows-only because it requires the
+real `powershell.exe`; the equivalent lowering and property regressions run on
+every platform. It also proves the trusted interpreter binding:
+`powershell-paths.ps1` compiles decoy `powershell.exe` programs, places them in
+the current directory and first on `PATH`, and requires both a small and an
+oversize recipe to produce their real output without writing the decoy marker.
+`bash.ps1` requires `generate` to fail with `PATH contains no bash.exe` and to
+leave no plan behind when Bash is selected without a runtime. Because
+`Add-Type` rejects `-OutputType ConsoleApplication` under PowerShell 7.1 and
+later, `powershell-paths.ps1` compiles the decoys with the .NET Framework C#
+compiler, `%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, falling
+back to the 32-bit `Framework` directory. The native smoke run therefore needs
+a Windows host carrying that compiler, which the Windows images provide; the
 `windows_recipe_interpreter_binding_tests` integration test covers the same
 decoys through `compile_rust_helper` on the CI image and skips the Ninja
 execution step when `ninja.exe` is absent unless `NETSUKE_REQUIRE_NINJA=1`.
@@ -9861,18 +9867,24 @@ its `tail` so a construct that closes later still checks the text that follows.
 
 The `src/ir/cmd_interpolate/substitution/powershell/` module groups focused
 PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
-`lexical/comments.rs` tracks fail-closed comment state, `stop_parsing.rs`
-tracks raw native-command arguments, and `tokens/mod.rs` recognizes the token
-boundaries and syntax used by those scanners. The private
-`tokens/member_expressions.rs` helper recognizes variable roots through member
-and index chains; keep it within the PowerShell token scanner rather than
-reusing it as a general expression parser. They share a shell-specific boundary
-but keep distinct state responsibilities. `PowerShellSourceCharacter` binds a
-Unicode-scalar index to the borrowed source buffer and provides checked
-lookaround only within the PowerShell scanner; it is not a shared shell
-abstraction. The sibling `src/ir/cmd_interpolate/command_substitution.rs` owns
-the local quote and parenthesis state needed to keep protected `$()` bodies
-isolated.
+`lexical/comments.rs` tracks fail-closed comment state,
+`lexical/block_comments.rs` tracks nestable block-comment depth,
+`lexical/boundary.rs` describes the region one entry leaves for the next,
+`stop_parsing.rs` tracks raw native-command arguments, and `tokens/mod.rs`
+recognizes the token boundaries and syntax used by those scanners.
+`substitution/shared_list.rs` owns the shared-list entry API: it interpolates
+one entry, rejects a region left open across the entry boundary, and carries
+the sticky fail-closed classification forward. Keep that entry API as the only
+way lowering scans a shared PowerShell list, so a future caller cannot
+reintroduce per-entry isolation. The private `tokens/member_expressions.rs`
+helper recognizes variable roots through member and index chains; keep it
+within the PowerShell token scanner rather than reusing it as a general
+expression parser. They share a shell-specific boundary but keep distinct state
+responsibilities. `PowerShellSourceCharacter` binds a Unicode-scalar index to
+the borrowed source buffer and provides checked lookaround only within the
+PowerShell scanner; it is not a shared shell abstraction. The sibling
+`src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
+parenthesis state needed to keep protected `$()` bodies isolated.
 
 `src/manifest/render/mod.rs` may emit the internal tokens while rendering the
 only accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell
@@ -10001,6 +10013,20 @@ legitimately contain heredocs and other syntax `shlex` cannot model. The
 odd-backtick and guard properties are complementary: one proves rejection of
 odd substituted backtick counts, while the other proves that the guard's
 success or failure and returned command agree with the substituted command.
+
+A shared PowerShell `command:` list is validated as one script rather than
+entry by entry. PowerShell parses each entry where its predecessor stopped, so
+a shared-list entry must end at a neutral boundary.
+`src/ir/from_manifest/support/command_resolution.rs` walks the entries in
+declaration order through `interpolate_shared_power_shell_entry` in
+`src/ir/cmd_interpolate/substitution/shared_list.rs`. An entry that leaves a
+single- or double-quoted string, here-string, block comment, or `$()`
+substitution open, or that ends in a backtick escape, is rejected with a
+localized diagnostic naming the entry and the region. The traversal also
+carries the sticky fail-closed classification forward, so a later marker stays
+protected after earlier scanner-sensitive text. Scalar commands, `isolated`
+lists, and POSIX or Bash lists keep their existing per-entry handling; the
+boundary check applies only to a shared PowerShell list.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies

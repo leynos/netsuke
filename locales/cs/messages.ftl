@@ -207,6 +207,7 @@ ir.circular_dependency = Byla zjištěna cyklická závislost: { $cycle }.
 ir.action_serialisation = Akci se nepodařilo serializovat: { $details }.
 ir.invalid_command = Neplatné vložení v příkazu: { $reason }.
 ir.ambiguous_substitution_boundary = Nejednoznačná hranice substituce příkazu na znaku { $position }; oddělte uzavírací závorku substituce od následujícího '#'.
+ir.unfinished_power_shell_region = Položka { $entry } seznamu příkazů PowerShell končí uvnitř { $region }; uzavřete ji, slučte položku s následující, nebo pro seznam příkazů nastavte 'command_isolation: isolated'.
 
 # Chyby při generování souborů Ninja.
 ninja_gen.missing_action = Chybí akce „{ $id }“, na kterou odkazuje hrana sestavení.

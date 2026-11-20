@@ -13,15 +13,12 @@ use crate::hasher::ActionHasher;
 use crate::localization::{self, keys};
 use crate::recipe_shell::RecipeShell;
 
+use self::command_resolution::{resolve_command, resolve_script};
 #[cfg(kani)]
 use super::super::graph::EdgeId;
-use super::super::{
-    cmd_interpolate::{
-        CommandBindings, interpolate_command_with_bindings, interpolate_script_with_bindings,
-    },
-    graph::{Action, BuildEdge, BuildGraph, IrGenError, IrHashMap},
-};
+use super::super::graph::{Action, BuildEdge, BuildGraph, IrGenError, IrHashMap};
 
+mod command_resolution;
 mod sort_utils;
 
 /// The `{{ ins }}`/`{{ outs }}` substitution views for one action under construction.
@@ -82,7 +79,7 @@ fn resolve_recipe(recipe: Recipe, bindings: ActionBindings<'_>) -> Result<Recipe
         Recipe::Command {
             command, isolation, ..
         } => Ok(Recipe::Command {
-            command: resolve_command(command, bindings)?,
+            command: resolve_command(command, bindings, isolation)?,
             isolation,
         }),
         Recipe::Script { script } => Ok(Recipe::Script {
@@ -90,35 +87,6 @@ fn resolve_recipe(recipe: Recipe, bindings: ActionBindings<'_>) -> Result<Recipe
         }),
         rule @ Recipe::Rule { .. } => Ok(rule),
     }
-}
-
-/// Resolves input and output bindings in every command representation.
-fn resolve_command(
-    command: StringOrList,
-    bindings: ActionBindings<'_>,
-) -> Result<StringOrList, IrGenError> {
-    let command_bindings = CommandBindings::new(bindings.inputs, bindings.outputs, bindings.shell);
-    match command {
-        StringOrList::String(scalar_command) => Ok(StringOrList::String(
-            interpolate_command_with_bindings(&scalar_command, &command_bindings)?,
-        )),
-        StringOrList::List(items) => items
-            .into_iter()
-            .map(|item| interpolate_command_with_bindings(&item, &command_bindings))
-            .collect::<Result<Vec<_>, _>>()
-            .map(StringOrList::List),
-        // An empty command list cannot deserialize (the manifest parser
-        // rejects it), so nothing needs interpolating here.
-        StringOrList::Empty => Ok(StringOrList::Empty),
-    }
-}
-
-/// Resolves input and output bindings in a script without interpreting shell syntax.
-fn resolve_script(script: &str, bindings: ActionBindings<'_>) -> Result<String, IrGenError> {
-    interpolate_script_with_bindings(
-        script,
-        &CommandBindings::new(bindings.inputs, bindings.outputs, bindings.shell),
-    )
 }
 
 /// Report duplicate outputs already known or repeated within one target.

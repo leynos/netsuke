@@ -35,6 +35,9 @@ mod from_manifest;
 mod graph;
 
 pub use cmd_interpolate::{INS_TOKEN, OUTS_TOKEN};
+
+#[cfg(test)]
+pub(crate) use cmd_interpolate::shared_power_shell_entry_is_neutral;
 pub use graph::{
     Action, BuildEdge, BuildGraph, DependencyOrder, EdgeArena, EdgeId, EdgeOutputVisibility,
     IrGenError,

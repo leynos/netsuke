@@ -207,6 +207,7 @@ ir.circular_dependency = 循環依存を検出しました: { $cycle }。
 ir.action_serialisation = アクションを直列化できませんでした: { $details }。
 ir.invalid_command = コマンドの補間が無効です: { $reason }。
 ir.ambiguous_substitution_boundary = 文字 { $position } でコマンド置換の境界が曖昧です。置換の閉じ括弧を後続の '#' から分離してください。
+ir.unfinished_power_shell_region = PowerShell コマンドリストのエントリ { $entry } が { $region } の内部で終了しています。領域を閉じるか、次のエントリと統合するか、コマンドリストに 'command_isolation: isolated' を設定してください。
 
 # Ninja 生成のエラー。
 ninja_gen.missing_action = ビルド辺が参照するアクション「{ $id }」がありません。
