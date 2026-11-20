@@ -74,6 +74,69 @@ fn coproc_simple_command_keeps_the_case_terminator_a_keyword() {
     }
 }
 
+// Verify `esac` after `|` is pattern text, not the construct's terminator.
+//
+// Bash reads `esac` as the terminator only where a pattern would start, so a
+// `|` makes it an alternative pattern instead: `case x in x|esac)` is valid and
+// the `)` after it still terminates the pattern. A tracker that closes the
+// construct at that `esac` reads the pattern terminator as the substitution
+// closer and lowers the arm's marker for the enclosing double quotes, which is
+// the reported defect in one more spelling. The subject may itself be `esac`,
+// which must be read as header data rather than as a closer.
+#[rstest]
+#[case::subject_matches("case x in x|esac) printf %s")]
+#[case::esac_subject("case esac in x|esac) printf %s")]
+fn esac_after_a_pattern_alternative_keeps_the_substitution_open(#[case] prefix: &str) {
+    let template = format!("echo \"$({prefix} {INS_TOKEN} ;; esac)\"");
+
+    for interpolate in both_interpolators() {
+        let hostile = interpolate(&template, &hostile_bash_bindings())
+            .expect_err("a marker in the arm must stay encoded for the substitution");
+        assert!(
+            matches!(hostile, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {hostile:?}"
+        );
+        // A marker inside a substitution is refused even for a benign path, so
+        // this fails too if the construct closed at the `esac` and the marker
+        // was lowered as outer text.
+        let benign = interpolate(&template, &bash_bindings())
+            .expect_err("a marker inside the substitution must stay inside it");
+        assert!(
+            matches!(benign, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered as outer text: {benign:?}"
+        );
+    }
+}
+
+// Verify a pattern group does not hide the construct from the tracker.
+//
+// A pattern may be spelled as an extglob group, and Bash accepts `@(case)` as
+// a pattern in its own right once `extglob` is enabled: the `)` that closes the
+// group is followed by the pattern terminator. The word inside the group is
+// pattern text, so it must not open a nested construct whose deeper depth hides
+// the outer one. The group's `(` is consumed as a substitution delimiter rather
+// than word data, which also leaves the keyword outside command position, so
+// the tracker and the fail-closed guard refuse this shape together; the point
+// pinned here is that the arm's marker is never lowered as outer text.
+#[test]
+fn extglob_pattern_keeps_the_substitution_open() {
+    let template = format!("echo \"$(case x in @(case)) printf %s {INS_TOKEN} ;; esac)\"");
+    let bindings = hostile_bash_bindings();
+
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &bindings)
+            .expect_err("a marker in the arm must stay encoded for the substitution");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+        assert!(
+            interpolate(&template, &bash_bindings()).is_err(),
+            "a marker inside the substitution must stay inside it"
+        );
+    }
+}
+
 // Verify a quoted `coproc` name cannot hide a `case` from the guard.
 //
 // Bash accepts a quoted name, and a quoted word is not word data, so the

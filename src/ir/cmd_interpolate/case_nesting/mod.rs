@@ -9,11 +9,11 @@
 //! a quoted or expanded word in either slot stays opaque, and
 //! [`CaseNesting::has_unplaced_case`] reports the keyword it could not place.
 
-use super::posix_lexical::SourceChar;
-
+mod lexical;
 mod state;
 
-use state::{CaseSightings, PrefixSlot, WordRole};
+use lexical::{ends_word, is_blank, is_option_word, starts_command_after, starts_command_list};
+use state::{CaseFrame, CasePhase, CaseSightings, PrefixSlot, WordRole};
 
 /// Describe one source character offered to a substitution's `case` tracker.
 ///
@@ -58,18 +58,25 @@ impl CaseObservation {
 /// one that is checked for an ambiguous `#`, instead of the pattern terminator
 /// that merely happens to come first.
 pub(super) struct CaseNesting {
-    /// Record the parenthesis depth at which each open `case` began.
+    /// Record each open `case` construct and the part of it being read.
     ///
     /// A pattern terminator stands at the depth of the group that contains its
     /// `case`, which need not be the substitution's own outermost level, so the
-    /// depth has to travel with the construct rather than be assumed.
-    depths: Vec<usize>,
+    /// depth has to travel with the construct rather than be assumed. The phase
+    /// travels with it too, because `esac` is a keyword at the start of a
+    /// pattern list but pattern text after `|`.
+    frames: Vec<CaseFrame>,
     /// Accumulate the current unquoted word so reserved words are recognized.
     word: String,
     /// Record that the traversal is inside an unquoted `#` comment.
     in_comment: bool,
     /// Record whether the next unquoted word would stand in command position.
     expects_command: bool,
+    /// Record the character read immediately before the current one.
+    ///
+    /// Only its role in spotting a `;;` or `;&` matters: both are two-character
+    /// operators, and the traversal offers one character at a time.
+    previous: Option<char>,
     /// Record which `case` keywords have been seen and where.
     sightings: CaseSightings,
     /// Record which compound-command prefix slot the next word may fill.
@@ -79,10 +86,11 @@ impl CaseNesting {
     /// Initialize an empty tracker for one command substitution.
     pub(super) const fn new() -> Self {
         Self {
-            depths: Vec::new(),
+            frames: Vec::new(),
             word: String::new(),
             in_comment: false,
             expects_command: true,
+            previous: None,
             sightings: CaseSightings::None,
             prefix_slot: PrefixSlot::None,
         }
@@ -114,13 +122,18 @@ impl CaseNesting {
         self.expects_command = true;
     }
 
-    /// Report whether the innermost open `case` began at `parenthesis_depth`.
+    /// Report whether any open `case` began at `parenthesis_depth`.
     ///
     /// Only a `)` at the depth of its own construct terminates that pattern: a
     /// `)` one level deeper closes a group inside the pattern, and one level
-    /// shallower closes the group that contains the whole `case`.
+    /// shallower closes the group that contains the whole `case`. Every frame
+    /// is consulted rather than only the innermost, because a construct at a
+    /// deeper depth must not hide the one whose terminator this position could
+    /// be.
     pub(super) fn is_open_at(&self, parenthesis_depth: usize) -> bool {
-        self.depths.last() == Some(&parenthesis_depth)
+        self.frames
+            .iter()
+            .any(|frame| frame.depth == parenthesis_depth)
     }
 
     /// Report whether a `case` keyword appeared anywhere in this substitution.
@@ -164,6 +177,7 @@ impl CaseNesting {
         } else {
             self.observe_word_character(observation);
         }
+        self.previous = Some(observation.ch);
     }
 
     /// End a comment when the line does, and ignore the rest of its text.
@@ -183,12 +197,37 @@ impl CaseNesting {
         }
         if ends_word(observation.ch) {
             self.finish_word(observation.parenthesis_depth);
+            self.apply_operator(observation.ch, observation.parenthesis_depth);
             if !is_blank(observation.ch) {
                 self.expects_command = starts_command_after(observation.ch);
             }
             return;
         }
         self.word.push(observation.ch);
+    }
+
+    /// Move the construct that contains this position across an operator.
+    ///
+    /// Only a construct open at this depth owns the operator: a `)` one level
+    /// deeper closes a group inside the pattern, and a `;;` inside a subshell
+    /// belongs to that subshell rather than to the outer arm.
+    fn apply_operator(&mut self, ch: char, parenthesis_depth: usize) {
+        let previous = self.previous;
+        if let Some(frame) = self.open_construct_at_mut(parenthesis_depth) {
+            frame.apply_operator(ch, previous);
+        }
+    }
+
+    /// Return the innermost open construct that began at `parenthesis_depth`.
+    ///
+    /// A construct at a deeper depth is skipped rather than assumed: the
+    /// operator belongs to the construct whose pattern list or arm contains
+    /// this position, not to whichever frame happens to be on top.
+    fn open_construct_at_mut(&mut self, parenthesis_depth: usize) -> Option<&mut CaseFrame> {
+        self.frames
+            .iter_mut()
+            .rev()
+            .find(|frame| frame.depth == parenthesis_depth)
     }
 
     /// Apply the completed word to the `case` nesting state.
@@ -217,6 +256,46 @@ impl CaseNesting {
     /// a command position open: the `case` that follows them is a reserved word
     /// even though it is not the first word of the command.
     fn classify_word(&self, parenthesis_depth: usize) -> WordRole {
+        match self.classify_within_construct(parenthesis_depth) {
+            Some(role) => role,
+            None => self.classify_command_word(parenthesis_depth),
+        }
+    }
+
+    /// Classify a word read inside the innermost construct at this depth.
+    ///
+    /// Returns `None` where no construct covers the position, so the word is
+    /// classified by the command positions that apply everywhere else. The
+    /// distinction matters because a pattern list is the one place where a
+    /// reserved word is data: `case x in esac)` closes the construct, while
+    /// `case x in x|esac)` has `esac` as an alternative pattern.
+    fn classify_within_construct(&self, parenthesis_depth: usize) -> Option<WordRole> {
+        let frame = self
+            .frames
+            .iter()
+            .rev()
+            .find(|frame| frame.depth <= parenthesis_depth)?;
+        let is_at_own_depth = frame.depth == parenthesis_depth;
+        let word = self.word.as_str();
+        match frame.phase {
+            CasePhase::Header if is_at_own_depth && word == "in" => Some(WordRole::EnterPattern),
+            CasePhase::Header => Some(WordRole::Other {
+                continues_command_list: false,
+            }),
+            CasePhase::Pattern
+                if is_at_own_depth && word == "esac" && !frame.is_after_alternative() =>
+            {
+                Some(WordRole::CloseCase)
+            }
+            CasePhase::Pattern => Some(WordRole::Other {
+                continues_command_list: false,
+            }),
+            CasePhase::Arm => None,
+        }
+    }
+
+    /// Classify a word by the command position it stands in.
+    fn classify_command_word(&self, parenthesis_depth: usize) -> WordRole {
         let is_command_position = self.expects_command;
         let word = self.word.as_str();
         if word == "case" {
@@ -259,8 +338,18 @@ impl CaseNesting {
     fn apply_role(&mut self, role: WordRole, parenthesis_depth: usize) {
         match role {
             WordRole::OpenCase => {
-                self.depths.push(parenthesis_depth);
+                self.frames.push(CaseFrame {
+                    depth: parenthesis_depth,
+                    phase: CasePhase::Header,
+                    after_alternative: false,
+                });
                 self.sightings.record_placed();
+                self.expects_command = false;
+            }
+            WordRole::EnterPattern => {
+                if let Some(frame) = self.open_construct_at_mut(parenthesis_depth) {
+                    frame.enter_pattern();
+                }
                 self.expects_command = false;
             }
             WordRole::UnplacedCase => {
@@ -268,7 +357,7 @@ impl CaseNesting {
                 self.expects_command = false;
             }
             WordRole::CloseCase => {
-                self.depths.pop();
+                self.close_construct_at(parenthesis_depth);
                 self.expects_command = false;
             }
             WordRole::TimePrefix => {
@@ -284,54 +373,20 @@ impl CaseNesting {
             } => self.expects_command = continues_command_list,
         }
     }
-}
 
-/// Report whether `ch` ends the unquoted word being accumulated.
-///
-/// A quote character ends the word as surely as a separator does: the quoted
-/// text that follows is not word data, so a reserved word cannot continue into
-/// it. Both categories are kept in one predicate because the caller treats them
-/// identically.
-const fn ends_word(ch: char) -> bool {
-    SourceChar::new(ch).is_word_terminator() || matches!(ch, '\'' | '"' | '`')
-}
-
-/// Report whether `ch` is an unquoted blank that leaves token position alone.
-const fn is_blank(ch: char) -> bool {
-    matches!(ch, ' ' | '\t')
-}
-
-/// Report whether a command may begin immediately after the operator `ch`.
-///
-/// A redirection operator introduces a filename rather than a command, so it is
-/// deliberately absent: `esac` after `>` is a filename, not a keyword.
-const fn starts_command_after(ch: char) -> bool {
-    matches!(ch, ';' | '&' | '|' | '\n' | '(' | ')')
-}
-
-/// Report whether a reserved word ends with the next word in command position.
-///
-/// These words open or continue a command list, so the following word is again
-/// a command word. Any other word completes an argument list.
-///
-/// `{` belongs here because it opens a brace-group command list in POSIX and
-/// Bash. A `case` written as the first command of such a group is a reserved
-/// word exactly as it is at the start of the substitution, so overlooking `{`
-/// would let the pattern terminator close the substitution early and lower a
-/// marker in the arm for the enclosing quote context.
-fn starts_command_list(word: &str) -> bool {
-    matches!(
-        word,
-        "if" | "then" | "else" | "elif" | "while" | "until" | "do" | "!" | "time" | "{"
-    )
-}
-
-/// Report whether `word` may be an option of a `time` command.
-///
-/// Bash accepts `-p` and `--`; any other hyphen-led word is treated as an
-/// option here too. Over-recognizing an option only keeps a command position
-/// open longer, where a mistake causes a rejection rather than a mis-encoded
-/// path.
-fn is_option_word(word: &str) -> bool {
-    word.starts_with('-') && word != "-"
+    /// Close the construct that began at `parenthesis_depth`.
+    ///
+    /// The innermost such construct is the one an `esac` terminates, which is
+    /// also the only one classification reports as closing. Removing it by
+    /// depth rather than from the top of the stack keeps a construct at a
+    /// deeper depth from being closed in its place.
+    fn close_construct_at(&mut self, parenthesis_depth: usize) {
+        if let Some(index) = self
+            .frames
+            .iter()
+            .rposition(|frame| frame.depth == parenthesis_depth)
+        {
+            self.frames.remove(index);
+        }
+    }
 }
