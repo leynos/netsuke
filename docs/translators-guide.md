@@ -161,10 +161,10 @@ Table 3: Message key domains and their purposes
 
 The corresponding Rust constants are defined in `src/localization/keys.rs`,
 with the `netsuke check` keys in `src/localization/check_keys.rs`, the clap
-error keys in `src/localization/clap_error_keys.rs`, and the manifest keys,
-including the schema-version keys, in `src/localization/manifest_keys.rs`,
-using UPPER_SNAKE_CASE (e.g., `CLI_FLAG_FILE_HELP` maps to
-`cli.flag.file.help`).
+error keys in `src/localization/clap_error_keys.rs`, the manifest keys,
+including the schema-version keys, in `src/localization/manifest_keys.rs`, and
+the recipe-shell filter keys in `src/localization/shell_keys.rs`, using
+UPPER_SNAKE_CASE (e.g., `CLI_FLAG_FILE_HELP` maps to `cli.flag.file.help`).
 
 ## 5. Variable usage
 
@@ -449,9 +449,9 @@ Netsuke validates every registered locale at compile time via
 
 - **Metadata drift**: `Cargo.toml`'s locale list disagrees with the registry
 - **Missing keys**: Keys in `keys.rs`, `check_keys.rs`, `clap_error_keys.rs`,
-  or `manifest_keys.rs` but not in the FTL file
+  `manifest_keys.rs`, or `shell_keys.rs` but not in the FTL file
 - **Orphaned keys**: Keys in the FTL file but in none of `keys.rs`,
-  `check_keys.rs`, `clap_error_keys.rs`, and `manifest_keys.rs`
+  `check_keys.rs`, `clap_error_keys.rs`, `manifest_keys.rs`, or `shell_keys.rs`
 - **Variable mismatches**: A message interpolating different variables from the
   English source — a dropped `{ $path }` or a stray `{ $name }`
 

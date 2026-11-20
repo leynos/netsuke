@@ -254,7 +254,7 @@ fn the_real_invocation_is_selected(#[case] source: &str) -> Result<()> {
 
 /// The real macro bodies are the contract this parser exists to read.
 ///
-/// The key table is split across four files, and the audit reads all of them,
+/// The key table is split across five files, and the audit reads all of them,
 /// so each must parse on its own.
 #[rstest]
 #[case::core(include_str!("../src/localization/keys.rs"), "cli.about", 300)]
@@ -268,6 +268,11 @@ fn the_real_invocation_is_selected(#[case] source: &str) -> Result<()> {
     include_str!("../src/localization/manifest_keys.rs"),
     "manifest.schema_version.missing",
     40
+)]
+#[case::shell(
+    include_str!("../src/localization/shell_keys.rs"),
+    "stdlib.shell.join.limit",
+    5
 )]
 fn the_repository_macro_parses(
     #[case] source: &str,

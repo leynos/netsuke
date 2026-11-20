@@ -1596,6 +1596,26 @@ for transforming data within templates.
   empty word, which is why `compact` is a separate filter rather than a flag
   here. It does not flatten nested lists. This is for deliberate shell recipes;
   structured `exec` recipes remain preferred when no shell syntax is needed.
+  The joined fragment's encoded length is bounded at 1 MiB. The filter
+  accumulates into one buffer rather than materializing an encoded copy of
+  every member and then the joined string. Before encoding a member it checks a
+  lower bound on that member's encoded size, so a member that provably cannot
+  fit is rejected without being encoded; the bound is exact for PowerShell,
+  whose encoder is fixed-shape. It is only a lower bound for `Sh`, whose suffix
+  quoting can emit up to three bytes per input byte, so there the pre-check can
+  pass while the encoded member exceeds the ceiling and the post-encode check
+  rejects it, truncating the buffer back to the last accepted member. The 1 MiB
+  figure bounds the buffer's encoded length, not total heap allocation or the
+  buffer's capacity: a rejected `Sh` encoding can transiently grow it to at
+  most three times the ceiling plus one, and the `shell-quote` dependency
+  additionally copies the one member being encoded into a scratch vector, which
+  is bounded by that member and released when the call returns. A host-supplied
+  budget does not participate: the ceiling is a fixed property of the filter,
+  so the bound holds identically in `help targets` and in build rendering. The
+  rendered *text* is a separate question: the query surface fixes the dialect to
+  `Sh` so its values do not depend on the host, while build rendering follows
+  the selected recipe shell. A manifest that needs the same text from both must
+  pass `dialect` explicitly.
 
 - `| compact`: A collection filter that removes `none`, undefined, and empty
   strings while preserving order. It drops nothing else: `0`, `false`, `[]`,
@@ -4035,7 +4055,7 @@ flowchart TD
     B_Metadata{"Cargo.toml locales<br/>match the registry?"} -->|No| N_Drift
     N_Drift["Report the metadata drift"] --> M_Fail
     B_Metadata -->|Yes| C_ReadKeys
-    C_ReadKeys["extract_key_constants<br/>from keys.rs, check_keys.rs,<br/>and clap_error_keys.rs"] --> D_ReadSource
+    C_ReadKeys["extract_key_constants<br/>from every localization key module"] --> D_ReadSource
     D_ReadSource["parse_catalogue<br/>from locales/en-US/messages.ftl"] --> E_Loop
 
     E_Loop["For each locale in<br/>SUPPORTED_LOCALES"] --> F_Parse
