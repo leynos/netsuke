@@ -12208,15 +12208,21 @@ comparing it with the classified project key through
 `ProjectKey::classify_candidate`, so a home directory reached through a link is
 recognized as the same file. A false answer means the pass does not adopt the
 candidate's chain, and it stops there rather than trying a lower-priority
-candidate. What happens next depends on which identity failed. A definite
-project match is skipped by the fallback scan, so the system layers still load
-and the project pass appends the same chain under its existing project
-quarantine. An unresolved candidate is not skipped, because ruling it out as
-the project file is exactly what failed: the fallback scan may load it, in the
-dependency's own order, before reaching a system candidate, and it reports that
-chain as an untrusted root, so the authority to set platform policy is
-withheld. Reading the user scope first changes which candidates are considered
-and who may donate authority, not how a loaded file is trusted.
+candidate. What happens next depends on why the answer was false. An ambiguous
+project key withholds authority from every candidate without identifying any of
+them, so the pass refuses even a candidate that is not the project file; the
+fallback scan then runs, and whatever root it selects is untrusted. A definite
+project match is skipped by the fallback scan, so the walk continues rather
+than stopping, and the project pass appends the same chain under its existing
+project quarantine. The scan then selects the first later candidate that loads;
+every system base precedes the home fallbacks, so an installed system file
+still supplies the chain, and only when none is installed can a later home
+candidate supply it. An unresolved candidate is not skipped, because ruling it
+out as the project file is exactly what failed: the fallback scan may load it,
+in the dependency's own order, before reaching a system candidate, and it
+reports that chain as an untrusted root, so the authority to set platform
+policy is withheld. Reading the user scope first changes which candidates are
+considered and who may donate authority, not how a loaded file is trusted.
 
 Both passes retain their decisions for replay. `UserScopeTrace` records whether
 the user pass adopted a candidate or fell back, `ProjectScopeTrace` records
