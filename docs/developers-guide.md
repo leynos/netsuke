@@ -1604,6 +1604,17 @@ node or a hidden output to the default targets, and never reuse the namespace
 for a user-visible path. See
 [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).
 
+A fixed case is the readable example of each shape;
+`tests/ninja_phony_lowering_property_tests.rs` carries the combinatorial claim.
+It generates graphs whose action names, output names, commands, `restat` flags,
+`phony` and `always` flags, input lists and edge counts all vary, then requires
+that every rotation and the reversal of the edge set render identically, that
+hidden identities stay distinct, that exactly the forced edges name the force
+node, and that `restat` is cleared on a hidden statement and retained on an
+`always` edge unless its rule already declares it. Extend the properties when a
+new flag feeds the classification; keep the fixed cases for the statement
+shapes a reader can check by eye.
+
 Clearing the force node belongs to the command layer, not to generation.
 `src/runner/phony_state/mod.rs` opens the effective working directory, verifies
 that `.netsuke` and `.netsuke/phony` are real directories without following a

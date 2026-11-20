@@ -109,7 +109,13 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
       lives in `src/runner/phony_state/resolve.rs` apart from the namespace
       handles, and gained a regression test for an unresolvable path plus a
       query test that resolution creates no state.
-- [x] Gates rerun on the fixed tree and the review cleared.
+- [x] Pre-merge Testing (Property / Proof) warning fixed: the lowering
+      invariants now have generated-graph properties in
+      `tests/ninja_phony_lowering_property_tests.rs`, each checked against a
+      deliberate mutation of the code it guards, and the developers' guide
+      records the suite.
+- [x] Gates rerun on the fixed trees and the pre-merge findings addressed on
+      them.
 
 ## Surprises & discoveries
 
@@ -329,29 +335,42 @@ Verification that has actually run: the generation-side suite in
 `tests/phony_always_runtime_tests.rs` with `NETSUKE_REQUIRE_NINJA=1`, the
 `dyndep::tests::paths` matrix, and `tests/ninja_gen_unit_tests.rs` all pass.
 
-The commit gates were then run as one sequential batch on the final tree.
-`make check-fmt`, `make lint`, `make typecheck`, `make doc-coverage`,
-`make markdownlint`, `make nixie`, `make test-workflow-contracts` and
-`NETSUKE_REQUIRE_NINJA=1 make test` each exited 0; the test gate ran all 6261
-nextest cases with 9 environment-gated skips and passed every doctest target.
-`make test-workflow-contracts` ran 2465 cases with 3 skips, and doc-comment
-coverage measured 98.32% against the 80% threshold.
+The commit gates were then run as one sequential batch on the tree that adds
+the lowering property suite. `make check-fmt`, `make lint`, `make typecheck`,
+`make doc-coverage`, `make markdownlint`, `make nixie`,
+`make test-workflow-contracts` and `NETSUKE_REQUIRE_NINJA=1 make test` each
+exited 0; the test gate ran all 6265 nextest cases with 9 environment-gated
+skips and passed every doctest target. `make test-workflow-contracts` ran 2465
+cases with 3 skips, and doc-comment coverage measured 98.32% against the 80%
+threshold.
 
-The pre-merge Unit Architecture finding was fixed before that batch: the alias
-resolver in `src/runner/phony_state/resolve.rs` now reports canonicalization
-failures instead of folding them into "not reserved", and the module split
-leaves the namespace handles and the removal in `mod.rs`. A link loop that
-cannot be resolved refuses the reset, and a query test pins that resolution
-creates no state.
+The pre-merge Unit Architecture finding was fixed before an earlier batch: the
+alias resolver in `src/runner/phony_state/resolve.rs` now reports
+canonicalization failures instead of folding them into "not reserved", and the
+module split leaves the namespace handles and the removal in `mod.rs`. A link
+loop that cannot be resolved refuses the reset, and a query test pins that
+resolution creates no state.
 
-Earlier drafts recorded 6050, 6065, 6102, 6107, 6216 and 6259 cases. Each was a
-real measurement of an earlier tree: the first before the runtime and
+The pre-merge Testing (Property / Proof) warning was answered with
+`tests/ninja_phony_lowering_property_tests.rs`. Four properties generate graphs
+whose action names, output names, commands, input lists, `restat`, `phony` and
+`always` flags and edge counts vary, and require byte-identical output across
+every rotation and the reversal of the edge set, distinct hidden identities,
+the force node on exactly the forced edges, and `restat` cleared on a hidden
+statement while retained on an `always` edge unless its rule already declares
+it. Each property was checked against a deliberate mutation: dropping `always`
+from the force predicate fails only the force property, and keeping an inherited
+`restat` on a hidden statement fails only the `restat` property. The
+developers' guide records the suite and the fixed cases it complements.
+
+Earlier drafts recorded 6050, 6065, 6102, 6107, 6216, 6259 and 6261 cases. Each
+was a real measurement of an earlier tree: the first before the runtime and
 generation suites added for this change were in the same batch, the second
 before the third review's alias tests existed, 6102 before the namespace-open
 and outside-link tests were added, 6107 before the branch was first rebased onto
-`main`, 6216 before `main` advanced again, and 6259 before the resolver tests
-above. A count belongs to the tree its batch ran on, so 6261 is the figure for
-the tree that ships.
+`main`, 6216 before `main` advanced again, 6259 before the resolver tests
+above, and 6261 before the lowering property suite. A count belongs to the tree
+its batch ran on, so 6265 is the figure for the tree that ships.
 
 The second rebase, onto the commit that split Ninja launch failures from recipe
 failures, conflicted in exactly one file: `docs/v0-1-0-migration-guide.md`,

@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 677fe7796aafb845ebe09576167777039d5dd62fdcfcbefa84f5ad2ead319beb # shrinks to specs = [EdgeSpec { index: 0, name: "a", command: "a", restat: false, phony: false, always: true, inputs: [] }]
+cc 4b42a375e45c40df74ecea6838e6141d9629be2b62c47cf7d1b131dc1bbaa1b9 # shrinks to specs = [EdgeSpec { index: 0, name: "a", command: "a", restat: true, phony: true, always: false, inputs: [] }]
