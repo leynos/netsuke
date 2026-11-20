@@ -1208,6 +1208,18 @@ conflict in `Decision log`, and escalate.
     outside `verus/` still sums to 3,384 added and 1 deleted, with 54 files
     changed, 39 with the Verus crate and mutation patches excluded, and 33
     once the six snapshots are excluded too.
+    - Final gates at `70da28da9`. All nine targets exited 0 against a clean
+      tree: `make check-fmt` 4 s; `make lint` 406 s; `make typecheck` 89 s;
+      `make markdownlint` 36 s (0 issues in 240 files); `make nixie` 1 s;
+      `make test` 264 s (6,287 nextest cases passed, 9 skipped; 226 doctests
+      passed, 66 ignored); `make test-workflow-contracts` 681 s (2,465 passed,
+      3 skipped, plus 69 script tests); `make test-rfc-stdlib-coverage` 41 s
+      (282 passed); and `make doc-coverage` 84 s (98.33% aggregate, 6,986 of
+      7,105 items). The larger counts are `main`'s: the twelve-commit advance
+      and [#1160](https://github.com/leynos/netsuke/pull/1160) add tests to the
+      same suites. The first attempt at this set, at `69d850835`, failed
+      `make check-fmt` on the hand-wrapped merge; `8a4df7b98` applies
+      `mdtablefix`'s wrap and this set is the re-run after it.
 
 ## Surprises & discoveries
 
@@ -1735,8 +1747,14 @@ conflict in `Decision log`, and escalate.
   `cardinality.rs` doc comment grew by three lines to say what its witnesses do
   not pin; no case, helper, or production line changed. The file counts and the
   1,017-line production surface are unchanged, so the tests, harness, and BDD
-  reading is 2,366 lines. The breach, its breakdown, and the request for the
-  owner's acceptance stand unchanged.
+  reading is 2,366 lines. Sixth amendment of 2026-11-20: the comparison base
+  moved twice more, to `e9cbb64f6` when #1157 merged and then to `3ff86655f`
+  when #1160 merged. Re-measured against `3ff86655f`, the figure is unchanged
+  at 3,384 added and 1 deleted, a net 3,383 — 1,383 over the bar — because
+  neither merge touches a path in this branch's delta. The file counts are 54
+  changed, 39 with the Verus crate and mutation patches excluded, and 33 with
+  the snapshots excluded too. The breach, its breakdown, and the request for
+  the owner's acceptance stand unchanged.
 - D-23. Decision: correct the Kani stopping condition rather than leave a cap
   the runs did not obey, and state the two measurements it conflated. The
   correction is recorded here; whether the whole-suite exception is acceptable
