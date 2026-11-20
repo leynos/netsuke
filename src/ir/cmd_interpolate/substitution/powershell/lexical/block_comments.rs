@@ -33,13 +33,16 @@ impl PowerShellLexicalState {
 }
 
 impl SubstitutionTraversal<'_, '_> {
-    /// Open a block comment at an unquoted PowerShell site.
+    /// Open a block comment at an unquoted PowerShell token boundary.
     ///
     /// Callers reach this check only outside here-strings, line comments, and
     /// `--%` regions, so an unquoted site is the whole remaining condition.
-    /// A mid-token hash that might itself begin a line comment makes `<#`
-    /// potentially ordinary comment text, so that case fails closed instead of
-    /// opening a region the interpreter may not share.
+    /// PowerShell recognizes `<#` only where a token can begin; inside an
+    /// argument such as `prefix<#" #>` it stays part of the argument token and
+    /// the quotes around it still open an expandable string. A mid-token
+    /// opener, or an opener inside a mid-token hash that may itself begin a
+    /// line comment, therefore fails closed instead of opening a region the
+    /// interpreter may not share.
     pub(super) fn open_unquoted_block_comment(
         &mut self,
         character: PowerShellSourceCharacter<'_>,
@@ -47,7 +50,7 @@ impl SubstitutionTraversal<'_, '_> {
         if !self.matches_unquoted_quote_context() || !character.starts_block_comment() {
             return None;
         }
-        if self.power_shell_lexical.is_in_ambiguous_comment() {
+        if self.power_shell_lexical.is_in_ambiguous_comment() || !character.is_token_boundary() {
             self.power_shell_lexical.note_unmodelled_syntax();
             return None;
         }

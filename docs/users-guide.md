@@ -752,7 +752,11 @@ entry. The diagnostic names the entry and the region; close the region or merge
 the entry with its successor. This boundary check does not apply to `isolated`
 lists, whose entries are separate scripts, but isolation does not repair an
 incomplete entry: each isolated entry must be syntactically complete on its
-own. The check is not a complete PowerShell parser.
+own. PowerShell starts a block comment only where a token can begin, so a `<#`
+inside an argument is literal text. Netsuke treats such an opener as
+unrecognized syntax: an entry that contains one is accepted, but a marker that
+follows it in the list is refused rather than guessed at. The check is not a
+complete PowerShell parser.
 
 Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
 `$env:NAME` reads an environment variable. PowerShell parses the braced

@@ -9868,21 +9868,22 @@ its `tail` so a construct that closes later still checks the text that follows.
 The `src/ir/cmd_interpolate/substitution/powershell/` module groups focused
 PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 `lexical/comments.rs` tracks fail-closed comment state,
-`lexical/block_comments.rs` tracks non-nesting block comments,
-`lexical/boundary.rs` describes the region one entry leaves for the next,
-`stop_parsing.rs` tracks raw native-command arguments, and `tokens/mod.rs`
-recognizes the token boundaries and syntax used by those scanners.
-`substitution/shared_list.rs` owns the shared-list entry API: it interpolates
-one entry, rejects a region left open across the entry boundary, and carries
-the sticky fail-closed classification forward. Keep that entry API as the only
-way lowering scans a shared PowerShell list, so a future caller cannot
-reintroduce per-entry isolation. The private `tokens/member_expressions.rs`
-helper recognizes variable roots through member and index chains; keep it
-within the PowerShell token scanner rather than reusing it as a general
-expression parser. They share a shell-specific boundary but keep distinct state
-responsibilities. `PowerShellSourceCharacter` binds a Unicode-scalar index to
-the borrowed source buffer and provides checked lookaround only within the
-PowerShell scanner; it is not a shared shell abstraction. The sibling
+`lexical/block_comments.rs` tracks non-nesting block comments at token
+boundaries and fails closed on a mid-token opener, `lexical/boundary.rs`
+describes the region one entry leaves for the next, `stop_parsing.rs` tracks
+raw native-command arguments, and `tokens/mod.rs` recognizes the token
+boundaries and syntax used by those scanners. `substitution/shared_list.rs`
+owns the shared-list entry API: it interpolates one entry, rejects a region
+left open across the entry boundary, and carries the sticky fail-closed
+classification forward. Keep that entry API as the only way lowering scans a
+shared PowerShell list, so a future caller cannot reintroduce per-entry
+isolation. The private `tokens/member_expressions.rs` helper recognizes
+variable roots through member and index chains; keep it within the PowerShell
+token scanner rather than reusing it as a general expression parser. They share
+a shell-specific boundary but keep distinct state responsibilities.
+`PowerShellSourceCharacter` binds a Unicode-scalar index to the borrowed source
+buffer and provides checked lookaround only within the PowerShell scanner; it
+is not a shared shell abstraction. The sibling
 `src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
 parenthesis state needed to keep protected `$()` bodies isolated.
 

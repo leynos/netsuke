@@ -234,6 +234,54 @@ fn shared_power_shell_lists_reject_other_unfinished_regions(
     assert_unfinished_region_rejected(&error, unfinished, 1, region);
 }
 
+/// Reject markers that a mid-token `<#` would otherwise hide.
+///
+/// PowerShell opens a block comment only where a token can begin, so the `<#`
+/// in `prefix<#" #>` stays inside the argument token and the quotes around the
+/// marker still form an expandable string. Modelling it as a comment would hide
+/// that string and accept the marker as a standalone literal.
+#[rstest]
+#[case::inputs(INS_TOKEN)]
+#[case::outputs(OUTS_TOKEN)]
+fn shared_power_shell_lists_reject_a_mid_token_block_comment_opener(
+    #[case] marker: &str,
+    en_localizer: EnLocalizer,
+) {
+    let _localizer = en_localizer;
+    let entry = format!("Write-Output prefix<#\" #> {marker} <# \" #>");
+    let error = lower_shared_power_shell_list(&[&entry], false)
+        .expect_err("a marker inside a mid-token quote sequence must fail");
+    let IrGenError::InvalidCommand { command, .. } = &error else {
+        panic!("expected an InvalidCommand rejection, got {error:?}");
+    };
+    assert_eq!(
+        command, &entry,
+        "the diagnostic must carry the entry's original template"
+    );
+    let rendered = normalize_fluent_isolates(&error.to_string());
+    assert!(
+        !rendered.contains("New-Item"),
+        "the diagnostic must not carry interpolated path text: {rendered}"
+    );
+}
+
+/// Keep a mid-token opener's fail-closed state for the rest of the list.
+#[rstest]
+fn shared_power_shell_lists_keep_fail_closed_after_a_mid_token_opener(en_localizer: EnLocalizer) {
+    let _localizer = en_localizer;
+    let opener = "Write-Output prefix<#";
+    let marker_entry = format!("Copy-Item {INS_TOKEN}");
+    let error = lower_shared_power_shell_list(&[opener, &marker_entry], false)
+        .expect_err("a later marker must stay protected after a mid-token opener");
+    let IrGenError::InvalidCommand { command, .. } = &error else {
+        panic!("expected an InvalidCommand rejection, got {error:?}");
+    };
+    assert_eq!(
+        command, &marker_entry,
+        "the carried fail-closed state must reject the later marker entry"
+    );
+}
+
 /// Report the index of the entry that left its lexical region open.
 #[rstest]
 fn shared_power_shell_lists_name_the_unfinished_entry_index(en_localizer: EnLocalizer) {
@@ -267,6 +315,10 @@ fn shared_power_shell_lists_name_the_unfinished_entry_index(en_localizer: EnLoca
 )]
 #[case::closed_block_comment(
     &["Write-Output <# note #> body", "Write-Output {{ ins }}"][..],
+    "Write-Output '; New-Item pwned; Write-Output x'"
+)]
+#[case::boundary_block_comment(
+    &["Write-Output 1;<# note #> 2", "Write-Output {{ ins }}"][..],
     "Write-Output '; New-Item pwned; Write-Output x'"
 )]
 #[case::block_comment_does_not_nest(

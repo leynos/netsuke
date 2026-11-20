@@ -671,9 +671,12 @@ interpolated path text, while the rendered diagnostic is the localized message
 alone. The sticky fail-closed classification also follows the list, so later
 markers stay protected after scanner-sensitive text in an earlier entry. Block
 comments end at the first `#>`, as PowerShell does, so an apparent inner `<#`
-neither deepens the region nor hides live syntax after the terminator. A block
-opener after a mid-token hash whose comment status is unknown fails closed,
-because a line comment would make `<#` ordinary text.
+neither deepens the region nor hides live syntax after the terminator.
+PowerShell recognizes `<#` only where a token can begin, so an opener inside an
+argument token — where the quotes around it still form an expandable string —
+fails closed instead of opening a comment. A block opener after a mid-token
+hash whose comment status is unknown fails closed for the same reason: a line
+comment would make `<#` ordinary text.
 
 Entries that end at a neutral boundary are unaffected, including a closed
 here-string, a `#` line comment, a `--%` stop-parsing region, and a closed
