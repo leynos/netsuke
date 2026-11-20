@@ -208,7 +208,7 @@ ir.circular_dependency = Εντοπίστηκε κυκλική εξάρτηση:
 ir.action_serialisation = Δεν ήταν δυνατή η σειριοποίηση της ενέργειας: { $details }.
 ir.invalid_command = Μη έγκυρη παρεμβολή στην εντολή: { $snippet }.
 ir.ambiguous_substitution_boundary = Ασαφές όριο αντικατάστασης εντολής στον χαρακτήρα { $position }· διαχωρίστε την παρένθεση κλεισίματος της αντικατάστασης από το επόμενο '#'.
-ir.unfinished_power_shell_region = Η καταχώριση { $entry } της λίστας εντολών PowerShell τελειώνει μέσα σε { $region }; κλείστε την ή συγχωνεύστε την καταχώριση με την επόμενη.
+ir.unfinished_power_shell_region = Η καταχώριση { $entry } της λίστας εντολών PowerShell τελειώνει μέσα σε { $region }; κλείστε την περιοχή ή συγχωνεύστε την καταχώριση με την επόμενη.
 
 # Σφάλματα παραγωγής αρχείων Ninja.
 ninja_gen.missing_action = Λείπει η ενέργεια «{ $id }» στην οποία παραπέμπει ακμή δόμησης.
