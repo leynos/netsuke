@@ -112,6 +112,15 @@
   path left at that prerequisite's reserved name, so it cannot silently turn
   forcing off
   ([#1144](https://github.com/leynos/netsuke/issues/1144), [ADR-0084](docs/adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md))
+- Bound `shell_join`'s intermediate allocation: the filter appends into one
+  buffer under a fixed 1 MiB ceiling and rejects an over-limit join with
+  `netsuke::jinja::shell::join_limit`, instead of materializing an encoded copy
+  of every member and then the joined string
+  ([#970](https://github.com/leynos/netsuke/issues/970))
+- Install the x64 and Arm64 Windows MSIs under `C:\Program Files\netsuke`
+  rather than `C:\Program Files (x86)\netsuke`, and migrate a v0.1.0-beta4
+  installation out of the 32-bit directory on upgrade
+  ([#1143](https://github.com/leynos/netsuke/issues/1143))
 
 ### Security
 
@@ -131,19 +140,6 @@
   accepted filename could introduce another argument into a trusted recipe; the
   portable unquoted-path allowlist now excludes the comma (CWE-88)
   ([#1017](https://github.com/leynos/netsuke/issues/1017))
-
-<!-- markdownlint-disable-next-line MD024 -->
-### Fixed
-
-- Bound `shell_join`'s intermediate allocation: the filter appends into one
-  buffer under a fixed 1 MiB ceiling and rejects an over-limit join with
-  `netsuke::jinja::shell::join_limit`, instead of materializing an encoded copy
-  of every member and then the joined string
-  ([#970](https://github.com/leynos/netsuke/issues/970))
-- Install the x64 and Arm64 Windows MSIs under `C:\Program Files\netsuke`
-  rather than `C:\Program Files (x86)\netsuke`, and migrate a v0.1.0-beta4
-  installation out of the 32-bit directory on upgrade
-  ([#1143](https://github.com/leynos/netsuke/issues/1143))
 
 ## [0.1.0-beta4] - 2026-09-26
 
