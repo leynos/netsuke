@@ -2327,9 +2327,10 @@ and warned about like any other, but it is never reported on stdout.
 The CLI, configuration files, and the environment use the same policy values,
 and policy names are matched case-insensitively in all three places. ASCII case
 is ignored. Surrounding whitespace is not part of a policy spelling: a
-configuration-file string keeps it, so `color = " always "` is rejected, while
-the environment value parser trims it, so `NETSUKE_COLOR=' always '` is
-accepted. The accepted values are:
+configuration-file string keeps it, so `color = " always "` is rejected. An
+unquoted environment value is trimmed, so `NETSUKE_COLOR=' always '` is
+accepted, while quoting the value inside the variable keeps its spaces, so
+`NETSUKE_COLOR='" always "'` is rejected. The accepted values are:
 
 - `--color` and `color`: `auto`, `always`, or `never`.
 - `--emoji` and `emoji`: `auto`, `always`, or `never`.

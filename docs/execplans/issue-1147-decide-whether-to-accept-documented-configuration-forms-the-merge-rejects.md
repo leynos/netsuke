@@ -211,6 +211,12 @@ list form.
   applied the same correction to the `parse_value` doc comment in
   `src/cli/environment/mod.rs`, which also called the behaviour scalar parsing,
   and to the pull request description.
+- [x] (2026-11-20) Review round four: quoted environment values. The users'
+  guide said the environment value parser trims surrounding whitespace, which
+  holds only for an unquoted value. Figment parses a value beginning with a
+  double quote as a quoted string, so spaces inside it survive and the policy
+  is rejected. The guide now distinguishes the two cases and shows
+  `NETSUKE_COLOR='" always "'` as the rejected quoted form.
 
 ## Surprises & discoveries
 
@@ -233,7 +239,10 @@ list form.
   `value()`, and the focused run showed `" AlWaYs "` merging as `always`; the
   new `non_boolean_string_values_are_trimmed` unit test pins it. Impact: the
   guide, migration guide, and ADR state the trim as environment parser
-  behaviour rather than claiming whitespace is rejected everywhere.
+  behaviour rather than claiming whitespace is rejected everywhere. A later
+  round refined the guide: the trim applies only to an unquoted value, because
+  a value starting with a double quote is parsed as a quoted string whose
+  spaces survive and then fail the policy match.
 - Observation: the workspace denies `clippy::self-named-module-files`, so a
   module that gains submodules must use the directory form. Adding
   `src/cli/environment/tests/boolean_values.rs` and
