@@ -133,6 +133,35 @@ fn cleanup_wording_away_from_the_legacy_path_does_not_qualify_it() {
     );
 }
 
+/// Verify that a two-word cleanup marker is matched as a phrase.
+#[test]
+fn no_longer_used_qualifies_the_legacy_directory() {
+    // "no longer" is one marker, not the word "longer": matching it word by
+    // word would reject a paragraph that correctly retires the directory.
+    let paragraph = "The `C:\\Program Files (x86)\\netsuke` directory is no longer \
+                     used once a later MSI has installed to the native location.";
+    assert!(
+        Paragraph::new(paragraph).qualifies_legacy_install(),
+        "a phrase marker beside the legacy directory must qualify it: {paragraph}"
+    );
+}
+
+/// Verify that cleanup of the native directory in the neighbouring clause does
+/// not qualify the legacy mention.
+#[test]
+fn native_cleanup_beside_the_legacy_mention_does_not_qualify_it() {
+    // The remove verb is one clause away from the legacy path, which a
+    // paragraph-scoped or window-scoped test would accept. The removal names
+    // the replacement directory, so it says nothing about retiring the 32-bit
+    // one.
+    let paragraph = "Remove `C:\\Program Files\\netsuke` from `PATH`; the earlier \
+                     MSI installed to `C:\\Program Files (x86)\\netsuke`.";
+    assert!(
+        !Paragraph::new(paragraph).qualifies_legacy_install(),
+        "cleanup of the native directory must not qualify the legacy one: {paragraph}"
+    );
+}
+
 /// Verify that cleanup wording next to the legacy directory qualifies it.
 #[test]
 fn cleanup_wording_beside_the_legacy_path_qualifies_it() {

@@ -205,16 +205,18 @@ impl<'a> Paragraph<'a> {
     /// instruction to add it to `PATH` stays wrong however it is labelled, so a
     /// paragraph that both names the directory and tells the reader to add it is
     /// rejected even when the release attribution is present. Cleanup wording such
-    /// as "remove" qualifies a mention only when it sits next to the directory, so
-    /// "add the 32-bit directory and remove the native one" is rejected: the
-    /// removal is of the replacement, not of the location being retired.
+    /// as "remove" qualifies a mention only when it sits next to the directory and
+    /// does not itself name the native one, so "add the 32-bit directory and
+    /// remove the native one" is rejected: the removal is of the replacement, not
+    /// of the location being retired.
     #[must_use]
     pub fn qualifies_legacy_install(self) -> bool {
         let nearby_clauses = self.clauses_naming_the_legacy_path();
         let is_attributed = self.text.contains("v0.1.0-beta4")
-            || nearby_clauses
-                .iter()
-                .any(|clause| mentions_any(clause, &LEGACY_CLEANUP_MARKERS));
+            || nearby_clauses.iter().any(|clause| {
+                !clause.contains(WINDOWS_INSTALL_LOCATION)
+                    && mentions_any(clause, &LEGACY_CLEANUP_MARKERS)
+            });
         let instructs_use = nearby_clauses
             .iter()
             .any(|clause| mentions_any(clause, &LEGACY_PATH_INSTRUCTIONS));
@@ -247,14 +249,30 @@ impl<'a> Paragraph<'a> {
     }
 }
 
-/// Whether `text` contains any of `words` as a whole word, ignoring case.
-fn mentions_any(text: &str, words: &[&str]) -> bool {
-    text.split(|character: char| !character.is_alphanumeric())
-        .any(|candidate| {
-            words
-                .iter()
-                .any(|word| candidate.eq_ignore_ascii_case(word))
-        })
+/// Whether `text` contains any of `markers` as whole words, ignoring case.
+///
+/// A marker may be a phrase, such as "no longer", and then every word of it
+/// has to appear in order and next to its neighbours. Matching one word at a
+/// time would silently retire such a marker: "longer" is not a marker anyone
+/// wrote, so a sentence saying the directory is no longer used would fail the
+/// contract that names it.
+fn mentions_any(text: &str, markers: &[&str]) -> bool {
+    let words: Vec<String> = text
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    markers.iter().any(|marker| {
+        let wanted: Vec<String> = marker
+            .split(|character: char| !character.is_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .map(str::to_lowercase)
+            .collect();
+        !wanted.is_empty()
+            && words
+                .windows(wanted.len())
+                .any(|window| window == wanted.as_slice())
+    })
 }
 
 /// Check that every README and the guide name both Windows install locations
