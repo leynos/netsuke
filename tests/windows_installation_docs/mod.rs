@@ -28,6 +28,15 @@ pub const USERS_GUIDE: &str = "docs/users-guide.md";
 /// The native directory the x64 and Arm64 MSIs install to.
 pub const WINDOWS_INSTALL_LOCATION: &str = "`C:\\Program Files\\netsuke`";
 
+/// The native directory without the Markdown formatting the documents use.
+///
+/// The document contract requires the backticked spelling wherever a document
+/// names the native location, but a paragraph being judged may name it plainly.
+/// Matching only the backticked form would let "Remove C:\Program Files\netsuke
+/// from PATH" qualify a neighbouring mention of the legacy directory, which is
+/// the guidance the clause rule exists to reject.
+pub const NATIVE_WINDOWS_INSTALL_DIRECTORY: &str = "C:\\Program Files\\netsuke";
+
 /// The 32-bit directory the v0.1.0-beta4 MSI uses, which each document may
 /// name only as a statement about that release or as the old location to
 /// clean up.
@@ -214,7 +223,7 @@ impl<'a> Paragraph<'a> {
         let nearby_clauses = self.clauses_naming_the_legacy_path();
         let is_attributed = self.text.contains("v0.1.0-beta4")
             || nearby_clauses.iter().any(|clause| {
-                !clause.contains(WINDOWS_INSTALL_LOCATION)
+                !clause.contains(NATIVE_WINDOWS_INSTALL_DIRECTORY)
                     && mentions_any(clause, &LEGACY_CLEANUP_MARKERS)
             });
         let instructs_use = nearby_clauses

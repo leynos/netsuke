@@ -27,7 +27,9 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use documentation_examples::{DocumentedExample, documented_example};
 use test_support::fs as test_fs;
-use windows_path_setup::{SENTINEL_PATH, run_example};
+use windows_path_setup::{
+    run_example, run_example_after_interrupted_append, wrapper::SENTINEL_PATH,
+};
 
 /// Verify that each documented script appends its directory to the user
 /// `PATH` and keeps the value expandable, and that it changes nothing when the
@@ -47,6 +49,53 @@ fn documented_path_setup_persists_the_directory() -> Result<()> {
         assert_example_persists_the_directory(&example)?;
         assert_missing_executable_changes_nothing(&example)?;
     }
+    Ok(())
+}
+
+/// Verify that a run killed after the example appends its directory is repaired
+/// by the next run.
+///
+/// The recovery exists for exactly this crash. Without it the next run adopts
+/// the sentinel-plus-directory value as the user's own original, and the
+/// entries the backup recorded are lost for good. The crashed state is seeded
+/// inside the wrapper, under its mutex, so no concurrent run can observe it,
+/// and the seeded backup records the real value, so this probe restores the
+/// user's `PATH` rather than a stand-in.
+#[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "the documented scripts write the Windows user environment key"
+)]
+fn interrupted_append_is_recovered_from_the_backup() -> Result<()> {
+    let root = tempfile::tempdir().context("create the recovery workspace")?;
+    let appended = install_directory(root.path())?;
+    let example = DocumentedExample {
+        id: "recovery-probe".to_owned(),
+        language: "powershell".to_owned(),
+        body: "# The recovery under test runs before this script.\n".to_owned(),
+    };
+    let output = run_example_after_interrupted_append(root.path(), &example, &appended)?;
+    let stdout = require_success(&output, &example)?;
+    let seeded = marker(&stdout, "SEEDED")
+        .with_context(|| describe(&output, &example, "did not report SEEDED"))?;
+    let captured = marker(&stdout, "ORIGINAL")
+        .with_context(|| describe(&output, &example, "did not report ORIGINAL"))?;
+    ensure!(
+        captured == seeded,
+        "the interrupted value should be repaired before capture, captured \
+         {captured:?} with {seeded:?} recorded"
+    );
+    ensure!(
+        !captured.starts_with(SENTINEL_PATH),
+        "the repaired value should not carry the sentinel, captured {captured:?}"
+    );
+    let restored = marker(&stdout, "RESTORED")
+        .with_context(|| describe(&output, &example, "did not report RESTORED"))?;
+    ensure!(
+        restored == seeded,
+        "the wrapper should leave the recorded value in place, restored {restored:?} \
+         with {seeded:?} recorded"
+    );
     Ok(())
 }
 

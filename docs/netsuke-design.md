@@ -4581,10 +4581,10 @@ The install root is `ProgramFiles6432Folder`, which resolves to the native
 program files directory for the x64 and Arm64 packages the release builds. The
 authoring previously used `ProgramFilesFolder`, whose WiX v4 meaning is always
 the 32-bit directory; a 64-bit binary therefore landed under
-`C:\Program Files (x86)\netsuke` from v0.1.0-beta4 onwards. Moving the
-executable changes its component's key path, and Windows Installer requires a
-new component GUID for a relocated component, so the beta4 GUID is retired and
-must not be reused. The registry value carrying the release rank stays at its
+`C:\Program Files (x86)\netsuke` in the v0.1.0-beta4 MSI. Moving the executable
+changes its component's key path, and Windows Installer requires a new
+component GUID for a relocated component, so the beta4 GUID is retired and must
+not be reused. The registry value carrying the release rank stays at its
 original location, because an older MSI compares its own rank against whatever
 it finds there before allowing the replacement.
 

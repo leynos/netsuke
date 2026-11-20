@@ -162,6 +162,24 @@ fn native_cleanup_beside_the_legacy_mention_does_not_qualify_it() {
     );
 }
 
+/// Verify that cleanup of the native directory is recognised as naming the
+/// replacement even when it is written without Markdown formatting.
+#[test]
+fn unformatted_native_cleanup_beside_the_legacy_mention_does_not_qualify_it() {
+    // The documents write the native directory as code, but the contract judges
+    // prose. Recognising only the backticked spelling would accept the very
+    // sentence the clause rule exists to reject: the `remove` describes the
+    // native directory, and the legacy mention is only a statement about where
+    // an older release installed.
+    let paragraph = "Remove C:\\Program Files\\netsuke from PATH. \
+                     `C:\\Program Files (x86)\\netsuke` is the current install \
+                     directory.";
+    assert!(
+        !Paragraph::new(paragraph).qualifies_legacy_install(),
+        "cleanup of the unformatted native path must not qualify the legacy one: {paragraph}"
+    );
+}
+
 /// Verify that cleanup wording next to the legacy directory qualifies it.
 #[test]
 fn cleanup_wording_beside_the_legacy_path_qualifies_it() {

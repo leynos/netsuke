@@ -36,6 +36,11 @@ from workflow_loading import (
 
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 
+#: The keys GitHub accepts in a `runs-on` mapping. A mapping names a runner
+#: group, a label set, or both; any other key is a shape this resolver cannot
+#: read, and reading it as selecting nothing would hide its labels.
+RUNS_ON_MAPPING_KEYS = frozenset({"group", "labels"})
+
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
     import collections.abc as cabc
 
@@ -76,6 +81,35 @@ def _entry_labels(entry: object, job: dict[str, object]) -> list[str]:
     return [str(entry)]
 
 
+def _mapping_labels(mapping: dict[str, object], job: dict[str, object]) -> list[str]:
+    """Return the labels a `runs-on` mapping can select.
+
+    GitHub accepts `{group: ..., labels: [...]}`, and a label declared only
+    inside `labels` selects a runner exactly as a bare one does.
+
+    Returns
+    -------
+    list[str]
+        Every label the mapping selects, empty when it names only a group.
+
+    Raises
+    ------
+    ValueError
+        When the mapping carries a key other than `group` or `labels`. Reading
+        such a shape as selecting nothing would drop its labels from the
+        inventory and leave the registry comparison green over a runner nobody
+        registered.
+    """
+    unknown = set(mapping) - RUNS_ON_MAPPING_KEYS
+    if unknown:
+        message = f"unsupported runs-on mapping keys: {sorted(unknown)}"
+        raise ValueError(message)
+    labels = mapping.get("labels")
+    if labels is None:
+        return []
+    return _selected_labels(labels, job)
+
+
 def _selected_labels(declaration: object, job: dict[str, object]) -> list[str]:
     """Return the labels one `runs-on` value can select.
 
@@ -95,6 +129,13 @@ def _selected_labels(declaration: object, job: dict[str, object]) -> list[str]:
             return selected_labels(label, job)
         case list() as entries:
             return [label for entry in entries for label in _entry_labels(entry, job)]
+        # A reusable-workflow caller omits `runs-on`; its runner arrives as an
+        # input and is read by `caller_runner_labels`, so the empty result here
+        # is what keeps that path from being counted twice.
+        case None:
+            return []
+        case dict() as mapping:
+            return _mapping_labels(mapping, job)
         case _:
             return []
 
@@ -220,6 +261,64 @@ def test_a_matrix_selector_inside_a_runs_on_list_is_resolved() -> None:
     assert labels == {"self-hosted", UBICLOUD_DEFAULT_LABEL}, (
         "the matrix-selected label in a runs-on list must reach the inventory; "
         f"got {sorted(labels)!r}"
+    )
+
+
+def test_a_label_declared_in_a_runs_on_mapping_reaches_the_registry_inventory() -> None:
+    """A label declared only in a `runs-on` mapping counts as a bare one does.
+
+    GitHub accepts `runs-on: {group: ..., labels: [...]}`. Reading the mapping
+    as an unsupported declaration would return no labels, and the registry
+    comparison would pass over a self-hosted runner nobody registered.
+    """
+    job: dict[str, object] = {
+        "runs-on": {"group": "default", "labels": [UBICLOUD_DEFAULT_LABEL]},
+    }
+    labels = self_hosted_labels_in_use([job])
+    assert labels == {UBICLOUD_DEFAULT_LABEL}, (
+        "the label declared in a runs-on mapping must reach the inventory; "
+        f"got {sorted(labels)!r}"
+    )
+
+
+def test_a_group_only_runs_on_mapping_adds_no_label() -> None:
+    """A mapping that names only a group selects no label for the inventory.
+
+    A runner group is not a label, and the registry compares labels, so reading
+    one for the other would demand a registration that no `runs-on` selector
+    can match.
+    """
+    job: dict[str, object] = {"runs-on": {"group": "default"}}
+    labels = self_hosted_labels_in_use([job])
+    assert labels == set(), (
+        f"a group-only runs-on mapping must add no label; got {sorted(labels)!r}"
+    )
+
+
+def test_an_unsupported_runs_on_mapping_key_is_rejected() -> None:
+    """A mapping form this resolver cannot read fails rather than hiding a lane.
+
+    Silently returning no labels would leave the registry comparison green over
+    whatever runner that form selects.
+    """
+    job: dict[str, object] = {
+        "runs-on": {"labels": [UBICLOUD_DEFAULT_LABEL], "team": "platform"},
+    }
+    with pytest.raises(ValueError, match="unsupported runs-on mapping keys"):
+        self_hosted_labels_in_use([job])
+
+
+def test_a_job_without_runs_on_contributes_no_labels() -> None:
+    """A reusable-workflow caller omits `runs-on` and keeps the empty result.
+
+    Its runner arrives as a workflow input, which the inventory reads through
+    its own path, so treating the absence as unsupported would either fail a
+    valid caller or count its runner twice.
+    """
+    job: dict[str, object] = {"uses": "./.github/workflows/ci.yml"}
+    labels = self_hosted_labels_in_use([job])
+    assert labels == set(), (
+        f"a job without runs-on must add no label; got {sorted(labels)!r}"
     )
 
 

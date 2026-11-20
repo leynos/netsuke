@@ -1,16 +1,16 @@
 //! The PowerShell harness that executes a documented Windows `PATH` fence.
 //!
-//! A fence is run inside a wrapper that owns the user environment registry
-//! key: it records the existing `Path` value, installs a sentinel, dot-sources
-//! the documented script, reports what was stored and its type, and restores
-//! the original value whatever the script does. The child PowerShell gets a
-//! cleared environment with only the variables Windows needs to start it, so
-//! nothing the host happens to export can decide which directory the example
-//! resolves.
+//! A fence is run inside the wrapper in [`wrapper`], which owns the user
+//! environment registry key: it records the existing `Path` value, installs a
+//! sentinel, dot-sources the documented script, reports what was stored and
+//! its type, and restores the original value whatever the script does. The
+//! child PowerShell gets a cleared environment with only the variables Windows
+//! needs to start it, so nothing the host happens to export can decide which
+//! directory the example resolves.
 //!
-//! The harness lives in a directory module because the wrapper is long enough
-//! that keeping it beside the assertions would push the test binary past the
-//! repository's file-size cap.
+//! The harness reads the parent environment through [`mockable::Env`], so the
+//! process is the only ambient dependency and a test could supply fixed values
+//! without mutating this one.
 
 use std::{
     env,
@@ -21,154 +21,12 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
+use mockable::{DefaultEnv, Env};
 use test_support::fs as test_fs;
 
 use crate::documentation_examples::DocumentedExample;
 
-/// Sentinel user `PATH` value every run starts from.
-///
-/// It is an expandable string, so the example's promise to preserve the value's
-/// type is observable: a script that rewrote `PATH` as a plain string would
-/// fail the assertion in the test binary even though the directory was added.
-pub const SENTINEL_PATH: &str = "%SystemRoot%\\netsuke-path-sentinel";
-
-/// The wrapper that surrounds the documented script.
-///
-/// It passes `-ExamplePath` to the script, owns the registry key for the
-/// duration of the run, and reports the observations the assertions use.
-///
-/// Its variables carry a `$wrapper` prefix because the documented script is
-/// dot-sourced into this scope so that its failures propagate unchanged. A
-/// script that declares `$environmentKey` — both documented fences do — would
-/// otherwise replace the wrapper's handle, and the `Dispose()` call at the end
-/// of the script would close the key the wrapper still needs to read.
-///
-/// Two runs must not interleave. Each run replaces the user `PATH` with
-/// `SENTINEL_PATH`, a fixed value, so a run that started while another was in
-/// flight would capture the sentinel as its original and could put it back
-/// over the real value. A named mutex serialises them; the backup file, which
-/// is written before the sentinel and removed after the restore, lets a later
-/// run put the real value back when a wrapper is killed before its `finally`
-/// block runs. The file is named by the caller because the recovery has to
-/// outlive the temp directory of the run that wrote it.
-pub const WRAPPER: &str = r#"
-param(
-    [Parameter(Mandatory)][string]$ExamplePath,
-    [Parameter(Mandatory)][string]$BackupPath
-)
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-$wrapperSentinel = '%SystemRoot%\netsuke-path-sentinel'
-$wrapperMutex = [System.Threading.Mutex]::new($false, 'Local\NetsukeWindowsPathSetupTest')
-# Both are read by the outer finally, so neither may still be unset when the
-# first statement inside the try throws: strict mode would report the missing
-# variable instead of the failure that got there.
-$wrapperMutexHeld = $false
-$wrapperKey = $null
-try {
-    # An abandoned mutex means its owner was killed, which is the case the
-    # backup file exists for; WaitOne throws but acquires the mutex anyway.
-    $wrapperMutexHeld = $true
-    try {
-        $wrapperMutexHeld = $wrapperMutex.WaitOne([TimeSpan]::FromMinutes(10))
-    }
-    catch [System.Threading.AbandonedMutexException] {
-        $wrapperMutexHeld = $true
-    }
-    if (-not $wrapperMutexHeld) {
-        throw 'Timed out waiting for another documented PATH run to finish.'
-    }
-    $wrapperKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-    if ($null -eq $wrapperKey) {
-        throw 'User environment registry key not found.'
-    }
-    # A run killed before its finally block leaves the sentinel behind. Repair
-    # that before capturing anything, so this run starts from the real value
-    # rather than adopting the sentinel as its own.
-    if ([System.IO.File]::Exists($BackupPath)) {
-        $wrapperBackup = [System.IO.File]::ReadAllText($BackupPath) | ConvertFrom-Json
-        $wrapperCurrent = if ($wrapperKey.GetValueNames() -contains 'Path') {
-            [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-        } else {
-            ''
-        }
-        if ($wrapperCurrent -eq [string]$wrapperBackup.Sentinel) {
-            if ($wrapperBackup.HadPath) {
-                $wrapperKey.SetValue(
-                    'Path',
-                    [string]$wrapperBackup.Value,
-                    [Microsoft.Win32.RegistryValueKind]$wrapperBackup.Kind
-                )
-            } else {
-                $wrapperKey.DeleteValue('Path', $false)
-            }
-        }
-        Remove-Item -LiteralPath $BackupPath -Force
-    }
-    $wrapperHadPath = $wrapperKey.GetValueNames() -contains 'Path'
-    $wrapperOriginalValue = if ($wrapperHadPath) {
-        [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-    } else {
-        ''
-    }
-    $wrapperOriginalKind = if ($wrapperHadPath) {
-        $wrapperKey.GetValueKind('Path')
-    } else {
-        [Microsoft.Win32.RegistryValueKind]::ExpandString
-    }
-    Write-Output "ORIGINAL=$wrapperOriginalValue"
-    $wrapperBackupJson = [ordered]@{
-        HadPath = $wrapperHadPath
-        Value = $wrapperOriginalValue
-        Kind = [string]$wrapperOriginalKind
-        Sentinel = $wrapperSentinel
-    } | ConvertTo-Json -Compress
-    [System.IO.File]::WriteAllText($BackupPath, $wrapperBackupJson)
-    try {
-        $wrapperKey.SetValue(
-            'Path',
-            $wrapperSentinel,
-            [Microsoft.Win32.RegistryValueKind]::ExpandString
-        )
-        . $ExamplePath
-        $wrapperStored = [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-        Write-Output "RESULT=$wrapperStored"
-        Write-Output "KIND=$($wrapperKey.GetValueKind('Path'))"
-    }
-    finally {
-        # Record what the script left behind before restoring it. A run that
-        # threw never reaches the RESULT line, so LEFTOVER is the only evidence
-        # of whether it changed the value on the way out.
-        $wrapperLeftover = if ($wrapperKey.GetValueNames() -contains 'Path') {
-            [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-        } else {
-            ''
-        }
-        Write-Output "LEFTOVER=$wrapperLeftover"
-        if ($wrapperHadPath) {
-            $wrapperKey.SetValue('Path', $wrapperOriginalValue, $wrapperOriginalKind)
-        } else {
-            $wrapperKey.DeleteValue('Path', $false)
-        }
-        $wrapperRestored = if ($wrapperKey.GetValueNames() -contains 'Path') {
-            [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-        } else {
-            ''
-        }
-        Write-Output "RESTORED=$wrapperRestored"
-        Remove-Item -LiteralPath $BackupPath -Force -ErrorAction SilentlyContinue
-    }
-}
-finally {
-    if ($null -ne $wrapperKey) {
-        $wrapperKey.Dispose()
-    }
-    if ($wrapperMutexHeld) {
-        $wrapperMutex.ReleaseMutex()
-    }
-    $wrapperMutex.Dispose()
-}
-"#;
+pub mod wrapper;
 
 /// Variables the wrapper inherits unchanged from the test process.
 ///
@@ -198,9 +56,9 @@ const INHERITED_VARIABLES: [&str; 15] = [
 ///
 /// A test drives the documented fence, so it has to observe the environment
 /// the test process itself was given before it can decide what the child may
-/// see. Capturing those values once, here, keeps the disallowed
-/// process-environment access inside a single auditable boundary instead of
-/// scattering it through the harness.
+/// see. Reading those values once here, through the injected [`Env`], keeps
+/// the process environment out of the individual helpers that consume it and
+/// lets a test supply fixed values instead of mutating the process.
 struct AmbientEnvironment {
     /// The parent `PATH`, used only to locate a PowerShell executable.
     path: Option<OsString>,
@@ -212,17 +70,21 @@ struct AmbientEnvironment {
 }
 
 /// Read the parent environment once, at the test boundary.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the harness is the boundary that observes the test process's own environment before it builds a controlled child environment; a test binary that must start a real shell has no reader to inject above it"
-)]
-fn ambient_environment() -> AmbientEnvironment {
+///
+/// [`Env::os_string`] is used rather than a string accessor because a real
+/// `PATH` is not guaranteed to be valid Unicode; dropping such a value would
+/// silently reduce the shells this harness can find.
+fn ambient_environment(env: &dyn Env) -> AmbientEnvironment {
     AmbientEnvironment {
-        path: env::var_os("PATH"),
-        system_root: env::var_os("SystemRoot"),
+        path: env.os_string("PATH"),
+        system_root: env.os_string("SystemRoot"),
         inherited: INHERITED_VARIABLES
             .iter()
-            .filter_map(|name| env::var_os(name).map(|value| (OsString::from(name), value)))
+            .copied()
+            .filter_map(|name| {
+                env.os_string(name)
+                    .map(|value| (OsString::from(name), value))
+            })
             .collect(),
     }
 }
@@ -234,6 +96,35 @@ fn ambient_environment() -> AmbientEnvironment {
 /// Returns an error when the example is not PowerShell, when a script cannot be
 /// written, or when no PowerShell executable can be started.
 pub fn run_example(root: &Path, example: &DocumentedExample) -> Result<Output> {
+    run_script(root, example, None)
+}
+
+/// Run `example` after seeding the state an interrupted earlier run leaves.
+///
+/// A run killed between appending its directory and its `finally` block leaves
+/// the sentinel *and* that directory in the stored `PATH`, with the backup
+/// still recording the real value. Seeding that pair inside the wrapper, under
+/// its mutex, lets the recovery path be observed without a second process
+/// racing the first, and the seeded backup records the real value, so the
+/// probe leaves the user's `PATH` exactly as it found it.
+///
+/// # Errors
+///
+/// Returns the same errors as [`run_example`].
+pub fn run_example_after_interrupted_append(
+    root: &Path,
+    example: &DocumentedExample,
+    appended: &Path,
+) -> Result<Output> {
+    run_script(root, example, Some(appended))
+}
+
+/// Write `example` and the wrapper into `root`, then run one wrapper process.
+fn run_script(
+    root: &Path,
+    example: &DocumentedExample,
+    interrupted: Option<&Path>,
+) -> Result<Output> {
     ensure!(
         example.language == "powershell",
         "{} should be a PowerShell example, got {:?}",
@@ -244,8 +135,8 @@ pub fn run_example(root: &Path, example: &DocumentedExample) -> Result<Output> {
     test_fs::write(&example_script, &example.body)
         .with_context(|| format!("write {} to {}", example.id, example_script.display()))?;
     let wrapper = root.join("wrapper.ps1");
-    test_fs::write(&wrapper, WRAPPER).context("write the registry wrapper")?;
-    run_wrapper(&wrapper, &example_script, root)
+    test_fs::write(&wrapper, wrapper::WRAPPER).context("write the registry wrapper")?;
+    run_wrapper(&wrapper, &example_script, root, interrupted)
 }
 
 /// Run the wrapper under the first PowerShell the host provides.
@@ -259,13 +150,19 @@ pub fn run_example(root: &Path, example: &DocumentedExample) -> Result<Output> {
 ///
 /// Returns an error when the environment cannot be assembled or when every
 /// candidate shell is missing or cannot be started.
-fn run_wrapper(wrapper: &Path, example: &Path, program_files_root: &Path) -> Result<Output> {
+fn run_wrapper(
+    wrapper_script: &Path,
+    example: &Path,
+    program_files_root: &Path,
+    interrupted: Option<&Path>,
+) -> Result<Output> {
     let backup = backup_path();
-    let ambient = ambient_environment();
+    let ambient = ambient_environment(&DefaultEnv);
     let environment = controlled_environment(&ambient, program_files_root)?;
     let mut unavailable = Vec::new();
     for shell in shell_candidates(&ambient) {
-        let attempt = Command::new(&shell)
+        let mut command = Command::new(&shell);
+        command
             .args([
                 "-NoProfile",
                 "-NonInteractive",
@@ -273,11 +170,15 @@ fn run_wrapper(wrapper: &Path, example: &Path, program_files_root: &Path) -> Res
                 "Bypass",
                 "-File",
             ])
-            .arg(wrapper)
+            .arg(wrapper_script)
             .arg("-ExamplePath")
             .arg(example)
             .arg("-BackupPath")
-            .arg(&backup)
+            .arg(&backup);
+        if let Some(appended) = interrupted {
+            command.arg("-InterruptedAppended").arg(appended);
+        }
+        let attempt = command
             .env_clear()
             .envs(environment.iter().map(|(name, value)| (name, value)))
             .output();
