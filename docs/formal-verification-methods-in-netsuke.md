@@ -304,10 +304,10 @@ stands; parts of it were never adopted. The `tools/` entries are real, and
 `tools/verus/VERSION` and `tools/verus/SHA256SUMS` are the pins that
 `make install-verus` and `make verus` read. The `verus/` filenames and the three
 `src/` harness modules are illustrative: the repository instead colocated its
-Kani harnesses beside the helpers they exercise, and its three Verus kernels
-are `verus/canonical_value/main.rs`, `verus/configured_shells/main.rs`, and
-`verus/resource_bounds/main.rs`. The
-`## Current repository state` section above records the actual layout.
+Kani harnesses beside the helpers they exercise, and its three Verus kernels are
+`verus/canonical_value/main.rs`, `verus/configured_shells/main.rs`, and
+`verus/resource_bounds/main.rs`. The `## Current repository state` section
+above records the actual layout.
 
 Kani and Verus installation and execution should be delegated to the
 `rust-prover-tools` CLI rather than repository-local shell scripts. Netsuke
