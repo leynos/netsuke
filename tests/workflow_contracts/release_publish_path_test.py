@@ -6,6 +6,17 @@ its policy denies. ``release_publish_path_authorization`` owns the wiring
 checks, ``release_publish_path_contract`` composes them with the publication
 paths, and both are exercised here against the real workflow.
 
+A table-driven contract can pass while the table itself is wrong, so these
+cases pin what a green run would otherwise leave implicit: the wiring checks
+must refuse a step that names the authorization script without running it, an
+id that only contains the expected one, or a decision step a condition can
+skip. The dependency outcomes the scenarios declare come from
+``needs_results`` in ``release_publish_path_scenario_model``, which refuses an
+outcome for a job the scenarios do not model, and the rows themselves live in
+``release_publish_path_scenarios``. The workflow documents are parsed from the
+repository by ``workflow_loading``, so the contract is held to the real
+release, caller and package workflows rather than to a copy of them.
+
 Run via ``make test-workflow-contracts``.
 """
 
