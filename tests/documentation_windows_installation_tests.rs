@@ -204,10 +204,16 @@ fn crlf_line_endings_keep_paragraphs_intact() {
         1,
         "CRLF text should split into whole paragraphs: {paragraphs:?}"
     );
+    // A single matching paragraph is not enough on its own: an implementation
+    // that never split the text would also return one paragraph, and it would
+    // still hold the continuation. The preceding paragraph must be absent.
+    let paragraph = paragraphs.first().copied().map(Paragraph::as_str);
     assert!(
-        paragraphs
-            .first()
-            .is_some_and(|paragraph| { paragraph.as_str().contains("and a later MSI moves it.") }),
+        paragraph.is_some_and(|text| !text.contains("Intro paragraph.")),
+        "a CRLF blank line should separate paragraphs rather than merge them: {paragraphs:?}"
+    );
+    assert!(
+        paragraph.is_some_and(|text| text.contains("and a later MSI moves it.")),
         "the paragraph should keep its wrapped continuation: {paragraphs:?}"
     );
 }
