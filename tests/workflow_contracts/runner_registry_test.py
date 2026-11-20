@@ -58,6 +58,24 @@ def is_self_hosted_label(label: str) -> bool:
     return label not in GITHUB_HOSTED_LABELS
 
 
+def _entry_labels(entry: object, job: dict[str, object]) -> list[str]:
+    """Return the labels one entry of a `runs-on` list can select.
+
+    A list entry is read exactly as a whole declaration is, because GitHub
+    evaluates each entry independently: `runs-on: [self-hosted, "${{ matrix.os }}"]`
+    selects every label both entries name, and reading the selector as text
+    would put the expression in the inventory instead of the runner it picks.
+
+    Returns
+    -------
+    list[str]
+        The labels the entry can select, empty when it selects none.
+    """
+    if isinstance(entry, str):
+        return selected_labels(entry, job)
+    return [str(entry)]
+
+
 def _selected_labels(declaration: object, job: dict[str, object]) -> list[str]:
     """Return the labels one `runs-on` value can select.
 
@@ -76,7 +94,7 @@ def _selected_labels(declaration: object, job: dict[str, object]) -> list[str]:
         case str() as label:
             return selected_labels(label, job)
         case list() as entries:
-            return [str(entry) for entry in entries]
+            return [label for entry in entries for label in _entry_labels(entry, job)]
         case _:
             return []
 
@@ -181,6 +199,26 @@ def test_a_matrix_selected_label_reaches_the_registry_inventory() -> None:
     labels = self_hosted_labels_in_use([job])
     assert labels == {UBICLOUD_DEFAULT_LABEL}, (
         "the matrix-selected self-hosted label must reach the inventory; "
+        f"got {sorted(labels)!r}"
+    )
+
+
+def test_a_matrix_selector_inside_a_runs_on_list_is_resolved() -> None:
+    """A selector in a `runs-on` list resolves like a bare one.
+
+    GitHub evaluates each list entry on its own, so a lane that writes
+    `runs-on: [self-hosted, "${{ matrix.os }}"]` selects the matrix runner.
+    Reading the entry as text would leave the expression in the inventory and
+    hide the label the lane actually uses, and the registry comparison would
+    then fail over a selector that does not name a runner at all.
+    """
+    job: dict[str, object] = {
+        "runs-on": ["self-hosted", "${{ matrix.runner }}"],
+        "strategy": {"matrix": {"runner": [UBICLOUD_DEFAULT_LABEL]}},
+    }
+    labels = self_hosted_labels_in_use([job])
+    assert labels == {"self-hosted", UBICLOUD_DEFAULT_LABEL}, (
+        "the matrix-selected label in a runs-on list must reach the inventory; "
         f"got {sorted(labels)!r}"
     )
 
