@@ -9981,21 +9981,24 @@ closer. Both conditions matter: the shell requires `in` before the first
 pattern terminator, and a later marker is what makes the quote-context decision
 observable at all. Both keywords are matched as Bash reads them: a
 backslash-newline pair is deleted before parsing, so `c` followed by a
-continuation and `ase` still spells `case`. The check over-approximates, so
-argument data such as `grep case in file` followed by a later marker is
-rejected too, and so is a `case` behind an assignment or redirection prefix.
-The shell reads the latter as a syntax error, so the alternative is not a
-silently different context. An `esac` also closes only the construct open at
-its own depth, so a pattern spelled `esac` does not end an outer case. The
-phase of that construct decides whether a reserved word is a keyword at all:
-`esac` where a pattern would start closes it, but after a `|` it is another
-alternative pattern, so `case x in x|esac) … esac)` keeps the substitution open
-until the `esac` after the arm. The arm is entered at the `)` written at the
-construct's own depth and left at `;;`, `;&`, or `;;&`, which start the next
-pattern list. A subject spelled `esac` (`case esac in …`) is header data for
-the same reason, as is a word inside a pattern group such as `@(case)`: the
-group only deepens the parenthesis depth, which classification and operator
-handling both skip over to reach the construct that governs the position.
+continuation and `ase` still spells `case`. A pair is deleted only when its
+backslash is unescaped: in `\\<newline>` the first backslash quotes the second,
+so the newline is an ordinary separator and the `in` after it starts a word.
+The check over-approximates, so argument data such as `grep case in file`
+followed by a later marker is rejected too, and so is a `case` behind an
+assignment or redirection prefix. The shell reads the latter as a syntax error,
+so the alternative is not a silently different context. An `esac` also closes
+only the construct open at its own depth, so a pattern spelled `esac` does not
+end an outer case. The phase of that construct decides whether a reserved word
+is a keyword at all: `esac` where a pattern would start closes it, but after a
+`|` it is another alternative pattern, so `case x in x|esac) … esac)` keeps the
+substitution open until the `esac` after the arm. The arm is entered at the `)`
+written at the construct's own depth and left at `;;`, `;&`, or `;;&`, which
+start the next pattern list. A subject spelled `esac` (`case esac in …`) is
+header data for the same reason, as is a word inside a pattern group such as
+`@(case)`: the group only deepens the parenthesis depth, which classification
+and operator handling both skip over to reach the construct that governs the
+position.
 
 Bash recognizes a reserved word before quote removal, so only a bare spelling
 counts. In a pattern list, `esac""` and `e\sac` both spell the word `esac`, but

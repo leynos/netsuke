@@ -7,7 +7,7 @@
 
 use super::case_nesting::CaseNesting;
 use super::find_substitution;
-use super::posix_lexical::{SourceChar, SubstitutionKind};
+use super::posix_lexical::{SourceChar, SubstitutionKind, is_unescaped_character};
 use super::{IrGenError, QuoteContext};
 use crate::localization::{self, keys};
 
@@ -278,10 +278,15 @@ fn is_keyword_at(chars: &[char], pos: usize, keyword: &[char]) -> bool {
 
 /// Return the first index at or after `pos` that no continuation hides.
 ///
-/// A backslash immediately followed by a newline is deleted before parsing, so
-/// the character the shell reads next is the one after the pair.
+/// An unescaped backslash immediately followed by a newline is deleted before
+/// parsing, so the character the shell reads next is the one after the pair. A
+/// backslash that is itself escaped starts no pair: in `\\<newline>` the
+/// newline is an ordinary terminator.
 fn skip_line_continuations(chars: &[char], mut pos: usize) -> usize {
-    while chars.get(pos) == Some(&'\\') && chars.get(pos + 1) == Some(&'\n') {
+    while chars.get(pos) == Some(&'\\')
+        && chars.get(pos + 1) == Some(&'\n')
+        && is_unescaped_character(chars, pos)
+    {
         pos += 2;
     }
     pos
@@ -302,8 +307,15 @@ fn previous_effective_char(chars: &[char], pos: usize) -> Option<usize> {
 
 /// Report whether a backslash-continued newline ends at `end`.
 ///
-/// The pair is deleted before parsing, so an index that follows one really
-/// follows the character before it.
+/// The pair is deleted before parsing only when the backslash is unescaped, so
+/// an index that follows one really follows the character before it. In
+/// `\\<newline>` the first backslash quotes the second and the newline is an
+/// ordinary separator, which is what lets the `in` after it start a word.
 fn ends_with_continuation(chars: &[char], end: usize) -> bool {
-    end >= 2 && chars.get(end - 1) == Some(&'\n') && chars.get(end - 2) == Some(&'\\')
+    let Some(backslash) = end.checked_sub(2) else {
+        return false;
+    };
+    chars.get(end - 1) == Some(&'\n')
+        && chars.get(backslash) == Some(&'\\')
+        && is_unescaped_character(chars, backslash)
 }

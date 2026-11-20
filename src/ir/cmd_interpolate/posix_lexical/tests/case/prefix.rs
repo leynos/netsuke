@@ -264,6 +264,33 @@ fn continued_keywords_behind_a_quoted_coproc_name_fail_closed(#[case] substituti
     }
 }
 
+// Verify an escaped backslash does not continue the line before the header.
+//
+// Bash deletes a backslash-newline pair only when the backslash is unescaped.
+// In `\\<newline>` the first backslash quotes the second, so the newline is an
+// ordinary command terminator and the `in` after it starts a word. A scan that
+// removes the escaped pair anyway reads `in` as argument data, so the unplaced
+// `case` behind a quoted `coproc` name goes unrecognized and the arm's marker
+// is lowered for the enclosing double quotes.
+#[test]
+fn escaped_backslash_before_in_still_fails_closed() {
+    let template = format!("echo \"$(coproc \"jobs\" case \\\\\nin x) echo {INS_TOKEN} ;; esac)\"");
+    let bindings = hostile_bash_bindings();
+
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &bindings)
+            .expect_err("an escaped backslash must not hide the header from the guard");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+        assert!(
+            interpolate(&template, &bash_bindings()).is_err(),
+            "a marker inside the substitution must stay inside it"
+        );
+    }
+}
+
 // Verify a continued `case` used as argument data is not rejected.
 //
 // The guard still needs a whole-word `in` after the keyword, so argument data
