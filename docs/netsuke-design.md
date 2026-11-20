@@ -3385,9 +3385,12 @@ diagnostic names the entry and the region code, and it points the author at
 closing the region or merging the entry with its successor. Isolated entries
 are already separate scripts and keep their per-entry interpolation, but
 isolation does not repair an incomplete entry: each isolated entry must be
-syntactically complete on its own. The check is deliberately a boundary check
-over the regions the scanner models, not a complete PowerShell parser; RFC 0036
-carries the longer-term harmonization under version-matched grammar.
+syntactically complete on its own. Because PowerShell starts a block comment
+only where a token can begin, a `<#` inside an argument token is literal text,
+and the scanner fails closed rather than hiding the quoted sections around it.
+The check is deliberately a boundary check over the regions the scanner models,
+not a complete PowerShell parser; RFC 0036 carries the longer-term
+harmonization under version-matched grammar.
 
 In `command:` recipes on the POSIX and Bash routes, unbalanced backticks or
 command text that `shlex` cannot parse produce an IR error before an action is
