@@ -277,9 +277,7 @@ impl CaseNesting {
         let word = self.word.as_str();
         match frame.phase {
             CasePhase::Header if is_at_own_depth && word == "in" => Some(WordRole::EnterPattern),
-            CasePhase::Pattern
-                if is_at_own_depth && word == "esac" && !frame.is_after_alternative() =>
-            {
+            CasePhase::Pattern if frame.is_closed_by(parenthesis_depth, word) => {
                 Some(WordRole::CloseCase)
             }
             // Every other word in the header or a pattern list is data: the
