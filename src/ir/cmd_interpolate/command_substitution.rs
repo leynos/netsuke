@@ -172,25 +172,17 @@ fn ambiguous_boundary_error(position: usize) -> IrGenError {
 ///
 /// The recipe is left out for the same reason as the ambiguity diagnostic, and
 /// so is a position: the condition is about the whole substitution rather than
-/// one character. The reason occupies the snippet argument, following the
-/// heredoc rejection, so the fail-closed path stays on the existing localized
-/// diagnostic without adding a locale entry per internal variant.
-fn unplaced_case_error() -> IrGenError {
-    let message =
-        localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", UNPLACED_CASE_SNIPPET);
+/// one character. The explanation is its own Fluent message rather than a
+/// snippet argument, so a non-English locale does not render an English
+/// sentence inside a translated diagnostic.
+const fn unplaced_case_error() -> IrGenError {
+    let message = localization::message(keys::IR_UNPLACED_CASE);
     IrGenError::InvalidCommand {
         command: String::new(),
-        snippet: String::from(UNPLACED_CASE_SNIPPET),
+        snippet: String::new(),
         message,
     }
 }
-
-/// Describe the unsupported `case` position in the interpolation diagnostic.
-const UNPLACED_CASE_SNIPPET: &str = concat!(
-    "unsupported command substitution: 'case' outside a recognized command ",
-    "position (write it first in the substitution, after a separator, or at ",
-    "the start of a brace group)"
-);
 
 /// Report whether a Netsuke marker appears after `pos`.
 ///
@@ -255,7 +247,15 @@ fn contains_keyword(chars: &[char], start: usize, end: usize, keyword: &[char]) 
 /// of it, matching the word the shell would build rather than the characters
 /// the file contains. A continuation that joins the keyword to a neighbouring
 /// word is joined here too, so it does not count as a word of its own.
+///
+/// The candidate must spell the first character at its own position, so a
+/// position inside a run of continuations is rejected in constant time instead
+/// of walking the rest of the run. A keyword written after a continuation is
+/// still found at the index of its first letter.
 fn is_keyword_at(chars: &[char], pos: usize, keyword: &[char]) -> bool {
+    if chars.get(pos) != keyword.first() {
+        return false;
+    }
     let mut cursor = pos;
     for expected in keyword {
         cursor = skip_line_continuations(chars, cursor);

@@ -206,6 +206,7 @@ ir.duplicate_outputs = Duplicate outputs detected: { $outputs }.
 ir.circular_dependency = Circular dependency detected: { $cycle }.
 ir.action_serialisation = Failed to serialise action: { $details }.
 ir.invalid_command = Invalid command interpolation: { $snippet }.
+ir.unplaced_case = Unsupported command substitution: 'case' outside a recognized command position (write it first in the substitution, after a separator, or at the start of a brace group).
 ir.ambiguous_substitution_boundary = Ambiguous command substitution boundary at character { $position }; separate the substitution closer from a following '#'.
 
 # Ninja generation errors.

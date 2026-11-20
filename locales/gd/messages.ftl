@@ -206,6 +206,7 @@ ir.duplicate_outputs = Chaidh às-chuir dhùblaichte a lorg: { $outputs }.
 ir.circular_dependency = Chaidh eisimeileachd chuairteach a lorg: { $cycle }.
 ir.action_serialisation = Cha b' urrainnear an gnìomh a shreathachadh: { $details }.
 ir.invalid_command = Cur a-steach mì-dhligheach san àithne: { $snippet }.
+ir.unplaced_case = Ionadachadh àithne gun taic: 'case' taobh a-muigh ionad àithne aithnichte (sgrìobh e an toiseach san ionadachadh, às dèidh dealaiche, no aig toiseach buidheann bracaidean).
 ir.ambiguous_substitution_boundary = Crìoch mhì-chinnteach air ionadachadh àithne aig caractar { $position }; dealaich bratach dùnaidh an ionadachaidh bhon '#' a leanas.
 
 # Mearachdan dèanamh Ninja.

@@ -395,8 +395,10 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   option, and behind a `coproc` name. It also reads each construct's phase, so
   an `esac` after a `|` is another alternative pattern rather than the
   terminator, and requires a bare spelling, so a quoted or escaped `esac` stays
-  pattern text. A pattern terminator then no longer closes the substitution,
-  and a substitution whose source contains `case` is rejected when a `)` is
+  pattern text. An optional `(` immediately before a pattern list belongs to
+  the pattern syntax, and a `;;` split by a line continuation still ends the
+  arm. A pattern terminator then no longer closes the substitution, and a
+  substitution whose source contains `case` is rejected when a `)` is
   immediately followed by `#`. A `case` written where the scanner's word model
   cannot place it, such as behind a quoted `coproc` name, fails closed when a
   whole-word `in` precedes the closer and a path marker follows, so a pattern

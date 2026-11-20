@@ -9364,18 +9364,31 @@ so the newline is an ordinary separator and the `in` after it starts a word.
 The check over-approximates, so argument data such as `grep case in file`
 followed by a later marker is rejected too, and so is a `case` behind an
 assignment or redirection prefix. The shell reads the latter as a syntax error,
-so the alternative is not a silently different context. An `esac` also closes
-only the construct open at its own depth, so a pattern spelled `esac` does not
-end an outer case. The phase of that construct decides whether a reserved word
-is a keyword at all: `esac` where a pattern would start closes it, but after a
-`|` it is another alternative pattern, so `case x in x|esac) … esac)` keeps the
+so the alternative is not a silently different context. The rejection has its
+own `ir.unplaced_case` Fluent message, so the explanation is localized rather
+than carried as an English snippet argument inside the translated
+`ir.invalid_command` text. The recipe and snippet stay empty for the same
+redaction reason as the ambiguity diagnostic. An `esac` also closes only the
+construct open at its own depth, so a pattern spelled `esac` does not end an
+outer case. The phase of that construct decides whether a reserved word is a
+keyword at all: `esac` where a pattern would start closes it, but after a `|`
+it is another alternative pattern, so `case x in x|esac) … esac)` keeps the
 substitution open until the `esac` after the arm. The arm is entered at the `)`
 written at the construct's own depth and left at `;;`, `;&`, or `;;&`, which
-start the next pattern list. A subject spelled `esac` (`case esac in …`) is
-header data for the same reason, as is a word inside a pattern group such as
+start the next pattern list. A line continuation between the two semicolons
+does not split that operator: an unquoted backslash-newline pair is deleted
+before tokenizing, so the tracker never records the backslash as the character
+before the second `;`. A subject spelled `esac` (`case esac in …`) is header
+data for the same reason, as is a word inside a pattern group such as
 `@(case)`: the group only deepens the parenthesis depth, which classification
 and operator handling both skip over to reach the construct that governs the
-position.
+position. Bash also accepts one optional `(` immediately before a pattern list,
+and that opener is pattern syntax rather than a group: the traversal asks the
+tracker before raising the depth, and the tracker answers yes only while the
+list has not started. `case z in (x) …` therefore keeps its terminator at the
+case's own depth, while a `(` after pattern text still deepens a group. After
+`|` the shell rejects a `(` outright, so no encoding decision depends on that
+form.
 
 Bash recognizes a reserved word before quote removal, so only a bare spelling
 counts. In a pattern list, `esac""` and `e\sac` both spell the word `esac`, but

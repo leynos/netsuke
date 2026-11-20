@@ -206,6 +206,7 @@ ir.duplicate_outputs = Ismétlődő kimenetek találhatók: { $outputs }.
 ir.circular_dependency = Körkörös függőség található: { $cycle }.
 ir.action_serialisation = A műveletet nem sikerült sorosítani: { $details }.
 ir.invalid_command = Érvénytelen behelyettesítés a parancsban: { $snippet }.
+ir.unplaced_case = Nem támogatott parancshelyettesítés: a 'case' felismert parancspozíción kívül van (írja elsőként a helyettesítésbe, egy elválasztó után vagy egy kapcsos zárójeles csoport elejére).
 ir.ambiguous_substitution_boundary = Kétértelmű parancshelyettesítési határ a(z) { $position }. karakternél; válassza el a helyettesítés záró zárójelét a következő '#'-tól.
 
 # A Ninja-fájlok előállításának hibái.

@@ -206,6 +206,7 @@ ir.duplicate_outputs = Der blev fundet dublerede output: { $outputs }.
 ir.circular_dependency = Der blev fundet en cirkulær afhængighed: { $cycle }.
 ir.action_serialisation = Handlingen kunne ikke serialiseres: { $details }.
 ir.invalid_command = Ugyldig indsættelse i kommandoen: { $snippet }.
+ir.unplaced_case = Ikke-understøttet kommandoerstatning: 'case' uden for en genkendt kommandoposition (skriv det først i erstatningen, efter en separator eller i begyndelsen af en klammergruppe).
 ir.ambiguous_substitution_boundary = Tvetydig grænse for kommandoerstatning ved tegn { $position }; adskil erstatningens afsluttende parentes fra det følgende '#'.
 
 # Fejl under generering af Ninja.

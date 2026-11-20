@@ -206,6 +206,7 @@ ir.duplicate_outputs = Byly zjištěny duplicitní výstupy: { $outputs }.
 ir.circular_dependency = Byla zjištěna cyklická závislost: { $cycle }.
 ir.action_serialisation = Akci se nepodařilo serializovat: { $details }.
 ir.invalid_command = Neplatné vložení v příkazu: { $snippet }.
+ir.unplaced_case = Nepodporovaná substituce příkazu: 'case' mimo rozpoznanou pozici příkazu (napište jej jako první v substituci, po oddělovači nebo na začátku skupiny ve složených závorkách).
 ir.ambiguous_substitution_boundary = Nejednoznačná hranice substituce příkazu na znaku { $position }; oddělte uzavírací závorku substituce od následujícího '#'.
 
 # Chyby při generování souborů Ninja.

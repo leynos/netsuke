@@ -206,6 +206,7 @@ ir.duplicate_outputs = Terdeteksi keluaran ganda: { $outputs }.
 ir.circular_dependency = Terdeteksi ketergantungan melingkar: { $cycle }.
 ir.action_serialisation = Tindakan tidak dapat diserialkan: { $details }.
 ir.invalid_command = Penyisipan tidak sah pada perintah: { $snippet }.
+ir.unplaced_case = Substitusi perintah tidak didukung: 'case' di luar posisi perintah yang dikenali (tuliskan lebih dulu di dalam substitusi, setelah pemisah, atau di awal grup kurung kurawal).
 ir.ambiguous_substitution_boundary = Batas substitusi perintah ambigu pada karakter { $position }; pisahkan penutup substitusi dari '#' berikutnya.
 
 # Galat pembuatan berkas Ninja.

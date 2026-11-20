@@ -191,7 +191,8 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         if self.starts_command_substitution(pos, ch) {
             return Some(ScriptCommandSubstitutionDelimiter::Start);
         }
-        if self.is_unquoted_command_substitution() && ch == '(' {
+        let opens_group = self.is_unquoted_command_substitution() && ch == '(';
+        if opens_group && !self.takes_pattern_opener() {
             return Some(ScriptCommandSubstitutionDelimiter::NestedOpen);
         }
         if self.is_unquoted_command_substitution() && ch == ')' {
@@ -212,6 +213,24 @@ impl ScriptSubstitutionTraversal<'_, '_> {
     fn is_unquoted_command_substitution(&self) -> bool {
         self.is_in_command_substitution()
             && self.active_quote_context() == ShellQuoteContext::Unquoted
+    }
+
+    /// Report whether a `(` at the active depth opens a `case` pattern list.
+    ///
+    /// Bash accepts one optional `(` immediately before a pattern list, and
+    /// that opener must not raise the grouping depth: the pattern terminator
+    /// after it stands at the case's own depth, where the tracker recognises
+    /// it. Reading the opener as a group would move the terminator one level
+    /// deeper, where it closes nothing and leaves the construct in its pattern
+    /// phase.
+    fn takes_pattern_opener(&self) -> bool {
+        self.command_substitutions
+            .last()
+            .is_some_and(|substitution| {
+                substitution
+                    .case_nesting
+                    .takes_pattern_opener(substitution.parenthesis_depth)
+            })
     }
 
     /// Increase the grouping depth in the innermost command substitution.

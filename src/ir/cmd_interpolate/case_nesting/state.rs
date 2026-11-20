@@ -104,16 +104,25 @@ pub(super) struct CaseFrame {
     pub(super) phase: CasePhase,
     /// Whether the last thing read in a pattern list was `|`.
     pub(super) after_alternative: bool,
+    /// Whether any pattern text has been read in the current pattern list.
+    ///
+    /// Bash accepts one optional `(` immediately before a pattern list, and the
+    /// traversal must not read that opener as a grouped expression. The flag
+    /// says whether the list has started: after a pattern word the following
+    /// `(` is a group instead, and a `|` alternative admits no opener at all.
+    pub(super) pattern_started: bool,
 }
 
 impl CaseFrame {
     /// Record that the `in` keyword completed the construct's header.
     ///
     /// The pattern list that follows starts without an alternative, because a
-    /// `|` seen before `in` belonged to an earlier construct.
+    /// `|` seen before `in` belonged to an earlier construct, and without
+    /// pattern text, so an immediately following `(` is the optional opener.
     pub(super) const fn enter_pattern(&mut self) {
         self.phase = CasePhase::Pattern;
         self.after_alternative = false;
+        self.pattern_started = false;
     }
 
     /// Report whether `word` terminates this construct's pattern list.
@@ -143,14 +152,19 @@ impl CaseFrame {
     /// one before it are what confirm the pair.
     pub(super) const fn apply_operator(&mut self, ch: char, previous: Option<char>) {
         match ch {
-            '|' if matches!(self.phase, CasePhase::Pattern) => self.after_alternative = true,
+            '|' if matches!(self.phase, CasePhase::Pattern) => {
+                self.after_alternative = true;
+                self.pattern_started = false;
+            }
             ')' if matches!(self.phase, CasePhase::Pattern) => {
                 self.phase = CasePhase::Arm;
                 self.after_alternative = false;
+                self.pattern_started = false;
             }
             ';' | '&' if matches!(previous, Some(';')) && matches!(self.phase, CasePhase::Arm) => {
                 self.phase = CasePhase::Pattern;
                 self.after_alternative = false;
+                self.pattern_started = false;
             }
             _ => {}
         }
@@ -199,6 +213,7 @@ impl super::CaseNesting {
                     depth: parenthesis_depth,
                     phase: CasePhase::Header,
                     after_alternative: false,
+                    pattern_started: false,
                 });
                 self.sightings.record_placed();
                 self.expects_command = false;
@@ -227,7 +242,24 @@ impl super::CaseNesting {
             }
             WordRole::Other {
                 continues_command_list,
-            } => self.expects_command = continues_command_list,
+            } => {
+                self.mark_pattern_text(parenthesis_depth);
+                self.expects_command = continues_command_list;
+            }
+        }
+    }
+
+    /// Record that pattern text has been read at this depth.
+    ///
+    /// The flag tells [`Self::takes_pattern_opener`] that a following `(` is a
+    /// grouped expression rather than the pattern list's optional opener, so
+    /// `x(y)` keeps its group and `(x)` gets its opener.
+    fn mark_pattern_text(&mut self, parenthesis_depth: usize) {
+        if let Some(frame) = self
+            .open_construct_at_mut(parenthesis_depth)
+            .filter(|frame| matches!(frame.phase, CasePhase::Pattern))
+        {
+            frame.pattern_started = true;
         }
     }
 

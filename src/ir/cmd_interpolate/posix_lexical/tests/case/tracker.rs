@@ -22,6 +22,29 @@ fn case_keyword_spelled_with_line_continuation_fails_closed() {
     );
 }
 
+// Verify a keyword after a long run of continuations is still recognised.
+//
+// The raw-source scan runs the keyword test at every position it reads, so a
+// test that skipped continuations before comparing the first character would
+// walk the rest of the run from each position inside it and make the
+// fail-closed check quadratic. Rejecting a position that does not spell the
+// first character keeps each candidate constant-time, while `c` followed by any
+// number of pairs and `ase` is still the keyword the shell builds.
+#[test]
+fn keyword_after_a_long_continuation_run_is_recognised() {
+    let run = "\\\n".repeat(4096);
+    let template =
+        format!("echo \"$(coproc \"jobs\" c{run}ase x in x) echo {INS_TOKEN} ;; esac)\"");
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &hostile_bash_bindings())
+            .expect_err("a continued keyword after a long run must fail closed");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+    }
+}
+
 // Verify a keyword spelled with backslash escapes is recognised.
 //
 // An unquoted backslash removes the special meaning of the escaped character
@@ -165,4 +188,93 @@ fn esac_used_as_a_command_argument_fails_closed() {
         &template,
         "an 'esac' argument must not close the construct before the real boundary",
     );
+}
+
+// Verify a `;;` split by a line continuation still ends the arm.
+//
+// Bash deletes an unquoted backslash-newline pair before tokenising, so `;` +
+// continuation + `;` is the `;;` arm terminator. A tracker that records the
+// backslash as the character before the second semicolon never sees the pair:
+// it reads the next pattern list as arm text, lets the `esac` in that list
+// close the construct, and then treats the pattern terminator that follows as
+// the substitution closer. The arm's marker is lowered for the enclosing double
+// quotes instead of staying inside the substitution.
+#[test]
+fn arm_terminator_split_by_a_continuation_fails_closed() {
+    let template =
+        format!("echo \"$(case x in a) : ;\\\n; x|esac) printf %s {INS_TOKEN} ;; esac)\"");
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &hostile_posix_bindings())
+            .expect_err("a `;;` split by a continuation must still end the arm");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+        assert!(
+            interpolate(&template, &bindings()).is_err(),
+            "a marker inside the substitution must stay inside it"
+        );
+    }
+}
+
+// Verify the same continued terminator interpolates without markers.
+//
+// Splitting `;;` across a continuation is supported Bash, so recognising it
+// must not reject a recipe whose substitution holds no marker. This pins the
+// supported side of the fix above.
+#[test]
+fn continued_arm_terminator_without_markers_is_accepted() {
+    let template = "echo \"$(case x in a) : ;\\\n; esac)\"";
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(template, &bindings())
+                .expect("a `;;` split by a continuation is supported Bash"),
+            template,
+            "a supported `case` substitution must keep its text"
+        );
+    }
+}
+
+// Verify the optional pattern opener does not swallow the pattern terminator.
+//
+// Bash accepts an optional `(` before a pattern list, so `(x)` is the pattern
+// `x` with its opener. A traversal that counts that `(` as a grouped
+// expression reads the pattern terminator at the deeper depth, where it closes
+// nothing, and leaves the construct in its pattern phase. The nested `case` is
+// then read as pattern data, its `esac` closes the outer construct, and the
+// `)` after it closes the substitution early, so the arm's marker is lowered
+// for the enclosing double quotes.
+#[test]
+fn optional_pattern_opener_fails_closed() {
+    let template = format!(
+        "echo \"$(case z in (x) case y in y) : ;; esac ;; z) printf %s {INS_TOKEN} ;; esac)\""
+    );
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &hostile_posix_bindings())
+            .expect_err("an optional pattern opener must not hide the nested construct");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+        assert!(
+            interpolate(&template, &bindings()).is_err(),
+            "a marker inside the substitution must stay inside it"
+        );
+    }
+}
+
+// Verify an optional pattern opener without markers is still accepted.
+//
+// The opener is part of the shell's grammar rather than an unsupported form, so
+// the fix must keep interpolating it unchanged.
+#[test]
+fn optional_pattern_opener_without_markers_is_accepted() {
+    let template = "echo \"$(case z in (x) : ;; esac)\"";
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(template, &bindings()).expect("Bash accepts an optional pattern opener"),
+            template,
+            "a supported `case` substitution must keep its text"
+        );
+    }
 }

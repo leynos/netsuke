@@ -206,6 +206,7 @@ ir.duplicate_outputs = Yinelenen çıktılar bulundu: { $outputs }.
 ir.circular_dependency = Döngüsel bağımlılık bulundu: { $cycle }.
 ir.action_serialisation = Eylem serileştirilemedi: { $details }.
 ir.invalid_command = Komutta geçersiz yerleştirme: { $snippet }.
+ir.unplaced_case = Desteklenmeyen komut ikamesi: 'case' tanınan bir komut konumunun dışında (ikamenin başında, bir ayırıcıdan sonra veya süslü parantez grubunun başında yazın).
 ir.ambiguous_substitution_boundary = { $position }. karakterde belirsiz komut ikamesi sınırı; ikamenin kapanış parantezini sonraki '#' işaretinden ayırın.
 
 # Ninja üretimi hataları.
