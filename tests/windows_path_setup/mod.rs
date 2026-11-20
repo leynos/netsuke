@@ -96,35 +96,60 @@ fn ambient_environment(env: &dyn Env) -> AmbientEnvironment {
 /// Returns an error when the example is not PowerShell, when a script cannot be
 /// written, or when no PowerShell executable can be started.
 pub fn run_example(root: &Path, example: &DocumentedExample) -> Result<Output> {
-    run_script(root, example, None)
+    run_script(root, example, Simulation::None)
 }
 
-/// Run `example` after seeding the state an interrupted earlier run leaves.
+/// Run `example` and stop the wrapper after it writes the interrupted state.
 ///
 /// A run killed between appending its directory and its `finally` block leaves
 /// the sentinel *and* that directory in the stored `PATH`, with the backup
-/// still recording the real value. Seeding that pair inside the wrapper, under
-/// its mutex, lets the recovery path be observed without a second process
-/// racing the first, and the seeded backup records the real value, so the
-/// probe leaves the user's `PATH` exactly as it found it.
+/// still recording the real value. This entry point produces exactly that
+/// state and ends the process without restoring it, so the next run has to
+/// recover it — in a separate process, against an abandoned mutex — rather
+/// than being handed the state directly.
+///
+/// The wrapper writes the backup first, so whatever the caller does next, a
+/// later run restores the user's `PATH` from it.
 ///
 /// # Errors
 ///
 /// Returns the same errors as [`run_example`].
-pub fn run_example_after_interrupted_append(
+pub fn run_example_interrupted(root: &Path, example: &DocumentedExample) -> Result<Output> {
+    run_script(root, example, Simulation::Interrupted)
+}
+
+/// Run `example` and stop the wrapper after restoring but before deleting the
+/// backup.
+///
+/// A run killed at that point leaves the registry holding the original value
+/// and the backup file still on disk. The next run must recognise the backup
+/// as spent and remove it, rather than refusing a state it has already
+/// finished restoring.
+///
+/// # Errors
+///
+/// Returns the same errors as [`run_example`].
+pub fn run_example_leaving_spent_backup(
     root: &Path,
     example: &DocumentedExample,
-    appended: &Path,
 ) -> Result<Output> {
-    run_script(root, example, Some(appended))
+    run_script(root, example, Simulation::SpentBackup)
+}
+
+/// The crash a run is asked to simulate before anything can restore the value.
+#[derive(Clone, Copy)]
+enum Simulation {
+    /// Run the wrapper through to its own restore.
+    None,
+    /// End the process with the sentinel and the appended directory in place.
+    Interrupted,
+    /// End the process after restoring the original but before removing the
+    /// backup that describes it.
+    SpentBackup,
 }
 
 /// Write `example` and the wrapper into `root`, then run one wrapper process.
-fn run_script(
-    root: &Path,
-    example: &DocumentedExample,
-    interrupted: Option<&Path>,
-) -> Result<Output> {
+fn run_script(root: &Path, example: &DocumentedExample, simulation: Simulation) -> Result<Output> {
     ensure!(
         example.language == "powershell",
         "{} should be a PowerShell example, got {:?}",
@@ -136,7 +161,7 @@ fn run_script(
         .with_context(|| format!("write {} to {}", example.id, example_script.display()))?;
     let wrapper = root.join("wrapper.ps1");
     test_fs::write(&wrapper, wrapper::WRAPPER).context("write the registry wrapper")?;
-    run_wrapper(&wrapper, &example_script, root, interrupted)
+    run_wrapper(&wrapper, &example_script, root, simulation)
 }
 
 /// Run the wrapper under the first PowerShell the host provides.
@@ -154,31 +179,20 @@ fn run_wrapper(
     wrapper_script: &Path,
     example: &Path,
     program_files_root: &Path,
-    interrupted: Option<&Path>,
+    simulation: Simulation,
 ) -> Result<Output> {
     let backup = backup_path();
+    let run = WrapperRun {
+        script: wrapper_script,
+        example,
+        backup: &backup,
+        simulation,
+    };
     let ambient = ambient_environment(&DefaultEnv);
     let environment = controlled_environment(&ambient, program_files_root)?;
     let mut unavailable = Vec::new();
     for shell in shell_candidates(&ambient) {
-        let mut command = Command::new(&shell);
-        command
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-            ])
-            .arg(wrapper_script)
-            .arg("-ExamplePath")
-            .arg(example)
-            .arg("-BackupPath")
-            .arg(&backup);
-        if let Some(appended) = interrupted {
-            command.arg("-InterruptedAppended").arg(appended);
-        }
-        let attempt = command
+        let attempt = wrapper_command(&shell, &run)
             .env_clear()
             .envs(environment.iter().map(|(name, value)| (name, value)))
             .output();
@@ -200,6 +214,50 @@ fn run_wrapper(
             unavailable.join("; ")
         }
     )
+}
+
+/// The inputs one wrapper process needs, other than the shell running it.
+///
+/// They are grouped because every candidate shell receives the same set and
+/// only the executable differs, so the retry loop passes one value rather than
+/// repeating the run's identity for each attempt.
+struct WrapperRun<'a> {
+    /// The wrapper script written into the run's workspace.
+    script: &'a Path,
+    /// The documented example the wrapper dot-sources.
+    example: &'a Path,
+    /// Where the wrapper records the value to restore if it is killed.
+    backup: &'a Path,
+    /// The crash this run is asked to simulate, if any.
+    simulation: Simulation,
+}
+
+/// Build the invocation of one wrapper process.
+///
+/// The arguments are assembled in one place so the retry loop over candidate
+/// shells holds only the attempt and its outcome.
+fn wrapper_command(shell: &Path, run: &WrapperRun<'_>) -> Command {
+    let mut command = Command::new(shell);
+    command
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ])
+        .arg(run.script)
+        .arg("-ExamplePath")
+        .arg(run.example)
+        .arg("-BackupPath")
+        .arg(run.backup);
+    if matches!(run.simulation, Simulation::Interrupted) {
+        command.arg("-SimulateInterruption");
+    }
+    if matches!(run.simulation, Simulation::SpentBackup) {
+        command.arg("-SimulateSpentBackup");
+    }
+    command
 }
 
 /// The file that records the value to restore when a run is killed outright.

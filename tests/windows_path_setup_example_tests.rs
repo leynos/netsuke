@@ -28,22 +28,28 @@ use anyhow::{Context, Result, bail, ensure};
 use documentation_examples::{DocumentedExample, documented_example};
 use test_support::fs as test_fs;
 use windows_path_setup::{
-    run_example, run_example_after_interrupted_append, wrapper::SENTINEL_PATH,
+    run_example, run_example_interrupted, run_example_leaving_spent_backup, wrapper::SENTINEL_PATH,
 };
 
-/// Verify that each documented script appends its directory to the user
-/// `PATH` and keeps the value expandable, and that it changes nothing when the
-/// executable is absent.
+/// Verify the whole documented `PATH` contract: each script appends its
+/// directory and keeps the value expandable, changes nothing when the
+/// executable is absent, and a run killed after appending is repaired by the
+/// next process.
 ///
-/// Both examples run inside one test on purpose: every run rewrites the same
-/// user `PATH` value, so separate cases could execute concurrently and read
-/// each other's value.
+/// Every case runs inside one test on purpose. Each run rewrites the same user
+/// `PATH` value, and the recovery case leaves a crashed state behind between
+/// two runs, so separate test functions could interleave and either read each
+/// other's value or repair the crashed state before its second run sees it.
 #[test]
 #[cfg_attr(
     not(windows),
     ignore = "the documented scripts write the Windows user environment key"
 )]
 fn documented_path_setup_persists_the_directory() -> Result<()> {
+    // Recovery runs first so a crashed run left behind by an earlier suite is
+    // repaired before the assertions that expect a settled value.
+    assert_interrupted_run_is_recovered()?;
+    assert_spent_backup_is_cleaned_up()?;
     for example_id in ["guide-windows-path", "guide-windows-path-beta4"] {
         let example = documented_example(example_id)?;
         assert_example_persists_the_directory(&example)?;
@@ -52,49 +58,145 @@ fn documented_path_setup_persists_the_directory() -> Result<()> {
     Ok(())
 }
 
-/// Verify that a run killed after the example appends its directory is repaired
-/// by the next run.
+/// Verify that a run killed after the example appends its directory is
+/// repaired by a separate process.
 ///
 /// The recovery exists for exactly this crash. Without it the next run adopts
 /// the sentinel-plus-directory value as the user's own original, and the
-/// entries the backup recorded are lost for good. The crashed state is seeded
-/// inside the wrapper, under its mutex, so no concurrent run can observe it,
-/// and the seeded backup records the real value, so this probe restores the
-/// user's `PATH` rather than a stand-in.
-#[test]
-#[cfg_attr(
-    not(windows),
-    ignore = "the documented scripts write the Windows user environment key"
-)]
-fn interrupted_append_is_recovered_from_the_backup() -> Result<()> {
+/// entries the backup recorded are lost for good. The first process really
+/// ends without restoring anything, so the second one meets the registry, the
+/// backup and the abandoned mutex that a crash leaves, rather than a state
+/// handed to it inside one process.
+///
+/// If this fails after the first process, the backup is still in place and the
+/// next run of the suite restores the user's `PATH` from it.
+fn assert_interrupted_run_is_recovered() -> Result<()> {
     let root = tempfile::tempdir().context("create the recovery workspace")?;
-    let appended = install_directory(root.path())?;
+    let install = install_directory(root.path())?;
     let example = DocumentedExample {
         id: "recovery-probe".to_owned(),
         language: "powershell".to_owned(),
         body: "# The recovery under test runs before this script.\n".to_owned(),
     };
-    let output = run_example_after_interrupted_append(root.path(), &example, &appended)?;
-    let stdout = require_success(&output, &example)?;
-    let seeded = marker(&stdout, "SEEDED")
-        .with_context(|| describe(&output, &example, "did not report SEEDED"))?;
-    let captured = marker(&stdout, "ORIGINAL")
-        .with_context(|| describe(&output, &example, "did not report ORIGINAL"))?;
+    let interrupted = run_example_interrupted(root.path(), &example)?;
     ensure!(
-        captured == seeded,
-        "the interrupted value should be repaired before capture, captured \
-         {captured:?} with {seeded:?} recorded"
+        !interrupted.status.success(),
+        "{}",
+        describe(
+            &interrupted,
+            &example,
+            "should end without restoring the value it wrote"
+        )
+    );
+    let interrupted_stdout = String::from_utf8_lossy(&interrupted.stdout).into_owned();
+    let appended = marker(&interrupted_stdout, "INTERRUPTED").with_context(|| {
+        describe(
+            &interrupted,
+            &example,
+            "did not report the directory it left in PATH",
+        )
+    })?;
+    let install_text = install.display().to_string();
+    ensure!(
+        appended == install_text,
+        "the interrupted run should leave the staged directory {install_text} in PATH, \
+         left {appended:?}"
+    );
+    let recorded = marker(&interrupted_stdout, "ORIGINAL").with_context(|| {
+        describe(
+            &interrupted,
+            &example,
+            "did not report the value it recorded",
+        )
+    })?;
+
+    let recovered = run_example(root.path(), &example)?;
+    let stdout = require_success(&recovered, &example)?;
+    let captured = marker(&stdout, "ORIGINAL").with_context(|| {
+        describe(
+            &recovered,
+            &example,
+            "did not report ORIGINAL after recovery",
+        )
+    })?;
+    ensure!(
+        captured == recorded,
+        "the next run should restore the value the interrupted run recorded, captured \
+         {captured:?} with {recorded:?} recorded"
     );
     ensure!(
         !captured.starts_with(SENTINEL_PATH),
-        "the repaired value should not carry the sentinel, captured {captured:?}"
+        "the recovered value should not carry the sentinel, captured {captured:?}"
     );
     let restored = marker(&stdout, "RESTORED")
-        .with_context(|| describe(&output, &example, "did not report RESTORED"))?;
+        .with_context(|| describe(&recovered, &example, "did not report RESTORED"))?;
     ensure!(
-        restored == seeded,
-        "the wrapper should leave the recorded value in place, restored {restored:?} \
-         with {seeded:?} recorded"
+        restored == recorded,
+        "the run should leave the recovered value in place, restored {restored:?} with \
+         {recorded:?} recorded"
+    );
+    Ok(())
+}
+
+/// Verify that a backup a completed restore left behind is removed rather than
+/// refused.
+///
+/// A run killed between its restore and the delete of its backup leaves the
+/// registry holding the original value and the backup still on disk. Refusing
+/// that state would make every later run fail against a backup it has already
+/// finished restoring, so the next run must recognise it, remove the spent
+/// file and carry on with the documented setup.
+///
+/// If this fails after the first process, the backup is still in place and the
+/// next run of the suite removes it.
+fn assert_spent_backup_is_cleaned_up() -> Result<()> {
+    let root = tempfile::tempdir().context("create the spent-backup workspace")?;
+    let example = DocumentedExample {
+        id: "spent-backup-probe".to_owned(),
+        language: "powershell".to_owned(),
+        body: "# The recovery under test runs before this script.\n".to_owned(),
+    };
+    let crashed = run_example_leaving_spent_backup(root.path(), &example)?;
+    ensure!(
+        !crashed.status.success(),
+        "{}",
+        describe(
+            &crashed,
+            &example,
+            "should end after restoring without deleting the backup"
+        )
+    );
+    let crashed_stdout = String::from_utf8_lossy(&crashed.stdout).into_owned();
+    let spent = marker(&crashed_stdout, "SPENT")
+        .with_context(|| describe(&crashed, &example, "did not report the value it restored"))?;
+    let recorded = marker(&crashed_stdout, "ORIGINAL")
+        .with_context(|| describe(&crashed, &example, "did not report the value it recorded"))?;
+    ensure!(
+        spent == recorded,
+        "the spent backup should describe the restored value, SPENT={spent:?} with \
+         ORIGINAL={recorded:?}"
+    );
+
+    let recovered = run_example(root.path(), &example)?;
+    let stdout = require_success(&recovered, &example)?;
+    let captured = marker(&stdout, "ORIGINAL").with_context(|| {
+        describe(
+            &recovered,
+            &example,
+            "did not report ORIGINAL after clearing the spent backup",
+        )
+    })?;
+    ensure!(
+        captured == spent,
+        "the run should keep the restored value while clearing the spent backup, captured \
+         {captured:?} with {spent:?} restored earlier"
+    );
+    let restored = marker(&stdout, "RESTORED")
+        .with_context(|| describe(&recovered, &example, "did not report RESTORED"))?;
+    ensure!(
+        restored == spent,
+        "the run should leave the restored value in place, restored {restored:?} with \
+         {spent:?} restored earlier"
     );
     Ok(())
 }
