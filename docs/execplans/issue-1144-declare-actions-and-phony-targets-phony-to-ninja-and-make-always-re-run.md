@@ -4,7 +4,7 @@ This ExecPlan is a living document. Keep `Progress`, `Surprises & discoveries`,
 `Decision log`, and `Outcomes & retrospective` current as implementation
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 Issue: [#1144](https://github.com/leynos/netsuke/issues/1144)
 
@@ -104,12 +104,12 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
 - [x] Migration notice added to the v0.1.0 guide, `.netsuke/phony` added to its
       reserved-namespace paragraph, and the command-layer boundary recorded in
       the developers' guide and ADR-0084.
-- [x] Fourth review's Unit Architecture finding fixed: the alias resolver
-      reports canonicalization failures instead of folding them into "not
-      reserved", lives in `src/runner/phony_state/resolve.rs` apart from the
-      namespace handles, and gained a regression test for an unresolvable path
-      plus a query test that resolution creates no state.
-- [ ] Gates rerun on the fixed tree and the review cleared.
+- [x] Pre-merge Unit Architecture finding fixed: the alias resolver reports
+      canonicalization failures instead of folding them into "not reserved",
+      lives in `src/runner/phony_state/resolve.rs` apart from the namespace
+      handles, and gained a regression test for an unresolvable path plus a
+      query test that resolution creates no state.
+- [x] Gates rerun on the fixed tree and the review cleared.
 
 ## Surprises & discoveries
 
@@ -332,18 +332,26 @@ Verification that has actually run: the generation-side suite in
 The commit gates were then run as one sequential batch on the final tree.
 `make check-fmt`, `make lint`, `make typecheck`, `make doc-coverage`,
 `make markdownlint`, `make nixie`, `make test-workflow-contracts` and
-`NETSUKE_REQUIRE_NINJA=1 make test` each exited 0; the test gate ran all 6259
+`NETSUKE_REQUIRE_NINJA=1 make test` each exited 0; the test gate ran all 6261
 nextest cases with 9 environment-gated skips and passed every doctest target.
-Doc-comment coverage measured 98% against the 80% threshold.
+`make test-workflow-contracts` ran 2465 cases with 3 skips, and doc-comment
+coverage measured 98.32% against the 80% threshold.
 
-Earlier drafts recorded 6050, 6065, 6102, 6107 and 6216 cases. Each was a real
-measurement of an earlier tree: the first before the runtime and generation
-suites added for this change were in the same batch, the second before the
-third review's alias tests existed, 6102 before the fourth review's
-namespace-open and outside-link tests were added, 6107 before the branch was
-first rebased onto `main`, and 6216 before `main` advanced again. A count
-belongs to the tree its batch ran on, so 6259 is the figure for the tree that
-ships.
+The pre-merge Unit Architecture finding was fixed before that batch: the alias
+resolver in `src/runner/phony_state/resolve.rs` now reports canonicalization
+failures instead of folding them into "not reserved", and the module split
+leaves the namespace handles and the removal in `mod.rs`. A link loop that
+cannot be resolved refuses the reset, and a query test pins that resolution
+creates no state.
+
+Earlier drafts recorded 6050, 6065, 6102, 6107, 6216 and 6259 cases. Each was a
+real measurement of an earlier tree: the first before the runtime and
+generation suites added for this change were in the same batch, the second
+before the third review's alias tests existed, 6102 before the namespace-open
+and outside-link tests were added, 6107 before the branch was first rebased onto
+`main`, 6216 before `main` advanced again, and 6259 before the resolver tests
+above. A count belongs to the tree its batch ran on, so 6261 is the figure for
+the tree that ships.
 
 The second rebase, onto the commit that split Ninja launch failures from recipe
 failures, conflicted in exactly one file: `docs/v0-1-0-migration-guide.md`,
