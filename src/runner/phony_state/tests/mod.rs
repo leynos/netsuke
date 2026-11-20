@@ -32,12 +32,11 @@ use tempfile::TempDir;
 
 #[test]
 fn the_component_constants_compose_the_force_path() {
-    let composed = Utf8Path::new(NAMESPACE_PARENT)
-        .join(NAMESPACE_LEAF)
-        .join(FORCE_ENTRY);
+    // Compose the slash-separated spelling directly. A joined path would carry
+    // the platform separator, which the generator never writes.
+    let composed = format!("{NAMESPACE_PARENT}/{NAMESPACE_LEAF}/{FORCE_ENTRY}");
     assert_eq!(
-        composed.as_str(),
-        FORCE_PATH,
+        composed, FORCE_PATH,
         "the reset must clear the node the generator names"
     );
 }
