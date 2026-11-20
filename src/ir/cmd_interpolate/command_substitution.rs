@@ -207,11 +207,23 @@ fn has_marker_after(chars: &[char], pos: usize) -> bool {
 /// `case` without one cannot be the construct whose `)` ends the pattern.
 /// Matching it keeps ordinary argument data such as `echo case` from failing
 /// closed, while `grep case in file` still over-approximates.
+///
+/// One forward pass answers the whole question: the first keyword that matters
+/// is the earliest `case`, and any later `in` completes its header. Rescanning
+/// the suffix from every `case` would make a long run of `case` arguments
+/// quadratic before the recipe is even accepted.
 fn contains_case_in_prefix(chars: &[char], start: usize, end: usize) -> bool {
-    (start..end).any(|pos| {
-        is_keyword_at(chars, pos, &CASE_KEYWORD)
-            && contains_keyword(chars, pos + CASE_KEYWORD.len(), end, &IN_KEYWORD)
-    })
+    let mut saw_case = false;
+    for pos in start..end {
+        if !saw_case && is_keyword_at(chars, pos, &CASE_KEYWORD) {
+            saw_case = true;
+            continue;
+        }
+        if saw_case && is_keyword_at(chars, pos, &IN_KEYWORD) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Report whether `chars[start..end]` contains the `case` reserved word.
