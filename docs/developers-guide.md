@@ -2806,23 +2806,27 @@ Netsuke is PowerShell. The second step invokes:
 The fixture exercises the Windows PowerShell legacy-recipe contract, including
 target discovery, scalar and script recipes, ordered-list state and failure,
 path quoting, the shared-list boundary check, and the large-recipe
-response-file transport. A positive target places a closed here-string in the
-first entry and an ordinary marker in the second, proving the marker is still
-interpolated, while a separate manifest with an open single quote in entry one
-must fail with the new interpolation diagnostic and must not create the `pwned`
-sentinel. The native rejection check is Windows-only because it requires the
-real `powershell.exe`; the equivalent lowering and property regressions run on
-every platform. It also proves the trusted interpreter binding:
-`powershell-paths.ps1` compiles decoy `powershell.exe` programs, places them in
-the current directory and first on `PATH`, and requires both a small and an
-oversize recipe to produce their real output without writing the decoy marker.
-`bash.ps1` requires `generate` to fail with `PATH contains no bash.exe` and to
-leave no plan behind when Bash is selected without a runtime. Because
-`Add-Type` rejects `-OutputType ConsoleApplication` under PowerShell 7.1 and
-later, `powershell-paths.ps1` compiles the decoys with the .NET Framework C#
-compiler, `%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, falling
-back to the 32-bit `Framework` directory. The native smoke run therefore needs
-a Windows host carrying that compiler, which the Windows images provide; the
+response-file transport. One separate manifest places a closed here-string in
+the first entry and an ordinary marker in the second, proving the marker is
+still interpolated, while another with an open single quote in entry one must
+fail with the new interpolation diagnostic and must not create the `pwned`
+sentinel. The positive manifest is separate because a here-string contains line
+feeds, which the POSIX route cannot place in one Ninja command binding; keeping
+it out of the shared fixture is what lets the `bash-isolated-state` scenario
+lower that fixture under `NETSUKE_WINDOWS_SHELL=bash`. The native rejection
+check is Windows-only because it requires the real `powershell.exe`; the
+equivalent lowering and property regressions run on every platform. It also
+proves the trusted interpreter binding: `powershell-paths.ps1` compiles decoy
+`powershell.exe` programs, places them in the current directory and first on
+`PATH`, and requires both a small and an oversize recipe to produce their real
+output without writing the decoy marker. `bash.ps1` requires `generate` to fail
+with `PATH contains no bash.exe` and to leave no plan behind when Bash is
+selected without a runtime. Because `Add-Type` rejects
+`-OutputType ConsoleApplication` under PowerShell 7.1 and later,
+`powershell-paths.ps1` compiles the decoys with the .NET Framework C# compiler,
+`%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, falling back to
+the 32-bit `Framework` directory. The native smoke run therefore needs a
+Windows host carrying that compiler, which the Windows images provide; the
 `windows_recipe_interpreter_binding_tests` integration test covers the same
 decoys through `compile_rust_helper` on the CI image and skips the Ninja
 execution step when `ninja.exe` is absent unless `NETSUKE_REQUIRE_NINJA=1`.
