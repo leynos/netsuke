@@ -207,6 +207,7 @@ ir.duplicate_outputs = Sorties en double détectées : { $outputs }.
 ir.circular_dependency = Dépendance circulaire détectée : { $cycle }.
 ir.action_serialisation = Impossible de sérialiser l'action : { $details }.
 ir.invalid_command = Interpolation de commande non valide : { $snippet }.
+ir.unplaced_case = Substitution de commande non prise en charge : 'case' hors d'une position de commande reconnue (écrivez-le d'abord dans la substitution, après un séparateur ou au début d'un groupe d'accolades).
 ir.ambiguous_substitution_boundary = Limite ambiguë de substitution de commande au caractère { $position } ; séparez la parenthèse fermante de la substitution du '#' suivant.
 
 # Erreurs de génération Ninja.

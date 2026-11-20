@@ -206,6 +206,7 @@ ir.duplicate_outputs = خروجی‌های تکراری یافت شد: { $output
 ir.circular_dependency = وابستگی چرخه‌ای یافت شد: { $cycle }.
 ir.action_serialisation = تبدیل کنش به داده‌های پیاپی ممکن نشد: { $details }.
 ir.invalid_command = درج نامعتبر در فرمان: { $snippet }.
+ir.unplaced_case = جایگزینی فرمان پشتیبانی‌نشده: 'case' بیرون از موقعیت فرمان شناخته‌شده (آن را نخست در جایگزینی، پس از یک جداکننده یا در آغاز گروه آکولاد بنویسید).
 ir.ambiguous_substitution_boundary = مرز مبهم جایگزینی فرمان در نویسه { $position }؛ پرانتز بستن جایگزینی را از '#' بعدی جدا کنید.
 
 # خطاهای تولید پرونده‌های Ninja.

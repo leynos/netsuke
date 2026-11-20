@@ -5,8 +5,9 @@
 //! helpers own that nesting state, keeping the parent traversal within the
 //! repository's module-size cap.
 
+use super::super::case_nesting::{CaseNesting, CaseObservation};
 use super::super::command_substitution::{
-    CaseNesting, CaseObservation, SubstitutionBoundary, reject_ambiguous_case_comment,
+    SubstitutionBoundary, reject_ambiguous_case_comment, reject_unplaced_case,
 };
 use super::super::posix_lexical::SubstitutionKind;
 use super::{IrGenError, ScriptSubstitutionTraversal, ShellQuoteContext};
@@ -105,6 +106,7 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             return Ok(None);
         };
         if is_closed {
+            reject_unplaced_case(self.chars, &boundary)?;
             self.posix_lexical.leave_command_substitution_region();
             reject_ambiguous_case_comment(self.chars, &boundary)?;
             self.posix_lexical.record_closed_command_substitution(pos);
@@ -122,12 +124,13 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             .last()
             .filter(|substitution| substitution.parenthesis_depth == 1)
             .map_or_else(
-                || SubstitutionBoundary::new(pos, None, false),
+                || SubstitutionBoundary::new(pos, None, false, false),
                 |substitution| {
                     SubstitutionBoundary::new(
                         pos,
                         Some(substitution.start),
                         substitution.case_nesting.saw_case(),
+                        substitution.case_nesting.has_unplaced_case(),
                     )
                 },
             )
@@ -188,7 +191,8 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         if self.starts_command_substitution(pos, ch) {
             return Some(ScriptCommandSubstitutionDelimiter::Start);
         }
-        if self.is_unquoted_command_substitution() && ch == '(' {
+        let opens_group = self.is_unquoted_command_substitution() && ch == '(';
+        if opens_group && !self.takes_pattern_opener() {
             return Some(ScriptCommandSubstitutionDelimiter::NestedOpen);
         }
         if self.is_unquoted_command_substitution() && ch == ')' {
@@ -209,6 +213,24 @@ impl ScriptSubstitutionTraversal<'_, '_> {
     fn is_unquoted_command_substitution(&self) -> bool {
         self.is_in_command_substitution()
             && self.active_quote_context() == ShellQuoteContext::Unquoted
+    }
+
+    /// Report whether a `(` at the active depth opens a `case` pattern list.
+    ///
+    /// Bash accepts one optional `(` immediately before a pattern list, and
+    /// that opener must not raise the grouping depth: the pattern terminator
+    /// after it stands at the case's own depth, where the tracker recognises
+    /// it. Reading the opener as a group would move the terminator one level
+    /// deeper, where it closes nothing and leaves the construct in its pattern
+    /// phase.
+    fn takes_pattern_opener(&self) -> bool {
+        self.command_substitutions
+            .last()
+            .is_some_and(|substitution| {
+                substitution
+                    .case_nesting
+                    .takes_pattern_opener(substitution.parenthesis_depth)
+            })
     }
 
     /// Increase the grouping depth in the innermost command substitution.

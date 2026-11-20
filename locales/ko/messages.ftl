@@ -206,6 +206,7 @@ ir.duplicate_outputs = 중복된 출력이 발견되었습니다: { $outputs }.
 ir.circular_dependency = 순환 의존성이 발견되었습니다: { $cycle }.
 ir.action_serialisation = 작업을 직렬화하지 못했습니다: { $details }.
 ir.invalid_command = 명령의 보간이 잘못되었습니다: { $snippet }.
+ir.unplaced_case = 지원되지 않는 명령 치환: 'case'가 인식된 명령 위치 밖에 있습니다(치환의 처음, 구분 기호 뒤 또는 중괄호 그룹의 시작에 작성하세요).
 ir.ambiguous_substitution_boundary = { $position }번째 문자에서 명령 치환 경계가 모호합니다. 치환의 닫는 괄호를 뒤따르는 '#'과 분리하세요.
 
 # Ninja 생성 오류.

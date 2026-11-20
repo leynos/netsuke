@@ -126,6 +126,7 @@ define_keys! {
     IR_CIRCULAR_DEPENDENCY => "ir.circular_dependency",
     IR_ACTION_SERIALISATION => "ir.action_serialisation",
     IR_INVALID_COMMAND => "ir.invalid_command",
+    IR_UNPLACED_CASE => "ir.unplaced_case",
     IR_AMBIGUOUS_SUBSTITUTION_BOUNDARY => "ir.ambiguous_substitution_boundary",
     NINJA_GEN_MISSING_ACTION => "ninja_gen.missing_action",
     NINJA_GEN_CONSOLE_DEPENDENCY_ONLY => "ninja_gen.console_dependency_only",

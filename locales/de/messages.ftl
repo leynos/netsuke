@@ -206,6 +206,7 @@ ir.duplicate_outputs = Doppelte Ausgaben erkannt: { $outputs }.
 ir.circular_dependency = Zyklische Abhängigkeit erkannt: { $cycle }.
 ir.action_serialisation = Die Aktion konnte nicht serialisiert werden: { $details }.
 ir.invalid_command = Ungültige Befehlsinterpolation: { $snippet }.
+ir.unplaced_case = Nicht unterstützte Befehlsersetzung: 'case' außerhalb einer erkannten Befehlsposition (schreiben Sie es zuerst in der Ersetzung, nach einem Trennzeichen oder am Anfang einer Klammergruppe).
 ir.ambiguous_substitution_boundary = Mehrdeutige Grenze der Befehlsersetzung bei Zeichen { $position }; trennen Sie die schließende Klammer der Ersetzung vom folgenden '#'.
 
 # Fehler bei der Ninja-Erzeugung.

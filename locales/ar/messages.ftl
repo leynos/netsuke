@@ -206,6 +206,7 @@ ir.duplicate_outputs = رُصدت مخرجات مكرّرة: { $outputs }.
 ir.circular_dependency = رُصد اعتماد دائري: { $cycle }.
 ir.action_serialisation = تعذّرت سَلسَلة الإجراء: { $details }.
 ir.invalid_command = إقحام غير صالح داخل الأمر: { $snippet }.
+ir.unplaced_case = استبدال أمر غير مدعوم: 'case' خارج موضع أمر معروف (اكتبه أولاً في الاستبدال، أو بعد فاصل، أو في بداية مجموعة أقواس).
 ir.ambiguous_substitution_boundary = حد غير واضح لاستبدال الأمر عند المحرف { $position }؛ افصل قوس إغلاق الاستبدال عن علامة '#' التالية.
 
 # أخطاء توليد ملفات Ninja.

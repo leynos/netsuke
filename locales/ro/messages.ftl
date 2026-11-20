@@ -206,6 +206,7 @@ ir.duplicate_outputs = Au fost detectate ieșiri duplicate: { $outputs }.
 ir.circular_dependency = A fost detectată o dependență circulară: { $cycle }.
 ir.action_serialisation = Acțiunea nu a putut fi serializată: { $details }.
 ir.invalid_command = Interpolare nevalidă în comandă: { $snippet }.
+ir.unplaced_case = Substituție de comandă neacceptată: 'case' în afara unei poziții de comandă recunoscute (scrieți-l primul în substituție, după un separator sau la începutul unui grup de acolade).
 ir.ambiguous_substitution_boundary = Limită ambiguă a substituției de comandă la caracterul { $position }; separați paranteza de închidere a substituției de '#' următor.
 
 # Erori la generarea fișierelor Ninja.

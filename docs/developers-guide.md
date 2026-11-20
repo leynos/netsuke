@@ -9305,9 +9305,13 @@ A `)` that terminates a `case` pattern is an operator, so a `#` immediately
 after it starts a comment, while the `)` that closes `$()` stays in the
 surrounding word and leaves the same `#` as word data. The two are lexically
 identical without the `case` grammar, so `CaseNesting` in
-`src/ir/cmd_interpolate/command_substitution.rs` counts `case` and `esac`
-reserved words inside each substitution and keeps the substitution open across
-pattern terminators; the `)` that finally closes it is the one checked. When
+`src/ir/cmd_interpolate/case_nesting/mod.rs` counts `case` and `esac` reserved
+words inside each substitution and keeps the substitution open across pattern
+terminators; the `)` that finally closes it is the one checked. Its sibling
+`state.rs` holds the tracker's state values — the keywords seen, the open
+compound-command prefix, the role a completed word plays, and each open
+construct's depth and phase — together with the transitions those roles apply,
+and `lexical.rs` holds the word-boundary and command-position predicates. When
 that closer is immediately followed by `#` and the substitution's source
 contains `case`, both POSIX traversals fail closed with
 `IrGenError::AmbiguousSubstitutionBoundary` rather than guessing a quote
@@ -9324,17 +9328,95 @@ the only place the shell reads one: `printf esac` passes `esac` as an argument
 and must leave the construct open. Command position holds at the start of the
 substitution, after a command separator, a newline, or a parenthesis, and after
 a reserved word that opens or continues a command list (`if`, `then`, `else`,
-`elif`, `while`, `until`, `do`, `!`, or `time`); a completed argument, a
-redirection operator, or quoted text clears it. An `esac` also closes only the
+`elif`, `while`, `until`, `do`, `!`, `time`, or `{`); a completed argument, a
+redirection operator, or quoted text clears it. `{` is on that list because it
+opens a brace-group command list, which is how a trusted script groups a `case`
+inside `$( )` or places one in a function body:
+`$( { case x in x) … ;; esac; } )` and
+`$( f() { case x in x) … ;; esac; }; f )` both read `case` as a reserved word.
+The pattern terminator must keep the substitution open there exactly as it does
+at the start of the substitution. A tracker that omitted `{` read the
+terminator as the substitution closer and lowered a marker in the arm for the
+enclosing quote context, so a double-quoted substitution received the outer
+double-quoted path encoding inside its body (issue #999). Parenthesized groups
+need no separate entry, because `(` already ends the preceding word and leaves
+the next one in command position.
+
+Bash also keeps command position open inside a compound command's prefix, so
+the tracker models the two word forms it can read: an unquoted option word after
+`time` (`time -p case ...`) and a name after `coproc`
+(`coproc jobs case ...`). Bash still reads a following `esac` as the terminator
+when the word after `coproc` is the coprocess's command rather than a name:
+`case x in x) coproc printf esac` is accepted, and the `)` after it closes the
+substitution, so the tracker keeps command position open there too. A quoted or
+expanded word in either slot is opaque because quoting hides its text, and so
+is a command prefixed by an assignment or a redirection. A `case` word seen
+where the tracker expected an argument is recorded, and `reject_unplaced_case`
+in `command_substitution.rs` fails closed once the substitution's source also
+holds a whole-word `in` before the closer and a Netsuke marker follows that
+closer. Both conditions matter: the shell requires `in` before the first
+pattern terminator, and a later marker is what makes the quote-context decision
+observable at all. Both keywords are matched as Bash reads them: a
+backslash-newline pair is deleted before parsing, so `c` followed by a
+continuation and `ase` still spells `case`. A pair is deleted only when its
+backslash is unescaped: in `\\<newline>` the first backslash quotes the second,
+so the newline is an ordinary separator and the `in` after it starts a word.
+The check over-approximates, so argument data such as `grep case in file`
+followed by a later marker is rejected too, and so is a `case` behind an
+assignment or redirection prefix. The shell reads the latter as a syntax error,
+so the alternative is not a silently different context. The rejection has its
+own `ir.unplaced_case` Fluent message, so the explanation is localized rather
+than carried as an English snippet argument inside the translated
+`ir.invalid_command` text. The recipe and snippet stay empty for the same
+redaction reason as the ambiguity diagnostic. An `esac` also closes only the
 construct open at its own depth, so a pattern spelled `esac` does not end an
-outer case. The tracker takes comments from the traversal rather than inferring
-them from `#`, because comment text is copied verbatim and is never offered to
-it: the traversal reports the comment's start and the newline that ends it, so a
-`case` on the line after a comment still opens its construct. PowerShell has no
-`case` patterns and keeps its unquoted-only rule. The regressions live in
+outer case. The phase of that construct decides whether a reserved word is a
+keyword at all: `esac` where a pattern would start closes it, but after a `|`
+it is another alternative pattern, so `case x in x|esac) … esac)` keeps the
+substitution open until the `esac` after the arm. The arm is entered at the `)`
+written at the construct's own depth and left at `;;`, `;&`, or `;;&`, which
+start the next pattern list. A line continuation between the two semicolons
+does not split that operator: an unquoted backslash-newline pair is deleted
+before tokenizing, so the tracker never records the backslash as the character
+before the second `;`. A subject spelled `esac` (`case esac in …`) is header
+data for the same reason, as is a word inside a pattern group such as
+`@(case)`: the group only deepens the parenthesis depth, which classification
+and operator handling both skip over to reach the construct that governs the
+position. Bash also accepts one optional `(` immediately before a pattern list,
+and that opener is pattern syntax rather than a group: the traversal asks the
+tracker before raising the depth, and the tracker answers yes only while the
+list has not started. `case z in (x) …` therefore keeps its terminator at the
+case's own depth, while a `(` after pattern text still deepens a group. After
+`|` the shell rejects a `(` outright, so no encoding decision depends on that
+form.
+
+Bash recognizes a reserved word before quote removal, so only a bare spelling
+counts. In a pattern list, `esac""` and `e\sac` both spell the word `esac`, but
+each is pattern text and the `)` after it is still the pattern terminator; a
+tracker that closed the construct there would read that `)` as the substitution
+closer and lower the arm's marker for the enclosing quote context. The tracker
+therefore marks a token non-literal at any quote or any escape of a real
+character, and closes a construct only on a literal `esac`. The mark covers the
+whole token rather than the accumulated word, because a quote ends the word
+without ending the token. A backslash-newline pair does not mark it: Bash
+deletes the pair before tokenizing, so `es\<newline>ac` is still the closer.
+Opening a construct stays over-approximate, because a quoted `case` word that
+the shell reads as a command name still opens one here; over-recognizing an
+opening only keeps the substitution open longer, where the boundary check
+rejects the marker instead of lowering it for a context the shell does not
+share.
+
+The tracker takes comments from the traversal rather than inferring them from
+`#`, because comment text is copied verbatim and is never offered to it: the
+traversal reports the comment's start and the newline that ends it, so a `case`
+on the line after a comment still opens its construct. PowerShell has no `case`
+patterns and keeps its unquoted-only rule. The regressions live in
 `src/ir/cmd_interpolate/posix_lexical/tests/case/`: `boundary.rs` covers the
-`)#` ambiguity and the operator-versus-word distinction, and `tracker.rs` covers
-`CaseNesting` command position, depth, and comment hand-off. The property
+`)#` ambiguity, the operator-versus-word distinction, and the brace-group and
+nested-group command positions; `prefix.rs` covers the `time`-option,
+`coproc`-name, pattern-alternative, pattern-group, and quoted- or
+escaped-`esac` forms; and `tracker.rs` covers `CaseNesting` command position,
+depth, and comment hand-off. The property
 `hash_boundary_follows_the_posix_comment_rule` in
 `src/ir/cmd_interpolate/property_tests/mod.rs` takes its prefixes from
 `property_tests/boundary.rs`, which builds them from an independent label for
