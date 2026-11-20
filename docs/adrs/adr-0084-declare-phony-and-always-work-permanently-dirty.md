@@ -167,6 +167,22 @@ rebuilds them.
 - Dependency-only aggregates keep their rule-less `build all: phony | dep` form,
   whatever their own `phony` flag says.
 - Neither the force node nor a hidden output is added to the default targets.
+- Ninja creates the parent directories of the outputs on an edge it is about to
+  run. Before the lowering, that covered a recipe writing a nested output such
+  as `build/report`; afterwards the only output Ninja sees is the hidden path,
+  so `netsuke build` creates the parents of every executable phony edge's
+  declared outputs itself, before it invokes Ninja. The collection is derived
+  from the graph by `ninja_gen::edge_metadata`, which owns the lowering
+  decision, and the creation stays in the runner's command layer: generation
+  remains a pure translation, and a manifest may declare an absolute or `..`
+  spelling that no capability handle beneath the workspace can create. This is
+  the same division of labour as the force-node reset, and the ambient call is
+  a narrowly scoped Whitaker exclusion.
+
+  _Addendum (2026-11-20)._ The preparation was added after review: without it,
+  a phony recipe whose output names a directory Ninja no longer saw failed on a
+  clean workspace, because the directory the previous lowering created for it
+  was gone. A real-Ninja regression test pins the nested-output case.
 
 ## Goals and non-goals
 
@@ -194,8 +210,17 @@ No manifest change is required. Existing manifests gain corrected behaviour:
   Its dependants still rebuild only when the recipe changes the output's
   modification time.
 - A path an older Netsuke run declared as an executable phony edge's output is
-  no longer declared, so `netsuke clean` will not remove it. Delete any such
-  stale build product once, before relying on `clean` to clear the workspace.
+  no longer declared, so `netsuke clean` will not remove it. A recipe that
+  still writes its public name recreates that path on every build, so a single
+  removal is not enough: `clean` must remove it on every run until the recipe
+  stops writing that name. A recipe that has stopped writing it leaves one
+  stale copy, which a single removal clears.
+
+  _Addendum (2026-11-20)._ The original text advised deleting the stale build
+  product once. That holds only for a recipe that no longer writes its public
+  name. A recipe that still writes it — for example one that redirects into the
+  declared file instead of writing `$out` — recreates the path on every build,
+  outside Ninja's knowledge, so `clean` has to handle it on every run.
 - Generated Ninja text changes shape for these edges. The determinism guarantee
   is unchanged: for one graph, environment, platform, shell selection, and
   Netsuke version, the emitted bundle is still byte-identical. Manifests that
@@ -216,6 +241,16 @@ No manifest change is required. Existing manifests gain corrected behaviour:
   `.netsuke/phony` directory.
 - Ninja creates the `.netsuke/phony` directory when it first runs a hidden
   recipe, so a build that skips every such edge never creates it.
+- A `depfile` on an executable phony edge is a rule binding, so the hidden
+  statement inherits it. Ninja loads such a depfile at scan time and accepts it
+  only when its first output equals the edge's first output, which is now the
+  hidden path; a depfile that names the declared public name instead is
+  ignored, and the dependencies it lists do not order the build. A recipe that
+  writes the depfile against `$out` produces a matching one, and a real-Ninja
+  test pins that form: the discovered producer runs before the phony recipe
+  only because the depfile was loaded. The manifest loader never sets
+  `Action.depfile` in beta4, so only programmatic IR construction reaches this
+  path today.
 - The force node is a real path in the build directory. If a file, directory,
   or symbolic link exists at `.netsuke/phony/force`, Ninja finds the phony
   node's output present and treats the forced edges as clean, so they stop

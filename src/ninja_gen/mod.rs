@@ -66,6 +66,7 @@ const CONSOLE_POOL: &str = "console";
 mod display_edge;
 pub(crate) use display_edge::DisplayEdge;
 mod edge_metadata;
+pub(crate) use edge_metadata::executable_phony_outputs;
 mod force_run;
 // Only in-crate tests compare the force node's component spelling against this
 // constant; production code reaches it through `force_run` itself.

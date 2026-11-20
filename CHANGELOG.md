@@ -110,7 +110,8 @@
   prerequisite, so its recipe re-runs while an output whose modification time
   is unchanged still prunes downstream work. `netsuke build` clears a stray
   path left at that prerequisite's reserved name, so it cannot silently turn
-  forcing off
+  forcing off, and creates the parent directories of a phony edge's declared
+  outputs, which Ninja no longer sees on the hidden statement
   ([#1144](https://github.com/leynos/netsuke/issues/1144), [ADR-0084](docs/adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md))
 - Bound `shell_join`'s intermediate allocation: the filter appends into one
   buffer under a fixed 1 MiB ceiling and rejects an over-limit join with

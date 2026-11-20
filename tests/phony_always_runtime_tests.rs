@@ -43,6 +43,9 @@ const ALWAYS_MANIFEST: &str = include_str!("data/phony_always.yml");
 /// A phony action named after a user directory, plus a real always output.
 const CLEAN_MANIFEST: &str = include_str!("data/phony_clean.yml");
 
+/// A phony target whose output names a directory that does not exist yet.
+const NESTED_OUTPUT_MANIFEST: &str = include_str!("data/phony_nested_output.yml");
+
 /// The force node, relative to the workspace.
 const FORCE_NODE: &str = ".netsuke/phony/force";
 
@@ -233,6 +236,50 @@ fn a_logical_target_runs_despite_a_same_named_user_path(
             .try_exists(shadow.survivor("check"))
             .context("check the surviving user path")?,
         "the build must not consume the user path that shares the target's name",
+    );
+    Ok(())
+}
+
+/// A recipe may still write its declared output into a directory of its own.
+///
+/// Ninja creates an edge's output directories before running its recipe. The
+/// hidden statement names only `.netsuke/phony/edge-*`, so the build command
+/// must prepare the parents of the declared names itself; without that step the
+/// recipe fails on a clean workspace because `build/` does not exist.
+#[rstest]
+fn a_nested_phony_output_finds_its_directory(
+    temp_workspace: Result<Option<TempDir>>,
+) -> Result<()> {
+    let Some(directory) = temp_workspace? else {
+        return Ok(());
+    };
+    let workspace = Workspace::new(directory)?;
+    workspace.write_manifest(NESTED_OUTPUT_MANIFEST)?;
+
+    workspace.build()?;
+    ensure!(
+        workspace
+            .root
+            .try_exists("build/report")
+            .context("check the nested output")?,
+        "a phony recipe must be able to write an output whose directory it did not create",
+    );
+    let report = workspace
+        .root
+        .read_to_string("build/report")
+        .context("read the nested output")?;
+    ensure!(
+        report.trim() == "report",
+        "the recipe must write the declared output: {report:?}",
+    );
+
+    workspace.build()?;
+    ensure!(
+        workspace
+            .root
+            .try_exists("build/report")
+            .context("check the nested output after the second build")?,
+        "the nested output must survive a repeated build",
     );
     Ok(())
 }

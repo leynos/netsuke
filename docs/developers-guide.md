@@ -1591,6 +1591,32 @@ output it exists to protect. Resolution only reads; the removal itself always
 goes through the verified namespace handles. A refused build reports the same
 reservation diagnostic generation uses, because it is the same rule.
 
+Preparing the declared outputs' directories is the second half of that
+command-layer work. Ninja creates the parent directories of the outputs on an
+edge it is about to run, and the hidden statement names only
+`.netsuke/phony/edge-*`, so a phony recipe writing `build/report` would find no
+`build/` on a clean workspace.
+`ninja_gen::edge_metadata::executable_phony_outputs` answers which names need
+preparing, because that module owns the classification and a caller must not
+re-derive it. `GeneratedNinjaWithTargets` deduplicates their parents into
+`phony_output_dirs`, and `src/runner/output_dirs.rs` creates them against the
+effective working directory before Ninja runs. That module carries this
+feature's Whitaker `excluded_paths` entry: a manifest may spell an output
+absolutely or through `..`, which `cap_std` refuses to create beneath the
+workspace capability. Keep the classification in `edge_metadata` and the
+creation in the command layer; moving either would duplicate the lowering rule
+or make generation impure.
+
+A `depfile` on an executable phony edge is a rule binding, so the hidden
+statement inherits it and Ninja reads it for that statement. Ninja accepts a
+depfile only when its first output equals the edge's first output, which is now
+the hidden path; the form a recipe produces by writing against `$out` therefore
+matches, and one that names the declared public name is ignored. Both
+directions are pinned by `tests/ninja_phony_depfile_tests.rs`, which runs a
+real Ninja over generated text — the manifest loader never sets
+`Action.depfile` in beta4, so only programmatic IR construction reaches the
+binding.
+
 ## Adding a lint rule
 
 `netsuke check` is driven by a static registry in `src/lint/registry/mod.rs`.
@@ -10678,6 +10704,18 @@ claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
 
+### `test_support::ninja`
+
+`test_support::ninja::resolve_ninja_program` (`test_support/src/ninja.rs`)
+returns the absolute path of the first executable `ninja` on the ambient
+`PATH`, or `None` when none is found. It is the test-side resolver, distinct
+from the production `src/runner/process/ninja/program.rs` seam. Tests use it so
+that the probe which decides whether a Ninja-backed test can run and the child
+process that test launches select the same executable: both walk `PATH` with
+one executability rule and resolve relative entries against the current
+directory. Invoke it only from tests and test-support code; production code
+must resolve Ninja through its own injected seam.
+
 ### `test_support::ninja_script`
 
 `test_support::ninja_script::write_fake_ninja_script` writes a small fake Ninja
@@ -10793,6 +10831,15 @@ for an ordinary edge. The property test in
 `src/ninja_gen/property_tests/console.rs` uses it for user-edge, serial-parent
 and synthetic-gate assertions. Keep this helper within test-support and test
 code; it does not parse general Ninja syntax.
+
+`test_support::ninja_edge::edge_build_line` returns the generated `build`
+statement that carries an output's dependencies after following one `phony`
+alias hop. An executable `phony` edge renders as an alias over a hidden output,
+so a test written against the manifest name must assert on the hidden
+statement; this helper performs that lookup once so callers do not each
+re-implement it. It returns borrowed text from the generated file, so a failure
+message can quote the exact statement. Permitted call sites are test-support
+and test code only, and it does not parse general Ninja syntax.
 
 The local `edge_factory` fixture in `src/ninja_gen/tests/console.rs` constructs
 parallel, single-output edges for console generator tests. Keep it within that

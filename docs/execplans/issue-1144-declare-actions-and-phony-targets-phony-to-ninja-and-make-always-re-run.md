@@ -116,6 +116,17 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
       records the suite.
 - [x] Gates rerun on the fixed trees and the pre-merge findings addressed on
       them.
+- [x] Fourth review's two missing edge-case tests added. A phony target whose
+      declared output is `build/report` now has a real-Ninja regression test,
+      together with the command-layer fix that creates the declared outputs'
+      parents: the hidden statement no longer shows Ninja the directory it used
+      to create. A depfile on an executable phony edge has a real-Ninja test
+      proving a loaded depfile orders its discovered producer first, plus the
+      control that omits the depfile. Both tests were checked against a
+      disabling probe and fail without the behaviour they guard.
+- [x] Fifth review's five documentation corrections applied to the ExecPlan,
+      users' guide and ADR-0084, and the two test-support helper entries added
+      to the developers' guide.
 
 ## Surprises & discoveries
 
@@ -221,13 +232,14 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   now joins the surviving `Normal` components with `/` and builds no path at
   all; an absolute or prefixed path returns `None`, and a literal backslash
   stays an ordinary character on Unix, which a `#[cfg(unix)]` test pins.
-- `open_dir_nofollow` alone accepts a directory symbolic link with the pinned
-  capability implementation, so opening `.netsuke/phony` that way would still
-  have let a link redirect the recursive removal. Each namespace component is
-  now inspected with `stat(..., FollowSymlinks::No)` first and refused unless
-  it is a real directory, mirroring the glob walker's documented literal-prefix
-  check. The `force` entry is removed through the verified handle, as a
-  relative name that cannot climb out.
+- Superseded by the later bullet on the pinned capabilities: this earlier
+  note says that `open_dir_nofollow` alone accepts a directory symbolic link
+  with the pinned capability implementation, and the discovery below records
+  what the lockfile's two `cap-primitives` versions (3.4.6 and 4.0.3) actually
+  do. Read the later bullet as authoritative: the `stat(…, FollowSymlinks::No)`
+  pre-check is advisory, while the no-follow open is the security boundary. The
+  pre-check still names a refused component before the open runs, so it is kept
+  for its diagnostic value rather than as the guarantee.
 - The localization audit requires every declared key in every catalogue, so the
   two new cleanup contexts could not be English-only. Both were translated into
   all 35 catalogues, with the right-to-left marks preserved for `ar`, `fa` and
@@ -250,6 +262,21 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   once and canonicalizes the longest existing ancestor of each declared path
   against it. The read is confined to this comparison; the removal itself still
   goes through the verified namespace handles.
+- Ninja creates an edge's output directories immediately before it runs that
+  edge's recipe — for every output class, absolute and implicit ones included.
+  Moving the recipe to the hidden output therefore removed the directory the
+  old form created for a declared nested output. The lowest-risk correction was
+  a command-layer pre-step driven by the generator's own classification, not a
+  hidden output per declared name: a per-name hidden tree would either land
+  outside the workspace for an absolute spelling or collide with a user's own
+  `.netsuke` directory beneath the declared parent.
+- A `depfile` is emitted as a rule binding, so every edge using that rule
+  inherits it, and Ninja requires the depfile's first output to equal the
+  edge's first output before it loads any discovered dependency. The hidden
+  statement satisfies that for a depfile written against `$out`; a depfile
+  naming the declared public name is ignored, which is the consequence recorded
+  in ADR-0084. `Action.depfile` is always `None` from the manifest loader, so
+  the regression test builds the IR directly.
 
 ## Decision log
 
@@ -278,9 +305,12 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   `ninja_gen/reserved_paths/mod.rs` owns the namespace constants and the pure
   folding of a graph spelling. The runner owns working-directory resolution,
   because it already selects the directory Ninja runs in and can read the
-  filesystem without making generation impure. A declared path the runner
-  cannot judge either way is not refused; only a resolution that lands in a
-  reserved namespace stops the reset.
+  filesystem without making generation impure. Only an unresolved path — one
+  with a missing component, or a `..` tail that climbs above the filesystem
+  root — is not refused, because it cannot name the node. Every other
+  canonicalization error refuses the reset, and so does a resolution that lands
+  in a reserved namespace; `resolved_target` propagates each failure other than
+  `NotFound`, and that error stops the reset.
 - The alias refusal reuses `ninja_gen.reserved_output_path` rather than adding
   a third message, so users meet one explanation for one rule and no new
   translation sweep is needed.

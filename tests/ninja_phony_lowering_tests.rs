@@ -1,9 +1,11 @@
 //! Generation-side coverage for the `phony` and `always` lowerings.
 //!
 //! These tests read the emitted Ninja text; the runtime behaviour the text is
-//! meant to produce is proved separately by `tests/phony_always_runtime_tests.rs`
-//! against a real Ninja. Splitting the two keeps a formatting regression
-//! reporting a text diff rather than a mysteriously failing build.
+//! meant to produce is proved separately against a real Ninja by
+//! `tests/phony_always_runtime_tests.rs` and, for a depfile on a hidden
+//! statement, `tests/ninja_phony_depfile_tests.rs`. Splitting the two keeps a
+//! formatting regression reporting a text diff rather than a mysteriously
+//! failing build.
 //!
 //! The lowering has three parts: an executable `phony` edge carries its recipe
 //! on a hidden output beneath `.netsuke/phony` and republishes its declared
