@@ -12,7 +12,9 @@
 mod lexical;
 mod state;
 
-use lexical::{ends_word, is_blank, is_option_word, starts_command_after, starts_command_list};
+use lexical::{
+    ends_word, is_blank, is_option_word, is_quote, starts_command_after, starts_command_list,
+};
 use state::{CaseFrame, CasePhase, CaseSightings, PrefixSlot, WordRole};
 
 /// Describe one source character offered to a substitution's `case` tracker.
@@ -68,6 +70,14 @@ pub(super) struct CaseNesting {
     frames: Vec<CaseFrame>,
     /// Accumulate the current unquoted word so reserved words are recognized.
     word: String,
+    /// Record whether the current token is spelled without quoting or escapes.
+    ///
+    /// Bash recognizes a reserved word only in its bare spelling, so a token
+    /// holding a quote or an escape of a real character is ordinary data even
+    /// when it spells `esac`. The flag covers the whole token rather than the
+    /// accumulated word, because a quote ends the word without ending the
+    /// token: `esac""` and `e\sac` are one token each.
+    word_is_literal: bool,
     /// Record that the traversal is inside an unquoted `#` comment.
     in_comment: bool,
     /// Record whether the next unquoted word would stand in command position.
@@ -88,6 +98,7 @@ impl CaseNesting {
         Self {
             frames: Vec::new(),
             word: String::new(),
+            word_is_literal: true,
             in_comment: false,
             expects_command: true,
             previous: None,
@@ -119,6 +130,7 @@ impl CaseNesting {
     pub(super) fn end_comment(&mut self) {
         self.in_comment = false;
         self.word.clear();
+        self.word_is_literal = true;
         self.expects_command = true;
     }
 
@@ -168,6 +180,9 @@ impl CaseNesting {
     /// pattern terminator can later be matched against it.
     pub(super) fn observe(&mut self, observation: CaseObservation) {
         if !observation.is_unquoted {
+            // Quoting is part of the token even where it ends the word, so the
+            // fragment completed here is not a reserved word.
+            self.word_is_literal = false;
             self.finish_word(observation.parenthesis_depth);
             // Quoted text is part of a word, so whatever follows it is not
             // in command position.
@@ -191,12 +206,11 @@ impl CaseNesting {
     /// Accumulate one character of unquoted word data.
     fn observe_word_character(&mut self, observation: CaseObservation) {
         if observation.ch == '\\' {
-            self.word
-                .extend(observation.next.filter(|escaped| *escaped != '\n'));
+            self.fold_escape(observation.next);
             return;
         }
         if ends_word(observation.ch) {
-            self.finish_word(observation.parenthesis_depth);
+            self.finish_word_at_boundary(observation.ch, observation.parenthesis_depth);
             self.apply_operator(observation.ch, observation.parenthesis_depth);
             if !is_blank(observation.ch) {
                 self.expects_command = starts_command_after(observation.ch);
@@ -204,6 +218,35 @@ impl CaseNesting {
             return;
         }
         self.word.push(observation.ch);
+    }
+
+    /// Record an escape in the word being accumulated.
+    ///
+    /// Bash deletes a backslash-newline pair before tokenizing, so a keyword
+    /// written across a continuation is still that keyword: `c\<newline>ase`
+    /// spells `case` with nothing quoted. Any other escape is folded into the
+    /// word instead, where `e\sac` spells `esac` but is ordinary data because
+    /// the shell never reads it as a reserved word.
+    fn fold_escape(&mut self, escaped: Option<char>) {
+        if escaped != Some('\n') {
+            self.word_is_literal = false;
+        }
+        self.word.extend(escaped.filter(|next| *next != '\n'));
+    }
+
+    /// Finish the word ending at `boundary` and set the spelling that follows.
+    ///
+    /// A quote ends the fragment being accumulated but belongs to the same
+    /// token, so it must mark the word non-literal before classification and
+    /// leave the token non-literal afterwards. A blank or operator ends the
+    /// token, so the word keeps the spelling it is classified with and the next
+    /// word starts bare.
+    fn finish_word_at_boundary(&mut self, boundary: char, parenthesis_depth: usize) {
+        let starts_word = !is_quote(boundary);
+        // Only the quote that ends this fragment is part of the token judged.
+        self.word_is_literal &= starts_word;
+        self.finish_word(parenthesis_depth);
+        self.word_is_literal = starts_word;
     }
 
     /// Move the construct that contains this position across an operator.
@@ -277,7 +320,9 @@ impl CaseNesting {
         let word = self.word.as_str();
         match frame.phase {
             CasePhase::Header if is_at_own_depth && word == "in" => Some(WordRole::EnterPattern),
-            CasePhase::Pattern if frame.is_closed_by(parenthesis_depth, word) => {
+            CasePhase::Pattern
+                if frame.is_closed_by(parenthesis_depth, word, self.word_is_literal) =>
+            {
                 Some(WordRole::CloseCase)
             }
             // Every other word in the header or a pattern list is data: the
@@ -307,8 +352,11 @@ impl CaseNesting {
         }
         // A case pattern may itself be spelled `esac`. Only a construct open at
         // this depth is the one this word closes; anything deeper is inside a
-        // pattern group and must not close it.
-        let is_open_here = is_command_position && self.is_open_at(parenthesis_depth);
+        // pattern group and must not close it. A quoted or escaped spelling is
+        // pattern text rather than a keyword, so closing there would read the
+        // pattern terminator as the substitution closer.
+        let is_bare_command_word = is_command_position && self.word_is_literal;
+        let is_open_here = is_bare_command_word && self.is_open_at(parenthesis_depth);
         if word == "esac" && is_open_here {
             return WordRole::CloseCase;
         }
@@ -326,46 +374,6 @@ impl CaseNesting {
         }
         WordRole::Other {
             continues_command_list: is_command_position && starts_command_list(word),
-        }
-    }
-
-    /// Apply a classified word to the tracker's state.
-    fn apply_role(&mut self, role: WordRole, parenthesis_depth: usize) {
-        match role {
-            WordRole::OpenCase => {
-                self.frames.push(CaseFrame {
-                    depth: parenthesis_depth,
-                    phase: CasePhase::Header,
-                    after_alternative: false,
-                });
-                self.sightings.record_placed();
-                self.expects_command = false;
-            }
-            WordRole::EnterPattern => {
-                if let Some(frame) = self.open_construct_at_mut(parenthesis_depth) {
-                    frame.enter_pattern();
-                }
-                self.expects_command = false;
-            }
-            WordRole::UnplacedCase => {
-                self.sightings.record_unplaced();
-                self.expects_command = false;
-            }
-            WordRole::CloseCase => {
-                self.close_construct_at(parenthesis_depth);
-                self.expects_command = false;
-            }
-            WordRole::TimePrefix => {
-                self.prefix_slot = PrefixSlot::TimeOption;
-                self.expects_command = true;
-            }
-            WordRole::CoprocPrefix => {
-                self.prefix_slot = PrefixSlot::CoprocName;
-                self.expects_command = true;
-            }
-            WordRole::Other {
-                continues_command_list,
-            } => self.expects_command = continues_command_list,
         }
     }
 
