@@ -111,7 +111,8 @@ fn marker_free_ansi_c_strings_are_preserved(
             lowering
                 .lower(template, &bindings)
                 .expect("marker-free ANSI-C text must lower unchanged"),
-            template
+            template,
+            "marker-free ANSI-C text changed via {lowering:?}: {template:?}"
         );
     }
 }
@@ -127,7 +128,8 @@ fn marker_after_ansi_c_region_uses_unquoted_encoding(#[case] lowering: Lowering)
         lowering
             .lower(&template, &bindings)
             .expect("a marker after the closing quote is outside ANSI-C"),
-        "echo $'a\\tb' input"
+        "echo $'a\\tb' input",
+        "post-region marker used the wrong encoding via {lowering:?}: {template:?}"
     );
 }
 
@@ -139,7 +141,8 @@ fn escaped_apostrophe_does_not_close_ansi_c() {
     assert_eq!(
         interpolate_script_with_bindings(&template, &bindings)
             .expect("the escaped apostrophe must not close the ANSI-C string"),
-        "echo $'it\\'s' input"
+        "echo $'it\\'s' input",
+        "the escaped apostrophe changed the lowered text: {template:?}"
     );
 }
 
@@ -154,7 +157,8 @@ fn escaped_dollar_before_quote_uses_single_quoted_encoding(#[case] lowering: Low
         lowering
             .lower(&template, &bindings)
             .expect("an escaped dollar cannot open ANSI-C"),
-        "echo \\$'a'\"'\"'b'"
+        "echo \\$'a'\"'\"'b'",
+        "the escaped dollar used the wrong encoding via {lowering:?}: {template:?}"
     );
 }
 
@@ -169,7 +173,32 @@ fn double_dollar_before_quote_uses_single_quoted_encoding(#[case] lowering: Lowe
         lowering
             .lower(&template, &bindings)
             .expect("the second dollar of a PID expansion cannot open ANSI-C"),
-        "echo $$'a'\"'\"'b'"
+        "echo $$'a'\"'\"'b'",
+        "the PID expansion dollar used the wrong encoding via {lowering:?}: {template:?}"
+    );
+}
+
+/// Do not carry ANSI-C look-behind state across a lowered placeholder.
+///
+/// Lowering replaces the rest of the token without scanning it, so a dollar
+/// before the placeholder and one after it must not pair as `$$`. If they did,
+/// the `$'` opening an ANSI-C string after the placeholder would be read as a
+/// PID expansion followed by ordinary quotes, and its marker would take the
+/// unsafe single-quoted encoding.
+#[rstest]
+#[case::posix(RecipeShell::Posix)]
+#[case::bash(RecipeShell::Bash)]
+fn placeholder_separates_ansi_c_lookbehind(#[case] shell: RecipeShell) {
+    let bindings = ansi_c_leading_bindings(shell);
+    let template = format!("echo ${INS_TOKEN}$'{OUTS_TOKEN}'");
+    let error = interpolate_script_with_bindings(&template, &bindings)
+        .expect_err("a placeholder must not let `$$` parity hide the ANSI-C opener");
+    assert!(
+        matches!(
+            error,
+            IrGenError::InvalidCommand { ref command, .. } if *command == template
+        ),
+        "rejection must report the original template, got: {error:?}"
     );
 }
 
@@ -184,7 +213,8 @@ fn dollar_and_quote_inside_double_quotes_use_double_encoding(#[case] lowering: L
         lowering
             .lower(&template, &bindings)
             .expect("ANSI-C is not opened inside double quotes"),
-        "echo \"$'a\\$b'\""
+        "echo \"$'a\\$b'\"",
+        "double-quoted `$'` used the wrong encoding via {lowering:?}: {template:?}"
     );
 }
 
@@ -199,6 +229,7 @@ fn dollar_quote_inside_ordinary_single_quotes_uses_single_encoding(#[case] lower
         lowering
             .lower(&template, &bindings)
             .expect("a dollar inside ordinary single quotes cannot open ANSI-C"),
-        "echo '$''a'\"'\"'b'"
+        "echo '$''a'\"'\"'b'",
+        "single-quoted `$'` used the wrong encoding via {lowering:?}: {template:?}"
     );
 }

@@ -277,6 +277,11 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if self.is_placeholder_unsafe() {
             return Err(invalid_command_error(self.template.to_owned()));
         }
+        // The replacement stands in for source text the traversal skipped, so
+        // no ANSI-C opener or `$$` half may pair across the boundary. The
+        // token's first character resets this state today; resetting here keeps
+        // the invariant independent of how a placeholder is spelled.
+        self.posix_lexical.reset_ansi_c_lookbehind();
         let context = match self.active_quote_context() {
             ShellQuoteContext::Unquoted => QuoteContext::Unquoted,
             ShellQuoteContext::SingleQuoted => QuoteContext::Single('\''),
