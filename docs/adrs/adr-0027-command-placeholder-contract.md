@@ -54,6 +54,11 @@ whitespace, and a `)` that closes a substitution immediately before `#` fails
 closed when the substitution source contains the `case` reserved word. The
 POSIX comment and heredoc boundary amendment below states the contract.
 
+Amended on 2026-11-19 for issue #992. Both POSIX traversals now reject a marker
+inside a Bash ANSI-C string (`$'…'`), because the ordinary single-quoted
+encoding is not a safe encoder there. The addendum below states the opener
+rules, the rejection boundary, and the remaining constraints.
+
 ## Date
 
 2026-09-19
@@ -634,3 +639,89 @@ apart on it. The split keeps each module within the workspace's 400-line limit.
 Regressions run through both traversals in
 `src/ir/cmd_interpolate/tests/heredoc/` and through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
+
+## Addendum — 2026-11-19: Reject markers inside Bash ANSI-C strings (#992)
+
+Bash reads `$'…'` as an ANSI-C string. Inside it, a backslash escapes the next
+character, so `\'` is a literal apostrophe rather than a closing delimiter, and
+only an unescaped apostrophe ends the string. The ordinary single-quoted path
+encoding rewrites every apostrophe as `'"'"'`, which assumes those five
+characters only close and reopen ordinary single quotes. A path that places a
+backslash immediately before an apostrophe therefore escapes the first
+rewritten apostrophe, closes the ANSI-C string on a later one, and leaves the
+rest of the path to be parsed in a different quote state. The resulting line
+can change the generated word, raise a syntax error, or expose path characters
+as executable shell syntax (CWE-78), reported as finding
+`b247e1c0-c546-4ac4-a8e1-ddb892fc9cee`.
+
+Lowering cannot always know whether the child interpreter reads `$'…'` as
+ANSI-C quoting. Both traversals reject a marker reached while the region is
+open, for both `RecipeShell::Posix` and `RecipeShell::Bash`, rather than emit
+the ordinary single-quoted binding. PowerShell is unchanged: it does not define
+ANSI-C quoting, so its `$'` sequence is ordinary text. The rejection reuses
+`IrGenError::InvalidCommand` and the localized `IR_INVALID_COMMAND` message, so
+it travels through the existing diagnostic channel and names the original
+template.
+
+### Opener and closing rules
+
+Both traversals share the opener state machine in
+`src/ir/cmd_interpolate/posix_lexical/ansi_c.rs`:
+
+- Only an unquoted dollar can open the string, and the next significant
+  character must be an apostrophe. A backslash-newline continuation between
+  them is removed before Bash tokenizes, so it is skipped when looking ahead.
+- An escaped dollar cannot open the string. In `$$`, the first dollar starts
+  the PID expansion and the second is consumed by it, so neither opens a
+  string; a third dollar may. Run parity, rather than a reverse scan, decides
+  which dollar in a run is available.
+- A `$'` sequence inside ordinary single or double quotes is literal text and
+  does not open ANSI-C.
+- Inside the string, the traversal consumes each backslash and the character
+  after it as a pair, so an escaped apostrophe cannot close it. An unescaped
+  apostrophe closes it and returns the traversal to the surrounding quote
+  context. Command substitution and backtick syntax are literal inside the
+  string.
+- A comment, a heredoc declaration or body, and a command-substitution region
+  all reset the look-behind, because a dollar before the boundary cannot pair
+  with one after it.
+
+Marker-free ANSI-C text is copied unchanged. A marker after the closing quote
+is outside the region and is encoded for its own site, so supported recipes
+keep working. The safe alternatives for a marker that must appear alongside
+ANSI-C text are an unquoted site, an ordinary single- or double-quoted site, or
+a site outside the `$'…'` region.
+
+### Why the existing guards do not cover this
+
+The post-substitution `shlex` guard admits the broken legacy encoding: `shlex`
+models ordinary POSIX quotes and accepts the rewritten line as one word. Real
+Bash then closes the ANSI-C string early. The regression suite pins both
+observations, and the executable case passes the same path as a literal
+argument to show that the failure belongs to the encoding rather than to Bash.
+The `shlex` guard remains a command-shape check, not a proof that the chosen
+path encoding is safe in every shell context.
+
+This rejection is distinct from the active-escape rejection for #629. That rule
+covers a marker directly after a backslash anywhere in unquoted text; this rule
+covers a marker inside a region whose end the backslash changes.
+
+### Remaining constraints
+
+- Hostile filenames are a Unix concern. Windows paths cannot contain the
+  apostrophe, backslash, and separator combination used by the regressions,
+  although the same traversal rules are platform-independent.
+- The executable cases require Bash and, for the Ninja oracle, Ninja on
+  `PATH`. The Bash transport is decoded and run under the host Bash; it is not
+  executed through its bound Windows interpreter.
+- `RecipeShell::Posix` also rejects the marker even when the host's `/bin/sh`
+  does not implement `$'…'`. The traversal cannot identify the final
+  interpreter, so rejection is the conservative choice.
+- No ANSI-C encoder is introduced. Adding one would have to model Bash's escape
+  vocabulary and the interaction with the surrounding quote state; rejecting
+  the marker is the smallest safe change.
+- Bash locale translation strings (`$"…"`) are out of scope. They do not
+  introduce the same backslash-delimited region.
+- Broader shell parsing and verified transformations remain tracked separately
+  by [RFC 0036](../rfcs/rfc-0036-shell-parsing-and-verified-transformations.md),
+  whose work packages cover the eventual shared analyser and verified encoders.

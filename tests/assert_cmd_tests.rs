@@ -100,6 +100,44 @@ fn build_rejects_command_injecting_glob_filename() -> Result<()> {
     Ok(())
 }
 
+/// Reject a Bash ANSI-C marker through the real CLI.
+///
+/// The recipe opens `$'…'` with the output marker inside it. The command route
+/// must fail closed during lowering, so the CLI exits non-zero, reports the
+/// invalid interpolation, and never writes the injected sentinel.
+#[cfg(unix)]
+#[rstest]
+fn build_rejects_marker_inside_ansi_c_quoting() -> Result<()> {
+    let temp = tempdir().context("create ANSI-C rejection workspace")?;
+    let manifest = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: \"\\\\'; touch PWNED; #\"\n",
+        "    command: printf %s $'{{ outs }}'\n"
+    );
+    fs::write(temp.path().join("Netsukefile"), manifest)
+        .context("write ANSI-C rejection manifest")?;
+
+    let output = create_netsuke_command(temp.path())
+        .args(["--json", "build"])
+        .output()
+        .context("run Netsuke build with ANSI-C quoting")?;
+    ensure!(
+        !output.status.success(),
+        "a marker inside ANSI-C quoting must stop the build"
+    );
+    let stderr = String::from_utf8(output.stderr).context("build stderr should be valid UTF-8")?;
+    ensure!(
+        stderr.contains("Invalid command interpolation"),
+        "the failed build must report the interpolation rejection: {stderr}"
+    );
+    ensure!(
+        !temp.path().join("PWNED").exists(),
+        "the ANSI-C recipe must not create PWNED"
+    );
+    Ok(())
+}
+
 fn assert_generate_streams_to_stdout(
     current_dir: &Path,
     args: &[&str],

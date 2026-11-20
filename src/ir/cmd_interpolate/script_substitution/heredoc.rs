@@ -44,7 +44,10 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))?;
         match declaration {
             HeredocDeclaration::NotADeclaration => Ok(None),
-            HeredocDeclaration::Copied(next) => Ok(Some(next)),
+            HeredocDeclaration::Copied(next) => {
+                self.posix_lexical.reset_ansi_c_lookbehind();
+                Ok(Some(next))
+            }
             HeredocDeclaration::Rejected(reason) => Err(invalid_heredoc_delimiter_error(
                 self.template.to_owned(),
                 reason,

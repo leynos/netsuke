@@ -3347,28 +3347,32 @@ later interpolation stage lowers those internal tokens everywhere. `$in`,
 `$out`, `$ins`, and `$outs` are shell variables in every recipe and remain
 unchanged until Ninja escaping. Command lowering encodes POSIX path text for
 its active quote context and rejects markers in backticks or command
-substitutions. PowerShell command and script lowering share the
-`SubstitutionTraversal`, which permits markers only at unquoted sites and
-rejects markers in quoted strings, here-strings, `$()`, or immediately after a
-backtick. PowerShell scripts do not treat comments as inert regions: plain
-line-comment text leaves later markers eligible for interpolation, while
-scanner-sensitive syntax after a comment boundary or any mid-token `#` can make
-later markers fail closed. This includes a block-comment opener, quotes,
-backticks, or substitution syntax. In particular, an apostrophe in a comment
-may make a later marker fail closed. POSIX and Bash script lowering retains
-comments and multiline shell syntax and uses the script-only
+substitutions. It also recognizes Bash ANSI-C strings (`$'…'`) and rejects a
+marker inside one, for both `Posix` and `Bash` recipe shells: the ordinary
+single-quoted encoding is unsafe where a backslash controls the next character.
+Marker-free ANSI-C text is preserved, and a marker after the closing quote
+takes the encoding of its surrounding site. PowerShell command and script
+lowering share the `SubstitutionTraversal`, which permits markers only at
+unquoted sites and rejects markers in quoted strings, here-strings, `$()`, or
+immediately after a backtick. PowerShell scripts do not treat comments as inert
+regions: plain line-comment text leaves later markers eligible for
+interpolation, while scanner-sensitive syntax after a comment boundary or any
+mid-token `#` can make later markers fail closed. This includes a block-comment
+opener, quotes, backticks, or substitution syntax. In particular, an apostrophe
+in a comment may make a later marker fail closed. POSIX and Bash script
+lowering retains comments and multiline shell syntax and uses the script-only
 `ScriptSubstitutionTraversal`; it encodes markers for unquoted, single-quoted,
-and double-quoted sites while rejecting protected command substitutions. The
-PowerShell comment-boundary recognizer keeps binary and hexadecimal radix
-prefixes paired with their digit bases in a private enum owned by the numeric
-literal scanner. Only that scanner selects the enum when validating a token;
-the type is not a shared shell API, and scanner callers compose character
-boundaries rather than passing arbitrary prefix/base strings. PowerShell also
-rejects markers in raw native-command arguments after an unquoted `--%` until a
-newline or pipeline; a semicolon does not end that region. Pipeline detection
-models ASCII double quotes only; a single quote, backtick, or typographic quote
-in the raw region makes later markers fail closed. The private
-`PowerShellLexicalState` in
+and double-quoted sites while rejecting protected command substitutions and
+markers inside an open Bash ANSI-C string. The PowerShell comment-boundary
+recognizer keeps binary and hexadecimal radix prefixes paired with their digit
+bases in a private enum owned by the numeric literal scanner. Only that scanner
+selects the enum when validating a token; the type is not a shared shell API,
+and scanner callers compose character boundaries rather than passing arbitrary
+prefix/base strings. PowerShell also rejects markers in raw native-command
+arguments after an unquoted `--%` until a newline or pipeline; a semicolon does
+not end that region. Pipeline detection models ASCII double quotes only; a
+single quote, backtick, or typographic quote in the raw region makes later
+markers fail closed. The private `PowerShellLexicalState` in
 `src/ir/cmd_interpolate/substitution/powershell/lexical/mod.rs` tracks
 here-string bodies and typographic-quote fail-closed state, while
 `PowerShellStopParsingState` tracks raw native-command arguments. These helpers

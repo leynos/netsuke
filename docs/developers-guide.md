@@ -1176,9 +1176,11 @@ The lowering stages have deliberately separate responsibilities:
   confused with the group's own closer. Heredoc delimiters the tracker cannot
   model are rejected rather than approximated. Literal `$in`, `$out`, `$ins`,
   and `$outs` remain shell variables and are escaped for Ninja pass-through.
-  POSIX lowering tracks unquoted, single-quoted, and double-quoted text, and
-  rejects markers within command substitutions because it cannot lower them
-  safely. Script recipes therefore retain heredocs and comments without
+  POSIX lowering tracks unquoted, single-quoted, double-quoted, and Bash ANSI-C
+  (`$'…'`) text, and rejects markers within command substitutions or an open
+  ANSI-C string because it cannot lower them safely; the ANSI-C rejection
+  applies to both `Posix` and `Bash` recipe shells and leaves PowerShell
+  unchanged. Script recipes therefore retain heredocs and comments without
   accepting an unsafe marker context. The resulting action contains lowered
   command text and no Ninja rule variables; an inert region may still retain an
   internal Netsuke marker token.
@@ -9229,13 +9231,21 @@ The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. Its
 `declaration.rs` child parses and queues one heredoc declaration, and its
 `delimiter.rs` child owns the delimiter word's quoting grammar; the split keeps
-each module inside the workspace's 400-line limit. The parent module copies
-those comments and heredoc bodies byte-for-byte, so internal marker tokens in
-them are not expanded and can remain in the generated recipe; markers in
-heredoc delimiters are expanded. It queues declarations FIFO, including quoted
-delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
-surrounding quote context. This is a command-interpolation helper, not a
-general shell parser, and is not intended for reuse outside that boundary.
+each module inside the workspace's 400-line limit. Its `ansi_c.rs` child owns
+the shared ANSI-C opener look-behind: an unquoted dollar whose next significant
+character is an apostrophe opens the region, continuations are transparent, and
+`$$` run parity decides which dollar can open it. The look-behind is reset at
+comments, heredoc declarations and bodies, and command-substitution boundaries.
+Both traversals map the region to their own literal quote variant
+(`QuoteContext::AnsiC` and `ShellQuoteContext::AnsiC`) so a marker inside it is
+rejected, while the surrounding escape handling still consumes `\` and the
+following character as a pair. The parent module copies those comments and
+heredoc bodies byte-for-byte, so internal marker tokens in them are not
+expanded and can remain in the generated recipe; markers in heredoc delimiters
+are expanded. It queues declarations FIFO, including quoted delimiters and
+`<<-` tab-stripping delimiters, so their text cannot change the surrounding
+quote context. This is a command-interpolation helper, not a general shell
+parser, and is not intended for reuse outside that boundary.
 
 The helper ends an unquoted POSIX word only at a space, tab, newline, or one of
 the operator characters `;`, `&`, `|`, `(`, `)`, `<`, and `>`. The `SourceChar`

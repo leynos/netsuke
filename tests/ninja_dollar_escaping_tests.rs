@@ -202,12 +202,6 @@ fn run_ninja_target(workspace: &NinjaWorkspace, environment: &[(&str, &str)]) ->
     Ok(())
 }
 
-/// Build the optional sentinel variable for an isolated child shell.
-#[cfg(unix)]
-fn sentinel_environment(value: Option<&str>) -> Vec<(&str, &str)> {
-    value.map_or_else(Vec::new, |sentinel_value| vec![(SENTINEL, sentinel_value)])
-}
-
 /// Assert one POSIX script recipe yields its expected output.
 #[cfg(unix)]
 fn assert_script_output(
@@ -284,58 +278,6 @@ fn ninja_expands_only_netsuke_placeholders(#[case] recipe: Recipe) -> Result<()>
     Ok(())
 }
 
-/// Verify scalar command recipes preserve child-shell defaults after Ninja execution.
-#[cfg(unix)]
-#[rstest]
-#[case::unset(None, "fallback")]
-#[case::set(Some(SENTINEL_VALUE), SENTINEL_VALUE)]
-fn shell_default_reaches_the_child_shell(
-    #[case] environment_value: Option<&str>,
-    #[case] expected: &str,
-) -> Result<()> {
-    let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > {{ outs }}'\n",
-    )?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-
-    let environment = sentinel_environment(environment_value);
-    let actual = ninja_output(&ninja, &environment, None)?;
-    ensure!(
-        actual == expected,
-        "expected child shell output {expected:?}, got {actual:?}"
-    );
-    Ok(())
-}
-
-/// Verify command-list recipes preserve braced child-shell defaults through Ninja.
-#[cfg(unix)]
-#[rstest]
-#[case::unset(None, "fallback")]
-#[case::set(Some(SENTINEL_VALUE), SENTINEL_VALUE)]
-fn command_list_default_reaches_the_child_shell(
-    #[case] environment_value: Option<&str>,
-    #[case] expected: &str,
-) -> Result<()> {
-    let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command:\n      - 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > {{ outs }}'\n",
-    )?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-
-    let environment = sentinel_environment(environment_value);
-    let actual = ninja_output(&ninja, &environment, None)?;
-    ensure!(
-        actual == expected,
-        "expected command-list child shell output {expected:?}, got {actual:?}"
-    );
-    Ok(())
-}
-
 /// Verify that manifest placeholder syntax lowers inside scalar and list recipes.
 #[rstest]
 #[case::scalar("command: 'cat {{ ins }} > {{ outs }}'")]
@@ -378,32 +320,6 @@ fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> 
     Ok(())
 }
 
-/// Verify script recipes preserve braced child-shell defaults through Ninja.
-#[cfg(unix)]
-#[rstest]
-#[case::unset(None, "fallback")]
-#[case::set(Some(SENTINEL_VALUE), SENTINEL_VALUE)]
-fn script_default_reaches_the_child_shell(
-    #[case] environment_value: Option<&str>,
-    #[case] expected: &str,
-) -> Result<()> {
-    let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > {{ outs }}'\n",
-    )?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-
-    let environment = sentinel_environment(environment_value);
-    let actual = ninja_output(&ninja, &environment, None)?;
-    ensure!(
-        actual == expected,
-        "expected script child shell output {expected:?}, got {actual:?}"
-    );
-    Ok(())
-}
-
 /// Heredoc delimiter cases, gated per test where they need a POSIX child shell.
 #[path = "ninja_dollar_escaping_tests/heredoc.rs"]
 mod heredoc;
@@ -415,3 +331,12 @@ mod scripts;
 /// Backslashes immediately before a path marker, executed through Ninja.
 #[path = "ninja_dollar_escaping_tests/backslash.rs"]
 mod backslash;
+
+/// Markers inside Bash ANSI-C quoting, rejected at the public lowering boundary.
+#[path = "ninja_dollar_escaping_tests/ansi_c.rs"]
+mod ansi_c;
+
+/// Child-shell default expansion through Ninja, gated on a POSIX child shell.
+#[cfg(unix)]
+#[path = "ninja_dollar_escaping_tests/defaults.rs"]
+mod defaults;

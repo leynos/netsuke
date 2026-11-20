@@ -8,17 +8,52 @@
 //! comment or a marker as protected.
 
 use super::{QuoteContext, SubstitutionTraversal};
+use crate::ir::cmd_interpolate::posix_lexical::AnsiCCharacter;
+use crate::recipe_shell::RecipeShell;
 
 impl SubstitutionTraversal<'_, '_> {
     /// Change POSIX quote state after retaining a delimiter in the output.
-    pub(super) fn update_quote_context(&mut self, ch: char) {
+    ///
+    /// A dollar followed by a quote opens a Bash ANSI-C string, so that
+    /// transition is decided before the ordinary quote rules run. The region is
+    /// tracked only to reject markers inside it; its escapes are still consumed
+    /// as character pairs by the traversal.
+    pub(super) fn update_quote_context(&mut self, pos: usize, ch: char) {
+        // ANSI-C quoting is a POSIX and Bash rule. PowerShell shares this
+        // traversal but reads `$'` differently, so its quote model is left
+        // exactly as it was.
+        let opens_ansi_c = self.bindings.shell != RecipeShell::PowerShell
+            && self.posix_lexical.observe_ansi_c_character(
+                AnsiCCharacter::new(self.chars, pos, ch),
+                self.matches_unquoted_quote_context(),
+            );
         let quote_context = self.active_quote_context_mut();
-        Self::update_quote_context_for_region(quote_context, ch);
+        if opens_ansi_c {
+            *quote_context = QuoteContext::AnsiC;
+        } else {
+            Self::update_quote_context_for_region(quote_context, ch);
+        }
     }
 
-    /// Report whether the traversal is currently enclosed by single quotes.
+    /// Report whether the active region is ordinary single quotes.
+    ///
+    /// A backslash escapes nothing in ordinary single quotes, but it does
+    /// escape in an ANSI-C string, so callers that decide whether to consume an
+    /// escaped pair must use this narrower predicate.
     pub(super) fn matches_single_quote_context(&self) -> bool {
         matches!(self.active_quote_context(), QuoteContext::Single(_))
+    }
+
+    /// Report whether the active region is a literal string Bash does not expand.
+    ///
+    /// Ordinary single quotes and ANSI-C strings both suppress command
+    /// substitution and backtick syntax, even though they disagree about
+    /// backslash escapes.
+    pub(super) fn matches_literal_quote_context(&self) -> bool {
+        matches!(
+            self.active_quote_context(),
+            QuoteContext::Single(_) | QuoteContext::AnsiC
+        )
     }
 
     /// Report whether the active shell region is outside both kinds of quotes.
@@ -48,6 +83,7 @@ impl SubstitutionTraversal<'_, '_> {
         match (*quote_context, ch) {
             (QuoteContext::Unquoted, '\'') => *quote_context = QuoteContext::Single('\''),
             (QuoteContext::Unquoted, '"') => *quote_context = QuoteContext::Double('"'),
+            (QuoteContext::AnsiC, '\'') => *quote_context = QuoteContext::Unquoted,
             (QuoteContext::Single(quote) | QuoteContext::Double(quote), character)
                 if quote == character =>
             {
