@@ -205,7 +205,7 @@ ir.empty_rule = Rhaid i'r targed ‘{ $target }’ gyfeirio at reol.
 ir.duplicate_outputs = Canfuwyd allbynnau dyblyg: { $outputs }.
 ir.circular_dependency = Canfuwyd dibyniaeth gylchol: { $cycle }.
 ir.action_serialisation = Methwyd â chyfresoli'r weithred: { $details }.
-ir.invalid_command = Mewnosodiad annilys yn y gorchymyn: { $snippet }.
+ir.invalid_command = Mewnosodiad annilys yn y gorchymyn: { $reason }.
 ir.ambiguous_substitution_boundary = Ffin amnewid gorchymyn amwys ar nod { $position }; gwahanwch gauad yr amnewid oddi wrth y '#' canlynol.
 
 # Gwallau cynhyrchu Ninja.

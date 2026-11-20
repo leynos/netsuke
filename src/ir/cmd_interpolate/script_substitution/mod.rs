@@ -5,8 +5,8 @@
 //! path semantics. PowerShell scripts use `SubstitutionTraversal` instead.
 
 use super::{
-    CommandBindings, IrGenError, Placeholder, QuoteContext, find_script_substitution,
-    invalid_command_error,
+    CommandBindings, IrGenError, Placeholder, QuoteContext, RejectionReason,
+    find_script_substitution, invalid_command_error,
     posix_lexical::{PosixCharacter, PosixLexicalState, SourceChar, backslash_escapes_marker},
 };
 
@@ -74,10 +74,12 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         &mut self,
         pos: usize,
     ) -> Result<usize, IrGenError> {
-        let ch = *self
-            .chars
-            .get(pos)
-            .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
+        let ch = *self.chars.get(pos).ok_or_else(|| {
+            invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::UnsupportedMarkerPosition,
+            )
+        })?;
         if let Some(next) = self.append_non_substitution_character(pos, ch)? {
             return Ok(next);
         }
@@ -196,7 +198,10 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             return Ok(false);
         }
         if backslash_escapes_marker(self.chars, pos, false, None) {
-            return Err(invalid_command_error(self.template.to_owned()));
+            return Err(invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::EscapeBeforeMarker,
+            ));
         }
         Ok(true)
     }
@@ -246,7 +251,10 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             return Ok(pos + 1);
         };
         if self.backtick_outer_context.is_some() || self.is_in_command_substitution() {
-            return Err(invalid_command_error(self.template.to_owned()));
+            return Err(invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::MarkerInProtectedRegion,
+            ));
         }
         let context = match self.active_quote_context() {
             ShellQuoteContext::Unquoted => QuoteContext::Unquoted,

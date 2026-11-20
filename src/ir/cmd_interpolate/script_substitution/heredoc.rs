@@ -7,7 +7,7 @@
 //! module keeps one responsibility.
 
 use super::super::{
-    IrGenError, invalid_command_error, invalid_heredoc_delimiter_error,
+    IrGenError, RejectionReason, invalid_command_error, invalid_heredoc_delimiter_error,
     posix_lexical::{EscapeBeforeMarker, HeredocDeclaration, PosixCharacter, SourceChar},
 };
 use super::{ScriptSubstitutionTraversal, ShellQuoteContext};
@@ -41,7 +41,12 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         let declaration = self
             .posix_lexical
             .append_heredoc_declaration(&mut character, self.bindings)
-            .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))?;
+            .map_err(|EscapeBeforeMarker| {
+                invalid_command_error(
+                    self.template.to_owned(),
+                    RejectionReason::EscapeBeforeMarker,
+                )
+            })?;
         match declaration {
             HeredocDeclaration::NotADeclaration => Ok(None),
             HeredocDeclaration::Copied(next) => Ok(Some(next)),

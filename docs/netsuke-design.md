@@ -3591,11 +3591,37 @@ enrichment:
    A schema-version rejection supplies neither half: its message names the
    declaration and the supported schema but never the file, so it keeps the
    contextual summary above it and a refusal stays attributable in a project
-   with several manifests. A failure carrying no diagnostic keeps its `anyhow`
-   context line, which is the whole report available for errors such as a
-   missing manifest. A circular-dependency failure keeps a separate branch that
-   prints the bounded cycle rendering and logs a fixed `error_kind` category,
-   so manifest target names stay out of tracing events.
+   with several manifests. A failure carrying no selected diagnostic keeps its
+   `anyhow` context line and adds the ordinary causes beneath it. That is the
+   graph, rejected interpolation, and Ninja-synthesis path: those errors carry
+   no `miette` diagnostic. The fallback renders `err.chain().skip(1)` as a
+   private `CauseChain` diagnostic, using each cause's `Display` text rather
+   than the alternate `{:#}` form and exposing the next cause through
+   `source()`, so `miette` draws the same chain it draws for a diagnostic that
+   declares its own source. A cause equal to the outer message or to its
+   predecessor is dropped, so one fault yields one line and a restated summary
+   adds nothing. JSON mode already reports those messages in `causes`, and both
+   modes therefore agree at the same depth; `IrGenError` and `NinjaGenError`
+   gain no selection branch.
+
+   The fallback widens how much human output shows, not what any one message
+   may contain. It renders the same causes JSON mode reports, so the two modes
+   agree at the same depth and the disclosure boundary is the message text
+   itself. That matters because `env()` runs while the manifest is rendered:
+   any cause that quoted a rendered recipe could carry a value the operator
+   permitted. Interpolation rejections therefore name the failed syntax — an
+   unmatched backtick, a marker in a protected region, an unmodelled heredoc
+   delimiter — and never quote the command. `IrGenError::InvalidCommand`
+   retains the rejected command for callers that inspect it, but its reason is
+   fixed text and `Display` uses the localized message alone, so the retained
+   string cannot reach either output mode. A resource budget rejects with a
+   constant-size `RunnerError` before a report is built, and a blocked `env()`
+   lookup reports a fixed message without the variable's name or value. A
+   missing manifest is itself a `RunnerError`, so it prints its diagnostic code
+   and recovery help rather than a bare context line. A circular-dependency
+   failure keeps a separate branch that prints the bounded cycle rendering and
+   logs a fixed `error_kind` category, so manifest target names stay out of
+   tracing events.
 
    Links are disabled in the graphical handler even though every
    `netsuke check` finding supplies a URL: `miette` emits OSC 8 hyperlinks

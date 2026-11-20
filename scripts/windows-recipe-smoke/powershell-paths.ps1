@@ -34,6 +34,26 @@ function Test-PathPlaceholderScript {
     }
 }
 
+# Bind the quoted-script failure to the bounded reason and to the disclosure
+# rule: the diagnostic must name the refused syntax without echoing the
+# rendered recipe, which may already contain an environment-resolved value.
+function Assert-QuotedScriptRejection {
+    param(
+        [Parameter(Mandatory)]
+        [string]$CausesText
+    )
+
+    if (-not ($CausesText -match 'Invalid command interpolation')) {
+        throw "The quoted script failure omitted its interpolation diagnostic: $CausesText"
+    }
+    if (-not ($CausesText -match 'recipe marker inside a protected shell region')) {
+        throw "The quoted script failure omitted its rejection reason: $CausesText"
+    }
+    if ($CausesText -match 'Write-Output' -or $CausesText -match '__NETSUKE_INS_PLACEHOLDER__') {
+        throw "The quoted script failure repeated its rendered template: $CausesText"
+    }
+}
+
 function Test-QuotedScriptPlaceholderRejection {
     param(
         [Parameter(Mandatory)]
@@ -53,33 +73,16 @@ function Test-QuotedScriptPlaceholderRejection {
     $tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
     $workspace = Join-Path $tempRoot "netsuke-windows-quoted-script-smoke-$PID"
 
+    New-Item -ItemType Directory -Path $workspace | Out-Null
     try {
-        New-Item -ItemType Directory -Path $workspace | Out-Null
         Copy-Item -LiteralPath $quotedManifest -Destination (Join-Path $workspace 'Netsukefile')
         Push-Location $workspace
         try {
             $payloadSource = Join-Path $workspace '; New-Item pwned; Write-Output x'
             # New-Item's -Path parameter treats this semicolon as literal data.
             New-Item -ItemType File -Path $payloadSource | Out-Null
-            $failure = & $Netsuke --json --locale en-GB build $TargetName 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                throw 'A quoted PowerShell script marker unexpectedly built successfully.'
-            }
-            $failureText = [string]::Join([Environment]::NewLine, [string[]]@($failure))
-            try {
-                $diagnostics = $failureText | ConvertFrom-Json -ErrorAction Stop
-            }
-            catch {
-                throw "The quoted script failure did not emit JSON diagnostics: $failureText"
-            }
-            $causes = @($diagnostics.diagnostics[0].causes | ForEach-Object { [string]$_ })
-            $causesText = [string]::Join([Environment]::NewLine, [string[]]$causes)
-            if (-not ($causesText -match 'Invalid command interpolation')) {
-                throw "The quoted script failure omitted its interpolation diagnostic: $causesText"
-            }
-            if (-not ($causesText -match 'Write-Output' -and $causesText -match '__NETSUKE_INS_PLACEHOLDER__')) {
-                throw "The quoted script failure omitted its original template: $causesText"
-            }
+            $causesText = Invoke-QuotedScriptBuild -Netsuke $Netsuke -TargetName $TargetName
+            Assert-QuotedScriptRejection -CausesText $causesText
             if (Test-Path -LiteralPath 'pwned') {
                 throw 'The rejected quoted script executed its path-derived payload.'
             }
@@ -91,6 +94,35 @@ function Test-QuotedScriptPlaceholderRejection {
     finally {
         Remove-Item -Recurse -Force -LiteralPath $workspace -ErrorAction SilentlyContinue
     }
+}
+
+# Build the quoted-script target and return the localized causes it reported.
+#
+# The parse is split from the workspace orchestration so each function keeps one
+# job: the caller owns the temporary directory and the sentinel check, while
+# this one owns running the build and reading its diagnostic document.
+function Invoke-QuotedScriptBuild {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Netsuke,
+
+        [Parameter(Mandatory)]
+        [string]$TargetName
+    )
+
+    $failure = & $Netsuke --json --locale en-GB build $TargetName 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        throw 'A quoted PowerShell script marker unexpectedly built successfully.'
+    }
+    $failureText = [string]::Join([Environment]::NewLine, [string[]]@($failure))
+    try {
+        $diagnostics = $failureText | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        throw "The quoted script failure did not emit JSON diagnostics: $failureText"
+    }
+    $causes = @($diagnostics.diagnostics[0].causes | ForEach-Object { [string]$_ })
+    return [string]::Join([Environment]::NewLine, [string[]]$causes)
 }
 
 function New-PowerShellSearchDecoy {

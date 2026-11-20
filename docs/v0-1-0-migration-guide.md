@@ -18,9 +18,11 @@ sections that match the features they use.
 | Required                                   | `BuildEdge` literals         | Add `output_visibility` to every literal.                               |
 | Review if enabled                          | Rust `Action.pool` choices   | Move console scheduling onto the edge; keep custom pools off it.        |
 | Required                                   | `NinjaGenError` matches      | Add arms for the two new console variants.                              |
+| Required                                   | `InvalidCommand` matches     | Bind `reason` instead of the removed `snippet` field.                   |
 | Required                                   | File-reading filters         | Move reads that leave the workspace into it, or name a path beneath it. |
 | Optional                                   | Existing manifests           | Omit `console` to retain ordinary scheduling; it defaults to false.     |
 | Optional                                   | Scripts parsing stdout       | Tolerate the forwarding-failure warning on stdout.                      |
+| Optional                                   | Scripts parsing stderr       | Tolerate the additional cause lines in human output.                    |
 | Optional                                   | Configured shell definitions | Declare `[[shells]]` only in operator configuration.                    |
 | Required                                   | Reusable release callers     | Pass `publish: true` to publish from a reusable call.                   |
 | Review if automation parses Netsuke errors | Ninja failure diagnostics    | Match the two diagnostic codes instead of the old summary text.         |
@@ -413,6 +415,44 @@ receive timing summaries on stderr. Callers that need to capture or redirect
 those summaries can opt into `VerboseTimingReporter::with_writer`; the
 [developers' guide](developers-guide.md#verbose-timing-sink) documents the
 owned sink and completion-ordering contract.
+
+### `InvalidCommand` carries a fixed rejection reason
+
+The next pre-release (`v0.1.0-beta5`) changes `IrGenError::InvalidCommand`: its
+`snippet: String` field is replaced by `reason: &'static str`. A rejection now
+names the syntax it refused instead of quoting the rejected command, because a
+rendered recipe can contain a value resolved from the environment. A pattern
+match that binds or destructures `snippet` must change to bind the new field or
+ignore it.
+
+Before:
+
+```rust,no_run
+use netsuke::ir::IrGenError;
+
+fn describe(err: IrGenError) -> String {
+    match err {
+        IrGenError::InvalidCommand { snippet, .. } => snippet,
+        other => other.to_string(),
+    }
+}
+```
+
+After:
+
+```rust,no_run
+use netsuke::ir::IrGenError;
+
+fn describe(err: IrGenError) -> String {
+    match err {
+        IrGenError::InvalidCommand { reason, .. } => reason.to_owned(),
+        other => other.to_string(),
+    }
+}
+```
+
+The variant still carries the rejected command in its `command` field for
+callers that inspect it; its `Display` renders the localized message alone.
 
 ## Use UTF-8 manifest and working-directory paths
 
@@ -1395,6 +1435,25 @@ The change also breaks compilation for an exhaustive `match` on the public
 `RunnerError`: it is not `#[non_exhaustive]`, so its two new variants must gain
 arms, or the match needs a wildcard arm.
 
+## Human-mode failure causes
+
+The next pre-release (`v0.1.0-beta5`) prints the ordinary cause chain beneath
+the context line in default human output for graph, interpolation, and
+Ninja-generation failures. A missing rule therefore reports both the enclosing
+build step and the failing reference. A cause that repeats the context line or
+the cause above it is omitted, so each message appears once.
+
+An interpolation rejection names the refused syntax, such as
+`unmatched backtick`, instead of quoting the recipe. A rendered recipe can
+contain a value resolved from the environment, so repeating it would disclose
+that value. JSON output already listed the same chain in its `causes` array, so
+the two modes agree at the same depth, except that human output omits a message
+repeated by the layer above it.
+
+No action is needed unless a script parses human-readable standard error; such
+a script must tolerate the additional cause lines. See
+[Interpret failures](users-guide.md#interpret-failures).
+
 ## What does not need to change
 
 The convenience wrappers keep their child-process behaviour: the child inherits
@@ -1424,6 +1483,8 @@ owned sink and completion-ordering contract.
 - [ ] Add `NinjaGenError::ConsoleDependencyOnly` and
   `NinjaGenError::ConsolePoolConflict` arms to exhaustive matches on generation
   errors.
+- [ ] Bind `reason` instead of the removed `snippet` field in Rust matches on
+  `IrGenError::InvalidCommand`.
 - [ ] If a script parses `netsuke` stdout, tolerate the
   `netsuke: warning: failed to forward child stderr` line.
 - [ ] If automation parses `netsuke` errors, match
@@ -1431,6 +1492,8 @@ owned sink and completion-ordering contract.
   rather than the old summary text.
 - [ ] If you match `RunnerError` exhaustively, add arms for its
   `NinjaSpawnFailed` and `NinjaFailed` variants, or a wildcard arm.
+- [ ] If a script parses human-readable stderr, tolerate the additional cause
+  lines.
 - [ ] Write project `env_block_var` and `fetch_block_host` values as arrays.
 - [ ] If you declare `[[shells]]`, declare it in system or user configuration,
   not a project file.

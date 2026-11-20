@@ -152,6 +152,10 @@ mod schema_version;
 #[path = "assert_cmd_tests/runner_diagnostics.rs"]
 mod runner_diagnostics;
 
+/// Snapshot the human-readable causes of manifest, graph, and Ninja failures.
+#[path = "assert_cmd_tests/human_failure_causes.rs"]
+mod human_failure_causes;
+
 /// Cover launch diagnostics for every subcommand and rendering mode.
 #[path = "assert_cmd_tests/launch_diagnostics.rs"]
 mod launch_diagnostics;

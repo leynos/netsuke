@@ -1,0 +1,13 @@
+---
+source: tests/assert_cmd_tests/human_failure_causes.rs
+expression: rendered
+---
+X Error: Failed to load manifest at Netsukefile.
+netsuke::manifest::parse
+
+  x Manifest parse failed.
+  |-> netsuke::manifest::structure
+  |   
+  |     x Manifest structure error in Netsukefile: unknown field `comand`
+  |   
+  `-> unknown field `comand`

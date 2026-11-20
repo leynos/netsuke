@@ -948,11 +948,20 @@ makes the same selection and renders the diagnostic with `miette`'s graphical
 handler. Both modes therefore report the same fault at the same depth, and a
 new diagnostic type has to be added to both or the modes disagree.
 
-A failure carrying none of those diagnostics keeps its context line, which is
-the whole report for errors such as a missing manifest. A failure that does
-carry one prints the rendered diagnostic instead of the context line when that
-diagnostic renders a snippet naming the file, because the snippet repeats the
-path the context line carries.
+A failure carrying none of those diagnostics still has an ordinary `anyhow`
+cause chain, and prints its context line followed by that chain.
+`human_diagnostics::failure_report` renders `err.chain().skip(1)` through a
+private `CauseChain` diagnostic: each cause is a `Display` message (never the
+alternate `{:#}` form) and the next cause is exposed through `source()`, so
+`miette` uses its usual cause layout. A message equal to the outer context or
+to its predecessor is dropped. This is the graph, interpolation, and
+Ninja-synthesis path; JSON mode already reports the same messages in `causes`,
+and both modes agree at that depth. Do not add `IrGenError` or `NinjaGenError`
+to `select_diagnostic` unless the JSON selector gains the same branch.
+
+A failure that does carry a selected diagnostic prints the rendered diagnostic
+instead of the context line when that diagnostic renders a snippet naming the
+file, because the snippet repeats the path the context line carries.
 
 Naming the file takes more than a source. `miette` returns from
 `render_snippets` before drawing anything when a diagnostic supplies no label,
@@ -969,8 +978,18 @@ label, and its message names the declaration and the supported schema without
 naming the file. It therefore keeps the context line above its diagnostic, so a
 refusal stays attributable in a project with more than one manifest. Both
 branches are pinned by a test, and the CLI exercises them against the real
-binary. Circular dependencies keep a separate branch: its bounded rendering is
-what keeps manifest target names out of the tracing event.
+binary.
+
+The fallback renders the same causes JSON mode reports, so its disclosure
+boundary is the message text: `env()` runs while the manifest is rendered, and
+a cause that quoted a recipe could carry a permitted value. Budget truncation
+and the fixed blocked-`env()` message are produced before this boundary, and
+interpolation rejections name the failed syntax rather than quoting the command
+— `IrGenError::InvalidCommand` keeps the rejected command for callers that
+inspect it, but never renders it. A missing manifest is a `RunnerError`, so it
+prints its own diagnostic code and help rather than a bare context line.
+Circular dependencies keep a separate branch: its bounded rendering is what
+keeps manifest target names out of the tracing event.
 
 The glyph theme comes from `human_diagnostics::theme_for`, which derives it
 from the resolved `OutputPrefs` rather than reading `NO_COLOR` itself, so the
@@ -9366,6 +9385,27 @@ only accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell
 variables `$ins` and `$outs` are not Netsuke markers and must pass through as
 shell text for the backend to escape. Keep the constants and their recognition
 limited to this two-stage recipe pipeline and its direct IR recipe tests.
+
+The private `src/ir/cmd_interpolate/rejection.rs` module owns the reasons a
+recipe command or heredoc delimiter can be refused. `command_rejection` in
+`src/ir/cmd_interpolate/mod.rs` replaces the former Boolean
+`is_valid_command_for_shell` and returns `Option<RejectionReason>` instead, so
+a refusal names the rule it broke rather than only reporting that one broke.
+The private `RejectionReason` enum is deliberately coarse: each variant names a
+class of rejection whose remedy is to move or remove a marker, and maps to a
+fixed `&'static str` description. The two module-level constructors are
+`invalid_command_error` for an interpolation rejection and
+`invalid_heredoc_delimiter_error` for a delimiter the tracker cannot model;
+both insert the bounded description into the localized `ir.invalid_command`
+message.
+
+`IrGenError::InvalidCommand` retains the rejected command for callers that
+inspect it, but its `Display` renders the localized message alone. The field
+that reaches the message is typed `&'static str`, so rendered recipe text
+cannot be placed in it, and the rejected command never reaches human or JSON
+output. This matters because `env()` runs while the manifest is rendered: a
+command that reaches this guard may already contain a value resolved from the
+environment.
 
 ### Command interpolation contract
 

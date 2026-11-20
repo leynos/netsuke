@@ -205,7 +205,7 @@ ir.empty_rule = Kohteen ”{ $target }” on viitattava sääntöön.
 ir.duplicate_outputs = Havaittiin päällekkäisiä tulosteita: { $outputs }.
 ir.circular_dependency = Havaittiin kehäriippuvuus: { $cycle }.
 ir.action_serialisation = Toimintoa ei voitu sarjallistaa: { $details }.
-ir.invalid_command = Virheellinen komennon sijoitus: { $snippet }.
+ir.invalid_command = Virheellinen komennon sijoitus: { $reason }.
 ir.ambiguous_substitution_boundary = Epäselvä komennon korvauksen raja merkissä { $position }; erota korvauksen päättävä sulkumerkki seuraavasta '#'-merkistä.
 
 # Ninja-generoinnin virheet.

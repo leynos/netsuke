@@ -1,0 +1,6 @@
+---
+source: tests/assert_cmd_tests/human_failure_causes.rs
+expression: rendered
+---
+X Error: Failed to build graph from the manifest.
+  x Duplicate outputs detected: ["hello.o"].

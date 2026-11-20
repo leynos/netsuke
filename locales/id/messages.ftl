@@ -205,7 +205,7 @@ ir.empty_rule = Target "{ $target }" harus merujuk sebuah aturan.
 ir.duplicate_outputs = Terdeteksi keluaran ganda: { $outputs }.
 ir.circular_dependency = Terdeteksi ketergantungan melingkar: { $cycle }.
 ir.action_serialisation = Tindakan tidak dapat diserialkan: { $details }.
-ir.invalid_command = Penyisipan tidak sah pada perintah: { $snippet }.
+ir.invalid_command = Penyisipan tidak sah pada perintah: { $reason }.
 ir.ambiguous_substitution_boundary = Batas substitusi perintah ambigu pada karakter { $position }; pisahkan penutup substitusi dari '#' berikutnya.
 
 # Galat pembuatan berkas Ninja.

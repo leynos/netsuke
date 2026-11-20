@@ -292,11 +292,13 @@ Les recettes `script:` et PowerShell ignorent ce comptage. Une future version
 pourra accepter davantage de cas sans changement incompatible. Les
 substitutions équilibrées écrites par l'auteur restent actives.
 
-Ce manifeste POSIX est rejeté avant l'exécution de Ninja. Lancez
-`netsuke --json --locale en-GB` pour voir la cause :
-`Invalid command interpolation:`, suivi de l'extrait concerné ; la sortie
-lisible par défaut peut ne montrer que l'échec global de construction du graphe
-:
+Ce manifeste POSIX est rejeté avant l'exécution de Ninja, car ses marqueurs se
+trouvent dans une substitution de commande entre accents graves. Lancez
+`netsuke --locale en-GB generate` pour voir la cause : la sortie lisible par
+défaut indique `Invalid command interpolation:` suivi de
+`recipe marker inside a protected shell region`. Le diagnostic ne répète jamais
+la recette, dont le texte rendu peut déjà contenir une valeur résolue depuis
+l'environnement.
 
 ```yaml
 netsuke_version: '1.0.0'

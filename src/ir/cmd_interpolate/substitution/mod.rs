@@ -1,7 +1,7 @@
 //! Hold the state required for one-pass recipe placeholder substitution.
 
 use super::{
-    CommandBindings, IrGenError, QuoteContext,
+    CommandBindings, IrGenError, QuoteContext, RejectionReason,
     command_substitution::{
         CaseObservation, CommandSubstitution, CommandSubstitutionDelimiter, SubstitutionBoundary,
         reject_ambiguous_case_comment,
@@ -91,13 +91,19 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         &mut self,
         pos: usize,
     ) -> Result<usize, IrGenError> {
-        let ch = *self
-            .chars
-            .get(pos)
-            .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
+        let ch = *self.chars.get(pos).ok_or_else(|| {
+            invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::UnsupportedMarkerPosition,
+            )
+        })?;
         if self.bindings.shell == RecipeShell::PowerShell {
-            let character = PowerShellSourceCharacter::new(self.chars, pos)
-                .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
+            let character = PowerShellSourceCharacter::new(self.chars, pos).ok_or_else(|| {
+                invalid_command_error(
+                    self.template.to_owned(),
+                    RejectionReason::UnsupportedMarkerPosition,
+                )
+            })?;
             return self.append_power_shell_character(character);
         }
         self.append_posix_character(pos, ch)
@@ -352,7 +358,10 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         substitution: Option<(super::Placeholder, usize)>,
     ) -> Result<usize, IrGenError> {
         if substitution.is_some() {
-            return Err(invalid_command_error(self.template.to_owned()));
+            return Err(invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::MarkerInProtectedRegion,
+            ));
         }
         self.output.push(ch);
         Ok(pos + 1)

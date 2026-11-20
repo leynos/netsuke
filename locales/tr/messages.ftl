@@ -205,7 +205,7 @@ ir.empty_rule = "{ $target }" hedefi bir kurala başvurmalıdır.
 ir.duplicate_outputs = Yinelenen çıktılar bulundu: { $outputs }.
 ir.circular_dependency = Döngüsel bağımlılık bulundu: { $cycle }.
 ir.action_serialisation = Eylem serileştirilemedi: { $details }.
-ir.invalid_command = Komutta geçersiz yerleştirme: { $snippet }.
+ir.invalid_command = Komutta geçersiz yerleştirme: { $reason }.
 ir.ambiguous_substitution_boundary = { $position }. karakterde belirsiz komut ikamesi sınırı; ikamenin kapanış parantezini sonraki '#' işaretinden ayırın.
 
 # Ninja üretimi hataları.

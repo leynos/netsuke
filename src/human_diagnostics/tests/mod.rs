@@ -10,6 +10,8 @@ use netsuke::output_prefs;
 use strip_ansi_escapes::strip;
 use tracing_subscriber::filter::LevelFilter;
 
+mod cause_chain;
+mod properties;
 mod runner_diagnostics;
 
 /// Remove bidi isolates and terminal wrapping from localized output.
@@ -219,12 +221,19 @@ fn rendered_diagnostics_emit_no_terminal_hyperlinks() -> Result<()> {
     Ok(())
 }
 
+/// A failure with neither a selected diagnostic nor a distinct cause stays a
+/// single line: there is nothing to add beneath the summary.
 #[test]
 fn failures_without_a_diagnostic_render_nothing_extra() -> Result<()> {
     let error = anyhow::Error::msg("plain failure");
+    let theme = theme_for(presentation_style(false, true));
     ensure!(
-        render_failure(&error, &theme_for(presentation_style(false, true))).is_none(),
+        render_failure(&error, &theme).is_none(),
         "a failure carrying no diagnostic must not gain a second rendering"
+    );
+    ensure!(
+        failure_report(&error, &theme).is_none(),
+        "a failure carrying no distinct cause must not gain a second rendering"
     );
     Ok(())
 }

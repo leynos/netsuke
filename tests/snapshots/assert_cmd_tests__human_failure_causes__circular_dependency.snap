@@ -1,0 +1,5 @@
+---
+source: tests/assert_cmd_tests/human_failure_causes.rs
+expression: rendered
+---
+X Error: Circular dependency detected: ["a.txt", "b.txt", "a.txt"].

@@ -1,0 +1,6 @@
+---
+source: tests/assert_cmd_tests/human_failure_causes.rs
+expression: rendered
+---
+X Error: Failed to generate the Ninja manifest.
+  x recipe text contains an unsafe Ninja control character

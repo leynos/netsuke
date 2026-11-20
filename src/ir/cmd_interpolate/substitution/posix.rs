@@ -9,7 +9,9 @@ use super::super::invalid_heredoc_delimiter_error;
 use super::super::posix_lexical::{
     EscapeBeforeMarker, HeredocDeclaration, PosixCharacter, SourceChar, backslash_escapes_marker,
 };
-use super::{IrGenError, MarkerProtection, SubstitutionTraversal, invalid_command_error};
+use super::{
+    IrGenError, MarkerProtection, RejectionReason, SubstitutionTraversal, invalid_command_error,
+};
 
 impl SubstitutionTraversal<'_, '_> {
     /// Preserve POSIX shell syntax while lowering context-safe recipe markers.
@@ -119,7 +121,12 @@ impl SubstitutionTraversal<'_, '_> {
         let declaration = self
             .posix_lexical
             .append_heredoc_declaration(&mut character, self.bindings)
-            .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))?;
+            .map_err(|EscapeBeforeMarker| {
+                invalid_command_error(
+                    self.template.to_owned(),
+                    RejectionReason::EscapeBeforeMarker,
+                )
+            })?;
         match declaration {
             HeredocDeclaration::NotADeclaration => {}
             HeredocDeclaration::Copied(next) => return Ok(Some(next)),
@@ -164,7 +171,10 @@ impl SubstitutionTraversal<'_, '_> {
             return Ok(None);
         }
         if backslash_escapes_marker(self.chars, pos, false, None) {
-            return Err(invalid_command_error(self.template.to_owned()));
+            return Err(invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::EscapeBeforeMarker,
+            ));
         }
         let Some(next) = self.chars.get(pos + 1).copied() else {
             return Ok(None);

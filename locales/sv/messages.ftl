@@ -205,7 +205,7 @@ ir.empty_rule = Målet ”{ $target }” måste hänvisa till en regel.
 ir.duplicate_outputs = Dubblerade utdata upptäcktes: { $outputs }.
 ir.circular_dependency = Ett cirkulärt beroende upptäcktes: { $cycle }.
 ir.action_serialisation = Åtgärden kunde inte serialiseras: { $details }.
-ir.invalid_command = Ogiltig interpolering i kommandot: { $snippet }.
+ir.invalid_command = Ogiltig interpolering i kommandot: { $reason }.
 ir.ambiguous_substitution_boundary = Tvetydig gräns för kommandosubstitution vid tecken { $position }; separera substitutionens avslutande parentes från följande '#'.
 
 # Fel vid generering av Ninja.

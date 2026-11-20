@@ -207,24 +207,30 @@ pub enum IrGenError {
 
     /// Raised when command interpolation yields an invalid shell snippet.
     ///
+    /// `command` may already contain values resolved from the environment,
+    /// because `env()` runs while the manifest is rendered. It is retained for
+    /// callers that inspect the rejected input, but it is never rendered:
+    /// `Display` uses `message` alone, and `reason` is fixed diagnostic text.
+    ///
     /// ```
     /// use netsuke::ir::IrGenError;
     /// use netsuke::localization::{self, keys};
-    /// use serde::ser::Error as _;
     ///
     /// let err = IrGenError::InvalidCommand {
-    ///     command: "echo $in".into(),
-    ///     snippet: "echo $in".into(),
-    ///     message: localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", "echo $in"),
+    ///     command: "echo $in `".into(),
+    ///     reason: "unmatched backtick",
+    ///     message: localization::message(keys::IR_INVALID_COMMAND)
+    ///         .with_arg("reason", "unmatched backtick"),
     /// };
-    /// assert!(matches!(err, IrGenError::InvalidCommand { command, .. } if command == "echo $in"));
+    /// assert!(err.to_string().contains("unmatched backtick"));
+    /// assert!(!err.to_string().contains("echo $in"));
     /// ```
     #[error("{message}")]
     InvalidCommand {
-        /// Original command string provided in the manifest.
+        /// Rendered command that failed validation; never rendered in output.
         command: String,
-        /// Rendered snippet that failed validation.
-        snippet: String,
+        /// Bounded description of the rejected syntax.
+        reason: &'static str,
         /// Localized error message.
         message: LocalizedMessage,
     },

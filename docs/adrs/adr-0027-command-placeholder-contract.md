@@ -54,6 +54,11 @@ whitespace, and a `)` that closes a substitution immediately before `#` fails
 closed when the substitution source contains the `case` reserved word. The
 POSIX comment and heredoc boundary amendment below states the contract.
 
+Amended on 2026-11-19 for issue #1145. Every interpolation rejection now names
+the syntax it refused instead of quoting the rejected command, because a
+rendered recipe may already contain a value that `env()` resolved while the
+manifest was rendered. The amendment below states the contract.
+
 ## Date
 
 2026-09-19
@@ -183,9 +188,11 @@ check, because scripts may legitimately contain heredocs and other text that
 
 `is_valid_command_for_shell` calls `shlex::split(command).is_some()` on the
 fully substituted text. Failure produces `IrGenError::InvalidCommand`, surfaced
-through the Fluent message `ir.invalid_command`
-(`locales/en-GB/messages.ftl:188`), rendered as
-`Invalid command interpolation: { $snippet }.`.
+through the Fluent message `ir.invalid_command` (in
+`locales/en-GB/messages.ftl`), rendered as
+`Invalid command interpolation: { $snippet }.` (The predicate and the message
+placeholder were renamed by the 2026-11-19 amendment below; the contract this
+paragraph states is unchanged.)
 
 It **is** part of the observable acceptance contract: a `command:` recipe on
 the POSIX or Bash route whose substituted text cannot be split is rejected with
@@ -634,3 +641,43 @@ apart on it. The split keeps each module within the workspace's 400-line limit.
 Regressions run through both traversals in
 `src/ir/cmd_interpolate/tests/heredoc/` and through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
+
+## Amendment — 2026-11-19: Interpolation rejections name the failed syntax (#1145)
+
+`is_valid_command_for_shell` is now `command_rejection`, which returns the
+reason a command was refused rather than a Boolean; every earlier mention of
+the old name in this record refers to it. The Fluent message
+`ir.invalid_command` takes a `$reason` argument in place of `$snippet`, and
+renders as `Invalid command interpolation: { $reason }.` The PowerShell and
+heredoc traversals report through the same vocabulary: a private
+`RejectionReason` for every traversal decision, and the existing
+`DelimiterRejection` descriptions for heredoc delimiters.
+
+The change is about disclosure, not style. `env()` is a Jinja helper, so it
+runs while the manifest is rendered, before IR lowering. By the time a command
+reaches this guard, any permitted environment value the recipe interpolated is
+already part of the text. Quoting that text in the diagnostic — which the
+`$snippet` form did, truncated to 160 characters — copies the value to standard
+error in default human output and into the JSON diagnostic alike. The
+truncation bounds the length of the leak without preventing it.
+
+A rejection therefore names the syntax that failed: `unmatched backtick`,
+`unparseable shell syntax`, `escape sequence before a recipe marker`,
+`recipe marker inside a protected shell region`,
+`recipe marker inside a PowerShell here-string`,
+`recipe marker inside raw native command arguments`,
+`recipe marker at an unsupported source position`, and, for delimiters, the
+descriptions in `DelimiterRejection`. Each is fixed English text inserted into
+a localized sentence, the same shape the heredoc rejections already used.
+
+`IrGenError::InvalidCommand` retains the rejected `command` because callers and
+tests inspect it, but its `Display` is the localized `message` alone. The field
+that reaches the message is typed `&'static str`, so rendered text cannot be
+placed in it. The doctest on the variant and
+`permitted_environment_value_stays_out_of_the_interpolation_diagnostic` in
+`tests/assert_cmd_tests/runner_diagnostics.rs` pin both properties.
+
+The subsection on the `shlex` guard above records the contract before this
+amendment; its predicate name and `$snippet` rendering are superseded here. Its
+statements about which inputs are rejected, and that the accepted set is not a
+stability commitment, still hold.

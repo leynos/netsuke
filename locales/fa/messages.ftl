@@ -205,7 +205,7 @@ ir.empty_rule = هدف «{ $target }» باید به یک قاعده ارجاع 
 ir.duplicate_outputs = خروجی‌های تکراری یافت شد: { $outputs }.
 ir.circular_dependency = وابستگی چرخه‌ای یافت شد: { $cycle }.
 ir.action_serialisation = تبدیل کنش به داده‌های پیاپی ممکن نشد: { $details }.
-ir.invalid_command = درج نامعتبر در فرمان: { $snippet }.
+ir.invalid_command = درج نامعتبر در فرمان: { $reason }.
 ir.ambiguous_substitution_boundary = مرز مبهم جایگزینی فرمان در نویسه { $position }؛ پرانتز بستن جایگزینی را از '#' بعدی جدا کنید.
 
 # خطاهای تولید پرونده‌های Ninja.
