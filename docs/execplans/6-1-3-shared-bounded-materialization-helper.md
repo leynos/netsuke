@@ -1184,6 +1184,30 @@ conflict in `Decision log`, and escalate.
       base-to-head figure is now 3,384 added and 1 deleted, a net 3,383 —
       1,383 over the 2,000-line bar. D-22's fifth amendment carries the
       arithmetic; the file counts and the production surface do not move.
+  - Rebase onto `e9cbb64f6` and the second ADR renumber (2026-11-20). `main`
+    advanced twelve commits while the candidate sat at `a4905db73`, and GitHub
+    reported the pull request `mergeable_state: dirty`, so the branch was
+    replayed onto `e9cbb64f6`. All forty-four commits replayed; four `docs/`
+    files conflicted, each because `main` had independently added the
+    configured-shells proof documentation and its own ADR-0082.
+    - `docs/formal-verification-methods-in-netsuke.md`. `main`'s name-sequence
+      paragraph stays the third proof and this branch's resource-bounds
+      paragraph becomes the fourth; the closing sentence counts four proof
+      boundaries rather than three.
+    - `docs/developers-guide.md`. Four accepted kernels rather than three,
+      keeping `main`'s sentence about the `Proofs` workflow.
+    - `docs/repository-layout.md`. One `verus/` bullet naming all three
+      kernels, with this branch's `make verus VERUS_FLAGS=…` and `proofs.yml`
+      detail.
+    - `docs/contents.md`. Both ADR-0082 entries survive the replay, because
+      the branch's renumber commit still targets 0082; `69d850835` moves this
+      branch's ADR to 0083 and D-27 records why.
+    `mdtablefix` then refused the hand-wrapped merges in two of those files;
+    `8a4df7b98` applies its wrap. The size tally is unchanged at 3,383 net
+    against the new base: `git diff --numstat e9cbb64f6 HEAD` over `.rs` paths
+    outside `verus/` still sums to 3,384 added and 1 deleted, with 54 files
+    changed, 39 with the Verus crate and mutation patches excluded, and 33
+    once the six snapshots are excluded too.
 
 ## Surprises & discoveries
 
