@@ -4589,15 +4589,16 @@ original location, because an older MSI compares its own rank against whatever
 it finds there before allowing the replacement.
 
 The move leaves two upgrade consequences that the installer cannot fix itself.
-The beta4 directory is removed only once nothing remains in it, so a user who
-upgraded still sees a stale `PATH` entry pointing at the old location until it
-is removed by hand or the directory disappears, and Windows never rewrites
-`PATH` during an install or an upgrade. The users' guide therefore documents two
-`PATH` setups: one resolving the native directory for beta5 and later, and one
-resolving the 32-bit directory for the linked v0.1.0-beta4 MSI, which still
-installs there. The documentation contracts pin both examples, and the Windows
-job executes them against a temporary install tree so that a script which reads
-correctly but cannot write the user environment fails the build.
+The beta4 directory is removed only once nothing remains in it, but removing
+the directory does not touch `PATH`: Windows never rewrites `PATH` during an
+install or an upgrade, so a user who upgraded keeps a stale entry for the old
+location until it is removed by hand, and that entry outlives the directory it
+names. The users' guide therefore documents two `PATH` setups: one resolving
+the native directory for beta5 and later, and one resolving the 32-bit
+directory for the linked v0.1.0-beta4 MSI, which still installs there. The
+documentation contracts pin both examples, and the Windows job executes them
+against a temporary install tree so that a script which reads correctly but
+cannot write the user environment fails the build.
 
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. The same composite action interprets the TOML
