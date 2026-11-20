@@ -9933,17 +9933,18 @@ words inside each substitution and keeps the substitution open across pattern
 terminators; the `)` that finally closes it is the one checked. Its sibling
 `state.rs` holds the tracker's state values — the keywords seen, the open
 compound-command prefix, the role a completed word plays, and each open
-construct's depth and phase — and `lexical.rs` holds the word-boundary and
-command-position predicates. When that closer is immediately followed by `#`
-and the substitution's source contains `case`, both POSIX traversals fail
-closed with `IrGenError::AmbiguousSubstitutionBoundary` rather than guessing a
-quote context. The check over-approximates on purpose: it scans the raw source,
-so a `case` inside quotes or a comment also triggers it, and it does not
-consult the enclosing quote context, because a substitution is parsed as its
-own script. The diagnostic carries the one-based character offset of the closing
-`)`, which is also the zero-based index of the `#` that follows it, and no
-recipe text, so it survives the 160-character snippet truncation and cannot
-copy executable syntax into a log line.
+construct's depth and phase — together with the transitions those roles apply,
+and `lexical.rs` holds the word-boundary and command-position predicates. When
+that closer is immediately followed by `#` and the substitution's source
+contains `case`, both POSIX traversals fail closed with
+`IrGenError::AmbiguousSubstitutionBoundary` rather than guessing a quote
+context. The check over-approximates on purpose: it scans the raw source, so a
+`case` inside quotes or a comment also triggers it, and it does not consult the
+enclosing quote context, because a substitution is parsed as its own script.
+The diagnostic carries the one-based character offset of the closing `)`, which
+is also the zero-based index of the `#` that follows it, and no recipe text, so
+it survives the 160-character snippet truncation and cannot copy executable
+syntax into a log line.
 
 `CaseNesting` counts a reserved word only in command position, because that is
 the only place the shell reads one: `printf esac` passes `esac` as an argument
@@ -9994,17 +9995,35 @@ construct's own depth and left at `;;`, `;&`, or `;;&`, which start the next
 pattern list. A subject spelled `esac` (`case esac in …`) is header data for
 the same reason, as is a word inside a pattern group such as `@(case)`: the
 group only deepens the parenthesis depth, which classification and operator
-handling both skip over to reach the construct that governs the position. The
-tracker takes comments from the traversal rather than inferring them from `#`,
-because comment text is copied verbatim and is never offered to it: the
+handling both skip over to reach the construct that governs the position.
+
+Bash recognizes a reserved word before quote removal, so only a bare spelling
+counts. In a pattern list, `esac""` and `e\sac` both spell the word `esac`, but
+each is pattern text and the `)` after it is still the pattern terminator; a
+tracker that closed the construct there would read that `)` as the substitution
+closer and lower the arm's marker for the enclosing quote context. The tracker
+therefore marks a token non-literal at any quote or any escape of a real
+character, and closes a construct only on a literal `esac`. The mark covers the
+whole token rather than the accumulated word, because a quote ends the word
+without ending the token. A backslash-newline pair does not mark it: Bash
+deletes the pair before tokenizing, so `es\<newline>ac` is still the closer.
+Opening a construct stays over-approximate, because a quoted `case` word that
+the shell reads as a command name still opens one here; over-recognizing an
+opening only keeps the substitution open longer, where the boundary check
+rejects the marker instead of lowering it for a context the shell does not
+share.
+
+The tracker takes comments from the traversal rather than inferring them from
+`#`, because comment text is copied verbatim and is never offered to it: the
 traversal reports the comment's start and the newline that ends it, so a `case`
 on the line after a comment still opens its construct. PowerShell has no `case`
 patterns and keeps its unquoted-only rule. The regressions live in
 `src/ir/cmd_interpolate/posix_lexical/tests/case/`: `boundary.rs` covers the
 `)#` ambiguity, the operator-versus-word distinction, and the brace-group and
 nested-group command positions; `prefix.rs` covers the `time`-option,
-`coproc`-name, pattern-alternative, and pattern-group forms; and `tracker.rs`
-covers `CaseNesting` command position, depth, and comment hand-off. The property
+`coproc`-name, pattern-alternative, pattern-group, and quoted- or
+escaped-`esac` forms; and `tracker.rs` covers `CaseNesting` command position,
+depth, and comment hand-off. The property
 `hash_boundary_follows_the_posix_comment_rule` in
 `src/ir/cmd_interpolate/property_tests/mod.rs` takes its prefixes from
 `property_tests/boundary.rs`, which builds them from an independent label for

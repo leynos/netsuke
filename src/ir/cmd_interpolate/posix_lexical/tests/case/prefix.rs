@@ -137,6 +137,87 @@ fn extglob_pattern_keeps_the_substitution_open() {
     }
 }
 
+// Verify a quoted or escaped `esac` in a pattern list is pattern text.
+//
+// Bash recognizes a reserved word only when it is genuinely unquoted and
+// unescaped. In a pattern list, `esac""`, `""esac`, and `e\sac` all spell the
+// word `esac`, but none is the terminator: Bash accepts each as a pattern and
+// reads the `)` after it as the pattern terminator. A tracker that finishes the
+// word at a quote, or folds the escape into the word, sees a bare `esac` and
+// closes the construct there, so it reads that `)` as the substitution closer
+// and lowers the arm's marker for the enclosing double quotes. Bash splices a
+// backslash-newline pair before tokenizing, so a continued spelling stays a
+// keyword; only a quote, or an escape of a real character, makes the word
+// pattern text.
+#[rstest]
+#[case::quoted_suffix("esac\"\"")]
+#[case::leading_quote("\"\"esac")]
+#[case::escaped_letter("e\\sac")]
+fn quoted_or_escaped_esac_in_a_pattern_keeps_the_substitution_open(#[case] pattern: &str) {
+    let template = format!("echo \"$(case x in {pattern}) printf %s {INS_TOKEN} ;; esac)\"");
+
+    for interpolate in both_interpolators() {
+        let hostile = interpolate(&template, &hostile_bash_bindings())
+            .expect_err("a marker in the arm must stay encoded for the substitution");
+        assert!(
+            matches!(hostile, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {hostile:?}"
+        );
+        assert!(
+            interpolate(&template, &bash_bindings()).is_err(),
+            "a marker inside the substitution must stay inside it"
+        );
+    }
+}
+
+// Verify a line-continued `esac` still closes the case.
+//
+// Bash deletes a backslash-newline pair before tokenizing, so `es\<newline>ac`
+// is the construct's terminator rather than pattern text. Treating every escape
+// as non-literal would leave the construct open past the real closer and reject
+// a marker that the shell reads as ordinary outer text.
+#[test]
+fn continued_esac_still_closes_the_case() {
+    let template = format!("echo \"$(case x in x) printf y ;; es\\\nac)\" {OUTS_TOKEN}");
+    let expected = "echo \"$(case x in x) printf y ;; es\\\nac)\" output";
+    let bindings = bash_bindings();
+
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(&template, &bindings)
+                .expect("Bash reads the continued esac as the case terminator"),
+            expected,
+            "the marker after the real closer must lower to its path"
+        );
+    }
+}
+
+// Verify a quoted `esac` in an arm's command list does not close the case.
+//
+// In an arm, `esac""` is a command name rather than the terminator, so the
+// construct stays open into the next pattern list. A tracker that closed there
+// would read the second arm's pattern terminator as the substitution closer and
+// lower that arm's marker for the enclosing double quotes.
+#[test]
+fn quoted_esac_in_an_arm_does_not_close_the_case() {
+    let template =
+        format!("echo \"$(case x in x) esac\"\" foo ;; y) printf %s {INS_TOKEN} ;; esac)\"");
+    let bindings = hostile_bash_bindings();
+
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &bindings)
+            .expect_err("a marker in the second arm must stay encoded for the substitution");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+        assert!(
+            interpolate(&template, &bash_bindings()).is_err(),
+            "a marker inside the substitution must stay inside it"
+        );
+    }
+}
+
 // Verify a quoted `coproc` name cannot hide a `case` from the guard.
 //
 // Bash accepts a quoted name, and a quoted word is not word data, so the

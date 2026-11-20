@@ -14,7 +14,18 @@ use super::super::posix_lexical::SourceChar;
 /// it. Both categories are kept in one predicate because the caller treats them
 /// identically.
 pub(super) const fn ends_word(ch: char) -> bool {
-    SourceChar::new(ch).is_word_terminator() || matches!(ch, '\'' | '"' | '`')
+    SourceChar::new(ch).is_word_terminator() || is_quote(ch)
+}
+
+/// Report whether `ch` is a shell quoting character.
+///
+/// A quote ends the word being accumulated but not the token it belongs to, and
+/// a token holding one is never read as a reserved word: Bash recognizes
+/// keywords in their bare spelling, so `esac""` and `"esac"` are ordinary
+/// words. The tracker needs the distinction to know whether an `esac` it reads
+/// can close a construct.
+pub(super) const fn is_quote(ch: char) -> bool {
+    matches!(ch, '\'' | '"' | '`')
 }
 
 /// Report whether `ch` is an unquoted blank that leaves token position alone.

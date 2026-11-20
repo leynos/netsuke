@@ -410,7 +410,8 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   the substitution, after an operator or newline, inside a brace group or
   function body, behind a `time` option, and behind a `coproc` name. It also
   reads each construct's phase, so an `esac` after a `|` is another alternative
-  pattern rather than the terminator. A pattern terminator then no longer
+  pattern rather than the terminator, and requires a bare spelling, so a quoted
+  or escaped `esac` stays pattern text. A pattern terminator then no longer
   closes the substitution, and a substitution whose source contains `case` is
   rejected when a `)` is immediately followed by `#`. A `case` written where
   the scanner's word model cannot place it, such as behind a quoted `coproc`

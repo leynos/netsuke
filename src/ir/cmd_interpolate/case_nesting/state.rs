@@ -5,7 +5,8 @@
 //! state, and which part of an open construct the tracker is reading. The
 //! construct also owns its own operator transitions, because only it knows
 //! whether a `|`, `)`, `;;`, or `;&` written at its depth is pattern syntax or
-//! an ordinary shell operator. Keeping all of that here leaves the tracker
+//! an ordinary shell operator. The tracker's word transitions live here too,
+//! beside the roles they consume. Keeping all of that here leaves the tracker
 //! module to the word and comment scanning that drives them.
 
 /// Record which `case` keywords one substitution's tracker has seen.
@@ -116,10 +117,18 @@ impl CaseFrame {
     /// Report whether `word` terminates this construct's pattern list.
     ///
     /// Bash reads `esac` as the construct's closer only where a pattern would
-    /// start, so a pattern list that just read a `|` is not closed by it.
-    pub(super) fn is_closed_by(&self, parenthesis_depth: usize, word: &str) -> bool {
+    /// start and only in its bare spelling, so neither `case x in x|esac)` nor
+    /// `case x in esac"")` is closed by the word: the first is an alternative
+    /// pattern, the second quoted pattern text.
+    pub(super) fn is_closed_by(
+        &self,
+        parenthesis_depth: usize,
+        word: &str,
+        is_literal: bool,
+    ) -> bool {
         let is_terminator = self.depth == parenthesis_depth && word == "esac";
-        is_terminator && !self.after_alternative
+        let is_bare_closer = is_literal && !self.after_alternative;
+        is_terminator && is_bare_closer
     }
 
     /// Move the construct across an operator written at its own depth.
@@ -173,4 +182,50 @@ pub(super) enum WordRole {
         /// Whether the next word is again a command word.
         continues_command_list: bool,
     },
+}
+
+impl super::CaseNesting {
+    /// Apply a classified word to the tracker's state.
+    ///
+    /// This is the transition table named by [`WordRole`]: each arm moves
+    /// exactly the state that role owns, and classification has already read
+    /// the state the role was judged against.
+    pub(super) fn apply_role(&mut self, role: WordRole, parenthesis_depth: usize) {
+        match role {
+            WordRole::OpenCase => {
+                self.frames.push(CaseFrame {
+                    depth: parenthesis_depth,
+                    phase: CasePhase::Header,
+                    after_alternative: false,
+                });
+                self.sightings.record_placed();
+                self.expects_command = false;
+            }
+            WordRole::EnterPattern => {
+                if let Some(frame) = self.open_construct_at_mut(parenthesis_depth) {
+                    frame.enter_pattern();
+                }
+                self.expects_command = false;
+            }
+            WordRole::UnplacedCase => {
+                self.sightings.record_unplaced();
+                self.expects_command = false;
+            }
+            WordRole::CloseCase => {
+                self.close_construct_at(parenthesis_depth);
+                self.expects_command = false;
+            }
+            WordRole::TimePrefix => {
+                self.prefix_slot = PrefixSlot::TimeOption;
+                self.expects_command = true;
+            }
+            WordRole::CoprocPrefix => {
+                self.prefix_slot = PrefixSlot::CoprocName;
+                self.expects_command = true;
+            }
+            WordRole::Other {
+                continues_command_list,
+            } => self.expects_command = continues_command_list,
+        }
+    }
 }
