@@ -22,19 +22,25 @@
 //! only be judged against the working directory. Deleting the entry under such
 //! a spelling would destroy the very output the manifest declared, so the
 //! build stops with the reservation's own diagnostic instead. That resolution
-//! lives here rather than in generation, because reading the filesystem is the
-//! command layer's work: generation stays a pure translation of the graph.
+//! lives in [`resolve`] rather than in generation, because reading the
+//! filesystem is the command layer's work: generation stays a pure translation
+//! of the graph. Keeping it in its own module also keeps the filesystem
+//! questions separate from the namespace handles and the removal they guard.
+//!
+//! [`resolve`]: self::resolve
 
 use super::path_helpers::{canonical_working_directory, open_effective_dir};
 use crate::cli::Cli;
 use crate::localization::{self, keys};
-use crate::ninja_gen::reserved_paths::is_reserved_path;
 use anyhow::{Context, Error, Result};
-use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_primitives::fs::{FollowSymlinks, open_dir_nofollow, stat};
 use cap_std::fs_utf8::Dir;
+use resolve::resolves_into_reserved_state;
 use std::io::{self, ErrorKind};
 use std::path::Path;
+
+mod resolve;
 
 /// Parent directory of the namespace reserved for generated phony state.
 const NAMESPACE_PARENT: &str = ".netsuke";
@@ -69,87 +75,12 @@ pub(in crate::runner) fn reset_force_node(cli: &Cli, declared: &[Utf8PathBuf]) -
         return Ok(());
     }
     let workspace = canonical_working_directory(cli)?;
-    if let Some(path) = declared
-        .iter()
-        .find(|path| resolves_into_reserved_state(&workspace, path))
-    {
-        return Err(alias_refusal(path));
+    for path in declared {
+        if resolves_into_reserved_state(&workspace, path)? {
+            return Err(alias_refusal(path));
+        }
     }
     remove_path(&phony, Utf8Path::new(FORCE_ENTRY))
-}
-
-/// Return whether `path`, resolved against `workspace`, names generated state.
-///
-/// Text alone cannot answer this for every spelling: `../project/force` and
-/// `/abs/project/force` may name the very node about to be removed, and an
-/// alias through a symbolic link names it without saying so. Two resolutions
-/// run, because they answer different questions:
-///
-/// - The whole path, following its final component when that is a link, says
-///   whether the declaration reaches into the namespace at all.
-/// - The parent alone, keeping the final component as written, says whether the
-///   entry about to be removed is the one declared. Following the link there
-///   would describe the link's target instead of the entry, so a declared
-///   absolute alias whose link points outside the workspace would otherwise
-///   escape the check.
-///
-/// Both use the longest existing ancestor, canonicalized against `workspace`,
-/// with the components that do not exist yet folded onto it. The results are
-/// given to the same reservation rule generation applies.
-///
-/// Canonicalization only reads: the removal itself still goes through the
-/// verified namespace handles, so this check can never redirect a deletion.
-fn resolves_into_reserved_state(workspace: &Utf8Path, path: &Utf8Path) -> bool {
-    is_reserved_path(path)
-        || within_namespace(workspace, resolved_target(workspace, path).as_deref())
-        || within_namespace(workspace, declared_entry(workspace, path).as_deref())
-}
-
-/// Resolve `path`'s parent and keep its final component as written.
-///
-/// A path with no final component — one that ends in `..` or in a separator —
-/// names no entry, so there is nothing separate from the full resolution above.
-fn declared_entry(workspace: &Utf8Path, path: &Utf8Path) -> Option<Utf8PathBuf> {
-    let parent = path.parent()?;
-    let name = path.file_name()?;
-    resolved_target(workspace, parent).map(|directory| directory.join(name))
-}
-
-/// Report whether an already-resolved path names reserved state in `workspace`.
-fn within_namespace(workspace: &Utf8Path, resolved: Option<&Utf8Path>) -> bool {
-    resolved
-        .and_then(|candidate| candidate.strip_prefix(workspace).ok())
-        .is_some_and(is_reserved_path)
-}
-
-/// Resolve `path` against the workspace, folding the components not yet on disk.
-fn resolved_target(workspace: &Utf8Path, path: &Utf8Path) -> Option<Utf8PathBuf> {
-    let candidate = workspace.join(path);
-    let mut ancestor = candidate.as_path();
-    loop {
-        if let Ok(canonical) = ancestor.canonicalize_utf8() {
-            let tail = candidate.strip_prefix(ancestor).ok()?;
-            return fold_tail(&canonical, tail);
-        }
-        ancestor = ancestor.parent()?;
-    }
-}
-
-/// Apply a relative tail to a canonical path.
-///
-/// Returns `None` when the tail climbs above the filesystem root, which no
-/// existing path can satisfy.
-fn fold_tail(canonical: &Utf8Path, tail: &Utf8Path) -> Option<Utf8PathBuf> {
-    let mut resolved = canonical.to_owned();
-    for component in tail.components() {
-        match component {
-            Utf8Component::Normal(segment) => resolved.push(segment),
-            Utf8Component::CurDir => {}
-            Utf8Component::ParentDir => resolved = resolved.parent()?.to_owned(),
-            Utf8Component::Prefix(_) | Utf8Component::RootDir => return None,
-        }
-    }
-    Some(resolved)
 }
 
 /// Report whether anything occupies the force node without following a link.

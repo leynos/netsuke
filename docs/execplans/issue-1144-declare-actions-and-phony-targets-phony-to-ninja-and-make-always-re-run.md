@@ -104,6 +104,11 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
 - [x] Migration notice added to the v0.1.0 guide, `.netsuke/phony` added to its
       reserved-namespace paragraph, and the command-layer boundary recorded in
       the developers' guide and ADR-0084.
+- [x] Fourth review's Unit Architecture finding fixed: the alias resolver
+      reports canonicalization failures instead of folding them into "not
+      reserved", lives in `src/runner/phony_state/resolve.rs` apart from the
+      namespace handles, and gained a regression test for an unresolvable path
+      plus a query test that resolution creates no state.
 - [ ] Gates rerun on the fixed tree and the review cleared.
 
 ## Surprises & discoveries

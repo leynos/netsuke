@@ -24,7 +24,10 @@ proptest! {
     ) {
         let workspace = workspace().expect("create a temporary workspace");
         let declared = workspace.root.join(format!(".netsuke/{tail}"));
-        prop_assert!(resolves_into_reserved_state(&workspace.root, &declared));
+        prop_assert!(
+            resolves_into_reserved_state(&workspace.root, &declared)
+                .expect("resolve the declared path"),
+        );
     }
 
     /// A climb that returns to the workspace's own namespace is reserved.
@@ -49,7 +52,8 @@ proptest! {
             climb = "../".repeat(depth),
         ));
         prop_assert!(
-            resolves_into_reserved_state(&workspace.root, &declared),
+            resolves_into_reserved_state(&workspace.root, &declared)
+                .expect("resolve the declared path"),
             "{declared} resolves into the workspace namespace",
         );
     }
@@ -68,7 +72,8 @@ proptest! {
         let name = workspace.root.file_name().expect("workspace has a name");
         let declared = Utf8PathBuf::from(format!("../{name}/.netsuke/{inner}"));
         prop_assert!(
-            resolves_into_reserved_state(&workspace.root, &declared),
+            resolves_into_reserved_state(&workspace.root, &declared)
+                .expect("resolve the declared path"),
             "{declared} re-enters the workspace",
         );
     }
@@ -85,7 +90,8 @@ proptest! {
         let workspace = workspace().expect("create a temporary workspace");
         let declared = Utf8PathBuf::from(format!("../not-{name}/.netsuke/phony/force"));
         prop_assert!(
-            !resolves_into_reserved_state(&workspace.root, &declared),
+            !resolves_into_reserved_state(&workspace.root, &declared)
+                .expect("resolve the declared path"),
             "{declared} lands outside the workspace",
         );
     }
@@ -97,6 +103,9 @@ proptest! {
     ) {
         let workspace = workspace().expect("create a temporary workspace");
         let declared = Utf8PathBuf::from(segments.join("/"));
-        prop_assert!(!resolves_into_reserved_state(&workspace.root, &declared));
+        prop_assert!(
+            !resolves_into_reserved_state(&workspace.root, &declared)
+                .expect("resolve the declared path"),
+        );
     }
 }
