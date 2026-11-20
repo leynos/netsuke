@@ -79,38 +79,29 @@ fn assert_interrupted_run_is_recovered() -> Result<()> {
         body: "# The recovery under test runs before this script.\n".to_owned(),
     };
     let interrupted = run_example_interrupted(root.path(), &example)?;
-    ensure!(
-        !interrupted.status.success(),
-        "{}",
-        describe(
-            &interrupted,
-            &example,
-            "should end without restoring the value it wrote"
-        )
-    );
-    let interrupted_stdout = String::from_utf8_lossy(&interrupted.stdout).into_owned();
-    let appended = marker(&interrupted_stdout, "INTERRUPTED").with_context(|| {
-        describe(
-            &interrupted,
-            &example,
-            "did not report the directory it left in PATH",
-        )
-    })?;
-    let install_text = install.display().to_string();
-    ensure!(
-        appended == install_text,
-        "the interrupted run should leave the staged directory {install_text} in PATH, \
-         left {appended:?}"
-    );
-    let recorded = marker(&interrupted_stdout, "ORIGINAL").with_context(|| {
-        describe(
-            &interrupted,
-            &example,
-            "did not report the value it recorded",
-        )
-    })?;
+    // The first process may have left the staged directory in the user's PATH,
+    // so the recovery run below must happen whatever these checks find. They
+    // are recorded here and reported only after recovery has repaired the
+    // value; failing early would skip the repair and leave the registry
+    // modified for every later run.
+    let first_run_problem = interrupted_run_problem(&interrupted, &install, &example);
+    let interrupted_recorded = marker(&String::from_utf8_lossy(&interrupted.stdout), "ORIGINAL")
+        .map(str::to_owned)
+        .with_context(|| {
+            describe(
+                &interrupted,
+                &example,
+                "did not report the value it recorded",
+            )
+        });
 
     let recovered = run_example(root.path(), &example)?;
+    // Only now that the repair process has run is it safe to report what the
+    // interrupted half got wrong.
+    if let Some(problem) = first_run_problem {
+        bail!("{problem}");
+    }
+    let recorded = interrupted_recorded?;
     let stdout = require_success(&recovered, &example)?;
     let captured = marker(&stdout, "ORIGINAL").with_context(|| {
         describe(
@@ -136,6 +127,40 @@ fn assert_interrupted_run_is_recovered() -> Result<()> {
          {recorded:?} recorded"
     );
     Ok(())
+}
+
+/// Describe what the interrupted run got wrong, if anything.
+///
+/// The check is returned rather than asserted so the caller can run the
+/// recovery process first: the run under test leaves the registry modified by
+/// design, and an early `ensure!` would skip the only repair. `None` means the
+/// interrupted half behaved as the crash it simulates.
+fn interrupted_run_problem(
+    interrupted: &Output,
+    install: &Path,
+    example: &DocumentedExample,
+) -> Option<String> {
+    if interrupted.status.success() {
+        return Some(describe(
+            interrupted,
+            example,
+            "should end without restoring the value it wrote",
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&interrupted.stdout).into_owned();
+    let install_text = install.display().to_string();
+    match marker(&stdout, "INTERRUPTED") {
+        None => Some(describe(
+            interrupted,
+            example,
+            "did not report the directory it left in PATH",
+        )),
+        Some(appended) if appended != install_text => Some(format!(
+            "the interrupted run should leave the staged directory {install_text} in PATH, \
+             left {appended:?}"
+        )),
+        Some(_) => None,
+    }
 }
 
 /// Verify that a backup a completed restore left behind is removed rather than

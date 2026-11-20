@@ -6,6 +6,16 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# The marker lines are the only channel back to the Rust test, and a staged
+# path may hold non-ASCII characters. A redirected console otherwise writes the
+# console code page, whose bytes are not UTF-8 and would decode to a different
+# path. Pinning the writer to UTF-8 without a byte order mark keeps the round
+# trip lossless whatever the host code page is.
+$wrapperStdout = [System.IO.StreamWriter]::new(
+    [Console]::OpenStandardOutput(),
+    [System.Text.UTF8Encoding]::new($false)
+)
+$wrapperStdout.AutoFlush = $true
 $wrapperSentinel = '%SystemRoot%\netsuke-path-sentinel'
 $wrapperMutex = [System.Threading.Mutex]::new($false, 'Local\NetsukeWindowsPathSetupTest')
 # Both are read by the outer finally, so neither may still be unset when the
@@ -114,7 +124,7 @@ try {
     } else {
         [Microsoft.Win32.RegistryValueKind]::ExpandString
     }
-    Write-Output "ORIGINAL=$wrapperOriginalValue"
+    $wrapperStdout.WriteLine("ORIGINAL=$wrapperOriginalValue")
     $wrapperBackupJson = [ordered]@{
         HadPath = $wrapperHadPath
         Value = $wrapperOriginalValue
@@ -140,8 +150,8 @@ try {
             } else {
                 $wrapperKey.DeleteValue('Path', $false)
             }
-            [Console]::Out.WriteLine("SPENT=$wrapperOriginalValue")
-            [Console]::Out.Flush()
+            $wrapperStdout.WriteLine("SPENT=$wrapperOriginalValue")
+            $wrapperStdout.Flush()
             [System.Environment]::Exit(1)
         }
         if ($SimulateInterruption) {
@@ -154,14 +164,14 @@ try {
                 "$wrapperSentinel;$wrapperExpectedAppended",
                 [Microsoft.Win32.RegistryValueKind]::ExpandString
             )
-            [Console]::Out.WriteLine("INTERRUPTED=$wrapperExpectedAppended")
-            [Console]::Out.Flush()
+            $wrapperStdout.WriteLine("INTERRUPTED=$wrapperExpectedAppended")
+            $wrapperStdout.Flush()
             [System.Environment]::Exit(1)
         }
         . $ExamplePath
         $wrapperStored = [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-        Write-Output "RESULT=$wrapperStored"
-        Write-Output "KIND=$($wrapperKey.GetValueKind('Path'))"
+        $wrapperStdout.WriteLine("RESULT=$wrapperStored")
+        $wrapperStdout.WriteLine("KIND=$($wrapperKey.GetValueKind('Path'))")
     }
     finally {
         # Record what the script left behind before restoring it. A run that
@@ -172,7 +182,7 @@ try {
         } else {
             ''
         }
-        Write-Output "LEFTOVER=$wrapperLeftover"
+        $wrapperStdout.WriteLine("LEFTOVER=$wrapperLeftover")
         if ($wrapperHadPath) {
             $wrapperKey.SetValue('Path', $wrapperOriginalValue, $wrapperOriginalKind)
         } else {
@@ -183,7 +193,7 @@ try {
         } else {
             ''
         }
-        Write-Output "RESTORED=$wrapperRestored"
+        $wrapperStdout.WriteLine("RESTORED=$wrapperRestored")
         Remove-Item -LiteralPath $BackupPath -Force -ErrorAction SilentlyContinue
     }
 }
