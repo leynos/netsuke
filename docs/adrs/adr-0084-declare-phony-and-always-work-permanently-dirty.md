@@ -215,15 +215,17 @@ manifest gains corrected behaviour without an edit:
 - A path an older Netsuke run declared as an executable phony edge's output is
   no longer declared, so `netsuke clean` will not remove it. A recipe that
   still writes its public name recreates that path on every build, so a single
-  removal is not enough: `clean` must remove it on every run until the recipe
-  stops writing that name. A recipe that has stopped writing it leaves one
-  stale copy, which a single removal clears.
+  removal is not enough: the stale product needs its own cleanup step on every
+  run until the recipe stops writing that name, because `netsuke clean` will
+  not take it. A recipe that has stopped writing it leaves one stale copy,
+  which a single removal clears.
 
   _Addendum (2026-11-20)._ The original text advised deleting the stale build
   product once. That holds only for a recipe that no longer writes its public
   name. A recipe that still writes it — for example one that redirects into the
-  declared file instead of writing `$out` — recreates the path on every build,
-  outside Ninja's knowledge, so `clean` has to handle it on every run.
+  declared file rather than through the `{{ outs }}` marker — recreates the
+  path on every build, outside Ninja's knowledge, so a cleanup step outside
+  `netsuke clean` has to remove it on every run.
 - Generated Ninja text changes shape for these edges. The determinism guarantee
   is unchanged: for one graph, environment, platform, shell selection, and
   Netsuke version, the emitted bundle is still byte-identical. Manifests that
@@ -245,15 +247,17 @@ manifest gains corrected behaviour without an edit:
 - Ninja creates the `.netsuke/phony` directory when it first runs a hidden
   recipe, so a build that skips every such edge never creates it.
 - A `depfile` on an executable phony edge is a rule binding, so the hidden
-  statement inherits it. Ninja loads such a depfile at scan time and accepts it
-  only when its first output equals the edge's first output, which is now the
-  hidden path; a depfile that names the declared public name instead is
-  ignored, and the dependencies it lists do not order the build. A recipe that
-  writes the depfile against `$out` produces a matching one, and a real-Ninja
-  test pins that form: the discovered producer runs before the phony recipe
-  only because the depfile was loaded. The manifest loader never sets
-  `Action.depfile` in beta4, so only programmatic IR construction reaches this
-  path today.
+  statement inherits it. Without a `deps` binding, Ninja reads the depfile at
+  scan time and accepts it only when its first target equals the edge's first
+  output, which is now the hidden path. No recipe can name that path:
+  `{{ outs }}` is lowered from the declared names, and `$out` is a literal
+  shell variable like every other recipe dollar, so a Makefile-style depfile
+  written by the recipe is refused and orders nothing. A rule that also sets
+  `deps` records the depfile's inputs in Ninja's dependency log against the
+  hidden output, so they order later builds; the build that records them cannot
+  use them. Real-Ninja tests pin both outcomes. The manifest loader never sets
+  `Action.depfile` or `Action.deps_format` in beta4, so only programmatic IR
+  construction reaches this path today.
 - The force node is a real path in the build directory. If a file, directory,
   or symbolic link exists at `.netsuke/phony/force`, Ninja finds the phony
   node's output present and treats the forced edges as clean, so they stop

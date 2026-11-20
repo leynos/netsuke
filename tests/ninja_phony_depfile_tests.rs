@@ -1,18 +1,21 @@
 //! Real-Ninja coverage for a depfile on an executable `phony` edge.
 //!
-//! A `phony` edge's recipe runs against a hidden output, so the depfile Ninja
-//! reads at startup must name that hidden path as its first output. This suite
-//! proves the generated text still lets Ninja load the discovered inputs: the
-//! producer is reachable only through the depfile, so a build that runs it
-//! before the consumer can only have honoured the discovered dependency.
+//! A `phony` edge's recipe runs against a hidden output, so a Makefile-style
+//! depfile — a `depfile` binding without `deps` — must name that hidden path
+//! as its first target. No recipe can name it: `{{ outs }}` is lowered from
+//! the declared names, and `$out` is a literal shell variable. This suite pins
+//! each outcome that boundary produces:
 //!
-//! The counterfactual case omits the depfile and records what "inputs not
-//! loaded" looks like — the producer never runs and the consumer fails — which
-//! is the failure mode this suite must be able to observe.
+//! - A pre-written depfile naming the hidden output is loaded at scan time and
+//!   orders the discovered producer before the recipe.
+//! - A depfile the recipe writes against its public name is refused by
+//!   Makefile-style loading, so its producer never runs.
+//! - With `deps`, Ninja records that same recipe-written depfile's inputs
+//!   against the hidden output, and the next build orders the producer first.
 //!
-//! The graph is constructed programmatically because `Action.depfile` is
-//! always `None` from the manifest loader; only direct IR construction can
-//! populate it, so the manifest route cannot express this scenario.
+//! The graphs are constructed programmatically because `Action.depfile` and
+//! `Action.deps_format` are always `None` from the manifest loader; only
+//! direct IR construction can populate them.
 //!
 //! When Ninja is unavailable the scenarios skip, unless the injected
 //! `NETSUKE_REQUIRE_NINJA=1` setting has made a missing installation fatal.
@@ -71,7 +74,7 @@ fn temp_workspace() -> Result<Option<TempDir>> {
 }
 
 /// Build an action whose recipe is `command` and whose rule names `depfile`.
-fn action(command: &str, depfile: Option<&str>) -> Action {
+fn action(command: &str, depfile: Option<&str>, deps: Option<&str>) -> Action {
     Action {
         recipe: Recipe::Command {
             command: StringOrList::String(command.to_owned()),
@@ -79,7 +82,7 @@ fn action(command: &str, depfile: Option<&str>) -> Action {
         },
         description: None,
         depfile: depfile.map(str::to_owned),
-        deps_format: None,
+        deps_format: deps.map(str::to_owned),
         pool: None,
         restat: false,
     }
@@ -116,6 +119,7 @@ fn depfile_graph() -> BuildGraph {
         action(
             &format!("printf 'produce\\n' >> {RUNS_LOG} && printf 'header\\n' > {GENERATED}"),
             None,
+            None,
         ),
     );
     graph.actions.insert(
@@ -123,6 +127,7 @@ fn depfile_graph() -> BuildGraph {
         action(
             &format!("printf 'consume\\n' >> {RUNS_LOG} && cat {GENERATED} > {RESULT}"),
             Some(DEPFILE),
+            None,
         ),
     );
     insert_edge(&mut graph, "produce", GENERATED, false);
@@ -169,22 +174,28 @@ fn run_log(root: &Dir) -> Result<Vec<String>> {
     Ok(content.lines().map(str::to_owned).collect())
 }
 
-/// Write the generated text and, when asked, the depfile naming the hidden output.
-fn prepare_workspace(directory: &TempDir, load_depfile: bool) -> Result<(Dir, Utf8PathBuf)> {
+/// Write the generated text into the temporary workspace.
+fn write_workspace(directory: &TempDir, ninja: &str) -> Result<(Dir, Utf8PathBuf)> {
     let path = Utf8Path::from_path(directory.path())
         .context("the temporary workspace path must be UTF-8")?;
     let root =
         Dir::open_ambient_dir(path, ambient_authority()).context("open the Ninja workspace")?;
+    root.write("build.ninja", ninja)
+        .context("write the generated Ninja file")?;
+    Ok((root, Utf8PathBuf::from(path)))
+}
+
+/// Write the generated text and, when asked, the depfile naming the hidden output.
+fn prepare_workspace(directory: &TempDir, load_depfile: bool) -> Result<(Dir, Utf8PathBuf)> {
     let ninja = generate_with_shell(&depfile_graph(), RecipeShell::Posix)
         .context("generate the depfile graph")?;
     let hidden = hidden_output(&ninja)?;
-    root.write("build.ninja", &ninja)
-        .context("write the generated Ninja file")?;
+    let (root, path) = write_workspace(directory, &ninja)?;
     if load_depfile {
         root.write(DEPFILE, format!("{hidden}: {GENERATED}\n"))
             .context("write the depfile naming the hidden output")?;
     }
-    Ok((root, Utf8PathBuf::from(path)))
+    Ok((root, path))
 }
 
 /// A loaded depfile must order the discovered producer before the phony recipe.
@@ -252,3 +263,7 @@ fn without_a_loaded_depfile_the_producer_never_runs(
     );
     Ok(())
 }
+
+/// Cover the depfile the consumer's recipe writes, with and without `deps`.
+#[path = "ninja_phony_depfile_tests/recipe_written.rs"]
+mod recipe_written;

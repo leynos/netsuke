@@ -232,14 +232,16 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   now joins the surviving `Normal` components with `/` and builds no path at
   all; an absolute or prefixed path returns `None`, and a literal backslash
   stays an ordinary character on Unix, which a `#[cfg(unix)]` test pins.
-- Superseded by the later bullet on the pinned capabilities: this earlier
+- Superseded by the decision-log entry on the pinned capability: this earlier
   note says that `open_dir_nofollow` alone accepts a directory symbolic link
-  with the pinned capability implementation, and the discovery below records
-  what the lockfile's two `cap-primitives` versions (3.4.6 and 4.0.3) actually
-  do. Read the later bullet as authoritative: the `stat(…, FollowSymlinks::No)`
-  pre-check is advisory, while the no-follow open is the security boundary. The
-  pre-check still names a refused component before the open runs, so it is kept
-  for its diagnostic value rather than as the guarantee.
+  with the pinned capability implementation. Read the decision-log entry as
+  authoritative: the `stat(…, FollowSymlinks::No)` pre-check is advisory, while
+  the no-follow open is the security boundary. Netsuke's own requirement
+  resolves `cap-primitives` to 3.4.6 (the workspace asks for 3.4.4); the 4.0.3
+  copy in the lockfile belongs to `ortho_config` and `rstest-bdd-macros`, so it
+  does not back this open. The pre-check still names a refused component before
+  the open runs, so it is kept for its diagnostic value rather than as the
+  guarantee.
 - The localization audit requires every declared key in every catalogue, so the
   two new cleanup contexts could not be English-only. Both were translated into
   all 35 catalogues, with the right-to-left marks preserved for `ar`, `fa` and
@@ -305,12 +307,15 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   `ninja_gen/reserved_paths/mod.rs` owns the namespace constants and the pure
   folding of a graph spelling. The runner owns working-directory resolution,
   because it already selects the directory Ninja runs in and can read the
-  filesystem without making generation impure. Only an unresolved path — one
-  with a missing component, or a `..` tail that climbs above the filesystem
-  root — is not refused, because it cannot name the node. Every other
-  canonicalization error refuses the reset, and so does a resolution that lands
-  in a reserved namespace; `resolved_target` propagates each failure other than
-  `NotFound`, and that error stops the reset.
+  filesystem without making generation impure. A declared path that is not
+  lexically reserved is resolved by folding the components not yet on disk onto
+  the longest existing ancestor, so a path with a missing tail is still
+  checked: the reset refuses it when either that resolution or the
+  parent-resolved entry lands in a reserved namespace. The only spelling not
+  refused is one that cannot be folded at all, a `..` tail that climbs above
+  the filesystem root, because no existing path can correspond to it. Every
+  canonicalization error other than `NotFound` refuses the reset;
+  `resolved_target` propagates it, and that error stops the reset.
 - The alias refusal reuses `ninja_gen.reserved_output_path` rather than adding
   a third message, so users meet one explanation for one rule and no new
   translation sweep is needed.
@@ -321,13 +326,15 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
 - The reset inspects `.netsuke` and `.netsuke/phony` with
   `stat(..., FollowSymlinks::No)` and refuses either component when it is a
   symbolic link or not a directory. The open that follows uses
-  `cap_primitives::fs::open_dir_nofollow`, which refuses a link as the final
-  component itself — `O_NOFOLLOW` on Unix, a reparse-point check on the opened
-  handle on Windows — so a link swapped in after the inspection fails the open
-  instead of yielding a handle that points elsewhere. Removal happens through
-  that verified handle, so a link cannot redirect a recursive delete outside
-  the namespace. A test pins the primitive's refusal, so a dependency change
-  that dropped it fails rather than silently weakening the reset.
+  `cap_primitives::fs::open_dir_nofollow` from `cap-primitives` 3.4.6, the
+  version the workspace's 3.4.4 requirement resolves to, and it refuses a link
+  as the final component itself — `O_NOFOLLOW` on Unix, a reparse-point check
+  on the opened handle on Windows — so a link swapped in after the inspection
+  fails the open instead of yielding a handle that points elsewhere. Removal
+  happens through that verified handle, so a link cannot redirect a recursive
+  delete outside the namespace. A test pins the primitive's refusal, so a
+  dependency change that dropped it fails rather than silently weakening the
+  reset.
 - Both cleanup contexts are localized Fluent keys carrying `$path`
   (`runner.io.phony.inspect` and `runner.io.phony.reset`), and the refusal uses
   `io::ErrorKind::NotADirectory` rather than authored English prose.
