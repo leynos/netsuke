@@ -113,9 +113,13 @@ impl CaseFrame {
         self.after_alternative = false;
     }
 
-    /// Report whether the pattern list just read a `|`.
-    pub(super) const fn is_after_alternative(&self) -> bool {
-        self.after_alternative
+    /// Report whether `word` terminates this construct's pattern list.
+    ///
+    /// Bash reads `esac` as the construct's closer only where a pattern would
+    /// start, so a pattern list that just read a `|` is not closed by it.
+    pub(super) fn is_closed_by(&self, parenthesis_depth: usize, word: &str) -> bool {
+        let is_terminator = self.depth == parenthesis_depth && word == "esac";
+        is_terminator && !self.after_alternative
     }
 
     /// Move the construct across an operator written at its own depth.
