@@ -64,10 +64,12 @@ def _admission_step(
 
 
 def _resolved_flag(value: object) -> bool | None:
-    """Interpret a step environment value the way the runner would.
+    """Interpret a step environment value the way the runner and gate would.
 
-    A step environment is a string on the runner, so a hard-coded `true` or
-    `false` reaches the gate as text.
+    A step environment is a string on the runner, so a boolean expression's
+    result arrives as lowercase ``true`` or ``false``. The gate compares that
+    text against those exact spellings, so ``TRUE`` or a padded value is not a
+    flag: a publishing run would receive it and observe, admitting nothing.
 
     Returns
     -------
@@ -80,10 +82,52 @@ def _resolved_flag(value: object) -> bool | None:
     match value:
         case bool() as flag:
             return flag
-        case str() as text if text.strip().lower() in {"true", "false"}:
-            return text.strip().lower() == "true"
+        case "true":
+            return True
+        case "false":
+            return False
         case _:
             return None
+
+
+def _is_expression(text: str) -> bool:
+    """Return whether a step environment value is a wrapped expression.
+
+    Returns
+    -------
+    bool
+        Whether the value is entirely one ``${{ }}`` expression. Anything else
+        is literal text on the runner.
+    """
+    stripped = text.strip()
+    return stripped.startswith("${{") and stripped.endswith("}}")
+
+
+def _environment_value(
+    expression: object,
+    contexts: dict[str, object],
+    label: str,
+    violations: list[str],
+) -> object:
+    """Return the value the runner assigns to the gate's environment.
+
+    A step environment is interpolated only where it is wrapped in ``${{ }}``;
+    unwrapped text reaches the gate literally. Evaluating bare text as an
+    expression would accept wiring whose delimiters were lost, which leaves the
+    gate comparing an expression's own source against the mode.
+
+    Returns
+    -------
+    object
+        The evaluated expression, the literal text, or ``MISSING`` when the
+        evaluator refuses the expression it was given.
+    """
+    if isinstance(expression, str) and not _is_expression(expression):
+        return expression
+    return evaluate_field(
+        expression,
+        FieldEvaluation(contexts=contexts, violations=violations, label=label),
+    )
 
 
 def check_admission_enforcement(
@@ -123,10 +167,7 @@ def check_admission_enforcement(
         },
         "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
     }
-    value = evaluate_field(
-        expression,
-        FieldEvaluation(contexts=contexts, violations=violations, label=label),
-    )
+    value = _environment_value(expression, contexts, label, violations)
     if value is MISSING:
         return
     resolved = _resolved_flag(value)

@@ -2,16 +2,18 @@
 
 Each mutation states a plausible way to reopen the bypass the gate closes: drop
 a dependency, drop one result or output check, invert the guard's cancellation
-negation, hard-code the enforcement mode in either direction, smuggle an
-``always()`` onto the publication guard, disjoin
+negation, hard-code the enforcement mode in either direction or in a spelling
+the gate refuses, smuggle an ``always()`` onto the publication guard, disjoin
 the guard from an always-true clause, add a publisher whose scopes arrive as a
 ``write-all`` shorthand or through the workflow level, let the rehearsal adopt
 the gate, let publication adopt the rehearsal, grant the rehearsal a write
 scope the publisher model does not name, or let `setup-uv` resolve the uv
 release from the candidate's own project files. The admission job's mutations,
 which collapse its two checkouts or move the gate step out of the candidate
-checkout, live in :mod:`release_admission_checkout_mutations` and are merged
-below. The expected diagnostics name the scenario or the structural rule that
+checkout, live in :mod:`release_admission_checkout_mutations`, and the
+enforcement spellings that keep the mode out of the runner's hands live in
+:mod:`release_admission_enforcement_mutations`; both are merged below. The
+expected diagnostics name the scenario or the structural rule that
 must notice, so the mutation test shows each assertion fires rather than merely
 passing.
 
@@ -22,6 +24,7 @@ import re
 import typing as typ
 
 from release_admission_checkout_mutations import CHECKOUT_MUTATIONS
+from release_admission_enforcement_mutations import ENFORCEMENT_MUTATIONS
 from release_admission_gate_contract import (
     ADMISSION_JOB,
     ADMISSION_STEP_ID,
@@ -91,6 +94,18 @@ GATE_VIOLATIONS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     "force-observation-enforcement": (("tag-publish", "admission.enforcement"),),
     "force-enforced-rehearsal": (("opened", "admission.enforcement"),),
+    "enforcement-bare-expression": (
+        ("tag-publish", "admission.enforcement"),
+        ("opened", "admission.enforcement"),
+    ),
+    "enforcement-uppercase": (
+        ("tag-publish", "admission.enforcement"),
+        ("opened", "admission.enforcement"),
+    ),
+    "enforcement-padded": (
+        ("tag-publish", "admission.enforcement"),
+        ("opened", "admission.enforcement"),
+    ),
     "always-publication-guard": (
         ("cancelled-publishing", "publish-job"),
         ("static", "write-authority.publish-release.guard"),
@@ -366,6 +381,7 @@ GATE_MUTATIONS: dict[str, cabc.Callable[[dict[str, object]], None]] = {
     "inherited-write-publisher": _inherited_write_publisher,
     "grant-rehearsal-unmodelled-write": _grant_unmodelled_write,
     **CHECKOUT_MUTATIONS,
+    **ENFORCEMENT_MUTATIONS,
     **{
         label: (lambda release, name=label: _drop_clause_for(name, release))
         for label in CLAUSE_REMOVALS
