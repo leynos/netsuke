@@ -1241,6 +1241,30 @@ conflict in `Decision log`, and escalate.
       this renumber and this record. `make check-fmt` and `make markdownlint`
       re-run over that delta; the code suites are unaffected, following the
       sensitivity rule already recorded for a docs-only delta.
+  - Assessment round five at `57f02277f` (2026-11-20). Both candidate-bound
+    follow-ups were answered within four minutes. `EP613-COMPLETE-57F0227`
+    found the implementation substantially complete with no runtime
+    correctness defect; `EP613-PROOF-57F0227` found the proofs substantive and
+    rigorous within their stated domains with no soundness defect. Both named
+    the same branch-repairable items, and all are repaired here.
+    - Proof CI coverage. `verus/configured_shells/main.rs` landed on `main` in
+      11.2.2, after `e28f26ae2` wrote the workflow's claim that CI runs every
+      proof under `verus/`, so the replay left a header and three documents
+      describing two proofs. `proofs.yml` gains a third step and the header,
+      the developers' guide, the formal-verification record, and the repository
+      layout say three. D-29 records the decision.
+    - Kani module comment. `verification.rs` said the harnesses check returned
+      values against an oracle or an admission contract without saying which
+      harness checks which claim. It now names the two cardinality harnesses
+      that compare against `u128` oracles, the admission and running-total
+      harnesses that check the caller contract, and the product harness that
+      pins only the zero and repeat cases.
+    - Correspondence wording. "External assumptions and residual gaps" said the
+      model is narrowed by token-for-token correspondence. It now says the
+      transcription is argued in the design record and names the three
+      substituted operations, matching the proof's own module comment.
+    - Final-commit gates. Both assessments asked for the named targets at the
+      final commit rather than at `70da28da9`; the next entry records that run.
 
 ## Surprises & discoveries
 
@@ -1894,6 +1918,20 @@ conflict in `Decision log`, and escalate.
   re-checked after every base advance, and the check belongs to the last step
   before publication rather than to the last step of authoring. Date/Author:
   2026-11-20.
+
+- D-29. Decision: add `verus/configured_shells/main.rs` to
+  `.github/workflows/proofs.yml` as a third proof step, and correct every count
+  that said the repository holds two proofs. Rationale: the round-five
+  assessments observed that the configured-shells proof landed on `main` in
+  11.2.2, after `e28f26ae2` wrote the workflow's universal claim, so this
+  branch's replay left the header citing PT-006 ("CI must run the proofs a
+  repository holds") while the job ran two of three. D-25 already settled the
+  rule for this branch's own proof: run it rather than obtain an exception. The
+  cost is one more step in a job that installs Verus and Z3 regardless, with
+  the 30-minute timeout unchanged, and the invocation is the one the
+  developers' guide already documents. The change ships because a workflow
+  whose own header is false is the worse failure, and hosted CI validates the
+  new step on this candidate. Date/Author: 2026-11-20.
 
 ## Outcomes & retrospective
 
@@ -2664,10 +2702,13 @@ obligations.
   supported target reaches the assumption; a 32-bit port would owe all four a
   width-derived form.
 - Residual gap: the Verus proof covers a transcription of the production
-  kernel, not the compiled kernel. It is narrowed by token-for-token
-  correspondence, by Kani on the production kernel within bounds, and by
-  Proptest against independent oracles. The proof file's module comment must
-  state the gap, as `verus/canonical_value/main.rs` does.
+  kernel, not the compiled kernel. It is narrowed by the transcription argued
+  in the design record, whose module comment names the three substituted
+  operations (`checked_pow` as a `checked_mul` fold, `min` as an explicit
+  comparison, and `Option::filter` as an explicit `match`), by Kani on the
+  production kernel within bounds, and by Proptest against independent oracles.
+  The proof file's module comment must state the gap, as
+  `verus/canonical_value/main.rs` does.
 - No end-to-end or command-line test is added: this task registers no template
   helper and changes no command-line behaviour. The consumer tasks (6.2.1,
   6.4.2, 6.5.3, and others) add end-to-end tests through manifests.

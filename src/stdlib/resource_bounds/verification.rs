@@ -3,9 +3,12 @@
 //! The Verus proof in `verus/resource_bounds/` reasons about a transcription of
 //! these kernels. These harnesses narrow the remaining gap by driving the
 //! compiled production functions within stated bounds: no input in range may
-//! panic, and the values they return must agree with an independent `u128`
-//! oracle or with the admission contract the callers rely on. They narrow it
-//! rather than close it, because a harness reaches only its stated bounds.
+//! panic, the two cardinality harnesses compare their values against
+//! independent `u128` oracles, the admission and running-total harnesses check
+//! the contract their callers rely on, and the product harness pins the zero
+//! and repeat cases rather than general positive-product values. They narrow
+//! the gap rather than close it, because a harness reaches only its stated
+//! bounds.
 //!
 //! Each harness states the bound that makes it decidable. The solver cannot
 //! discharge a symbolic `u64` product or quotient in reasonable time — a first

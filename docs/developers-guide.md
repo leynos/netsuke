@@ -8037,19 +8037,21 @@ Use the Make targets for day-to-day formal-verification checks:
   make verus VERUS_FLAGS='--proof-file "verus/first proof.rs" --proof-file verus/second.rs'
   ```
 
-  The repository holds two proofs, and the default selects only one of them.
+  The repository holds three proofs, and the default selects only one of them.
   `verus/canonical_value/main.rs` is the default,
+  `verus/configured_shells/main.rs` is the trusted shell-composition rule, and
   `verus/resource_bounds/main.rs` is the combinatorial and running-total
-  arithmetic, and that second proof is run by:
+  arithmetic. The latter two are run by:
 
   ```bash
+  make verus VERUS_FLAGS='--proof-file verus/configured_shells/main.rs'
   make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'
   ```
 
-  `.github/workflows/proofs.yml` runs both selections as two steps of the
-  `Verus` job, so a green job now means both repository proofs verified; the
+  `.github/workflows/proofs.yml` runs all three selections as three steps of the
+  `Verus` job, so a green job means every repository proof verified; the
   estate prover-tooling rule PT-006 requires CI to run the proofs a repository
-  holds, and the default selection alone no longer covers them.
+  holds, and the default selection alone does not cover them.
 
   The pinned CLI runs files in order, stops at the first failed proof, and
   returns the verifier's exit status. `make test-prover-tools-integration`
