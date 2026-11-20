@@ -1264,7 +1264,16 @@ conflict in `Decision log`, and escalate.
       transcription is argued in the design record and names the three
       substituted operations, matching the proof's own module comment.
     - Final-commit gates. Both assessments asked for the named targets at the
-      final commit rather than at `70da28da9`; the next entry records that run.
+      final commit rather than at `70da28da9`, so the whole set was re-run at
+      `fd6a8239b` against a clean tree and all nine exited 0: `make check-fmt`
+      3 s; `make lint` 789 s; `make typecheck` 67 s; `make markdownlint` 41 s
+      (0 issues); `make nixie` 1 s; `make test` 183 s (6,381 nextest cases
+      passed, 9 skipped; 225 doctests passed, 66 ignored);
+      `make test-workflow-contracts` 678 s (2,465 passed, 3 skipped, plus 69
+      script tests); `make test-rfc-stdlib-coverage` 8 s (282 passed); and
+      `make doc-coverage` 123 s (98.34% aggregate, 7,036 of 7,155 items). The
+      case counts move again because the replay brought `main`'s #1164 and
+      #1060, which add tests to the same suites.
 
 ## Surprises & discoveries
 
@@ -1798,8 +1807,11 @@ conflict in `Decision log`, and escalate.
   at 3,384 added and 1 deleted, a net 3,383 — 1,383 over the bar — because
   neither merge touches a path in this branch's delta. The file counts are 54
   changed, 39 with the Verus crate and mutation patches excluded, and 33 with
-  the snapshots excluded too. The breach, its breakdown, and the request for
-  the owner's acceptance stand unchanged.
+  the snapshots excluded too. Seventh amendment of 2026-11-20: the Kani module
+  comment repair in `fd6a8239b` adds three net lines, so the figure is now
+  3,387 added and 1 deleted, a net 3,386 — 1,386 over the bar. The file counts
+  are unchanged. The breach, its breakdown, and the request for the owner's
+  acceptance stand unchanged.
 - D-23. Decision: correct the Kani stopping condition rather than leave a cap
   the runs did not obey, and state the two measurements it conflated. The
   correction is recorded here; whether the whole-suite exception is acceptable
