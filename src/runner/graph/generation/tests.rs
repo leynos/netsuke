@@ -33,15 +33,14 @@ fn command() -> Recipe {
 }
 
 /// Insert an edge referencing `action_id` and naming `outputs` explicitly.
-fn insert_edge(graph: &mut BuildGraph, action_id: &str, outputs: &[&str], phony: bool) {
-    let explicit_outputs = outputs.iter().map(Utf8PathBuf::from).collect();
+fn insert_edge(graph: &mut BuildGraph, action_id: &str, outputs: &[Utf8PathBuf], phony: bool) {
     graph
         .insert_edge(BuildEdge {
             action_id: action_id.to_owned(),
             inputs: Vec::new(),
             implicit_deps: Vec::new(),
             dependency_order: DependencyOrder::Parallel,
-            explicit_outputs,
+            explicit_outputs: outputs.to_vec(),
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),
             progress_label: None,
@@ -58,12 +57,13 @@ fn insert_edge(graph: &mut BuildGraph, action_id: &str, outputs: &[&str], phony:
 /// graphs declare uniquely. The graph only requires the two ids to match, so
 /// deriving one keeps a redundant name out of every case.
 fn insert_action_edge(graph: &mut BuildGraph, definition: Action, outputs: &[&str], phony: bool) {
+    let explicit_outputs: Vec<Utf8PathBuf> = outputs.iter().map(Utf8PathBuf::from).collect();
     let action_id = outputs
         .first()
         .copied()
         .expect("fixture edges declare an output");
     graph.actions.insert(action_id.to_owned(), definition);
-    insert_edge(graph, action_id, outputs, phony);
+    insert_edge(graph, action_id, &explicit_outputs, phony);
 }
 
 #[rstest]
@@ -110,7 +110,12 @@ fn a_dependency_only_edge_contributes_nothing() {
 #[test]
 fn an_edge_without_an_action_contributes_nothing() {
     let mut graph = BuildGraph::default();
-    insert_edge(&mut graph, "missing", &["build/report"], true);
+    insert_edge(
+        &mut graph,
+        "missing",
+        &[Utf8PathBuf::from("build/report")],
+        true,
+    );
     assert_eq!(
         phony_output_dirs(&graph),
         Vec::<Utf8PathBuf>::new(),
