@@ -18,7 +18,6 @@ import typing as typ
 
 import authorize_release_writes as adapter
 import release_write_policy as policy
-from release_publish_needs import job_names
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -76,6 +75,10 @@ CRATES_IO_NEEDS = {
 PUBLISHER_NEEDS = {"publish-crates-io", "publish-release"}
 #: The admission gate whose outputs every write job compares against.
 ADMISSION_JOB = "release-admission-canaries"
+#: The inventory verifier. Resolution derives its result from its guard, but a
+#: scenario may also declare it: only that result stands between a successful
+#: publication and an un-drafted release.
+VERIFY_JOB = "verify-release-inventory"
 #: Every prerequisite a publishing job waits on. Both publishers wait on the
 #: same set by design: a difference would let one lane publish bytes the other
 #: refuses, and the gate belongs to both for the same reason.
@@ -153,6 +156,24 @@ class Scenario:
     invocation: Invocation | None = None
     resolver: cabc.Mapping[str, str] | None = None
     admission_outputs: cabc.Mapping[str, str] | None = None
+    #: The results the workflow's own edges derive, filled in by
+    #: ``release_publish_path_results.resolve_results``. Until then the declared
+    #: map is the whole answer: it names only the leaf outcomes to exercise.
+    resolved_results: cabc.Mapping[str, str] | None = None
+
+    @property
+    def effective_results(self) -> cabc.Mapping[str, str]:
+        """The results a guard sees for this run.
+
+        Returns
+        -------
+        cabc.Mapping[str, str]
+            The workflow-derived results when resolved, else the declared leaf
+            outcomes. An unresolved scenario describes only its own leaves.
+        """
+        if self.resolved_results is None:
+            return self.needs_results
+        return self.resolved_results
 
     @property
     def gate_outputs(self) -> dict[str, str]:
@@ -254,54 +275,6 @@ def render_flag(*, flag: bool) -> str:
     return "true" if flag else "false"
 
 
-def needs_entry(
-    scenario: Scenario, name: str, outputs: cabc.Mapping[str, str]
-) -> dict[str, object]:
-    """Build one dependency entry as a guard expression sees it.
-
-    Only the two jobs whose outputs a guard reads carry them: metadata supplies
-    the release-mode map, and the admission gate supplies the enforcement,
-    outcome and candidate every write guard compares against.
-
-    Returns
-    -------
-    dict[str, object]
-        The dependency's declared result, plus its outputs where a guard reads
-        them. A job the scenario does not model reports ``skipped``, which is
-        what GitHub reports for a dependency whose guard excluded it.
-    """
-    entry: dict[str, object] = {"result": scenario.needs_results.get(name, "skipped")}
-    if name == "metadata":
-        entry["outputs"] = dict(outputs)
-    if name == ADMISSION_JOB:
-        entry["outputs"] = scenario.gate_outputs
-    return entry
-
-
-def job_contexts(
-    scenario: Scenario, outputs: cabc.Mapping[str, str], job: dict[str, object]
-) -> dict[str, object]:
-    """Build the contexts one job's guard is evaluated against.
-
-    The needs are read from the job rather than from the module's constants, so
-    a mutated dependency list is evaluated as written and reports its own
-    result instead of being silently replaced by the oracle's expectation.
-
-    Returns
-    -------
-    dict[str, object]
-        The ``needs``, ``status`` and ``github`` contexts for the scenario.
-    """
-    return {
-        "needs": {
-            name: needs_entry(scenario, name, outputs)
-            for name in job_names(job.get("needs", [])) or []
-        },
-        "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
-    }
-
-
 def needs_results(
     *,
     smoke: str = "success",
@@ -334,8 +307,12 @@ def needs_results(
     >>> needs_results(smoke="skipped")["windows-native-recipe-smoke"]
     'skipped'
     """
+    #: Every job a scenario may declare an outcome for. Finalization already
+    #: arrives through the consumer smoke's needs; the verifier is the one job
+    #: with no dependent, yet its own result is what finalization checks.
     results = dict.fromkeys(
-        CRATES_IO_NEEDS | PUBLISHER_NEEDS | CONSUMER_SMOKE_NEEDS, "success"
+        CRATES_IO_NEEDS | PUBLISHER_NEEDS | CONSUMER_SMOKE_NEEDS | {VERIFY_JOB},
+        "success",
     )
     results["windows-native-recipe-smoke"] = smoke
     if outcomes is not None:

@@ -13,6 +13,7 @@ import dataclasses
 import typing as typ
 
 from release_mutation_support import MutationError, MutationIssue, replace_once
+from release_publication_gate_mutations import GATE_MUTATIONS, GATE_VIOLATIONS
 from release_publish_crates_io_mutations import CRATES_IO_MUTATIONS
 from release_publish_path_artifacts import BUILD_JOBS
 from release_publish_path_authorization import AUTHORIZATION_STEP, RESOLVER_STEP
@@ -70,6 +71,7 @@ EXPECTED_VIOLATIONS = {
         ("static", "authorization.env.INPUT_WORKFLOW_REF"),
     ),
     "remove-dry-run-veto": (("static", "publish-release.dry-run-veto"),),
+    **GATE_VIOLATIONS,
 }
 MUTATION_LABELS = tuple(EXPECTED_VIOLATIONS)
 
@@ -279,6 +281,8 @@ def mutate_workflows(
         applier(mutant_release, mutant_caller)
     elif label in CRATES_IO_MUTATIONS:
         CRATES_IO_MUTATIONS[label](mutant_release, mutant_action)
+    elif label in GATE_MUTATIONS:
+        GATE_MUTATIONS[label](mutant_release)
     else:
         raise MutationError(MutationIssue.UNKNOWN_LABEL, label)
     return MutationCase(

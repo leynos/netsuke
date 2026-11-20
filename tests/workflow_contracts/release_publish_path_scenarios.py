@@ -15,6 +15,7 @@ from release_publish_path_scenario_model import (
     PUBLISHING_DRY_RUN,
     PULL_REF,
     TAG_REF,
+    VERIFY_JOB,
     Invocation,
     Scenario,
     needs_results,
@@ -283,6 +284,27 @@ SCENARIOS = (
         cancelled=False,
         release_runs=False,
     ),
+    # Both publishers succeeded, so only the verifier's own outcome stands
+    # between this run and an un-drafted release. The skip row is a modelling
+    # device rather than a reachable run: finalization's guard must refuse a
+    # verifier that reported anything but success, and declaring the skip is
+    # what exercises that clause without a second prerequisite failure.
+    Scenario(
+        "verify-release-inventory-failure",
+        "publish",
+        "",
+        needs_results(outcomes={VERIFY_JOB: "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "verify-release-inventory-skipped",
+        "publish",
+        "",
+        needs_results(outcomes={VERIFY_JOB: "skipped"}),
+        cancelled=False,
+        release_runs=False,
+    ),
     Scenario(
         "neither-mode",
         "neither",
@@ -309,4 +331,8 @@ SCENARIOS = (
     ),
     *_prerequisite_scenarios("failure"),
     *_prerequisite_scenarios("skipped"),
+    # A job-level concurrency rule can cancel one pending dependency while the
+    # run continues. That arrives as an ordinary non-successful result, not as
+    # a cancelled run, so it must close the publishers and their dependants.
+    *_prerequisite_scenarios("cancelled"),
 )

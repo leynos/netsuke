@@ -20,8 +20,9 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
+from release_publish_path_context import job_contexts
 from release_publish_path_publication import step_runs
-from release_publish_path_scenario_model import ADMISSION_JOB, job_contexts
+from release_publish_path_scenario_model import ADMISSION_JOB
 from release_publish_path_verification import VERIFY_JOB
 from workflow_loading import job_steps, named_step, workflow_job
 
@@ -74,7 +75,7 @@ def _should_finalize(scenario: Scenario, outputs: dict[str, str]) -> bool:
         and outputs.get("should_publish") == "true"
         and scenario.admits_candidate
         and all(
-            scenario.needs_results.get(name) == "success" for name in FINALIZE_NEEDS
+            scenario.effective_results.get(name) == "success" for name in FINALIZE_NEEDS
         )
     )
 

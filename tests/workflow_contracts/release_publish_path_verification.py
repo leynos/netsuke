@@ -13,7 +13,8 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_scenario_model import VERIFY_NEEDS, job_contexts
+from release_publish_path_context import job_contexts
+from release_publish_path_scenario_model import VERIFY_NEEDS
 from workflow_loading import workflow_job
 
 if typ.TYPE_CHECKING:
@@ -71,7 +72,9 @@ def _should_verify(scenario: Scenario, outputs: dict[str, str]) -> bool:
         outputs.get("should_publish") == "true"
         and not scenario.cancelled
         and scenario.admits_candidate
-        and all(scenario.needs_results.get(name) == "success" for name in VERIFY_NEEDS)
+        and all(
+            scenario.effective_results.get(name) == "success" for name in VERIFY_NEEDS
+        )
     )
 
 

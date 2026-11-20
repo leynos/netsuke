@@ -12,10 +12,10 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
+from release_publish_path_context import job_contexts
 from release_publish_path_scenario_model import (
     CRATES_IO_NEEDS,
     PUBLICATION_NEEDS,
-    job_contexts,
 )
 from workflow_loading import (
     job_steps,
@@ -145,7 +145,7 @@ def _check_publication_job(
         ),
     )
     all_dependencies_succeeded = all(
-        scenario.needs_results[name] == "success" for name in PUBLICATION_NEEDS
+        scenario.effective_results[name] == "success" for name in PUBLICATION_NEEDS
     )
     # The job also requires the gate's outputs: an admission that observed,
     # refused, or admitted another commit leaves the run unauthorized even when
@@ -253,7 +253,9 @@ def _crates_io_should_run(check: PublicationCheck) -> bool:
         not scenario.cancelled
         and check.outputs.get("should_publish") == "true"
         and scenario.admits_candidate
-        and all(scenario.needs_results[name] == "success" for name in CRATES_IO_NEEDS)
+        and all(
+            scenario.effective_results[name] == "success" for name in CRATES_IO_NEEDS
+        )
     )
 
 

@@ -117,7 +117,7 @@ def check_admission_enforcement(
     contexts: dict[str, object] = {
         "needs": {
             "metadata": {
-                "result": scenario.needs_results.get("metadata", "skipped"),
+                "result": scenario.effective_results.get("metadata", "skipped"),
                 "outputs": dict(metadata_outputs),
             }
         },

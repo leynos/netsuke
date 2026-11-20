@@ -3765,10 +3765,24 @@ Each row is a `Scenario` from `release_publish_path_scenario_model.py`, which
 derives the expected outputs by running the real
 `scripts/release_write_policy.py` policy through
 `scripts/authorize_release_writes.py`, so the contract holds the wiring to the
-rule a live run applies rather than to a second copy of it. A row names its
-dependency results directly, and `needs_results()` refuses a name the table
-does not model, because a mistyped job name would otherwise leave the intended
-dependency at its default and assert the opposite of what the row's name says.
+rule a live run applies rather than to a second copy of it. A row names only
+the leaf outcomes its case exercises, and `needs_results()` refuses a name the
+table does not model, because a mistyped job name would otherwise leave the
+intended dependency at its default and assert the opposite of what the row's
+name says.
+
+`release_publish_path_results.py` then derives every other job's result from
+the workflow's own `needs` edges, which is what keeps a row describing a run
+GitHub could report. Naming a downstream job's result directly let a row assert
+that a publisher succeeded while the build it publishes had failed; a job with
+no guard now runs only when each dependency succeeded, and a guarded job is
+evaluated as written, so the rehearsal still runs after packaging or admission
+fails. Cancellation is modelled through `status.cancelled` rather than through
+the results, so only a missing `!cancelled()` clause stops a job in a cancelled
+run; a dependency that reports `cancelled` while the run continues is an
+ordinary non-successful result, and the table varies it alongside `failure` and
+`skipped`.
+
 Three further rows model a gate that reported a successful job without
 admitting this run: report-only admission, a non-successful gate outcome, and
 admission of another commit. Each is a publishing run whose publishers,
@@ -5407,7 +5421,14 @@ describe and mutate the release workflow's documents, and production code must
 not import them. `release_publish_path_scenario_model.py` owns `Scenario`,
 `Invocation`, and `needs_results`, and derives each scenario's expected outputs
 through `scripts/release_write_policy.py` and
-`scripts/authorize_release_writes.py`.
+`scripts/authorize_release_writes.py`. `release_publish_path_results.py` owns
+`resolve_results`, which propagates each scenario's declared leaf outcomes
+through the workflow's own `needs` edges so every oracle reads the results a
+run could report, and `dependency_order`, which orders the jobs and reports a
+cycle rather than looping. `release_publish_path_context.py` owns
+`job_contexts`, which builds the `needs`, `status` and `github` contexts a
+guard is evaluated against, and the `Resolution` value that lets the resolver
+supply its own partial results with `cancelled=False`.
 `release_publish_path_metadata_outputs.py` owns `metadata_outputs` and
 `resolved_repo_name`, which evaluate the metadata job's declarations against
 the step answers a run may publish. `release_publish_path_authorization.py` owns

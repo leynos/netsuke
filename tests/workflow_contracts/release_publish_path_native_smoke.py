@@ -36,7 +36,7 @@ def check_native_smoke_job(
     context: dict[str, object] = {
         "needs": {
             "metadata": {
-                "result": scenario.needs_results["metadata"],
+                "result": scenario.effective_results["metadata"],
                 "outputs": outputs,
             }
         },
@@ -52,7 +52,7 @@ def check_native_smoke_job(
             job_level=True,
         ),
     )
-    metadata_succeeded = scenario.needs_results["metadata"] == "success"
+    metadata_succeeded = scenario.effective_results["metadata"] == "success"
     # The guard reads the decision's effective output, not the scenario's
     # nominal mode: a publish-shaped invocation whose authorization still
     # leaves the run in dry-run mode must skip the smoke exactly as a plain

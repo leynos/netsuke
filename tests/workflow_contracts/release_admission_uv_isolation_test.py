@@ -20,41 +20,29 @@ are supplied to prove they cannot rescue an unflagged command.
 Run via ``make test-workflow-contracts``.
 """
 
-import base64
-import hashlib
 import os
 import shlex
+import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - uv and the probe script are the boundary under test.
 import typing as typ
-import zipfile
 
 import pytest
 from release_admission_source_pin import (
     ADMISSION_JOB,
+    PINNED_UV_VERSION,
     verifier_gate_command,
+)
+from release_admission_uv_probe import (
+    PLAIN_PROBE,
+    PROBE_IDENTITY,
+    PROBE_SENTINEL,
+    build_wheel,
+    dependency_probe,
 )
 from workflow_loading import RELEASE_WORKFLOW_PATH, job_steps, load_workflow
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
-
-#: Printed by the probe the gate step is pointed at, so a run that reached the
-#: script is distinguishable from one uv refused before starting it.
-PROBE_SENTINEL = "verifier-probe-ran"
-
-#: The identity the handcrafted wheel's module reports. It is a value no index
-#: could serve, so printing it proves the dependency came from the local file
-#: this case built rather than from anywhere else.
-PROBE_IDENTITY = "local-wheel"
-
-#: The dependency the offline probe declares, and the module it installs. The
-#: name carries no hyphen because uv rejected the handcrafted file name with
-#: one -- `admission-probe-dependency-0.1.0-py3-none-any.whl` was refused with
-#: "Python tag must not start with a digit" -- and this case is about
-#: resolution, not about uv's file-name parsing.
-DEPENDENCY_NAME = "admissionprobe"
-DEPENDENCY_MODULE = "admissionprobe"
-DEPENDENCY_VERSION = "0.1.0"
 
 #: A `uv.toml` that no uv release accepts. `index-url` must be a string, so a
 #: run that reads this file stops before it reaches the script. The trap has to
@@ -86,10 +74,58 @@ STRIPPED_VARIABLES = (
     "UV_EXTRA_INDEX_URL",
 )
 
-#: The plain probe: a script that only prints the sentinel. It declares no
-#: dependency, so uv runs it in the project environment when project discovery
-#: is allowed, which is what makes the project trap observable.
-PLAIN_PROBE = f'print("{PROBE_SENTINEL}")\n'
+
+def _installed_uv_version() -> str:
+    """Return the version of the uv release on ``PATH``.
+
+    The executable is resolved to its full path before it is run: naming the
+    file lets the failure say which uv answered when several are installed, and
+    a missing uv is reported as a missing prerequisite rather than as an
+    unreadable subprocess error.
+
+    Returns
+    -------
+    str
+        The version uv reports, or the whole first line when it cannot be
+        split into a name and a version.
+    """
+    executable = shutil.which("uv")
+    if executable is None:
+        pytest.fail("the isolation cases run uv itself, but uv is not on PATH")
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - a fixed argument list, never a shell string.
+        [executable, "--version"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        pytest.fail(
+            "the isolation cases run uv itself, but "
+            f"`{executable} --version` exited {result.returncode}: "
+            f"{result.stderr or result.stdout}"
+        )
+    tokens = result.stdout.split()
+    return tokens[1] if len(tokens) > 1 else result.stdout.strip()
+
+
+@pytest.fixture(autouse=True)
+def _pinned_uv() -> None:
+    """Refuse to draw conclusions from a uv release the workflow does not pin.
+
+    Every case here observes how one uv release interprets ``--no-config``,
+    ``--no-project`` and its environment aliases. A different release may change
+    that behaviour, so a result from it would say nothing about the pinned tool
+    the release workflow installs. CI installs the pin; a host with another uv
+    skips with the two versions named rather than silently recording an
+    observation about the wrong tool.
+    """
+    installed = _installed_uv_version()
+    if installed != PINNED_UV_VERSION:
+        pytest.skip(
+            f"uv {PINNED_UV_VERSION} is pinned by the release workflow; this "
+            f"host has uv {installed}, so its behaviour is not the observed one"
+        )
 
 
 def _gate_command() -> str:
@@ -103,89 +139,6 @@ def _script_path(command: str) -> str:
     """Return the workspace-relative script the command runs."""
     parts = shlex.split(command)
     return parts[parts.index("--script") + 1]
-
-
-def _write_wheel(directory: Path) -> Path:
-    """Build a wheel for the probe's declared dependency, with no build tool.
-
-    A real index would make the case depend on the network and on a package
-    nobody pins. The wheel is written directly: one module, the metadata that
-    names it, the wheel marker, and a `RECORD` whose digests match the bytes
-    written, which is what an installer checks.
-
-    Parameters
-    ----------
-    directory
-        Directory to write the wheel into.
-
-    Returns
-    -------
-    Path
-        The wheel file the run is told to resolve from.
-    """
-    directory.mkdir(parents=True, exist_ok=True)
-    stem = f"{DEPENDENCY_NAME}-{DEPENDENCY_VERSION}"
-    files = {
-        f"{DEPENDENCY_MODULE}/__init__.py": f'IDENTITY = "{PROBE_IDENTITY}"\n',
-        f"{stem}.dist-info/METADATA": (
-            f"Metadata-Version: 2.1\nName: {DEPENDENCY_NAME}\n"
-            f"Version: {DEPENDENCY_VERSION}\nSummary: verifier probe\n"
-            "Requires-Python: >=3.8\n"
-        ),
-        f"{stem}.dist-info/WHEEL": (
-            "Wheel-Version: 1.0\nGenerator: handcrafted\n"
-            "Root-Is-Purelib: true\nTag: py3-none-any\n"
-        ),
-    }
-    files[f"{stem}.dist-info/RECORD"] = _record(files)
-    wheel = directory / f"{stem}-py3-none-any.whl"
-    with zipfile.ZipFile(wheel, "w") as archive:
-        for path, text in files.items():
-            archive.writestr(path, text)
-    return wheel
-
-
-def _record(files: dict[str, str]) -> str:
-    """Return a `RECORD` file naming every written member and its digest.
-
-    Parameters
-    ----------
-    files
-        The members written so far, excluding the record itself.
-
-    Returns
-    -------
-    str
-        The record's contents, with the record's own line left unhashed.
-    """
-    lines = []
-    for path, text in files.items():
-        encoded = text.encode("utf-8")
-        digest = base64.urlsafe_b64encode(hashlib.sha256(encoded).digest())
-        checksum = digest.rstrip(b"=").decode("ascii")
-        lines.append(f"{path},sha256={checksum},{len(encoded)}")
-    lines.append(f"{DEPENDENCY_NAME}-{DEPENDENCY_VERSION}.dist-info/RECORD,,")
-    return "\n".join(lines) + "\n"
-
-
-def _dependency_probe() -> str:
-    """Return a script whose PEP 723 block declares the local dependency.
-
-    The block is what the gate's real script uses for its own pinned
-    dependencies, so this exercises the same resolution path.
-
-    Returns
-    -------
-    str
-        The script the command under test runs.
-    """
-    return (
-        "# /// script\n"
-        f'# dependencies = ["{DEPENDENCY_NAME}=={DEPENDENCY_VERSION}"]\n'
-        "# ///\n"
-        f"import {DEPENDENCY_MODULE}\n"
-        f'print("{PROBE_SENTINEL}", {DEPENDENCY_MODULE}.IDENTITY)\n'
-    )
 
 
 def _probe_workspace(root: Path, script_path: str, *, probe: str = PLAIN_PROBE) -> Path:
@@ -301,9 +254,9 @@ def test_the_gate_command_installs_the_scripts_pinned_dependency(
     this case built.
     """
     command = _gate_command()
-    wheel = _write_wheel(tmp_path / "dist")
+    wheel = build_wheel(tmp_path / "dist")
     workspace = _probe_workspace(
-        tmp_path / "workspace", _script_path(command), probe=_dependency_probe()
+        tmp_path / "workspace", _script_path(command), probe=dependency_probe()
     )
     result = _run(
         command,
@@ -331,16 +284,40 @@ def test_the_gate_command_installs_the_scripts_pinned_dependency(
 def test_the_configuration_trap_catches_a_command_without_no_config(
     tmp_path: Path,
 ) -> None:
-    """Show the trap fires when ``--no-config`` is dropped."""
+    """Show the trap fires for a run that would have installed a dependency.
+
+    The probe declares its own PEP 723 dependency and is served it from the
+    local wheel, so this is the same resolution path the positive case proves
+    works. Dropping ``--no-config`` must stop that run before it resolves or
+    imports anything: the module's identity is never printed, which is what
+    shows the candidate's file stopped the install rather than merely a script
+    that needed nothing installed.
+    """
     command = _without_flag(_gate_command(), "--no-config")
-    workspace = _probe_workspace(tmp_path, _script_path(command))
-    result = _run(command, workspace)
+    wheel = build_wheel(tmp_path / "dist")
+    workspace = _probe_workspace(
+        tmp_path / "workspace", _script_path(command), probe=dependency_probe()
+    )
+    result = _run(
+        command,
+        workspace,
+        extra_environment={
+            "UV_FIND_LINKS": str(wheel.parent),
+            "UV_OFFLINE": "1",
+            "UV_CACHE_DIR": str(tmp_path / "cache"),
+        },
+    )
     assert result.returncode != 0, (
         "without --no-config the candidate's uv.toml must stop the run, but "
         f"{command!r} exited 0: {result.stdout}"
     )
     assert PROBE_SENTINEL not in result.stdout, (
-        "a run that read the candidate's uv.toml must not reach the script"
+        "a run that read the candidate's uv.toml must not import the "
+        f"dependency or reach the script, got {result.stdout!r}"
+    )
+    assert PROBE_IDENTITY not in result.stdout, (
+        "the dependency must not be installed and imported by a run the "
+        f"candidate's uv.toml stopped, got {result.stdout!r}"
     )
     assert "uv.toml" in result.stderr, (
         f"the refusal must name the file that caused it, got {result.stderr!r}"

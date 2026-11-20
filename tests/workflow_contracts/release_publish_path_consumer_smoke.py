@@ -49,11 +49,8 @@ from release_publish_path_consumer_shape import (
     smoke_job,
     steps_of,
 )
-from release_publish_path_scenario_model import (
-    Scenario,
-    job_contexts,
-    needs_results,
-)
+from release_publish_path_context import job_contexts
+from release_publish_path_scenario_model import Scenario, needs_results
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -97,7 +94,7 @@ def _should_smoke(scenario: Scenario) -> bool:
         scenario.authorization.should_publish
         and not scenario.cancelled
         and all(
-            scenario.needs_results.get(name) == "success"
+            scenario.effective_results.get(name) == "success"
             for name in CONSUMER_SMOKE_NEEDS
         )
     )
