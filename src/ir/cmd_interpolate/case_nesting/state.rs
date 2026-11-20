@@ -9,6 +9,8 @@
 //! beside the roles they consume. Keeping all of that here leaves the tracker
 //! module to the word and comment scanning that drives them.
 
+use super::lexical::{is_option_word, starts_command_list};
+
 /// Record which `case` keywords one substitution's tracker has seen.
 ///
 /// The two observations are independent, so they cannot be one flag: a single
@@ -226,6 +228,75 @@ impl super::CaseNesting {
             WordRole::Other {
                 continues_command_list,
             } => self.expects_command = continues_command_list,
+        }
+    }
+
+    /// Classify a word by the command position it stands in.
+    ///
+    /// The reserved words come first, in the order the shell reads them: `case`
+    /// opens a construct wherever it is a command word, and a literal `esac`
+    /// closes the one open at this depth. Everything else is a
+    /// compound-command prefix or ordinary data.
+    pub(super) fn classify_command_word(&self, parenthesis_depth: usize) -> WordRole {
+        let is_command_position = self.expects_command;
+        let word = self.word.as_str();
+        if word == "case" {
+            return Self::classify_case_word(is_command_position);
+        }
+        if self.is_bare_esac_closing(parenthesis_depth) {
+            return WordRole::CloseCase;
+        }
+        self.classify_prefix_word(word, is_command_position)
+    }
+
+    /// Classify a word spelled `case` by the position it stands in.
+    ///
+    /// A `case` behind a word the tracker read as an argument may still be a
+    /// keyword: `time` options and a `coproc` name are opaque when written as
+    /// quoted or expanded words. Recording it lets the boundary check fail
+    /// closed instead of lowering a marker for a context the shell does not
+    /// share.
+    const fn classify_case_word(is_command_position: bool) -> WordRole {
+        if is_command_position {
+            WordRole::OpenCase
+        } else {
+            WordRole::UnplacedCase
+        }
+    }
+
+    /// Report whether a bare `esac` closes the construct open at this depth.
+    ///
+    /// A case pattern may itself be spelled `esac`. Only a construct open at
+    /// this depth is the one this word closes; anything deeper is inside a
+    /// pattern group and must not close it. A quoted or escaped spelling is
+    /// pattern text rather than a keyword, so closing there would read the
+    /// pattern terminator as the substitution closer.
+    fn is_bare_esac_closing(&self, parenthesis_depth: usize) -> bool {
+        let is_bare_command_word = self.expects_command && self.word_is_literal;
+        let is_open_here = is_bare_command_word && self.is_open_at(parenthesis_depth);
+        self.word == "esac" && is_open_here
+    }
+
+    /// Classify a `time` or `coproc` prefix word, or leave the word as data.
+    ///
+    /// The keyword forms are tested before the slots so a bare `time` or
+    /// `coproc` restarts its slot rather than being read as its own option or
+    /// name.
+    fn classify_prefix_word(&self, word: &str, is_command_position: bool) -> WordRole {
+        if word == "time" && is_command_position {
+            return WordRole::TimePrefix;
+        }
+        if word == "coproc" && is_command_position {
+            return WordRole::CoprocPrefix;
+        }
+        if self.prefix_slot == PrefixSlot::TimeOption && is_option_word(word) {
+            return WordRole::TimePrefix;
+        }
+        if self.prefix_slot == PrefixSlot::CoprocName && !starts_command_list(word) {
+            return WordRole::CoprocPrefix;
+        }
+        WordRole::Other {
+            continues_command_list: is_command_position && starts_command_list(word),
         }
     }
 }
