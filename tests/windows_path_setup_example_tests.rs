@@ -6,10 +6,10 @@
 //! runs each documented script against a temporary install directory and
 //! inspects the user environment value the run leaves behind.
 //!
-//! The wrapper owns the registry key, not the script: it records the existing
-//! value, installs a sentinel, dot-sources the documented example, reports the
-//! stored value and its type, and restores the original value in a `finally`
-//! block whatever the example does.
+//! The wrapper in [`windows_path_setup`] owns the registry key, not the script:
+//! it records the existing value, installs a sentinel, dot-sources the
+//! documented example, reports the stored value and its type, and restores the
+//! original value in a `finally` block whatever the example does.
 //!
 //! The contract is only observable on Windows, so the case is ignored
 //! elsewhere rather than passing without doing anything. Keeping the file
@@ -17,84 +17,17 @@
 //! Linux gates instead of the Windows job.
 
 pub mod documentation_examples;
+pub mod windows_path_setup;
 
 use std::{
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::Output,
 };
 
 use anyhow::{Context, Result, bail, ensure};
 use documentation_examples::{DocumentedExample, documented_example};
 use test_support::fs as test_fs;
-
-/// Sentinel user `PATH` value every run starts from.
-///
-/// It is an expandable string, so the example's promise to preserve the value's
-/// type is observable: a script that rewrote `PATH` as a plain string would
-/// fail the assertion below even though the directory was added.
-const SENTINEL_PATH: &str = "%SystemRoot%\\netsuke-path-sentinel";
-
-/// The wrapper that surrounds the documented script.
-///
-/// It passes `-ExamplePath` to the script, owns the registry key for the
-/// duration of the run, and reports the three observations the assertions use.
-///
-/// Its variables carry a `$wrapper` prefix because the documented script is
-/// dot-sourced into this scope so that its failures propagate unchanged. A
-/// script that declares `$environmentKey` — both documented fences do — would
-/// otherwise replace the wrapper's handle, and the `Dispose()` call at the end
-/// of the script would close the key the wrapper still needs to read.
-const WRAPPER: &str = r#"
-param([Parameter(Mandatory)][string]$ExamplePath)
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-$wrapperKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-if ($null -eq $wrapperKey) {
-    throw 'User environment registry key not found.'
-}
-$wrapperHadPath = $wrapperKey.GetValueNames() -contains 'Path'
-$wrapperOriginalValue = if ($wrapperHadPath) {
-    [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-} else {
-    ''
-}
-$wrapperOriginalKind = if ($wrapperHadPath) {
-    $wrapperKey.GetValueKind('Path')
-} else {
-    [Microsoft.Win32.RegistryValueKind]::ExpandString
-}
-Write-Output "ORIGINAL=$wrapperOriginalValue"
-try {
-    $wrapperKey.SetValue(
-        'Path',
-        '%SystemRoot%\netsuke-path-sentinel',
-        [Microsoft.Win32.RegistryValueKind]::ExpandString
-    )
-    . $ExamplePath
-    $wrapperStored = [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-    Write-Output "RESULT=$wrapperStored"
-    Write-Output "KIND=$($wrapperKey.GetValueKind('Path'))"
-}
-finally {
-    # Record what the script left behind before restoring it. A run that threw
-    # never reaches the RESULT line, so LEFTOVER is the only evidence of
-    # whether it changed the value on the way out.
-    $wrapperLeftover = [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-    Write-Output "LEFTOVER=$wrapperLeftover"
-    if ($wrapperHadPath) {
-        $wrapperKey.SetValue('Path', $wrapperOriginalValue, $wrapperOriginalKind)
-    } else {
-        $wrapperKey.DeleteValue('Path', $false)
-    }
-    $wrapperRestored = if ($wrapperKey.GetValueNames() -contains 'Path') {
-        [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-    } else {
-        ''
-    }
-    Write-Output "RESTORED=$wrapperRestored"
-    $wrapperKey.Dispose()
-}
-"#;
+use windows_path_setup::{SENTINEL_PATH, run_example};
 
 /// Verify that each documented script appends its directory to the user
 /// `PATH` and keeps the value expandable, and that it changes nothing when the
@@ -123,7 +56,7 @@ fn assert_example_persists_the_directory(example: &DocumentedExample) -> Result<
     let root = workspace(example)?;
     let install = install_directory(root.path())?;
     stage_binary(&install)?;
-    let output = run_documented_example(&root, example)?;
+    let output = run_example(root.path(), example)?;
     assert_persisted(&output, &install, example)
 }
 
@@ -136,7 +69,7 @@ fn assert_example_persists_the_directory(example: &DocumentedExample) -> Result<
 fn assert_missing_executable_changes_nothing(example: &DocumentedExample) -> Result<()> {
     let root = workspace(example)?;
     let install = install_directory(root.path())?;
-    let output = run_documented_example(&root, example)?;
+    let output = run_example(root.path(), example)?;
     assert_untouched(&output, example)?;
     ensure!(
         !output.status.success(),
@@ -151,23 +84,6 @@ fn assert_missing_executable_changes_nothing(example: &DocumentedExample) -> Res
 /// Create a temporary workspace for one run of `example`.
 fn workspace(example: &DocumentedExample) -> Result<tempfile::TempDir> {
     tempfile::tempdir().with_context(|| format!("create workspace for {}", example.id))
-}
-
-/// Write the documented example and the registry wrapper into `root` and run
-/// them, returning the wrapper's output.
-fn run_documented_example(root: &tempfile::TempDir, example: &DocumentedExample) -> Result<Output> {
-    ensure!(
-        example.language == "powershell",
-        "{} should be a PowerShell example, got {:?}",
-        example.id,
-        example.language
-    );
-    let example_script = root.path().join("example.ps1");
-    test_fs::write(&example_script, &example.body)
-        .with_context(|| format!("write {} to {}", example.id, example_script.display()))?;
-    let wrapper = root.path().join("wrapper.ps1");
-    test_fs::write(&wrapper, WRAPPER).context("write the registry wrapper")?;
-    run_wrapper(&wrapper, &example_script, root.path())
 }
 
 /// Create the directory the examples treat as the install root.
@@ -197,39 +113,6 @@ fn stage_binary(install: &Path) -> Result<()> {
     test_fs::copy(binary, &staged)
         .with_context(|| format!("copy {} to {}", binary.display(), staged.display()))?;
     Ok(())
-}
-
-/// Run the wrapper under the first PowerShell the host provides.
-///
-/// PowerShell 7 (`pwsh`) is the documented shell, but Windows PowerShell
-/// (`powershell.exe`) ships with every Windows image and drives the same
-/// registry APIs, so a host without `pwsh` still exercises the script instead
-/// of failing on a missing executable.
-fn run_wrapper(wrapper: &Path, example: &Path, program_files_root: &Path) -> Result<Output> {
-    let mut last_error = None;
-    for shell in ["pwsh", "powershell"] {
-        let attempt = Command::new(shell)
-            .args(["-NoProfile", "-NonInteractive", "-File"])
-            .arg(wrapper)
-            .arg("-ExamplePath")
-            .arg(example)
-            // Every variable the examples consult points at the temporary
-            // tree, so neither script can resolve the host's real directories.
-            .env("ProgramW6432", program_files_root)
-            .env("ProgramFiles", program_files_root)
-            .env("ProgramFiles(x86)", program_files_root)
-            .output();
-        match attempt {
-            Ok(captured) => return Ok(captured),
-            Err(error) => last_error = Some(error),
-        }
-    }
-    Err(last_error
-        .map_or_else(
-            || anyhow::anyhow!("no PowerShell executable was available"),
-            anyhow::Error::from,
-        )
-        .context("run the documented PATH setup"))
 }
 
 /// Assert that the run stored the staged directory and kept the value type.
