@@ -245,14 +245,31 @@ impl PosixLexicalState {
         character: &mut PosixCharacter<'_, '_>,
     ) -> bool {
         if self.in_comment {
-            self.reset_ansi_c_lookbehind();
-            character.output.push(character.ch);
-            if character.ch == '\n' {
-                self.in_comment = false;
-                self.begin_next_heredoc();
-            }
+            self.append_comment_character(character);
             return true;
         }
+        self.append_heredoc_character(character)
+    }
+
+    /// Copy one comment character and end the comment at its newline.
+    ///
+    /// The look-behind reset happens here rather than for every inert
+    /// character: comment text cannot contribute to an ANSI-C opener or to
+    /// `$$` run parity, but a character outside a comment still can.
+    fn append_comment_character(&mut self, character: &mut PosixCharacter<'_, '_>) {
+        self.reset_ansi_c_lookbehind();
+        character.output.push(character.ch);
+        if character.ch == '\n' {
+            self.in_comment = false;
+            self.begin_next_heredoc();
+        }
+    }
+
+    /// Copy one heredoc-body character and end the body at its delimiter.
+    ///
+    /// The reset is skipped when no body is open, because such a character is
+    /// not inert and its dollar may still pair with a later one.
+    fn append_heredoc_character(&mut self, character: &mut PosixCharacter<'_, '_>) -> bool {
         if self.heredoc_body.is_none() {
             return false;
         }

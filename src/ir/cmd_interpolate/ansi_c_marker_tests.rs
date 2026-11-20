@@ -149,35 +149,32 @@ fn escaped_apostrophe_does_not_close_ansi_c() {
     );
 }
 
-/// Treat a dollar escaped before a quote as an ordinary single-quoted string.
+/// Keep the quote context of a marker that does not sit inside ANSI-C.
+///
+/// Each row is text where `$'` does not open an ANSI-C string: an escaped
+/// dollar, the second dollar of a PID expansion, a dollar inside double
+/// quotes, and a dollar inside ordinary single quotes. The expected text is
+/// the encoding of the surrounding context, so a traversal that wrongly opens
+/// ANSI-C, or selects another context, fails the row.
 #[rstest]
-#[case::command(Lowering::Command)]
-#[case::script(Lowering::Script)]
-fn escaped_dollar_before_quote_uses_single_quoted_encoding(#[case] lowering: Lowering) {
-    let bindings = context_bindings(RecipeShell::Bash, "a'b");
-    let template = format!("echo \\$'{INS_TOKEN}'");
+#[case::escaped_dollar("echo \\$'{marker}'", "a'b", "echo \\$'a'\"'\"'b'")]
+#[case::pid_expansion_dollar("echo $$'{marker}'", "a'b", "echo $$'a'\"'\"'b'")]
+#[case::dollar_inside_double_quotes("echo \"$'{marker}'\"", "a$b", "echo \"$'a\\$b'\"")]
+#[case::dollar_inside_single_quotes("echo '$''{marker}'", "a'b", "echo '$''a'\"'\"'b'")]
+fn ansi_c_lookbehind_keeps_the_surrounding_quote_context(
+    #[case] template: &str,
+    #[case] path: &str,
+    #[case] expected: &str,
+    #[values(Lowering::Command, Lowering::Script)] lowering: Lowering,
+) {
+    let bindings = context_bindings(RecipeShell::Bash, path);
+    let expanded = template.replace("{marker}", INS_TOKEN);
     assert_eq!(
         lowering
-            .lower(&template, &bindings)
-            .expect("an escaped dollar cannot open ANSI-C"),
-        "echo \\$'a'\"'\"'b'",
-        "the escaped dollar used the wrong encoding via {lowering:?}: {template:?}"
-    );
-}
-
-/// Treat the second dollar of `$$` as the PID expansion, not an opener.
-#[rstest]
-#[case::command(Lowering::Command)]
-#[case::script(Lowering::Script)]
-fn double_dollar_before_quote_uses_single_quoted_encoding(#[case] lowering: Lowering) {
-    let bindings = context_bindings(RecipeShell::Bash, "a'b");
-    let template = format!("echo $$'{INS_TOKEN}'");
-    assert_eq!(
-        lowering
-            .lower(&template, &bindings)
-            .expect("the second dollar of a PID expansion cannot open ANSI-C"),
-        "echo $$'a'\"'\"'b'",
-        "the PID expansion dollar used the wrong encoding via {lowering:?}: {template:?}"
+            .lower(&expanded, &bindings)
+            .expect("a marker outside ANSI-C must still lower"),
+        expected,
+        "wrong quote context via {lowering:?}: {expanded:?}"
     );
 }
 
@@ -202,37 +199,5 @@ fn placeholder_separates_ansi_c_lookbehind(#[case] shell: RecipeShell) {
             IrGenError::InvalidCommand { ref command, .. } if *command == template
         ),
         "rejection must report the original template, got: {error:?}"
-    );
-}
-
-/// Treat a dollar and quote inside double quotes as literal text.
-#[rstest]
-#[case::command(Lowering::Command)]
-#[case::script(Lowering::Script)]
-fn dollar_and_quote_inside_double_quotes_use_double_encoding(#[case] lowering: Lowering) {
-    let bindings = context_bindings(RecipeShell::Bash, "a$b");
-    let template = format!("echo \"$'{INS_TOKEN}'\"");
-    assert_eq!(
-        lowering
-            .lower(&template, &bindings)
-            .expect("ANSI-C is not opened inside double quotes"),
-        "echo \"$'a\\$b'\"",
-        "double-quoted `$'` used the wrong encoding via {lowering:?}: {template:?}"
-    );
-}
-
-/// Leave a `$'` sequence inside ordinary single quotes as literal text.
-#[rstest]
-#[case::command(Lowering::Command)]
-#[case::script(Lowering::Script)]
-fn dollar_quote_inside_ordinary_single_quotes_uses_single_encoding(#[case] lowering: Lowering) {
-    let bindings = context_bindings(RecipeShell::Bash, "a'b");
-    let template = format!("echo '$''{INS_TOKEN}'");
-    assert_eq!(
-        lowering
-            .lower(&template, &bindings)
-            .expect("a dollar inside ordinary single quotes cannot open ANSI-C"),
-        "echo '$''a'\"'\"'b'",
-        "single-quoted `$'` used the wrong encoding via {lowering:?}: {template:?}"
     );
 }

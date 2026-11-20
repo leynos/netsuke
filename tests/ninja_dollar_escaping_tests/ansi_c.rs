@@ -41,12 +41,20 @@ fn rejected_command(error: &anyhow::Error) -> Option<&str> {
     }
 }
 
+/// The manifest sections a rejection case supplies around its target.
+struct TargetSections<'a> {
+    /// The target's recipe declaration, already indented for the list entry.
+    recipe: &'a str,
+    /// Top-level sections, such as `rules:`, that follow the targets list.
+    extra: &'a str,
+}
+
 /// Build a single-target manifest around one recipe declaration.
 ///
 /// The target names the quote-breaking path and takes no sources, so the path
 /// reaches the recipe only through the output marker and the target cannot
 /// depend on itself.
-fn target_manifest(recipe: &str, extra: &str) -> String {
+fn target_manifest(TargetSections { recipe, extra }: TargetSections<'_>) -> String {
     let escaped_path = ANSI_C_LEADING_PATH.replace('\\', "\\\\");
     format!("targets:\n  - name: \"{escaped_path}\"\n{recipe}{extra}")
 }
@@ -68,7 +76,7 @@ fn markers_inside_ansi_c_strings_are_rejected(
     #[case] extra: &str,
 ) -> Result<()> {
     for shell in [RecipeShell::Posix, RecipeShell::Bash] {
-        let error = lower_for(shell, &target_manifest(recipe, extra))
+        let error = lower_for(shell, &target_manifest(TargetSections { recipe, extra }))
             .expect_err("lowering must reject a marker inside ANSI-C quoting");
         ensure!(
             rejected_command(&error) == Some(REJECTED_TEMPLATE),
@@ -184,12 +192,35 @@ fn legacy_single_quote_encoding_is_not_valid_ansi_c() -> Result<()> {
 #[cfg(unix)]
 const ANSI_C_SOURCE_PATH: &str = "a'b\\c; touch injected; #";
 
+/// Render one executable case and fail unless its generated command is bound.
+#[cfg(unix)]
+fn executable_case(shell: RecipeShell) -> Result<(String, String)> {
+    let manifest = manifest::from_str(&ansi_c_manifest())?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, shell)?;
+    let ninja = generate_executable(shell, &graph)?;
+    let binding = command_binding(&ninja)?;
+    let script = transport_script(shell, &binding)?;
+    Ok((ninja, script))
+}
+
+/// The command text Ninja holds for one generated build edge.
+#[cfg(unix)]
+struct CommandBinding<'a>(&'a str);
+
+#[cfg(unix)]
+impl<'a> CommandBinding<'a> {
+    /// Borrow the command text carried by this binding.
+    const fn as_str(&self) -> &'a str {
+        self.0
+    }
+}
+
 /// Extract the command binding from generated Ninja text.
 #[cfg(unix)]
-fn command_binding(ninja: &str) -> Result<String> {
+fn command_binding(ninja: &str) -> Result<CommandBinding<'_>> {
     ninja
         .lines()
-        .find_map(|line| line.strip_prefix("  command = ").map(str::to_owned))
+        .find_map(|line| line.strip_prefix("  command = ").map(CommandBinding))
         .context("generated Ninja should carry one command binding")
 }
 
@@ -228,13 +259,14 @@ fn generate_executable(shell: RecipeShell, graph: &BuildGraph) -> Result<String>
 
 /// Recover the script the selected transport would execute.
 #[cfg(unix)]
-fn transport_script(shell: RecipeShell, binding: &str) -> Result<String> {
+fn transport_script(shell: RecipeShell, binding: &CommandBinding<'_>) -> Result<String> {
     // `$$` is the generated-file spelling of one shell dollar; Ninja collapses
     // it before the child shell runs, which running the text directly must
     // model.
+    let command = binding.as_str();
     let script = match shell {
-        RecipeShell::Bash => decode_bash_transport(INTERPRETER_PATH, binding)?,
-        RecipeShell::Posix | RecipeShell::PowerShell => binding.to_owned(),
+        RecipeShell::Bash => decode_bash_transport(INTERPRETER_PATH, command)?,
+        RecipeShell::Posix | RecipeShell::PowerShell => command.to_owned(),
     };
     Ok(script.replace("$$", "$"))
 }
@@ -254,11 +286,7 @@ fn ansi_c_text_before_a_marker_survives_real_bash(#[case] shell: RecipeShell) ->
         skip_without_bash();
         return Ok(());
     };
-    let manifest = manifest::from_str(&ansi_c_manifest())?;
-    let graph = BuildGraph::from_manifest_for_shell(&manifest, shell)?;
-    let ninja = generate_executable(shell, &graph)?;
-    let binding = command_binding(&ninja)?;
-    let script = transport_script(shell, &binding)?;
+    let (_ninja, script) = executable_case(shell)?;
     ensure!(
         script.contains("$'a\\\\b'"),
         "the ANSI-C word must survive lowering, got: {script}"
