@@ -83,7 +83,10 @@ def _draw_graph(
             )
         )
         graphs[name] = {"needs": _needs_value(chosen, as_string=draw(st.booleans()))}
-    return graphs
+    # Declaring the jobs out of dependency order keeps a resolver that walks the
+    # mapping directly from passing just because declaration order happens to
+    # be a valid order.
+    return {name: graphs[name] for name in draw(st.permutations([*graphs]))}
 
 
 @st.composite
