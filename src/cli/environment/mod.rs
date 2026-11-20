@@ -62,11 +62,14 @@ fn is_boolean_path(components: &[String]) -> bool {
 ///
 /// Boolean paths accept exactly the four strict spellings and otherwise keep
 /// the raw text, so case or whitespace variants fail deserialization instead of
-/// being coerced. Every other path keeps Figment's ordinary scalar parsing,
-/// which recognizes booleans, numbers, arrays, and strings. Figment trims
-/// surrounding whitespace from an unquoted scalar, so an environment policy
-/// such as `NETSUKE_COLOR=" always "` is accepted even though the same spaces
-/// in a quoted configuration-file value are not.
+/// being coerced. Every other path keeps Figment's ordinary value parsing,
+/// which recognizes values including booleans, numbers, arrays, dictionaries,
+/// and quoted strings, and turns anything it cannot parse into a string.
+/// Figment trims surrounding whitespace from an unquoted scalar, so an
+/// environment policy such as `NETSUKE_COLOR=" always "` is accepted even
+/// though the same spaces in a quoted configuration-file value are not.
+/// A parsed value can still fail the target field's type, in which case the
+/// merge reports a deserialization error.
 fn parse_value(components: &[String], value_text: &str) -> Value {
     if is_boolean_path(components) {
         return parse_environment_bool(value_text)

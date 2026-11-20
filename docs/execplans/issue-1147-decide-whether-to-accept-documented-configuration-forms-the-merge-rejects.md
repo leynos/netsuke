@@ -207,7 +207,10 @@ list form.
   `{key=value}` dictionaries, so both the plan and the developers' guide now
   describe the recognized forms as non-exhaustive and name the string fallback.
   The ADR and decision D6 say "value parsing" where they had said "scalar
-  parsing", because arrays and dictionaries are values too.
+  parsing", because arrays and dictionaries are values too. The following round
+  applied the same correction to the `parse_value` doc comment in
+  `src/cli/environment/mod.rs`, which also called the behaviour scalar parsing,
+  and to the pull request description.
 
 ## Surprises & discoveries
 
