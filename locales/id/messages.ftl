@@ -207,7 +207,7 @@ ir.circular_dependency = Terdeteksi ketergantungan melingkar: { $cycle }.
 ir.action_serialisation = Tindakan tidak dapat diserialkan: { $details }.
 ir.invalid_command = Penyisipan tidak sah pada perintah: { $reason }.
 ir.ambiguous_substitution_boundary = Batas substitusi perintah ambigu pada karakter { $position }; pisahkan penutup substitusi dari '#' berikutnya.
-ir.unfinished_power_shell_region = Entri daftar perintah PowerShell { $entry } berakhir di dalam { $region }; tutup entri tersebut atau gabungkan dengan entri berikutnya.
+ir.unfinished_power_shell_region = Entri daftar perintah PowerShell { $entry } berakhir di dalam { $region }; tutup wilayah tersebut atau gabungkan dengan entri berikutnya.
 
 # Galat pembuatan berkas Ninja.
 ninja_gen.missing_action = Tindakan "{ $id }" yang dirujuk sebuah sisi build tidak ada.

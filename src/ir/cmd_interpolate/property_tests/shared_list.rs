@@ -31,6 +31,10 @@ proptest! {
         ]),
         input in power_shell_path_strategy(),
     ) {
+        // The rendered diagnostic is localized, and the localizer is
+        // process-wide, so pin English rather than inheriting whichever locale
+        // another test last installed.
+        let _en_localizer = test_support::en_localizer();
         let inputs = [input];
         let outputs = [camino::Utf8PathBuf::from("out.txt")];
         let bindings = CommandBindings::new(&inputs, &outputs, RecipeShell::PowerShell);

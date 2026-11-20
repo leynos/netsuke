@@ -207,7 +207,7 @@ ir.circular_dependency = Havaittiin kehäriippuvuus: { $cycle }.
 ir.action_serialisation = Toimintoa ei voitu sarjallistaa: { $details }.
 ir.invalid_command = Virheellinen komennon sijoitus: { $reason }.
 ir.ambiguous_substitution_boundary = Epäselvä komennon korvauksen raja merkissä { $position }; erota korvauksen päättävä sulkumerkki seuraavasta '#'-merkistä.
-ir.unfinished_power_shell_region = PowerShell-komentolistan merkintä { $entry } päättyy { $region } sisään; sulje se tai yhdistä merkintä seuraavaan.
+ir.unfinished_power_shell_region = PowerShell-komentolistan merkintä { $entry } päättyy { $region } sisään; sulje alue tai yhdistä merkintä seuraavaan.
 
 # Ninja-generoinnin virheet.
 ninja_gen.missing_action = Toiminto ”{ $id }”, johon koontikaari viittaa, puuttuu.
