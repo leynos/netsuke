@@ -7,14 +7,20 @@
 //! could fail quietly: treating an unresolvable path as unrelated, and
 //! creating state while deciding.
 
-use super::super::{FORCE_ENTRY, NAMESPACE_LEAF, NAMESPACE_PARENT, resolves_into_reserved_state};
-use super::support::{force_node_exists, namespace, reset, stray_force_node, workspace};
+use super::super::{NAMESPACE_LEAF, NAMESPACE_PARENT, resolves_into_reserved_state};
+use super::support::{force_node_exists, reset, stray_force_node, workspace};
 use crate::ninja_gen::FORCE_PATH;
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::rstest;
 
+// The symbolic-link cases are Unix-only, so their helpers are imported only
+// there; Windows builds would otherwise deny the imports as unused.
+#[cfg(unix)]
+use super::super::FORCE_ENTRY;
+#[cfg(unix)]
+use super::support::namespace;
 #[cfg(unix)]
 use tempfile::TempDir;
 
