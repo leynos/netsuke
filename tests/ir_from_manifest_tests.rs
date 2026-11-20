@@ -48,6 +48,27 @@ fn manifest_fixture_generates_expected_ir(
     Ok(())
 }
 
+/// Render the shared Windows smoke fixture as a POSIX Ninja bundle.
+///
+/// The native Windows smoke suite selects `NETSUKE_WINDOWS_SHELL=bash` for
+/// `bash-isolated-state`, and lowering covers the whole manifest, so every
+/// target in this fixture must stay renderable through the POSIX route. A
+/// PowerShell-only construct such as a here-string carries line feeds, which a
+/// Ninja command binding cannot hold; such scenarios keep their own fixture.
+#[test]
+fn windows_smoke_fixture_renders_under_the_posix_route() -> Result<()> {
+    let manifest = manifest::from_path("tests/data/windows-recipe-smoke.yml")?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)
+        .context("the shared Windows smoke fixture must lower under the POSIX route")?;
+    let bundle = ninja_gen::generate_bundle(&graph)
+        .context("the shared Windows smoke fixture must render as one Ninja bundle")?;
+    ensure!(
+        bundle.build_file().contains("bash-isolated-state"),
+        "the rendered bundle must carry every fixture target, including the Bash scenario"
+    );
+    Ok(())
+}
+
 /// Preserve declaration order while interpolating command-list entries.
 #[rstest]
 fn command_list_entries_are_interpolated_in_order() -> Result<()> {

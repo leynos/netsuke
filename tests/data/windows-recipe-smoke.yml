@@ -110,9 +110,3 @@ targets:
     description: Preserve the PowerShell $in variable inside an existing string
     script: |
       Set-Content -NoNewline -LiteralPath {{ outs }} -Value '$in'
-  - name: shared list.txt
-    description: Interpolate a marker after a neutral here-string entry
-    sources: '; New-Item pwned; Write-Output x'
-    command:
-      - "@'\nneutral body\n'@"
-      - "Copy-Item -LiteralPath {{ ins }} -Destination {{ outs }}"

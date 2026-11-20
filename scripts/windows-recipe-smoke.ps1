@@ -244,15 +244,46 @@ function Test-AutomaticPathQuoting {
 function Test-NeutralSharedListInterpolation {
     param(
         [Parameter(Mandatory)]
-        [string]$Netsuke
+        [string]$Netsuke,
+
+        [Parameter(Mandatory)]
+        [string]$Manifest,
+
+        [Parameter(Mandatory)]
+        [string]$FixtureName
     )
 
-    Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'shared list.txt')
-    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'shared list.txt') `
-        -Expected 'path-derived-content' `
-        -Message 'A marker after a neutral shared-list entry was not interpolated as literal path text'
-    if (Test-Path -LiteralPath 'pwned') {
-        throw 'A shared command list executed its path-derived payload.'
+    # A here-string carries line feeds, which the POSIX route cannot place in
+    # one Ninja command binding, so this PowerShell-only target keeps its own
+    # fixture and workspace. The shared fixture stays lowerable under Bash.
+    $listManifest = Join-Path (Split-Path -Parent $Manifest) $FixtureName
+    $tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+    $workspace = Join-Path $tempRoot "netsuke-windows-neutral-list-smoke-$PID"
+
+    try {
+        New-Item -ItemType Directory -Path $workspace | Out-Null
+        Copy-Item -LiteralPath $listManifest -Destination (Join-Path $workspace 'Netsukefile')
+        Push-Location $workspace
+        try {
+            $payloadSource = Join-Path $workspace '; New-Item pwned; Write-Output x'
+            # New-Item's -Path parameter treats this semicolon as literal data.
+            New-Item -ItemType File -Path $payloadSource | Out-Null
+            Set-Content -NoNewline -LiteralPath $payloadSource -Value 'path-derived-content'
+
+            Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'shared list.txt')
+            Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'shared list.txt') `
+                -Expected 'path-derived-content' `
+                -Message 'A marker after a neutral shared-list entry was not interpolated as literal path text'
+            if (Test-Path -LiteralPath 'pwned') {
+                throw 'A shared command list executed its path-derived payload.'
+            }
+        }
+        finally {
+            Pop-Location
+        }
+    }
+    finally {
+        Remove-Item -Recurse -Force -LiteralPath $workspace -ErrorAction SilentlyContinue
     }
 }
 
@@ -350,7 +381,8 @@ function Invoke-WindowsRecipeScenarios {
     Test-AutomaticPathQuoting -Netsuke $Netsuke
     Test-ExplicitBashIsolation -Netsuke $Netsuke
     Test-PathPlaceholderScript -Netsuke $Netsuke
-    Test-NeutralSharedListInterpolation -Netsuke $Netsuke
+    Test-NeutralSharedListInterpolation -Netsuke $Netsuke -Manifest $Manifest `
+        -FixtureName 'windows-recipe-smoke-neutral-list.yml'
     Test-QuotedScriptPlaceholderRejection -Netsuke $Netsuke -Manifest $Manifest `
         -FixtureName 'windows-recipe-smoke-quoted-script.yml' `
         -TargetName 'quoted-script-single.txt'
