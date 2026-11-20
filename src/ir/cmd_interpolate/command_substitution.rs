@@ -283,13 +283,21 @@ fn is_keyword_at(chars: &[char], pos: usize, keyword: &[char]) -> bool {
 /// backslash that is itself escaped starts no pair: in `\\<newline>` the
 /// newline is an ordinary terminator.
 fn skip_line_continuations(chars: &[char], mut pos: usize) -> usize {
-    while chars.get(pos) == Some(&'\\')
-        && chars.get(pos + 1) == Some(&'\n')
-        && is_unescaped_character(chars, pos)
-    {
+    while is_line_continuation_at(chars, pos) {
         pos += 2;
     }
     pos
+}
+
+/// Report whether an unescaped backslash-newline pair starts at `pos`.
+///
+/// The pair is deleted before parsing, so `c` followed by a continuation and
+/// `ase` still spells `case`. The test is one predicate so the scan above keeps
+/// a single branch, and each of its own conditions stays within the branch
+/// limit.
+fn is_line_continuation_at(chars: &[char], pos: usize) -> bool {
+    let is_pair = chars.get(pos) == Some(&'\\') && chars.get(pos + 1) == Some(&'\n');
+    is_pair && is_unescaped_character(chars, pos)
 }
 
 /// Return the index of the character that really precedes `pos`.
