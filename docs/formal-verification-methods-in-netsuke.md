@@ -68,10 +68,10 @@ archives. Three Verus kernels are committed: `verus/canonical_value/main.rs`,
 `make verus` defaults to the first, so a maintainer proof run covers one kernel
 unless `VERUS_FLAGS` selects more; callers repeat `--proof-file` through that
 variable to run an ordered batch. The runner stops at the first failed proof
-and returns the verifier's status. `proofs.yml` runs the canonical-value and
-resource-bounds proofs as separate steps, so the resource-bounds proof is
-selected with `VERUS_FLAGS` rather than left to the default. The developers'
-guide documents the commands and their local usage.
+and returns the verifier's status. `proofs.yml` runs the canonical-value,
+configured-shells, and resource-bounds proofs as three separate steps, so the
+latter two are selected with `VERUS_FLAGS` rather than left to the default. The
+developers' guide documents the commands and their local usage.
 
 The composite [Kani cache action](../.github/actions/kani-cache/action.yml) owns
 `.kani-cargo`, `.kani-home`, and `.kani-rustup` under a key that includes the

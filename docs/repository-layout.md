@@ -225,9 +225,10 @@ output and some leaf files so the long-lived structure remains visible.
   shell-composition rule, `verus/canonical_value/` proves the canonical value
   key and equality relation, and `verus/resource_bounds/` models the stdlib
   combinatorial and running-total arithmetic. Bare `make verus` selects only
-  the canonical-value proof; the resource-bounds proof runs as
+  the canonical-value proof; the other two run as
+  `make verus VERUS_FLAGS='--proof-file verus/configured_shells/main.rs'` and
   `make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'`, and
-  `.github/workflows/proofs.yml` runs both as separate steps. Neither is part
+  `.github/workflows/proofs.yml` runs all three as separate steps. None is part
   of the ordinary pull-request gate.
 
 ## Internal support module ownership

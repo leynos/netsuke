@@ -1,20 +1,22 @@
 ---
 name: Proofs
 
-# The Verus proofs under `verus/`: the canonical-value proof and the
-# resource-bounds proof. Proof code that no job runs is a comment, so this
-# workflow runs both of them: on a pull request or push to `main` that touches
-# the proofs, the pinned prover tooling, or this workflow, and weekly. Verus was
-# once an optional maintainer tool with no CI job; the estate prover-tooling
-# rule (PT-006) now requires CI to run the proofs a repository holds, which is
-# every proof under `verus/`, not only the one `make verus` selects by default.
+# The Verus proofs under `verus/`: the canonical-value proof, the
+# configured-shells proof, and the resource-bounds proof. Proof code that no
+# job runs is a comment, so this workflow runs all three of them: on a pull
+# request or push to `main` that touches the proofs, the pinned prover tooling,
+# or this workflow, and weekly. Verus was once an optional maintainer tool with
+# no CI job; the estate prover-tooling rule (PT-006) now requires CI to run the
+# proofs a repository holds, which is every proof under `verus/`, not only the
+# one `make verus` selects by default.
 #
 # The triggers name the proofs and how they are run, not the production code
 # they transcribe. The resource-bounds proof is a transcription of
-# `src/stdlib/resource_bounds/kernel.rs`, so a change to that kernel neither
-# invalidates the proof nor is checked by it: correspondence between the two is
-# argued in the design record, and the Kani harnesses narrow that gap rather
-# than closing it.
+# `src/stdlib/resource_bounds/kernel.rs`, with the three substitutions for
+# `checked_pow`, `min`, and `Option::filter` that its own module comment names,
+# so a change to that kernel neither invalidates the proof nor is checked by
+# it: correspondence between the two is argued in the design record, and the
+# Kani harnesses narrow that gap rather than closing it.
 #
 # Verus and Z3 are installed only through the shared install-prover-tools
 # action, which reads the release from tools/verus/VERSION. `make verus` then
@@ -68,6 +70,10 @@ jobs:
         env:
           VERUS_Z3_PATH: ${{ steps.prover.outputs.z3-path }}
         run: make verus
+      - name: Run the configured-shells Verus proof
+        env:
+          VERUS_Z3_PATH: ${{ steps.prover.outputs.z3-path }}
+        run: make verus VERUS_FLAGS='--proof-file verus/configured_shells/main.rs'
       - name: Run the resource-bounds Verus proof
         env:
           VERUS_Z3_PATH: ${{ steps.prover.outputs.z3-path }}
