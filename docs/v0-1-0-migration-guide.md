@@ -1189,13 +1189,17 @@ namespaces are reserved for Netsuke's generated state. Generation rejects a
 spelling that folds into one of them, and `netsuke build` additionally refuses
 a spelling that only the working directory can settle — an absolute path, a
 `..` path that returns to it, or a symbolic-link alias — before it clears the
-force node. Sidecars are immutable and content-addressed. Retention keeps the
-current bundle plus at most 32 obsolete `.dd` files and 1 MiB of obsolete `.dd`
-bytes; stale `.tmp` files are cleaned while the exclusive sidecar-directory
-lease is held. `clean` prunes only after successful `ninja -t clean`, not after
-a failure. An old arbitrary `generate --output` manifest needs regeneration
-only if retention has removed any of its referenced sidecars. See
-[ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md). The
+force node. That check runs only when something occupies the force node,
+because a build with nothing there clears nothing and inspects no declared
+path; a manifest whose output reaches the namespace through such a spelling can
+therefore pass that build, and is refused from the first build that finds a
+force entry to clear. Sidecars are immutable and content-addressed. Retention
+keeps the current bundle plus at most 32 obsolete `.dd` files and 1 MiB of
+obsolete `.dd` bytes; stale `.tmp` files are cleaned while the exclusive
+sidecar-directory lease is held. `clean` prunes only after successful
+`ninja -t clean`, not after a failure. An old arbitrary `generate --output`
+manifest needs regeneration only if retention has removed any of its referenced
+sidecars. See [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md). The
 [users' guide](users-guide.md#run-direct-dependencies-serially) documents the
 execution scope and the independent-reachability boundary.
 

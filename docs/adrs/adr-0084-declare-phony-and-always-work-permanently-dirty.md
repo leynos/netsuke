@@ -199,7 +199,10 @@ rebuilds them.
 
 ## Migration plan
 
-No manifest change is required. Existing manifests gain corrected behaviour:
+One manifest shape must change: a manifest that declares a path under
+`.netsuke/phony` must move that path, because the namespace now holds the state
+these lowerings generate and generation rejects the spelling. Every other
+manifest gains corrected behaviour without an edit:
 
 - An action or `phony: true` target that a same-named path used to suppress now
   runs every time the target is reached.

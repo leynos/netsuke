@@ -1011,8 +1011,8 @@ time the target is reached, even when its inputs and output are unchanged.
 Afterwards the edge compares the output's modification time. When the recipe
 leaves that time unchanged, `restat` stops the unchanged output from forcing
 its dependant; a dependant with another changed input can still run. Rewriting
-the file, even with identical bytes, updates its time and rebuilds the
-dependants.
+the file normally updates its time and rebuilds the dependants; a recipe that
+restores the original modification time still lets `restat` skip them.
 
 Both lowerings depend on a shared force node, `.netsuke/phony/force`, whose
 dirtiness is its absence from disk. `netsuke build` removes any file,
