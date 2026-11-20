@@ -378,7 +378,7 @@ fn preceding_shell_character(chars: &[char], pos: usize) -> Option<usize> {
 }
 
 /// Report whether the character at `pos` is not escaped by a backslash run.
-fn is_unescaped_character(chars: &[char], pos: usize) -> bool {
+pub(super) fn is_unescaped_character(chars: &[char], pos: usize) -> bool {
     chars
         .get(..pos)
         .into_iter()
