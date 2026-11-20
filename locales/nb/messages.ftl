@@ -207,6 +207,7 @@ ir.circular_dependency = Det ble funnet en sirkulær avhengighet: { $cycle }.
 ir.action_serialisation = Handlingen kunne ikke serialiseres: { $details }.
 ir.invalid_command = Ugyldig interpolasjon i kommandoen: { $snippet }.
 ir.ambiguous_substitution_boundary = Tvetydig grense for kommandoerstatning ved tegn { $position }; skill erstatningens avsluttende parentes fra den følgende '#'.
+ir.unfinished_power_shell_region = PowerShell-kommandolisteelementet { $entry } slutter inne i { $region }; lukk området eller slå sammen elementet med det neste.
 
 # Feil ved generering av Ninja.
 ninja_gen.missing_action = Handlingen «{ $id }» som en byggekant viser til, mangler.

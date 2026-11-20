@@ -626,6 +626,20 @@ both modes, an entry remains opaque recipe text, so multiple native commands
 separated by semicolons inside one entry are not checked individually. State
 does not cross action or target boundaries.
 
+A `shared` list is parsed by PowerShell as one script, so every entry must end
+at a neutral lexical boundary. Netsuke rejects an entry that leaves a single-
+or double-quoted string, here-string, block comment, or `$()` substitution
+open, or that ends in a backtick escape that would consume text from the next
+entry. The diagnostic names the entry and the region; close the region or merge
+the entry with its successor. This boundary check does not apply to `isolated`
+lists, whose entries are separate scripts, but isolation does not repair an
+incomplete entry: each isolated entry must be syntactically complete on its
+own. PowerShell starts a block comment only where a token can begin, so a `<#`
+inside an argument is literal text. Netsuke treats such an opener as
+unrecognized syntax: an entry that contains one is accepted, but a marker that
+follows it in the list is refused rather than guessed at. The check is not a
+complete PowerShell parser.
+
 Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
 `$env:NAME` reads an environment variable. PowerShell parses the braced
 variable name in `${VAR:-default}`, but does not perform POSIX default-value

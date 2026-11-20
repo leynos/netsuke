@@ -107,6 +107,11 @@ impl<'source> PowerShellSourceCharacter<'source> {
         self.value() == '<' && self.next().is_some_and(|next| next.value() == '#')
     }
 
+    /// Report whether a block-comment terminator starts here.
+    pub(super) fn ends_block_comment(self) -> bool {
+        self.value() == '#' && self.next().is_some_and(|next| next.value() == '>')
+    }
+
     /// Report whether this source character begins a PowerShell token.
     pub(super) fn is_token_boundary(self) -> bool {
         self.previous().is_none_or(Self::is_token_separator)

@@ -208,6 +208,7 @@ ir.circular_dependency = Dépendance circulaire détectée : { $cycle }.
 ir.action_serialisation = Impossible de sérialiser l'action : { $details }.
 ir.invalid_command = Interpolation de commande non valide : { $snippet }.
 ir.ambiguous_substitution_boundary = Limite ambiguë de substitution de commande au caractère { $position } ; séparez la parenthèse fermante de la substitution du '#' suivant.
+ir.unfinished_power_shell_region = L'entrée { $entry } de la liste de commandes PowerShell se termine à l'intérieur de { $region } ; fermez la région ou fusionnez l'entrée avec la suivante.
 
 # Erreurs de génération Ninja.
 ninja_gen.missing_action = Action « { $id } » manquante alors qu'une arête de compilation la référence.

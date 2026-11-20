@@ -207,6 +207,7 @@ ir.circular_dependency = Döngüsel bağımlılık bulundu: { $cycle }.
 ir.action_serialisation = Eylem serileştirilemedi: { $details }.
 ir.invalid_command = Komutta geçersiz yerleştirme: { $snippet }.
 ir.ambiguous_substitution_boundary = { $position }. karakterde belirsiz komut ikamesi sınırı; ikamenin kapanış parantezini sonraki '#' işaretinden ayırın.
+ir.unfinished_power_shell_region = PowerShell komut listesi girdisi { $entry }, { $region } içinde bitiyor; bölgeyi kapatın veya girdiyi bir sonrakiyle birleştirin.
 
 # Ninja üretimi hataları.
 ninja_gen.missing_action = Bir derleme kenarının başvurduğu "{ $id }" eylemi eksik.

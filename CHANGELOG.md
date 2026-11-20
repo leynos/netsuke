@@ -95,6 +95,12 @@
   accepted filename could introduce another argument into a trusted recipe; the
   portable unquoted-path allowlist now excludes the comma (CWE-88)
   ([#1017](https://github.com/leynos/netsuke/issues/1017))
+- Validate a shared PowerShell command list as the single script PowerShell
+  parses. An entry that leaves a quoted string, here-string, block comment, or
+  `$()` substitution open, or that ends in a backtick escape, is now rejected
+  instead of letting the next entry's path literal be reclassified as
+  executable syntax (CWE-78)
+  ([#993](https://github.com/leynos/netsuke/issues/993))
 
 ## [0.1.0-beta4] - 2026-09-26
 

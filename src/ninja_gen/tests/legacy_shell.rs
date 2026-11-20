@@ -243,6 +243,48 @@ fn power_shell_recipes_quote_apostrophe_paths_with_power_shell_literals() -> Res
     Ok(())
 }
 
+/// Verify a shared list keeps each apostrophe path in one doubled-apostrophe literal.
+///
+/// Entry one ends at a neutral boundary, so entry two's marker is lowered at
+/// its own unquoted site and the generated payload must carry the standalone
+/// PowerShell literal rather than a literal split across the entry wrapper.
+#[test]
+fn power_shell_shared_lists_keep_apostrophe_paths_in_one_literal() -> Result<()> {
+    let manifest = crate::manifest::render_manifest(
+        crate::manifest::from_str(concat!(
+            "netsuke_version: '1.0.0'\n",
+            "targets:\n",
+            "  - name: output's-file\n",
+            "    sources: source's-file\n",
+            "    command:\n",
+            "      - Write-Output 'first entry'\n",
+            "      - Copy-Item {{ ins }} {{ outs }}\n",
+        ))?,
+        &minijinja::Environment::new(),
+    )?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)?;
+    let mut rendered = String::new();
+    generate_into_with_interpreter(
+        &graph,
+        &mut rendered,
+        RecipeShell::PowerShell,
+        &power_shell_interpreter(),
+    )?;
+    let generated = GeneratedNinja::new(&rendered);
+
+    ensure!(
+        generated.recipe_contains(RecipeNeedle::new(
+            "Copy-Item 'source''s-file' 'output''s-file'"
+        ))?,
+        "the shared list must carry each apostrophe path in one doubled-apostrophe literal"
+    );
+    ensure!(
+        !generated.recipe_contains(RecipeNeedle::new("Copy-Item 'source's-file'"))?,
+        "the shared list must not split an apostrophe path across a literal boundary"
+    );
+    Ok(())
+}
+
 /// Verify that PowerShell scripts bypass the POSIX script wrapper.
 #[test]
 fn power_shell_scripts_do_not_use_the_posix_script_wrapper() -> Result<()> {

@@ -3,9 +3,11 @@
 use super::{
     ISOLATED_POWER_SHELL_CHILD_ARGUMENT_PREFIX, ISOLATED_POWER_SHELL_CHILD_EXECUTABLE,
     InterpreterBinding, MAX_POWER_SHELL_COMMAND_LINE, MAX_POWER_SHELL_RECIPE_BYTES,
-    POWER_SHELL_ENCODED_ARGUMENTS, POWER_SHELL_RESPONSE_FILE_ARGUMENTS, RecipeShell,
-    RenderedRecipeCommand, encode_power_shell_script, escape_posix_script, windows_argument,
+    POWER_SHELL_ENCODED_ARGUMENTS, POWER_SHELL_LIST_ENTRY_PREFIX, POWER_SHELL_LIST_ENTRY_SUFFIX,
+    POWER_SHELL_RESPONSE_FILE_ARGUMENTS, RecipeShell, RenderedRecipeCommand,
+    encode_power_shell_script, escape_posix_script, windows_argument,
 };
+use crate::ir::shared_power_shell_entry_is_neutral;
 use crate::ninja_gen::escape::ShellText;
 use crate::ninja_gen::test_support::power_shell_interpreter;
 use crate::recipe_shell::InterpreterExecutable;
@@ -361,4 +363,20 @@ fn isolated_child_prefix_is_the_length_accounting_prefix() {
         .expect("PowerShell route should be available");
     assert!(script.contains(&payload));
     assert!(expected_length < MAX_POWER_SHELL_COMMAND_LINE);
+}
+
+/// Verify the shared-list wrapper fragments scan as neutral PowerShell entries.
+///
+/// The wrapper is emitted around every entry of one shared script, so a
+/// fragment that opened a region or forced fail-closed rejection would either
+/// break the next entry or make lowering reject a command list the renderer
+/// still emits.
+#[test]
+fn shared_power_shell_list_wrapper_fragments_are_neutral() {
+    for fragment in [POWER_SHELL_LIST_ENTRY_PREFIX, POWER_SHELL_LIST_ENTRY_SUFFIX] {
+        assert!(
+            shared_power_shell_entry_is_neutral(fragment),
+            "the shared-list wrapper fragment {fragment:?} must end at a neutral boundary"
+        );
+    }
 }

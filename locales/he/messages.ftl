@@ -207,6 +207,7 @@ ir.circular_dependency = זוהתה תלות מעגלית: { $cycle }.
 ir.action_serialisation = לא ניתן היה לבצע סריאליזציה לפעולה: { $details }.
 ir.invalid_command = שיבוץ לא תקין בפקודה: { $snippet }.
 ir.ambiguous_substitution_boundary = גבול החלפת פקודה דו-משמעי בתו { $position }; הפרידו את סוגר הסגירה של ההחלפה מתו ה-'#' הבא.
+ir.unfinished_power_shell_region = הרשומה { $entry } ברשימת הפקודות של PowerShell מסתיימת בתוך { $region }; סגרו את האזור או מזגו את הרשומה עם הבאה.
 
 # שגיאות ביצירת קובצי Ninja.
 ninja_gen.missing_action = הפעולה „{ $id }” שאליה מפנה קשת בנייה חסרה.

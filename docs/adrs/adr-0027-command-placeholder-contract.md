@@ -54,6 +54,14 @@ whitespace, and a `)` that closes a substitution immediately before `#` fails
 closed when the substitution source contains the `case` reserved word. The
 POSIX comment and heredoc boundary amendment below states the contract.
 
+Amended on 2026-11-19 for issue #993. A shared PowerShell `command:` list is
+validated as one script, because PowerShell parses each entry where its
+predecessor stopped. An entry that leaves a quoted string, here-string, block
+comment, or `$()` substitution open, or that ends in a backtick escape, is now
+rejected. The addendum below distinguishes this cross-entry boundary from the
+same-recipe findings tracked in
+[#846](https://github.com/leynos/netsuke/issues/846) and states the scope.
+
 ## Date
 
 2026-09-19
@@ -634,3 +642,43 @@ apart on it. The split keeps each module within the workspace's 400-line limit.
 Regressions run through both traversals in
 `src/ir/cmd_interpolate/tests/heredoc/` and through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
+
+## Addendum — 2026-11-19: Shared PowerShell command-list boundaries (#993)
+
+A `shared` PowerShell `command:` list is assembled into one script: the
+interpreter parses entry `n + 1` where entry `n` stopped. The #846 fix made one
+recipe's marker insertion site safe against an already-open quote in that same
+recipe. It did not address a list in which one entry opens a region and the
+next entry's marker is interpolated independently, because each entry was
+scanned in isolation. A source path could therefore reach the script as a
+standalone single-quoted literal while PowerShell was already inside a
+single-quoted string, and filename text became executable syntax (CWE-78).
+
+The scanner now walks a shared list in declaration order. Each entry is
+interpolated with the previous entry's boundary, and an entry that ends inside
+a single- or double-quoted string, a here-string, a block comment, or a `$()`
+substitution, or that ends in a backtick escape, is rejected with an
+`InvalidCommand` diagnostic naming the entry and a language-neutral region
+code. The rejection carries the entry's original template, never interpolated
+path text. The sticky fail-closed classification also follows the list, so
+later markers stay protected after scanner-sensitive text in an earlier entry.
+Block comments end at the first `#>`, as PowerShell does, so an apparent inner
+`<#` neither deepens the region nor hides live syntax after the terminator.
+PowerShell recognizes `<#` only where a token can begin, so an opener inside an
+argument token — where the quotes around it still form an expandable string —
+fails closed instead of opening a comment. A block opener after a mid-token
+hash whose comment status is unknown fails closed for the same reason: a line
+comment would make `<#` ordinary text.
+
+Entries that end at a neutral boundary are unaffected, including a closed
+here-string, a `#` line comment, a `--%` stop-parsing region, and a closed
+block comment. Scalar commands, `script:` recipes,
+`command_isolation: isolated` lists, and the POSIX and Bash routes keep their
+existing scanning. Isolation is not a remedy for an entry this check rejects:
+each isolated entry runs as its own script, so an entry that leaves a region
+open is invalid on its own as well. The check is a boundary check over the
+lexical regions this scanner models, not a complete PowerShell parser; RFC 0036
+owns the longer-term harmonization under a version-matched grammar and states
+the residual migration obligation. Native execution coverage runs in the
+Windows recipe smoke suite; the regression and property suites run on every
+platform.

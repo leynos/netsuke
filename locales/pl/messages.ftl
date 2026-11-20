@@ -207,6 +207,7 @@ ir.circular_dependency = Wykryto zależność cykliczną: { $cycle }.
 ir.action_serialisation = Nie udało się zserializować działania: { $details }.
 ir.invalid_command = Nieprawidłowa interpolacja w poleceniu: { $snippet }.
 ir.ambiguous_substitution_boundary = Niejednoznaczna granica podstawienia polecenia na znaku { $position }; oddziel zamykający nawias podstawienia od następnego '#'.
+ir.unfinished_power_shell_region = Wpis { $entry } listy poleceń programu PowerShell kończy się wewnątrz { $region }; zamknij obszar lub połącz wpis z następnym.
 
 # Błędy generowania plików Ninja.
 ninja_gen.missing_action = Brakuje działania „{ $id }”, do którego odwołuje się krawędź budowania.

@@ -34,7 +34,7 @@ impl PowerShellLexicalState {
         character: PowerShellSourceCharacter<'_>,
         context: PowerShellCommandSubstitutionContext,
     ) {
-        self.has_unmodelled_syntax |= comment_character_changes_scanner_state(character, context);
+        self.is_fail_closed |= comment_character_changes_scanner_state(character, context);
         if character.is_line_break() {
             self.comment_state = PowerShellCommentState::None;
             self.reset_variable_assignment_context();
@@ -96,15 +96,5 @@ impl SubstitutionTraversal<'_, '_> {
         };
         self.power_shell_lexical
             .note_comment_character(character, context);
-    }
-
-    /// Remember a block comment that the partial scanner cannot parse safely.
-    pub(super) fn note_unparsed_block_comment_opener(
-        &mut self,
-        character: PowerShellSourceCharacter<'_>,
-    ) {
-        if self.matches_unquoted_quote_context() && character.starts_block_comment() {
-            self.power_shell_lexical.note_unmodelled_syntax();
-        }
     }
 }

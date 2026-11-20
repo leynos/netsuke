@@ -172,3 +172,18 @@ and the old interpretation remains the default.
   `PATH` when Ninja later runs them.
 - Structured per-unit `cwd` remains planned work under RFC 0009 and roadmap
   items 12.1.1 and 12.2.3; this decision does not ship it.
+
+## Amendment — 2026-11-19: Shared-list validation beside isolated entries (#993)
+
+[ADR-0027](adr-0027-command-placeholder-contract.md) now rejects a shared
+PowerShell `command:` list entry that leaves a lexical region open for its
+successor. This does not change the isolated mode introduced by this record. An
+isolated entry is already its own script, so there is no cross-entry parse
+state to validate, and each entry keeps its per-entry interpolation. The two
+mechanisms are distinct: a shared list keeps one interpreter and therefore
+needs a boundary check, while isolating the entries removes the shared parse
+state instead. Isolation is not a remedy for an entry that the shared check
+rejects: because each isolated entry is its own script, an entry that leaves a
+quote, here-string, comment, or substitution unfinished there is invalid on its
+own. Neither mechanism relaxes the other's guarantees, and accepted shared
+lists retain their existing action hashes.
