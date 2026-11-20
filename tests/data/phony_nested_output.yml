@@ -1,0 +1,6 @@
+netsuke_version: '1.0.0'
+targets:
+  - name: build/report
+    phony: true
+    command: echo report > build/report
+defaults: [build/report]

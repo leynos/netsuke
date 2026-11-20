@@ -59,6 +59,7 @@ pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 mod graph;
 mod help;
 mod ninja;
+mod output_dirs;
 mod path_helpers;
 mod phony_state;
 mod process;
@@ -79,6 +80,7 @@ pub use recipe_shell::telemetry::{
 
 use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
 use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
+use output_dirs::create_output_dirs;
 use path_helpers::resolve_output_path;
 use phony_state::reset_force_node;
 use recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
@@ -217,11 +219,12 @@ fn execute_build(
         Some(keys::STATUS_TOOL_BUILD.into()),
         graph_generation,
     )?;
-    let (bundle, command_list_targets, declared_paths) = generated.into_build_parts();
-    let console_edge_count = bundle.console_edge_count();
-    let publication = materialize_dyndep_bundle(cli, &bundle)?;
-    prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
-    let ninja = NinjaContent::new(bundle.into_parts().0);
+    let parts = generated.into_build_parts();
+    let console_edge_count = parts.bundle.console_edge_count();
+    let publication = materialize_dyndep_bundle(cli, &parts.bundle)?;
+    prune_dyndep_bundle(cli, parts.bundle.dyndep_files(), &publication)?;
+    let ninja = NinjaContent::new(parts.bundle.into_parts().0);
+    let command_list_targets = parts.command_list_targets;
     let targets = if args.targets.is_empty() {
         BuildTargets::new(&cli.default_targets)
     } else {
@@ -232,7 +235,10 @@ fn execute_build(
     // leftover path there would quietly turn off every forced edge. The reset
     // takes the manifest's paths because a spelling that only the working
     // directory can resolve must not delete a declared output.
-    reset_force_node(cli, &declared_paths)?;
+    reset_force_node(cli, &parts.declared_paths)?;
+    // A `phony` edge's executable statement names only its hidden output, so
+    // Ninja no longer creates the declared outputs' directories for it.
+    create_output_dirs(cli, &parts.phony_output_dirs)?;
     let build_file = process::create_temp_ninja_file(&ninja)?;
     let build_path = build_file.as_path();
     let ninja_program = context.ninja_program;

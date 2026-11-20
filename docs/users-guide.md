@@ -629,8 +629,8 @@ The top-level fields are:
   render.
 - `rules`: reusable recipes referenced by targets or actions.
 - `actions`: implicitly phony operations, such as `test` or `lint`. Their name
-  is not a file, so the recipe runs on every build even when a file or
-  directory of that name exists.
+  is not a file, so the recipe runs whenever the action is reached in the
+  selected target graph, even when a file or directory of that name exists.
 - `targets`: required list of file-producing or logical build nodes. An empty
   list is valid for an action-only manifest.
 - `defaults`: target or action names used when `build` receives no explicit
@@ -1013,15 +1013,26 @@ generated output beneath `.netsuke/phony`, so:
 - a file or directory with the same name cannot make the target look up to
   date, and the recipe may itself write a path with that name;
 - `netsuke clean` leaves a user path of that name in place and removes the
-  generated output instead.
+  generated output instead;
+- a recipe may write a nested output such as `build/report`. Ninja creates the
+  parent directories of the outputs it sees on an edge, and the lowering moves
+  the recipe onto a hidden output, so `netsuke build` creates the declared
+  outputs' parent directories before it invokes Ninja.
+
+A `depfile` on an executable phony action belongs to its rule, so Ninja reads
+it for the hidden statement. Ninja accepts a depfile only when its first output
+names the edge's first output, which is the hidden path `$out` expands to; a
+recipe that writes the declared name instead produces a depfile Ninja ignores,
+and the dependencies it lists do not order the build.
 
 A target with `always: true` keeps its declared output, so it may produce a
 real file. Netsuke makes its edge permanently dirty, so the recipe runs every
 time the target is reached, even when its inputs and output are unchanged.
 Afterwards the edge compares the output's modification time. When the recipe
-leaves that time unchanged, anything depending on the output is pruned;
-rewriting the file, even with identical bytes, updates its time and rebuilds
-the dependants.
+leaves that time unchanged, `restat` stops the unchanged output from forcing
+its dependant; a dependant with another changed input can still run. Rewriting
+the file, even with identical bytes, updates its time and rebuilds the
+dependants.
 
 Both lowerings depend on a shared force node, `.netsuke/phony/force`, whose
 dirtiness is its absence from disk. `netsuke build` removes any file,
@@ -1034,8 +1045,11 @@ node or its namespace — an absolute path, a `..` path that returns to the
 working directory, or a symbolic-link alias — because removing the entry would
 destroy the output the manifest named. `netsuke generate` leaves
 `.netsuke/phony/force` alone, because generation is a pure translation of the
-graph; running the generated file by hand therefore requires that path to be
-absent, so remove it yourself first.
+graph, so running the generated file by hand requires that path to be absent.
+Before removing it manually, apply the same check the build applies: an
+absolute spelling, a `..` path that returns to the working directory, and a
+symbolic-link alias all resolve to the same node, and a declared output behind
+any of them is destroyed by the removal rather than generated state.
 
 The flags are independent. An entry in `actions` is implicitly phony and not
 always; it may also set `always: true`, though the phony lowering already runs
