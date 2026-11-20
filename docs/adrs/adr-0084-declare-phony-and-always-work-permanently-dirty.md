@@ -215,16 +215,17 @@ manifest gains corrected behaviour without an edit:
 - A path an older Netsuke run declared as an executable phony edge's output is
   no longer declared, so `netsuke clean` will not remove it. A recipe that
   still writes its public name recreates that path on every build, so a single
-  removal is not enough: the stale product needs its own cleanup step on every
-  run until the recipe stops writing that name, because `netsuke clean` will
-  not take it. A recipe that has stopped writing it leaves one stale copy,
-  which a single removal clears.
+  removal is not enough: the stale product needs a removal step separate from
+  `netsuke clean`, repeated on every run until the recipe stops writing that
+  name. A recipe that has stopped writing it leaves one stale copy, which a
+  single removal clears.
 
   _Addendum (2026-11-20)._ The original text advised deleting the stale build
   product once. That holds only for a recipe that no longer writes its public
-  name. A recipe that still writes it — for example one that redirects into the
-  declared file rather than through the `{{ outs }}` marker — recreates the
-  path on every build, outside Ninja's knowledge, so a cleanup step outside
+  name. A recipe that still writes it — including one that redirects into the
+  declared file, whether it names that path directly or through the
+  `{{ outs }}` marker, which is lowered from the declared names — recreates the
+  path on every build, outside Ninja's knowledge, so a step separate from
   `netsuke clean` has to remove it on every run.
 - Generated Ninja text changes shape for these edges. The determinism guarantee
   is unchanged: for one graph, environment, platform, shell selection, and
