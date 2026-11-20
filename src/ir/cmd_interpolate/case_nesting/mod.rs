@@ -12,9 +12,7 @@
 mod lexical;
 mod state;
 
-use lexical::{
-    ends_word, is_blank, is_option_word, is_quote, starts_command_after, starts_command_list,
-};
+use lexical::{ends_word, is_blank, is_quote, starts_command_after};
 use state::{CaseFrame, CasePhase, CaseSightings, PrefixSlot, WordRole};
 
 /// Describe one source character offered to a substitution's `case` tracker.
@@ -331,49 +329,6 @@ impl CaseNesting {
                 continues_command_list: false,
             }),
             CasePhase::Arm => None,
-        }
-    }
-
-    /// Classify a word by the command position it stands in.
-    fn classify_command_word(&self, parenthesis_depth: usize) -> WordRole {
-        let is_command_position = self.expects_command;
-        let word = self.word.as_str();
-        if word == "case" {
-            return if is_command_position {
-                WordRole::OpenCase
-            } else {
-                // A `case` behind a word the tracker read as an argument may
-                // still be a keyword: `time` options and a `coproc` name are
-                // opaque when written as quoted or expanded words. Recording it
-                // lets the boundary check fail closed instead of lowering a
-                // marker for a context the shell does not share.
-                WordRole::UnplacedCase
-            };
-        }
-        // A case pattern may itself be spelled `esac`. Only a construct open at
-        // this depth is the one this word closes; anything deeper is inside a
-        // pattern group and must not close it. A quoted or escaped spelling is
-        // pattern text rather than a keyword, so closing there would read the
-        // pattern terminator as the substitution closer.
-        let is_bare_command_word = is_command_position && self.word_is_literal;
-        let is_open_here = is_bare_command_word && self.is_open_at(parenthesis_depth);
-        if word == "esac" && is_open_here {
-            return WordRole::CloseCase;
-        }
-        if word == "time" && is_command_position {
-            return WordRole::TimePrefix;
-        }
-        if word == "coproc" && is_command_position {
-            return WordRole::CoprocPrefix;
-        }
-        if self.prefix_slot == PrefixSlot::TimeOption && is_option_word(word) {
-            return WordRole::TimePrefix;
-        }
-        if self.prefix_slot == PrefixSlot::CoprocName && !starts_command_list(word) {
-            return WordRole::CoprocPrefix;
-        }
-        WordRole::Other {
-            continues_command_list: is_command_position && starts_command_list(word),
         }
     }
 
