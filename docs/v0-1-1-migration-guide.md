@@ -80,13 +80,16 @@ behind as the edge's declared output. `netsuke clean` no longer removes it, and
 will not remove it after the upgrade either, because the generated
 `.netsuke/phony` output does not replace the old path. Identify stale build
 products from earlier runs and delete only the ones you have confirmed the
-recipe created. Do not delete unrelated files that merely share a target's name.
+recipe created. A recipe that still writes its declared name recreates it on
+every build, so it has to be removed on every run rather than once. Do not
+delete unrelated files that merely share a target's name.
 
-A target declaring `always: true` re-runs on every invocation even when its
-inputs and output are unchanged. Ninja records the output's modification time
-after the run: an unchanged time lets it skip an otherwise up-to-date
-dependant, while a recipe that rewrites identical bytes still advances the time
-and rebuilds that dependant.
+A target declaring `always: true` re-runs on every invocation that reaches it,
+even when its inputs and output are unchanged. Ninja records the output's
+modification time after the run: a dependant rebuilds when that recorded time
+changes, and is skipped when it does not. A recipe that rewrites identical
+bytes and restores the original modification time therefore still lets the
+dependant be skipped.
 
 Because the generated Ninja text changes shape for these edges, a manifest that
 compares `netsuke generate` output against a stored copy must update that copy.
