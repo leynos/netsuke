@@ -1,6 +1,9 @@
 # Issue 1146: Report a missing Ninja executable distinctly from a failed recipe
 
-Status: IN PROGRESS
+Status: COMPLETE
+
+Merged as `e9cbb64f6` through PR #1163; the records below describe the
+candidate that landed.
 
 ## Purpose / big picture
 
@@ -45,10 +48,10 @@ temporary build file.
   and JSON modes; the command-list and tool-subcommand tests updated.
 - [x] Phase 3b: quick start, users' guide, design document, and developers'
   guide updated.
-- [ ] Phase 3c: run the full gate set and clear CodeRabbit review.
-  - [ ] The last step is the reviewer's approval of the merge candidate; the
-    gates and every review finding are complete, and this item is what still
-    keeps the plan open.
+- [x] Phase 3c: run the full gate set and clear CodeRabbit review.
+  - [x] The reviewer approved `856e18e41`, every hosted check was green on that
+    head, and PR #1163 squash-merged as `e9cbb64f6`. CI, Netsukefile Build
+    Test, and Coverage (main) then passed on the landed commit.
   - [x] `make check-fmt`, `make lint`, and `make doc-coverage` (98.29%).
   - [x] `make test` was run far enough to expose one regression in the bounded
     legacy-recipe telemetry classifier; both new `RunnerError` variants now map
