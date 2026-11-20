@@ -22,10 +22,12 @@ TARGET = "test-release-admission"
 RUNTIME_MODULES = (
     "scripts/tests/test_release_admission_metrics.py",
     "scripts/tests/test_release_admission_metric_failures.py",
+    "scripts/tests/test_release_admission_invalid_configuration.py",
     "scripts/tests/test_release_admission_metric_boundedness.py",
     "scripts/tests/test_release_admission_process_bounds.py",
     "scripts/tests/test_release_admission_environment_contract.py",
     "scripts/tests/test_release_admission_configuration_resolution.py",
+    "scripts/tests/test_release_admission_destination_resolution.py",
     "scripts/tests/test_release_admission_artefact_initialization.py",
     "scripts/tests/test_release_admission_artefact_truncation.py",
     "scripts/tests/test_release_admission_default_forms.py",
@@ -33,7 +35,16 @@ RUNTIME_MODULES = (
     "scripts/tests/test_release_admission_status_translation.py",
     "scripts/tests/test_release_admission_runner_contract.py",
     "scripts/tests/test_release_admission_metric_degradation.py",
+    "scripts/tests/test_release_admission_wall_clock.py",
+    "scripts/tests/test_release_admission_manifest_parsing.py",
+    "scripts/tests/test_release_admission_evidence_reading.py",
+    "scripts/tests/test_release_admission_freshness_recheck.py",
+    "scripts/tests/test_release_admission_freshness_properties.py",
+    "scripts/tests/test_release_admission_bounded_guards.py",
+    "scripts/tests/test_release_admission_producer_trust.py",
+    "scripts/tests/test_release_admission_cross_repository.py",
     "scripts/tests/test_release_admission_sink_persistence.py",
+    "scripts/tests/test_release_admission_harness_isolation.py",
 )
 #: The pinned dependencies the runtime modules import: pytest drives the suite,
 #: Hypothesis generates the identifier property, cmd-mox supplies every command
@@ -112,9 +123,9 @@ def test_make_target_runs_only_the_release_admission_runtime_modules() -> None:
     Notes
     -----
     The target must use the repository Python baseline, explicit test
-    dependencies, isolated pytest configuration, and exactly the fourteen
-    release-admission modules -- no more, because a stray path would make this
-    target responsible for a suite that has its own gate.
+    dependencies, isolated pytest configuration, and exactly the modules
+    :data:`RUNTIME_MODULES` names -- no more, because a stray path would make
+    this target responsible for a suite that has its own gate.
     """
     recipe = _target_recipe()
     for fragment in (*REQUIRED_RECIPE_FRAGMENTS, *RUNTIME_MODULES):
@@ -125,7 +136,8 @@ def test_make_target_runs_only_the_release_admission_runtime_modules() -> None:
         token for token in recipe.split() if token.startswith("scripts/tests/test_")
     ]
     assert runtime_paths == list(RUNTIME_MODULES), (
-        f"{TARGET} must execute exactly the fourteen release-admission modules, "
+        f"{TARGET} must execute exactly the {len(RUNTIME_MODULES)} "
+        "release-admission modules, "
         f"got {runtime_paths!r}"
     )
 

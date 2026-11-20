@@ -141,6 +141,31 @@ checked as a rehearsal and must record no release tag; a publishing run
 supplies the tag, and the identity must record exactly that tag. This step
 never contacts the registry.
 
+Publishing is gated on packaging and on release admission. Every job that
+writes -- the crates.io publisher, the release publisher, inventory
+verification, and finalization -- runs only when `package-crate` succeeded and
+the `release-admission-canaries` job admitted this run's candidate: enforcement
+is `true`, the gate outcome is `success`, and the gate's candidate commit is
+the run's own commit. Enforcement follows the run's mode, so a publishing run
+enforces while a pull-request dry run only observes. A publishing run refuses
+with `missing_evidence` and writes nothing until an evidence producer uploads a
+`release-admission-evidence` manifest for the candidate. That producer runs
+inside the release workflow; it is tracked by #598, and a caller supplies no
+new input for it. The admission job runs the gate from this repository's own
+workflow commit, so a calling workflow cannot substitute a gate that reports a
+more favourable decision. It also checks out the caller's candidate separately,
+because the gate fetches the candidate commit from the caller's repository; a
+calling workflow's own commit is therefore judged even when this repository
+does not contain it, and the two checkouts are what let the same job do both.
+The gate admits only evidence that names the repository, commit, tag, and
+workflow run under release, was issued inside its freshness window, and reports
+every required canary as successful. Those fields are compared with the run,
+which shows the manifest agrees with the candidate rather than who produced it.
+Until #598 supplies a producer whose upload the run can attribute, an enforcing
+run therefore refuses every supplied manifest with `untrusted_evidence` as
+well, because a file's contents cannot establish its origin. Observation mode
+is unaffected: a pull-request dry run still reports the manifest it read.
+
 When a publication is interrupted, rerun the crates.io publisher job. It
 re-probes the registry before any mutation: an absent version is published from
 the retained bytes, an identical version skips the upload and verifies the
@@ -181,16 +206,17 @@ guarantee is that this workflow never publishes an unverified draft, not that
 every public release it encounters has been verified.
 
 A publishing run then verifies what GitHub ended up holding. The
-`verify-release-inventory` job runs only when the metadata, crates.io, and
-release publishers all succeeded and the run is publishing, and it never
-contacts the registry: it holds `contents: write` to read a draft's listing,
-the verifier step receives no token at all, and its own bytes are already on
-disk. It stops the run when the release carries an asset the declaration does
-not name, when a declared asset is missing, when a downloaded asset's digest
-differs from the recorded one, or when the record does not cover exactly the
-declared set -- including a package swapped for another build's, which travels
-without a sidecar of its own. It does not publish, un-draft, or replace
-anything.
+`verify-release-inventory` job runs only on a publishing run, and only when
+`metadata`, `package-crate`, `release-admission-canaries`, `publish-crates-io`,
+and `publish-release` all succeeded and the admission gate admitted the
+candidate, and it never contacts the registry: it holds `contents: write` to
+read a draft's listing, the verifier step receives no token at all, and its own
+bytes are already on disk. It stops the run when the release carries an asset
+the declaration does not name, when a declared asset is missing, when a
+downloaded asset's digest differs from the recorded one, or when the record
+does not cover exactly the declared set -- including a package swapped for
+another build's, which travels without a sidecar of its own. It does not
+publish, un-draft, or replace anything.
 
 Only a release the workflow creates is a draft: when the tag already has one,
 the job attaches to that release whether or not it is public. An attached asset

@@ -20,9 +20,13 @@ import pytest
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
     CLOCK_ARGUMENTS,
+    FORWARD_COMPATIBLE,
     METRICS_VALIDATOR,
+    RELEASE_TAG,
     REVISION,
     SCRIPT_PATH,
+    WALL_CLOCK_ARGUMENTS,
+    WORKFLOW_RUN_ID,
     AdaptedBoundaries,
     expected_gate_labels,
     expected_operation_labels,
@@ -39,13 +43,15 @@ if typ.TYPE_CHECKING:
 
 pytest_plugins = ("cmd_mox.pytest_plugin",)
 
-FRESH_OBSERVATION_GATE_OUTPUTS = {
-    "gate-outcome": "failure",
-    "gate-error-category": "missing_evidence",
+SUCCESSFUL_GATE_OUTPUTS = {
+    "gate-outcome": "success",
+    "gate-error-category": "none",
+    "enforcement": "false",
+    "candidate-commit": REVISION,
 }
-FRESH_OBSERVATION_GATE_RECORD = {
+SUCCESSFUL_GATE_RECORD = {
     "name": "netsuke_release_admission_gate_total",
-    "labels": expected_gate_labels("failure", "missing_evidence"),
+    "labels": expected_gate_labels("success", "none"),
     "value": 1,
 }
 EXPECTED_TRACE_EVENTS = {
@@ -55,13 +61,15 @@ EXPECTED_TRACE_EVENTS = {
     "trace_delivery",
 }
 #: The commit-resolution request, as the gate's own argument vector renders it.
+#: A rehearsal names no tag, so the resolution is asked about the revision.
 COMMIT_QUERY = ("api", f"repos/leynos/netsuke/commits/{REVISION}", "--jq", ".sha")
-#: The workflow-run request, which asks for the run covering the revision.
+#: The workflow-run request, which asks about the run this gate is executing in
+#: rather than about whichever run is newest for the revision.
 RUN_QUERY = (
     "api",
-    f"repos/leynos/netsuke/actions/runs?head_sha={REVISION}&per_page=1",
+    f"repos/leynos/netsuke/actions/runs/{WORKFLOW_RUN_ID}",
     "--jq",
-    ".workflow_runs[0].id // empty",
+    ".head_sha // empty",
 )
 #: The bounded fetch, with the separator that stops a revision being an option.
 FETCH_ARGUMENTS = ("fetch", "--depth", "1", "--no-tags", "origin", "--", REVISION)
@@ -81,8 +89,8 @@ def _trace_signature(trace: dict[str, object]) -> tuple[object, ...]:
     )
 
 
-def _assert_fresh_observation_metrics(metrics: list[dict[str, object]]) -> None:
-    """Assert the fixed metric contract for synthetic fresh evidence."""
+def _assert_successful_metrics(metrics: list[dict[str, object]]) -> None:
+    """Assert the fixed metric contract for a run that admits the candidate."""
     assert len(metrics) == 11, "five operations need counters and durations plus gate"
     duration_operations = {
         record["labels"]["operation"]
@@ -96,29 +104,30 @@ def _assert_fresh_observation_metrics(metrics: list[dict[str, object]]) -> None:
     for operation, canary in CANARY_BY_OPERATION.items():
         records = operation_records(metrics, operation)
         assert len(records) == 1, f"{operation} must emit exactly one counter"
-        outcome = "failure" if operation == "verify_evidence" else "success"
-        error_category = "missing_evidence" if outcome == "failure" else "none"
         assert records[0]["labels"] == expected_operation_labels(
-            canary, operation, outcome, error_category
+            canary, operation, "success", "none"
         ), f"{operation} must retain its bounded outcome and error category"
-    assert metrics[-1] == FRESH_OBSERVATION_GATE_RECORD, (
-        "synthetic freshness must retain the producer-backed evidence failure"
+    assert metrics[-1] == SUCCESSFUL_GATE_RECORD, (
+        "admitting the candidate must leave the gate counter successful"
     )
 
 
-def _assert_fresh_observation_outputs(
-    outputs: dict[str, str], tmp_path: pathlib.Path
+def _assert_successful_outputs(
+    outputs: dict[str, str], tmp_path: pathlib.Path, *, enforce: bool
 ) -> None:
-    """Assert the fixed workflow-output contract for synthetic fresh evidence."""
-    assert {
-        name: outputs[name] for name in FRESH_OBSERVATION_GATE_OUTPUTS
-    } == FRESH_OBSERVATION_GATE_OUTPUTS, "observation must publish the gate result"
+    """Assert the fixed workflow-output contract for an admitted candidate."""
+    expected = {**SUCCESSFUL_GATE_OUTPUTS, "enforcement": str(enforce).lower()}
+    assert {name: outputs[name] for name in expected} == expected, (
+        "an admitted run must publish its own result and the mode it ran in"
+    )
     assert tuple(outputs) == (
         "gate-outcome",
         "gate-error-category",
+        "enforcement",
+        "candidate-commit",
         "metrics-file",
         "trace-file",
-    ), "the workflow must read the four outputs in the documented order"
+    ), "the workflow must read the six outputs in the documented order"
     assert outputs["metrics-file"] == str(
         tmp_path / "release-admission-metrics.jsonl"
     ), "workflow output must identify the metric artefact"
@@ -127,8 +136,8 @@ def _assert_fresh_observation_outputs(
     )
 
 
-def _assert_fresh_observation_traces(traces: list[dict[str, object]]) -> None:
-    """Assert the fixed trace sequence for synthetic fresh evidence."""
+def _assert_successful_traces(traces: list[dict[str, object]]) -> None:
+    """Assert the fixed trace sequence for a run that admits the candidate."""
     assert {trace["event"] for trace in traces} == EXPECTED_TRACE_EVENTS, (
         "traces must include operation, gate, output, and delivery boundaries"
     )
@@ -139,39 +148,77 @@ def _assert_fresh_observation_traces(traces: list[dict[str, object]]) -> None:
             "fetch_candidate_revision",
             "fetch_workflow_run",
             "check_scan_freshness",
+            "verify_evidence",
         )
     ] + [
-        (
-            "operation_complete",
-            "verify_evidence",
-            "failure",
-            "missing_evidence",
-        ),
-        ("gate_complete", "verify_evidence", "failure", "missing_evidence"),
+        ("gate_complete", "verify_evidence", "success", "none"),
         ("workflow_output_delivery", "verify_evidence", "success", "none"),
         ("trace_delivery", "verify_evidence", "success", "none"),
-    ], "successful operation sequence must retain all bounded trace hand-offs"
+    ], "an admitted sequence must retain all bounded trace hand-offs"
 
 
-def test_gate_observes_synthetic_fresh_evidence_without_blocking(
+def _mode_environment(*, enforce: bool) -> dict[str, str]:
+    """Return the child environment that selects one of the gate's two modes.
+
+    A publishing run must name the tag it is admitting, so the enforcing arm
+    supplies one; the rehearsal arm names none and is the default.
+
+    Returns
+    -------
+    dict[str, str]
+        The variables that select the requested mode and the tag it needs.
+    """
+    if not enforce:
+        return {"NETSUKE_RELEASE_ADMISSION_ENFORCE": "false"}
+    return {
+        "NETSUKE_RELEASE_ADMISSION_ENFORCE": "true",
+        # The workflow's interim block is exercised by the producer-trust
+        # cases; here an enforcing run states the attribution a bound producer
+        # will report, so this case tests admission rather than the block.
+        "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED": "true",
+        "NETSUKE_RELEASE_ADMISSION_TAG": RELEASE_TAG,
+    }
+
+
+@pytest.mark.parametrize("mode", ["rehearsal", "publishing"])
+def test_gate_admits_the_candidate_on_valid_evidence(
     cmd_mox: CmdMox,
     tmp_path: pathlib.Path,
+    mode: str,
 ) -> None:
-    """Verify synthetic fresh evidence remains an observed gate failure.
+    """Verify a candidate-bound manifest admits the candidate in either mode.
 
     Notes
     -----
-    Contract invariants: observation mode returns success while retaining the
-    failed gate result, the native admission requests, and all bounded
-    operation and trace records.
+    Contract invariants: both modes return success, every operation succeeds,
+    the native admission requests are unchanged, and all bounded operation,
+    gate, and delivery records are written.
+
+    The two modes differ in one request and one output. A rehearsal names no
+    tag, so commit resolution is asked about ``GITHUB_SHA`` and the tag itself
+    never appears; a publishing run names the release tag, so the same step
+    resolves the tag under its ``tags/`` namespace and compares the answer with
+    the candidate. The namespace is part of the request because a bare name
+    would also match a branch of that name, so the tag's own existence would go
+    unchecked. Both must reach the same admission, and the mode the gate
+    reports is the one it actually ran in, because publication refuses a
+    report-only success.
     """
+    enforce = mode == "publishing"
+    subject = f"tags/{RELEASE_TAG}" if enforce else REVISION
+    commit_query = ("api", f"repos/leynos/netsuke/commits/{subject}", "--jq", ".sha")
     boundaries = install_boundaries(cmd_mox)
-    run = run_gate(cmd_mox, tmp_path, evidence_state="fresh")
+    run = run_gate(
+        cmd_mox,
+        tmp_path,
+        evidence_state="fresh",
+        extra_environment=_mode_environment(enforce=enforce),
+    )
 
     assert run.result.returncode == 0, run.result.stderr
     METRICS_VALIDATOR.validate_metrics(run.metrics)
     METRICS_VALIDATOR.validate_traces(run.traces)
-    assert boundaries.gh.calls == [list(COMMIT_QUERY), list(RUN_QUERY)], (
+    assert boundaries.gh.calls == [list(commit_query), list(RUN_QUERY)], (
         "the GitHub adapter must receive both native admission queries"
     )
     assert boundaries.git.calls == [list(FETCH_ARGUMENTS)], (
@@ -180,9 +227,37 @@ def test_gate_observes_synthetic_fresh_evidence_without_blocking(
     assert boundaries.clock.calls == [], (
         "the default clock is the real interpreter, not the unused double"
     )
-    _assert_fresh_observation_metrics(run.metrics)
-    _assert_fresh_observation_outputs(run.outputs, tmp_path)
-    _assert_fresh_observation_traces(run.traces)
+    _assert_successful_metrics(run.metrics)
+    _assert_successful_outputs(run.outputs, tmp_path, enforce=enforce)
+    _assert_successful_traces(run.traces)
+
+
+def test_an_unrequired_result_does_not_refuse_a_valid_manifest(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify a manifest reporting a future canary still publishes.
+
+    Notes
+    -----
+    Issue #598 adds downstream canaries to the same manifest. A gate that
+    refused a document carrying a result it does not require would make every
+    such addition a breaking change across the two workflows, so the extra
+    result is ignored rather than fatal -- and this is asserted in the
+    publishing mode, where refusing would block the release.
+    """
+    install_boundaries(cmd_mox)
+    run = run_gate(
+        cmd_mox,
+        tmp_path,
+        evidence_state=FORWARD_COMPATIBLE,
+        extra_environment=_mode_environment(enforce=True),
+    )
+
+    assert run.result.returncode == 0, run.result.stderr
+    METRICS_VALIDATOR.validate_metrics(run.metrics)
+    METRICS_VALIDATOR.validate_traces(run.traces)
+    _assert_successful_outputs(run.outputs, tmp_path, enforce=True)
 
 
 def test_documented_adapters_receive_native_boundary_contracts(
@@ -215,11 +290,16 @@ def test_documented_adapters_receive_native_boundary_contracts(
     assert adapted.git.calls == [list(FETCH_ARGUMENTS)], (
         "a redirected Git adapter must receive the bounded native fetch arguments"
     )
-    assert {tuple(call) for call in adapted.clock.calls} == {CLOCK_ARGUMENTS}, (
-        "the clock adapter must receive the Python clock program arguments"
+    assert {tuple(call) for call in adapted.clock.calls} == {
+        CLOCK_ARGUMENTS,
+        WALL_CLOCK_ARGUMENTS,
+    }, "the clock adapter must receive both clock program argument vectors"
+    assert len(adapted.clock.calls) == 12, (
+        "the gate reads the clock twice per operation, once for freshness, and "
+        "once at the admission decision"
     )
-    assert len(adapted.clock.calls) == 10, (
-        "the gate reads the clock once before and once after each operation"
+    assert adapted.clock.calls.count(list(WALL_CLOCK_ARGUMENTS)) == 2, (
+        "the window must be read at the freshness check and again at the decision"
     )
     assert len(adapted.metrics.calls) == len(run.metrics), (
         "the metric sink must receive exactly the records the artefact holds"

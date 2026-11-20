@@ -166,7 +166,7 @@ def test_persistent_trace_sink_failure_is_fail_open_for_the_gate(
     Contract invariants: trace delivery is fail-open, every attempted write is
     reported once, and the gate's own result is untouched. The gate's status is
     decided by the *admission*, so a refused trace write leaves the exit status
-    and the four workflow outputs exactly as a healthy sink would, and the
+    and the six workflow outputs exactly as a healthy sink would, and the
     trace artefact empty because a configured sink replaces the in-process
     append rather than adding to it.
 
@@ -201,13 +201,15 @@ def test_persistent_trace_sink_failure_is_fail_open_for_the_gate(
     assert tuple(run.outputs) == (
         "gate-outcome",
         "gate-error-category",
+        "enforcement",
+        "candidate-commit",
         "metrics-file",
         "trace-file",
     ), "a refused trace write must not cost any workflow output"
-    assert run.outputs["gate-outcome"] == "failure", (
-        "the observed admission must be reported unchanged"
+    assert run.outputs["gate-outcome"] == "success", (
+        "the admitted result must be reported unchanged"
     )
-    assert run.outputs["gate-error-category"] == "missing_evidence", (
+    assert run.outputs["gate-error-category"] == "none", (
         "the reported category must be the admission's own"
     )
     assert run.outputs["trace-file"] == str(run.paths["trace"]), (

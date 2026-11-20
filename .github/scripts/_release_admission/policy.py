@@ -84,6 +84,16 @@ class Canary(Vocabulary):
     NONE = "none"
 
 
+#: The canaries an evidence manifest must report before admission is granted.
+#: #598 adds downstream canaries whose names need no change here, so this is
+#: the closed set of *required* results, not the whole producer vocabulary:
+#: presence is required here, success of every declared result.
+REQUIRED_RESULTS: typ.Final[tuple[Canary, ...]] = (
+    Canary.HISTORY_SCAN,
+    Canary.RELEASE_CANDIDATE,
+)
+
+
 class Operation(Vocabulary):
     """Name one of the five fixed admission operations."""
 
@@ -106,8 +116,13 @@ class ErrorCategory(Vocabulary):
     """Record why an operation or the gate did not succeed.
 
     The categories are deliberately coarse: they say which decision failed, so
-    an operator reads the same set of words on every run and never sees a
-    message body, a path, or an identifier in the published artefacts.
+    an operator reads the same words on every run and never sees a message
+    body, a path, or an identifier in the published artefacts. Three evidence
+    categories split what a manifest can get wrong: unreadable
+    (``malformed_evidence``), about another release (``candidate_mismatch``),
+    or unattributable to a trusted producer (``untrusted_evidence``). An
+    operator fixes each in a different place, and the last one refuses the
+    document's origin while every identity field may still agree.
     """
 
     NONE = "none"
@@ -115,6 +130,9 @@ class ErrorCategory(Vocabulary):
     FETCH_ERROR = "fetch_error"
     STALE_EVIDENCE = "stale_evidence"
     MISSING_EVIDENCE = "missing_evidence"
+    MALFORMED_EVIDENCE = "malformed_evidence"
+    UNTRUSTED_EVIDENCE = "untrusted_evidence"
+    CANDIDATE_MISMATCH = "candidate_mismatch"
     MISMATCH = "mismatch"
     TIMEOUT = "timeout"
     UNKNOWN = "unknown"
@@ -127,24 +145,6 @@ class TraceEvent(Vocabulary):
     GATE_COMPLETE = "gate_complete"
     WORKFLOW_OUTPUT_DELIVERY = "workflow_output_delivery"
     TRACE_DELIVERY = "trace_delivery"
-
-
-class EvidenceState(Vocabulary):
-    """Name the evidence states the operator reports for a revision.
-
-    The three states a caller can act on are enumerated here so the two
-    classifiers that read an evidence state -- :func:`classify_scan_freshness`
-    and :func:`classify_evidence` -- name the same values the default in
-    :mod:`configuration` supplies, rather than each spelling its own literal.
-    A state outside this set is deliberately *not* enumerated: the
-    classifiers report it as unknown rather than forcing it into one of
-    these, so the vocabulary cannot claim to be closed when the gate accepts
-    more.
-    """
-
-    FRESH = "fresh"
-    STALE = "stale"
-    MISSING = "missing"
 
 
 class CommandOutcome(enum.StrEnum):
@@ -254,64 +254,62 @@ def classify_commit_resolution(revision: str, resolved_revision: str) -> Classif
     return Classification(Outcome.FAILURE, ErrorCategory.MISMATCH)
 
 
-def classify_scan_freshness(evidence_state: str) -> Classification:
-    """Classify whether a recorded scan covers the candidate revision.
+def classify_run_head(head_revision: str, candidate_revision: str) -> Classification:
+    """Classify the commit a workflow-run lookup reported against the candidate.
 
-    The gate has no producer of its own yet, so the state arrives from the
-    environment. ``fresh`` is the only state that admits the revision; a stale
-    scan and a missing one are different operator problems, so they keep
-    different categories; anything else is reported as unknown rather than
-    forced into one of the two.
+    The gate asks the API for the run named by ``GITHUB_RUN_ID`` and requires
+    that run's head to *be* the revision under release. Evidence produced by
+    one run cannot admit another, so a difference here is a candidate mismatch
+    rather than an API fault: the lookup succeeded and answered a different
+    question.
 
     Returns
     -------
     Classification
-        The freshness decision for the supplied state.
+        Success when the run's head is the candidate, otherwise a candidate
+        mismatch.
 
     Examples
     --------
-    >>> classify_scan_freshness("fresh").outcome
+    >>> classify_run_head("abc", "abc").outcome
     <Outcome.SUCCESS: 'success'>
-    >>> classify_scan_freshness("stale").error_category
-    <ErrorCategory.STALE_EVIDENCE: 'stale_evidence'>
+    >>> classify_run_head("def", "abc").error_category
+    <ErrorCategory.CANDIDATE_MISMATCH: 'candidate_mismatch'>
     """
-    if evidence_state == EvidenceState.FRESH:
+    if head_revision == candidate_revision:
         return Classification(Outcome.SUCCESS, ErrorCategory.NONE)
-    if evidence_state == EvidenceState.STALE:
-        return Classification(Outcome.FAILURE, ErrorCategory.STALE_EVIDENCE)
-    if evidence_state in {EvidenceState.MISSING, ""}:
-        return Classification(Outcome.FAILURE, ErrorCategory.MISSING_EVIDENCE)
-    return Classification(Outcome.FAILURE, ErrorCategory.UNKNOWN)
+    return Classification(Outcome.FAILURE, ErrorCategory.CANDIDATE_MISMATCH)
 
 
-def classify_evidence(evidence_state: str, workflow_run_id: str) -> Classification:
-    """Classify whether the evidence the revision needs was produced.
+#: The shape of a full Git object ID: lowercase hexadecimal, either the SHA-1
+#: width the workflow's own metadata step validates or the SHA-256 width a
+#: repository may be created with.
+_FULL_REVISION = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 
-    This is the intentional contradiction with :func:`classify_scan_freshness`,
-    and it is deliberately strict: a *fresh* state always fails here, and a
-    state that is not fresh fails whenever it names no workflow run. Success is
-    therefore reserved for the one shape the freshness check already refused --
-    a non-fresh state that still names the run that produced it. The gate
-    refuses a fresh state outright because freshness is the assertion it is
-    checking, not the evidence it needs, and the alternative is admitting a
-    revision whose evidence cannot be traced.
+
+def publishable_revision(revision: str) -> str:
+    r"""Return *revision* when it is safe to publish, and ``""`` otherwise.
+
+    The revision reaches ``GITHUB_OUTPUT``, a line-oriented file of
+    ``key=value`` lines: a newline would forge a second line and invent an
+    output. A value that is not a full object ID therefore publishes as empty,
+    which the publication job's ``candidate-commit == github.sha`` comparison
+    refuses. Only the *published* value is narrowed; the revision itself still
+    reaches the commit query and the self-check unchanged.
 
     Returns
     -------
-    Classification
-        Failure for a fresh state, or for any state without a run identifier;
-        success otherwise.
+    str
+        The revision when it is a full lowercase object ID, otherwise ``""``.
 
     Examples
     --------
-    >>> classify_evidence("stale", "1001").outcome
-    <Outcome.SUCCESS: 'success'>
-    >>> classify_evidence("fresh", "1001").error_category
-    <ErrorCategory.MISSING_EVIDENCE: 'missing_evidence'>
+    >>> publishable_revision("0123456789abcdef0123456789abcdef01234567")
+    '0123456789abcdef0123456789abcdef01234567'
+    >>> publishable_revision("0123456789abcdef0123456789abcdef01234567\n")
+    ''
     """
-    if evidence_state == EvidenceState.FRESH or not workflow_run_id:
-        return Classification(Outcome.FAILURE, ErrorCategory.MISSING_EVIDENCE)
-    return Classification(Outcome.SUCCESS, ErrorCategory.NONE)
+    return revision if _FULL_REVISION.fullmatch(revision) else ""
 
 
 def is_operation_timeout(value: str) -> bool:
@@ -355,6 +353,30 @@ def is_admission_enforcement(value: str) -> bool:
     (True, False)
     """
     return value in {ADMISSION_OBSERVATION_MODE, ADMISSION_ENFORCEMENT_MODE}
+
+
+def enforcement_label(value: str) -> str:
+    """Return the bounded spelling of an admission mode for the workflow output.
+
+    A refused mode is reported as observation, because that is what the run
+    actually did: it wrote no failure exit. The publication job compares the
+    output with ``'true'``, so a run that never enforced can never satisfy it.
+
+    Returns
+    -------
+    str
+        ``"true"`` only for the enforcement mode, otherwise ``"false"``.
+
+    Examples
+    --------
+    >>> enforcement_label("true"), enforcement_label("observe")
+    ('true', 'false')
+    """
+    return (
+        ADMISSION_ENFORCEMENT_MODE
+        if value == ADMISSION_ENFORCEMENT_MODE
+        else ADMISSION_OBSERVATION_MODE
+    )
 
 
 def is_metric_value(value: str) -> bool:

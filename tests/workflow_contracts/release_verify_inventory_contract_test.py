@@ -308,7 +308,12 @@ def _assert_complete_contract(
     _assert_job_contract(workflow)
     _assert_publisher_records_the_artifact_name(workflow)
     violations: list[str] = []
-    check_verify_inventory(workflow, _tag_publish(), PUBLISH_OUTPUTS, violations)
+    check_verify_inventory(
+        workflow,
+        _tag_publish(),
+        PUBLISH_OUTPUTS,
+        violations,
+    )
     assert not violations, f"verify-job reachability contract: {violations}"
 
 

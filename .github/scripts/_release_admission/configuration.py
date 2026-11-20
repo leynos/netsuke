@@ -1,28 +1,22 @@
 """Resolve the release-admission gate's configuration from the environment.
 
 This module owns everything the gate reads *before* it runs an operation: the
-three required variables and their diagnostics, the optional values with their
-documented defaults, the two artefact paths, and the adapter programs and sinks
-the rest of the run is wired from.
+required variables and diagnostics, the optional values and their defaults, the
+artefact paths, and the adapter programs and sinks the run is wired from.
 
 It is separate from :mod:`gate` because the two halves answer different
-questions. This one asks what the gate was *told*; ``gate`` asks what it then
-*does*. Keeping them apart also keeps each reviewable on its own: the default
-forms below are Bash's, and getting one of them wrong changes admission
-behaviour without changing a single operation.
+questions: this one asks what the gate was *told*, ``gate`` what it then
+*does*. Keeping them apart keeps each reviewable alone: the default forms
+below are Bash's, and getting one wrong changes admission behaviour silently.
 
-Start-up is four steps rather than one, and the entry point calls them in the
-order the shell refused in. :func:`resolve_destination` and
-:func:`resolve_configuration` are pure -- they read the mapping they are handed
-and write nothing -- while :func:`prepare_destination` is the only step that
-touches a filesystem, through the :class:`~.filesystem.FileSystem` it is handed
-rather than one it looks up. :func:`require_workflow_output` performs the one
-required-variable refusal that belongs *after* the artefacts exist.
-
-The order is observable, and alerting keys off which refusal a rerun produced.
-The shell resolved ``GITHUB_REPOSITORY`` and ``GITHUB_SHA`` with ``:?``, then
-ran one ``mkdir -p`` naming both parents, then truncated both files with
-``: >``, and only then expanded ``${GITHUB_OUTPUT:?}``.
+Start-up is four steps rather than one, called in the order the shell refused
+in. :func:`resolve_destination` and :func:`resolve_configuration` are pure;
+:func:`prepare_destination` is the only step that touches a filesystem, through
+the :class:`~.filesystem.FileSystem` it is handed; and
+:func:`require_workflow_output` refuses the last required variable, *after* the
+artefacts exist. That order is observable: the shell resolved its required
+variables with ``:?``, ran one ``mkdir -p`` naming both parents, truncated both
+files with ``: >``, and only then expanded ``${GITHUB_OUTPUT:?}``.
 
 Both of Bash's default forms appear in the shell this gate replaces, and
 :mod:`environment` owns them: the colon form for every path, sink, adapter, and
@@ -35,7 +29,7 @@ import functools
 import typing as typ
 from pathlib import Path
 
-from . import commands, environment, filesystem, policy, telemetry
+from . import commands, environment, evidence, filesystem, policy, telemetry
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -45,13 +39,14 @@ REPOSITORY_VARIABLE = "GITHUB_REPOSITORY"
 REPOSITORY_DIAGNOSTIC = "GITHUB_REPOSITORY must identify the release repository"
 REVISION_VARIABLE = "GITHUB_SHA"
 REVISION_DIAGNOSTIC = "GITHUB_SHA must identify the release candidate revision"
+RUN_ID_VARIABLE = "GITHUB_RUN_ID"
+RUN_ID_DIAGNOSTIC = "GITHUB_RUN_ID must identify the workflow run being admitted"
 OUTPUT_VARIABLE = "GITHUB_OUTPUT"
 OUTPUT_DIAGNOSTIC = "GITHUB_OUTPUT must identify the workflow output file"
 
 #: Environment variables the gate reads with a documented default.
 TIMEOUT_VARIABLE = "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS"
 ENFORCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
-EVIDENCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE"
 METRICS_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_METRICS_FILE"
 TRACE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TRACE_FILE"
 TEMPORARY_DIRECTORY_VARIABLE = "RUNNER_TEMP"
@@ -68,15 +63,21 @@ DEFAULT_TEMPORARY_DIRECTORY = "/tmp"  # ruff: ignore[hardcoded-temp-file] - the 
 class Configuration:
     """Hold the gate's resolved settings, with the shell's own defaults.
 
-    ``output`` is the one field :func:`resolve_configuration` leaves empty.
+    ``output`` arrives later; ``tag`` and ``evidence_file`` are empty only in a
+    rehearsal, which does not admit a release and therefore names neither.
     """
 
     repository: str
     revision: str
+    run_id: str
+    tag: str
+    evidence_file: str
     output: str
-    evidence_state: str
+    max_evidence_age_seconds: str
     timeout_seconds: str
     enforcement: str
+    #: Whether this run can attribute the evidence to a producer it trusts.
+    producer_trusted: bool
     programs: commands.Programs
     sinks: telemetry.Sinks
 
@@ -91,8 +92,8 @@ class ConfigurationError(Exception):
     is also what carries the one bounded diagnostic the port prints in that
     state instead of escaping as an uncaught traceback.
 
-    Three steps raise it: :func:`resolve_configuration` and
-    :func:`require_workflow_output` through :func:`_required`, and
+    :func:`resolve_configuration` raises it directly and through
+    :func:`_required`, as does :func:`require_workflow_output`, and
     :func:`prepare_destination` through :func:`_refusing`.
     """
 
@@ -126,8 +127,13 @@ def resolve_configuration(
 ) -> Configuration:
     """Resolve the gate's settings, performing no filesystem access.
 
-    An unset or empty ``GITHUB_REPOSITORY`` or ``GITHUB_SHA`` is refused here,
-    with the shell's own diagnostic, through :func:`_required`.
+    An unset or empty ``GITHUB_REPOSITORY``, ``GITHUB_SHA`` or ``GITHUB_RUN_ID``
+    is refused through :func:`_required` with the shell's own diagnostic. An
+    *enforcing* run must also name a tag and an evidence file; a rehearsal may
+    leave both unset, which keeps the read-only lane reachable with no override.
+
+    ``producer_trusted`` is true only for the exact text ``true``; every other
+    state resolves to false, so the gate refuses evidence it cannot attribute.
 
     Returns
     -------
@@ -136,46 +142,69 @@ def resolve_configuration(
         :attr:`Configuration.sinks`. :attr:`Configuration.output` is empty:
         see :func:`require_workflow_output` for why it arrives later.
 
+    Raises
+    ------
+    ConfigurationError
+        If a required variable is absent or empty, or if an enforcing run
+        leaves the tag or the evidence file unset.
+
     Notes
     -----
     The artefact spellings reach the sinks here and are never read from the
-    environment again, so the value a sink is handed is the value the workflow
-    output publishes. *destination* is passed in rather than resolved here:
-    resolving it twice would give two steps their own answer to one question.
+    environment again. *destination* is passed in so one step answers once.
     """
     # Required variables are resolved first, and the artefacts are created
-    # after the first two, because that is the order the shell refused them in
-    # and the contract tests pin each refusal's position.
+    # after them, because that is the order the shell refused them in and the
+    # contract tests pin each refusal's position.
     repository = _required(variables, REPOSITORY_VARIABLE, REPOSITORY_DIAGNOSTIC)
     revision = _required(variables, REVISION_VARIABLE, REVISION_DIAGNOSTIC)
+    run_id = _required(variables, RUN_ID_VARIABLE, RUN_ID_DIAGNOSTIC)
+    enforcement = environment.defaulted_only_when_unset(
+        variables, ENFORCE_VARIABLE, policy.ADMISSION_OBSERVATION_MODE
+    )
+    tag = environment.optional(variables, evidence.TAG_VARIABLE, "")
+    evidence_file = environment.optional(variables, evidence.EVIDENCE_FILE_VARIABLE, "")
+    # Publication trusts an enforcing run, so it must name the tag it is
+    # admitting and the document that admits it. A rehearsal names neither.
+    refusing = enforcement == policy.ADMISSION_ENFORCEMENT_MODE
+    if refusing and not tag:
+        raise ConfigurationError(evidence.TAG_DIAGNOSTIC)
+    if refusing and not evidence_file:
+        raise ConfigurationError(evidence.EVIDENCE_FILE_DIAGNOSTIC)
     return Configuration(
         repository=repository,
         revision=revision,
+        run_id=run_id,
+        tag=tag,
+        evidence_file=evidence_file,
         output="",
-        evidence_state=environment.optional(
-            variables, EVIDENCE_VARIABLE, policy.EvidenceState.MISSING
+        max_evidence_age_seconds=environment.optional(
+            variables,
+            evidence.MAX_AGE_VARIABLE,
+            str(evidence.DEFAULT_EVIDENCE_MAX_AGE_SECONDS),
         ),
         timeout_seconds=environment.optional(
             variables, TIMEOUT_VARIABLE, str(policy.DEFAULT_OPERATION_TIMEOUT_SECONDS)
         ),
-        enforcement=environment.defaulted_only_when_unset(
-            variables, ENFORCE_VARIABLE, policy.ADMISSION_OBSERVATION_MODE
-        ),
+        enforcement=enforcement,
+        producer_trusted=environment.optional(
+            variables, evidence.PRODUCER_TRUST_VARIABLE, "false"
+        )
+        == "true",
         programs=commands.Programs.from_environment(variables),
         sinks=telemetry.Sinks(
             metrics_file=destination.metrics_file.configured,
             trace_file=destination.trace_file.configured,
-            metrics_sink=environment.optional(
-                variables, commands.METRICS_SINK_VARIABLE, ""
-            ),
-            output_sink=environment.optional(
-                variables, commands.OUTPUT_SINK_VARIABLE, ""
-            ),
-            trace_sink=environment.optional(
-                variables, commands.TRACE_SINK_VARIABLE, ""
-            ),
+            metrics_sink=_adapter(variables, commands.METRICS_SINK_VARIABLE),
+            output_sink=_adapter(variables, commands.OUTPUT_SINK_VARIABLE),
+            trace_sink=_adapter(variables, commands.TRACE_SINK_VARIABLE),
         ),
     )
+
+
+def _adapter(variables: cabc.Mapping[str, str], variable: str) -> str:
+    """Return a sink adapter's configured name, empty when unset."""
+    return environment.optional(variables, variable, "")
 
 
 def prepare_destination(
@@ -184,19 +213,16 @@ def prepare_destination(
     """Create both artefact parents, then truncate both files.
 
     The bindings are read from *sinks* because that is where the configured
-    spellings already live: resolution puts them there and reads them from the
-    environment only once, so initialization and the workflow outputs cannot
-    disagree about which file a run wrote.
+    spellings already live: resolution reads the environment once, so
+    initialization and the workflow outputs cannot disagree about which file a
+    run wrote.
 
     *file_system* is required rather than defaulted: an initializer that looked
     one up could only be shown to work by a real refusal, and the choice of
     filesystem would sit inside the effect rather than in the caller that owns
-    the outcome.
-
-    Either effect the operating system refuses reaches the caller as a
-    :class:`ConfigurationError` from :func:`_refusing`, whose message names the
-    configured spelling and keeps the system's own reason, because the shell
-    printed that sentence itself.
+    the outcome. Either effect the operating system refuses reaches the caller
+    as a :class:`ConfigurationError` from :func:`_refusing`, whose message
+    names the configured spelling and keeps the system's own reason.
 
     Notes
     -----
@@ -256,14 +282,12 @@ class OutputPath:
 
     ``configured`` is the string the operator supplied, verbatim, and
     ``directory`` is the parent the shell's ``mkdir -p "$(dirname "$file")"``
-    named for it. They are not interchangeable, and the split is not "one
-    spelling per boundary": the configured string reaches *every* observable
-    boundary -- the argument a sink adapter is named with, the ``metrics-file``
-    and ``trace-file`` workflow outputs, and the open that truncates the file --
-    so ``./observations//metrics.jsonl`` stayed spelled that way everywhere the
-    shell spelled it that way. ``directory`` is the ``mkdir`` operand alone,
-    and :func:`_directory_name` is where its difference from the configured
-    path's :attr:`~pathlib.Path.parent` is set out.
+    named for it. They are not interchangeable: the configured string reaches
+    *every* observable boundary -- the argument a sink adapter is named with,
+    the workflow outputs, and the open that truncates the file -- so a path's
+    original spelling survives wherever the shell preserved it. ``directory``
+    is the ``mkdir`` operand alone, and :func:`_directory_name` is where its
+    difference from :attr:`~pathlib.Path.parent` is set out.
 
     Rendering ``Path`` back to text at any of the configured boundaries would
     rewrite the operator's spelling, and at the truncation open it would change
@@ -307,10 +331,9 @@ def _directory_name(configured: str) -> str:
     ``No such file or directory`` where the shell had already created
     ``reports`` and failed with ``Is a directory``.
 
-    :func:`os.path.dirname` is the near miss rather than the answer: it returns
-    ``reports`` for ``reports/`` where ``dirname(1)`` returns ``.``, so
-    adopting it would put a new divergence exactly where the trailing-slash
-    cases already look.
+    :func:`os.path.dirname` is the near miss rather than the answer: it answers
+    ``reports`` for ``reports/`` where ``dirname(1)`` answers ``.``, which would
+    put a new divergence where the trailing-slash cases already look.
 
     Returns
     -------
@@ -344,11 +367,10 @@ def _directory_name(configured: str) -> str:
 def _refusing(lead: str, target: str, operation: cabc.Callable[[], None]) -> None:
     """Perform one filesystem operation on *target*, refusing a rejection.
 
-    ``mkdir`` and the redirection each reported their own sentence in the
-    shell, and both reach the caller as the same bounded diagnostic: the
-    message keeps the system's own text through :func:`_reason`, so the
-    operator still reads *why* the path was refused. One helper serves both,
-    because the failure handling is identical.
+    ``mkdir`` and the redirection each reported their own sentence, and both
+    reach the caller as one bounded diagnostic, keeping the system's text
+    through :func:`_reason` so the operator still reads *why* the path was
+    refused.
 
     Raises
     ------
@@ -366,8 +388,7 @@ def _reason(error: OSError) -> str:
     """Render one operating-system refusal as a short reason.
 
     The shell printed the operating system's own sentence, so this carries its
-    text whenever the system supplied one; the fallback names the class for
-    the rare :class:`OSError` raised without a message.
+    text whenever the system supplied one, and the class name otherwise.
 
     Returns
     -------

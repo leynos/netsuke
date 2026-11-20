@@ -17,8 +17,8 @@ Inputs
 Every input is an environment variable. Absent, empty, and set are three
 distinct states for several of them, and the defaults differ in kind:
 
-- ``GITHUB_REPOSITORY`` and ``GITHUB_SHA`` are required. Bash's ``:?`` form
-  aborts with a diagnostic when either is unset or empty.
+- ``GITHUB_REPOSITORY``, ``GITHUB_SHA`` and ``GITHUB_RUN_ID`` are required.
+  Bash's ``:?`` form aborts with a diagnostic when any is unset or empty.
 - ``GITHUB_OUTPUT`` is required later, when the gate results are written.
 - ``NETSUKE_RELEASE_ADMISSION_GH_ADAPTER`` (``gh``), ``..._GIT_ADAPTER``
   (``git``), and ``..._CLOCK_ADAPTER`` (``python3``) name the executables the
@@ -34,7 +34,11 @@ distinct states for several of them, and the defaults differ in kind:
 - ``NETSUKE_RELEASE_ADMISSION_ENFORCE`` defaults to ``false`` *only when
   unset*: Bash's ``${VAR-default}`` form keeps an empty value empty, and the
   empty string is not a valid enforcement mode.
-- ``NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE`` defaults to ``missing``.
+- ``NETSUKE_RELEASE_ADMISSION_TAG`` and ``..._EVIDENCE_FILE`` default to the
+  empty string, and an *enforcing* run must supply both: it admits a named tag
+  from a named document. A rehearsal supplies neither.
+- ``NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS`` defaults to ``86400``
+  and is valid only as a decimal integer in ``1``..``604800``.
 
 Outputs
 -------
@@ -48,8 +52,9 @@ Three artefacts, all written before any external command runs:
   ``0`` is an integer and ``0.0`` is a float depending on the adapter.
 - The trace file, JSON Lines, with keys ``event``, ``operation``, ``outcome``,
   ``error_category``, ``duration_seconds``.
-- ``GITHUB_OUTPUT``, four ``key=value`` lines in the order ``gate-outcome``,
-  ``gate-error-category``, ``metrics-file``, ``trace-file``.
+- ``GITHUB_OUTPUT``, six ``key=value`` lines in the order ``gate-outcome``,
+  ``gate-error-category``, ``enforcement``, ``candidate-commit``,
+  ``metrics-file``, ``trace-file``.
 
 Trace records are whole. A byte-level measurement of a fresh run reads eight
 complete records in 1135 bytes, and a missing-evidence run seven in 989; the
@@ -73,17 +78,17 @@ reproduce:
   ``fetch_workflow_run`` succeed, ``check_scan_freshness`` is
   ``failure``/``missing_evidence`` -- then the gate counter
   ``failure``/``missing_evidence``. ``verify_evidence`` never runs, because
-  the freshness check stopped the chain. All four ``GITHUB_OUTPUT`` lines.
-- Fresh evidence, observation mode: exit ``0``. All five operations run and
-  ``verify_evidence`` is ``failure``/``missing_evidence`` even though the
-  evidence is fresh. This is the intentional contradiction the gate encodes:
-  a fresh state is only reachable with a workflow-run identifier, and the
-  fixture supplies none. The gate counter repeats that category.
+  the freshness check stopped the chain. All six ``GITHUB_OUTPUT`` lines.
+- A manifest that admits the candidate, in either mode: exit ``0``. All five
+  operations succeed, so the gate counter is ``success``/``none`` and the six
+  workflow outputs carry ``enforcement`` and ``candidate-commit`` beside the
+  result. A rehearsal names no tag, so the tag comparison is skipped; an
+  enforcing run names one and the manifest must agree with it.
 - Invalid ``OPERATION_TIMEOUT_SECONDS`` (``0``, ``301``, ``not-a-number``) or
   invalid ``ENFORCE`` (``""``, ``False``, ``observe``): exit ``1``, exactly one
   metric record -- the gate counter ``failure``/``unknown`` -- exactly three
   traces (``gate_complete``, ``workflow_output_delivery``, ``trace_delivery``),
-  all four ``GITHUB_OUTPUT`` lines, and no external command at all.
+  all six ``GITHUB_OUTPUT`` lines, and no external command at all.
 - Missing ``GITHUB_OUTPUT``: exit ``1``, both JSON Lines files created and
   empty, no ``GITHUB_OUTPUT`` written, and a Bash diagnostic naming the line
   that tested it.
@@ -99,7 +104,7 @@ reproduce:
   outputs 0 lines, because the workflow-output writes sit between
   ``gate_complete`` and the delivery traces.
 - Trace sink failing throughout: exit ``0``, metrics 11 lines, traces 0 lines,
-  outputs 4 lines, and eight ``release-admission trace sink failed``
+  outputs 6 lines, and eight ``release-admission trace sink failed``
   diagnostics -- one per attempted trace write. Trace delivery is fail-open by
   design; the gate's own result is untouched.
 - A clock adapter that exits non-zero: the operation becomes
@@ -163,10 +168,32 @@ reproduce:
   this scenario does not reach on either side.
 """
 
+from release_admission_evidence_fixtures import (
+    FORWARD_COMPATIBLE,
+    INCOMPLETE,
+    MALFORMED,
+    MISMATCHED,
+    MISSING,
+    OVERSIZED,
+    STALE,
+    UNKNOWN_SCHEMA,
+    UNREQUIRED_FAILURE,
+    UNSUCCESSFUL,
+    WRONG_REPOSITORY,
+    WRONG_RUN,
+    WRONG_TAG,
+    Candidate,
+    candidate_for,
+    write_evidence,
+)
+from release_admission_gate_environment import GateInputs, gate_environment
 from release_admission_test_doubles import (
     CLOCK_ARGUMENTS,
     GITHUB_REPOSITORY,
+    RELEASE_TAG,
     REVISION,
+    WALL_CLOCK_ARGUMENTS,
+    WORKFLOW_RUN_ID,
     AdaptedBoundaries,
     Boundaries,
     GateRun,
@@ -189,7 +216,10 @@ from release_admission_test_harness import (
     METRICS_VALIDATOR,
     PYTHON_PATH,
     SCRIPT_PATH,
+    GateRunRequest,
+    gate_paths,
     run_gate,
+    run_gate_request,
 )
 from release_admission_test_records import (
     OPERATION_SEQUENCE,
@@ -203,15 +233,34 @@ from release_admission_test_records import (
 __all__ = (
     "CANARY_BY_OPERATION",
     "CLOCK_ARGUMENTS",
+    "FORWARD_COMPATIBLE",
     "GITHUB_REPOSITORY",
+    "INCOMPLETE",
+    "MALFORMED",
     "METRICS_VALIDATOR",
+    "MISMATCHED",
+    "MISSING",
     "OPERATION_SEQUENCE",
+    "OVERSIZED",
     "PYTHON_PATH",
+    "RELEASE_TAG",
     "REVISION",
     "SCRIPT_PATH",
+    "STALE",
+    "UNKNOWN_SCHEMA",
+    "UNREQUIRED_FAILURE",
+    "UNSUCCESSFUL",
+    "WALL_CLOCK_ARGUMENTS",
+    "WORKFLOW_RUN_ID",
+    "WRONG_REPOSITORY",
+    "WRONG_RUN",
+    "WRONG_TAG",
     "AdaptedBoundaries",
     "Boundaries",
+    "Candidate",
+    "GateInputs",
     "GateRun",
+    "GateRunRequest",
     "Handler",
     "RunShape",
     "Subprocess",
@@ -221,8 +270,11 @@ __all__ = (
     "assert_identifiers_excluded_from_diagnostics",
     "assert_identifiers_excluded_from_records",
     "assert_identifiers_excluded_from_values",
+    "candidate_for",
     "expected_gate_labels",
     "expected_operation_labels",
+    "gate_environment",
+    "gate_paths",
     "install_adapted",
     "install_boundaries",
     "operation_duration",
@@ -231,7 +283,9 @@ __all__ = (
     "reply_to_github",
     "reply_to_sink",
     "run_gate",
+    "run_gate_request",
     "shim",
+    "write_evidence",
 )
 
 CANARY_BY_OPERATION = {

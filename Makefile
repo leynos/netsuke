@@ -395,10 +395,12 @@ test-release-admission: ## Validate the release-admission runtime contract
 		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' \
 		python -m pytest scripts/tests/test_release_admission_metrics.py \
 		scripts/tests/test_release_admission_metric_failures.py \
+		scripts/tests/test_release_admission_invalid_configuration.py \
 		scripts/tests/test_release_admission_metric_boundedness.py \
 		scripts/tests/test_release_admission_process_bounds.py \
 		scripts/tests/test_release_admission_environment_contract.py \
 		scripts/tests/test_release_admission_configuration_resolution.py \
+		scripts/tests/test_release_admission_destination_resolution.py \
 		scripts/tests/test_release_admission_artefact_initialization.py \
 		scripts/tests/test_release_admission_artefact_truncation.py \
 		scripts/tests/test_release_admission_default_forms.py \
@@ -406,7 +408,16 @@ test-release-admission: ## Validate the release-admission runtime contract
 		scripts/tests/test_release_admission_status_translation.py \
 		scripts/tests/test_release_admission_runner_contract.py \
 		scripts/tests/test_release_admission_metric_degradation.py \
-		scripts/tests/test_release_admission_sink_persistence.py -c /dev/null \
+		scripts/tests/test_release_admission_wall_clock.py \
+		scripts/tests/test_release_admission_manifest_parsing.py \
+		scripts/tests/test_release_admission_evidence_reading.py \
+		scripts/tests/test_release_admission_freshness_recheck.py \
+		scripts/tests/test_release_admission_freshness_properties.py \
+		scripts/tests/test_release_admission_bounded_guards.py \
+		scripts/tests/test_release_admission_producer_trust.py \
+		scripts/tests/test_release_admission_cross_repository.py \
+		scripts/tests/test_release_admission_sink_persistence.py \
+		scripts/tests/test_release_admission_harness_isolation.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 test-coverage-artifact: ## Test hostile LCOV artefact validation

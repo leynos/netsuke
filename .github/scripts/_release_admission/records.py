@@ -169,6 +169,12 @@ class GateRecord:
 
     outcome: str
     error_category: str
+    #: ``"true"`` only for a run that enforced, so publication cannot be
+    #: satisfied by a report-only gate that happened to pass.
+    enforcement: str
+    #: The revision the gate verified the evidence against, published so the
+    #: publication job can compare it with ``github.sha`` itself.
+    candidate_commit: str
 
     def metric_fields(self) -> MetricFields:
         """Return the fields for the gate counter, whose value is ``1``."""
@@ -191,7 +197,7 @@ class GateRecord:
         )
 
 
-#: The trace the shell wrote once its four workflow-output lines were written.
+#: The trace the shell wrote once its workflow-output lines were written.
 #: It reports delivery, not admission, so it is unconditional success and does
 #: not belong to any gate result.
 WORKFLOW_OUTPUT_TRACE: typ.Final[TraceFields] = TraceFields(

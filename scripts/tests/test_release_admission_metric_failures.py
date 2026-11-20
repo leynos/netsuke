@@ -20,10 +20,8 @@ from release_admission_test_doubles import REVISION
 from release_admission_test_scenarios import delay_workflow_run_query
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
-    CLOCK_ARGUMENTS,
     GITHUB_REPOSITORY,
     METRICS_VALIDATOR,
-    AdaptedBoundaries,
     Boundaries,
     assert_failure_trace_sequence,
     assert_identifiers_excluded_from_records,
@@ -43,31 +41,9 @@ if typ.TYPE_CHECKING:
 
 pytest_plugins = ("cmd_mox.pytest_plugin",)
 
-#: A refused configuration emits exactly one metric: the gate's own.
-INVALID_CONFIGURATION_METRICS = [
-    {
-        "name": "netsuke_release_admission_gate_total",
-        "labels": {"outcome": "failure", "error_category": "unknown"},
-        "value": 1,
-    }
-]
-#: Its traces stop after the gate record, because no operation ever ran.
-INVALID_CONFIGURATION_TRACE_SIGNATURES = [
-    ("gate_complete", "verify_evidence", "failure", "unknown"),
-    ("workflow_output_delivery", "verify_evidence", "success", "none"),
-    ("trace_delivery", "verify_evidence", "success", "none"),
-]
-
 #: The one-second delay the duration test injects, well inside both the
 #: default thirty-second operation bound and the shim's own client timeout.
 DELAYED_SECONDS = 1.0
-
-
-def _trace_signature(trace: dict[str, object]) -> tuple[object, ...]:
-    """Return the bounded fields that identify one trace record."""
-    return tuple(
-        trace[field] for field in ("event", "operation", "outcome", "error_category")
-    )
 
 
 def _assert_malformed_revision_is_a_bounded_mismatch(
@@ -93,6 +69,10 @@ def _assert_malformed_revision_is_a_bounded_mismatch(
     )
     assert outputs["gate-outcome"] == "failure", (
         "malformed revisions must publish a failed gate outcome"
+    )
+    assert not outputs["candidate-commit"], (
+        "a revision that is not a full object ID must publish empty, so a value "
+        "carrying a newline cannot forge a second workflow-output line"
     )
     assert (
         outputs["gate-error-category"]
@@ -125,19 +105,16 @@ def _assert_malformed_revision_stops_followup_requests(
 
 
 @pytest.mark.parametrize(
-    ("revision", "mode"),
+    "revision",
     [
-        pytest.param("a" * 40 + "\n", "enforcement", id="sha-newline-enforcement"),
-        pytest.param("\n", "enforcement", id="newline-enforcement"),
-        pytest.param("a" * 40 + "\n", "observation", id="sha-newline-observation"),
-        pytest.param("\n", "observation", id="newline-observation"),
+        pytest.param("a" * 40 + "\n", id="sha-newline"),
+        pytest.param("\n", id="newline"),
     ],
 )
 def test_malformed_revision_fails_as_mismatch_before_followup_requests(
     cmd_mox: CmdMox,
     tmp_path: pathlib.Path,
     revision: str,
-    mode: typ.Literal["enforcement", "observation"],
 ) -> None:
     """Reject newline revisions before fetching or looking up workflow runs.
 
@@ -149,30 +126,33 @@ def test_malformed_revision_fails_as_mismatch_before_followup_requests(
         Isolated output directory for the gate.
     revision
         Malformed SHA text whose trailing newline the API answer loses.
-    mode
-        Whether the gate runs in enforcement or observation mode.
 
     Notes
     -----
     Contract invariants: the raw revision reaches the API unchanged, the
     comparison is against the stripped answer, and the mismatch stops the chain
-    before the fetch and the workflow-run lookup.
+    before the fetch and the workflow-run lookup. The run observes rather than
+    enforces, because an enforcing run names a tag and the resolution then asks
+    about the tag instead of the revision under test.
+
+    The published ``candidate-commit`` is asserted empty as well. That is the
+    boundary where the malformed value could do damage rather than merely be
+    refused: ``GITHUB_OUTPUT`` is read as ``key=value`` lines, so a revision
+    ending in a newline would forge a line if it were published verbatim.
     """
     boundaries = install_boundaries(cmd_mox)
-    enforce = mode == "enforcement"
     run = run_gate(
         cmd_mox,
         tmp_path,
         evidence_state="fresh",
         extra_environment={
             "GITHUB_SHA": revision,
-            "NETSUKE_RELEASE_ADMISSION_ENFORCE": str(enforce).lower(),
+            "NETSUKE_RELEASE_ADMISSION_ENFORCE": "false",
         },
     )
 
-    assert run.result.returncode == (1 if enforce else 0), (
-        "enforcement must reject the malformed revision while observation "
-        "retains diagnostics"
+    assert run.result.returncode == 0, (
+        "observation must retain the malformed revision's diagnostics"
     )
     _assert_malformed_revision_is_a_bounded_mismatch(
         run.metrics, run.traces, run.outputs, revision
@@ -241,101 +221,6 @@ def test_operation_durations_measure_controlled_delay(
     assert delayed_duration > baseline_duration, (
         "operation duration must increase when its bounded command is delayed"
     )
-
-
-def _assert_unreachable_boundaries(
-    adapted: AdaptedBoundaries, expected_clock_calls: int
-) -> None:
-    """Assert no admission operation ran, but the clock still reached its double."""
-    assert adapted.gh.calls == [], (
-        "a refused configuration must not reach the GitHub adapter"
-    )
-    assert adapted.git.calls == [], (
-        "a refused configuration must not reach the Git adapter"
-    )
-    assert len(adapted.clock.calls) == expected_clock_calls, (
-        "a refused configuration must not read the clock for any operation"
-    )
-    assert {tuple(call) for call in adapted.clock.calls} <= {CLOCK_ARGUMENTS}, (
-        "every clock call must carry the Python monotonic program"
-    )
-
-
-@pytest.mark.parametrize(
-    ("setting", "value"),
-    [
-        pytest.param(
-            "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS",
-            "0",
-            id="timeout-seconds-0",
-        ),
-        pytest.param(
-            "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS",
-            "301",
-            id="timeout-seconds-301",
-        ),
-        pytest.param(
-            "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS",
-            "not-a-number",
-            id="timeout-seconds-not-a-number",
-        ),
-        pytest.param("NETSUKE_RELEASE_ADMISSION_ENFORCE", "", id="enforce-empty"),
-        pytest.param("NETSUKE_RELEASE_ADMISSION_ENFORCE", "False", id="enforce-False"),
-        pytest.param(
-            "NETSUKE_RELEASE_ADMISSION_ENFORCE", "observe", id="enforce-observe"
-        ),
-    ],
-)
-def test_invalid_configuration_fails_before_running_admission_operations(
-    cmd_mox: CmdMox,
-    tmp_path: pathlib.Path,
-    setting: str,
-    value: str,
-) -> None:
-    """Verify invalid configuration fails before any external command runs.
-
-    Parameters
-    ----------
-    cmd_mox
-        Active controller whose shims stand in for every adapter.
-    tmp_path
-        Isolated output directory for the gate.
-    setting
-        Closed configuration input that receives an invalid value.
-    value
-        Out-of-contract configuration value supplied to the gate.
-
-    Notes
-    -----
-    Early validation must still emit valid gate metrics, traces, and workflow
-    outputs while preventing every external admission operation. The clock
-    adapter is redirected at a double here, so its absence is observed rather
-    than assumed from a name the gate would never resolve anyway.
-    """
-    adapted = install_adapted(cmd_mox)
-    run = run_gate(
-        cmd_mox,
-        tmp_path,
-        evidence_state="fresh",
-        extra_environment={**adapted.variables(cmd_mox), setting: value},
-    )
-
-    assert run.result.returncode != 0, "invalid configuration must fail closed"
-    _assert_unreachable_boundaries(adapted, expected_clock_calls=0)
-    METRICS_VALIDATOR.validate_metrics(run.metrics)
-    METRICS_VALIDATOR.validate_traces(run.traces)
-    assert run.metrics == INVALID_CONFIGURATION_METRICS, (
-        "invalid configuration must emit only the fixed failure gate metric"
-    )
-    assert run.outputs["gate-outcome"] == "failure", (
-        "invalid configuration must publish failure"
-    )
-    assert run.outputs["gate-error-category"] == "unknown", (
-        "invalid configuration must publish the fixed unknown category"
-    )
-    assert [_trace_signature(trace) for trace in run.traces] == (
-        INVALID_CONFIGURATION_TRACE_SIGNATURES
-    ), "early configuration failure must retain the bounded trace hand-off sequence"
 
 
 def test_operating_system_refusal_keeps_the_operations_own_category(

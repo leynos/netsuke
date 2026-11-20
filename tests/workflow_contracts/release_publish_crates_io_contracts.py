@@ -16,6 +16,7 @@ from release_publish_crates_io_action_shape import (
 from release_publish_crates_io_timing_contracts import (
     check_action_timing_boundary,
 )
+from release_write_authority_contract import effective_permissions
 from workflow_loading import (
     job_steps,
     require_mapping,
@@ -287,7 +288,7 @@ def _check_job_permissions(
     violations: list[str],
 ) -> None:
     """Keep OIDC authority exclusive to the job declared in this workflow."""
-    permissions = require_mapping(job.get("permissions"), "publisher permissions")
+    permissions = effective_permissions(release, job)
     if permissions != {"contents": "read", "id-token": "write"}:
         violations.append(
             "publish-crates-io.permissions: require contents read and id-token write"
@@ -298,7 +299,7 @@ def _check_job_permissions(
     oidc_writers = [
         name
         for name, raw_job in jobs.items()
-        if _has_oidc_write_permission(raw_job, name)
+        if _has_oidc_write_permission(release, raw_job, name)
     ]
     if oidc_writers != ["publish-crates-io"]:
         violations.append(
@@ -309,12 +310,22 @@ def _check_job_permissions(
         violations.append("publish-crates-io.job: declare OIDC exchange in release.yml")
 
 
-def _has_oidc_write_permission(raw_job: object, name: str) -> bool:
-    """Return whether one release job receives OIDC write authority."""
+def _has_oidc_write_permission(
+    release: dict[str, object], raw_job: object, name: str
+) -> bool:
+    """Return whether one release job receives OIDC write authority.
+
+    The scopes come from the job's own declaration or, failing that, the
+    workflow's, so a job that inherits ``id-token: write`` counts as a holder
+    rather than reading as empty.
+
+    Returns
+    -------
+    bool
+        Whether the job can trade an OIDC token for a registry credential.
+    """
     job = require_mapping(raw_job, f"release job {name}")
-    permissions = require_mapping(
-        job.get("permissions", {}), f"release job {name} permissions"
-    )
+    permissions = effective_permissions(release, job) or {}
     return permissions.get("id-token") == "write"
 
 

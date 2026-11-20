@@ -2223,14 +2223,15 @@ runs prove the failure boundary before any job receives release permissions.
     mismatch.
   - Preserve existing archive names, target coverage, checksum sidecars,
     `cargo-binstall` resolution, action SHA pins, and release staging policy.
-  - Instrument the non-blocking RFC 0005 scaffold with bounded gate and
-    operation metrics, retain the JSONL metrics file as a workflow artefact,
-    and expose the final outcome in the job summary. The current workflow
-    explicitly selects observation mode: it records fail-closed results,
-    including missing evidence, but does not fail the workflow or make
-    publication depend on the scaffold. Connect publication to the admission
-    result only once a real evidence producer is available and enforcement
-    mode is enabled. See [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md)
+  - Instrument the RFC 0005 gate with bounded gate and operation metrics,
+    retain the JSONL metrics file as a workflow artefact, and expose the final
+    outcome in the job summary. The workflow now enforces the gate on
+    publishing runs and observes it on pull-request dry runs, and every job
+    that writes depends on the gate's success. Publication is therefore
+    refused until a real evidence producer (#598) both uploads the manifest the
+    gate verifies and attests that upload: an enforcing run reports a missing
+    manifest as `missing_evidence` and an unattributable one as
+    `untrusted_evidence`. See [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md)
     and the
     [release-admission observability
     guidance](developers-guide.md#release-admission-observability).

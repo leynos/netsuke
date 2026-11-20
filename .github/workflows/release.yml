@@ -116,6 +116,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           enable-cache: false
       - id: repo_name
         name: Determine repository name
@@ -209,6 +210,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           enable-cache: false
       - id: package_metadata
         name: Read Linux package metadata from Cargo.toml
@@ -426,28 +428,120 @@ jobs:
     permissions:
       actions: read
       contents: read
+    # Every write-authority job compares these outputs with what it needs, so
+    # an admission that observed rather than enforced, failed its gate, or
+    # admitted another candidate cannot be read as permission to publish.
+    outputs:
+      gate_outcome: ${{ steps.release_admission.outputs.gate-outcome }}
+      enforcement: ${{ steps.release_admission.outputs.enforcement }}
+      candidate_commit: ${{ steps.release_admission.outputs.candidate-commit }}
     steps:
+      # The job needs two different commits, and they must not be confused.
+      # This first checkout is the caller's candidate, and its job is to leave
+      # `origin` pointing at the repository the candidate belongs to: the gate
+      # fetches the candidate revision from `origin`, so a cross-repository
+      # caller's commit has to be fetchable from there. `persist-credentials`
+      # keeps its default because the fetch must read a private caller's
+      # repository; this job holds `contents: read`, so the credential git
+      # commands inherit here cannot write. Nothing from this checkout is
+      # executed.
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+      # The second checkout is the verifier: the gate must run the
+      # implementation that ships with this workflow, not one from the caller's
+      # checkout. In a reusable workflow the default checkout resolves the
+      # *caller's* repository, so an unpinned checkout would let a caller
+      # supply an older or modified gate that emits the mode, outcome and
+      # candidate the write guards consume. `job.workflow_sha` is the commit of
+      # the workflow file that defines this job, which is a commit of this
+      # repository both for a reusable-workflow call and for a directly
+      # triggered run; no caller-named commit is ever selected.
+      #
+      # It goes in a subdirectory because a checkout at the workspace root
+      # would replace the candidate checkout above and re-point `origin` here,
+      # which is exactly how the candidate fetch stops working for a caller
+      # whose commit this repository does not have.
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
           persist-credentials: false
+          repository: leynos/netsuke
+          ref: ${{ job.workflow_sha }}
+          path: gate
       - name: Install Python for admission timings
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          # The candidate checkout owns the workspace root, and setup-uv
+          # resolves an unpinned release from `uv.toml` or `pyproject.toml`
+          # there. Naming the release keeps the candidate from choosing which
+          # uv runs a gate that holds this job's token. Every setup-uv step in
+          # this workflow pins it for the same reason, and the workflow
+          # contract requires the pin rather than only this comment.
+          version: '0.13.2'
           enable-cache: false
+      # No producer uploads this artefact yet (#598 supplies it, together with
+      # the downstream canaries admission is to require). Failing here would
+      # report a missing producer rather than a refused admission, so absence
+      # is tolerated: the verifier then records `missing_evidence`, and an
+      # enforcing run fails closed on that category.
+      #
+      # This download is not a provenance boundary: it resolves the current run,
+      # and a reusable-workflow caller defines jobs in that same run, so a
+      # caller that deliberately uploads under this name arrives here
+      # indistinguishably. The gate therefore stays blocked on the flag below
+      # until the producer attests its upload, which is why publication is
+      # refused even when a matching manifest is present. The verifier checkout
+      # is what keeps that refusal out of the caller's hands: the gate that
+      # reads this file is the one from this repository's own commit.
+      - name: Download the release-admission evidence
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1
+        continue-on-error: true
+        with:
+          name: release-admission-evidence
+          path: ${{ runner.temp }}/release-admission-evidence
       - id: release_admission
         name: Require release-admission evidence
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NETSUKE_RELEASE_ADMISSION_ENFORCE: 'false'
+          # Enforcement is derived from the release mode rather than configured
+          # beside it: a publishing run must fail closed, and a rehearsal must
+          # keep observing so the read-only lane stays reachable.
+          NETSUKE_RELEASE_ADMISSION_ENFORCE: >-
+            ${{ needs.metadata.outputs.should_publish == 'true' }}
+          # The interim publication block. While this literal is not `true`, an
+          # enforcing run refuses every manifest -- including one a same-run
+          # supplier uploaded -- with `untrusted_evidence`, because nothing in
+          # the run authenticates the producer. #598 supplies the producer that
+          # attests the upload; only then does this become derivable from its
+          # output, and only this file can change it, never the caller.
+          NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED: 'false'
+          NETSUKE_RELEASE_ADMISSION_TAG: ${{ needs.metadata.outputs.release_tag }}
+          NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE: >-
+            ${{ runner.temp }}/release-admission-evidence/evidence.json
           NETSUKE_RELEASE_ADMISSION_METRICS_FILE: >-
             ${{ runner.temp }}/release-admission-metrics.jsonl
           NETSUKE_RELEASE_ADMISSION_TRACE_FILE: >-
             ${{ runner.temp }}/release-admission-traces.jsonl
-        run: uv run --script .github/scripts/release_admission.py
+        # The verifier's own script, run from the workspace root: the working
+        # directory stays the candidate checkout, which is where `origin`
+        # points at the caller's repository. That directory is also untrusted
+        # content, and uv reads `uv.toml` and `pyproject.toml` from it and its
+        # parents, so the run refuses both: without the flags a candidate
+        # could redirect the index its dependencies come from and run code
+        # here, where `GH_TOKEN` is available. The PEP 723 block still
+        # installs the verifier's pinned dependencies.
+        run: >-
+          uv run --no-config --no-project --script
+          gate/.github/scripts/release_admission.py
       - name: Summarise release-admission metrics
         if: always()
         shell: bash
@@ -529,6 +623,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           enable-cache: false
       - id: package_crate
         name: Package the crate and record its identity
@@ -609,6 +704,10 @@ jobs:
           path: ${{ runner.temp }}/release-operation-observability.jsonl
 
   publish-crates-io:
+    # Publishing to the registry cannot be undone, so it waits on the packaged
+    # crate and on an enforcing, candidate-matching admission exactly as the
+    # GitHub release publisher does. A rehearsal never reaches it, because
+    # `should_publish` must be true.
     if: >-
       !cancelled() &&
       needs.metadata.result == 'success' &&
@@ -618,6 +717,9 @@ jobs:
       needs.build-macos.result == 'success' &&
       needs.windows-native-recipe-smoke.result == 'success' &&
       needs.release-admission-canaries.result == 'success' &&
+      needs.release-admission-canaries.outputs.enforcement == 'true' &&
+      needs.release-admission-canaries.outputs.gate_outcome == 'success' &&
+      needs.release-admission-canaries.outputs.candidate_commit == github.sha &&
       needs.metadata.outputs.should_publish == 'true'
     needs:
       - metadata
@@ -645,6 +747,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           enable-cache: false
       - name: Download the package-crate candidate
         uses: >-
@@ -747,6 +850,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           # The hoist script is stdlib-only and runs with --no-project, so a
           # restored cache buys nothing and adds an unnecessary supply-chain
           # input to the staging rehearsal.
@@ -826,14 +930,25 @@ jobs:
           python3 scripts/release_operation_observability.py
 
   publish-release:
+    # Publication writes the release, so it waits for the packaged crate and
+    # for an enforcing, candidate-matching admission. The three output checks
+    # are what make the admission dependency structural rather than nominal:
+    # a job that reported observation, refused its gate, or admitted another
+    # commit leaves one of them false, and no `always()` appears here to
+    # override the result.
     if: >-
       !cancelled() &&
       needs.metadata.result == 'success' &&
+      needs.package-crate.result == 'success' &&
       needs.build-linux.result == 'success' &&
       needs.build-windows.result == 'success' &&
       needs.build-macos.result == 'success' &&
       needs.windows-native-recipe-smoke.result == 'success' &&
       needs.metadata.outputs.dry_run != 'true' &&
+      needs.release-admission-canaries.result == 'success' &&
+      needs.release-admission-canaries.outputs.enforcement == 'true' &&
+      needs.release-admission-canaries.outputs.gate_outcome == 'success' &&
+      needs.release-admission-canaries.outputs.candidate_commit == github.sha &&
       needs.metadata.outputs.should_publish == 'true'
     # Publication writes the release. The verifier holds this scope too, but
     # only to read a draft release's listing.
@@ -841,10 +956,12 @@ jobs:
       contents: write
     needs:
       - metadata
+      - package-crate
       - build-linux
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
+      - release-admission-canaries
     # The retained record's name is attempt-scoped, and this output is how
     # verification learns it. A "Re-run failed jobs" reuses this job's
     # successful result instead of running it again, so the verifier must read
@@ -873,6 +990,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           # These helpers are stdlib-only, so restoring a dependency cache
           # adds an unnecessary supply-chain input.
           enable-cache: false
@@ -997,8 +1115,10 @@ jobs:
 
   verify-release-inventory:
     # Verifies what both publishers produced, so it runs only once each has
-    # succeeded. The rehearsal job `release` is deliberately absent: a dry run
-    # never publishes a release, so there is no draft inventory to verify.
+    # succeeded. It carries the publication gate as well: an inventory checked
+    # against a release that was never admitted would attest the wrong bytes.
+    # The rehearsal job `release` is deliberately absent: a dry run never
+    # publishes a release, so there is no draft inventory to verify.
     # Every dependency result is named explicitly because `!cancelled()` is a
     # status function, and a status function suppresses the implicit success
     # check GitHub would otherwise apply. Omitting one would let the job run
@@ -1007,11 +1127,18 @@ jobs:
     if: >-
       !cancelled() &&
       needs.metadata.result == 'success' &&
+      needs.package-crate.result == 'success' &&
       needs.publish-crates-io.result == 'success' &&
       needs.publish-release.result == 'success' &&
+      needs.release-admission-canaries.result == 'success' &&
+      needs.release-admission-canaries.outputs.enforcement == 'true' &&
+      needs.release-admission-canaries.outputs.gate_outcome == 'success' &&
+      needs.release-admission-canaries.outputs.candidate_commit == github.sha &&
       needs.metadata.outputs.should_publish == 'true'
     needs:
       - metadata
+      - package-crate
+      - release-admission-canaries
       - publish-crates-io
       - publish-release
     runs-on: ubuntu-latest
@@ -1038,6 +1165,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           # The release helpers are stdlib-only, so a dependency cache would add
           # an unnecessary supply-chain input.
           enable-cache: false
@@ -1113,9 +1241,10 @@ jobs:
   finalize-github-release:
     # Un-drafting is irreversible: a public release cannot be made a draft
     # again. This job therefore runs only once the registry publication, the
-    # draft upload, and the inventory verification have each succeeded, and it
-    # reconciles the draft against the *build's* digest record rather than the
-    # verifier's output. Every dependency result is named explicitly because
+    # draft upload, the inventory verification and an enforcing,
+    # candidate-matching admission have each succeeded, and it reconciles the
+    # draft against the *build's* digest record rather than the verifier's
+    # output. Every dependency result is named explicitly because
     # `!cancelled()` is a status function, and a status function suppresses the
     # implicit success check GitHub would otherwise apply. The rehearsal job
     # `release` is deliberately absent: a dry run never creates a draft.
@@ -1126,10 +1255,15 @@ jobs:
       needs.publish-crates-io.result == 'success' &&
       needs.publish-release.result == 'success' &&
       needs.verify-release-inventory.result == 'success' &&
+      needs.release-admission-canaries.result == 'success' &&
+      needs.release-admission-canaries.outputs.enforcement == 'true' &&
+      needs.release-admission-canaries.outputs.gate_outcome == 'success' &&
+      needs.release-admission-canaries.outputs.candidate_commit == github.sha &&
       needs.metadata.outputs.should_publish == 'true'
     needs:
       - metadata
       - package-crate
+      - release-admission-canaries
       - publish-crates-io
       - publish-release
       - verify-release-inventory
@@ -1164,6 +1298,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           # The adapter pins its two direct dependencies exactly in a PEP 723
           # block; their transitive closure still resolves on every attempt, so
           # the pins narrow the graph rather than freeze it. A restored package
@@ -1247,6 +1382,7 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
+          version: '0.13.2'
           # The smoke helpers are stdlib-only, so a restored dependency cache
           # would add a supply-chain input and buy nothing.
           enable-cache: false

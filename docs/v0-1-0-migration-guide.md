@@ -1403,6 +1403,36 @@ states the rules, and
 [ADR-0082](adrs/adr-0082-authorize-release-writes-from-the-callers-policy.md)
 records the decision.
 
+## Release publication requires packaging and enforced admission
+
+A publishing run now requires the `package-crate` and
+`release-admission-canaries` jobs to succeed before any job that writes starts.
+The crates.io publisher, the release publisher, inventory verification, and
+finalization each declare both, and each also requires the gate's enforcement
+to be on, its outcome to be `success`, and its `candidate_commit` output to
+name the run's own commit. Enforcement follows the run's mode, so a
+pull-request dry run observes rather than enforces and its rehearsal lane keeps
+running after a failed package or a refused admission.
+
+The gate refuses with `error_category=missing_evidence` while no
+`release-admission-evidence` manifest exists in the run, and with
+`error_category=untrusted_evidence` when a manifest exists that the run cannot
+attribute to a trusted producer. Both refusals are deliberate: enforcement
+lands before a producer does, so the path that published without evidence is
+closed first, and the interim block closes the path that published on any
+same-run document. A caller of the reusable `release.yml` needs no new input,
+because the producer runs inside the workflow; a caller that expected a publish
+to proceed now sees the admission job fail and every job that writes skipped.
+The admission job also runs the gate from this repository's own workflow
+commit, so a calling workflow cannot supply an older or modified gate that
+reports a more favourable decision. The producer, its provenance, and the
+downstream canaries are tracked by #598. Publication therefore stays
+unavailable until #598 lands, and it is refused on both counts rather than only
+on the absence of a document.
+
+See [Install Netsuke](users-guide.md#install-netsuke) for the caller-visible
+rules and the conditions the manifest must satisfy.
+
 ## Tolerate the forwarding-failure warning on stdout
 
 Netsuke counts every child-output forwarding failure in

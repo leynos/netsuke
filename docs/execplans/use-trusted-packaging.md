@@ -11,12 +11,14 @@ The plan is approved and implementation has begun. EP-M1 and EP-M2 are
 complete. Issue #1064 delivers the first crates.io publisher and its workflow
 contracts, #1066 replaces the shared upload action in `publish-release` with a
 candidate-bound declared-asset upload, #1067 adds the downloaded-inventory
-verifier, #1068 adds digest-aware GitHub release finalization, and #1069 adds
-the public-consumer smoke that exercises the published release. Stage C's
-sequence is now fully declared, but no tagged run has exercised it, so its
-roadmap entry stays open; Stage D is in progress. No release, tag, registry
-publication, live credential exchange, GitHub Release, or account setting has
-been changed by this work.
+verifier, #1068 adds digest-aware GitHub release finalization, #1069 adds the
+public-consumer smoke that exercises the published release, and #1070 gates
+every release write on successful packaging and enforced, candidate-bound
+admission. Stage C's sequence is now fully declared, but no tagged run has
+exercised it, so its roadmap entry stays open; publishing now refuses with
+`missing_evidence` until #598 supplies a producer, by design. Stage D is in
+progress. No release, tag, registry publication, live credential exchange,
+GitHub Release, or account setting has been changed by this work.
 
 ## Purpose / big picture
 
@@ -826,14 +828,15 @@ all delivered; no live release has exercised the sequence yet:
    ```
 
 3. `verify-release-inventory` —
-   `needs: [metadata, publish-crates-io, publish-release]`; `contents: write`;
-   `if: … should_publish == 'true'`. The mode gate is stated directly rather
-   than inherited. `release` and `publish-release` are mutually exclusive —
-   `release` requires `dry_run == 'true'`, `publish-release` requires
-   `should_publish == 'true'` — and GitHub skips any job that needs a skipped
-   job. Depending on `release` here would make this job unreachable in both
-   lanes: on a tag push `release` is skipped, and on a pull-request dry run
-   `publish-crates-io` is skipped.
+   `needs: [metadata, package-crate, release-admission-canaries,
+   publish-crates-io, publish-release]`;
+   `contents: write`; `if: … should_publish == 'true'`. The mode gate is
+   stated directly rather than inherited. `release` and `publish-release` are
+   mutually exclusive — `release` requires `dry_run == 'true'`,
+   `publish-release` requires `should_publish == 'true'` — and GitHub skips any
+   job that needs a skipped job. Depending on `release` here would make this
+   job unreachable in both lanes: on a tag push `release` is skipped, and on a
+   pull-request dry run `publish-crates-io` is skipped.
 
    The scope is `write` because the assets this job downloads belong to a
    **draft** release, and a token needs write scope to see a draft's assets at
@@ -849,8 +852,8 @@ all delivered; no live release has exercised the sequence yet:
    from drifting into "writes". `id-token: write` stays out, so this job
    remains disjoint from the registry-exchange job's credentials.
 4. `finalize-github-release` — delivered by #1068.
-   `needs: [metadata, package-crate, publish-crates-io, publish-release,
-   verify-release-inventory]`;
+   `needs: [metadata, package-crate, release-admission-canaries,
+   publish-crates-io, publish-release, verify-release-inventory]`;
    `contents: write`, no `id-token`; the guard names every dependency's
    `result` explicitly alongside `should_publish == 'true'`, because
    `!cancelled()` is a status function and suppresses the implicit success
@@ -877,13 +880,81 @@ all delivered; no live release has exercised the sequence yet:
 
 `publish-release` — not `release` — is the job holding `contents: write` and
 running the draft-creation steps; `release` holds `contents: read` and runs the
-dry-run rehearsal. Issue #1064 leaves `publish-release` unchanged, with its
-existing five-job dependency list. `publish-crates-io` and `publish-release`
-remain independent of one another, and `finalize-github-release` is what makes
-their outcomes gate the completed release path: it needs both, so neither can
-finish unproven while the release becomes public. Stage C as first drafted
-attributed the write permission to `release`; that predates PR #834, which
-split rehearsal from publication.
+dry-run rehearsal. #1070, delivered below, replaces `publish-release`'s
+five-job dependency list with the seven the registry job already carried.
+`publish-crates-io` and `publish-release` remain independent of one another, and
+`finalize-github-release` is what makes their outcomes gate the completed
+release path: it needs both, so neither can finish unproven while the release
+becomes public. Stage C as first drafted attributed the write permission to
+`release`; that predates PR #834, which split rehearsal from publication.
+
+**Packaging and admission gate every release write (#1070) — delivered.** At
+the revision the issue cites, `publish-release` waited on `metadata`, the three
+platform builds, and `windows-native-recipe-smoke`, but not on `package-crate`
+or `release-admission-canaries`, and the admission job hard-coded
+`NETSUKE_RELEASE_ADMISSION_ENFORCE: 'false'`. Adding the dependency alone would
+not have closed the hole, because a report-only gate reports success. Two
+changes were needed, and they are the gate's own terms rather than a second
+guard idiom.
+
+The enforcement mode is now derived, not configured: the step's environment sets
+`NETSUKE_RELEASE_ADMISSION_ENFORCE` to
+`${{ needs.metadata.outputs.should_publish == 'true' }}`, so a rehearsal
+observes and exits zero while a publishing run enforces and exits non-zero on
+the same refusal. The gate publishes `enforcement`, `gate_outcome`, and
+`candidate_commit` as job outputs; `candidate_commit` is the `GITHUB_SHA` the
+verifier bound the manifest to, and publication compares it with `github.sha`.
+
+Four jobs hold a write scope, and all four now carry the same five checks:
+`package-crate.result == 'success'`,
+`release-admission-canaries.result == 'success'`,
+`outputs.enforcement == 'true'`, `outputs.gate_outcome == 'success'`, and
+`outputs.candidate_commit == github.sha`, each a top-level conjunct beside
+`should_publish == 'true'`. The set is `publish-crates-io`, `publish-release`,
+`verify-release-inventory`, and `finalize-github-release`. `release` keeps its
+five-job rehearsal list and holds no write scope, so a failed package or a
+refused admission cannot make the read-only lane unreachable, and no mutually
+exclusive dependency or `always()` condition reaches the publication guard.
+
+The rule is enforced structurally rather than by enumerating today's jobs.
+`tests/workflow_contracts/release_write_authority_contract.py` derives the
+write-authority set from the workflow's own `contents`, `packages`, and
+`id-token` scopes, so a publisher added beside the gate fails the contract
+until it sits behind it. It requires each of the five clauses as a *top-level*
+conjunct, so `|| true`, `!(...)`, or a clause inside a disjunction is reported
+rather than read as present, and it refuses any `always()` in the guard.
+`release_admission_gate_contract.py` evaluates the enforcement expression in
+every modelled scenario instead of matching its text, so either hard-coded mode
+is reported for the run that exposes it, and a value that is not a flag fails
+rather than reading as "not enforcing".
+
+**Audit of the other publication entry points.** Every job in the repository
+outside `release.yml` that holds a write scope was reviewed:
+`dependabot-automerge.yml` writes `contents` to merge a pull request and never
+touches a release or the registry; `mutation-testing.yml` takes `id-token` to
+resolve the workflow source through OIDC rather than to exchange a registry
+credential. Neither is a release writer, so neither is gated. No `gh release` or
+`cargo publish` invocation exists outside `release.yml` apart from a `ci.yml`
+comment describing the release path. The audit is a one-time reading, not a
+contract: the generic rule covers `release.yml` only, and a new workflow that
+publishes would need its own reachability decision.
+
+**Fail-closed rollout.** Publishing now fails with
+`error_category=missing_evidence` until a producer uploads the
+`release-admission-evidence` artefact, and that is the intended state rather
+than a defect. Enforcement has to exist before a producer does, or the path
+that publishes without evidence stays reachable for however long the two
+changes land apart. The evidence contract is schema-versioned JSON: it names
+the repository, the full lowercase commit, the tag, the workflow run
+identifier, and the instant of issue, and carries one timestamped result per
+canary, of which `history_scan` and `release_candidate` are required. Extra
+results and unknown fields are accepted because #598 adds downstream canaries;
+a schema version the verifier does not know is refused rather than interpreted
+under the wrong rules. Freshness is bounded by a one-day default maximum age,
+provisional until a real producer's cadence is known and capped at one week,
+plus a five-minute allowance for clock skew. The remaining follow-up is
+therefore #598 for the producer; registry publication arrived with #1065, which
+is closed, and the runbook records what an operator sees in the meantime.
 
 `concurrency.cancel-in-progress` stays **`false`** and is **not** made a
 function of the event. `pr_concurrency_test.py:275-278` pins
@@ -4334,6 +4405,1190 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   published release, and `CONSUMER_SMOKE_EXPECTED_VIOLATIONS` is the count's
   source.
 
+- [x] (2026-11-15) Delivered #1070: every release write now requires successful
+  packaging and enforced, candidate-bound admission.
+
+  **Red–Green–Refactor.** The red state was written first, as this plan's Stage
+  B discipline requires: the scenario table gained package and admission
+  results plus five cases (failed packaging, failed gate, report-only admission
+  on a publishing run, failed gate outcome, mismatched candidate), and the
+  write-authority and enforcement clauses were stated before the workflow
+  carried them, so the contract suite failed against the old `release.yml` for
+  the reason the issue gives. Green was the workflow change: the derived
+  enforcement mode, the three gate outputs, the evidence download, and the
+  seven-need dependency list on all four write jobs. The refactor split the new
+  Python across four modules rather than growing three, because
+  `tests/workflow_contracts` is held to a 400-line module ceiling: the mutation
+  primitives moved to `release_mutation_support`, and the gate's own mutations
+  to `release_publication_gate_mutations`. `release_publish_path_scenarios`
+  ended at 399 lines only after three comment rewraps, which is the same
+  ceiling the plan's earlier stages hit.
+
+  **Mutation control run.** The control is
+  `test_release_dry_run_reaches_the_staging_path`, which runs the contract over
+  the unmutated workflows and passes. The paired test then applies each of 34
+  labelled mutations — 20 already carried by the release-path corpus, 14 added
+  here — and requires the named scenario or structural rule to report. All 37
+  tests in the two files pass, so every new assertion is shown to fire rather
+  than merely to sit beside a green tree. A separate probe of six of the new
+  mutations confirmed the diagnostics name the structural rule, not just the
+  scenario: removing the enforcement check reports
+  `write-authority.publish-release.guard` *and*
+  `tag-publish-report-only-admission.publish-job`, and an `always()` guard
+  reports the bypass *and* the cancelled-publication scenario.
+
+  **Gates.** `make test-workflow-contracts` passed 2344 tests with 3 skipped and
+  `make test-release-admission` passed 131, with `make check-fmt`,
+  `make lint-python`, `make typecheck-python`, and `make github-actions-lint`
+  green on the same head.
+
+  **Lint baseline finding.** A full `make lint-python` reported three findings
+  in modules and a fixture committed by the previous stage: redundant
+  `from __future__ import annotations` on the 3.14 baseline (C9112), a type
+  dispatch that a `match` states more clearly (R9101), and a constant chain the
+  same rule set prefers as a `match` (R9103). They were fixed in their own
+  commit rather than inside this one, so the gate work stays reviewable apart
+  from a lint-baseline correction.
+
+- [x] (2026-11-15) Answered the first CodeRabbit review of #1070: the
+  publication-gate contract now reads effective permissions and refuses a
+  disjunctive guard.
+
+  **Findings and dispositions.** The review raised four items. Two were defects
+  in the contract, and both were confirmed against the code before being fixed.
+
+  *Effective permissions.* `_holds_write` read only a job's own mapping
+  declaration, so a publisher spelled `permissions: write-all` was not
+  recognized as a write job at all, and a job that inherited write from the
+  workflow level was invisible. `effective_permissions` now resolves the job's
+  declaration first and the workflow's only when the job declares none,
+  normalizes the `write-all` and `read-all` shorthands, and returns `None` when
+  neither declares anything; that last state is reported rather than read as
+  "no write", because the repository default can grant it. The crates.io
+  OIDC-exclusivity reader had the same blind spot — it read
+  `job.get("permissions", {})`, so an inherited `id-token: write` counted as
+  empty — and now shares the same resolver.
+
+  *Disjunctive guard.* `&&` binds tighter than `||`, so
+  `… && needs.metadata.outputs.should_publish == 'true' || true` keeps every
+  required clause as a top-level conjunct and is still always true; the
+  clause-by-clause reader read it as fully gated. A write guard holding any
+  `||` is now refused outright, reusing `contains_unquoted_or` from
+  `actions_expressions` rather than adding a second expression reader. The rule
+  is stated as a conjunction requirement because a disjunction has no
+  legitimate use in a guard that must be satisfied by five named checks.
+
+  The other two findings did not survive verification. The first asked for a
+  `RecursionError` refusal in `parse_manifest`, on the theory that a deeply
+  nested document crashes the JSON decoder. The size bound
+  (`MAX_EVIDENCE_BYTES`, 65,536) caps nesting at 32,768, and a document of
+  exactly that shape decodes on the pinned 3.14.7 baseline and returns
+  `malformed_evidence` with no crash; no input inside the bound reaches the
+  handler, and the branch could not be covered by a test that fails without it.
+  The second asked for a `replace_once` that refuses an ambiguous pattern,
+  which was real and is fixed below rather than rejected.
+
+  **Ambiguity in mutation rules.** `replace_once` asked the engine for one
+  substitution and required one match, which reports success for a pattern that
+  occurs twice: the first occurrence is rewritten and the rule silently edits
+  text it did not mean. It now asks for at most two matches, so "unique" is
+  distinguishable from "at least one", and two regression cases sit beside the
+  mutation suite.
+
+  **Control run.** The three new mutations were run against pre-fix readers
+  rather than only against the fixed ones. With the mapping-only permission
+  reader, neither the `write-all` publisher nor the inheriting publisher is
+  held to `needs` or the guard; with the disjunction reader stubbed to `False`,
+  the disjunctive guard produces no `write-authority` finding at all. The fixed
+  readers report `write-authority.publish-packages.{needs,guard}`,
+  `write-authority.publish-notes.{needs,guard}`, and
+  `write-authority.publish-release.guard` respectively, so each mutation is
+  load-bearing. The gate corpus is now 37 labelled mutations — 20 release-path
+  and 17 gate mutations — and the contract suite runs 2350 tests with 3 skipped.
+
+  **Gates.** A first full batch on the intermediate tree failed only
+  `make lint`: four Ruff findings, three of them in the new docstrings and
+  helper (DOC501, DOC201, an import-order pair) and one a dict comprehension
+  the rule set prefers as `dict.fromkeys`. All four were fixed, and the first
+  attempt to document `_has_oidc_write_permission`'s parameters pushed
+  `release_publish_crates_io_contracts.py` to 409 lines against the 400-line
+  ceiling, so the section was cut to the `Returns` entry the rule requires and
+  the module sits at exactly 400. The second batch passed all nine gates on
+  that tree: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.26%,
+  6478/6593), `test` (nextest 5669 passed with 9 skipped, plus doctests),
+  `test-workflow-contracts` (2350 passed with 3 skipped, then 30),
+  `test-release-admission` (131), `markdownlint`, and `nixie`.
+
+  **A tool rebuilt under the gate.** Moving one constant beside its siblings
+  afterwards prompted a third batch, which failed `lint` alone, at
+  `lint-whitaker`, with eighteen `bumpy_road_function` findings across
+  `src/cli`, `src/graph_view`, `src/ir`, `src/manifest`, `src/ninja_gen`, and
+  `src/runner`. The branch touches none of them:
+  `git diff --name-only
+  d8adff001 -- src/ test_support/ build_l10n_audit/ Cargo.toml Cargo.lock
+  rust-toolchain.toml .cargo/ dylint.toml`
+  is empty, and the same sources passed the same gate at 05:54. The cause is
+  tool drift, not code: `libwhitaker_suite@nightly-2026-05-28.so` and the
+  bootstrap's `bootstrap.json` were rewritten at 06:09:22, between the two
+  runs, so the local tip suite now enforces the 2.5 threshold this repository's
+  own Whitaker guide documents. The remaining third-batch gates passed on the
+  final tree — `check-fmt`, `typecheck`, `doc-coverage`, `test`,
+  `test-workflow-contracts` (2350 with 3 skipped, then 30),
+  `test-release-admission` (131), `markdownlint`, `nixie` — and
+  `make lint-python` and `make github-actions-lint`, which `make lint` never
+  reached, were run separately and pass. The eighteen findings are a base
+  condition of the rebuilt suite on `d8adff001`'s Rust sources, reported to the
+  operator rather than fixed here, because rewriting eighteen unrelated
+  functions is not this issue's scope.
+
+- [x] (2026-11-15) Answered the second CodeRabbit review of #1070: the gate
+  reads a wrapped guard, the harness writes evidence where the run reads it,
+  and the decoder's recursion failure is refused.
+
+  **Findings and dispositions.** The review raised three items, all minor and
+  all confirmed against the code.
+
+  *Wrapped guard.* GitHub accepts a job-level `if` bare or wrapped in `${{ }}`,
+  and the contract split the wrapped form on `&&` without removing the wrapper,
+  leaving `}}` on the final clause. A guard carrying every check was therefore
+  reported as missing
+  `needs.release-admission-canaries.outputs.candidate_commit == github.sha`.
+  `unwrap_expression` in `actions_expressions` now removes one complete wrapper
+  and leaves anything else untouched, and `check_write_guard` reads its result;
+  the helper is public now rather than private, because the case it needs is a
+  verdict about one job, not about a whole workflow. A direct control probe
+  over a fully wrapped guard reports `[]` with the fix and the candidate clause
+  with `unwrap_expression` stubbed to identity.
+
+  *Harness evidence path.* `run_gate` wrote the fixture at its own default path
+  and then applied the case's environment overrides, so a case that redirected
+  `NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE` left the redirected path empty and
+  a fresh document arrived as `missing_evidence`. The fixture is now written at
+  the merged environment's value, falling back to the default only when the
+  variable is unset or empty — a state no run can decide, because an enforcing
+  run refuses the configuration without a document and a rehearsal reads none.
+  The new case in `test_release_admission_environment_contract` runs the gate
+  in publishing mode against a redirected path and requires admission, its own
+  document at that path, and nothing at the harness default.
+
+  *Decoder recursion.* The first review raised this and measurement rejected
+  it; the second raised it with a 60,001-byte document. Re-measured on the
+  pinned 3.14.7: 30,000 nested arrays decode, as do 40,000, and the first
+  `RecursionError` sits between 40,000 and 80,000 depth — at least 80,001 bytes
+  against a 65,536-byte cap. The finding's document is still inside the cap and
+  still decodes, so the branch remains unreachable on this interpreter. The
+  catch was added anyway, because `RecursionError` is not a `ValueError` and
+  the nesting limit is a property of the interpreter rather than of this
+  reader: on a host whose decoder refuses earlier, the failure would escape as
+  an unclassified gate failure instead of a refusal. The mapping is pinned
+  directly, and the new module also pins the deepest document the cap admits as
+  `malformed_evidence`, so the size bound and the decoder limit are each held
+  by a case.
+
+  **Gate-contract consequence.** Adding a release-admission test module broke
+  `test_make_target_runs_only_the_release_admission_runtime_modules`, which
+  pins the target's exact module list. The list is now sixteen modules, with
+  the new one in its Makefile position; the target itself was left as the only
+  place the suite is enumerated.
+
+  **Lint corrections before the batch.** The new `_evidence_path` and its
+  docstring pushed `release_admission_test_harness.py` to 436 lines against the
+  400-line ceiling, so the protocol, the file loader, and the loaded validator
+  moved into `release_admission_validator`: they are not part of the subprocess
+  boundary, and the support facade re-exports the validator unchanged. Ruff
+  also required a trailing newline on files the editor had left unterminated
+  and a one-line signature for `check_write_guard`; `make fmt` applied both.
+
+  **Gates.** All nine gates pass on `a6448603a`, the head that carries the
+  three commits: `check-fmt`, `lint`, `typecheck`, `doc-coverage`, `test`,
+  `test-workflow-contracts` (2356 passed with 3 skipped, then 30),
+  `test-release-admission` (134), `markdownlint`, and `nixie`.
+
+  **Correction: the Whitaker red was transient.** The third batch above failed
+  eighteen `bumpy_road_function` findings after the tip suite was rewritten
+  mid-run, and recorded them as a base condition of the rebuilt suite. That
+  diagnosis does not survive this batch: the same `libwhitaker_suite` file,
+  unchanged since 06:09:22, now reports nothing at all on the same `src/` tree,
+  and `make lint` passes. The findings belonged to a run that overlapped the
+  suite's own replacement, not to the suite's policy, so there is no tool drift
+  to report and nothing for the operator to recover.
+
+  **Superseded by the third review round.** The claim above is false. The
+  passing run at 08:3x used the *old* install; at 09:36:17 another process on
+  this host replaced `~/.local/bin/whitaker`, `whitaker-ls`,
+  `~/.local/share/dylint/lib/nightly-2026-05-28/release/libwhitaker_suite@nightly-2026-05-28.so`,
+  and `~/.local/share/whitaker-bootstrap/bootstrap.json` together, and the
+  reinstalled suite reports the same eighteen findings again on the same
+  sources. See the third-round entry below for the timestamps and the evidence.
+
+- [x] (2026-11-15) Answered the third CodeRabbit review of #1070: the evidence
+  read refuses what is not a document, the run-head double follows the child's
+  revision, and the read-only rule inspects every scope.
+
+  **Findings and dispositions.** The review raised three items, one major and
+  two minor, all confirmed against the code.
+
+  *Blocking read.* `filesystem.read_bytes` opened the configured evidence path
+  with `open(..., "rb")`, which waits for a writer when the path names a FIFO
+  with none, and the gate calls it synchronously without the external-command
+  timeout. Admission could therefore neither refuse nor finish, and the byte
+  bound never applied because no byte was ever read. The read now opens with
+  `O_NONBLOCK`, inspects the opened handle with `fstat`, refuses anything that
+  is not a regular file as `NotRegularFileError` before reading, and then reads
+  at most `limit + 1` bytes through a loop that tolerates a short read. The
+  refusal is an `OSError`, so `_check_scan_freshness` keeps classifying it as
+  `malformed_evidence` beside the oversized-document arm, whose comment now
+  names both. A control probe on one writer-less FIFO shows the pre-fix
+  `open()` still blocked after a second while `read_bytes` refused in the same
+  run, and `NotRegularFileError` reached 100% doc coverage.
+
+  *Run-head double.* `reply_to_github` answered a run lookup with the module's
+  fixed `REVISION` rather than the child's `GITHUB_SHA`, so a case that set its
+  own revision was refused as a candidate mismatch and its scenario never ran.
+  Both lookups now answer from `GITHUB_SHA`, as the commit lookup already did.
+  The bespoke `answer_run_head` override in
+  `release_admission_test_boundedness` existed only to repair that answer, so
+  it and its imports are gone and the identifier property now exercises the
+  shared double. The fix is load-bearing through that property: restoring the
+  fixed answer fails `test_identifiers_never_become_metric_labels` with "the
+  generated candidate must be admitted by its own manifest" (1 failed, 22
+  passed, 334.61 s), while the fixed double passes all 23 in 41.68 s.
+
+  *Read-only scopes.* `check_read_only_jobs` filtered the three scopes the
+  publisher model names, so a job that must stay reachable could hold any other
+  write scope -- `jobs.release.permissions: {actions: write}`, for instance --
+  and pass. Every declared entry is inspected now. The new mutation
+  `grant-rehearsal-unmodelled-write` requires a `release.permissions:` finding;
+  against the pre-fix filter it reports `got []`, and with the fix the case
+  passes.
+
+  **Test coverage and lint corrections.** A new module,
+  `test_release_admission_evidence_reading`, pins the inclusive byte bound, the
+  propagation of an absent path, the refusal of a directory, and the refusal of
+  a writer-less FIFO under a five-second daemon-thread deadline, skipping the
+  FIFO case where `mkfifo` is unavailable so a regression fails an assertion
+  rather than hanging the suite. The module is in the Makefile target and in
+  the workflow contract's pinned list, which is now seventeen modules. Ruff
+  required `Returns` sections on the two new readers and a trailing newline;
+  `make lint-python` then reached 10.00/10.
+
+  **Gates.** On this tree, eight of the nine commit gates pass: `check-fmt`,
+  `typecheck`, `doc-coverage`, `test`, `test-workflow-contracts`,
+  `test-release-admission`, `markdownlint`, and `nixie`. `make lint` fails at
+  `lint-whitaker` alone, with eighteen `bumpy_road_function` findings across
+  seventeen files under `src/`; the branch changes no Rust at all
+  (`git diff --name-only 5c707ef3…HEAD -- src/ test_support/
+  build_l10n_audit/ Cargo.toml Cargo.lock .cargo/ dylint.toml`
+  is empty), so the findings are a condition of the host tool rather than of
+  this diff. The other stages `make lint` composes all pass: `lint-clippy`
+  inside the failed run, then `make lint-python`, `make lint-workflow-scripts`,
+  and `make github-actions-lint` separately.
+
+  **Host-tool change, reported not worked around.** The failing suite is not
+  the one that passed at 08:3x. Four files carry the identical timestamp
+  `2026-11-15 09:36:17`, written by a process outside this session:
+  `~/.local/bin/whitaker`, `~/.local/bin/whitaker-ls`,
+  `~/.local/share/dylint/lib/nightly-2026-05-28/release/libwhitaker_suite@nightly-2026-05-28.so`,
+  and `~/.local/share/whitaker-bootstrap/bootstrap.json` (snapshot
+  `e4608a25c2e2`, dylint 6.3.0). The installed library is byte-identical to the
+  06:09 tip copy, so the behaviour change is the wrapper and bootstrap beside
+  it, not the library's content. The restored findings diagnose
+  `src/stdlib/time/mod.rs::add_component` and sixteen siblings against the
+  suite's documented default threshold of 2.5, which
+  `docs/whitaker-users-guide.md` states was lowered from 3.0 to detect this
+  pattern. Raising the threshold in `dylint.toml` would silence real findings
+  for the whole repository, and rewriting seventeen untouched functions is not
+  this issue's change, so the condition is reported to the operator instead. No
+  Lody, build-limits, or Whitaker process was signalled or reconfigured.
+
+- [x] (2026-11-15) Answered the fourth CodeRabbit review of #1070: a tag is
+  resolved under its own namespace, the admission package is imported from one
+  place, and a guard that starts on cancellation is refused.
+
+  **Findings and dispositions.** The review raised three items -- one minor,
+  one trivial and one minor -- each confirmed against the code.
+
+  *Tag namespace.* `_resolve_tag_commit` passed the bare tag name to
+  `github_resolve_commit`, which asks the API about
+  `repos/{repository}/commits/{ref}`. That endpoint resolves branch names as
+  well as tags, so a branch sharing the release tag's name answers for a tag
+  that does not exist, and its commit is then compared with the candidate. A
+  publishing run now asks about `tags/<tag>`, which makes the tag's own
+  existence part of admission; the rehearsal keeps the bare candidate because
+  it names no tag. Probed against the live API on `leynos/netsuke`:
+  `commits/v0.1.0-beta4`, `commits/tags/v0.1.0-beta4` and
+  `commits/refs/tags/v0.1.0-beta4` all answer `b0e8547f…`, while
+  `commits/heads/main` answers `e28f26ae…` -- the branch spelling the bare form
+  admits. The mode-parametrized admission test pinned the bare spelling, so it
+  now pins the namespace, and restoring the bare subject fails
+  `test_gate_admits_the_candidate_on_valid_evidence[publishing]` with "the
+  GitHub adapter must receive both native admission queries".
+
+  *Import path.* The gate is a package under `.github/scripts`, which the
+  `PYTHONPATH` the Makefile exports does not name, so each admission test
+  module inserted that directory into `sys.path` during its own collection. The
+  shared `scripts/tests/conftest.py` now inserts it once, before any module is
+  imported, and the three modules this branch touched import the package like
+  any other. Their documented single-module invocations still work, because
+  pytest loads the conftest from the module's own directory first.
+
+  *Cancellation guard.* `check_write_guard` required each gate clause as a
+  top-level conjunct and refused `always()` and disjunctions, but not
+  `cancelled()`: a guard beginning with `cancelled() &&` carries every other
+  required clause and is true exactly when the run was cancelled after its
+  dependencies succeeded. `!cancelled()` is now a required clause itself, the
+  guard test refuses the positive spelling, and the new mutation
+  `positive-cancellation-publication-guard` inverts the committed publication
+  guard and requires both the `cancelled-publishing` scenario finding and the
+  structural one. The first attempt dropped the clause instead of inverting it;
+  a guard with no status function at all is implicitly success-guarded, so that
+  mutation would have described a benign edit rather than this regression.
+
+  **Lint corrections after the batch.** Ruff required the admission import to
+  share a block with `pytest` in two modules, and named `pathlib.Path` a
+  typing-only import in the new evidence-reading module, which now annotates
+  with `pathlib.Path` behind `typ.TYPE_CHECKING` as its siblings do;
+  `make lint-python` then reached 10.00/10.
+
+  **Gates.** The nine-gate batch ran on the working tree that became
+  `43e302278`, `ec63947eb` and `faae17e32`. Eight gates passed: `check-fmt`,
+  `typecheck`, `doc-coverage`, `test` (5669 nextest tests with 9 skipped, then
+  the doctests), `test-workflow-contracts` (2360 passed with 3 skipped, then
+  30), `test-release-admission` (138), `markdownlint` and `nixie`. `make lint`
+  failed at `lint-whitaker` alone, with the same eighteen `bumpy_road_function`
+  findings across the same seventeen untouched `src/` files that the third
+  round recorded. The batch preceded the ruff corrections, so `make check-fmt`
+  and `make test-release-admission` were re-run on the committed tree and pass.
+
+  **The Whitaker red cleared with the next install.** The failed run used the
+  suite installed at 09:36:17. At 11:45:27 another process on this host rewrote
+  `~/.local/bin/whitaker`, `whitaker-ls`, the installed
+  `libwhitaker_suite@nightly-2026-05-28.so` (md5 `85d56666…`) and
+  `bootstrap.json` together, and the plan batch below then passed `make lint`
+  in full -- on the same sources, because the branch still changes no Rust and
+  the only difference between the two runs is the document this entry is
+  written in. Nothing was raised, silenced or reconfigured here, so
+  `dylint.toml` and the untouched sources stand as they were.
+
+**Plan-edit gates.** With this document modified and the code committed, the
+seven-gate set passes: `check-fmt`, `lint`, `typecheck`, `markdownlint`,
+`nixie`, `test` and `test-workflow-contracts`. The first attempt failed
+`markdownlint` at the spelling gate, which wanted the `-ize` spelling of
+"parametrize" where that sentence had used the `-ise` form, and `check-fmt`
+then required the rewrap `make fmt` applies. Both Markdown gates were re-run,
+and pass, on the final wording.
+
+- [x] (2026-11-15) Answered the fifth CodeRabbit review of #1070: the evidence
+  window is re-read at the admission decision, and the review's other finding
+  was refuted against the suite it named.
+
+  **Findings and dispositions.** The review raised two items: a minor one on
+  the final admission decision in `gate.py`, and a major one on the admission
+  timeout cases in `release_admission_test_cases.py`.
+
+  *The window is re-read at the decision (implemented).* `check_scan_freshness`
+  classified the manifest against a wall-clock reading, and `verify_evidence`
+  then admitted on identity and results alone. Two clock commands and the
+  telemetry writes run between the two readings -- 14 ms per clock command,
+  measured with `hyperfine` on this host -- so a document observed just inside
+  its window can expire before the gate admits on it, and the gate would have
+  admitted evidence older than the bound it publishes. The wall-clock read and
+  the freshness classification became one helper that both evidence checks
+  call, so the window is measured the same way at both moments. The second call
+  runs only after `evidence.verify` succeeds, so a candidate mismatch or an
+  unsuccessful canary keeps its own category and the recheck can only replace a
+  success with a refusal. A recheck refusal is attributed to `verify_evidence`
+  with `stale_evidence`, so the metric and label vocabulary are unchanged.
+
+  *The evidence decisions moved out of the orchestration module (forced).* The
+  recheck took `gate.py` to 426 lines, past the repository's 400-line ceiling,
+  which the lint gate reported as `C0302`. Rather than trim the prose that
+  explains the decisions, the two evidence checks and the read they share moved
+  to `.github/scripts/_release_admission/admission_evidence.py`, leaving
+  `gate.py` at 340 lines as orchestration and composition root. The package
+  docstring indexes the new module, which keeps the filesystem port and the
+  wall-clock reader as injected collaborators; `Gate` passes in its own clock
+  reader, so the window is still measured where the record is written.
+
+  *The monotonic clock in the timeout cases (refuted).* The finding stated that
+  the default clock double answers `1` for every monotonic read, that the
+  timeout cases therefore record a duration of `0.0`, and that the
+  positive-duration assertion in `test_release_admission_metric_boundedness.py`
+  fails for them. The premise does not hold. `install_boundaries` registers a
+  clock double, but `_gate_environment` never names
+  `NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER`, so the child runs the real
+  interpreter and its durations are genuine elapsed times.
+  `test_operation_durations_measure_controlled_delay` states the same contract
+  in its own notes ("The real clock is in use, so the undelayed run's durations
+  are the genuine elapsed times rather than a double's constant"), and
+  `make test-release-admission` passed all 138 cases before this round changed
+  anything. The assertion the finding cites is what keeps a double from
+  silently replacing that clock, so no change was made.
+
+  **Evidence that the new case is not vacuous.**
+  `scripts/tests/test_release_admission_freshness_recheck.py` scripts the wall
+  clock: a case names the readings in order, the double answers them in that
+  order, and monotonic reads come from a rising counter so no duration decides
+  a case about freshness. Three cases: a document inside the window at the
+  check and outside it at the decision is refused (`stale_evidence`, exit 1,
+  with the freshness operation itself recorded as successful); the same
+  document inside at both readings is admitted; and observation mode records
+  the same refusal while exiting 0. Each asserts the readings it was served, so
+  a gate that stopped re-reading fails there rather than passing for want of a
+  second reading. Probed by removing the two recheck lines from the admission
+  path as it stood before the extraction: all three cases fail, and the file
+  was restored byte-identical (`9357f0d3…`, confirmed by `md5sum` against the
+  copy taken before the probe).
+
+  **Contracts that pinned the old shape.** `test_release_admission_metrics.py`
+  required eleven clock invocations and exactly one wall-clock read in an
+  admitting run; it now requires twelve and two. The Makefile target and
+  `tests/workflow_contracts/release_admission_runtime_gate_test.py` list the
+  runtime modules in the same order and compare them, so the new module was
+  added to both. The developers' guide's copy of that list had been three
+  modules behind the target before this change; it now enumerates all eighteen,
+  states that the list is contractual, and describes the scripted clock.
+
+  **Documentation.** The 2026-11-15 addendum to ADR-0020 records the second
+  reading: why it exists, what it can and cannot do, and why a recheck refusal
+  is `stale_evidence` on `verify_evidence`.
+
+  **Verification for this round.** The four admission modules nearest the
+  change pass together (38 cases: `metrics`, `freshness_recheck`,
+  `metric_degradation`, `metric_boundedness`). The full gate set for the round
+  is `test-release-admission`, `test-workflow-contracts`, `check-fmt`, `lint`,
+  `typecheck`, `markdownlint`, `nixie` and `test`; it is the batch this
+  document's commit is gated on, and its results are recorded in the pull
+  request rather than here, so the record of a passing run is not itself an
+  edit that invalidates the run.
+
+- **2026-11-15: the review's two coverage findings, and the base skew behind
+  one red gate (completed).**
+
+  *The harness handed the gate an inherited environment (fixed).* The test
+  harness built the child's environment from `os.environ` whole, so a developer
+  with `NETSUKE_RELEASE_ADMISSION_TAG`, `..._ENFORCE`, a bound, or an adapter
+  exported would silently change what a case exercised: the default rehearsal
+  became a tagged run, and the failure would have read as a defect in the gate.
+  `gate_environment` now drops every inherited name under the admission prefix
+  before the harness's fixed values and the case's overrides are applied, and
+  takes the environment to inherit from as a parameter. The drop is asserted
+  through that seam rather than through the ambient environment, because
+  in-process environment mutation is forbidden in tests.
+
+  **Evidence that the new case is not vacuous.**
+  `scripts/tests/test_release_admission_harness_isolation.py` injects a tag, a
+  mode and a timeout, alongside a variable outside the prefix, and asserts what
+  reaches the child. Removing the filter makes it fail on the mode assertion
+  while the case's own tag still arrives, which is the distinction it exists to
+  draw.
+
+  *The byte-bound assertions could be satisfied without reading (fixed).*
+  `filesystem.read_bytes` states that the bound applies to what was read rather
+  than to the size the filesystem reports. Both earlier assertions used a file
+  whose size was fixed before the call, so an implementation comparing the
+  reported size with the limit passed them both and could still admit a
+  document that grew. The new case writes a file shorter than the bound and
+  stubs the reader's `os` binding to hand back one byte more than the bound;
+  replacing the post-read check with a size precheck fails the new case and
+  leaves the two earlier assertions passing, which was measured rather than
+  assumed.
+
+  *A red gate in a file this branch does not touch (the base was stale).*
+  `lint-whitaker` reported `bumpy_road_function` against
+  `src/cli/merge/observability.rs`, a file the branch does not modify. The
+  branch predated #1139, which raised `min_bump_lines` to 15 in both
+  `dylint.toml` files after measuring 60 findings at the default; the rolling
+  suite had meanwhile been reinstalled. The remedy was to rebase onto
+  `fa06bdb21`, not to add a suppression, and `make lint-whitaker` passes on the
+  rebase.
+
+  **Inventories.** The new isolation module is part of the runtime suite, so it
+  is listed in the Makefile target, in
+  `tests/workflow_contracts/release_admission_runtime_gate_test.py`'s
+  `RUNTIME_MODULES`, and in the developers' guide's copy of that list, which
+  now enumerates nineteen modules.
+
+  **Verification.** Both added cases pass with the modules around them, and the
+  full eight-gate batch passes on the rebased head with the working-tree
+  fingerprint unchanged; its results are recorded in the pull request.
+
+- **2026-11-17: the scenario table now derives its results and evaluates
+  finalization, and the verifier refuses any declared failure (completed).**
+
+  *The gap.* The scenario table named every downstream job's result itself, so
+  a case could assert that a publisher succeeded while the build it publishes
+  had failed -- a combination GitHub cannot produce, because a job does not
+  start once a dependency it needs has not succeeded. Finalization was held to
+  a separate exact-clause contract, and a clause set cannot see that the job is
+  unreachable: a guard that keeps every required clause and also names the
+  rehearsal job -- skipped on every publishing run -- satisfies the clause
+  contract and leaves the release permanently a draft.
+
+  *The propagation.* `tests/workflow_contracts/release_publish_path_results.py`
+  derives one result per job in dependency order from the workflow's own
+  `needs` and job-level `if`. A job with no guard keeps GitHub's implicit
+  all-succeeded rule; a job with one is evaluated as written, which is why the
+  rehearsal still runs after packaging or admission fails. A scenario now
+  declares only the leaf outcomes it exists to exercise. Cancellation is
+  modelled through `status`, not through each result: folding it into the
+  results made every guard false for the wrong reason, and the three
+  cancellation mutations passed until the model was corrected, because the
+  missing `!cancelled()` was masked by results that had all become unsuccessful.
+
+  *The finalization evaluation.*
+  `tests/workflow_contracts/release_publish_path_finalization.py` compares the
+  job's guard with an oracle computed from the scenario -- publish mode, not
+  cancelled, `should_publish`, admitted candidate, and six successful
+  dependencies -- and then requires the un-drafting step to run when the job
+  does. Two scenarios were added (`verify-release-inventory-failure` and
+  `verify-release-inventory-skipped`) so the verifier's own outcome, which no
+  later result depends on, is what stands between a published release and an
+  un-drafted one. Two mutations pair with them:
+  `remove-finalize-verify-result-check` and `finalize-adopts-rehearsal`, the
+  second of which the exact-clause contract accepts.
+
+  *A false expectation, corrected.* `remove-finalize-verify-result-check` was
+  first paired with a static `write-authority` violation. No such violation
+  exists: the verify-result clause is not in `REQUIRED_GUARD_CLAUSES`, so the
+  only diagnostics are the two scenario reachability findings. The pairing was
+  corrected rather than the contract widened, because the clause is
+  finalization's own gate and the scenario evaluation is where it is checked.
+
+  *The rollout dependency.* The verifier required presence only of
+  `history_scan` and `release_candidate` and ignored every other name, so a
+  producer that added a downstream canary and reported it as failed would have
+  been admitted. `evidence.verify` still requires presence only of the
+  configured set, but now requires success of every result the document
+  declares, refusing with `unknown`. The new child-process case
+  `unrequired-result-failed` reports the required canaries as successful and
+  `licence_scan` as failed, and the gate exits 1 in enforcing mode. The forward
+  compatibility case -- an extra result reporting success -- still admits the
+  release, so adding a canary is not a breaking change.
+
+  *What publication still waits for.* Issue `#1065` is closed, so the documents
+  no longer name it as the owner of registry publication. The ADR-0020 addendum
+  and the developers' guide now record the remaining rollout: `#598` supplies a
+  trusted producer, the admission job must wait for that upload instead of
+  tolerating an absent artefact, the required set must name the downstream
+  canaries, and both the successful and the refused publishing run need an
+  end-to-end demonstration before the gate can admit anything.
+
+  **Verification for this round.** `make test-release-admission` passes 144
+  cases, including the new refusal; the mutation, permission, artefact and
+  derivation modules pass 66 cases together; and the full
+  `make test-workflow-contracts` passes 2,367 cases with 3 skipped. The
+  remaining gates for the round run as the batch this document's commit is
+  gated on, and their results are recorded in the pull request.
+
+- Observation: **the code review asked for two properties the scenario table
+  could not state, and writing them exposed one local hole.** The review found
+  that the scenario table derives prerequisite results but never evaluates a
+  write job's guard across arbitrary result combinations, and that the
+  freshness recheck was pinned only at named boundaries. Two Hypothesis modules
+  now state those relations.
+
+  *The guard property.*
+  `tests/workflow_contracts/release_publish_path_guard_properties_test.py`
+  derives the write-authority jobs from the workflow's own permissions, draws
+  every dependency's result plus the admission outputs, the mode, and
+  cancellation, and evaluates each job's `if` through the production field
+  evaluator. The expected answer is computed in Python, so a guard that drifts
+  from the admission rule is a generated counterexample. A deliberate mutation
+  removing the `should_publish` conjunct from `publish-crates-io` failed the
+  property, which is the evidence that it is not vacuous.
+
+  *The freshness property.*
+  `scripts/tests/test_release_admission_freshness_properties.py` draws the
+  issue instant, the window length, and both clock readings. Offsets are drawn
+  with one branch exactly inside the window and one naming the four offsets
+  just outside either edge, because a uniform draw over a week-wide window
+  almost never reaches a refusal. Applying the same offset strategy to a
+  uniform range made the finality mutation below pass, which is why the
+  generator is biased rather than uniform.
+
+  *The local hole.* `AdmissionEvidence.admit` re-judged identity and results
+  and re-read the window, so calling it after a refused `check_freshness` could
+  return success for a document whose timestamps moved back inside the window.
+  The gate never calls it there -- `run_operations` stops at the first failure
+  -- so the hole was unreachable, but the module's own claim that the recheck
+  "can only replace that success with a refusal" was not locally true. The
+  check's classification is now carried in `_checked`, and `admit` returns it
+  unchanged when it is not a success. Two mutations were run in each direction:
+  removing the recheck and removing the finality check both fail the property,
+  and the restored sources pass.
+
+  *Documentation.* Publication gating and the evidence producer's role are
+  recorded in the users' guide; the module ownership of `manifest`, `evidence`,
+  and `admission_evidence` and the runtime module list (now twenty) are
+  recorded in the developers' guide; and roadmap item 9.4.2 names the
+  enforced-on-publish, observed-on-rehearsal split and the `#598` dependency.
+  The migration guide was left unchanged in that round: its earlier sections
+  address manifest authors, source-build users, and Rust API callers. The next
+  round found the guide already carries release-pipeline notes for
+  reusable-workflow callers, and added one there.
+
+- Observation: **the candidate-bound assessment cleared the gate and named one
+  remaining coverage gap, which was reachable only because a prerequisite can
+  be cancelled without the run being cancelled.** The reply to
+  `NETSUKE-1141-R2-20261117` found no remaining publication bypass and accepted
+  the finalization, ignored-result, and documentation repairs. It still asked
+  for a `cancelled` result per prerequisite, which the table had covered only
+  as a cancelled run.
+
+  *Why the two cancellations are not the same case.* A cancelled run sets
+  `status.cancelled`, so every guard is false for the same reason and a guard
+  that dropped `!cancelled()` is the defect. A single job can also report
+  `cancelled` while the run continues -- a job-level concurrency rule
+  cancelling a pending job does exactly that -- and then the other guards
+  decide on merit. `_prerequisite_scenarios("cancelled")` now builds one
+  publishing scenario for each of the seven prerequisites, and a guard that
+  tested `!= 'failure'` instead of `== 'success'` starts a publisher in each of
+  them.
+
+  *A stale reference.* The living Stage C section still named `#1065` as a
+  follow-up owner though the issue is closed; it now records that registry
+  publication arrived with it and that `#598` supplies the producer.
+
+- Observation: **the next assessment cleared the guards again and asked for
+  three documentation repairs and one trust-boundary statement.** The reply to
+  `NETSUKE-1141-R3-20261117` found no bypass and accepted the cancellation
+  scenarios and the two property suites. It named four items, one of them
+  outside this PR's decision authority.
+
+  *The two dependency lists.* The living Stage C section's direct `needs` lists
+  for `verify-release-inventory` and `finalize-github-release` predated
+  packaging and admission, though the gate description beside them and
+  `release.yml` both name those jobs. Both lists now match the workflow, which
+  the contract derives from the same field.
+
+  *The migration note.* The guide already documents release-pipeline changes
+  for reusable-workflow callers, so a section there is the right home after
+  all: it states the packaging and admission prerequisites, the mode-derived
+  enforcement, and the `missing_evidence` refusal a caller now sees, and points
+  at the users' guide.
+
+  *The module docstrings.* Seven workflow-contract modules carried one-line
+  docstrings. They now state what each module checks and how it relates to its
+  neighbours, without a code change. `release_publish_path_scenarios.py` sits
+  three lines below the 400-line ceiling, which is why its docstring is three
+  lines rather than a paragraph.
+
+  *The trust boundary, stated rather than claimed.* The download step resolves
+  the current run, so any artefact under the expected name reaches the
+  verifier, and a reusable-workflow caller defines jobs in that same run. The
+  identity fields show the manifest agrees with the candidate, not who produced
+  it. That is a provenance gap, and closing it -- a named producer job, an
+  admission step that waits for it, and authentication of its output -- belongs
+  to `#598`. The developers' guide, the ADR-0020 addendum, and the users' guide
+  now say so. That round left the gap open to a same-run supplier and described
+  publication only as waiting for a producer; the round below closes it and
+  corrects the description.
+
+- Observation: **the fourth assessment accepted the repairs but refused to
+  call the rollout fail-closed, because a same-run supplier was still
+  admissible; the interim block closes that path without claiming provenance.**
+  The reply to `NETSUKE-1141-R4-20261117` verified the guard properties, the
+  cancellation scenarios, and the documentation, then named one enforced
+  boundary and three stale rollout claims.
+
+  *The interim block.* `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` is read by
+  `_release_admission.configuration` and shipped as `'false'` in
+  `release.yml`'s admission step environment. The workflow sets it, never the
+  caller, and only this repository's workflow file can change it. An enforcing
+  run refuses any manifest with the new `untrusted_evidence` category unless
+  the value is exactly `true`, so a same-run supplier is excluded as firmly as
+  an absent producer; observation mode ignores it, so the read-only lane still
+  reports what it read. The design is deliberately a maintainer's declaration
+  rather than a synthetic attestation: it asserts that no trusted producer
+  exists, which is the true state, instead of manufacturing a check that would
+  appear to authenticate one.
+
+  *The negative coverage.*
+  `scripts/tests/test_release_admission_producer_trust.py` drives the real gate
+  through cmd-mox and pins five non-attributing spellings (`unset`, `empty`,
+  `false`, `True`, `yes`), each expected to exit 1 with `untrusted_evidence` in
+  both the operation and the gate labels and in the two refusing outputs. It
+  pairs them with a positive control at `true` and an observation-mode control,
+  so the module distinguishes "refused for attribution" from "refused for
+  contents" and from "not enforced". Three existing enforcing-success cases now
+  state `true` explicitly, with a comment saying they test another contract,
+  rather than relying on the shipped default.
+
+  *The corrected claims.* The migration guide, the developers' guide, and the
+  users' guide no longer say publication is unreachable until a producer lands;
+  each now separates the two refusals and says the block is what excludes a
+  same-run supplier. The users' guide's instruction that a caller "must supply"
+  the manifest contradicted the migration guide's "no new caller input", and is
+  replaced by the statement that the producer runs inside the workflow. The
+  workflow contract pins the exact admission environment, so the shipped
+  literal cannot change without a deliberate edit to that test.
+
+  *What `#598` must supply.* Recorded so the next round has acceptance criteria
+  rather than a pointer: a named producer job that uploads the manifest; an
+  admission step that waits for that producer instead of tolerating an absent
+  artefact, so `continue-on-error` comes off the download; an authenticated
+  binding from the upload to that producer job, which is what makes
+  `producer_trusted` derivable rather than declared; the downstream canary
+  results added to `policy.REQUIRED_RESULTS`; and end-to-end demonstration of
+  both a successful publishing run and a refused one before the literal changes.
+
+- Observation: **the fifth assessment found the interim block bypassable
+  through the gate's own source, because a reusable workflow's default checkout
+  resolves the caller; the admission job now runs this repository's gate, and
+  the six undocumented modules are recorded.** The reply to
+  `NETSUKE-1141-R5-20261117` confirmed the producer-trust refusal and the
+  derived scenario table, then named one blocking finding, one documentation
+  warning, and one code-health failure.
+
+  *The bypass.* `release.yml` is reusable, and in a called workflow the default
+  `actions/checkout` resolves the *caller's* repository. The admission job
+  relied on that default, so a caller could keep an older
+  `release_admission.py` that emitted the mode, outcome, and candidate the
+  write guards consume while ignoring the `'false'` literal, and the interim
+  block would not apply. A workflow-inlined deny keyed on the gate's outputs
+  cannot close this: those outputs are what the untrusted gate produces. The
+  job now checks out `leynos/netsuke` at `${{ job.workflow_sha }}` with
+  `persist-credentials: false` before the gate step, so the gate, the literal,
+  and the summary scripts come from the same commit as the guards that trust
+  them. `job.workflow_sha` is the commit of the workflow file that defines the
+  job, for a call and for a directly triggered run alike; `github.sha` would
+  not do, because on a call it is the caller's candidate. A caller that
+  replaces the whole workflow also replaces the guards, so the pin removes the
+  choice of implementation without claiming to authenticate a producer.
+
+  *The negative coverage.* `check_admission_source_pin` requires exactly one
+  checkout, requires it before the gate step, and pins both inputs.
+  `release_publication_gate_mutations.py` gained three cases -- both inputs
+  removed, `repository` set to `${{ github.repository }}`, and `ref` reduced to
+  `${{ github.sha }}` -- and each reports the
+  `release-admission-canaries.checkout` diagnostic. That brings the stated gate
+  regressions to twenty-four, which the new ADR addendum records.
+
+  *The correction.* The first pin named the ref through
+  `${{ github.job_workflow_sha || github.sha }}`, and the GitHub Actions lint
+  gate refused it: `job_workflow_sha` is not a `github` context property. The
+  workflows contexts reference names the per-job identity properties on the
+  `job` context, and its own reusable-workflow example checks out
+  `repository: ${{ job.workflow_repository }}` and
+  `ref: ${{ job.workflow_sha }}`. Had the gate not fired, the mistyped property
+  would have expanded empty, the `|| github.sha` fallback would have selected
+  the caller's candidate, and the pin would have been absent while looking
+  present. The ref is now `${{ job.workflow_sha }}`, the fallback is gone
+  because on a call `github.sha` is exactly the commit the pin refuses, and
+  actionlint 1.7.12's vendored context types still predate the property, so
+  `.github/actionlint.yaml` exempts that one expression and records why.
+
+  *The code-health failure.* CodeScene refused `resolve_configuration` at 74
+  lines against a 70-line threshold. Extracting the sink construction first
+  traded that finding for a 402-line file, above the 400-line limit, so the
+  adapter reads are extracted instead and the `Sinks` construction stays in
+  place: `resolve_configuration` is 67 lines, `configuration.py` is 398, and
+  `cs delta 4984c7f2f` reports no issues across 62 eligible files.
+
+  *The documentation.* The developers' guide now states the result-derivation
+  rule, the finalization oracle, the generated guard properties, the
+  seven-prerequisite failure, skip, and cancellation matrix, the two verifier
+  scenarios, and the purpose of `release_admission_gate_contract.py`,
+  `release_mutation_support.py`, and `release_publication_gate_mutations.py`;
+  the stale claim that the table merely pairs a failure and a skip with each
+  publisher is replaced. It also records the pinned checkout under
+  release-admission observability, and the users' guide and migration guide
+  state what the pin means for a caller. The ADR gains a 2026-11-17 addendum
+  rather than editing the accepted 2026-11-15 text.
+
+- Observation: **the sixth assessment showed that the pinned checkout alone
+  breaks cross-repository callers, so admission now checks out the candidate
+  and the verifier separately, and the distinction is demonstrated by
+  execution.** The reply to `NETSUKE-1141-R6-20261117` confirmed the
+  producer-trust refusal and the derived scenario table, then named one
+  blocking finding.
+
+  *The finding.* `commands.git_fetch_revision` runs
+  `git fetch --depth 1 --no-tags origin -- <revision>` from the process working
+  directory. With the verifier as the job's only checkout, `origin` named
+  `leynos/netsuke`, so a candidate that lives in the caller's repository was
+  unreachable and admission failed with `fetch_error` before it read a
+  manifest: the pin closed the bypass by breaking every cross-repository call.
+  The job now checks out two commits. The candidate checkout sits at the
+  workspace root, keeps the default credential persistence so the fetch can
+  read a private caller's repository, and is never executed. The verifier
+  checkout is `leynos/netsuke` at `${{ job.workflow_sha }}`, written into a
+  subdirectory with `persist-credentials: false`. The gate step runs
+  `uv run --no-config --no-project --script
+  gate/.github/scripts/release_admission.py`
+  from the workspace root, so the working directory leaves `origin` naming the
+  caller while the code being run comes from this repository. A verifier
+  checkout at the root would have replaced the candidate checkout and re-pointed
+  `origin` here, so the subdirectory is the property that keeps the fetch
+  working, not a layout preference.
+
+  *The coverage.* The source-pin contract moved to
+  `release_admission_source_pin.py`, which holds the repository, ref, checkout
+  order, subdirectory, and gate step, and derives the expected gate command
+  from the verifier checkout's path so the workflow and the metric test cannot
+  drift apart. Nine checkout regressions moved to
+  `release_admission_checkout_mutations.py`, taking the stated total across
+  both mutation modules to thirty. `test_release_admission_cross_repository.py`
+  builds two real bare repositories with `uploadpack.allowAnySHA1InWant` over
+  `file://` URLs, because a cmd-mox invocation records neither a working
+  directory nor an `origin`; it runs the gate from the candidate checkout and
+  from the verifier checkout in both admission modes, and fails if the
+  verifier's repository contains the caller's candidate, so a passing fetch
+  cannot be vacuous. `release_admission_test_cases.py` also gained an
+  observation-mode fetch-failure case, because the fetch precedes the
+  enforcement decision and must not be masked by it. Date/Author: 2026-11-18,
+  implementation agent.
+
+- Observation: **the seventh assessment's review found four defects in the
+  two-checkout repair, and one of the four proposed remedies was itself
+  insufficient.** On head `382e174db`, CodeRabbit filed `CHANGES_REQUESTED`
+  with two major and two minor findings. Each was verified against the source
+  before repair.
+
+  *Evidence parsing.* `json.loads` keeps the last of two identical object
+  members, so a manifest could record a failing result and then overwrite it
+  with a passing one while remaining valid JSON. `parse_manifest` now decodes
+  with an `object_pairs_hook` that refuses a repeated name at any nesting
+  level, and the refusal class derives from `ValueError` so the existing
+  handler maps it to `malformed_evidence`. Four cases cover it: a positive
+  control, a repeated result name, a repeated `outcome` inside one result, and
+  a repeated top-level member.
+
+  *Inherited Git location.* A gate run from a `pre-commit` hook inherits
+  `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE` for the repository that
+  started it, and `gate_environment` passed them to the child, which then
+  fetched into the wrong repository. The harness now drops the whole `GIT_`
+  prefix beside the admission variables, and a case asserts that none of the
+  three reaches the child while the shim directory still leads `PATH`.
+
+  *Relative evidence path.* The child resolved
+  `NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE` against its own working directory
+  while the test looked for the default path, so a relative value wrote outside
+  the layout the test inspected. `_evidence_path` now takes the child's `cwd`
+  and a regression test sets a relative file name, runs from the candidate
+  checkout, and asserts the file is written where the child reads it.
+
+  *uv isolation.* The gate's working directory is the candidate checkout, and
+  uv reads `uv.toml` and `pyproject.toml` from it and its parents, so a
+  candidate could name the index the gate's pinned dependencies come from; that
+  code then runs with the job's `GH_TOKEN`. The finding proposed `--no-config`.
+  A local probe showed the remedy insufficient: a malformed `pyproject.toml`
+  still failed under `--no-config` alone (`rc=2`), while
+  `--no-config --no-project` succeeded and still installed PEP 723
+  dependencies, proved with `six==1.17.0`. Both flags are therefore shipped,
+  held as `UV_ISOLATION_FLAGS` in `release_admission_source_pin.py`, derived
+  into the expected command, and regression-tested by the
+  `gate-run-without-uv-isolation` mutation, which takes the stated total to
+  thirty-one. Date/Author: 2026-11-18, implementation agent.
+
+- [x] (2026-11-18) Answered the eighth assessment: the review of `ecd854350`
+  filed seven inline findings, four outside-diff findings, and two failed
+  pre-merge rows. All thirteen were verified against the source and repaired;
+  none was declined.
+
+  *Evidence decoding.* `parse_manifest` read the document as text before
+  parsing, so a wide encoding could slip past the documented UTF-8 contract. It
+  now decodes `raw` as UTF-8 inside the existing handler, which maps a
+  `UnicodeDecodeError` to `malformed_evidence` through the same `ValueError`
+  arm as invalid JSON, and `_unique_members` still refuses a repeated member. A
+  UTF-16 and a UTF-32 document are each witnessed refused, with the successful
+  `json.loads` of the same bytes asserted first so the case cannot pass
+  vacuously.
+
+  *Bounded guards.* `evidence.is_evidence_max_age` and
+  `policy.publishable_revision` are the two validators that decide whether a
+  claimed window and a published revision are in contract, and neither had a
+  test of its own refusals. `test_release_admission_bounded_guards.py` now
+  states both sides: ASCII digits with no leading zero and at most six of them
+  up to `604800`, and a full lowercase SHA-1 or SHA-256 object ID. Refusals
+  include the empty string, `"00"`, a leading zero, one past the maximum,
+  surrounding whitespace, a trailing newline, signs, exponent notation, and a
+  non-ASCII digit; and for the revision, both wrong widths and an uppercase
+  spelling. The module is wired into `make test-release-admission` and the
+  runtime-gate contract, taking that target to twenty-three modules.
+
+  *Runtime refusal.* A dedicated enforcing-mode case sets
+  `NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS` to `0` and to `604801`
+  and asserts exit status `1`, a `failure`/`unknown` gate record as the only
+  metric, the matching workflow outputs, and that no canary, adapter, or clock
+  call ran. Supplying enforcement exposed a precondition the observation-mode
+  cases never needed: an enforcing run must also name its tag, or configuration
+  resolution refuses it before the bound is consulted.
+
+  *Checkout contract.* Four outside-diff findings tightened the same module.
+  The order rule is now `candidate < verifier < gate < ...`, so a job that
+  writes the verifier first is reported even though both checkouts still
+  precede the gate step. The `run` comparison trims only the outer whitespace a
+  block scalar leaves, because an internal newline is a shell command boundary.
+  `verifier_gate_command` normalizes the declared path through the same
+  `normalise_gate_path` the validator uses, and a regression case proves
+  `./gate` and `gate` name one command. The working-directory rule now also
+  reads the workflow-level `defaults.run`, which applies to this job even when
+  neither the job nor the step repeats it.
+
+  *Coverage.* Six mutations were added: a conditional and a failure-tolerant
+  checkout for each role, a persisted verifier credential, a verifier path the
+  shell would split, the two checkouts swapped, and a gate command split at a
+  shell boundary, plus a workflow-level default that moves the gate. The
+  checkout module now states nineteen regressions and the two mutation modules
+  forty in all. Targeted runs pass: 71 workflow-contract tests across the
+  mutation, runtime-gate, metrics, and publish-path modules, and 18 runtime
+  metric-failure tests. Date/Author: 2026-11-18, implementation agent.
+
+- [x] (2026-11-18) Brought the branch up to `origin/main` after #1150 landed,
+  and closed the two reds the first full gate batch reported.
+
+  *Merge rather than rebase.* `338ff4ac4` restructures the same release-path
+  contract modules this branch does, and the repository's merge driver is
+  Weave; replaying those commits one at a time would have re-run the driver
+  over files both sides had already rewritten. Merging records the resolution
+  once, in `eb9def366`, and keeps the branch's history readable as "the
+  pr-babysitting branch, then main brought underneath it". `557614003` repaired
+  the one resolution defect the merge left: the mutations suite carried the
+  module docstring twice, once above and once below its imports.
+
+  *Duplicate module.* Main's new `release_publish_path_native_smoke.py` was a
+  second copy of the check this branch already owns in
+  `release_publish_path_smoke.py`. Both resolve the same job's guard against the
+  `metadata` need with the same label, the same `MISSING` refusal, and the
+  same predicate — a dry run runs the smoke only on `ready_for_review`, and a
+  publication run runs it after a successful metadata job. The merge therefore
+  kept this branch's module and dropped main's, having first confirmed that the
+  two `_mutate_smoke_tolerance` mutations arriving from main are present
+  unchanged in this branch's mutation table, so no mutation or scenario was
+  lost with the file.
+
+  *Batch #2.* Eleven of the thirteen targets exited zero. `lint-python` failed
+  with four DOC501 findings: functions that raise for a precondition the
+  docstring did not state. Each now carries a `Raises` section naming the
+  condition rather than restating the code. `markdownlint` failed on one
+  spelling: a progress entry wrote the British `-ise` form of "normalize",
+  which this repository's en-GB-oxendict dictionary rejects in favour of the
+  `-ize` spelling. Both fixes are in `38e90c618`.
+
+  *The lint cascade the fix exposed.* With Ruff satisfied, pylint surfaced: it
+  exits 16 at a stated 10.00/10, so the score alone said nothing. One C1804
+  compared a string-returning validator to `""` where `not` states the same
+  test, and three modules exceeded the 400-line limit — the scenario table, the
+  metadata-output derivation, and the metric-failure suite. `58cc7bb29` moves
+  the table to `release_publish_path_scenario_table.py` and the derivation to
+  `release_publish_path_metadata.py`, both along seams the modules already had,
+  and splits the invalid-configuration cases out as
+  `scripts/tests/test_release_admission_invalid_configuration.py`. That module
+  is pinned in the `test-release-admission` recipe *and* in
+  `release_admission_runtime_gate_test.py`, which asserts the recipe runs
+  exactly the modules it lists, so the target now names twenty-four; the
+  developers' guide records the new module.
+
+  *Verification after the fixes.* 267 workflow-contract tests and 44
+  release-admission tests pass, and `make lint-python`, `make markdownlint`, and
+  `make check-fmt` each exit zero on `58cc7bb29`. The lesson carried into the
+  next batch: a batch is only worth starting on a green `check-fmt`, because a
+  red first target voids it, so the cheap gates are preflighted before a
+  multi-hour run is launched. A first attempt to launch the batch on
+  `e200220b4` was aborted at its second target: fetching showed main had
+  advanced again, by `8daa91431` (#1059), after the merge this entry records.
+  That commit confines the stdlib file-reading filters to the workspace
+  capability and edits the developers' guide, the users' guide, the design
+  document, and every locale catalogue. Merging it as `8a49ed6e1` was
+  conflict-free; both sides' edits to the shared documents sit in different
+  sections, and the release-admission bullets this branch added still read
+  twenty-four modules. The batch then ran all thirteen targets green on
+  `dd29bb0f6`, the head that records the merge.
+
+  *Typecheck.* The batch's target set does not include `make typecheck`, and
+  running it separately found the one thing the batch could not: `ty` refuses
+  the eighth assessment's verifier-path test, because the list literal it
+  passes to `verifier_gate_command` infers
+  `list[dict[str, str | dict[str, str]]]` and the parameter takes
+  `list[dict[str, object]]`. Annotating the binding fixes it without weakening
+  the test, which still compares the command `verifier_gate_command` derives
+  from a `./gate` checkout path. `make typecheck` now joins the batch set, so
+  the next full run covers it alongside the other thirteen targets; running it
+  only afterwards would have repeated this discovery on every candidate.
+  Date/Author: 2026-11-18, implementation agent.
+
+- [x] (2026-11-19) Reconciled the remaining pre-merge warning and answered the
+  security question it raised. CodeRabbit's Developer Documentation row named
+  four runtime-test helpers the developers' guide did not describe, so
+  `ecfa3d0e1` adds a paragraph to the "Release-admission runtime tests" section
+  covering `gate_environment` (which drops inherited
+  `NETSUKE_RELEASE_ADMISSION_*` and `GIT_*` names, prepends the cmd-mox shim
+  directory, and applies case overrides last), the candidate-bound manifest
+  builders, the two-repository layout, and the workflow-contract validator
+  loader. CodeRabbit's reply confirmed the row resolved at that commit and that
+  the guide's twenty-four-module list still matches the
+  `test-release-admission` recipe in the same order.
+
+  *What the reply then raised.* It argued that the uv isolation flags were only
+  checked statically, and that proving the boundary needed a run against a
+  hostile candidate checkout. The earlier finding asked only for `--no-config`
+  and a matching contract, so the claim overstated its own history; the
+  underlying concern was still right, because a text comparison cannot show
+  that a flag changes uv's behaviour. A probe settled the design: an unparsable
+  `uv.toml` (`index-url = 123`) is refused when uv reads it, and a
+  `requires-python = ">=99"` project is refused when uv honours it, while a
+  plain script runs under both flags in about a second with no network access.
+  `f610a237f` adds `release_admission_uv_isolation_test.py`, which runs the
+  workflow's *own* gate command over a candidate holding both traps and
+  requires the probe's sentinel, plus one negative control per flag that drops
+  only that flag and requires the matching refusal. The command comes from
+  `verifier_gate_command`, so moving the verifier checkout moves the test with
+  it.
+
+  *Gates.* The full set ran on `f610a237f`. The first launch was cut short by
+  the session ending at `doc-coverage`, so the remaining eight targets were
+  re-run from that point: `check-fmt`, `typecheck`, `lint-clippy`,
+  `lint-whitaker`, `lint-python`, `github-actions-lint`, `doc-coverage`
+  (98.29%), `test-nextest`, `doctest`, `test-workflow-contracts`,
+  `test-documentation-contracts`, `markdownlint`, `nixie`, and
+  `test-release-admission` each exit zero. `typecheck` took 2488 seconds and
+  `lint-whitaker` 3214 under a full compile-admission pool, which is queue
+  latency rather than a defect. Date/Author: 2026-11-19, implementation agent.
+
+- [x] (2026-11-19) Closed the review's test-coverage gap, and the uv-resolution
+  bypass the same workspace boundary exposes.
+
+  *Coverage gap.* The scenario table declares each prerequisite's outcome, but
+  the consumer-smoke oracle evaluated those declarations rather than the graph,
+  so a scenario could agree with itself: `publish-build-linux-failure` fails
+  the build while declaring the smoke's own dependency successful.
+  `resolve_results` already propagates results through the graph, so
+  `check_consumer_smoke` now takes them, and `_needs_context` and
+  `_should_smoke` both read the propagated map. A named case pins the
+  distinction by replacing the smoke job's guard with `!cancelled()`: the
+  declared map expects the smoke to run and the resolved map forbids it, so
+  only the resolved oracle passes. This is the "require the downstream results"
+  half of the reviewer's rollout condition; the producer link remains the
+  documented interim block that #598 supplies.
+
+  *The other clock input in the same directory.* `setup-uv` defaults its
+  working directory to the workspace root, which the candidate checkout owns,
+  and resolves an unset `version` from a `uv.toml` or `pyproject.toml` there.
+  The action's commit pins the installer's code, not the uv binary it
+  downloads, so candidate content could choose the tool that runs a gate
+  holding the job's token. All ten setup steps now name `version: '0.13.2'`,
+  recorded once as `PINNED_UV_VERSION`, and `_check_setup_uv_pins` in the
+  source-pin contract requires the input in every job rather than admission
+  alone. The mutation `admission-uv-unpinned` removes it and must report
+  `release-admission-canaries.setup-uv`; the metrics contract's expectation for
+  the admission step gained the input so the two contracts agree.
+
+  *Isolation proved by resolution, not only by text.* The uv-isolation module
+  now builds a wheel by hand, serves it offline, and requires the PEP 723
+  script's dependency to install and report its own identity under
+  `--no-config --no-project`; it also exports the flags' environment aliases
+  (`UV_NO_CONFIG`, `UV_NO_PROJECT`) to show they cannot rescue an unflagged
+  command. The handcrafted wheel's name carries no hyphen because uv rejected
+  `admission-probe-dependency-0.1.0-py3-none-any.whl` with "Python tag must not
+  start with a digit" -- a probe-construction detail, not a property of the
+  boundary, and recorded as such beside the constant.
+
+  *Clock coverage.* `..._wall_clock.py` is new. Its unit table requires
+  `read_wall_clock` to flag a refused read, a word, the empty string, `nan`,
+  `inf` and `-inf` as unusable while keeping zero, a negative moment, a
+  fraction, and an exponent form usable, because zero is a real instant and
+  `nan` compares false with every bound. End-to-end cases spoil each of the
+  three wall-clock invocations in a fresh-evidence run -- the check's read
+  (invocation 8), the admission's re-read (11), and the closing read (12) --
+  and require `failure`/`unknown` with the operation's trace sequence.
+  `..._freshness_properties.py` now scripts `(seconds, is_unusable)` pairs and
+  gains a named case requiring `unknown` at both decisions. Removing the
+  `is_unusable` refusal in `_classify_freshness` failed all eight end-to-end
+  cases, and removing the `math.isfinite` guard failed the `nan`/`inf`/`-inf`
+  rows, so both layers are observed rather than assumed.
+
+  *Guide accuracy.* The same round corrected the guide's account of observation
+  mode. Producer attribution is enforcement-only, so a rehearsal can record
+  `outcome=success` on evidence an enforcing run refuses with
+  `untrusted_evidence`; the earlier paragraph claimed both modes refused it.
+  The runtime-test section names the new module and explains what it pins, and
+  the recipe and `release_admission_runtime_gate_test.py` now list twenty-five
+  modules in the same order.
+
+  *Verification.* `make check-fmt`, `make lint-python`, and `make markdownlint`
+  exit zero, 85 focused workflow-contract tests pass, and
+  `make test-release-admission` passes all 218 cases. `make fmt` ran first
+  because Ruff wanted four files reformatted and moved two typing-only imports
+  behind `TYPE_CHECKING`; pylint then rejected the five-argument end-to-end
+  test, whose two scripted positions are now one tuple parameter. Date/Author:
+  2026-11-19, implementation agent.
+
+- [x] (2026-11-19) Restored the mutation that the resolved oracle had silently
+  retired.
+
+  *Symptom.* Hosted `build-test` failed on `badae75ae` at
+  `remove-consumer-smoke-publish-guard`: the case expected
+  `neither-mode.consumer-smoke-job:` and the contract reported nothing. The
+  failure reproduced locally, and a probe confirmed the pristine document
+  reported zero violations for that label as well.
+
+  *Cause.* Propagating graph results, the fix above, removed the only scenario
+  that could observe the smoke's mode predicate. `neither-mode` publishes
+  nothing, so the graph also skips `finalize-github-release`, whose success the
+  guard already requires; the guard is false with or without
+  `needs.metadata.outputs.should_publish == 'true'`, and no realizable run
+  reaches a state where the predicate alone decides. The claim was true of the
+  declared-outcome oracle and became vacuous under the resolved one.
+
+  *Fix.* `check_smoke_publication_guard` evaluates the guard once, outside the
+  scenario loop, against the publishing and neither modes' resolved outputs
+  with every declared dependency successful and the run uncancelled. Only the
+  mode predicate can then decide, so the predicate is pinned in both
+  directions: a publishing run must smoke and a run that publishes nothing must
+  not. The expectation moved to `("static", "consumer-smoke-job.guard")`, and
+  `_needs_context` lost the `scenario` parameter it never read.
+
+  *Verification.* The full workflow-contract suite passes (2439 passed, 2
+  skipped), and `make check-fmt` and `make lint-python` exit zero. Date/Author:
+  2026-11-19, implementation agent.
+
+- [x] (2026-11-19) Merged `main` into the branch instead of rebasing, and
+  ported the admission-gate delta onto #1157's scenario model.
+
+  *Why a merge.* The branch carried 54 commits over a refactor of the same
+  release-path contract modules that #1157 landed on `main`. A rebase replays
+  that refactor commit by commit and re-resolves the same collision at every
+  step; a single merge resolves each file once. It also keeps every commit SHA,
+  so the review anchors written against them survive, and the push becomes a
+  plain fast-forward with no force.
+
+  *What #1157 subsumed.* `main` already carried the admission job, its
+  source-pin checkout, the metadata-output resolver, and a scenario table whose
+  expected outputs are the real `authorize_release_writes.py` policy. The
+  branch's own derivation layer -- `release_publish_path_results.py`,
+  `release_publish_path_context.py`, `release_publish_path_scenario_table.py`,
+  `release_publish_path_metadata.py`, `release_publish_path_smoke.py`, and
+  `release_publish_path_guard_properties_test.py` -- therefore duplicated a
+  landed design and was deleted rather than merged. The remaining unique value
+  of this branch is the write-side gating: the gate's declared
+  `enforcement`/`gate_outcome`/`candidate_commit` outputs, enforcement derived
+  from `should_publish`, the two-checkout source pin, the four admission
+  conjuncts on every writing job, and the contracts and mutations that hold
+  them.
+
+  *The seam.* `main` built a needs context at four separate call sites, none of
+  which carried the gate's outputs. `release_publish_path_scenario_model.py`
+  now owns `needs_entry` and `job_contexts`, which add the gate's outputs and
+  `github.sha` for every job's declared dependencies, so all four checks
+  evaluate the merged guards without duplicating the plumbing.
+
+  *Corrections the port forced.* The enforcement oracle compares the resolved
+  flag with the policy's `should_publish`, not the resolver's nominal mode: a
+  reusable push the policy narrows to a rehearsal must observe, and comparing
+  with `mode == "publish"` reported six false failures. The consumer smoke's
+  mode predicate still needs the one-shot static check first written for
+  `neither-mode`, because no realizable scenario can isolate it. And the merge
+  left two `MutationError` classes, so `pytest.raises` in
+  `release_publish_path_mutations_test.py` no longer caught the helper's
+  refusal; `release_mutation_support.py` is now the single vocabulary.
+
+  *Verification.* The focused release-path, verification, publication,
+  finalization, and mutation suites pass (361 cases), and the full
+  workflow-contract suite is re-run on the merged tree before the merge commit
+  is published. Date/Author: 2026-11-19, implementation agent.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
@@ -5128,6 +6383,31 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   question they all need; each consumer that imposes a format must add its own
   refusal. Date/Author: 2026-11-08, implementation agent.
 
+- Observation: **pinning an action's SHA does not pin the tool it installs when
+  the action accepts a tool version input.** Evidence: `astral-sh/setup-uv` was
+  SHA-pinned at every step, and the source-pin contract proved which uv version
+  it installed by nothing at all; `setup-uv` defaults its working directory to
+  the workspace root — the candidate checkout — and resolves an unset `version`
+  from a `uv.toml` or `pyproject.toml` it finds there. Impact: a candidate
+  could choose the interpreter of the gate that judges it while every "pinned
+  action" assertion passed. The durable rule is that every action with a
+  tool-version input is an unpinned dependency until that input is set, and the
+  check belongs across the whole workflow rather than at the one step a review
+  noticed. Date/Author: 2026-11-19, implementation agent.
+
+- Observation: **making an oracle stricter can retire a mutation's claim
+  silently, and the mutation test is what notices.** Evidence:
+  `remove-consumer-smoke-publish-guard` was caught only because the oracle read
+  a scenario's *declared* dependency outcomes. Once the smoke was judged
+  against the graph, the scenario it named — `neither-mode` — also skipped
+  finalization, so the guard was false before the removed clause was consulted.
+  The contract still reported nothing after the regression was reintroduced,
+  and the hosted `build-test` run was the first place it showed. Impact: when a
+  reachability oracle starts reading resolved results, any clause that the
+  resolved graph makes redundant needs a check of its own, driven by the two
+  contexts that differ in that clause alone. Date/Author: 2026-11-19,
+  implementation agent.
+
 ## Decision log
 
 - Decision: keep the existing `release` job's name and identity.
@@ -5886,6 +7166,27 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   write-implying `gh api` flag, which is what keeps the job's
   `contents: write` — needed because a draft is invisible without it — from
   becoming mutation. Date/Author: 2026-11-08, implementation agent.
+
+- Decision: derive admission enforcement from the release mode and require it
+  before every release write, before any evidence producer exists. Rationale:
+  the admission job previously hard-coded `NETSUKE_RELEASE_ADMISSION_ENFORCE` to
+  `false`, and a report-only gate reports success, so adding a dependency on
+  it would have changed the picture without closing the path. Deriving the mode
+  from `should_publish` leaves no configuration to get wrong: a rehearsal
+  observes and exits zero, a publishing run enforces and exits non-zero, and
+  publication additionally requires `enforcement == 'true'`, so a report-only
+  success cannot satisfy it even if the derivation regressed. Gating before a
+  producer exists is deliberate ordering: the alternative connects a producer
+  first and leaves the publish-without-evidence path open until the gate
+  follows. The cost is that every publishing run now refuses with
+  `missing_evidence` until #598 lands, which the runbook states plainly rather
+  than treating as a transient defect. The write-authority rule is derived from
+  the workflow's `contents`, `packages`, and `id-token` scopes instead of
+  listing today's jobs, so `publish-crates-io` and `finalize-github-release` —
+  and anything added after them — satisfy it by construction rather than by
+  remembering. The rehearsal keeps its five-job list and no write scope, which
+  is what keeps the read-only lane reachable when either prerequisite fails.
+  Date/Author: 2026-11-15, implementation agent.
 
 ## Outcomes & retrospective
 

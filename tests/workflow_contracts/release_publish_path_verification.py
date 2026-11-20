@@ -13,6 +13,7 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
+from release_publish_path_context import job_contexts
 from release_publish_path_scenario_model import VERIFY_NEEDS
 from workflow_loading import workflow_job
 
@@ -35,7 +36,7 @@ def _declared_names(job: dict[str, object], violations: list[str]) -> list[str] 
 
 
 def check_verification_needs(job: dict[str, object], violations: list[str]) -> None:
-    """Require exactly metadata and both publishers, with nothing else.
+    """Require exactly the packaged candidate, the gate and both publishers.
 
     The length comparison catches a repeated name, which set equality alone
     would accept and which GitHub treats as an error.
@@ -45,8 +46,8 @@ def check_verification_needs(job: dict[str, object], violations: list[str]) -> N
         return
     if set(names) != VERIFY_NEEDS or len(names) != len(VERIFY_NEEDS):
         violations.append(
-            f"{VERIFY_JOB}.needs: expected exactly metadata, publish-crates-io "
-            "and publish-release"
+            f"{VERIFY_JOB}.needs: expected exactly metadata, package-crate, "
+            "release-admission-canaries, publish-crates-io and publish-release"
         )
 
 
@@ -65,37 +66,15 @@ def check_verification_permissions(
         )
 
 
-def _verification_needs_context(
-    job: dict[str, object], scenario: Scenario, outputs: dict[str, str]
-) -> dict[str, object]:
-    """Build the needs context from the job's declared dependencies.
-
-    Read from the job rather than from ``VERIFY_NEEDS`` so a mutated dependency
-    list is evaluated as written and reports its own result, instead of being
-    silently replaced by the oracle's expectation.
-
-    Returns
-    -------
-    dict[str, object]
-        A needs entry per declared dependency, carrying its scenario result.
-    """
-    needs: dict[str, object] = {}
-    for name in job_names(job.get("needs", [])) or []:
-        dependency: dict[str, object] = {
-            "result": scenario.needs_results.get(name, "skipped")
-        }
-        if name == "metadata":
-            dependency["outputs"] = outputs
-        needs[name] = dependency
-    return needs
-
-
 def _should_verify(scenario: Scenario, outputs: dict[str, str]) -> bool:
     """Compute the independent reachability oracle for inventory verification."""
     return (
         outputs.get("should_publish") == "true"
         and not scenario.cancelled
-        and all(scenario.needs_results.get(name) == "success" for name in VERIFY_NEEDS)
+        and scenario.admits_candidate
+        and all(
+            scenario.effective_results.get(name) == "success" for name in VERIFY_NEEDS
+        )
     )
 
 
@@ -109,11 +88,7 @@ def check_verify_inventory(
     job = workflow_job(release, VERIFY_JOB)
     check_verification_needs(job, violations)
     check_verification_permissions(job, violations)
-    contexts: dict[str, object] = {
-        "needs": _verification_needs_context(job, scenario, outputs),
-        "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}},
-    }
+    contexts = job_contexts(scenario, outputs, job)
     actual = evaluate_field(
         job.get("if", True),
         FieldEvaluation(

@@ -3078,52 +3078,272 @@ request, and refuses any other condition. And the dry run's event types outside
 
 ## Release-admission observability
 
-The release workflow runs a read-only release-admission canary scaffold before
-publication. The gate's GitHub API requests and Git fetches emit bounded JSON
-Lines (JSONL) metrics to a runner-local file. Each fixed operation emits its
-counter and duration at the operation boundary; the final gate boundary emits
-the overall counter, including early failures. The scaffold is currently
-non-blocking for publication; the publication dependency is enabled once a real
-RFC 0005 evidence producer is connected. The workflow uploads the completed
-JSONL file as a workflow artefact and writes one concise outcome line to
-`GITHUB_STEP_SUMMARY`. In the release workflow,
-`NETSUKE_RELEASE_ADMISSION_METRICS_FILE` points to
+The release workflow runs a release-admission canary gate before every write to
+a GitHub release, the crates.io registry, or the repository's packages. Its
+GitHub API requests and Git fetches emit bounded JSON Lines (JSONL) metrics to
+a runner-local file. Each fixed operation emits its counter and duration at the
+operation boundary; the final gate boundary emits the overall counter,
+including early failures. The workflow uploads the completed JSONL file as a
+workflow artefact and writes one concise outcome line to `GITHUB_STEP_SUMMARY`.
+In the release workflow, `NETSUKE_RELEASE_ADMISSION_METRICS_FILE` points to
 `${runner.temp}/release-admission-metrics.jsonl`, and the file is uploaded
 under the `release-admission-metrics` artefact name. The summary and upload
 steps retain the result on failure; dry-run policy still controls whether an
 artefact is uploaded. The workflow provisions Python before running the gate's
 monotonic duration timing helpers, using Python 3.14 through the SHA-pinned
-`astral-sh/setup-uv` action.
+`astral-sh/setup-uv` action. Every `setup-uv` step in the workflow also names
+`version: '0.13.2'`: the action's commit pins its own code, not the uv binary
+it installs, and an unset version is resolved from `uv.toml` or
+`pyproject.toml` in its working directory — the workspace root, which the
+candidate checkout owns. Naming the release keeps candidate content from
+choosing which uv runs a gate that holds the job's token, and
+`tests/workflow_contracts/release_admission_source_pin.py` requires the value
+rather than trusting the comment.
 
-The admission mode is a closed configuration vocabulary. The
-`NETSUKE_RELEASE_ADMISSION_ENFORCE` value is either `false` (observation) or
-`true` (enforcement), and an unset value defaults to `false`. The current
-release workflow explicitly selects `false` because no RFC 0005 evidence
-producer is connected. Observation mode records the fail-closed admission
-result, including `outcome=failure` and `error_category=missing_evidence` when
-the producer has not supplied evidence, writes the gate outputs and summary,
-and then exits successfully so the canary does not block publication.
-Enforcement mode preserves fail-closed behaviour: missing, stale, malformed,
-unknown, or mismatched evidence exits non-zero after recording its bounded
-result. An environment value such as `fresh` is not evidence and must never
-substitute for a real evidence producer. Any other mode value is an invalid
-configuration and fails closed as an unknown gate result.
+The gate has two modes, and the workflow derives which one applies rather than
+configuring it. `NETSUKE_RELEASE_ADMISSION_ENFORCE` is set from
+`needs.metadata.outputs.should_publish`: `false` (observation) on a rehearsal,
+`true` (enforcement) on a publishing run. Observation records the same
+fail-closed decision — including `outcome=failure` and a refusing
+`error_category` when the evidence is missing, malformed, stale, about another
+candidate, or reports an unsuccessful upstream result — writes the gate outputs
+and summary, and then exits successfully, so a missing producer cannot make the
+read-only lane unreachable. Producer attribution is the one check that is
+enforcement-only: a rehearsal reads and reports the manifest it was given,
+because an unattributable upload in a dry run is a rehearsal input rather than
+a publication decision, so an observation run can record `outcome=success` on
+evidence an enforcing run would refuse with `untrusted_evidence`. Enforcement
+exits non-zero after recording a refusal. Observation exits successfully even
+when it records a refusal; both modes still run the gate and write its outputs.
+An environment value such as `fresh` is not evidence and must never substitute
+for a real evidence producer, and any value that is neither `true` nor `false`
+fails closed as an unknown gate result.
+
+The four jobs that hold `contents: write`, `packages: write`, or
+`id-token: write` require the gate explicitly. Each declares
+`release-admission-canaries` and `package-crate` as dependencies and carries
+four top-level conjuncts in its job-level condition:
+`needs.release-admission-canaries.result == 'success'`,
+`needs.release-admission-canaries.outputs.enforcement == 'true'`,
+`needs.release-admission-canaries.outputs.gate_outcome == 'success'`, and
+`needs.release-admission-canaries.outputs.candidate_commit == github.sha`,
+beside the packaging result and the mode output. A report-only gate therefore
+cannot satisfy a publishing job even when it reports success, and neither can a
+gate that admitted a different commit. The rule is stated once, in
+`tests/workflow_contracts/release_write_authority_contract.py`, which derives
+the set from the workflow's own permission scopes: a new publisher added beside
+the gate fails the contract until it sits behind it. Scopes are read from the
+job's own `permissions` declaration or, when it declares none, from the
+workflow's, and either may be the `write-all` shorthand; a job whose scopes
+cannot be derived at all is reported rather than assumed read-only, because the
+repository default can grant write. A clause hidden inside a negation does not
+count as a conjunct, and a guard holding any `||` is refused outright: `&&`
+binds tighter than `||`, so an appended always-true disjunct leaves every
+required clause visible while making the guard always true. The optional
+`${{ }}` wrapper is removed before the guard is read, so the wrapped and bare
+spellings GitHub both accepts for one guard are judged alike. The same module
+requires `release-admission-canaries`, `package-crate`, and `release` to hold
+no write scope, so the jobs that must stay reachable cannot mutate anything.
+
+Evidence is a candidate-bound JSON manifest, not a claim about one. Schema
+version 1 names the repository, the 40-character lowercase commit, the release
+tag, the workflow run identifier, and the instant the manifest was issued, and
+carries one timestamped result per canary. Two results are required:
+`history_scan` and `release_candidate`. A manifest may carry further results
+and unknown fields, because #598 adds downstream canaries and a verifier that
+refused every name it had not been taught would make each addition a breaking
+change; a schema version the verifier does not know is refused rather than
+interpreted under the wrong rules. Admission compares the manifest with the
+release the run is about to perform, and refuses a document naming another
+repository, commit, run, or tag. The workflow downloads the producer's
+`release-admission-evidence` artefact into
+`${runner.temp}/release-admission-evidence` and points
+`NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE` at `evidence.json` inside it; the
+download tolerates the artefact's absence, so a missing producer reaches the
+verifier as `missing_evidence` rather than as an anonymous job failure.
+
+Whether the run can attribute the evidence to a producer it trusts is a
+separate input, `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`. The workflow sets
+it, never the caller: only this repository's workflow file can change it, the
+admission job checks the gate out from the commit that defines that file, and
+the shipped literal is `false`. That is the interim publication block. An
+enforcing run therefore refuses every manifest with `untrusted_evidence` unless
+the variable is exactly `true`; anything unset, empty, or misspelled leaves the
+gate unable to attribute the evidence, which is the intended state until #598
+supplies a producer whose upload attests itself. Observation mode ignores the
+variable, so a rehearsal still reports the manifest it read and the read-only
+lane stays reachable. `scripts/tests/test_release_admission_producer_trust.py`
+pins the refusal across five spellings of a non-attributing value, the
+admitting case for `true`, and the observation-mode control.
+
+Freshness is bounded at both ends. Every recorded instant must lie within
+`NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS`, which defaults to 86,400
+seconds and may not exceed one week, and no instant may sit more than five
+minutes ahead of the gate's own clock. Runner clocks are not synchronized, so a
+small lead is expected; a larger one means the document was written for a
+moment that has not arrived. The one-day default is provisional until a real
+producer's cadence is known, and is the number to revisit then rather than a
+settled tolerance.
+
+Refusals are reported as one category, never as a message body, path, or
+identifier. `missing_evidence` says no document was supplied,
+`malformed_evidence` says the document could not be read as schema 1,
+`candidate_mismatch` says it read perfectly well and describes a different
+release, `untrusted_evidence` says the run cannot attribute it to a trusted
+producer, `stale_evidence` says a timestamp fell outside the bounded window, and
+`unknown` says a result reported a non-success outcome. Those two refuse
+different things: a mismatched document can be corrected, while an
+unattributable one has to be replaced by a producer the run trusts. Presence is
+required only for the two canary names in `policy.REQUIRED_RESULTS`; success is
+required of every result the manifest declares, so a producer that adds a
+downstream canary can report it without a change here, while a reported failure
+is refused rather than ignored. The earlier operations add `api_error`,
+`fetch_error`, `timeout`, and `mismatch`. An operator fixes each in a different
+place, which is why they are separate words rather than one failure. The gate
+publishes six outputs — `gate-outcome`, `gate-error-category`, `enforcement`,
+`candidate-commit`, `metrics-file`, and `trace-file` — so a refused publication
+records why in the job that refused it.
+
+Publishing therefore fails until a producer uploads
+`release-admission-evidence` *and* the run can attribute that upload to it, and
+that is the intended state. Enforcement lands before any producer exists, so
+the path that would publish without evidence is closed first; connecting a
+producer first would leave that path open for however long the two changes
+landed apart. The producer is tracked by
+[#598](https://github.com/leynos/netsuke/issues/598), which also supplies the
+downstream canaries admission is to require. Publishing is now gated on
+packaging and on an enforced, successful admission (`#1070`); issue `#1065`,
+which tracked the release pipeline, is closed. No override exists: no input,
+environment variable, or workflow-dispatch field can request enforcement on a
+rehearsal or observation on a publishing run, because the mode is derived from
+the release mode the metadata job already resolved.
+
+Enabling publication is a further step, not a flip of this gate. Before a
+publishing run can succeed, `#598` has to supply a trusted producer, the
+admission job has to wait for that producer's upload rather than tolerating an
+absent artefact, and the required result set has to name the downstream
+canaries. Until then the download step keeps `continue-on-error: true` so an
+absent artefact is reported as `missing_evidence` -- a refused admission --
+rather than as a missing producer, the workflow keeps
+`NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` at `false` so a supplied document
+is reported as `untrusted_evidence`, and a successful publishing run has to be
+demonstrated end to end alongside the refused one before either changes.
+Nothing in this repository produces the manifest yet, so publication is
+deliberately blocked on both counts rather than merely untested.
+
+The download is not a trust boundary, and this guide does not claim one.
+`actions/download-artifact` resolves the current run by default, so any
+artefact named `release-admission-evidence` in that run reaches the verifier.
+The identity fields are then compared with the run, which shows the document
+agrees with the candidate rather than who produced it. A workflow may also call
+`release.yml` and define its own jobs in the same run, so such a caller could
+upload under that name before admission starts; the values it would have to
+match are the run's own commit, tag, and run identifier, all of which that
+caller knows. What the gate closes is therefore the accidental path -- a run
+that publishes without packaging, or with a producer that never ran -- not a
+caller that deliberately supplies evidence of its own. That second path is
+closed by the interim block rather than by the identity fields: because
+`NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` ships `false`, an enforcing run
+refuses a same-run supplier's manifest with `untrusted_evidence` just as it
+refuses an absent one. The block is a maintainer's declaration that no trusted
+producer exists yet, not an authentication of one, so it does not establish
+provenance either; binding the evidence to a named producer job and
+authenticating that producer remains `#598`'s work, and flipping the literal
+before that lands would reopen the path this block closes.
+
+The gate itself is pinned to this repository's own commit, which is what keeps
+that block out of a caller's reach. `release.yml` is reusable, and a called
+workflow's default checkout resolves the *caller's* repository, so an unpinned
+admission job would run whatever `release_admission.py` the caller's candidate
+contains -- including an older gate written before the producer-trust refusal,
+which would report the mode, outcome, and candidate every write job consumes
+while ignoring the literal.
+
+The job therefore checks out two commits and keeps them apart. The first
+checkout is the caller's candidate at the workspace root, and its purpose is to
+leave `origin` naming the repository the candidate belongs to: the gate fetches
+the candidate revision from `origin`, so a cross-repository caller's commit has
+to be fetchable from there. Its `persist-credentials` keeps the default because
+the fetch must read a private caller's repository; the job holds
+`contents: read`, so the credential git inherits cannot write, and nothing from
+that checkout is executed. The second checkout is the verifier,
+`leynos/netsuke` at `${{ job.workflow_sha }}`, written into a subdirectory with
+`persist-credentials: false`. A verifier checkout at the workspace root would
+replace the candidate checkout and re-point `origin` here, which is exactly how
+the candidate fetch stops working, so the subdirectory is a safety property
+rather than a layout preference. The gate step runs
+`uv run --no-config --no-project --script
+gate/.github/scripts/release_admission.py`
+with the candidate checkout as its working directory, which is what leaves
+`origin` naming the caller while the code being run comes from this repository.
+
+Those two uv flags exist because that working directory is untrusted content.
+uv reads `uv.toml` and `pyproject.toml` from the working directory and its
+parents, so a candidate that supplied either could redirect the index the
+gate's own pinned dependencies come from and run its code inside the admission
+job, where `GH_TOKEN` is available. `--no-config` refuses the configuration
+files and `--no-project` refuses project discovery; neither suppresses the
+entry point's PEP 723 block, so uv still resolves and installs the verifier's
+declared dependencies.
+
+`job.workflow_sha` is the commit of the workflow file that defines the job, so
+the gate and the literal in its step environment come from the same commit as
+the guards that trust them; the job's inline steps, including the summary, come
+from that file as well. This holds for a reusable-workflow call and for a
+directly triggered run alike; `github.sha` would not do, because on a call it
+is the caller's candidate. `job.workflow_sha` postdates actionlint's vendored
+context types, so `.github/actionlint.yaml` exempts that diagnostic. The
+exemption matches on file and message text rather than on an expression, so it
+silences the message anywhere in `release.yml`; `release_admission_source_pin`
+in `tests/workflow_contracts/release_admission_source_pin.py` is what holds the
+checkout order, subdirectory, and gate step of the expression the exemption
+exists for, with the repository and ref each checkout must name in
+`release_admission_checkout_inputs.py`. `release_publication_gate_mutations.py`
+and `release_admission_checkout_mutations.py` prove the rule fires when the
+pair is collapsed into one checkout, when the verifier replaces the candidate,
+when either checkout names the other's repository or ref, when a checkout is
+made conditional or failure-tolerant, when the verifier keeps its credential or
+is given a path the shell would split, when the two checkouts are written in
+the wrong order, when the gate runs the candidate's copy of the entry point,
+splits its command at a shell boundary, stops refusing the candidate's
+configuration and project files, or is moved into the verifier by a step, job,
+or workflow default -- forty stated regressions in all.
+
+Two limits follow from the mechanism and are recorded rather than worked
+around. GitHub documents `job.workflow_sha` as unavailable on GitHub Enterprise
+Server, so this pin is for github.com. The hard-coded `leynos/netsuke` also
+assumes the job is defined in this repository, so a fork that runs its own copy
+of `release.yml` verifies with this repository's gate at this repository's
+commit: a fork's own changes to the gate do not take effect until it changes
+the repository input. This pin removes the caller's choice of implementation;
+it does not authenticate a producer, because a caller that replaces the whole
+workflow also replaces the guards. Provenance remains `#598`'s work.
 
 The gate logic is Python, per the estate rule in
 [scripting standards](scripting-standards.md), not shell.
 `.github/scripts/release_admission.py` is the PEP 723 entry point the workflow
-runs with `uv run --script`, which resolves its declared dependencies at
-invocation. Its implementation is split across
-`.github/scripts/_release_admission/`: `policy` owns the pure bounded
-classifications, `records` owns the metric and trace shapes, `delivery` owns
-the metric, output, and trace sinks, `bounding` owns the process-group command
-bound and the stream wiring, `commands` owns the bounded external command
-runner, `statuses` translates an exit status, an elapsed bound, or a refused
-launch into the gate's own command result, `telemetry` owns the emitted records,
-`environment` reads a variable in one of Bash's two default forms,
-`filesystem` performs the two start-up effects that create the artefact parents
-and truncate the artefacts, `configuration` resolves the environment the gate
-is told, and `gate` composes the operations and reporting. The workflow's
+runs with `uv run`, with configuration and project discovery disabled as
+described above, which resolves its declared dependencies at invocation. Its
+implementation is split across `.github/scripts/_release_admission/`: `policy`
+owns the pure bounded classifications, including `classify_run_head` for the
+run a lookup reported, `publishable_revision` for the narrower value written to
+`GITHUB_OUTPUT`, and `enforcement_label` for the mode the write jobs compare
+with `'true'`, `manifest` owns the candidate-bound evidence document, its
+schema version, field readers, and its single refusal, `evidence` owns the
+freshness and admission decisions over a parsed manifest, the bounded maximum
+age, and the variables that set it, `admission_evidence` owns the shared read
+and the two evidence decisions, including the window re-read before admission,
+`records` owns the metric and trace shapes, `delivery` owns the metric, output,
+and trace sinks, `bounding` owns the process-group command bound and the stream
+wiring, `commands` owns the bounded external command runner, `statuses`
+translates an exit status, an elapsed bound, or a refused launch into the
+gate's own command result, `telemetry` owns the emitted records, `environment`
+reads a variable in one of Bash's two default forms, `filesystem` creates the
+artefact parents, truncates the artefacts, and performs the bounded evidence
+read with `read_bytes`, which refuses a document past its byte bound with
+`EvidenceTooLargeError` and a path that is not a regular file with
+`NotRegularFileError`, `configuration` resolves the environment the gate is
+told, and `gate` composes the operations and reporting. The workflow's
 `astral-sh/setup-uv` step provisions the interpreter; `uv` reads the entry
 point's own `requires-python` and dependency pins rather than the workflow
 restating them.
@@ -3131,7 +3351,10 @@ restating them.
 The gate keeps fallible boundaries behind explicit adapters. Set
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
 `NETSUKE_RELEASE_ADMISSION_GIT_ADAPTER` for Git fetches,
-`NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` for monotonic clock readings,
+`NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` for both clock readings — the
+monotonic readings that measure an elapsed bound and the wall-clock reading
+(`time.time()`, via `WALL_CLOCK_ARGUMENTS`) the freshness checks compare
+against the evidence's own timestamp — and
 `NETSUKE_RELEASE_ADMISSION_METRICS_SINK` for metric records,
 `NETSUKE_RELEASE_ADMISSION_OUTPUT_SINK` for `GITHUB_OUTPUT`, or
 `NETSUKE_RELEASE_ADMISSION_TRACE_SINK` for trace records. The defaults are `gh`,
@@ -3240,7 +3463,8 @@ The metric contract is deliberately closed. The only label names are `canary`,
   `check_scan_freshness|verify_evidence`;
 - `outcome=success|failure|unknown`; and
 - `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|`
-  `mismatch|timeout|unknown`.
+  `malformed_evidence|candidate_mismatch|untrusted_evidence|mismatch|timeout|`
+  `unknown`.
 
 The duration instrument carries only the fixed `operation` label. Never add a
 revision, run ID, path, URL, workflow content, or other identifier-derived
@@ -3277,8 +3501,9 @@ Instruments emitted by the gate are:
 
 - `netsuke_release_admission_gate_total` — counter. Records the final canary
   outcome with `outcome` and `error_category` labels. Operators use it to
-  identify a successful, failed, or unknown canary result. It does not gate
-  publication until a real evidence producer is connected.
+  identify a successful, failed, or unknown canary result. The record is what
+  an operator reads after a refusal; the gate's own outputs, not this counter,
+  are what the write jobs condition on.
 - `netsuke_release_admission_operation_total` — counter. Records one result
   for each fixed GitHub API request or Git fetch, with `canary`, `operation`,
   `outcome`, and `error_category` labels. Operators use it to locate the
@@ -3356,21 +3581,21 @@ the builds and package validation, while the registry publisher and GitHub
 writer are skipped. A tagged publishing run reaches the crates.io publisher and
 the separate GitHub release writer after their prerequisites succeed.
 
-| Job                           | Needs                                                       | Permissions                         | Mode                           |
-| ----------------------------- | ----------------------------------------------------------- | ----------------------------------- | ------------------------------ |
-| `metadata`                    | —                                                           | `contents: read`                    | always                         |
-| `build-linux`                 | `metadata`                                                  | `contents: read`                    | always                         |
-| `build-windows`               | `metadata`                                                  | `contents: read`                    | always                         |
-| `build-macos`                 | `metadata`                                                  | `contents: read`                    | always                         |
-| `windows-native-recipe-smoke` | `metadata`                                                  | `contents: read`                    | publish or PR ready-for-review |
-| `release-admission-canaries`  | `metadata`                                                  | `contents: read`, `actions: read`   | always                         |
-| `package-crate`               | `metadata`                                                  | `contents: read`                    | always                         |
-| `publish-crates-io`           | all six validation jobs and `package-crate`                 | `contents: read`, `id-token: write` | `should_publish == 'true'`     |
-| `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: read`                    | `dry_run == 'true'`            |
-| `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | published, not dry run         |
-| `verify-release-inventory`    | `metadata`, `publish-crates-io`, `publish-release`          | `contents: write`                   | both publishers succeeded      |
-| `finalize-github-release`     | `metadata`, `package-crate`, both publishers, the verifier  | `contents: write`                   | every prerequisite succeeded   |
-| `consumer-smoke`              | `metadata`, `package-crate`, `finalize-github-release`      | `contents: read`                    | every prerequisite succeeded   |
+| Job                           | Needs                                                                                    | Permissions                         | Mode                           |
+| ----------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------ |
+| `metadata`                    | —                                                                                        | `contents: read`                    | always                         |
+| `build-linux`                 | `metadata`                                                                               | `contents: read`                    | always                         |
+| `build-windows`               | `metadata`                                                                               | `contents: read`                    | always                         |
+| `build-macos`                 | `metadata`                                                                               | `contents: read`                    | always                         |
+| `windows-native-recipe-smoke` | `metadata`                                                                               | `contents: read`                    | publish or PR ready-for-review |
+| `release-admission-canaries`  | `metadata`                                                                               | `contents: read`, `actions: read`   | always                         |
+| `package-crate`               | `metadata`                                                                               | `contents: read`                    | always                         |
+| `publish-crates-io`           | all six validation jobs and `package-crate`                                              | `contents: read`, `id-token: write` | `should_publish == 'true'`     |
+| `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke`                              | `contents: read`                    | `dry_run == 'true'`            |
+| `publish-release`             | the same seven as `publish-crates-io`                                                    | `contents: write`                   | `should_publish == 'true'`     |
+| `verify-release-inventory`    | `metadata`, `package-crate`, `release-admission-canaries`, both publishers               | `contents: write`                   | both publishers succeeded      |
+| `finalize-github-release`     | `metadata`, `package-crate`, `release-admission-canaries`, both publishers, the verifier | `contents: write`                   | every prerequisite succeeded   |
+| `consumer-smoke`              | `metadata`, `package-crate`, `finalize-github-release`                                   | `contents: read`                    | every prerequisite succeeded   |
 
 *Table 1: `release.yml` jobs, their dependencies, permissions, and mode.*
 
@@ -3392,9 +3617,15 @@ after the release is public and holds `contents: read` alone: it downloads what
 a consumer downloads and runs one published executable, so it needs no write
 authority over the release it is checking.
 
-`release` and `publish-release` carry the same five-job dependency list and
-mutually exclusive guards, so a run is a rehearsal or a publication and never
-both. The guards are derived from the workflow's own authorization decision in
+`release` and `publish-release` carry mutually exclusive guards, so a run is a
+rehearsal or a publication and never both, but their dependency lists differ on
+purpose. `release` needs only `metadata`, the three builds, and
+`windows-native-recipe-smoke`, so packaging or admission failing cannot make
+the read-only lane unreachable. `publish-release` needs those five plus
+`package-crate` and `release-admission-canaries`, and its guard requires each
+of the seven to succeed, the run not to be cancelled, the gate to have enforced
+and admitted this commit, and `should_publish == 'true'`. The guards are
+derived from the workflow's own authorization decision in
 `scripts/authorize_release_writes.py`, which reads the reusable `publish` and
 `dry-run` inputs, the trigger, `github.workflow_ref`, and the pinned
 `determine-release-modes` answers. The resolver alone is necessary but not
@@ -3405,12 +3636,10 @@ an unconditional veto, a reusable invocation needs an explicit `publish: true`,
 the ref must be a `v*.*.*` tag, and only a direct tag push of `release.yml`
 itself may publish on the resolver's word alone. The same decision supplies
 `should_publish` to the artefact upload, so the upload stage and the jobs agree
-about the mode. The registry job has seven prerequisites: `metadata`,
-`package-crate`, all three platform builds, `windows-native-recipe-smoke`, and
-`release-admission-canaries`. Its job-level condition requires every
-prerequisite to succeed, the run not to be cancelled, and
-`should_publish == 'true'`. Pull requests and dry runs therefore skip the job
-before requesting the `crates-io` environment or exchanging credentials.
+about the mode. The registry job carries the same seven prerequisites and the
+same admission checks. Pull requests and dry runs therefore skip both
+publishers before requesting the `crates-io` environment or exchanging
+credentials.
 
 `package-crate` packages the crate, records its candidate identity and archive
 digest, and uploads them as the `release-crate-package` artefact. Before the
@@ -3426,15 +3655,15 @@ and digest before it probes crates.io. Its action consumes the recorded
 
 The registry job and `publish-release` remain independent siblings: neither
 depends on the other, so an upload interrupted on one surface can be resumed
-without repeating the other. `verify-release-inventory` runs only after both. A
-tagged run in which either publisher fails or is skipped therefore leaves the
-draft unverified, and `finalize-github-release` runs only after the verifier as
-well, so the release's inventory is reconciled once more by a read taken
-immediately before the edit. That read covers the GitHub release alone: the
-registry was verified earlier and is not read again. Those checks narrow the
-gap between the verified snapshot and the release this finalizer publishes;
-they cannot close it, because an asset can still change between that read and
-the edit.
+without repeating the other. `verify-release-inventory` runs only after both,
+and only once packaging and admission have succeeded as well. A tagged run in
+which either publisher fails or is skipped therefore leaves the draft
+unverified, and `finalize-github-release` runs only after the verifier as well,
+so the release's inventory is reconciled once more by a read taken immediately
+before the edit. That read covers the GitHub release alone: the registry was
+verified earlier and is not read again. Those checks narrow the gap between the
+verified snapshot and the release this finalizer publishes; they cannot close
+it, because an asset can still change between that read and the edit.
 
 That gate governs the transition, not a state. A rerun that begins with a
 release already public leaves it public whether or not the verifier and
@@ -3533,8 +3762,13 @@ The job's guard names every dependency result explicitly:
 if: >-
   !cancelled() &&
   needs.metadata.result == 'success' &&
+  needs.package-crate.result == 'success' &&
   needs.publish-crates-io.result == 'success' &&
   needs.publish-release.result == 'success' &&
+  needs.release-admission-canaries.result == 'success' &&
+  needs.release-admission-canaries.outputs.enforcement == 'true' &&
+  needs.release-admission-canaries.outputs.gate_outcome == 'success' &&
+  needs.release-admission-canaries.outputs.candidate_commit == github.sha &&
   needs.metadata.outputs.should_publish == 'true'
 ```
 
@@ -3553,14 +3787,70 @@ reached through nested wrappers; a `gh` subcommand outside the two the contract
 has a rule for, whether built from a variable or quoted, which hides the call
 the `gh api` check looks for; and any command that would hand a run-time string
 to an interpreter. `release_publish_path_verification.py` judges the job's
-reachability from the scenario rows in `release_publish_path_scenarios.py`.
+reachability from the scenario rows in `release_publish_path_scenarios.py`,
+against the expected outputs of a correctly wired run rather than against the
+guard under test, so a guard that stops matching the model is a finding instead
+of an agreed answer. The table varies each of the seven prerequisites through
+`failure` and `skipped`, adds the `verify-release-inventory` outcomes, and
+keeps the realistic dry run in which both publishers are skipped while the
+rehearsal job runs.
+
 Each row is a `Scenario` from `release_publish_path_scenario_model.py`, which
 derives the expected outputs by running the real
 `scripts/release_write_policy.py` policy through
 `scripts/authorize_release_writes.py`, so the contract holds the wiring to the
-rule a live run applies rather than to a second copy of it. The table includes
-a publisher failure and a publisher skip for each publisher, plus the realistic
-dry run in which both are skipped while the rehearsal job runs.
+rule a live run applies rather than to a second copy of it. A row names only
+the leaf outcomes its case exercises, and `needs_results()` refuses a name the
+table does not model, because a mistyped job name would otherwise leave the
+intended dependency at its default and assert the opposite of what the row's
+name says.
+
+`release_publish_path_results.py` then derives every other job's result from
+the workflow's own `needs` edges, which is what keeps a row describing a run
+GitHub could report. Naming a downstream job's result directly let a row assert
+that a publisher succeeded while the build it publishes had failed; a job with
+no guard now runs only when each dependency succeeded, and a guarded job is
+evaluated as written, so the rehearsal still runs after packaging or admission
+fails. Cancellation is modelled through `status.cancelled` rather than through
+the results, so only a missing `!cancelled()` clause stops a job in a cancelled
+run; a dependency that reports `cancelled` while the run continues is an
+ordinary non-successful result, and the table varies it alongside `failure` and
+`skipped`.
+
+Three further rows model a gate that reported a successful job without
+admitting this run: report-only admission, a non-successful gate outcome, and
+admission of another commit. Each is a publishing run whose publishers,
+verifier and finalizer must all stay shut.
+
+`release_publish_path_finalization.py` evaluates the job whose effect cannot be
+undone. Un-drafting is irreversible, so finalization has its own per-scenario
+oracle, computed from the scenario rather than read off the guard: it must run
+exactly when the run publishes, was not cancelled, `should_publish` is `true`,
+admission admits the candidate, and every one of its six declared dependencies
+succeeded. A guard that keeps every required clause and also names the
+rehearsal -- skipped on every publishing run -- is exact and permanently
+unreachable, and the oracle reports it by name, as it reports a guard that
+would finalize a run that should not. The admission outputs themselves come
+from the scenario, so a gate that observed, refused, or admitted another
+candidate is evaluated as the guard would see it rather than as a docstring
+claims it would.
+
+Three modules hold the mutation scaffolding.
+`release_admission_gate_contract.py` evaluates the gate's enforcement
+expression in every scenario, so a mode hard-coded in either direction is
+reported for the case that exposes it, and `check_admission_source_pin` holds
+the pinned checkout described under release-admission observability.
+`release_mutation_support.py` shares the failure vocabulary and `replace_once`,
+which refuses a mutation pattern that matches other than exactly once, so a
+stale rule cannot report success without editing anything.
+`release_publication_gate_mutations.py` states each way to reopen the
+publication bypass -- a dropped need, a dropped guard clause, a hard-coded
+mode, an `always()` or disjunction, a write scope outside the model, or an
+unpinned gate checkout -- beside the diagnostics it must provoke, and
+`release_publish_path_mutations.py` merges those cases with the core
+release-path mutations for `release_publish_path_mutations_test.py`, which
+applies each to a fresh copy of the workflow and requires the named diagnostic
+to fire.
 
 ### Release-inventory verifier telemetry
 
@@ -5165,7 +5455,14 @@ describe and mutate the release workflow's documents, and production code must
 not import them. `release_publish_path_scenario_model.py` owns `Scenario`,
 `Invocation`, and `needs_results`, and derives each scenario's expected outputs
 through `scripts/release_write_policy.py` and
-`scripts/authorize_release_writes.py`.
+`scripts/authorize_release_writes.py`. `release_publish_path_results.py` owns
+`resolve_results`, which propagates each scenario's declared leaf outcomes
+through the workflow's own `needs` edges so every oracle reads the results a
+run could report, and `dependency_order`, which orders the jobs and reports a
+cycle rather than looping. `release_publish_path_context.py` owns
+`job_contexts`, which builds the `needs`, `status` and `github` contexts a
+guard is evaluated against, and the `Resolution` value that lets the resolver
+supply its own partial results with `cancelled=False`.
 `release_publish_path_metadata_outputs.py` owns `metadata_outputs` and
 `resolved_repo_name`, which evaluate the metadata job's declarations against
 the step answers a run may publish. `release_publish_path_authorization.py` owns
@@ -5953,16 +6250,18 @@ Python gate. It uses the repository's Python 3.14 baseline and provisions
 `pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
 `cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
 `cyclopts==4.25.3` for the entry point the tests import. The target runs the
-fourteen runtime modules with `python -m pytest`, `-c /dev/null`,
+twenty-five runtime modules with `python -m pytest`, `-c /dev/null`,
 `--rootdir=.`, and `-p no:cacheprovider`, so the test run is isolated from
 repository-local pytest configuration and cache state:
 
 - `scripts/tests/test_release_admission_metrics.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
+- `scripts/tests/test_release_admission_invalid_configuration.py`
 - `scripts/tests/test_release_admission_metric_boundedness.py`
 - `scripts/tests/test_release_admission_process_bounds.py`
 - `scripts/tests/test_release_admission_environment_contract.py`
 - `scripts/tests/test_release_admission_configuration_resolution.py`
+- `scripts/tests/test_release_admission_destination_resolution.py`
 - `scripts/tests/test_release_admission_artefact_initialization.py`
 - `scripts/tests/test_release_admission_artefact_truncation.py`
 - `scripts/tests/test_release_admission_default_forms.py`
@@ -5970,7 +6269,22 @@ repository-local pytest configuration and cache state:
 - `scripts/tests/test_release_admission_status_translation.py`
 - `scripts/tests/test_release_admission_runner_contract.py`
 - `scripts/tests/test_release_admission_metric_degradation.py`
+- `scripts/tests/test_release_admission_wall_clock.py`
+- `scripts/tests/test_release_admission_manifest_parsing.py`
+- `scripts/tests/test_release_admission_evidence_reading.py`
+- `scripts/tests/test_release_admission_freshness_recheck.py`
+- `scripts/tests/test_release_admission_freshness_properties.py`
+- `scripts/tests/test_release_admission_bounded_guards.py`
+- `scripts/tests/test_release_admission_producer_trust.py`
+- `scripts/tests/test_release_admission_cross_repository.py`
 - `scripts/tests/test_release_admission_sink_persistence.py`
+- `scripts/tests/test_release_admission_harness_isolation.py`
+
+The module list is itself contractual.
+`tests/workflow_contracts/release_admission_runtime_gate_test.py` compares the
+target's recipe against the same paths in the same order, so a module added to
+one without the other fails the workflow-contract suite rather than running
+unnoticed or not at all.
 
 Three of these reach past the doubles. `..._process_bounds.py` holds the
 bound's own regression cases: a child and a descendant it starts, both trapping
@@ -5983,6 +6297,45 @@ file descriptor can observe an inherited stream. `..._status_translation.py`
 calls `statuses.as_bash_status` and `statuses.launch_failure_status` directly
 and drives real sink processes, so a signal death and a refused launch are
 observed rather than fabricated.
+
+`..._freshness_recheck.py` does something the others do not: it scripts the
+wall clock. The gate reads that clock once when it checks the evidence window
+and again when it is about to admit, so a case names the readings in order and
+the double answers them in that order, leaving the monotonic reads to a rising
+counter so no duration decides a case about freshness. Each case also asserts
+which readings it was actually served, so a gate that stopped re-reading the
+window fails there instead of passing for want of a second reading.
+
+`..._wall_clock.py` covers the case where the wall clock answers with something
+that is not a moment. `commands.read_wall_clock` returns a reading together
+with an unusable flag, because the zero fallback it reports is also a real
+instant: a refused read, a word, and the non-finite values `float` accepts all
+travel as `0.0` with the flag set, while zero, a negative moment, and an
+exponent form travel with it clear. `nan` is the dangerous one, since every
+comparison against it is false and a window test that accepted it would admit
+an unbounded document. End-to-end cases spoil each of the run's two wall-clock
+reads in turn -- the check's observation and the admission's re-read -- and
+require `failure`/`unknown` at the operation that asked, so a gate that started
+treating an unusable reading as an instant fails here rather than admitting.
+
+`..._freshness_properties.py` states the same relation over generated windows
+rather than at the named edges. It draws the issue instant, the window length,
+and both readings, then requires the check to admit exactly the readings inside
+the window, admission to require both readings inside it, and a refusal at the
+check never to be converted into an admission. It reaches the production
+decisions through the injected clock and filesystem ports, so both edges of the
+window, and a clock that moves backwards between the readings, are exercised
+without a child process. A named case beside the property scripts the unusable
+flag at each position, requiring `unknown` at both the check and the decision
+rather than the `stale_evidence` an epoch fallback would produce.
+
+`..._bounded_guards.py` pins the two refusals that narrow a value before
+anything is published on it. The maximum evidence age must be plain bounded
+decimal digits, because a mistyped bound must not widen the window, and the
+revision that reaches `GITHUB_OUTPUT` must be a full lowercase object ID,
+because a newline there would forge a second `key=value` line. Both tables
+carry the spellings that a reader which merely tried `int`, or merely checked
+the width, would accept.
 
 The runtime modules drive the gate as a real process and intercept its external
 commands with cmd-mox doubles registered under the gate's own adapter names.
@@ -6037,6 +6390,25 @@ to the child's standard error, which is retained with the release and therefore
 carries the same cardinality hazard as a label. It is not redundant with the
 record check: the gate's own diagnostics are fixed sentences, but an adapter's
 message reaches that stream through the inherited stderr.
+
+Four further modules own one construction each, so a case names the state it
+wants instead of assembling the machinery around it. The environment one real
+invocation starts with belongs to `release_admission_gate_environment.py`:
+`gate_environment` drops every inherited `NETSUKE_RELEASE_ADMISSION_*` and
+`GIT_*` name, because an exported tag or a hook's `GIT_DIR` would otherwise
+decide what the case exercises, prepends the active cmd-mox shim directory to
+`PATH`, writes the fixed runner values, and applies the case's own overrides
+last, where a `None` removes a name rather than storing an empty one.
+`release_admission_evidence_fixtures.py` builds the candidate-bound manifests
+the cases hand the gate; it writes the schema out independently of the
+verifier, so a fixture cannot agree with a reader that dropped a required
+result. `release_admission_cross_repository_layout.py` builds the caller and
+verifier repositories in the case's own temporary tree, because the working
+directory that chooses `origin` is invisible to a command double, and the
+layout is asserted as it is built so a passing fetch cannot be vacuous.
+`release_admission_validator.py` loads the workflow-contract metrics schema by
+file path and exposes it as a narrow protocol, so the runtime suite asserts
+against the contract suite's validator rather than restating it.
 
 The isolated subprocess uses `GITHUB_REPOSITORY` as the fixed repository value
 at its doubled GitHub boundary. The boundedness property generates canonical

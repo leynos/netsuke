@@ -36,6 +36,48 @@ from actions_expression_evaluator import (
 
 #: The characters that open a string literal, matched by the same character.
 _QUOTES: typ.Final[str] = "'\""
+#: The delimiters an ``if`` value may wrap its whole expression in.
+_WRAPPER_OPEN: typ.Final[str] = "${{"
+_WRAPPER_CLOSE: typ.Final[str] = "}}"
+
+
+def unwrap_expression(expression: str) -> str:
+    """Return an ``if`` value with one optional ``${{ }}`` wrapper removed.
+
+    GitHub accepts a job-level ``if`` either bare or wrapped, and both spell
+    the same guard. Every reader here assumes the bare form, so leaving a
+    wrapper on would attach ``}}`` to the final clause and read a present check
+    as a missing one. Only a complete wrapper is removed: an expression that
+    merely ends in ``}}`` is left exactly as written.
+
+    Parameters
+    ----------
+    expression : str
+        The ``if`` value exactly as the workflow wrote it.
+
+    Returns
+    -------
+    str
+        The stripped expression inside the wrapper, or the stripped input when
+        it carries no complete wrapper.
+
+    Examples
+    --------
+    >>> unwrap_expression("${{ a && b }}")
+    'a && b'
+    >>> unwrap_expression("  a && b  ")
+    'a && b'
+    >>> unwrap_expression("${{ a }} && b")
+    '${{ a }} && b'
+    """
+    stripped = expression.strip()
+    is_wrapped = stripped.startswith(_WRAPPER_OPEN) and stripped.endswith(
+        _WRAPPER_CLOSE
+    )
+    if not is_wrapped:
+        return stripped
+    inner = stripped.removeprefix(_WRAPPER_OPEN).removesuffix(_WRAPPER_CLOSE)
+    return inner.strip()
 
 
 def _unquoted_positions(expression: str) -> cabc.Iterator[tuple[int, int]]:

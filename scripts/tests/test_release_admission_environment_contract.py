@@ -39,6 +39,7 @@ import typing as typ
 
 import pytest
 from release_admission_test_support import (
+    RELEASE_TAG,
     REVISION,
     install_boundaries,
     run_gate,
@@ -56,6 +57,15 @@ REVISION_VARIABLE = "GITHUB_SHA"
 OUTPUT_VARIABLE = "GITHUB_OUTPUT"
 METRICS_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_METRICS_FILE"
 TRACE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TRACE_FILE"
+EVIDENCE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE"
+ENFORCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
+PRODUCER_TRUST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED"
+TAG_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TAG"
+
+#: The evidence file the harness writes when a case names no other. It is the
+#: path a redirected run must leave untouched, because a second copy there
+#: would let a gate that ignored the configuration still find a document.
+DEFAULT_EVIDENCE_NAME = "release-admission-evidence.json"
 
 #: The artefact names the harness *configures*, which is what a
 #: refusal-position case asserts the absence of: the harness names both files
@@ -323,3 +333,47 @@ def test_required_input_refusal_keeps_the_shells_diagnostic_sentence(
         "the port must not prefix the sentence with a script path"
     )
     assert REVISION not in run.result.stderr, "the refusal must not carry the revision"
+
+
+def test_a_publishing_run_reads_the_configured_evidence_file(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify the manifest is read from the path the run was told to use.
+
+    Notes
+    -----
+    The evidence variable exists so a producer can publish a document without
+    the gate deriving its location, which makes the configured path the whole
+    contract. An enforcing run is the sharp case: it refuses a document it
+    cannot read, so a gate that looked at any other path would fail here, and a
+    harness that wrote the fixture to its own default would fail it just as
+    surely by leaving the configured path empty.
+    """
+    redirect = tmp_path / "configured" / "evidence.json"
+    install_boundaries(cmd_mox)
+    run = run_gate(
+        cmd_mox,
+        tmp_path,
+        evidence_state="fresh",
+        extra_environment={
+            EVIDENCE_FILE_VARIABLE: str(redirect),
+            ENFORCE_VARIABLE: "true",
+            # The path contract is the subject here, so the run states the
+            # producer attribution that keeps admission reachable; the shipped
+            # block that withholds it has its own cases.
+            PRODUCER_TRUST_VARIABLE: "true",
+            TAG_VARIABLE: RELEASE_TAG,
+        },
+    )
+
+    assert run.result.returncode == 0, run.result.stderr
+    assert run.outputs["gate-outcome"] == "success", (
+        "a candidate-bound manifest at the configured path must be admitted"
+    )
+    assert redirect.exists(), (
+        "the document must be written where the run was told to read it"
+    )
+    assert not (tmp_path / DEFAULT_EVIDENCE_NAME).exists(), (
+        "no document may sit at the harness default when the run named another"
+    )

@@ -73,10 +73,39 @@ CRATES_IO_NEEDS = {
     "release-admission-canaries",
 }
 PUBLISHER_NEEDS = {"publish-crates-io", "publish-release"}
-#: The verification job depends on both publishers and on nothing else, so a
-#: failed or skipped publisher leaves the inventory unverified rather than
-#: verified against a release that was never completed.
-VERIFY_NEEDS = {"metadata", *PUBLISHER_NEEDS}
+#: The admission gate whose outputs every write job compares against.
+ADMISSION_JOB = "release-admission-canaries"
+#: The inventory verifier. Resolution derives its result from its guard, but a
+#: scenario may also declare it: only that result stands between a successful
+#: publication and an un-drafted release.
+VERIFY_JOB = "verify-release-inventory"
+#: Every prerequisite a publishing job waits on. Both publishers wait on the
+#: same set by design: a difference would let one lane publish bytes the other
+#: refuses, and the gate belongs to both for the same reason.
+PUBLICATION_NEEDS = CRATES_IO_NEEDS
+#: The commit every scenario releases. ``github.sha`` reports it and the gate
+#: publishes it as ``candidate_commit``, so only an admitted candidate matches.
+GITHUB_SHA = "a" * 40
+#: The gate's outputs as a successful, candidate-matching run reports them.
+#: Only ``enforcement`` differs: a rehearsal observes, a publishing run enforces.
+ADMISSION_OUTPUTS = {
+    mode: {
+        "enforcement": "true" if mode == "publish" else "false",
+        "gate_outcome": "success",
+        "candidate_commit": GITHUB_SHA,
+    }
+    for mode in MODE_OUTPUTS
+}
+#: The verification job depends on both publishers, on the packaged candidate
+#: and on the gate, so a failed, skipped or report-only prerequisite leaves the
+#: inventory unverified rather than verified against a release that was never
+#: completed.
+VERIFY_NEEDS = {
+    "metadata",
+    "package-crate",
+    ADMISSION_JOB,
+    *PUBLISHER_NEEDS,
+}
 #: The consumer smoke depends on the candidate's three stages and on nothing
 #: else. Finalization is one of them because an archive attached to a draft
 #: release needs a token to download, and the smoke deliberately holds none.
@@ -126,6 +155,50 @@ class Scenario:
     release_runs: bool
     invocation: Invocation | None = None
     resolver: cabc.Mapping[str, str] | None = None
+    admission_outputs: cabc.Mapping[str, str] | None = None
+    #: The results the workflow's own edges derive, filled in by
+    #: ``release_publish_path_results.resolve_results``. Until then the declared
+    #: map is the whole answer: it names only the leaf outcomes to exercise.
+    resolved_results: cabc.Mapping[str, str] | None = None
+
+    @property
+    def effective_results(self) -> cabc.Mapping[str, str]:
+        """The results a guard sees for this run.
+
+        Returns
+        -------
+        cabc.Mapping[str, str]
+            The workflow-derived results when resolved, else the declared leaf
+            outcomes. An unresolved scenario describes only its own leaves.
+        """
+        if self.resolved_results is None:
+            return self.needs_results
+        return self.resolved_results
+
+    @property
+    def gate_outputs(self) -> dict[str, str]:
+        """The admission outputs the gate reports for this scenario.
+
+        Returns
+        -------
+        dict[str, str]
+            The override the scenario names, else its mode's defaults. A
+            scenario that names one models a gate that observed, refused, or
+            admitted another commit while still reporting a successful job.
+        """
+        if self.admission_outputs is not None:
+            return dict(self.admission_outputs)
+        return dict(ADMISSION_OUTPUTS[self.mode])
+
+    @property
+    def admits_candidate(self) -> bool:
+        """Whether the gate's outputs admit this run's own commit."""
+        outputs = self.gate_outputs
+        return (
+            outputs.get("enforcement") == "true"
+            and outputs.get("gate_outcome") == "success"
+            and outputs.get("candidate_commit") == GITHUB_SHA
+        )
 
     @property
     def arrival(self) -> Invocation:
@@ -180,17 +253,25 @@ class Scenario:
         decision = self.authorization
         upload = decision.should_upload_workflow_artifacts
         return {
-            "should_publish": _render(flag=decision.should_publish),
-            "dry_run": _render(flag=decision.dry_run),
-            "should_upload_workflow_artifacts": _render(flag=upload),
+            "should_publish": render_flag(flag=decision.should_publish),
+            "dry_run": render_flag(flag=decision.dry_run),
+            "should_upload_workflow_artifacts": render_flag(flag=upload),
             # Staging rehearsal also needs the package artefacts, so the
             # workflow admits them on a dry run as well as on a diagnostics run.
-            "should_upload_package_artifacts": _render(flag=upload or decision.dry_run),
+            "should_upload_package_artifacts": render_flag(
+                flag=upload or decision.dry_run
+            ),
         }
 
 
-def _render(*, flag: bool) -> str:
-    """Render one decision flag as the workflow output spelling."""
+def render_flag(*, flag: bool) -> str:
+    """Render one decision flag as the workflow output spelling.
+
+    Returns
+    -------
+    str
+        ``"true"`` or ``"false"``, the spelling a workflow output carries.
+    """
     return "true" if flag else "false"
 
 
@@ -226,8 +307,12 @@ def needs_results(
     >>> needs_results(smoke="skipped")["windows-native-recipe-smoke"]
     'skipped'
     """
+    #: Every job a scenario may declare an outcome for. Finalization already
+    #: arrives through the consumer smoke's needs; the verifier is the one job
+    #: with no dependent, yet its own result is what finalization checks.
     results = dict.fromkeys(
-        CRATES_IO_NEEDS | PUBLISHER_NEEDS | CONSUMER_SMOKE_NEEDS, "success"
+        CRATES_IO_NEEDS | PUBLISHER_NEEDS | CONSUMER_SMOKE_NEEDS | {VERIFY_JOB},
+        "success",
     )
     results["windows-native-recipe-smoke"] = smoke
     if outcomes is not None:

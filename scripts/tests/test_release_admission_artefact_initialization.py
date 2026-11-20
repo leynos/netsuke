@@ -59,9 +59,10 @@ EXPECTED_PARENT = "/observations"
 PARENT_REFUSAL_REASON = "Not a directory"
 TARGET_REFUSAL_REASON = "Is a directory"
 
-#: The two members every double must provide, named once so the conformance
-#: case and the port cannot drift apart silently.
-PORT_MEMBERS = ("make_parent", "truncate")
+#: Every member the port names, so the conformance case and the port cannot
+#: drift apart silently. Initialization itself performs only two of them; the
+#: read is here because a double must satisfy the whole port it is typed as.
+PORT_MEMBERS = ("make_parent", "truncate", "read_bytes")
 
 
 def sinks(
@@ -107,6 +108,11 @@ class RecordingFileSystem:
         if configured == self._refuse_truncation:
             raise OSError(errno.EISDIR, TARGET_REFUSAL_REASON, configured)
         self.calls.append(("truncate", configured))
+
+    def read_bytes(self, configured: str, limit: int, /) -> bytes:
+        """Fail the case: initialization performs no read at all."""
+        msg = f"initialization must not read {configured} (bound {limit})"
+        raise AssertionError(msg)
 
 
 class RefusingParentFileSystem(RecordingFileSystem):
@@ -156,7 +162,7 @@ DOUBLES: typ.Final[tuple[filesystem.FileSystem, ...]] = (
 
 
 def test_every_double_satisfies_the_filesystem_port() -> None:
-    """Verify each double really implements both port members.
+    """Verify each double really implements every port member.
 
     Notes
     -----

@@ -1,18 +1,27 @@
 """Run the release-admission gate and decode the records one run produced.
 
 This module owns the subprocess boundary the release-admission runtime tests
-exercise: it builds an isolated environment, invokes the gate under test, and
-returns the completed process alongside the three artefact sets it wrote. The
-frozen measurements those tests are built on live in
+exercise: it invokes the gate under test and returns the completed process
+alongside the three artefact sets it wrote. The environment that process starts
+with is built by :mod:`release_admission_gate_environment`. The frozen
+measurements those tests are built on live in
 :mod:`release_admission_test_support`, which re-exports everything here as the
 facade the runtime modules import from, and the doubles the child reaches are
 registered by :mod:`release_admission_test_doubles`.
 
 The gate is a real process because only a process exercises the whole contract:
 the exit status the workflow reads, the artefact files the gate creates for
-itself, and the redirections it performs. The executables it runs are cmd-mox
+itself, and the redirections it performs. Most executables it runs are cmd-mox
 shims, so the boundary under test is the one production reaches while every
 external effect stays inside the test.
+
+The candidate fetch is the exception, and :func:`run_gate` supports it through
+``cwd`` and an absolute ``GIT_ADAPTER``. No shim can model which repository
+``origin`` names -- a shim's recorded invocation has no working directory -- so
+a test that must distinguish the candidate checkout from the verifier checkout
+builds real repositories in its own temporary tree and points the adapter at the
+host's own ``git``. The mutation stays inside that tree: the repositories are
+bare remotes and clones the test created for the run.
 
 The *shebang* is not one of those properties. :func:`run_gate` launches
 ``[str(PYTHON_PATH), str(SCRIPT_PATH)]`` -- the interpreter by absolute path,
@@ -24,8 +33,6 @@ which reads the first line of the file and its executable bit.
 """
 
 import dataclasses
-import importlib.util
-import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
 import typing as typ
 from pathlib import Path
@@ -33,119 +40,45 @@ from pathlib import Path
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
-from release_admission_test_doubles import (
-    GITHUB_REPOSITORY,
-    PYTHON_PATH,
-    REVISION,
-    SCRIPT_PATH,
-    GateRun,
+from release_admission_evidence_fixtures import MISSING, candidate_for, write_evidence
+from release_admission_gate_environment import (
+    EVIDENCE_FILE_VARIABLE,
+    GateInputs,
+    gate_environment,
 )
+from release_admission_test_doubles import PYTHON_PATH, SCRIPT_PATH, GateRun
+from release_admission_validator import METRICS_VALIDATOR
 
 if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-METRICS_VALIDATOR_PATH = (
-    REPO_ROOT / "tests" / "workflow_contracts" / "release_admission_metrics.py"
-)
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class GateRunRequest:
+    """Hold the values one gate invocation is launched from.
 
-class MetricsValidator(typ.Protocol):
-    """Define finite-JSON parsing and fixed-label validation operations.
-
-    Notes
-    -----
-    Enforce ordered schemas, bounded vocabularies, and finite JSON values.
+    Most cases vary only the temporary directory, the evidence state, and their
+    own environment overrides, and :func:`run_gate` takes exactly those. The
+    working directory is the fourth choice, and only a case that models two
+    checkouts makes it: it is what decides which repository ``origin`` names
+    for the gate's candidate fetch, so it must be a value that case states
+    rather than an ambient property of the test process.
     """
 
-    def parse_metrics(self, lines: list[str]) -> list[dict[str, object]]:
-        """Parse finite JSON Lines metric records into mappings.
-
-        Parameters
-        ----------
-        lines
-            JSON Lines containing release-admission metric records.
-
-        Returns
-        -------
-        list[dict[str, object]]
-            Decoded metric objects in input order.
-        """
-
-    def validate_metrics(self, records: list[dict[str, object]]) -> None:
-        """Validate records against the fixed metric contract.
-
-        Parameters
-        ----------
-        records
-            Decoded metric records to validate.
-        """
-
-    def parse_traces(self, lines: list[str]) -> list[dict[str, object]]:
-        """Parse finite JSON Lines release-admission trace records.
-
-        Parameters
-        ----------
-        lines
-            JSON Lines containing release-admission trace records.
-
-        Returns
-        -------
-        list[dict[str, object]]
-            Decoded trace objects in input order.
-        """
-
-    def validate_traces(self, records: list[dict[str, object]]) -> None:
-        """Validate traces against the fixed trace contract.
-
-        Parameters
-        ----------
-        records
-            Decoded trace records to validate.
-        """
-
-
-def load_metrics_validator() -> MetricsValidator:
-    """Load the workflow-contract validator without changing the import path.
-
-    Returns
-    -------
-    MetricsValidator
-        Validator implementation loaded from the workflow-contract module.
-
-    Raises
-    ------
-    AssertionError
-        If the workflow-contract module has no importable loader.
-
-    Notes
-    -----
-    File loading preserves one validator contract without package installation,
-    and keeps the record schema shared with the workflow-contract tests rather
-    than restated here.
-    """
-    specification = importlib.util.spec_from_file_location(
-        "release_admission_metrics_contract", METRICS_VALIDATOR_PATH
-    )
-    if specification is None or specification.loader is None:
-        message = "the release-admission metrics validator must be loadable"
-        raise AssertionError(message)
-    module = importlib.util.module_from_spec(specification)
-    specification.loader.exec_module(module)
-    return typ.cast("MetricsValidator", module)
-
-
-METRICS_VALIDATOR = load_metrics_validator()
+    tmp_path: Path
+    evidence_state: str = MISSING
+    extra_environment: cabc.Mapping[str, str | None] | None = None
+    cwd: Path | None = None
 
 
 def run_gate(
     cmd_mox: CmdMox,
     tmp_path: Path,
     *,
-    evidence_state: str = "missing",
+    evidence_state: str = MISSING,
     extra_environment: cabc.Mapping[str, str | None] | None = None,
 ) -> GateRun:
-    """Run the production gate under cmd-mox and collect everything it wrote.
+    """Run the production gate from the test process's own directory.
 
     Parameters
     ----------
@@ -155,7 +88,9 @@ def run_gate(
     tmp_path
         Isolated directory for inputs and outputs.
     evidence_state
-        Evidence state passed to the admission subprocess.
+        Which evidence manifest to write at the path the child is told to read,
+        named from :mod:`release_admission_evidence_fixtures`. The default
+        writes nothing, which is the state before a producer exists.
     extra_environment
         Optional child-process environment overrides for a test scenario. A
         value of ``None`` removes the variable instead of setting it, which is
@@ -168,18 +103,65 @@ def run_gate(
 
     Notes
     -----
+    This is :func:`run_gate_request` for the common case, which keeps the test
+    process's working directory. A case that must choose the working directory
+    -- because it models a second checkout -- builds the request itself.
+    """
+    return run_gate_request(
+        cmd_mox,
+        GateRunRequest(
+            tmp_path,
+            evidence_state=evidence_state,
+            extra_environment=extra_environment,
+        ),
+    )
+
+
+def run_gate_request(cmd_mox: CmdMox, request: GateRunRequest) -> GateRun:
+    """Run the production gate for one request and collect what it wrote.
+
+    Parameters
+    ----------
+    cmd_mox
+        Active controller, already in replay, whose shims are on the child
+        ``PATH``.
+    request
+        The temporary directory, evidence state, environment overrides, and
+        working directory the run uses.
+
+    Returns
+    -------
+    GateRun
+        The completed process and the records decoded from the files it wrote.
+
+    Notes
+    -----
     Contract invariants: the child receives an isolated environment, the only
     ``gh`` and ``git`` it can reach are the shims, its standard input is closed,
     and every returned record is decoded from a file the gate itself produced.
+    The tag is left unset unless a case supplies it, so the default run is the
+    rehearsal form: the revision resolves and compares with itself.
     """
-    paths = _gate_paths(tmp_path)
-    environment = _gate_environment(
-        cmd_mox, GateInputs(tmp_path, evidence_state, extra_environment, paths)
+    paths = gate_paths(request.tmp_path)
+    environment = gate_environment(
+        cmd_mox,
+        GateInputs(
+            request.tmp_path,
+            request.evidence_state,
+            request.extra_environment,
+            paths,
+        ),
+    )
+    write_evidence(
+        _evidence_path(environment, paths, request.cwd),
+        request.evidence_state,
+        candidate_for(environment),
     )
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed test target.
         [str(PYTHON_PATH), str(SCRIPT_PATH)],
         capture_output=True,
         check=False,
+        cwd=request.cwd,
         env=environment,
         stdin=subprocess.DEVNULL,
         text=True,
@@ -189,13 +171,55 @@ def run_gate(
     return GateRun(result, metrics, traces, outputs, paths)
 
 
+def _evidence_path(
+    environment: dict[str, str],
+    paths: dict[str, Path],
+    cwd: Path | None,
+) -> Path:
+    """Return the evidence path the child under test will actually read.
+
+    A case may redirect the child's evidence file, and the fixture has to be
+    written where that case pointed it. Writing to the harness's own default
+    instead leaves the redirected path absent, so a state the case asked for
+    arrives as a *missing evidence* refusal -- a failure that names the
+    document rather than the harness defect producing it.
+
+    Parameters
+    ----------
+    environment
+        The merged child environment, after the case's overrides.
+    paths
+        Named output paths returned by :func:`gate_paths`.
+    cwd
+        The working directory the child starts in, or ``None`` when it
+        inherits this process's. A relative configured value is resolved
+        against it, because that is where the child resolves it.
+
+    Returns
+    -------
+    Path
+        The configured evidence path, or the harness default when the
+        variable is unset or empty.
+
+    Notes
+    -----
+    Neither remaining case can be decided by the fixture's location: an
+    enforcing run refuses the configuration outright without an evidence file,
+    and a rehearsal reads no evidence at all.
+    """
+    configured = environment.get(EVIDENCE_FILE_VARIABLE, "")
+    if not configured:
+        return paths["evidence"]
+    return Path.cwd() / configured if cwd is None else cwd / configured
+
+
 def _read_workflow_outputs(paths: dict[str, Path]) -> dict[str, str]:
     """Decode the workflow outputs one run wrote, empty when it wrote none.
 
     Parameters
     ----------
     paths
-        Named output paths returned by :func:`_gate_paths`.
+        Named output paths returned by :func:`gate_paths`.
 
     Returns
     -------
@@ -205,12 +229,10 @@ def _read_workflow_outputs(paths: dict[str, Path]) -> dict[str, str]:
     Notes
     -----
     An absent file is a meaningful state, not a fault: the runner creates
-    ``GITHUB_OUTPUT`` before the step, so the gate's first write is an append
-    and a run that stops earlier leaves the file exactly as it found it. In
-    this harness nothing pre-creates it, so such a run leaves nothing to read.
-    The shell behaved the same way -- the gate record and the four output lines
-    sit behind the same ``set -e`` -- and a case that asserts no outputs were
-    written is asserting on this empty mapping.
+    ``GITHUB_OUTPUT`` before the step, so a run that stops earlier leaves it
+    exactly as it found it. In this harness nothing pre-creates it, so such a
+    run leaves nothing to read, and a case asserting no outputs were written
+    asserts on this empty mapping.
     """
     path = paths["output"]
     if not path.exists():
@@ -221,7 +243,7 @@ def _read_workflow_outputs(paths: dict[str, Path]) -> dict[str, str]:
     )
 
 
-def _gate_paths(tmp_path: Path) -> dict[str, Path]:
+def gate_paths(tmp_path: Path) -> dict[str, Path]:
     """Name the files one gate run writes into.
 
     Parameters
@@ -241,87 +263,9 @@ def _gate_paths(tmp_path: Path) -> dict[str, Path]:
     return {
         "metrics": tmp_path / "release-admission-metrics.jsonl",
         "trace": tmp_path / "release-admission-traces.jsonl",
+        "evidence": tmp_path / "release-admission-evidence.json",
         "output": tmp_path / "github-output",
     }
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class GateInputs:
-    """Hold the runner-local inputs one gate invocation is configured from.
-
-    These four values travel together -- the directory everything is confined
-    to, the state the fixture supplies, the case's own overrides, and the named
-    output paths -- so they are one value rather than a five-argument call.
-    """
-
-    tmp_path: Path
-    evidence_state: str
-    extra_environment: cabc.Mapping[str, str | None] | None
-    paths: dict[str, Path]
-
-
-def _gate_environment(
-    cmd_mox: CmdMox,
-    inputs: GateInputs,
-) -> dict[str, str]:
-    """Build an isolated environment for one real gate invocation.
-
-    The PATH is the controller's own: cmd-mox prepends its shim directory when
-    it enters, so the copy made here is what puts the shims ahead of any real
-    ``gh`` or ``git`` the host happens to have. A scenario must never replace
-    that PATH. A shim is a Python script whose shebang resolves ``python3``
-    through the child's own PATH, so a child started without one cannot run the
-    shim at all -- it fails before it can record anything, which reads as an
-    unexplained missing invocation rather than as the configuration error it is.
-
-    Parameters
-    ----------
-    cmd_mox
-        Active controller whose shim directory leads the child PATH.
-    inputs
-        Runner-local inputs: the isolated directory, the fixture state, the
-        case's own overrides, and the named output paths.
-
-    Returns
-    -------
-    dict[str, str]
-        Environment mapping passed to the admission subprocess.
-
-    Notes
-    -----
-    Contract invariants: the child inherits the controller's environment, so
-    the shim directory and the IPC socket reach it, and production values are
-    preserved unless a scenario overrides them. An absent shim directory means
-    this helper was called outside a live controller, which is a fault in the
-    test rather than a condition to report.
-    """
-    shim_dir = cmd_mox.environment.shim_dir
-    assert shim_dir is not None, "CmdMox must create its command shim directory"
-    paths = inputs.paths
-    # The overrides are merged below, where a ``None`` *removes* a name rather
-    # than being stored: the returned mapping therefore holds only ``str``
-    # values, and the annotation is what says so rather than a narrowed view a
-    # reader would have to reconstruct.
-    environment: dict[str, str] = {
-        **os.environ,
-        "GITHUB_OUTPUT": str(paths["output"]),
-        "GITHUB_REPOSITORY": GITHUB_REPOSITORY,
-        "GITHUB_SHA": REVISION,
-        "NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE": inputs.evidence_state,
-        "NETSUKE_RELEASE_ADMISSION_METRICS_FILE": str(paths["metrics"]),
-        "NETSUKE_RELEASE_ADMISSION_TRACE_FILE": str(paths["trace"]),
-        "PATH": os.pathsep.join([str(shim_dir), os.environ["PATH"]]),
-        "RUNNER_TEMP": str(inputs.tmp_path),
-    }
-    # Mapping a name to ``None`` *unsets* it, which is not the same as mapping
-    # it to ``""``: the gate's colon-form default substitutes for an empty
-    # value, so only an unset variable reaches the earlier arm.
-    for name, value in (inputs.extra_environment or {}).items():
-        if value is None:
-            environment.pop(name, None)
-        else:
-            environment[name] = value
-    return environment
 
 
 def _read_gate_records(
@@ -332,7 +276,7 @@ def _read_gate_records(
     Parameters
     ----------
     paths
-        Named output paths returned by :func:`_gate_paths`.
+        Named output paths returned by :func:`gate_paths`.
 
     Returns
     -------
@@ -344,13 +288,12 @@ def _read_gate_records(
     Contract invariant: JSON Lines are decoded through the shared validator so
     runtime tests exercise the same schema as workflow-contract tests.
 
-    An absent file is read as no records. Neither artefact exists when a
-    required variable aborts the gate before the two paths are computed, and
-    that state is one the tests assert on deliberately: the shell refused
-    ``GITHUB_REPOSITORY`` and ``GITHUB_SHA`` before any artefact was created.
-    Raising :class:`FileNotFoundError` here would make that run unpresentable
-    rather than assertable, so an absent file reads as an empty record set and
-    the file's existence is a separate, explicit assertion.
+    An absent file reads as no records. Neither artefact exists when a required
+    variable aborts the gate before the two paths are computed, a state the
+    tests assert on deliberately: the shell refused ``GITHUB_REPOSITORY`` and
+    ``GITHUB_SHA`` before any artefact was created. Raising
+    :class:`FileNotFoundError` would make that run unpresentable rather than
+    assertable, so the file's existence is a separate, explicit assertion.
     """
     return (
         _parse_records(paths["metrics"], METRICS_VALIDATOR.parse_metrics),
@@ -382,15 +325,15 @@ def _parse_records(
 
 
 __all__ = (
-    "GITHUB_REPOSITORY",
+    "EVIDENCE_FILE_VARIABLE",
     "METRICS_VALIDATOR",
-    "METRICS_VALIDATOR_PATH",
     "PYTHON_PATH",
-    "REPO_ROOT",
-    "REVISION",
     "SCRIPT_PATH",
+    "GateInputs",
     "GateRun",
-    "MetricsValidator",
-    "load_metrics_validator",
+    "GateRunRequest",
+    "gate_environment",
+    "gate_paths",
     "run_gate",
+    "run_gate_request",
 )

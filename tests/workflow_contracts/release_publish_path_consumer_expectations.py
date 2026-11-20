@@ -22,9 +22,10 @@ CONSUMER_SMOKE_EXPECTED_VIOLATIONS = {
     "ignore-consumer-smoke-finalize-result": (
         ("finalize-failure", f"{CONSUMER_SMOKE_JOB}-job"),
     ),
-    "remove-consumer-smoke-publish-guard": (
-        ("neither-mode", f"{CONSUMER_SMOKE_JOB}-job"),
-    ),
+    # A non-publishing run also skips finalization, whose result the guard
+    # already requires, so no resolved scenario can observe this clause on its
+    # own: the guard is pinned against a run where every other clause holds.
+    "remove-consumer-smoke-publish-guard": (("static", f"{CONSUMER_SMOKE_JOB}.guard"),),
     "remove-consumer-smoke-cancelled-guard": (
         ("cancelled-publishing", f"{CONSUMER_SMOKE_JOB}-job"),
     ),

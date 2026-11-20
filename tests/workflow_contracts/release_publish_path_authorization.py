@@ -14,6 +14,11 @@ import authorize_release_writes as adapter
 import release_write_policy as policy
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
+from release_publish_path_scenario_model import (
+    ADMISSION_JOB,
+    GITHUB_SHA,
+    render_flag,
+)
 from release_publish_path_summary import check_summary_record
 from workflow_loading import job_steps, require_mapping, workflow_job
 
@@ -225,23 +230,12 @@ def _resolver_outputs() -> dict[str, str]:
     """
     context = _DENIED_BUT_SELECTED
     return {
-        "should-publish": _flag(value=context.resolver_should_publish),
-        "dry-run": _flag(value=context.resolver_dry_run),
-        "should-upload-workflow-artifacts": _flag(
-            value=context.resolver_should_upload_workflow_artifacts
+        "should-publish": render_flag(flag=context.resolver_should_publish),
+        "dry-run": render_flag(flag=context.resolver_dry_run),
+        "should-upload-workflow-artifacts": render_flag(
+            flag=context.resolver_should_upload_workflow_artifacts
         ),
     }
-
-
-def _flag(*, value: bool) -> str:
-    """Render one resolver flag in workflow output spelling.
-
-    Returns
-    -------
-    str
-        ``"true"`` or ``"false"``.
-    """
-    return "true" if value else "false"
 
 
 def _check_step_order(release: dict[str, object], violations: list[str]) -> None:
@@ -357,11 +351,23 @@ def _check_publish_job_veto(release: dict[str, object], violations: list[str]) -
         dependency: dict[str, object] = {"result": "success"}
         if name == "metadata":
             dependency["outputs"] = outputs
+        if name == ADMISSION_JOB:
+            # Every admission clause is satisfied, so the dry-run veto is the
+            # only clause that can keep the job closed here.
+            dependency["outputs"] = {
+                "enforcement": "true",
+                "gate_outcome": "success",
+                "candidate_commit": GITHUB_SHA,
+            }
         needs[name] = dependency
     value = evaluate_field(
         guard,
         FieldEvaluation(
-            contexts={"needs": needs, "status": {"cancelled": False}},
+            contexts={
+                "needs": needs,
+                "status": {"cancelled": False},
+                "github": {"sha": GITHUB_SHA},
+            },
             violations=violations,
             label="publish-release.dry-run-veto",
             job_level=True,

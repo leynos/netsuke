@@ -10,10 +10,10 @@ Run via ``make test-workflow-contracts``.
 
 import copy
 import dataclasses
-import enum
-import re
 import typing as typ
 
+from release_mutation_support import MutationError, MutationIssue, replace_once
+from release_publication_gate_mutations import GATE_MUTATIONS, GATE_VIOLATIONS
 from release_publish_crates_io_mutations import CRATES_IO_MUTATIONS
 from release_publish_path_artifacts import BUILD_JOBS
 from release_publish_path_authorization import AUTHORIZATION_STEP, RESOLVER_STEP
@@ -71,6 +71,7 @@ EXPECTED_VIOLATIONS = {
         ("static", "authorization.env.INPUT_WORKFLOW_REF"),
     ),
     "remove-dry-run-veto": (("static", "publish-release.dry-run-veto"),),
+    **GATE_VIOLATIONS,
 }
 MUTATION_LABELS = tuple(EXPECTED_VIOLATIONS)
 
@@ -95,38 +96,6 @@ class WorkflowInputs:
     caller: dict[str, object]
     build: dict[str, object]
     action: dict[str, object]
-
-
-class MutationIssue(enum.StrEnum):
-    """Classify a stale mutation definition or unknown mutation label."""
-
-    PATTERN_MISMATCH = "mutation pattern did not match exactly once"
-    UNKNOWN_LABEL = "unknown release-path mutation"
-    MISSING_CALLER_EVENT = "caller pull_request.types must include synchronize"
-
-
-class MutationError(AssertionError):
-    """Describe a mutation helper that no longer matches its test fixture."""
-
-    def __init__(self, issue: MutationIssue, detail: object | None = None) -> None:
-        """Record the mutation error category and optional detail."""
-        self.issue = issue
-        self.detail = detail
-        super().__init__(issue, detail)
-
-    def __str__(self) -> str:
-        """Render the mutation error with any stale pattern or label."""
-        if self.detail is None:
-            return self.issue.value
-        return f"{self.issue.value}: {self.detail}"
-
-
-def _replace_once(value: str, pattern: str, replacement: str) -> str:
-    """Replace one required expression shape, refusing stale mutation rules."""
-    mutated, count = re.subn(pattern, replacement, value, count=1)
-    if count != 1:
-        raise MutationError(MutationIssue.PATTERN_MISMATCH, (pattern, count))
-    return mutated
 
 
 def _release_steps(release: dict[str, object]) -> list[dict[str, object]]:
@@ -174,7 +143,7 @@ def _mutate_draft_guard(release: dict[str, object]) -> None:
 def _mutate_cancelled_guard(release: dict[str, object]) -> None:
     """Remove the explicit cancellation check from the release job."""
     job = workflow_job(release, "release")
-    job["if"] = _replace_once(str(job.get("if", "")), r"!cancelled\(\)\s*&&\s*", "")
+    job["if"] = replace_once(str(job.get("if", "")), r"!cancelled\(\)\s*&&\s*", "")
 
 
 def _mutate_smoke_tolerance(release: dict[str, object], *, allow_publish: bool) -> None:
@@ -194,7 +163,7 @@ def _mutate_smoke_tolerance(release: dict[str, object], *, allow_publish: bool) 
             r"needs\.windows-native-recipe-smoke\.result == 'skipped'"
         )
         replacement = "needs.windows-native-recipe-smoke.result == 'success'"
-    job["if"] = _replace_once(guard, pattern, replacement)
+    job["if"] = replace_once(guard, pattern, replacement)
 
 
 def _mutate_package_upload_source(release: dict[str, object]) -> None:
@@ -273,7 +242,7 @@ def _authorization_ignores_workflow_ref(release: dict[str, object]) -> None:
 def _remove_dry_run_veto(release: dict[str, object]) -> None:
     """Drop the dry-run veto from the write job's guard."""
     job = workflow_job(release, "publish-release")
-    job["if"] = _replace_once(
+    job["if"] = replace_once(
         str(job.get("if", "")),
         r"needs\.metadata\.outputs\.dry_run != 'true'\s*&&\s*",
         "",
@@ -312,6 +281,8 @@ def mutate_workflows(
         applier(mutant_release, mutant_caller)
     elif label in CRATES_IO_MUTATIONS:
         CRATES_IO_MUTATIONS[label](mutant_release, mutant_action)
+    elif label in GATE_MUTATIONS:
+        GATE_MUTATIONS[label](mutant_release)
     else:
         raise MutationError(MutationIssue.UNKNOWN_LABEL, label)
     return MutationCase(

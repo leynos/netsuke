@@ -12,7 +12,11 @@ import typing as typ
 
 from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_scenario_model import CRATES_IO_NEEDS, REQUIRED_NEEDS
+from release_publish_path_context import job_contexts
+from release_publish_path_scenario_model import (
+    CRATES_IO_NEEDS,
+    PUBLICATION_NEEDS,
+)
 from workflow_loading import (
     job_steps,
     named_step,
@@ -111,28 +115,19 @@ def _check_publication_step_order(
         )
 
 
-def _publication_needs(
-    job: dict[str, object],
-    check: PublicationCheck,
-) -> dict[str, object]:
-    """Resolve the metadata, build and smoke jobs required for publication."""
+def _check_publication_dependencies(
+    job: dict[str, object], check: PublicationCheck
+) -> None:
+    """Require publication to wait on packaging, admission and the builds."""
     declared = job_names(job.get("needs", []))
     if declared is None:
         check.violations.append("publish-release.needs: dependencies must be job names")
-        return {}
-    required = REQUIRED_NEEDS
-    declared_needs = set(declared)
-    if declared_needs != required:
+        return
+    if set(declared) != PUBLICATION_NEEDS:
         check.violations.append(
-            "publish-release.needs: expected metadata, build and smoke dependencies"
+            "publish-release.needs: expected metadata, packaging, build, smoke and "
+            "admission dependencies"
         )
-    needs: dict[str, object] = {}
-    for name in sorted(required & declared_needs):
-        dependency: dict[str, object] = {"result": check.scenario.needs_results[name]}
-        if name == "metadata":
-            dependency["outputs"] = check.outputs
-        needs[name] = dependency
-    return needs
 
 
 def _check_publication_job(
@@ -150,11 +145,15 @@ def _check_publication_job(
         ),
     )
     all_dependencies_succeeded = all(
-        scenario.needs_results[name] == "success" for name in REQUIRED_NEEDS
+        scenario.effective_results[name] == "success" for name in PUBLICATION_NEEDS
     )
+    # The job also requires the gate's outputs: an admission that observed,
+    # refused, or admitted another commit leaves the run unauthorized even when
+    # every dependency reports success.
     expected_job = (
         check.outputs.get("should_publish") == "true"
         and not scenario.cancelled
+        and scenario.admits_candidate
         and all_dependencies_succeeded
     )
     publication_runs = actual_job is not MISSING and bool(actual_job)
@@ -223,11 +222,8 @@ def check_publication_path(check: PublicationCheck) -> None:
     """Verify publish-job reachability and the draft and asset upload guards."""
     scenario = check.scenario
     job = workflow_job(check.release, "publish-release")
-    contexts: dict[str, object] = {
-        "needs": _publication_needs(job, check),
-        "status": {"cancelled": scenario.cancelled},
-        "github": {"event": {"action": scenario.event_action}},
-    }
+    _check_publication_dependencies(job, check)
+    contexts = job_contexts(scenario, check.outputs, job)
     publication_runs = _check_publication_job(job, check, contexts)
     steps = job_steps(check.release, "publish-release")
     _check_draft_guard(steps, check, contexts)
@@ -256,7 +252,10 @@ def _crates_io_should_run(check: PublicationCheck) -> bool:
     return (
         not scenario.cancelled
         and check.outputs.get("should_publish") == "true"
-        and all(scenario.needs_results[name] == "success" for name in CRATES_IO_NEEDS)
+        and scenario.admits_candidate
+        and all(
+            scenario.effective_results[name] == "success" for name in CRATES_IO_NEEDS
+        )
     )
 
 
