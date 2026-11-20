@@ -665,21 +665,28 @@ The scanner now walks a shared list in declaration order. Each entry is
 interpolated with the previous entry's boundary, and an entry that ends inside
 a single- or double-quoted string, a here-string, a block comment, or a `$()`
 substitution, or that ends in a backtick escape, is rejected with an
-`InvalidCommand` that names the entry and the region. The rejection retains the
-entry's original template for inspection, never interpolated path text, while
-the rendered diagnostic is the localized message alone. The sticky fail-closed
-classification also follows the list, so later markers stay protected after
-scanner-sensitive text in an earlier entry.
+`InvalidCommand` that names the entry and a language-neutral region code. The
+rejection retains the entry's original template for inspection, never
+interpolated path text, while the rendered diagnostic is the localized message
+alone. The sticky fail-closed classification also follows the list, so later
+markers stay protected after scanner-sensitive text in an earlier entry. Block
+comments end at the first `#>`, as PowerShell does, so an apparent inner `<#`
+neither deepens the region nor hides live syntax after the terminator. A block
+opener after a mid-token hash whose comment status is unknown fails closed,
+because a line comment would make `<#` ordinary text.
 
 Entries that end at a neutral boundary are unaffected, including a closed
 here-string, a `#` line comment, a `--%` stop-parsing region, and a closed
 block comment. Scalar commands, `script:` recipes,
 `command_isolation: isolated` lists, and the POSIX and Bash routes keep their
-existing scanning. The check is a boundary check over the lexical regions this
-scanner models, not a complete PowerShell parser; RFC 0036 owns the longer-term
-harmonization under a version-matched grammar and states the residual migration
-obligation. Native execution coverage runs in the Windows recipe smoke suite;
-the regression and property suites run on every platform.
+existing scanning. Isolation is not a remedy for an entry this check rejects:
+each isolated entry runs as its own script, so an entry that leaves a region
+open is invalid on its own as well. The check is a boundary check over the
+lexical regions this scanner models, not a complete PowerShell parser; RFC 0036
+owns the longer-term harmonization under a version-matched grammar and states
+the residual migration obligation. Native execution coverage runs in the
+Windows recipe smoke suite; the regression and property suites run on every
+platform.
 
 ## Amendment — 2026-11-19: Interpolation rejections name the failed syntax (#1145)
 

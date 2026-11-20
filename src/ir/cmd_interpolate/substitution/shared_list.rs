@@ -90,13 +90,13 @@ fn unfinished_power_shell_region_error(
     entry_index: usize,
     region: PowerShellUnfinishedRegion,
 ) -> IrGenError {
-    let description = region.description();
+    let region_code = region.code();
     let message = localization::message(keys::IR_UNFINISHED_POWER_SHELL_REGION)
         .with_arg("entry", entry_index)
-        .with_arg("region", description);
+        .with_arg("region", region_code);
     IrGenError::InvalidCommand {
         command: template.to_owned(),
-        snippet: description.to_owned(),
+        snippet: region_code.to_owned(),
         message,
     }
 }

@@ -204,16 +204,25 @@ fn shared_power_shell_lists_reject_an_entry_that_leaves_a_quote_open(
     let marker_entry = format!("Copy-Item {marker}");
     let error = lower_shared_power_shell_list(&[unfinished, &marker_entry], is_rule_backed)
         .expect_err("an unfinished single-quoted string must fail during lowering");
-    assert_unfinished_region_rejected(&error, unfinished, 1, "single-quoted string");
+    assert_unfinished_region_rejected(&error, unfinished, 1, "single_quoted_string");
 }
 
 /// Reject every shared PowerShell region the scanner can leave unfinished.
 #[rstest]
-#[case::double_quote("Write-Output \"prefix", "double-quoted string")]
-#[case::here_string("@'\nbody", "here-string")]
-#[case::block_comment("Write-Output <# note", "block comment")]
-#[case::command_substitution("Write-Output $(Get-Date", "command substitution")]
-#[case::trailing_escape("Write-Output prefix`", "backtick escape")]
+#[case::double_quote("Write-Output \"prefix", "double_quoted_string")]
+#[case::here_string("@'\nbody", "here_string")]
+#[case::block_comment("Write-Output <# note", "block_comment")]
+#[case::command_substitution("Write-Output $(Get-Date", "command_substitution")]
+#[case::trailing_escape("Write-Output prefix`", "trailing_backtick_escape")]
+// PowerShell ends a block comment at the first `#>`, so the quoted text after
+// the inner-looking opener is live syntax and can hide a later entry's marker.
+#[case::block_comment_does_not_nest("<# <# #>\nWrite-Output \" #>", "double_quoted_string")]
+// A mid-token hash may begin a line comment, which would make `<#` ordinary
+// comment text; the scanner must not model it as a block comment.
+#[case::ambiguous_hash_before_block_comment(
+    "$x=$null# <#\nWrite-Output \" #>",
+    "double_quoted_string"
+)]
 fn shared_power_shell_lists_reject_other_unfinished_regions(
     #[case] unfinished: &str,
     #[case] region: &str,
@@ -235,7 +244,7 @@ fn shared_power_shell_lists_name_the_unfinished_entry_index(en_localizer: EnLoca
         false,
     )
     .expect_err("a later unfinished entry must still fail during lowering");
-    assert_unfinished_region_rejected(&error, unfinished, 3, "single-quoted string");
+    assert_unfinished_region_rejected(&error, unfinished, 3, "single_quoted_string");
 }
 
 /// Keep entries whose lexical regions are finished accepted in a shared list.
@@ -258,6 +267,10 @@ fn shared_power_shell_lists_name_the_unfinished_entry_index(en_localizer: EnLoca
 )]
 #[case::closed_block_comment(
     &["Write-Output <# note #> body", "Write-Output {{ ins }}"][..],
+    "Write-Output '; New-Item pwned; Write-Output x'"
+)]
+#[case::block_comment_does_not_nest(
+    &["<# outer <# inner #> body", "Write-Output {{ ins }}"][..],
     "Write-Output '; New-Item pwned; Write-Output x'"
 )]
 fn shared_power_shell_lists_accept_entries_that_end_neutral(

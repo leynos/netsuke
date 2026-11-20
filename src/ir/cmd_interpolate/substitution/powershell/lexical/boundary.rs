@@ -27,18 +27,19 @@ pub(in crate::ir::cmd_interpolate) enum PowerShellUnfinishedRegion {
 }
 
 impl PowerShellUnfinishedRegion {
-    /// Describe the region for the localized diagnostic.
+    /// Name the region for diagnostics and programmatic classification.
     ///
-    /// The phrase is passed as a message argument, so the catalogue entry
-    /// interpolates it rather than carrying one translation per region.
-    pub(in crate::ir::cmd_interpolate) const fn description(self) -> &'static str {
+    /// The value is a stable code rather than prose: the catalogue message is
+    /// localized while the code stays language-neutral, so translators never
+    /// inherit an English phrase they cannot translate in place.
+    pub(in crate::ir::cmd_interpolate) const fn code(self) -> &'static str {
         match self {
-            Self::SingleQuotedString => "a single-quoted string",
-            Self::DoubleQuotedString => "a double-quoted string",
-            Self::HereString => "a here-string",
-            Self::BlockComment => "a block comment",
-            Self::CommandSubstitution => "a command substitution",
-            Self::TrailingEscape => "a trailing backtick escape",
+            Self::SingleQuotedString => "single_quoted_string",
+            Self::DoubleQuotedString => "double_quoted_string",
+            Self::HereString => "here_string",
+            Self::BlockComment => "block_comment",
+            Self::CommandSubstitution => "command_substitution",
+            Self::TrailingEscape => "trailing_backtick_escape",
         }
     }
 }

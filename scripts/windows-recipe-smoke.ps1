@@ -303,7 +303,7 @@ function Test-CrossEntryListPlaceholderRejection {
             }
             # Fluent isolates message arguments, so match across the isolate
             # between the word "entry" and its number.
-            if (-not ($detail -match 'entry.*1' -and $detail -match 'single-quoted string')) {
+            if (-not ($detail -match 'entry.*1' -and $detail -match 'single_quoted_string')) {
                 throw "The cross-entry list failure did not name the unfinished entry and region: $detail"
             }
             if (Test-Path -LiteralPath 'pwned') {

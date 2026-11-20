@@ -207,7 +207,7 @@ ir.circular_dependency = Обнаружена циклическая завис�
 ir.action_serialisation = Не удалось сериализовать действие: { $details }.
 ir.invalid_command = Некорректная подстановка в команде: { $reason }.
 ir.ambiguous_substitution_boundary = Неоднозначная граница подстановки команды на символе { $position }; отделите закрывающую скобку подстановки от следующего '#'.
-ir.unfinished_power_shell_region = Элемент { $entry } списка команд PowerShell заканчивается внутри { $region }; закройте его, объедините элемент со следующим или задайте 'command_isolation: isolated' для списка команд.
+ir.unfinished_power_shell_region = Элемент { $entry } списка команд PowerShell заканчивается внутри { $region }; закройте его или объедините элемент со следующим.
 
 # Ошибки генерации файлов Ninja.
 ninja_gen.missing_action = Отсутствует действие «{ $id }», на которое ссылается ребро сборки.

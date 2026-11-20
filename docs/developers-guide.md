@@ -9868,7 +9868,7 @@ its `tail` so a construct that closes later still checks the text that follows.
 The `src/ir/cmd_interpolate/substitution/powershell/` module groups focused
 PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 `lexical/comments.rs` tracks fail-closed comment state,
-`lexical/block_comments.rs` tracks nestable block-comment depth,
+`lexical/block_comments.rs` tracks non-nesting block comments,
 `lexical/boundary.rs` describes the region one entry leaves for the next,
 `stop_parsing.rs` tracks raw native-command arguments, and `tokens/mod.rs`
 recognizes the token boundaries and syntax used by those scanners.
@@ -10022,11 +10022,13 @@ declaration order through `interpolate_shared_power_shell_entry` in
 `src/ir/cmd_interpolate/substitution/shared_list.rs`. An entry that leaves a
 single- or double-quoted string, here-string, block comment, or `$()`
 substitution open, or that ends in a backtick escape, is rejected with a
-localized diagnostic naming the entry and the region. The traversal also
-carries the sticky fail-closed classification forward, so a later marker stays
-protected after earlier scanner-sensitive text. Scalar commands, `isolated`
-lists, and POSIX or Bash lists keep their existing per-entry handling; the
-boundary check applies only to a shared PowerShell list.
+localized diagnostic naming the entry and a language-neutral region code. The
+traversal also carries the sticky fail-closed classification forward, so a
+later marker stays protected after earlier scanner-sensitive text. Scalar
+commands, `isolated` lists, and POSIX or Bash lists keep their existing
+per-entry handling; the boundary check applies only to a shared PowerShell
+list. Isolation is not a remedy for an entry that is itself incomplete, because
+each isolated entry runs as its own script.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies

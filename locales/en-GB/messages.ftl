@@ -207,7 +207,7 @@ ir.circular_dependency = Circular dependency detected: { $cycle }.
 ir.action_serialisation = Failed to serialise action: { $details }.
 ir.invalid_command = Invalid command interpolation: { $reason }.
 ir.ambiguous_substitution_boundary = Ambiguous command substitution boundary at character { $position }; separate the substitution closer from a following '#'.
-ir.unfinished_power_shell_region = PowerShell command-list entry { $entry } ends inside { $region }; close it, merge the entry with the next one, or set 'command_isolation: isolated' for the command list.
+ir.unfinished_power_shell_region = PowerShell command-list entry { $entry } ends inside { $region }; close it or merge the entry with the next one.
 
 # Ninja generation errors.
 ninja_gen.missing_action = Missing action '{ $id }' referenced by a build edge.

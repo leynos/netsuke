@@ -207,7 +207,7 @@ ir.circular_dependency = Canfuwyd dibyniaeth gylchol: { $cycle }.
 ir.action_serialisation = Methwyd â chyfresoli'r weithred: { $details }.
 ir.invalid_command = Mewnosodiad annilys yn y gorchymyn: { $reason }.
 ir.ambiguous_substitution_boundary = Ffin amnewid gorchymyn amwys ar nod { $position }; gwahanwch gauad yr amnewid oddi wrth y '#' canlynol.
-ir.unfinished_power_shell_region = Mae cofnod { $entry } yng nghatalog gorchmynion PowerShell yn gorffen y tu mewn i { $region }; caewch ef, unwch y cofnod â'r nesaf, neu gosodwch 'command_isolation: isolated' ar gyfer y catalog gorchmynion.
+ir.unfinished_power_shell_region = Mae cofnod { $entry } yng nghatalog gorchmynion PowerShell yn gorffen y tu mewn i { $region }; caewch ef neu unwch y cofnod â'r nesaf.
 
 # Gwallau cynhyrchu Ninja.
 ninja_gen.missing_action = Mae'r weithred ‘{ $id }’ y cyfeirir ati gan ymyl adeiladu ar goll.

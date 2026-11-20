@@ -748,10 +748,11 @@ A `shared` list is parsed by PowerShell as one script, so every entry must end
 at a neutral lexical boundary. Netsuke rejects an entry that leaves a single-
 or double-quoted string, here-string, block comment, or `$()` substitution
 open, or that ends in a backtick escape that would consume text from the next
-entry. The diagnostic names the entry and the region; close the region, merge
-the entry with its successor, or set `command_isolation: isolated`. This
-boundary check does not apply to `isolated` lists, whose entries are separate
-scripts, and it is not a complete PowerShell parser.
+entry. The diagnostic names the entry and the region; close the region or merge
+the entry with its successor. This boundary check does not apply to `isolated`
+lists, whose entries are separate scripts, but isolation does not repair an
+incomplete entry: each isolated entry must be syntactically complete on its
+own. The check is not a complete PowerShell parser.
 
 Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
 `$env:NAME` reads an environment variable. PowerShell parses the braced

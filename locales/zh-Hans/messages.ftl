@@ -206,7 +206,7 @@ ir.circular_dependency = 检测到循环依赖：{ $cycle }。
 ir.action_serialisation = 无法序列化操作：{ $details }。
 ir.invalid_command = 命令中的插值无效：{ $reason }。
 ir.ambiguous_substitution_boundary = 字符 { $position } 处的命令替换边界不明确；请将替换的右括号与后面的 '#' 分开。
-ir.unfinished_power_shell_region = PowerShell 命令列表的第 { $entry } 项在 { $region } 内结束；请闭合该区域、将该项与下一项合并，或为该命令列表设置 'command_isolation: isolated'。
+ir.unfinished_power_shell_region = PowerShell 命令列表的第 { $entry } 项在 { $region } 内结束；请闭合该区域，或将该项与下一项合并。
 
 # Ninja 生成错误。
 ninja_gen.missing_action = 缺少构建边引用的操作“{ $id }”。

@@ -207,7 +207,7 @@ ir.circular_dependency = Körkörös függőség található: { $cycle }.
 ir.action_serialisation = A műveletet nem sikerült sorosítani: { $details }.
 ir.invalid_command = Érvénytelen behelyettesítés a parancsban: { $reason }.
 ir.ambiguous_substitution_boundary = Kétértelmű parancshelyettesítési határ a(z) { $position }. karakternél; válassza el a helyettesítés záró zárójelét a következő '#'-tól.
-ir.unfinished_power_shell_region = A(z) { $entry }. PowerShell-parancslistaelem { $region } belsejében végződik; zárja le, vonja össze a következő elemmel, vagy állítsa be a parancslistához a 'command_isolation: isolated' értéket.
+ir.unfinished_power_shell_region = A(z) { $entry }. PowerShell-parancslistaelem { $region } belsejében végződik; zárja le, vagy vonja össze a következő elemmel.
 
 # A Ninja-fájlok előállításának hibái.
 ninja_gen.missing_action = Hiányzik a(z) „{ $id }” művelet, amelyre egy építési él hivatkozik.

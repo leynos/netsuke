@@ -207,7 +207,7 @@ ir.circular_dependency = رُصد اعتماد دائري: { $cycle }.
 ir.action_serialisation = تعذّرت سَلسَلة الإجراء: { $details }.
 ir.invalid_command = إقحام غير صالح داخل الأمر: { $reason }.
 ir.ambiguous_substitution_boundary = حد غير واضح لاستبدال الأمر عند المحرف { $position }؛ افصل قوس إغلاق الاستبدال عن علامة '#' التالية.
-ir.unfinished_power_shell_region = إدخال { $entry } في قائمة أوامر PowerShell ينتهي داخل { $region }؛ أغلقه، أو ادمج الإدخال مع الإدخال التالي، أو اضبط 'command_isolation: isolated' لقائمة الأوامر.
+ir.unfinished_power_shell_region = إدخال { $entry } في قائمة أوامر PowerShell ينتهي داخل { $region }؛ أغلقه أو ادمج الإدخال مع الإدخال التالي.
 
 # أخطاء توليد ملفات Ninja.
 ninja_gen.missing_action = الإجراء «{ $id }» الذي تشير إليه حافة بناء مفقود.
