@@ -8,12 +8,14 @@
 use clap::ArgMatches;
 use clap::parser::ValueSource;
 use ortho_config::{OrthoError, OrthoResult};
+use std::ffi::OsString;
 use std::sync::Arc;
 
 use super::command::Cli;
 use super::discovery::{
     DiscoveryOutcome, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env, is_shells_key,
 };
+use super::environment::{JSON_KEY, normalized_components, parse_environment_bool};
 
 /// Environment variable carrying an explicit JSON-output preference.
 const JSON_ENV_VAR: &str = "NETSUKE_JSON";
@@ -140,27 +142,61 @@ const fn json_from_layers(outcome: &DiscoveryOutcome) -> bool {
 /// Invalid or non-Unicode values are validation errors rather than silently
 /// falling back, so users receive actionable configuration feedback.
 fn json_from_env(env: &impl EnvProvider) -> OrthoResult<Option<bool>> {
-    let Some(value) = env.get(JSON_ENV_VAR) else {
+    let Some((key, value)) = json_environment_entry(env) else {
         return Ok(None);
     };
     let raw = value.into_string().map_err(|invalid_value| {
         Arc::new(OrthoError::Validation {
-            key: String::from(JSON_ENV_VAR),
+            key: key.clone(),
             message: format!(
-                "{JSON_ENV_VAR} must be valid Unicode, got {}",
+                "{key} must be valid Unicode, got {}",
                 invalid_value.to_string_lossy()
             ),
         })
     })?;
-    match raw.as_str() {
-        "true" | "1" => Ok(Some(true)),
-        "false" | "0" => Ok(Some(false)),
-        _ => Err(Arc::new(OrthoError::Validation {
-            key: String::from(JSON_ENV_VAR),
-            message: format!("{JSON_ENV_VAR} must be true, false, 1, or 0; got {raw:?}"),
-        })),
-    }
+    parse_environment_bool(&raw).map_or_else(
+        || {
+            Err(Arc::new(OrthoError::Validation {
+                key: key.clone(),
+                message: format!("{key} must be true, false, 1, or 0; got {raw:?}"),
+            }))
+        },
+        |flag| Ok(Some(flag)),
+    )
 }
+
+/// Locate the environment entry naming the JSON preference.
+///
+/// The canonical spelling is consulted first, so a case-insensitive platform
+/// resolves exactly the entry it always did. Otherwise the snapshot is scanned
+/// with [`normalized_components`], the same normalization the merge layer uses,
+/// which is what lets `netsuke_json` reach the same decision here as it does in
+/// the full merge. A pathological environment carrying two spellings of the
+/// one key is rejected by the merge as a duplicate; answering from the
+/// canonical entry keeps this resolver deterministic until that rejection is
+/// reported in the selected mode.
+fn json_environment_entry(env: &impl EnvProvider) -> Option<(String, OsString)> {
+    if let Some(value) = env.get(JSON_ENV_VAR) {
+        return Some((String::from(JSON_ENV_VAR), value));
+    }
+    env.entries().into_iter().find_map(|(key, value)| {
+        let key_text = key.to_str()?;
+        names_json_path(key_text).then(|| (key_text.to_owned(), value))
+    })
+}
+
+/// Report whether `key_text` normalizes to the single `json` configuration path.
+///
+/// Only the exact path counts. `NETSUKE_JSONX` and `NETSUKE_JSON__NESTED` name
+/// other paths, and the merge does not read them as the JSON preference.
+fn names_json_path(key_text: &str) -> bool {
+    normalized_components(key_text).is_some_and(
+        |components| matches!(components.as_slice(), [component] if component == JSON_KEY),
+    )
+}
+
+#[cfg(test)]
+mod alias_tests;
 
 #[cfg(test)]
 mod quarantined_policy_tests;

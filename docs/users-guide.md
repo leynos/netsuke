@@ -2206,9 +2206,27 @@ Common environment equivalents include:
 - `NETSUKE_PROGRESS=never`
 - `NETSUKE_ACCESSIBILITY=on`
 - `NETSUKE_LOCALE=en-US`
-- `NETSUKE_DEFAULT_TARGETS__0=hello.txt`
+- `NETSUKE_DEFAULT_TARGETS=hello.txt`
 - `NETSUKE_NINJA=/opt/ninja/bin/ninja`
 - `NETSUKE_WHICH_WORKSPACE=0`
+
+Boolean configuration environment variables accept `true`, `false`, `1`, and
+`0`, with no surrounding whitespace and no case folding. `NETSUKE_NO_INPUT`
+follows the same rule, so `NETSUKE_NO_INPUT=0` parses to `false` and is then
+rejected, because configuration does not accept `no_input = false`; only `true`
+and `1` are usable. A configuration file keeps strict Boolean typing, so
+`verbose = 1` is rejected there even though `NETSUKE_VERBOSE=1` is accepted.
+Policy values accept any ASCII casing in a file and in the environment, as
+described in [Policy values and parsing](#policy-values-and-parsing).
+
+List-valued variables, except `shells`, accept a scalar, which becomes a
+one-element list, or a serialized JSON array. The `shells` key is file-only, so
+`NETSUKE_SHELLS` and any nested `NETSUKE_SHELLS__...` spelling are rejected
+rather than read as a list. For example, `NETSUKE_DEFAULT_TARGETS=hello.txt` and
+`NETSUKE_DEFAULT_TARGETS='["hello.txt","world.txt"]'` both work. An indexed
+variable such as `NETSUKE_DEFAULT_TARGETS__0=hello.txt` is not a list form: the
+double underscore nests a map, and the merge rejects it with an invalid-type
+error.
 
 `NETSUKE_LOCALE` selects the interface language; see
 [Choose a language with `--locale`](#choose-a-language-with---locale) for how
@@ -2312,8 +2330,13 @@ and warned about like any other, but it is never reported on stdout.
 
 ### Policy values and parsing
 
-The CLI and configuration use the same policy values, and policy names are
-matched case-insensitively in both places. The accepted values are:
+The CLI, configuration files, and the environment use the same policy values,
+and policy names are matched case-insensitively in all three places. ASCII case
+is ignored. Surrounding whitespace is not part of a policy spelling: a
+configuration-file string keeps it, so `color = " always "` is rejected. An
+unquoted environment value is trimmed, so `NETSUKE_COLOR=' always '` is
+accepted, while quoting the value inside the variable keeps its spaces, so
+`NETSUKE_COLOR='" always "'` is rejected. The accepted values are:
 
 - `--color` and `color`: `auto`, `always`, or `never`.
 - `--emoji` and `emoji`: `auto`, `always`, or `never`.
@@ -2321,10 +2344,11 @@ matched case-insensitively in both places. The accepted values are:
 - `--accessibility` and `accessibility`: `auto`, `on`, or `off`.
 
 Lowercase spellings are used in help and examples. For instance,
-`--color ALWAYS` and `color = "AlWaYs"` select the same explicit colour policy
-as `--color always` and `color = "always"`. `auto` follows terminal and
-environment detection. `always` or `never` makes colour, emoji, or progress
-behaviour explicit. Accessibility uses `on` and `off` for its explicit values.
+`--color ALWAYS`, `color = "AlWaYs"`, and `NETSUKE_COLOR=ALWAYS` select the
+same explicit colour policy as `--color always`, `color = "always"`, and
+`NETSUKE_COLOR=always`. `auto` follows terminal and environment detection.
+`always` or `never` makes colour, emoji, or progress behaviour explicit.
+Accessibility uses `on` and `off` for its explicit values.
 
 Netsuke has no interactive mode. It never prompts, and `no_input = false` is
 rejected. Pass root `--no-input` in automation to state that requirement
@@ -2531,11 +2555,19 @@ than written as unstructured text.
 
 JSON selection follows the normal configuration precedence: `--json`, then
 `NETSUKE_JSON`, then `json = true|false` in a configuration file. Set
-`NETSUKE_JSON` to `true` or `1` to enable JSON output, or to `false` or `0` to
-disable it. Any other value, including malformed or non-Boolean text, produces
-a configuration validation error rather than silently falling back. An explicit
-`--json` flag takes precedence and bypasses parsing a lower-priority
-environment value. For example, `NETSUKE_JSON=1 netsuke …` enables JSON output.
+`NETSUKE_JSON` to exactly `true`, `false`, `1`, or `0`. Any other value,
+including case variants, word variants, numbers other than `1` and `0`, and
+text with surrounding whitespace, produces a configuration validation error
+rather than silently falling back. A configuration file keeps strict Boolean
+typing, so `json = 1` is rejected there. An explicit `--json` flag takes
+precedence and bypasses parsing a lower-priority environment value. For example,
+`NETSUKE_JSON=1 netsuke …` enables JSON output.
+
+Environment keys are matched without regard to ASCII case, and surrounding
+whitespace is trimmed, so `netsuke_json=1` selects JSON exactly as
+`NETSUKE_JSON=1` does. This holds for the diagnostic mode chosen before the
+configuration merge as well as for the merged value, so a configuration error
+found during the merge is reported in the mode the variable selects.
 
 The following command deliberately selects a missing manifest:
 

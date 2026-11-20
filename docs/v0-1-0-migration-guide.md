@@ -545,6 +545,20 @@ case-insensitive and are listed in the users' guide's
 [policy values and parsing](users-guide.md#policy-values-and-parsing) section.
 Clap-specific validation and help metadata remain an internal CLI concern.
 
+Configuration-file and environment deserialization now delegates to the same
+`FromStr`, so mixed-case policy values such as `color = "AlWaYs"` and
+`NETSUKE_COLOR=ALWAYS` are accepted alongside the canonical lowercase
+spellings. Surrounding whitespace is still not part of a policy spelling: a
+quoted file value such as `color = " always "` is rejected, while the
+environment value parser trims it, so `NETSUKE_COLOR=' always '` is accepted.
+Boolean environment variables additionally accept `1` and `0`, while
+configuration files keep strict Boolean typing. `NETSUKE_NO_INPUT` carries a
+policy check as well, so `NETSUKE_NO_INPUT=0` parses to `false` and is then
+rejected; only `true` and `1` are usable. List variables accept a scalar or a
+serialized JSON array; the indexed `NETSUKE_<KEY>__0` spelling remains
+unsupported and must be replaced with one of the supported forms. See
+[ADR-0083](adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md).
+
 ## Colour, emoji and progress are resolved once
 
 Netsuke now resolves colour, emoji, progress, accessibility and JSON into a

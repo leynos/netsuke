@@ -90,6 +90,15 @@
   actionable diagnostic before any template evaluation when the declaration is
   missing, malformed, or outside that range
   ([ADR-0075](docs/adrs/adr-0075-manifest-schema-versions-and-admission.md)).
+- Accept `1` and `0` as well as `true` and `false` for the `NETSUKE_VERBOSE`,
+  `NETSUKE_JSON`, `NETSUKE_FETCH_DEFAULT_DENY`,
+  `NETSUKE_TRUST_PROJECT_FETCH_POLICY`, and `NETSUKE_NO_INPUT` environment
+  variables, and accept display-policy values in any ASCII casing from
+  configuration files and the environment. The early `NETSUKE_JSON` resolver
+  and the full merge now accept the same set. `NETSUKE_NO_INPUT=0` parses as
+  `false` and is then rejected by the no-input policy, so only `true` and `1`
+  are usable. Indexed `__N` list variables remain unsupported
+  ([#1147](https://github.com/leynos/netsuke/issues/1147), [ADR-0083](docs/adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md)).
 
 ### Security
 

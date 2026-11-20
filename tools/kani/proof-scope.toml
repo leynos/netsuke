@@ -21,6 +21,7 @@ sources = [
   "src/cli/config/defaults.rs",
   "src/cli/config/mod.rs",
   "src/cli/config/no_input.rs",
+  "src/cli/config/policies.rs",
   "src/cli/config/policy_definitions.rs",
   "src/cli/config/shells/arguments.rs",
   "src/cli/config/shells/compose.rs",

@@ -114,6 +114,53 @@ proptest! {
     }
 }
 
+proptest! {
+    /// The diagnostic pass and the cached merge accept the same `NETSUKE_JSON` values.
+    ///
+    /// The early resolver runs before the merge, so a disagreement would mean a
+    /// documented value is accepted in one pass only. Short mixed-case strings
+    /// exercise the boundary around the four strict spellings.
+    #[test]
+    fn json_environment_acceptance_agrees_between_passes(raw in "[a-zA-Z01 ]{0,5}") {
+        let temp_dir = tempdir().expect("create temporary config directory");
+        let config_path = temp_dir.path().join("netsuke.toml");
+        let config_dir =
+            Dir::open_ambient_dir(temp_dir.path(), ambient_authority()).expect("open temp dir");
+        config_dir
+            .write("netsuke.toml", b"json = false\n")
+            .expect("write config");
+
+        let localizer = Arc::from(cli_localization::build_localizer(None));
+        let config_arg = config_path.to_string_lossy().into_owned();
+        let (cli, matches) = netsuke::cli::parse_with_localizer_from(
+            ["netsuke", "--config", config_arg.as_str()],
+            &localizer,
+            clap::ColorChoice::Auto,
+        )
+        .expect("parse CLI");
+        let env = TestEnv::default().with_var("NETSUKE_JSON", raw.as_str());
+
+        let (json_result, outcome) =
+            netsuke::cli::resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
+        let merge_result = netsuke::cli::merge_with_cached_file_layers(
+            &cli,
+            &matches,
+            &env,
+            outcome.into_layers(),
+        );
+        let is_documented = matches!(raw.as_str(), "true" | "false" | "1" | "0");
+
+        if let Ok(resolved) = json_result {
+            prop_assert!(is_documented, "only documented spellings should be accepted: {raw:?}");
+            let merged = merge_result.expect("an accepted spelling should also merge");
+            prop_assert_eq!(merged.json, resolved);
+        } else {
+            prop_assert!(!is_documented, "documented spelling {raw:?} must not be rejected");
+            prop_assert!(merge_result.is_err(), "the merge accepted {raw:?} but the diagnostic pass did not");
+        }
+    }
+}
+
 /// The generated config file is always parseable and yields only the given keys.
 #[test]
 fn rendered_config_file_is_parseable_toml() -> Result<()> {

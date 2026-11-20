@@ -366,6 +366,9 @@ operator, user, and contributor references are easier to find.
   Shallow-end policy composition and rule-to-feature requirements.
 - [ADR-0082: Authorize release writes from the caller's policy](adrs/adr-0082-authorize-release-writes-from-the-callers-policy.md):
   Reusable release inputs bind publication whatever trigger reached the run.
+- [ADR-0083: Accept environment Boolean digits and case-insensitive policy
+  values](adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md):
+  Accepted configuration value forms and the indexed-list rejection.
 
 ## Proposals
 

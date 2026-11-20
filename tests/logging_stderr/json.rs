@@ -15,7 +15,7 @@ use tempfile::{TempDir, tempdir};
 #[cfg(unix)]
 use test_support::check_ninja::{ToolName, fake_ninja_check_build_file, fake_ninja_expect_tool};
 
-fn parse_success_result(output: std::process::Output, command: &str) -> Result<Value> {
+pub(super) fn parse_success_result(output: std::process::Output, command: &str) -> Result<Value> {
     ensure!(
         output.status.success(),
         "expected {command} command success"

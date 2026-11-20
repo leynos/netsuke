@@ -18,6 +18,69 @@ const NON_UTF8_VALUE: &str = "non-UTF-8 environment value";
 const SHELLS_IN_ENVIRONMENT: &str =
     "the `shells` key may only be declared in a configuration file, not in the environment";
 
+/// Configuration key selecting JSON diagnostic output.
+pub(crate) const JSON_KEY: &str = "json";
+
+/// Complete single-component paths that map to `CliConfig` Boolean fields.
+///
+/// This list mirrors `verbose`, `json`, `fetch_default_deny`,
+/// `trust_project_fetch_policy`, and `no_input` in `src/cli/config/mod.rs`.
+/// Nested aliases are deliberately excluded: only the exact configuration key
+/// accepts a Boolean environment spelling.
+pub(crate) const BOOLEAN_PATHS: [&str; 5] = [
+    "verbose",
+    JSON_KEY,
+    "fetch_default_deny",
+    "trust_project_fetch_policy",
+    "no_input",
+];
+
+/// Parse the strict Boolean spellings accepted from the environment.
+///
+/// Exactly `true`, `false`, `1`, and `0` are accepted, with no surrounding
+/// whitespace and no case folding. Sharing this parser with the early
+/// diagnostic-mode resolver keeps the finite accepted set identical before and
+/// after the full merge. Configuration files keep strict Boolean typing; this
+/// helper applies only to environment values.
+pub(crate) fn parse_environment_bool(value: &str) -> Option<bool> {
+    match value {
+        "true" | "1" => Some(true),
+        "false" | "0" => Some(false),
+        _ => None,
+    }
+}
+
+/// Report whether `components` names a single Boolean configuration path.
+fn is_boolean_path(components: &[String]) -> bool {
+    match components {
+        [component] => BOOLEAN_PATHS.contains(&component.as_str()),
+        _ => false,
+    }
+}
+
+/// Parse one environment value according to its configuration path.
+///
+/// Boolean paths accept exactly the four strict spellings and otherwise keep
+/// the raw text, so case or whitespace variants fail deserialization instead of
+/// being coerced. Every other path keeps Figment's ordinary value parsing,
+/// which recognizes values including booleans, numbers, arrays, dictionaries,
+/// and quoted strings, and turns anything it cannot parse into a string.
+/// Figment trims surrounding whitespace from an unquoted scalar, so an
+/// environment policy such as `NETSUKE_COLOR=" always "` is accepted even
+/// though the same spaces in a quoted configuration-file value are not.
+/// A parsed value can still fail the target field's type, in which case the
+/// merge reports a deserialization error.
+fn parse_value(components: &[String], value_text: &str) -> Value {
+    if is_boolean_path(components) {
+        return parse_environment_bool(value_text)
+            .map_or_else(|| Value::from(value_text.to_owned()), Value::from);
+    }
+    match value_text.parse::<Value>() {
+        Ok(parsed) => parsed,
+        Err(never) => match never {},
+    }
+}
+
 /// Environment layer backed by an owned, injected snapshot.
 pub(super) struct EnvironmentLayer {
     /// Owned snapshot of the environment entries this layer presents.
@@ -66,18 +129,9 @@ fn parse_entry(key: &OsStr, value: &OsStr) -> Result<Option<(Vec<String>, Value)
         KeyDecode::Unrelated => return Ok(None),
         KeyDecode::Invalid => return Err(Box::new(reject(NON_UTF8_KEY, "non_utf8_key"))),
     };
-    let Some(stripped) = strip_prefix_uncased(key_text.trim(), ENV_PREFIX) else {
+    let Some(components) = normalized_components(key_text) else {
         return Ok(None);
     };
-    let components: Vec<String> = stripped
-        .split("__")
-        .map(str::trim)
-        .filter(|component| !component.is_empty())
-        .map(str::to_ascii_lowercase)
-        .collect();
-    if components.is_empty() {
-        return Ok(None);
-    }
     // `shells` declares executable policy, so it is a file-only key. Reject it
     // on the normalized leading component, which covers case and whitespace
     // variation as well as nested `NETSUKE_SHELLS__...` spellings.
@@ -93,10 +147,7 @@ fn parse_entry(key: &OsStr, value: &OsStr) -> Result<Option<(Vec<String>, Value)
     let Some(value_text) = value.to_str() else {
         return Err(Box::new(reject(NON_UTF8_VALUE, "non_utf8_value")));
     };
-    let parsed = match value_text.parse::<Value>() {
-        Ok(parsed) => parsed,
-        Err(never) => match never {},
-    };
+    let parsed = parse_value(&components, value_text);
     Ok(Some((components, parsed)))
 }
 
@@ -156,6 +207,28 @@ fn claims_config_prefix(key: &OsStr) -> bool {
         .trim_ascii_start()
         .get(..ENV_PREFIX.len())
         .is_some_and(|candidate| candidate.eq_ignore_ascii_case(ENV_PREFIX.as_bytes()))
+}
+
+/// Normalize one environment key into its configuration path components.
+///
+/// Surrounding whitespace is trimmed, the `NETSUKE_` prefix is removed without
+/// regard to ASCII case, and the remainder is split on the double underscore.
+/// Each non-empty component is trimmed and ASCII-lowercased, so `netsuke_json`
+/// and ` NETSUKE_JSON ` both name the `json` path.
+///
+/// The early diagnostic-mode resolver shares this function with the merge
+/// layer. A key it honours before the merge is therefore exactly a key the
+/// merge honours afterwards; reimplementing the rule in either place would let
+/// the two disagree about spellings such as `netsuke_json`.
+pub(super) fn normalized_components(key_text: &str) -> Option<Vec<String>> {
+    let stripped = strip_prefix_uncased(key_text.trim(), ENV_PREFIX)?;
+    let components: Vec<String> = stripped
+        .split("__")
+        .map(str::trim)
+        .filter(|component| !component.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect();
+    (!components.is_empty()).then_some(components)
 }
 
 /// Return `value` with `prefix` removed when it matches ignoring ASCII case.

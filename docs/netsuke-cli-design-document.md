@@ -862,6 +862,18 @@ are convenient for CI and also for users who prefer them over config files.
 They override the config file but are themselves overridden by explicit CLI
 flags[^3].
 
+**Accepted Value Forms:** Boolean environment variables accept `true`, `false`,
+`1`, and `0`, while configuration files keep strict Boolean typing.
+`NETSUKE_NO_INPUT` also passes a policy check, so `NETSUKE_NO_INPUT=0` parses to
+`false` and is then rejected; only `true` and `1` are usable. Display policies
+accept any ASCII casing in every layer, matching the command line. List-valued
+variables accept a scalar or a serialized JSON array; indexed `__N` segments
+nest into maps and are not a list syntax. The merge masks lower layers with
+higher ones before deserializing the document once, so a valid higher-layer
+value hides an invalid lower-layer value. See
+[ADR-0083](adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md)
+for the decision and its limits.
+
 **Command-Line Flags:** OrthoConfig integrates with Clap such that flags parsed
 by Clap feed into the config struct. Since Clap is already being used for
 primary CLI parsing (subcommands etc.), Clap’s results can directly construct

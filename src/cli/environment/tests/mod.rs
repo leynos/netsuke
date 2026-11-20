@@ -3,6 +3,8 @@
 use super::*;
 use proptest::prelude::*;
 
+mod boolean_values;
+
 fn layer(entries: &[(&str, &str)]) -> EnvironmentLayer {
     EnvironmentLayer::new(
         entries
