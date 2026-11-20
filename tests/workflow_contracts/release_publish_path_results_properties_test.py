@@ -56,31 +56,46 @@ def _needs_value(chosen: list[str], *, as_string: bool) -> object:
     return chosen[0] if as_string and len(chosen) == 1 else chosen
 
 
-@st.composite
-def _graphs(draw: st.DrawFn) -> dict[str, object]:
-    """Draw a graph whose needs may be a string, a list, or form a cycle."""
-    count = draw(st.integers(min_value=1, max_value=6))
-    names = [f"job{index}" for index in range(count)]
-    candidates = [*names, GHOST]
-    graphs: dict[str, object] = {}
-    for name in names:
-        chosen = draw(st.lists(st.sampled_from(candidates), unique=True, max_size=3))
-        graphs[name] = {"needs": _needs_value(chosen, as_string=draw(st.booleans()))}
-    return graphs
+def _any_job_candidates(names: list[str], _index: int) -> list[str]:
+    """Return every job name plus the ghost, so a graph may hold a cycle."""
+    return [*names, GHOST]
 
 
-@st.composite
-def _acyclic_graphs(draw: st.DrawFn) -> dict[str, object]:
-    """Draw a graph whose jobs may only need jobs declared before them."""
+def _earlier_job_candidates(names: list[str], index: int) -> list[str]:
+    """Return the earlier job names plus the ghost, so a graph stays acyclic."""
+    return [*names[:index], GHOST]
+
+
+def _draw_graph(
+    draw: st.DrawFn,
+    candidates_for: cabc.Callable[[list[str], int], list[str]],
+) -> dict[str, object]:
+    """Draw a jobs graph, taking each job's candidate needs from a builder."""
     count = draw(st.integers(min_value=1, max_value=6))
     names = [f"job{index}" for index in range(count)]
     graphs: dict[str, object] = {}
     for index, name in enumerate(names):
         chosen = draw(
-            st.lists(st.sampled_from([*names[:index], GHOST]), unique=True, max_size=3)
+            st.lists(
+                st.sampled_from(candidates_for(names, index)),
+                unique=True,
+                max_size=3,
+            )
         )
         graphs[name] = {"needs": _needs_value(chosen, as_string=draw(st.booleans()))}
     return graphs
+
+
+@st.composite
+def _graphs(draw: st.DrawFn) -> dict[str, object]:
+    """Draw a graph whose needs may be a string, a list, or form a cycle."""
+    return _draw_graph(draw, _any_job_candidates)
+
+
+@st.composite
+def _acyclic_graphs(draw: st.DrawFn) -> dict[str, object]:
+    """Draw a graph whose jobs may only need jobs declared before them."""
+    return _draw_graph(draw, _earlier_job_candidates)
 
 
 @given(graphs=_graphs())
