@@ -21,12 +21,14 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::rstest;
 use support::{force_node_exists, namespace, reset, stray_force_node, workspace};
-use tempfile::TempDir;
 
 #[cfg(unix)]
 use cap_primitives::fs::open_dir_nofollow;
 #[cfg(unix)]
 use std::path::Path;
+// Only the Unix-only outside-link case creates a directory of its own.
+#[cfg(unix)]
+use tempfile::TempDir;
 
 #[test]
 fn the_component_constants_compose_the_force_path() {
