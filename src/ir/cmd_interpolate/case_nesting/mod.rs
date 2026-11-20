@@ -256,10 +256,8 @@ impl CaseNesting {
     /// a command position open: the `case` that follows them is a reserved word
     /// even though it is not the first word of the command.
     fn classify_word(&self, parenthesis_depth: usize) -> WordRole {
-        match self.classify_within_construct(parenthesis_depth) {
-            Some(role) => role,
-            None => self.classify_command_word(parenthesis_depth),
-        }
+        self.classify_within_construct(parenthesis_depth)
+            .unwrap_or_else(|| self.classify_command_word(parenthesis_depth))
     }
 
     /// Classify a word read inside the innermost construct at this depth.
@@ -279,15 +277,14 @@ impl CaseNesting {
         let word = self.word.as_str();
         match frame.phase {
             CasePhase::Header if is_at_own_depth && word == "in" => Some(WordRole::EnterPattern),
-            CasePhase::Header => Some(WordRole::Other {
-                continues_command_list: false,
-            }),
             CasePhase::Pattern
                 if is_at_own_depth && word == "esac" && !frame.is_after_alternative() =>
             {
                 Some(WordRole::CloseCase)
             }
-            CasePhase::Pattern => Some(WordRole::Other {
+            // Every other word in the header or a pattern list is data: the
+            // subject, an alternative pattern, or the text that follows `in`.
+            CasePhase::Header | CasePhase::Pattern => Some(WordRole::Other {
                 continues_command_list: false,
             }),
             CasePhase::Arm => None,
