@@ -206,6 +206,7 @@ ir.duplicate_outputs = Phát hiện đầu ra trùng lặp: { $outputs }.
 ir.circular_dependency = Phát hiện phụ thuộc vòng: { $cycle }.
 ir.action_serialisation = Không tuần tự hoá được hành động: { $details }.
 ir.invalid_command = Nội suy không hợp lệ trong lệnh: { $reason }.
+ir.unplaced_case = Thay thế lệnh không được hỗ trợ: 'case' nằm ngoài vị trí lệnh được nhận diện (hãy viết nó đầu tiên trong phần thay thế, sau dấu phân cách hoặc ở đầu nhóm dấu ngoặc nhọn).
 ir.ambiguous_substitution_boundary = Ranh giới thay thế lệnh không rõ ràng tại ký tự { $position }; hãy tách dấu ngoặc đóng của phần thay thế khỏi '#' theo sau.
 ir.unfinished_power_shell_region = Mục { $entry } trong danh sách lệnh PowerShell kết thúc bên trong { $region }; hãy đóng vùng đó hoặc gộp mục với mục tiếp theo.
 

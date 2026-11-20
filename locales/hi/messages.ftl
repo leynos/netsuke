@@ -206,6 +206,7 @@ ir.duplicate_outputs = दोहरे निर्गम मिले: { $outpu
 ir.circular_dependency = चक्रीय निर्भरता मिली: { $cycle }।
 ir.action_serialisation = क्रिया का क्रमांकन नहीं हो सका: { $details }।
 ir.invalid_command = आदेश में अमान्य प्रक्षेपण: { $reason }।
+ir.unplaced_case = असमर्थित कमांड प्रतिस्थापन: मान्य कमांड स्थिति के बाहर 'case' (इसे प्रतिस्थापन में पहले, विभाजक के बाद या ब्रेस समूह के आरंभ में लिखें)।
 ir.ambiguous_substitution_boundary = वर्ण { $position } पर अस्पष्ट कमांड प्रतिस्थापन सीमा; प्रतिस्थापन के समापन कोष्ठक को अगले '#' से अलग करें।
 ir.unfinished_power_shell_region = PowerShell कमांड-सूची प्रविष्टि { $entry } { $region } के भीतर समाप्त होती है; क्षेत्र को बंद करें या प्रविष्टि को अगली के साथ मिलाएँ।
 

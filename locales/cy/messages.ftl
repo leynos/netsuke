@@ -206,6 +206,7 @@ ir.duplicate_outputs = Canfuwyd allbynnau dyblyg: { $outputs }.
 ir.circular_dependency = Canfuwyd dibyniaeth gylchol: { $cycle }.
 ir.action_serialisation = Methwyd â chyfresoli'r weithred: { $details }.
 ir.invalid_command = Mewnosodiad annilys yn y gorchymyn: { $reason }.
+ir.unplaced_case = Amnewid gorchymyn heb ei gefnogi: 'case' y tu allan i safle gorchymyn cydnabyddedig (ysgrifennwch ef yn gyntaf yn yr amnewid, ar ôl gwahanydd, neu ar ddechrau grŵp braced).
 ir.ambiguous_substitution_boundary = Ffin amnewid gorchymyn amwys ar nod { $position }; gwahanwch gauad yr amnewid oddi wrth y '#' canlynol.
 ir.unfinished_power_shell_region = Mae cofnod { $entry } yng nghatalog gorchmynion PowerShell yn gorffen y tu mewn i { $region }; caewch y rhan neu unwch y cofnod â'r nesaf.
 

@@ -304,8 +304,29 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Report whether `ch` opens a grouped expression inside a `$()` region.
+    ///
+    /// Bash accepts one optional `(` immediately before a `case` pattern list,
+    /// and that opener must not raise the grouping depth: the pattern
+    /// terminator after it stands at the case's own depth, where the tracker
+    /// recognises it. Reading the opener as a group would move the terminator
+    /// one level deeper, where it closes nothing and leaves the construct in
+    /// its pattern phase.
     fn starts_nested_command_substitution_parenthesis(&self, ch: char) -> bool {
-        self.is_in_command_substitution() && self.matches_unquoted_quote_context() && ch == '('
+        let opens_group =
+            self.is_in_command_substitution() && self.matches_unquoted_quote_context();
+        let is_parenthesis = opens_group && ch == '(';
+        is_parenthesis && !self.takes_pattern_opener()
+    }
+
+    /// Report whether a `(` at the active depth opens a `case` pattern list.
+    fn takes_pattern_opener(&self) -> bool {
+        self.command_substitutions
+            .last()
+            .is_some_and(|substitution| {
+                substitution
+                    .case_nesting
+                    .takes_pattern_opener(substitution.parenthesis_depth)
+            })
     }
 
     /// Report whether `ch` closes the current `$()` expression.

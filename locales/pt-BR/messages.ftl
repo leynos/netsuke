@@ -207,6 +207,7 @@ ir.duplicate_outputs = Saídas duplicadas detectadas: { $outputs }.
 ir.circular_dependency = Dependência circular detectada: { $cycle }.
 ir.action_serialisation = Não foi possível serializar a ação: { $details }.
 ir.invalid_command = Interpolação de comando inválida: { $reason }.
+ir.unplaced_case = Substituição de comando não suportada: 'case' fora de uma posição de comando reconhecida (escreva-o primeiro na substituição, após um separador ou no início de um grupo de chaves).
 ir.ambiguous_substitution_boundary = Limite ambíguo de substituição de comando no caractere { $position }; separe o parêntese de fechamento da substituição do '#' seguinte.
 ir.unfinished_power_shell_region = A entrada { $entry } da lista de comandos do PowerShell termina dentro de { $region }; feche a região ou mescle a entrada com a próxima.
 

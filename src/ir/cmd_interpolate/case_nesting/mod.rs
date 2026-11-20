@@ -47,6 +47,18 @@ impl CaseObservation {
             parenthesis_depth,
         }
     }
+
+    /// Report whether the shell reads this character before the next one.
+    ///
+    /// An unquoted backslash-newline pair is deleted before tokenizing, so the
+    /// character after the pair follows whatever preceded the backslash: `;`,
+    /// a continuation, then `;` spells the `;;` operator. Every other
+    /// character, including an escaped real character such as `;` in `\;`, is
+    /// read by the shell and does precede the next one.
+    const fn is_read_before_next(&self) -> bool {
+        let is_continuation = matches!((self.ch, self.next), ('\\', Some('\n')));
+        !(is_continuation && self.is_unquoted)
+    }
 }
 
 /// Track `case ... esac` nesting inside one command substitution.
@@ -83,7 +95,9 @@ pub(super) struct CaseNesting {
     /// Record the character read immediately before the current one.
     ///
     /// Only its role in spotting a `;;` or `;&` matters: both are two-character
-    /// operators, and the traversal offers one character at a time.
+    /// operators, and the traversal offers one character at a time. A deleted
+    /// continuation is not a character the shell reads, so it is never stored:
+    /// `;`, a continuation, then `;` still spells `;;`.
     previous: Option<char>,
     /// Record which `case` keywords have been seen and where.
     sightings: CaseSightings,
@@ -146,6 +160,26 @@ impl CaseNesting {
             .any(|frame| frame.depth == parenthesis_depth)
     }
 
+    /// Report whether a `(` at this depth opens a pattern list.
+    ///
+    /// Bash accepts one optional `(` immediately before a pattern list. The
+    /// traversal cannot tell it from a grouped expression without the
+    /// construct's phase, so the tracker answers from the frame open at this
+    /// depth. Only a list that has not started yet can begin with the opener:
+    /// after a pattern word the `(` is a group, and after a `|` alternative
+    /// Bash rejects one outright.
+    pub(super) fn takes_pattern_opener(&self, parenthesis_depth: usize) -> bool {
+        self.frames
+            .iter()
+            .rev()
+            .find(|frame| frame.depth == parenthesis_depth)
+            .is_some_and(|frame| {
+                let is_pattern_phase = matches!(frame.phase, CasePhase::Pattern);
+                let is_at_list_start = !frame.pattern_started && !frame.after_alternative;
+                is_pattern_phase && is_at_list_start
+            })
+    }
+
     /// Report whether a `case` keyword appeared anywhere in this substitution.
     ///
     /// The raw-source scan that backs the ambiguity guard cannot see a keyword
@@ -190,7 +224,9 @@ impl CaseNesting {
         } else {
             self.observe_word_character(observation);
         }
-        self.previous = Some(observation.ch);
+        if observation.is_read_before_next() {
+            self.previous = Some(observation.ch);
+        }
     }
 
     /// End a comment when the line does, and ignore the rest of its text.
