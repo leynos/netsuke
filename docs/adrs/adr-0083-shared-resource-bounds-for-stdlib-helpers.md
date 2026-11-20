@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0082: Share one resource-bounds module across stdlib helpers
+# Architectural decision record (ADR) 0083: Share one resource-bounds module across stdlib helpers
 
 ## Status
 

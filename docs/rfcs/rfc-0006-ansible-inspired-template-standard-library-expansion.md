@@ -408,7 +408,7 @@ against the ceiling before any allocation. The diagnostic reports both the
 computed cardinality and the ceiling. Materialized output is charged against
 the output-content ceiling as each element is appended, so a helper that is
 admitted on cardinality can still refuse before the total exceeds the bound
-([ADR-0082](../adrs/adr-0082-shared-resource-bounds-for-stdlib-helpers.md)).
+([ADR-0083](../adrs/adr-0083-shared-resource-bounds-for-stdlib-helpers.md)).
 Defaults are constants in the first implementation slice; exposing them as
 configuration is deferred until a consumer needs it.
 
