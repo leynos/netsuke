@@ -255,6 +255,17 @@ dependency-free and deterministic so the Kani harnesses in
 `src/ir/from_manifest/verification.rs` can verify bounded symbolic input, and
 do not move them out to a shared utility crate.
 
+### `src/ir/from_manifest/support/command_resolution.rs`
+
+Manifest recipe resolution for commands and scripts, split out of
+`src/ir/from_manifest/support/mod.rs` to keep the parent below the 400-line
+cap. It owns `resolve_command` and `resolve_script`, and the parent declares it
+`mod command_resolution;`. It is the only lowering site that walks a shared
+PowerShell command list in declaration order through
+`interpolate_shared_power_shell_entry`; keep per-entry scanning out of that
+path. Scalar commands, isolated lists, and POSIX or Bash lists keep their
+existing interpolation.
+
 ### `src/ir/cycle/detector.rs`
 
 The depth-first traversal state machine, owned by `src/ir/cycle/mod.rs` through
@@ -458,6 +469,15 @@ when it serves more than one command-interpolation property test.
 This test-only module owns the command-interpolation cases for protected
 PowerShell contexts. Keep those cases here to hold the parent test module below
 the 400-line cap; production code must not depend on this test module.
+
+### `src/ir/cmd_interpolate/substitution/shared_list.rs`
+
+The shared PowerShell command-list entry API. It interpolates one entry with
+the previous entry's boundary, rejects an unfinished quoted string,
+here-string, block comment, `$()` substitution, or trailing backtick escape,
+and carries the sticky fail-closed classification to the next entry. Lowering
+must reach a shared list only through this module so its entries cannot be
+scanned independently again.
 
 ### `src/shell_selection/`
 

@@ -1,0 +1,8 @@
+netsuke_version: "1.0.0"
+
+targets:
+  - name: cross-entry-list.txt
+    sources: '; New-Item pwned; Write-Output x'
+    command:
+      - "Write-Output 'prefix"
+      - "Copy-Item -LiteralPath {{ ins }} -Destination {{ outs }}"

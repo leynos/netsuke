@@ -207,6 +207,7 @@ ir.circular_dependency = Виявлено циклічну залежність:
 ir.action_serialisation = Не вдалося серіалізувати дію: { $details }.
 ir.invalid_command = Некоректна підстановка в команді: { $snippet }.
 ir.ambiguous_substitution_boundary = Неоднозначна межа підстановки команди на символі { $position }; відокремте закривну дужку підстановки від наступного '#'.
+ir.unfinished_power_shell_region = Елемент { $entry } списку команд PowerShell закінчується всередині { $region }; закрийте його, об'єднайте елемент із наступним або задайте 'command_isolation: isolated' для списку команд.
 
 # Помилки створення файлів Ninja.
 ninja_gen.missing_action = Відсутня дія «{ $id }», на яку посилається ребро збирання.
