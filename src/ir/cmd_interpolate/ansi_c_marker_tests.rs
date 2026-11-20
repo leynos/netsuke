@@ -122,13 +122,16 @@ fn marker_free_ansi_c_strings_are_preserved(
 #[case::command(Lowering::Command)]
 #[case::script(Lowering::Script)]
 fn marker_after_ansi_c_region_uses_unquoted_encoding(#[case] lowering: Lowering) {
-    let bindings = context_bindings(RecipeShell::Bash, "input");
+    // The path encodes differently in every quote context, so the expected
+    // text below fails if the traversal selects any encoding but the
+    // unquoted one.
+    let bindings = context_bindings(RecipeShell::Bash, "in put$x");
     let template = format!("echo $'a\\tb' {INS_TOKEN}");
     assert_eq!(
         lowering
             .lower(&template, &bindings)
             .expect("a marker after the closing quote is outside ANSI-C"),
-        "echo $'a\\tb' input",
+        "echo $'a\\tb' in' put$x'",
         "post-region marker used the wrong encoding via {lowering:?}: {template:?}"
     );
 }
