@@ -1620,10 +1620,15 @@ the build command judges it before it deletes anything.
 longest existing ancestor is canonicalized and the components that do not exist
 yet are folded onto it. That catches an absolute path, a `..` path that leaves
 the workspace and returns, and a symbolic-link alias, each of which names a
-declared output that the reset would otherwise destroy. Resolution only reads;
-the removal itself always goes through the verified namespace handles. A
-refused build reports the same reservation diagnostic generation uses, because
-it is the same rule.
+declared output that the reset would otherwise destroy. The resolution rule
+lives in `src/runner/phony_state/resolve.rs`, apart from the namespace handles
+and the removal in `mod.rs`, so the filesystem questions have their own unit.
+It reports every canonicalization failure other than an absent component rather
+than folding the failure into "not reserved": a permission or symbolic-link
+error must stop the reset, because a guard that failed open would delete the
+output it exists to protect. Resolution only reads; the removal itself always
+goes through the verified namespace handles. A refused build reports the same
+reservation diagnostic generation uses, because it is the same rule.
 
 ## Adding a lint rule
 
