@@ -468,8 +468,8 @@ conflict in `Decision log`, and escalate.
     own log records 257.7 s and 261.5 s for a smaller patch set there.
 - [x] EP-M5: documentation, ADR, roadmap, and final gates.
   - ADR (2026-11-09, renumbered 2026-11-13, again 2026-11-16, again
-    2026-11-20).
-    `docs/adrs/adr-0083-shared-resource-bounds-for-stdlib-helpers.md` is
+    2026-11-20, again 2026-11-20).
+    `docs/adrs/adr-0084-shared-resource-bounds-for-stdlib-helpers.md` is
     `Accepted`, dated 2026-11-09, and carries the context, the four options
     with a captioned comparison table, the outcome, the consequences, and the
     known risks (the `serde_json` off-by-one, the output-content row, and the
@@ -482,13 +482,16 @@ conflict in `Decision log`, and escalate.
     moved to 0075. The first sweep under-reported because it compared the
     zero-padded numbers as strings, so `0069 >= "060"` was false and the whole
     range was filtered out; the corrected sweep compares numerically. The ADR
-    is indexed in `docs/contents.md` as ADR-0083. It was ADR-0075 from
+    is indexed in `docs/contents.md` as ADR-0084. It was ADR-0075 from
     2026-11-13 until 2026-11-16, when `main` took 0075 for the manifest
     schema-version ADR [#808](https://github.com/leynos/netsuke/pull/808)
     merged; it was ADR-0082 from then until 2026-11-20, when `main` took
     0082 for the release-write authorization ADR
-    [#1157](https://github.com/leynos/netsuke/pull/1157) merged. D-26
-    records the first renumber and D-27 the second.
+    [#1157](https://github.com/leynos/netsuke/pull/1157) merged; and it was
+    ADR-0083 later the same day, until `main` took 0083 for the accepted
+    configuration value forms ADR
+    [#1164](https://github.com/leynos/netsuke/pull/1164) merged. D-26
+    records the first renumber, D-27 the second, and D-28 the third.
   - Design and layout (2026-11-09). `docs/netsuke-design.md` §4.7 gains a
     "Resource bounds" subsection with the ceilings, the exactness and
     precedence rules, the ownership boundary, and the ADR reference.
@@ -575,7 +578,7 @@ conflict in `Decision log`, and escalate.
     `E0603` the private module would give — each paired with a passing example
     as the vacuity control, following `src/manifest/glob/mod.rs`. Two
     documentation counts said "six" Kani harnesses where seven exist;
-    `docs/netsuke-design.md` §4.7 and ADR-0083 now say seven, and the
+    `docs/netsuke-design.md` §4.7 and ADR-0084 now say seven, and the
     retrospective no longer calls the module wholly private.
   - Gate repair (2026-11-15). The batch against the first repair head (since
     amended into `607e5bdf5`) stopped in `make lint` at `lint-clippy` with
@@ -1220,6 +1223,24 @@ conflict in `Decision log`, and escalate.
       same suites. The first attempt at this set, at `69d850835`, failed
       `make check-fmt` on the hand-wrapped merge; `8a4df7b98` applies
       `mdtablefix`'s wrap and this set is the re-run after it.
+  - Rebase onto `6aa3ee4e2` and the third ADR renumber (2026-11-20). `main`
+    advanced two further commits after the push —
+    [#1164](https://github.com/leynos/netsuke/pull/1164) at `1476f3b40` and
+    [#1060](https://github.com/leynos/netsuke/pull/1060) at `6aa3ee4e2` — and
+    the pull request again reported `mergeable_state: dirty`. The replay onto
+    `6aa3ee4e2` conflicted in one file.
+    - `docs/contents.md`. `main` now holds accepted ADRs 0082 and 0083, so
+      this branch's replayed renumber commits each keep the serial they were
+      authored for and `main`'s entries stay in place; the intermediate
+      commits therefore carry a duplicate entry for one revision each. The tip
+      commit moves this branch's ADR to 0084, and D-28 records why.
+    - Delta and gating. The replay changes no Rust, Python, YAML, or catalogue
+      content attributable to this branch: the only conflict is
+      `docs/contents.md`, and after the replay the branch's delta over
+      `6aa3ee4e2` differs from the delta the nine-gate set verified only by
+      this renumber and this record. `make check-fmt` and `make markdownlint`
+      re-run over that delta; the code suites are unaffected, following the
+      sensitivity rule already recorded for a docs-only delta.
 
 ## Surprises & discoveries
 
@@ -1856,6 +1877,24 @@ conflict in `Decision log`, and escalate.
   comparison base immediately before publication, not only when the branch is
   written or the base last advanced. Date/Author: 2026-11-20.
 
+- D-28. Decision: renumber this branch's ADR a third time, from 0083 to 0084,
+  because `main` allocated 0083 to *Accept environment Boolean digits and
+  case-insensitive policy values* when
+  [#1164](https://github.com/leynos/netsuke/pull/1164) merged on 2026-11-20.
+  Rationale: D-26 and D-27's rule, applied unchanged. The collision arrived as a
+  `docs/contents.md` conflict in the replay onto `6aa3ee4e2`: `main`'s 0082
+  and 0083 entries were already in place, so the branch's own renumber commits
+  replayed to a duplicate 0083 rather than a free serial. The file, its
+  heading, the `docs/contents.md` entry, and its references in
+  `docs/netsuke-design.md`, `docs/developers-guide.md`,
+  `docs/repository-layout.md`, RFC 0006, and this plan move together. Impact:
+  three allocations in five days, every one of them while the branch sat
+  unmerged. The lesson D-26 recorded and D-27 restated is now the third
+  observation, and it sharpens: on a long-lived branch the serial must be
+  re-checked after every base advance, and the check belongs to the last step
+  before publication rather than to the last step of authoring. Date/Author:
+  2026-11-20.
+
 ## Outcomes & retrospective
 
 Outcome against `Purpose / big picture`. The task asked whether one shared
@@ -1892,7 +1931,7 @@ What was delivered:
   before being reverted, plus registration in the mutation workflow's
   `exclude-globs`, `KANI_EXCLUDES`, the `cargo-mutants` exclusion paragraph,
   and the Kani proof scope.
-- ADR-0083, the design §4.7 subsection, the developers'-guide re-use policy,
+- ADR-0084, the design §4.7 subsection, the developers'-guide re-use policy,
   the formal-verification record, the repository layout, the regenerated Kani
   harness table, the roadmap checkbox, and the RFC 0006 table 3 output-content
   row.
@@ -1905,7 +1944,7 @@ the surface that renders these refusals belongs to 6.1.4, 6.2.1, 6.4.2, and
 
 Discoveries and how they landed. The `serde_json` off-by-one (127 admitted
 containers for a nominal 128) is recorded in D-06, in the developers' guide,
-and in ADR-0083 rather than being silently matched. The missing table 3
+and in ADR-0084 rather than being silently matched. The missing table 3
 output-content row became D-12, the RFC amendment, and the ADR. Fluent's `f64`
 number storage is recorded as a hazard for counts above `2^53`, which matters
 because 100000 and 10000 are both far below it today but a future ceiling need
