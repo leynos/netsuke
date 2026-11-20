@@ -1,10 +1,10 @@
 //! Track PowerShell block comments so their contents stay lexically inert.
 //!
-//! PowerShell block comments nest, and a `#>` inside one only closes the
-//! innermost level. Modelling the depth exactly keeps quotes, parentheses, and
-//! markers inside the comment from perturbing the surrounding script, which is
-//! what lets a shared command-list entry close its comment and hand a neutral
-//! boundary to its successor.
+//! A block comment starts at `<#` and ends at the first `#>`; PowerShell does
+//! not nest them, so a `<#` inside the body is ordinary comment text. Modelling
+//! that exactly keeps quotes, parentheses, and markers inside the comment from
+//! perturbing the surrounding script, which is what lets a shared command-list
+//! entry close its comment and hand a neutral boundary to its successor.
 
 use super::super::super::{
     IrGenError, SubstitutionTraversal, find_substitution, invalid_command_error,
@@ -18,14 +18,17 @@ impl PowerShellLexicalState {
         self.block_comment_depth > 0
     }
 
-    /// Record one block-comment nesting level.
+    /// Record that a block comment is open.
+    ///
+    /// The field stays a count so `unfinished_region` reads as a depth check,
+    /// but PowerShell comments do not nest, so this never exceeds one.
     const fn open_block_comment(&mut self) {
-        self.block_comment_depth += 1;
+        self.block_comment_depth = 1;
     }
 
-    /// Release one block-comment nesting level.
+    /// Record that the block comment's terminating `#>` was read.
     const fn close_block_comment(&mut self) {
-        self.block_comment_depth = self.block_comment_depth.saturating_sub(1);
+        self.block_comment_depth = 0;
     }
 }
 
@@ -34,11 +37,18 @@ impl SubstitutionTraversal<'_, '_> {
     ///
     /// Callers reach this check only outside here-strings, line comments, and
     /// `--%` regions, so an unquoted site is the whole remaining condition.
+    /// A mid-token hash that might itself begin a line comment makes `<#`
+    /// potentially ordinary comment text, so that case fails closed instead of
+    /// opening a region the interpreter may not share.
     pub(super) fn open_unquoted_block_comment(
         &mut self,
         character: PowerShellSourceCharacter<'_>,
     ) -> Option<usize> {
         if !self.matches_unquoted_quote_context() || !character.starts_block_comment() {
+            return None;
+        }
+        if self.power_shell_lexical.is_in_ambiguous_comment() {
+            self.power_shell_lexical.note_unmodelled_syntax();
             return None;
         }
         self.power_shell_lexical.open_block_comment();
@@ -66,14 +76,8 @@ impl SubstitutionTraversal<'_, '_> {
             self.output.push('>');
             return Ok(pos + 2);
         }
-        if character.starts_block_comment() {
-            // PowerShell nests block comments, so an inner opener only deepens
-            // the region the outer terminator must eventually unwind.
-            self.power_shell_lexical.open_block_comment();
-            self.output.push('<');
-            self.output.push('#');
-            return Ok(pos + 2);
-        }
+        // PowerShell does not nest block comments, so an inner `<#` is ordinary
+        // comment text rather than a deeper region.
         self.output.push(character.value());
         Ok(pos + 1)
     }

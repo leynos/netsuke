@@ -3370,7 +3370,7 @@ models ASCII double quotes only; a single quote, backtick, or typographic quote
 in the raw region makes later markers fail closed. The private
 `PowerShellLexicalState` in
 `src/ir/cmd_interpolate/substitution/powershell/lexical/mod.rs` tracks
-here-string bodies, block-comment depth, and typographic-quote fail-closed
+here-string bodies, block-comment state, and typographic-quote fail-closed
 state, while `PowerShellStopParsingState` tracks raw native-command arguments.
 These helpers are not a general PowerShell parser or a shared shell API. Longer
 identifiers such as `$input` and non-placeholder text inside backticks remain
@@ -3381,12 +3381,13 @@ parses, not as independent entries. Each entry must end at a neutral lexical
 boundary, so an entry that leaves a quoted string, here-string, block comment,
 or `$()` substitution open, or that ends in a backtick escape, is rejected
 before its successor's path literal can be reclassified inside that region. The
-diagnostic names the entry and the region and points the author at closing the
-region, merging the entry with its successor, or selecting
-`command_isolation: isolated`. Isolated entries are already separate scripts
-and keep their per-entry interpolation. The check is deliberately a boundary
-check over the regions the scanner models, not a complete PowerShell parser;
-RFC 0036 carries the longer-term harmonization under version-matched grammar.
+diagnostic names the entry and the region code, and it points the author at
+closing the region or merging the entry with its successor. Isolated entries
+are already separate scripts and keep their per-entry interpolation, but
+isolation does not repair an incomplete entry: each isolated entry must be
+syntactically complete on its own. The check is deliberately a boundary check
+over the regions the scanner models, not a complete PowerShell parser; RFC 0036
+carries the longer-term harmonization under version-matched grammar.
 
 In `command:` recipes on the POSIX and Bash routes, unbalanced backticks or
 command text that `shlex` cannot parse produce an IR error before an action is

@@ -182,5 +182,8 @@ isolated entry is already its own script, so there is no cross-entry parse
 state to validate, and each entry keeps its per-entry interpolation. The two
 mechanisms are distinct: a shared list keeps one interpreter and therefore
 needs a boundary check, while isolating the entries removes the shared parse
-state instead. Neither mechanism relaxes the other's guarantees, and accepted
-shared lists retain their existing action hashes.
+state instead. Isolation is not a remedy for an entry that the shared check
+rejects: because each isolated entry is its own script, an entry that leaves a
+quote, here-string, comment, or substitution unfinished there is invalid on its
+own. Neither mechanism relaxes the other's guarantees, and accepted shared
+lists retain their existing action hashes.

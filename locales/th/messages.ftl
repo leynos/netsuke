@@ -207,7 +207,7 @@ ir.circular_dependency = พบการพึ่งพาแบบวงกล�
 ir.action_serialisation = ทำให้การกระทำเป็นลำดับข้อมูลไม่สำเร็จ: { $details }
 ir.invalid_command = การแทรกค่าในคำสั่งไม่ถูกต้อง: { $snippet }
 ir.ambiguous_substitution_boundary = ขอบเขตการแทนที่คำสั่งไม่ชัดเจนที่อักขระ { $position }; แยกวงเล็บปิดของการแทนที่ออกจาก '#' ที่ตามมา
-ir.unfinished_power_shell_region = รายการ { $entry } ในรายการคำสั่ง PowerShell สิ้นสุดภายใน { $region } ให้ปิดรายการนั้น รวมรายการกับรายการถัดไป หรือตั้งค่า 'command_isolation: isolated' สำหรับรายการคำสั่ง
+ir.unfinished_power_shell_region = รายการ { $entry } ในรายการคำสั่ง PowerShell สิ้นสุดภายใน { $region } ให้ปิดรายการนั้นหรือรวมรายการกับรายการถัดไป
 
 # ข้อผิดพลาดในการสร้างไฟล์ Ninja
 ninja_gen.missing_action = ไม่มีการกระทำ “{ $id }” ที่เส้นเชื่อมของการสร้างอ้างถึง

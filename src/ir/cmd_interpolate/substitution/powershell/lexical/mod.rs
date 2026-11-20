@@ -40,7 +40,9 @@ pub(in crate::ir::cmd_interpolate::substitution) struct PowerShellLexicalState {
     is_fail_closed: bool,
     /// Cache whether the nearest assignment since a lexical boundary targets a variable.
     has_variable_assignment_since_boundary: bool,
-    /// Count the block-comment levels whose terminators have not been read.
+    /// Track whether a block comment's terminating `#>` has been read.
+    ///
+    /// PowerShell block comments do not nest, so the value is zero or one.
     block_comment_depth: usize,
     /// Record a final backtick that would escape the character following the entry.
     has_trailing_escape: bool,

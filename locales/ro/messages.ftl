@@ -207,7 +207,7 @@ ir.circular_dependency = A fost detectată o dependență circulară: { $cycle }
 ir.action_serialisation = Acțiunea nu a putut fi serializată: { $details }.
 ir.invalid_command = Interpolare nevalidă în comandă: { $snippet }.
 ir.ambiguous_substitution_boundary = Limită ambiguă a substituției de comandă la caracterul { $position }; separați paranteza de închidere a substituției de '#' următor.
-ir.unfinished_power_shell_region = Intrarea { $entry } din lista de comenzi PowerShell se termină în interiorul { $region }; închideți-o, îmbinați intrarea cu următoarea sau setați 'command_isolation: isolated' pentru lista de comenzi.
+ir.unfinished_power_shell_region = Intrarea { $entry } din lista de comenzi PowerShell se termină în interiorul { $region }; închideți-o sau îmbinați intrarea cu următoarea.
 
 # Erori la generarea fișierelor Ninja.
 ninja_gen.missing_action = Lipsește acțiunea „{ $id }” la care face referire o muchie de construire.
