@@ -14,7 +14,7 @@
 
 use std::{
     env,
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     io::ErrorKind,
     path::{Path, PathBuf},
     process::{Command, Output},
@@ -194,6 +194,39 @@ const INHERITED_VARIABLES: [&str; 15] = [
     "ProgramData",
 ];
 
+/// The parent environment the child environment is derived from.
+///
+/// A test drives the documented fence, so it has to observe the environment
+/// the test process itself was given before it can decide what the child may
+/// see. Capturing those values once, here, keeps the disallowed
+/// process-environment access inside a single auditable boundary instead of
+/// scattering it through the harness.
+struct AmbientEnvironment {
+    /// The parent `PATH`, used only to locate a PowerShell executable.
+    path: Option<OsString>,
+    /// `SystemRoot`, which locates both Windows PowerShell and the system
+    /// directories the child's `PATH` names.
+    system_root: Option<OsString>,
+    /// Every variable from [`INHERITED_VARIABLES`] the parent defines.
+    inherited: Vec<(OsString, OsString)>,
+}
+
+/// Read the parent environment once, at the test boundary.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the harness is the boundary that observes the test process's own environment before it builds a controlled child environment; a test binary that must start a real shell has no reader to inject above it"
+)]
+fn ambient_environment() -> AmbientEnvironment {
+    AmbientEnvironment {
+        path: env::var_os("PATH"),
+        system_root: env::var_os("SystemRoot"),
+        inherited: INHERITED_VARIABLES
+            .iter()
+            .filter_map(|name| env::var_os(name).map(|value| (OsString::from(name), value)))
+            .collect(),
+    }
+}
+
 /// Write `example` beside the wrapper in `root` and run it.
 ///
 /// # Errors
@@ -228,9 +261,10 @@ pub fn run_example(root: &Path, example: &DocumentedExample) -> Result<Output> {
 /// candidate shell is missing or cannot be started.
 fn run_wrapper(wrapper: &Path, example: &Path, program_files_root: &Path) -> Result<Output> {
     let backup = backup_path();
-    let environment = controlled_environment(program_files_root)?;
+    let ambient = ambient_environment();
+    let environment = controlled_environment(&ambient, program_files_root)?;
     let mut unavailable = Vec::new();
-    for shell in shell_candidates() {
+    for shell in shell_candidates(&ambient) {
         let attempt = Command::new(&shell)
             .args([
                 "-NoProfile",
@@ -284,10 +318,11 @@ fn backup_path() -> PathBuf {
 /// sees. The documented shell is PowerShell 7, but Windows PowerShell ships
 /// with every Windows image and drives the same registry APIs, so a host
 /// without `pwsh` still exercises the script.
-fn shell_candidates() -> Vec<PathBuf> {
+fn shell_candidates(ambient: &AmbientEnvironment) -> Vec<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
-    candidates.extend(find_on_path("pwsh.exe"));
-    if let Some(system_root) = env::var_os("SystemRoot") {
+    let path = ambient.path.as_deref();
+    candidates.extend(path.and_then(|value| find_on_path(value, "pwsh.exe")));
+    if let Some(system_root) = ambient.system_root.as_deref() {
         candidates.push(
             PathBuf::from(system_root)
                 .join("System32")
@@ -296,13 +331,13 @@ fn shell_candidates() -> Vec<PathBuf> {
                 .join("powershell.exe"),
         );
     }
-    candidates.extend(find_on_path("powershell.exe"));
+    candidates.extend(path.and_then(|value| find_on_path(value, "powershell.exe")));
     candidates
 }
 
-/// Return the first `executable` on the ambient `PATH`, if there is one.
-fn find_on_path(executable: &str) -> Option<PathBuf> {
-    env::split_paths(&env::var_os("PATH")?)
+/// Return the first `executable` on `path`, if there is one.
+fn find_on_path(path: &OsStr, executable: &str) -> Option<PathBuf> {
+    env::split_paths(path)
         .filter(|directory| !directory.as_os_str().is_empty())
         .map(|directory| directory.join(executable))
         .find(|candidate| candidate.is_file())
@@ -322,17 +357,19 @@ fn find_on_path(executable: &str) -> Option<PathBuf> {
 ///
 /// Returns an error when `SystemRoot` is unset, because both the system `PATH`
 /// and the Windows PowerShell location are derived from it.
-fn controlled_environment(program_files_root: &Path) -> Result<Vec<(OsString, OsString)>> {
-    let system_root = env::var_os("SystemRoot")
+fn controlled_environment(
+    ambient: &AmbientEnvironment,
+    program_files_root: &Path,
+) -> Result<Vec<(OsString, OsString)>> {
+    let system_root = ambient
+        .system_root
+        .as_deref()
         .context("SystemRoot should be set so the wrapper's system PATH can be built")?;
-    let mut environment: Vec<(OsString, OsString)> = INHERITED_VARIABLES
-        .iter()
-        .filter_map(|name| env::var_os(name).map(|value| (OsString::from(name), value)))
-        .collect();
-    let system32 = PathBuf::from(&system_root).join("System32");
+    let mut environment = ambient.inherited.clone();
+    let system32 = PathBuf::from(system_root).join("System32");
     let path = env::join_paths([
         system32.clone(),
-        PathBuf::from(&system_root),
+        PathBuf::from(system_root),
         system32.join("Wbem"),
         system32.join("WindowsPowerShell").join("v1.0"),
     ])
