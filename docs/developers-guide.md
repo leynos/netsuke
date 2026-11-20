@@ -13113,20 +13113,23 @@ the manual resolver free to dereference the link, so a read that asked not to
 follow symlinks returned the target's contents on macOS and on every forced
 fallback (issue #1009).
 
-Two tests hold that pair together. The `file_type_tests` cases pin the policy
-at every spelling of the option for all four filters, including a symlink to a
-FIFO, which would hang rather than reject if the non-blocking open were made
-conditional on the policy. `resolver_fallback_tests` (Linux only) runs an
-ignored child copy of the test binary under `strace`, injects `EPERM` for
-`openat2`, and correlates the trace: a refused link must show `ELOOP` and no
-`readlinkat`, while the opt-in must show the dereference. The harness skips
-where `strace` cannot inject the fault, unless
-`NETSUKE_READ_POLICY_RESOLVER_STRICT` is set, which the Linux CI lanes do. The
-macOS lane in `ci-macos.yml` runs the same subset natively, because that
-platform always takes the manual path. `make test-read-policy` is the target
-both lanes use; it selects the boundary with `--no-tests fail`, so a filter
-that matched nothing cannot report success on the lane whose only test run it
-is.
+Two tests hold that pair together. The `file_type_tests` and `fifo_tests`
+tables pin the policy at every spelling of the option for all four filters: a
+regular file still renders, a final symlink is refused unless the caller opts
+in, and a FIFO — which would hang rather than reject if the non-blocking open
+were made conditional on the policy — reaches the regular-file check under
+every policy. `resolver_fallback_tests` (Linux only) runs an ignored child copy
+of the test binary under `strace`, injects `EPERM` for `openat2`, and
+correlates the trace: a refused link must show `ELOOP` and no `readlinkat`,
+while the opt-in must show the dereference, and the regular-file control must
+show a read-only `openat`, so the write that created the fixture cannot stand
+in for the read. The harness skips where `strace` cannot inject the fault,
+unless `NETSUKE_READ_POLICY_RESOLVER_STRICT` is set, which the Linux CI lanes
+do. The macOS lane in `ci-macos.yml` runs the same subset natively, because
+that platform always takes the manual path. `make test-read-policy` is the
+target both lanes use; it selects the boundary with `--no-tests fail`, so a
+filter that matched nothing cannot report success on the lane whose only test
+run it is.
 
 Windows has no `O_NOFOLLOW` through cap-std, but `windows_reparse` reaches the
 same guarantee through `cap_std`'s Windows-only `OpenOptionsExt::custom_flags`,

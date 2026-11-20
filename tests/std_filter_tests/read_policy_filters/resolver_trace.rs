@@ -10,8 +10,11 @@
 //! injected `openat2` failure, then an `openat` refused with `ELOOP`, and no
 //! `readlinkat` at all: dereferencing the final component is the pre-fix
 //! behaviour, and only that syscall records it. The opt-in must show the
-//! `readlinkat`, and a regular-file control must show an `openat` that
-//! returned a descriptor.
+//! `readlinkat`, and a regular-file control must show a read-only `openat` that
+//! returned a descriptor. The control checks for a read rather than any
+//! successful open because the child creates that fixture with a write open
+//! before it renders; a write record would otherwise satisfy the outcome
+//! without the filter having read anything.
 //!
 //! The separation keeps the spawn, the availability probe and the deadline in
 //! `resolver_fallback_tests`, which knows nothing about how a trace is read.
@@ -101,7 +104,7 @@ enum TraceLine {
     Openat,
     /// `openat` refused with `ELOOP`.
     RefusedOpenat,
-    /// `openat` that returned a descriptor.
+    /// A read-only `openat` that returned a descriptor.
     SuccessfulOpenat,
     /// A `readlinkat` dereference.
     Readlinkat,
@@ -112,7 +115,12 @@ impl TraceLine {
     fn required(self) -> &'static [&'static str] {
         match self {
             Self::RefusedOpenat2 => &["openat2(", "= -1 EPERM"],
-            Self::Openat | Self::RefusedOpenat | Self::SuccessfulOpenat => &["openat("],
+            Self::Openat => &["openat("],
+            Self::RefusedOpenat => &["openat(", "= -1 ELOOP"],
+            // The child creates the control fixture with a write open before
+            // it renders, so the outcome check looks for the read the filter
+            // performs rather than for any open that happened to succeed.
+            Self::SuccessfulOpenat => &["openat(", "O_RDONLY"],
             Self::Readlinkat => &["readlinkat("],
         }
     }
@@ -178,22 +186,17 @@ impl<'a> TraceWindow<'a> {
         }
     }
 
-    /// Assert that the injected fault refused the fixture's `openat2`.
-    fn require_injected_refusal(&self) -> Result<()> {
+    /// Assert that the window shows `shape`, or name the missing behaviour.
+    ///
+    /// Every check here is the same shape — a syscall that must appear for this
+    /// fixture — so they share one assertion and differ only in the sentence
+    /// that says what its absence means. `missing` is written to follow the
+    /// fixture name, and the collected lines are appended so a mismatch can be
+    /// read without re-running the child.
+    fn require(&self, shape: TraceLine, missing: &str) -> Result<()> {
         ensure!(
-            self.shows(TraceLine::RefusedOpenat2),
-            "the injected fault did not refuse an openat2 for {}:\n{}",
-            self.name,
-            self.excerpt()
-        );
-        Ok(())
-    }
-
-    /// Assert that the manual resolver then attempted an `openat`.
-    fn require_manual_open(&self) -> Result<()> {
-        ensure!(
-            self.shows(TraceLine::Openat),
-            "the manual resolver did not open {} after openat2 was refused:\n{}",
+            self.shows(shape),
+            "for {}, {missing}:\n{}",
             self.name,
             self.excerpt()
         );
@@ -201,63 +204,107 @@ impl<'a> TraceWindow<'a> {
     }
 
     /// Assert the outcome this fixture's symlink policy requires.
+    ///
+    /// The `readlinkat` check in the refused-link arm is the one that catches
+    /// the original defect: a resolver that consulted cap-std's logical
+    /// `FollowSymlinks::Yes` default dereferenced the final component even
+    /// though `O_NOFOLLOW` was set, and only that syscall records the
+    /// dereference.
     fn require_outcome(&self) -> Result<()> {
         match self.path {
-            TracePath::RefusedLink => self.require_refused_link(),
-            TracePath::FollowedLink => self.require_followed_link(),
-            TracePath::RegularFile => self.require_regular_file(),
+            TracePath::RefusedLink => {
+                self.require(
+                    TraceLine::RefusedOpenat,
+                    "the manual resolver did not refuse the link with ELOOP",
+                )?;
+                ensure!(
+                    !self.shows(TraceLine::Readlinkat),
+                    "for {}, the manual resolver dereferenced the refused link:\n{}",
+                    self.name,
+                    self.excerpt()
+                );
+                Ok(())
+            }
+            TracePath::FollowedLink => self.require(
+                TraceLine::Readlinkat,
+                "the opt-in did not dereference the link",
+            ),
+            TracePath::RegularFile => self.require(
+                TraceLine::SuccessfulOpenat,
+                "the manual resolver did not read it through a read-only open",
+            ),
         }
-    }
-
-    /// Assert that the no-follow policy refused the link without resolving it.
-    ///
-    /// The `readlinkat` check is the one that catches the original defect: a
-    /// resolver that consulted cap-std's logical `FollowSymlinks::Yes` default
-    /// dereferenced the final component even though `O_NOFOLLOW` was set, and
-    /// only that syscall records the dereference.
-    fn require_refused_link(&self) -> Result<()> {
-        ensure!(
-            self.shows(TraceLine::RefusedOpenat),
-            "the manual resolver did not refuse the link {} with ELOOP:\n{}",
-            self.name,
-            self.excerpt()
-        );
-        ensure!(
-            !self.shows(TraceLine::Readlinkat),
-            "the manual resolver dereferenced the refused link {}:\n{}",
-            self.name,
-            self.excerpt()
-        );
-        Ok(())
-    }
-
-    /// Assert that the opt-in resolved the link through `readlinkat`.
-    fn require_followed_link(&self) -> Result<()> {
-        ensure!(
-            self.shows(TraceLine::Readlinkat),
-            "the opt-in did not dereference the link {}:\n{}",
-            self.name,
-            self.excerpt()
-        );
-        Ok(())
-    }
-
-    /// Assert that an ordinary file was opened without an error.
-    fn require_regular_file(&self) -> Result<()> {
-        ensure!(
-            self.shows(TraceLine::SuccessfulOpenat),
-            "the manual resolver did not open the regular file {}:\n{}",
-            self.name,
-            self.excerpt()
-        );
-        Ok(())
     }
 }
 
 /// Assert that `trace` shows the manual resolver handling `expectation`.
 pub(super) fn assert_trace(trace: &str, expectation: &TraceExpectation) -> Result<()> {
     let window = TraceWindow::new(trace, expectation);
-    window.require_injected_refusal()?;
-    window.require_manual_open()?;
+    window.require(
+        TraceLine::RefusedOpenat2,
+        "the injected fault did not refuse an openat2",
+    )?;
+    window.require(
+        TraceLine::Openat,
+        "the manual resolver did not open it after openat2 was refused",
+    )?;
     window.require_outcome()
+}
+
+#[cfg(test)]
+mod tests {
+    //! Pin which trace lines satisfy each syscall shape.
+    //!
+    //! The correlation decides whether the manual resolver refused a link or
+    //! read an ordinary file, so a shape that also accepted the wrong evidence
+    //! would let the harness pass on the pre-fix behaviour. These cases pin the
+    //! two shapes that must exclude it: a successful `openat` is not a refusal,
+    //! and the write that creates the control fixture is not the read the
+    //! filter performs.
+    use anyhow::{Result, ensure};
+    use rstest::rstest;
+
+    use super::{TraceLine, line_matches};
+
+    /// A read-only open of the control, as strace records it.
+    const CONTROL_READ: &str = "openat(3, \"control_contents\", O_RDONLY|O_CLOEXEC|O_NOFOLLOW) = 4";
+    /// The write open that creates that control before rendering.
+    const CONTROL_WRITE: &str =
+        "openat(3, \"control_contents\", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 4";
+    /// A refused link open, as the no-follow policy produces it.
+    const REFUSED_LINK: &str = concat!(
+        "openat(3, \"link_contents_default\", ",
+        "O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK) = -1 ELOOP ",
+        "(Too many levels of symbolic links)"
+    );
+    /// The injected refusal of the native resolver.
+    const INJECTED: &str = concat!(
+        "openat2(3, \"link_contents_default\", ",
+        "{flags=O_RDONLY}, 24) = -1 EPERM (Operation not permitted)"
+    );
+    /// The dereference an opt-in link produces.
+    const DEREFERENCE: &str = "readlinkat(3, \"link_contents_true\", \"file\", 4) = 4";
+
+    /// A shape must accept its own syscall and reject its near neighbours.
+    #[rstest]
+    #[case::read_is_a_successful_open(CONTROL_READ, TraceLine::SuccessfulOpenat, true)]
+    #[case::read_is_not_a_refusal(CONTROL_READ, TraceLine::RefusedOpenat, false)]
+    #[case::write_is_not_the_read(CONTROL_WRITE, TraceLine::SuccessfulOpenat, false)]
+    #[case::refused_link_is_a_refusal(REFUSED_LINK, TraceLine::RefusedOpenat, true)]
+    #[case::refused_link_is_not_a_successful_open(REFUSED_LINK, TraceLine::SuccessfulOpenat, false)]
+    #[case::injected_refusal_is_recognized(INJECTED, TraceLine::RefusedOpenat2, true)]
+    #[case::dereference_is_recognized(DEREFERENCE, TraceLine::Readlinkat, true)]
+    #[case::dereference_is_not_an_open(DEREFERENCE, TraceLine::SuccessfulOpenat, false)]
+    fn shapes_admit_only_their_own_evidence(
+        #[case] line: &str,
+        #[case] shape: TraceLine,
+        #[case] expected: bool,
+    ) -> Result<()> {
+        ensure!(
+            line_matches(shape, line) == expected,
+            "{shape:?} should {}match: {line}",
+            if expected { "" } else { "not " }
+        );
+        Ok(())
+    }
 }

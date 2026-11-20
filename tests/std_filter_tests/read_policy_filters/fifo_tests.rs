@@ -25,105 +25,50 @@ use super::{
     fallible, rejection, render_case, require_real_symlink,
 };
 
-#[rstest]
-#[case::contents(CONTENTS)]
-#[case::linecount(LINECOUNT)]
-#[case::hash(HASH)]
-#[case::digest(DIGEST)]
-fn reading_filters_reject_a_fifo(#[case] case: FilterCase) -> Result<()> {
-    let (_temp, root) = fallible::filter_workspace()?;
-    let pipe = create_fifo(&root, "pipe")?;
-    let err = rejection(
-        case,
-        render_case(
-            case,
-            "fifo",
-            ReadTarget::new(&root, &pipe, 1024),
-            &case.template(),
-        )?,
-    )?;
-    ensure!(
-        err.kind() == ErrorKind::InvalidOperation,
-        "{}: should report InvalidOperation for a FIFO but was {:?}",
-        case.name,
-        err.kind()
-    );
-    Ok(())
-}
-
-/// The symlink opt-in must not reintroduce a blocking open.
+/// Every direct-FIFO case must reach the non-blocking open and be rejected.
 ///
-/// `O_NONBLOCK` is what keeps this open from wedging the render worker under
-/// either policy: opening a FIFO for reading with neither a writer nor
-/// `O_NONBLOCK` blocks until a writer appears, and the test would only end when
-/// `nextest` terminates it. `O_NOFOLLOW` is not the guard here — it refuses a
-/// symlink final component, and a FIFO is not one. The FIFO therefore reaches
-/// the read-only open, returns because of `O_NONBLOCK`, and is rejected by the
-/// regular-file check on the opened handle, which is what this case asserts.
+/// A FIFO is not a symlink, so `O_NOFOLLOW` never applies to it and the policy
+/// cannot decide the outcome: each spelling must get past the open, return
+/// because of `O_NONBLOCK`, and be refused by the regular-file check on the
+/// opened handle. Asserting the diagnostic for every policy is what keeps the
+/// policy from becoming a condition on the non-blocking flag — the opt-in arm
+/// is the one that would hang if it did — and a case that refused the FIFO
+/// before opening it would not exercise the same path as a regular file.
 #[rstest]
-#[case::contents(CONTENTS)]
-#[case::linecount(LINECOUNT)]
-#[case::hash(HASH)]
-#[case::digest(DIGEST)]
-fn reading_filters_reject_a_fifo_when_following_symlinks(#[case] case: FilterCase) -> Result<()> {
+#[case::contents_default(CONTENTS, Policy::Omitted)]
+#[case::contents_false(CONTENTS, Policy::FollowFalse)]
+#[case::contents_true(CONTENTS, Policy::FollowTrue)]
+#[case::linecount_default(LINECOUNT, Policy::Omitted)]
+#[case::linecount_false(LINECOUNT, Policy::FollowFalse)]
+#[case::linecount_true(LINECOUNT, Policy::FollowTrue)]
+#[case::hash_default(HASH, Policy::Omitted)]
+#[case::hash_false(HASH, Policy::FollowFalse)]
+#[case::hash_true(HASH, Policy::FollowTrue)]
+#[case::digest_default(DIGEST, Policy::Omitted)]
+#[case::digest_false(DIGEST, Policy::FollowFalse)]
+#[case::digest_true(DIGEST, Policy::FollowTrue)]
+fn reading_filters_reject_a_fifo(#[case] case: FilterCase, #[case] policy: Policy) -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
     let pipe = create_fifo(&root, "pipe")?;
     let err = rejection(
         case,
         render_case(
             case,
-            "fifo_follow",
+            &format!("fifo_{}", policy.suffix()),
             ReadTarget::new(&root, &pipe, 1024),
-            &case.template_with("follow_symlinks=true"),
+            &policy.template(case),
         )?,
     )?;
     ensure!(
         err.kind() == ErrorKind::InvalidOperation,
-        "{}: should report InvalidOperation for a FIFO but was {:?}",
+        "{}: should report InvalidOperation for a FIFO under {policy:?} but was {:?}",
         case.name,
         err.kind()
     );
     let message = normalize_fluent_isolates(&err.to_string());
     ensure!(
         message.contains("not a regular file"),
-        "{}: a non-blocking open should reach the regular-file check: {message}",
-        case.name
-    );
-    Ok(())
-}
-
-/// The explicit `false` spelling must refuse a direct FIFO without blocking.
-///
-/// `O_NOFOLLOW` does not apply to a FIFO, so this case proves the
-/// non-blocking open and the regular-file check still hold when the policy is
-/// stated explicitly rather than omitted.
-#[rstest]
-#[case::contents(CONTENTS)]
-#[case::linecount(LINECOUNT)]
-#[case::hash(HASH)]
-#[case::digest(DIGEST)]
-fn reading_filters_reject_a_fifo_when_follow_is_false(#[case] case: FilterCase) -> Result<()> {
-    let (_temp, root) = fallible::filter_workspace()?;
-    let pipe = create_fifo(&root, "pipe")?;
-    let err = rejection(
-        case,
-        render_case(
-            case,
-            "fifo_false",
-            ReadTarget::new(&root, &pipe, 1024),
-            &Policy::FollowFalse.template(case),
-        )?,
-    )?;
-    ensure!(
-        err.kind() == ErrorKind::InvalidOperation,
-        "{}: should report InvalidOperation for a FIFO but was {:?}",
-        case.name,
-        err.kind()
-    );
-    let message = normalize_fluent_isolates(&err.to_string());
-    ensure!(
-        message.contains("not a regular file"),
-        "{}: a non-blocking open should reach the regular-file check: {message}",
+        "{}: a non-blocking open under {policy:?} should reach the regular-file check: {message}",
         case.name
     );
     Ok(())
