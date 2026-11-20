@@ -86,10 +86,11 @@ delete unrelated files that merely share a target's name.
 
 A target declaring `always: true` re-runs on every invocation that reaches it,
 even when its inputs and output are unchanged. Ninja records the output's
-modification time after the run: a dependant rebuilds when that recorded time
-changes, and is skipped when it does not. A recipe that rewrites identical
-bytes and restores the original modification time therefore still lets the
-dependant be skipped.
+modification time after the run: an otherwise up-to-date dependant rebuilds
+when that recorded time changes and is skipped when it does not. A recipe that
+rewrites identical bytes and restores the original modification time therefore
+still lets `restat` skip such a dependant, while a dependant with another
+changed input can still run.
 
 Because the generated Ninja text changes shape for these edges, a manifest that
 compares `netsuke generate` output against a stored copy must update that copy.

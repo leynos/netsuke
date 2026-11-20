@@ -1658,13 +1658,17 @@ creation in the command layer; moving either would duplicate the lowering rule
 or make generation impure.
 
 A `depfile` on an executable phony edge is a rule binding, so the hidden
-statement inherits it and Ninja reads it for that statement. Ninja accepts a
-depfile only when its first output equals the edge's first output, which is now
-the hidden path; the form a recipe produces by writing against `$out` therefore
-matches, and one that names the declared public name is ignored. Both
-directions are pinned by `tests/ninja_phony_depfile_tests.rs`, which runs a
-real Ninja over generated text — the manifest loader never sets
-`Action.depfile` in beta4, so only programmatic IR construction reaches the
+statement inherits it. Without `deps`, Ninja accepts a depfile only when its
+first target equals the edge's first output, now the hidden path; no recipe can
+name that path, because `{{ outs }}` is lowered from the declared names and
+`$out` is a literal shell variable, so that form orders nothing. With `deps`,
+Ninja records the depfile's inputs in its dependency log against the hidden
+output and orders them on later builds. `tests/ninja_phony_depfile_tests.rs`
+pins both outcomes with a real Ninja: a pre-written depfile naming the hidden
+output orders the discovered producer at scan time, a recipe-written depfile
+with `deps` orders it on the next build, and the same recipe without `deps`
+never orders it. The manifest loader never sets `Action.depfile` or
+`Action.deps_format` in beta4, so only programmatic IR construction reaches the
 binding.
 
 ## Adding a lint rule

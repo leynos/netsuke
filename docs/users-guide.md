@@ -990,7 +990,8 @@ A target supports these fields:
 - `always`: forces the recipe to run whenever the target is requested, even
   when its inputs and output are unchanged. The edge compares the output's
   modification time afterwards, so a recipe that leaves that time unchanged
-  still prunes downstream work.
+  still prunes downstream work that depends only on this output; a dependant
+  with another changed input can still run.
 - `console`: selects Ninja's serial console pool for this executable action or
   target. It defaults to `false` and is unavailable to dependency-only
   aggregates.
@@ -1019,11 +1020,16 @@ generated output beneath `.netsuke/phony`, so:
   the recipe onto a hidden output, so `netsuke build` creates the declared
   outputs' parent directories before it invokes Ninja.
 
-A `depfile` on an executable phony action belongs to its rule, so Ninja reads
-it for the hidden statement. Ninja accepts a depfile only when its first output
-names the edge's first output, which is the hidden path `$out` expands to; a
-recipe that writes the declared name instead produces a depfile Ninja ignores,
-and the dependencies it lists do not order the build.
+A `depfile` on an executable phony action is a rule binding, so the hidden
+statement inherits it. Without a `deps` binding, Ninja reads the depfile at
+scan time and accepts it only when its first target names the edge's first
+output, the hidden path. A recipe cannot name that path: `{{ outs }}` is
+lowered from the declared names during graph construction, and `$out` is a
+literal shell variable, as for every other recipe. A Makefile-style depfile
+written by such a recipe therefore orders nothing. A rule that also sets `deps`
+differs: Ninja records the depfile's inputs against the hidden output in its
+dependency log, so they order later builds, though a build cannot use inputs it
+records itself.
 
 A target with `always: true` keeps its declared output, so it may produce a
 real file. Netsuke makes its edge permanently dirty, so the recipe runs every
