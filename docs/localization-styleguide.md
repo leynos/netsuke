@@ -121,6 +121,10 @@ Don't:
 - **Word order and agreement.** Placeables move with the target language's
   syntax. A placeable is never locked to its English position, but its name and
   braces are literal.
+- **Grammar around placeables.** Do not assume the pronunciation or
+  grammatical properties of an arbitrary substituted value. Follow the
+  locale-specific glossary guidance for agreement and particles around
+  placeables.
 - **Sentence shape.** The source favours one condition per sentence. Keep
   that structure; do not merge sentences even where the target language would
   tolerate longer periods.
