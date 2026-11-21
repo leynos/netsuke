@@ -2237,13 +2237,15 @@ Three boundaries keep a run from depending on the host:
   backup file under the system temporary directory, installs a sentinel,
   restores the original value in a `finally` block, and reports the stored
   value and type on standard output. It arms a registry change notification
-  before dot-sourcing the example and reads it before the restore, so the
-  report says whether the example changed the key's value: a value comparison
-  cannot show a change that was undone, and the key's last-write time is too
-  coarse to separate such a change from the wrapper's own sentinel write. The
-  notification reports a change to a value of the key, and a write that stores
-  the text already present is not such a change, so the report establishes a
-  value change rather than counting writes. The report also carries the child
+  before dot-sourcing the example and reads it before the restore, because the
+  value the example leaves cannot show whether it touched the key: a change
+  that restores the text that was already there looks exactly like no change at
+  all. The notification reports a change to a value of the key rather than a
+  write, and the documentation does not say what a write that stores the text
+  already present does, so the report is not read as a write count. The watch
+  is armed after the wrapper's own sentinel write, so a write by the example
+  changes the value and is reported, while a guard that returns before writing
+  performs no write and reports nothing. The report also carries the child
   process `PATH` before and after the example, so a fence that fails its
   existence guard is shown to leave the process value alone as well as the user
   one. A run killed before that block leaves the backup for the next process to

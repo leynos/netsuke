@@ -23,13 +23,15 @@ $wrapperMutex = [System.Threading.Mutex]::new($false, 'Local\NetsukeWindowsPathS
 # variable instead of the failure that got there.
 $wrapperMutexHeld = $false
 $wrapperKey = $null
-# Whether the example changed the key's value is not visible from the value it
-# leaves: a change that restores the text that was already there looks exactly
-# like no change at all, and the key's last-write time is too coarse to separate
-# a change from the sentinel write the wrapper performs immediately before the
-# example. `REG_NOTIFY_CHANGE_LAST_SET` reports a change to a value of the key,
-# and a write that stores the text already present is not such a change, so the
-# report establishes a value change rather than counting writes.
+# The value the example leaves cannot show whether it touched the key: a change
+# that restores the text that was already there looks exactly like no change at
+# all. The wrapper therefore asks the key to report changes while the example
+# runs. `REG_NOTIFY_CHANGE_LAST_SET` reports a change to a value of the key
+# rather than a write, and the documentation does not say what a write that
+# stores the text already present does, so the report is not read as a write
+# count. The watch is armed after the sentinel write below, so a write by the
+# example changes the value and is reported, while a guard that returns before
+# writing performs no write and reports nothing.
 $wrapperWatchType = 'NetsukeRegistryWatch'
 if (-not ($wrapperWatchType -as [type])) {
     Add-Type -TypeDefinition @'

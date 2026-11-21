@@ -7,9 +7,9 @@
 //! child PowerShell gets a cleared environment with only the variables Windows
 //! needs to start it, so nothing the host happens to export can decide which
 //! directory the example resolves. The report also carries the child process
-//! `PATH` the example started and ended with, and whether the example changed
-//! the environment key's value; [`observation`] turns that report into the
-//! assertions the behavioural test makes.
+//! `PATH` the example started and ended with, and whether the environment key
+//! reported a change while the example ran; [`observation`] turns that report
+//! into the assertions the behavioural test makes.
 //!
 //! The harness reads the parent environment through [`mockable::Env`], so the
 //! process is the only ambient dependency and a test could supply fixed values

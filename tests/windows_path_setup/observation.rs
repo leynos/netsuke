@@ -2,11 +2,11 @@
 //!
 //! The wrapper is the only witness to what a documented fence did: it reports
 //! the user `PATH` value it recorded, the value the example left behind,
-//! whether the example changed the environment key's value, the child process
-//! `PATH` before and after the example, and the value it restored. Parsing
-//! that report once here keeps the behavioural test reading as the contract
-//! rather than as marker handling, and gives every failure the whole report as
-//! its context.
+//! whether the environment key reported a change while the example ran, the
+//! child process `PATH` before and after the example, and the value it
+//! restored. Parsing that report once here keeps the behavioural test reading
+//! as the contract rather than as marker handling, and gives every failure the
+//! whole report as its context.
 
 use std::{path::Path, process::Output};
 
@@ -75,7 +75,7 @@ pub struct RunReport<'a> {
     process_before: String,
     /// The child process `PATH` the example left behind.
     process_after: String,
-    /// Whether the example changed the environment key's value at all.
+    /// Whether the environment key reported a change while the example ran.
     key_changed: bool,
 }
 
@@ -196,7 +196,7 @@ impl<'a> RunReport<'a> {
     /// The existence guard is the only thing standing between a user who has
     /// not installed Netsuke and a `PATH` entry pointing at nothing, so the
     /// failure is observed on every surface it could reach: the user value, the
-    /// fact that the key's value never changed, the process `PATH`, and the exit
+    /// fact that the key reported no change, the process `PATH`, and the exit
     /// status. Checking only the stored value would accept a run that changed it
     /// and changed it back.
     ///
