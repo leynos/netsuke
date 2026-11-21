@@ -22,7 +22,7 @@ use rstest::rstest;
 
 use super::*;
 
-use crate::stdlib::canonical_value::budget::AdmissionLimits;
+use crate::stdlib::canonical_value::budget::{AdmissionBudget, AdmissionLimits};
 use crate::stdlib::canonical_value::path::PathRef;
 
 /// Depth of the shared graph that exceeds every default ceiling.
@@ -108,64 +108,69 @@ fn stable_deduplicate_refuses_an_exponentially_shared_input() -> Result<()> {
 // Exact ceilings
 // ---------------------------------------------------------------------------
 
-/// A value exactly at the depth ceiling is admitted; one edge deeper is not.
-#[rstest]
-#[case::at_the_ceiling(1, true)]
-#[case::one_edge_past(0, false)]
-fn depth_ceiling_is_inclusive(#[case] max_depth: usize, #[case] admits: bool) -> Result<()> {
-    let nested = Value::from([Value::from(1_i64)]);
-    let admitted =
-        canonical_key_within(&nested, &mut admission_budget(max_depth, 100, 100)).is_ok();
-    ensure!(
-        admitted == admits,
-        "max_depth={max_depth} admitted={admitted}",
-    );
-    Ok(())
+/// The ceiling a case exercises, named by what it meters.
+#[derive(Clone, Copy, Debug)]
+enum Ceiling {
+    /// Distance in edges below the snapshot root.
+    Depth,
+    /// Snapshot nodes, counted per occurrence.
+    Nodes,
+    /// Bytes of an admitted scalar.
+    Bytes,
+    /// Bytes of a mapping member name.
+    MemberNameBytes,
 }
 
-/// A sequence exactly at the node ceiling is admitted; one node past is not.
-#[rstest]
-#[case::at_the_ceiling(4, true)]
-#[case::one_node_past(3, false)]
-fn node_ceiling_is_inclusive(#[case] max_nodes: usize, #[case] admits: bool) -> Result<()> {
-    let flat = Value::from([1_i64, 2, 3]);
-    let admitted = canonical_key_within(&flat, &mut admission_budget(100, max_nodes, 100)).is_ok();
-    ensure!(
-        admitted == admits,
-        "max_nodes={max_nodes} admitted={admitted}",
-    );
-    Ok(())
+impl Ceiling {
+    /// Return the resource this ceiling reports when it refuses.
+    const fn resource(self) -> CanonicalResource {
+        match self {
+            Self::Depth => CanonicalResource::Depth,
+            Self::Nodes => CanonicalResource::Nodes,
+            Self::Bytes | Self::MemberNameBytes => CanonicalResource::Bytes,
+        }
+    }
 }
 
-/// A string exactly at the byte ceiling is admitted; one byte past is not.
-#[rstest]
-#[case::at_the_ceiling(3, true)]
-#[case::one_byte_past(2, false)]
-fn string_byte_ceiling_is_inclusive(#[case] max_bytes: usize, #[case] admits: bool) -> Result<()> {
-    let text = Value::from("abc");
-    let admitted = canonical_key_within(&text, &mut admission_budget(100, 100, max_bytes)).is_ok();
-    ensure!(
-        admitted == admits,
-        "max_bytes={max_bytes} admitted={admitted}",
-    );
-    Ok(())
+/// Build a fixture that spends exactly `allowance` of `ceiling`.
+///
+/// Every other ceiling is set generously, so the fixture costs the named one
+/// and nothing else; passing `allowance - 1` yields the same value one unit
+/// over budget.
+fn at_ceiling(ceiling: Ceiling, allowance: usize) -> (Value, AdmissionBudget) {
+    match ceiling {
+        Ceiling::Depth => (
+            Value::from([Value::from(1_i64)]),
+            admission_budget(allowance, 100, 100),
+        ),
+        Ceiling::Nodes => (
+            Value::from([1_i64, 2, 3]),
+            admission_budget(100, allowance, 100),
+        ),
+        Ceiling::Bytes => (Value::from("abc"), admission_budget(100, 100, allowance)),
+        Ceiling::MemberNameBytes => (
+            map_of(vec![("abc".to_owned(), Value::from(1_i64))]),
+            admission_budget(100, 100, allowance),
+        ),
+    }
 }
 
-/// A member name exactly at the byte ceiling is admitted; one byte past is not.
+/// Each ceiling admits its exact allowance and refuses one unit less.
 #[rstest]
-#[case::at_the_ceiling(3, true)]
-#[case::one_byte_past(2, false)]
-fn member_name_byte_ceiling_is_inclusive(
-    #[case] max_bytes: usize,
-    #[case] admits: bool,
-) -> Result<()> {
-    let map = map_of(vec![("abc".to_owned(), Value::from(1_i64))]);
-    let admitted = canonical_key_within(&map, &mut admission_budget(100, 100, max_bytes)).is_ok();
+#[case::depth(Ceiling::Depth, 1)]
+#[case::nodes(Ceiling::Nodes, 4)]
+#[case::text_bytes(Ceiling::Bytes, 3)]
+#[case::member_name_bytes(Ceiling::MemberNameBytes, 3)]
+fn ceiling_is_inclusive(#[case] ceiling: Ceiling, #[case] exact: usize) -> Result<()> {
+    let (at_limit, mut at_limit_budget) = at_ceiling(ceiling, exact);
     ensure!(
-        admitted == admits,
-        "max_bytes={max_bytes} admitted={admitted}",
+        canonical_key_within(&at_limit, &mut at_limit_budget).is_ok(),
+        "a value that spends exactly the {ceiling:?} ceiling must be admitted",
     );
-    Ok(())
+    let (past_limit, mut past_limit_budget) = at_ceiling(ceiling, exact - 1);
+    let refusal = canonical_key_within(&past_limit, &mut past_limit_budget)
+        .expect_err("a value one unit past the ceiling must be refused");
+    ensure_resource_refusal(&refusal, ceiling.resource())
 }
 
 /// A depth refusal names the first value past the ceiling, not the root.
@@ -194,6 +199,26 @@ fn depth_refusal_names_the_first_value_past_the_ceiling() -> Result<()> {
     ensure!(
         path == "[0]",
         "the refusal must name the refused item, got {path}",
+    );
+    Ok(())
+}
+
+/// A container one edge past the depth ceiling is refused before enumerating.
+///
+/// The counted sequence is the value the ceiling refuses, not an ancestor of
+/// it, so a traversal that checked depth only after dispatching into a
+/// container would pull at least once before refusing and fail the count.
+#[rstest]
+fn a_container_past_the_depth_ceiling_is_refused_before_it_enumerates() -> Result<()> {
+    let (counted, pulls) = counted_sequence(10);
+    let nested = Value::from(vec![Value::from(vec![counted])]);
+    let refusal = canonical_key_within(&nested, &mut admission_budget(1, 100, 100))
+        .expect_err("the counted sequence sits two edges below a one-edge ceiling");
+    ensure_resource_refusal(&refusal, CanonicalResource::Depth)?;
+    let pulled = pulls.load(Ordering::SeqCst);
+    ensure!(
+        pulled == 0,
+        "the refused container must not be enumerated, got {pulled} pulls",
     );
     Ok(())
 }
@@ -232,55 +257,18 @@ fn shared_graph_matches_its_expanded_tree() -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Operation scope
-// ---------------------------------------------------------------------------
-
-/// `canonical_eq` spends one budget across both operands.
-#[rstest]
-fn canonical_eq_shares_one_budget_across_operands() -> Result<()> {
-    let left = Value::from([1_i64, 2]);
-    let right = Value::from([1_i64, 2]);
-    ensure!(
-        canonical_key_within(&left, &mut admission_budget(100, 4, 100)).is_ok(),
-        "each operand must fit the ceiling on its own",
-    );
-    ensure!(
-        canonical_key_within(&right, &mut admission_budget(100, 4, 100)).is_ok(),
-        "each operand must fit the ceiling on its own",
-    );
-    let refusal = canonical_eq_within(&left, &right, &mut admission_budget(100, 4, 100))
-        .expect_err("one budget cannot admit both operands");
-    ensure_resource_refusal(&refusal, CanonicalResource::Nodes)?;
-    Ok(())
-}
-
-/// `stable_deduplicate` spends one budget across every input.
-#[rstest]
-fn stable_deduplicate_shares_one_budget_across_inputs() -> Result<()> {
-    let first = Value::from([1_i64, 2]);
-    let second = Value::from([1_i64, 2]);
-    ensure!(
-        canonical_key_within(&first, &mut admission_budget(100, 4, 100)).is_ok(),
-        "each input must fit the ceiling on its own",
-    );
-    ensure!(
-        canonical_key_within(&second, &mut admission_budget(100, 4, 100)).is_ok(),
-        "each input must fit the ceiling on its own",
-    );
-    let input = [first, second];
-    let refusal = stable_deduplicate_within(&input, &mut admission_budget(100, 4, 100))
-        .expect_err("one budget cannot admit both inputs");
-    ensure_resource_refusal(&refusal, CanonicalResource::Nodes)?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // Refusal precedence
 // ---------------------------------------------------------------------------
 
 /// A non-string key is refused before any member value is charged.
+///
+/// The value behind the key is larger than the whole byte ceiling, so an
+/// implementation that admitted or charged values before checking keys would
+/// refuse `Bytes`; the expected `NonStringKey` is what shows the key check ran
+/// first. A non-string key has no member-name charge of its own, which is why
+/// the ceiling this test orders against is the value's rather than a name's.
 #[rstest]
-fn non_string_key_precedes_the_member_byte_ceiling() -> Result<()> {
+fn non_string_key_precedes_the_value_byte_ceiling() -> Result<()> {
     let map = pair_map(
         vec![(Value::from(1_i64), Value::from("x".repeat(100)))],
         Some(1),
@@ -289,7 +277,7 @@ fn non_string_key_precedes_the_member_byte_ceiling() -> Result<()> {
         .expect_err("an integer key is refused");
     ensure!(
         matches!(refusal, CanonicalValueError::NonStringKey { .. }),
-        "the key check must precede byte charging, got {refusal}",
+        "the key check must precede value byte charging, got {refusal}",
     );
     Ok(())
 }

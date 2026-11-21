@@ -43,12 +43,47 @@ pub(super) struct SnapshotPath {
 }
 
 /// One edge of a [`SnapshotPath`].
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 enum PathStep {
     /// A member of a sequence, addressed by its index.
     Item(usize),
     /// A member of a string-keyed mapping, addressed by its key.
     Member(String),
+}
+
+impl Clone for PathStep {
+    /// Clone one edge, counting the clone under test instrumentation.
+    ///
+    /// Cloning a [`PathStep`] is the operation this module exists to avoid
+    /// during traversal: a `Member` step owns its name, so cloning one per
+    /// descendant copies every ancestor name once per descendant. Counting the
+    /// clone makes that regression observable, which no assertion over the
+    /// admitted key or the pull count can be. The counter is compiled only
+    /// under `cfg(test)`, so no production cost is added.
+    fn clone(&self) -> Self {
+        #[cfg(test)]
+        STEP_CLONES.with(|clones| clones.set(clones.get().saturating_add(1)));
+        match self {
+            Self::Item(index) => Self::Item(*index),
+            Self::Member(key) => Self::Member(key.clone()),
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Path steps cloned on this thread since the last reset.
+    static STEP_CLONES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Return how many [`PathStep`] clones happened on this thread, resetting it.
+///
+/// Thread-local rather than global because each test runs in its own thread
+/// under nextest, and a shared counter would let an unrelated case's clones
+/// decide this one's verdict. Exposed only to the module's own test batteries.
+#[cfg(test)]
+pub(super) fn take_step_clones() -> usize {
+    STEP_CLONES.with(|clones| clones.replace(0))
 }
 
 impl SnapshotPath {

@@ -7,7 +7,7 @@
 //! proportional to its occurrences rather than to the ancestor bytes each
 //! descendant could copy.
 //!
-//! The case drives the public surface, so it measures the traversal the
+//! The cases drive the public surface, so they measure the traversal the
 //! canonicalizer really runs rather than a stand-in for it.
 
 use std::sync::Arc;
@@ -20,6 +20,8 @@ use rstest::rstest;
 use super::*;
 
 use super::budget::{counted_sequence, pair_map};
+
+use crate::stdlib::canonical_value::path::take_step_clones;
 
 /// Bytes of each member name in the wide-under-long-names fixture.
 ///
@@ -65,23 +67,29 @@ fn wide_leaf_under_long_names() -> (Value, Arc<AtomicUsize>) {
     (current, pulls)
 }
 
-/// Admission's path bookkeeping does not grow with ancestor-name bytes.
+/// Admission's path bookkeeping does not copy ancestor names.
 ///
 /// Traversal carries a borrowed chain, so extending a path for a child costs a
 /// reference and an index or name reference however many bytes the ancestors'
 /// names hold; the owned path is materialized only to render a refusal.
-/// Extending an owned path per child instead would copy every ancestor name
-/// once per descendant: four 1 MiB names above a 90,000-item sequence would
-/// move roughly 360 GB during an admission that both ceilings allow, so the
-/// accepted key this case asserts is precisely what such a copy could not
-/// produce.
+/// Extending an owned path per child instead would clone every ancestor step
+/// once per descendant — four 1 MiB names above a 90,000-item sequence — and
+/// the clone counter below is what makes that difference observable rather than
+/// a matter of elapsed time.
 ///
 /// The pull count is the second half of the claim. Work follows occurrences,
 /// not name bytes, so the leaf is pulled once per item and never re-read.
 #[rstest]
-fn path_bookkeeping_does_not_grow_with_ancestor_name_bytes() -> Result<()> {
+fn path_bookkeeping_does_not_copy_ancestor_names() -> Result<()> {
     let (value, pulls) = wide_leaf_under_long_names();
+    // Reset the thread's counter, so the measurement covers only this case.
+    let _ = take_step_clones();
     let key = canonical_key(&value).expect("the fixture is inside every default ceiling");
+    let clones = take_step_clones();
+    ensure!(
+        clones == 0,
+        "admission must not clone path steps, got {clones} clones",
+    );
     ensure!(
         key.as_bytes().len() > PATH_NAME_BYTES,
         "the key must carry the four member names, got {} bytes",

@@ -104,10 +104,17 @@ every default: the property generator reaches depth 3, and the deepest fixture
 a test expects to be admitted is the wide-leaf path fixture in
 [`tests/path_bookkeeping.rs`](../../src/stdlib/canonical_value/tests/path_bookkeeping.rs),
 whose items sit five edges below the root. Fixtures that go deeper exist to
-provoke a refusal, so no supported input changes behaviour. A caller needing a
-different ceiling needs a different API, not a different number, and making the
-ceiling configurable would require the policy ownership, validation, and
-localization that roadmap 6.1.4 and the CLI policy layer own.
+provoke a refusal. A caller needing a different ceiling needs a different API,
+not a different number, and making the ceiling configurable would require the
+policy ownership, validation, and localization that roadmap 6.1.4 and the CLI
+policy layer own.
+
+Every input inside the ceilings behaves exactly as it did before this decision.
+An input beyond one does not: a single string larger than 8 MiB, a value deeper
+than 128 edges, or a value expanding past 100,000 occurrences was previously
+admitted whenever the host could allocate it, and is now refused with a typed
+error before admission starts. That refusal is the decision rather than an
+accident, and it defines the supported input domain from this ADR onwards.
 
 ## Consequences
 
@@ -133,6 +140,12 @@ The refusal message is stable English prose until roadmap 6.1.4 supplies
 localized diagnostics. Cycles and unstable host enumeration remain caller
 preconditions: an infinite enumeration is refused as `Nodes` and a cycle as
 `Depth`, but neither is diagnosed as the condition it is.
+
+Bounding the pulls does not bound the work a host object does inside its own
+`next()` before it yields an item. A `MiniJinja` object whose enumeration
+allocates, blocks, or runs long before returning remains a caller precondition,
+as does one that never returns at all; the ceiling is charged per yielded
+occurrence and cannot see work performed ahead of a yield.
 
 ## Alternatives considered
 

@@ -124,26 +124,36 @@ impl AdmissionBudget {
     /// A charge that lands exactly on the ceiling succeeds; only the next one
     /// is refused, which keeps the limit an inclusive allowance.
     pub(super) fn charge_node(&mut self, path: &PathRef<'_>) -> Result<(), CanonicalValueError> {
-        Allowance {
-            used: &mut self.used_nodes,
-            limit: self.limits.nodes,
-            resource: CanonicalResource::Nodes,
-        }
-        .charge(1, path)
+        self.meter(Metered::Nodes).charge(1, path)
     }
 
-    /// Charge `bytes` of admitted text before it is copied.
+    /// Charge `bytes` of admitted text against the byte ceiling.
     pub(super) fn charge_bytes(
         &mut self,
         bytes: usize,
         path: &PathRef<'_>,
     ) -> Result<(), CanonicalValueError> {
-        Allowance {
-            used: &mut self.used_bytes,
-            limit: self.limits.bytes,
-            resource: CanonicalResource::Bytes,
+        self.meter(Metered::Bytes).charge(bytes, path)
+    }
+
+    /// Return the counter and ceiling that `metered` bounds.
+    ///
+    /// The metered resources differ only in which counter and ceiling they
+    /// name, so selecting one here leaves the accounting detail in a single
+    /// place and the two charge functions as thin entry points.
+    const fn meter(&mut self, metered: Metered) -> Allowance<'_> {
+        match metered {
+            Metered::Nodes => Allowance {
+                used: &mut self.used_nodes,
+                limit: self.limits.nodes,
+                resource: CanonicalResource::Nodes,
+            },
+            Metered::Bytes => Allowance {
+                used: &mut self.used_bytes,
+                limit: self.limits.bytes,
+                resource: CanonicalResource::Bytes,
+            },
         }
-        .charge(bytes, path)
     }
 }
 
@@ -152,6 +162,19 @@ impl Default for AdmissionBudget {
     fn default() -> Self {
         Self::new(AdmissionLimits::default())
     }
+}
+
+/// A resource whose consumption is counted, and so can be charged.
+///
+/// Depth is a bound rather than a counter, so it is deliberately absent: naming
+/// only the metered resources keeps [`AdmissionBudget::meter`] total without a
+/// dummy arm for a resource that has no allowance to select.
+#[derive(Clone, Copy, Debug)]
+enum Metered {
+    /// Snapshot nodes, charged once per admitted occurrence.
+    Nodes,
+    /// Admitted string and member-name bytes.
+    Bytes,
 }
 
 /// One counter with the ceiling and resource that bound it.

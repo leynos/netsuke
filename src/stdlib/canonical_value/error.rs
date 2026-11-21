@@ -175,6 +175,19 @@ impl CanonicalValueError {
         }
     }
 
+    /// Return the ceiling a resource-limit refusal reports, if this is one.
+    ///
+    /// Kept internal to the crate's tests: a property case derives the expected
+    /// outcome from its own charge model, so it needs the reported resource
+    /// without matching the whole variant.
+    #[cfg(test)]
+    pub(super) const fn resource(&self) -> Option<CanonicalResource> {
+        match self {
+            Self::ResourceLimitExceeded { resource, .. } => Some(*resource),
+            _ => None,
+        }
+    }
+
     /// Construct an unsupported-kind refusal at `path`.
     pub(super) fn unsupported(kind: ValueKind, path: &PathRef<'_>) -> Self {
         Self::UnsupportedKind {

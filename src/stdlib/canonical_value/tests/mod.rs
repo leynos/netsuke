@@ -16,12 +16,15 @@
 //! and the named witnesses that check `stable_deduplicate` against it; `sweep`
 //! owns the generated inputs that check it against the same oracle at scale and
 //! the strategy-coverage claim those inputs make; `budget` owns the exact
-//! ceilings, refusal precedence, and operation scope of bounded admission, with
-//! its shared fixtures in `admission_support`; `path_bookkeeping` owns the cost
-//! of tracking a snapshot location, which the ceilings do not bound; and
-//! `examples` owns the cases whose inputs are written out by hand. A fixture
-//! lives here rather than beside its first caller so that a battery cannot
-//! quietly drift onto a private copy of it.
+//! ceilings and refusal precedence of bounded admission, with its shared
+//! fixtures in `admission_support`; `operation_scope` owns the claim that one
+//! budget serves one public operation rather than one value;
+//! `admission_properties` owns the generated chains, ceilings, and charge
+//! sequences that check those bounds over shapes no fixture names;
+//! `path_bookkeeping` owns the cost of tracking a snapshot location, which the
+//! ceilings do not bound; and `examples` owns the cases whose inputs are
+//! written out by hand. A fixture lives here rather than beside its first
+//! caller so that a battery cannot quietly drift onto a private copy of it.
 //!
 //! EP-V3's independent quadratic first-index oracle lives in `oracle`, and the
 //! standalone Verus proof over the abstract kernel lives in
@@ -38,12 +41,14 @@ use minijinja::value::{Enumerator, Object, ObjectRepr, Value, ValueKind};
 
 use super::*;
 
+mod admission_properties;
 mod admission_support;
 mod boundaries;
 mod budget;
 mod diagnostics;
 mod examples;
 mod host_traversal;
+mod operation_scope;
 mod oracle;
 mod parity;
 mod path_bookkeeping;
