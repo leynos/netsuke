@@ -525,3 +525,8 @@ check.rule.severity = Selektor { $name } wskazuje ważność { $severity }; ocze
 check.fail_on.invalid = Nieznany próg niepowodzenia { $value }; oczekiwano jednego z { $values }.
 check.source_index = Nie udało się zindeksować { $path } dla diagnostyki w wierszu { $line }: { $reason }.
 status.tool.check = Sprawdzanie
+
+# Komunikaty automatycznego wykrywania konfiguracji.
+config.discovery.dangling_link = brak celu dowiązania symbolicznego.
+config.discovery.present_without_layer = wpis istnieje, ale nie dostarczył żadnej warstwy konfiguracji.
+config.discovery.inspection_failed = nie udało się sprawdzić wpisu.

@@ -502,3 +502,8 @@ check.rule.severity = 选择器 { $name } 指定的严重级别 { $severity } �
 check.fail_on.invalid = 未知的失败阈值 { $value }；应为 { $values } 之一。
 check.source_index = 无法为诊断在第 { $line } 行索引 { $path }：{ $reason }。
 status.tool.check = 检查
+
+# 自动配置发现消息。
+config.discovery.dangling_link = 符号链接的目标缺失。
+config.discovery.present_without_layer = 条目存在但未提供任何配置层。
+config.discovery.inspection_failed = 无法检查该条目。

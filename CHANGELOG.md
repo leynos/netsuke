@@ -99,6 +99,16 @@
   `false` and is then rejected by the no-input policy, so only `true` and `1`
   are usable. Indexed `__N` list variables remain unsupported
   ([#1147](https://github.com/leynos/netsuke/issues/1147), [ADR-0083](docs/adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md)).
+- **Breaking:** automatic configuration discovery now checks every user
+  location before any system location. On Unix, with `XDG_CONFIG_HOME` unset,
+  `$HOME/.netsuke.toml` and `$HOME/.config/netsuke/config.toml` now override
+  `/etc/xdg` system configuration, so operators with both files must review
+  their fetch and `env_allow_var` policy. A user file that exists but cannot be
+  loaded, including a symbolic link whose target is missing, stops discovery
+  instead of falling back to a system file. An empty or relative user location
+  value is ignored rather than resolved against the working directory, as is a
+  Windows drive-relative rooted value such as `\config`
+  ([#986](https://github.com/leynos/netsuke/issues/986))
 
 ### Security
 

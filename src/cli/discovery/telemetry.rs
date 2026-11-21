@@ -11,10 +11,12 @@
 //! coarse pass outcome, never selectors, paths, or error text.
 
 use super::DiscoveryOutcome;
+use super::layers::user_candidate::{CandidateFailure, UnloadableCandidate};
 use crate::cli::{DISCOVERY_DURATION, DISCOVERY_TOTAL};
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use monotony::MonotonicClock;
 use ortho_config::OrthoError;
+use std::io;
 use std::sync::Once;
 use std::time::Instant;
 use tracing::field;
@@ -37,10 +39,15 @@ pub(super) fn describe_metrics() {
 /// Classify a discovery failure into a closed label set.
 ///
 /// `OrthoError` is `#[non_exhaustive]`, so unknown future variants map to a
-/// stable `other` label rather than leaking error text into telemetry.
-const fn error_category(error: &OrthoError) -> &'static str {
+/// stable `other` label rather than leaking error text into telemetry. A file
+/// error that carries a candidate-failure marker reports that marker's closed
+/// reason, so the three fail-closed user-scope branches stay distinguishable
+/// from a generic load failure.
+fn error_category(error: &OrthoError) -> &'static str {
     match error {
-        OrthoError::File { .. } => "file",
+        OrthoError::File { source, .. } => {
+            candidate_failure(source.as_ref()).map_or("file", candidate_failure_label)
+        }
         OrthoError::Validation { .. } => "validation",
         OrthoError::CyclicExtends { .. } => "cyclic_extends",
         OrthoError::CliParsing(_) => "cli_parsing",
@@ -48,6 +55,35 @@ const fn error_category(error: &OrthoError) -> &'static str {
         OrthoError::Merge { .. } => "merge",
         OrthoError::Aggregate(_) => "aggregate",
         _ => "other",
+    }
+}
+
+/// Return the closed candidate-failure reason carried by a file error source.
+///
+/// The marker is nested inside the I/O error that wraps it, so both layers are
+/// traversed. Any other source shape reports `None` and falls back to the
+/// generic file category.
+fn candidate_failure(
+    source: &(dyn std::error::Error + Send + Sync + 'static),
+) -> Option<CandidateFailure> {
+    let io_error = source.downcast_ref::<io::Error>()?;
+    io_error
+        .get_ref()?
+        .downcast_ref::<UnloadableCandidate>()
+        .map(UnloadableCandidate::reason)
+}
+
+/// Return the telemetry label for a closed candidate-failure reason.
+///
+/// The vocabulary belongs to telemetry rather than to the policy type: the
+/// match is exhaustive, so adding a rejection reason forces a decision about
+/// how it is counted instead of silently reusing another label. The values are
+/// deliberately stable strings; consumers filter the discovery series on them.
+const fn candidate_failure_label(reason: CandidateFailure) -> &'static str {
+    match reason {
+        CandidateFailure::DanglingLink => "dangling_link",
+        CandidateFailure::PresentWithoutLayer => "present_without_layer",
+        CandidateFailure::ProbeFailed => "probe_failed",
     }
 }
 
@@ -95,6 +131,8 @@ mod tests {
         CompositeKey, MetricKind,
         debugging::{DebugValue, DebuggingRecorder},
     };
+    use rstest::rstest;
+    use std::path::Path;
     use std::sync::Arc;
     use tracing_subscriber::filter::LevelFilter;
 
@@ -235,9 +273,9 @@ mod tests {
         let diagnostics = DiscoveryDiagnostics::new(
             super::super::trace::DiscoveryTrace::new(
                 &resolution,
-                super::super::trace::FileLayerTrace::Automatic {
-                    project_scope: None,
-                },
+                super::super::trace::FileLayerTrace::Automatic(
+                    super::super::layers::AutomaticTrace::default(),
+                ),
             ),
             None,
         );
@@ -253,6 +291,9 @@ mod tests {
             matches!(
                 category,
                 "file"
+                    | "dangling_link"
+                    | "present_without_layer"
+                    | "probe_failed"
                     | "validation"
                     | "cyclic_extends"
                     | "cli_parsing"
@@ -262,6 +303,45 @@ mod tests {
                     | "other"
             ),
             "category must be from the closed set, got {category}"
+        );
+    }
+
+    /// Each fail-closed user-candidate branch reports its own closed category.
+    ///
+    /// The three branches previously collapsed into the generic `file`
+    /// category, so an operator could not tell which one fired. The probe case
+    /// also retains its original error kind, which this table keeps honest.
+    #[rstest]
+    #[case::dangling_link(CandidateFailure::DanglingLink, "dangling_link")]
+    #[case::present_without_layer(CandidateFailure::PresentWithoutLayer, "present_without_layer")]
+    #[case::probe_failed(CandidateFailure::ProbeFailed, "probe_failed")]
+    fn candidate_failures_report_closed_categories(
+        #[case] reason: CandidateFailure,
+        #[case] expected: &str,
+    ) {
+        let detail = (reason == CandidateFailure::ProbeFailed)
+            .then(|| io::Error::new(io::ErrorKind::PermissionDenied, "probe refused"));
+        let error = super::super::layers::user_candidate::candidate_failure_error(
+            Path::new("candidate.toml"),
+            reason,
+            detail,
+        );
+        assert_eq!(
+            error_category(&error),
+            expected,
+            "a {reason:?} failure must report its own closed category"
+        );
+    }
+
+    /// A file error without a candidate marker keeps the generic category.
+    #[test]
+    fn plain_file_errors_keep_the_file_category() {
+        let outcome = outcome_with_error();
+        let error = outcome.first_error().expect("error outcome has an error");
+        assert_eq!(
+            error_category(error),
+            "file",
+            "an ordinary load failure must not claim a candidate-failure category"
         );
     }
 

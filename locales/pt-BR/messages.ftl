@@ -511,3 +511,8 @@ check.rule.severity = O seletor { $name } indica a severidade { $severity }; esp
 check.fail_on.invalid = Limite de falha desconhecido { $value }; esperava-se um de { $values }.
 check.source_index = Não foi possível indexar { $path } para diagnósticos na linha { $line }: { $reason }.
 status.tool.check = Verificação
+
+# Mensagens da descoberta automática de configuração.
+config.discovery.dangling_link = o destino da ligação simbólica está ausente.
+config.discovery.present_without_layer = a entrada existe mas não forneceu nenhuma camada de configuração.
+config.discovery.inspection_failed = não foi possível inspecionar a entrada.

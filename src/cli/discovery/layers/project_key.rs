@@ -10,8 +10,84 @@ use super::super::paths::PathNormalizer;
 use camino::Utf8Path;
 use std::path::{Path, PathBuf};
 
+/// Closed answer to whether a candidate root is the project configuration file.
+///
+/// The three states keep identification and trust apart. A definite project
+/// match may be skipped from the fallback scan, because the project pass loads
+/// it again with project quarantine. `Other` is the only state that may donate
+/// operator authority. `Unresolved` is neither: it cannot prove the candidate
+/// is the project file, so skipping it could drop an ordinary user chain, and
+/// it cannot prove the candidate is something else, so granting authority would
+/// be a guess.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CandidateIdentity {
+    /// The candidate resolves to, or literally spells, the project file.
+    Project,
+    /// The candidate could not be resolved and is not the literal key.
+    Unresolved,
+    /// The candidate provably names a different file.
+    Other,
+}
+
+/// The project key paired with the resolution seam that classified it.
+///
+/// Discovery compares every candidate with the key through the same normalizer
+/// that produced the key, so the two can never be resolved by different views of
+/// the filesystem. Carrying the pair as one value keeps that invariant visible
+/// in the signatures rather than in a comment, and keeps the helpers that need
+/// both within a readable parameter list.
+#[derive(Clone, Copy)]
+pub(in crate::cli::discovery) struct ProjectIdentity<'a> {
+    /// Resolution seam that classified `project_key`.
+    normalizer: &'a dyn PathNormalizer,
+    /// Key for the project configuration file, when discovery has one.
+    project_key: Option<&'a ProjectKey>,
+}
+
+impl<'a> ProjectIdentity<'a> {
+    /// Pair `normalizer` with the key it classified.
+    pub(super) const fn new(
+        normalizer: &'a dyn PathNormalizer,
+        project_key: Option<&'a ProjectKey>,
+    ) -> Self {
+        Self {
+            normalizer,
+            project_key,
+        }
+    }
+
+    /// Report whether `candidate` is a definite match for the project file.
+    ///
+    /// Only a definite match may be skipped from the fallback scan, because the
+    /// project pass loads the same chain again with project quarantine. An
+    /// ambiguous key identifies no candidate at all, and an unresolvable one is
+    /// only *possibly* the project file: skipping it could drop an ordinary user
+    /// chain, so it stays in the walk and is loaded untrusted instead.
+    pub(super) fn candidate_is_project_file(&self, candidate: &Path) -> bool {
+        self.project_key.is_some_and(|key| {
+            !key.is_ambiguous()
+                && key.classify_candidate(self.normalizer, candidate) == CandidateIdentity::Project
+        })
+    }
+
+    /// Report whether `candidate` provably names a file other than the project one.
+    ///
+    /// The project configuration is not a user file, because a project can
+    /// influence it wherever it is read from. Trust is granted only to a
+    /// candidate that provably names another file: an ambiguous key or an
+    /// unresolvable candidate cannot rule the project file out, so both fail
+    /// closed. A literal spelling that identifies the project file is the one
+    /// resolution failure that still counts as a match.
+    pub(super) fn candidate_is_trusted(&self, candidate: &Path) -> bool {
+        self.project_key.is_none_or(|key| {
+            !key.is_ambiguous()
+                && key.classify_candidate(self.normalizer, candidate) == CandidateIdentity::Other
+        })
+    }
+}
+
 /// Normalized comparison key for the project configuration file.
-pub(super) struct ProjectKey {
+pub(in crate::cli::discovery) struct ProjectKey {
     /// Normalized key, or the literal spelling when resolution failed.
     key: PathBuf,
     /// Literal spelling, retained only when the key is not valid UTF-8.
@@ -50,6 +126,34 @@ impl ProjectKey {
     /// Report whether a recorded layer path is the project configuration file.
     pub(super) fn matches(&self, path: &Utf8Path) -> bool {
         self.matches_path(path.as_std_path())
+    }
+
+    /// Classify a candidate root against the project configuration file.
+    ///
+    /// Candidate paths arrive in the spelling their scope produced, while the
+    /// key holds a resolved path. Resolving the candidate the same way keeps a
+    /// differently-cased or short-name spelling from looking distinct on a
+    /// case-insensitive filesystem, and resolves a link to the project file so
+    /// it cannot be mistaken for an independent user file. An exact literal
+    /// spelling is still identified when resolution fails, because that is the
+    /// only evidence left and it names the project path itself.
+    ///
+    /// A candidate that neither resolves nor matches literally is reported as
+    /// [`CandidateIdentity::Unresolved`] rather than as a plain miss. Collapsing
+    /// it into a miss would let an identity that cannot be established grant
+    /// operator authority, which is the silent trust upgrade the key's own
+    /// ambiguity flag already refuses.
+    pub(super) fn classify_candidate(
+        &self,
+        normalizer: &(impl PathNormalizer + ?Sized),
+        path: &Path,
+    ) -> CandidateIdentity {
+        match normalizer.normalize(path) {
+            Ok(resolved) if self.matches_path(&resolved) => CandidateIdentity::Project,
+            Ok(_) => CandidateIdentity::Other,
+            Err(_) if self.matches_path(path) => CandidateIdentity::Project,
+            Err(_) => CandidateIdentity::Unresolved,
+        }
     }
 
     /// Report whether a plain path is literally the project configuration file.

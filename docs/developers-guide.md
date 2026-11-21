@@ -9238,6 +9238,22 @@ modules under `tests/cli_tests/`:
 - `merge_targets_proptests.rs` holds the handwritten proptest strategies (no
   `#[derive(Arbitrary)]`) for the `default_targets` append-in-discovery-order
   invariant and scalar merge ordering (defaults → file → environment → CLI).
+- `config_discovery_scopes/user_precedence.rs` pins user-before-system
+  discovery for every `XDG_CONFIG_HOME` state that leaves the home fallbacks
+  unreachable, and checks that a broken user file, including a dangling
+  symbolic link, stops discovery instead of falling back to a system file. Unit
+  tests in `src/cli/discovery/layers/tests/user_scope/mod.rs` cover the same
+  ordering through the injected environment seam, including the `APPDATA` and
+  `LOCALAPPDATA` branches and the filter for empty or relative base values.
+  `src/cli/discovery/layers/tests/user_scope/properties.rs` adds two properties
+  over that seam: candidate derivation over every set, empty, relative, and
+  unset combination of the five user variables, and selection over generated
+  file-presence masks, which asserts that the first existing candidate wins and
+  that an unloadable one fails discovery. The two files form a directory module
+  so the shared `user_scope` prefix groups them, as the module-layout contract
+  requires. `config_discovery_env_provenance.rs` plus
+  `fetch_policy_trust/merge_tests.rs` assert that a home-dotfile operator grant
+  and fetch policy outrank a system file.
 
 These tests drive a re-executed worker process through
 `tests/cli_tests/merge_probe.rs`. `merge_probe` builds an isolated environment
@@ -11968,6 +11984,155 @@ into a string. Figment also trims surrounding whitespace from an unquoted
 environment scalar but not from a quoted file value. The decision is recorded in
 [ADR-0083](adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md).
 
+#### Netsuke-owned user-scope pass
+
+`ortho_config` 0.10.0 assembles automatic candidates in the order
+`XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`/`LOCALAPPDATA`, then the home
+fallbacks, and stops at the first candidate that loads. A valid system file
+therefore suppresses `$HOME/.config/netsuke/config.toml` or
+`$HOME/.netsuke.toml` whenever `XDG_CONFIG_HOME` does not name that user file
+directly. That ordering is unsafe for Netsuke, whose user configuration carries
+operator fetch and environment policy.
+
+`src/cli/discovery/paths/mod.rs::user_scope_candidates` derives the user subset
+in preference order from the injected `SharedEnvSource`:
+`$XDG_CONFIG_HOME/netsuke/config.toml`, `$XDG_CONFIG_HOME/.netsuke.toml`,
+`%APPDATA%` and `%LOCALAPPDATA%` equivalents, then
+`$HOME/.config/netsuke/config.toml`, `$HOME/.config/.netsuke.toml`, and
+`$HOME/.netsuke.toml`. A value that is empty or not absolute counts as unset,
+so no candidate can resolve against the working directory or, on Windows, the
+current drive, and `HOME` outranks `USERPROFILE`. The pass never reads
+`XDG_CONFIG_DIRS` or project roots, and it does not consult
+`EnvSource::home_fallback`: Netsuke always supplies a `MapEnv`, whose fallback
+is `None`, so mirroring it would add an ambient lookup without changing
+behaviour.
+
+`src/cli/discovery/layers/user_candidate/mod.rs` loads those candidates before
+the dependency's own walk. An absent candidate is skipped, a load error is
+returned immediately, and the first successful chain that is not the project
+configuration becomes the base layers. A candidate that is the project
+configuration — `$HOME/.netsuke.toml` when the tool runs from `$HOME`, or any
+user location that resolves to the project file — is refused rather than
+adopted: adoption returns before the dependency's scan loads the system layers,
+so a system `env_block_var` or `fetch_default_deny` restriction would stop
+applying to a file the project itself controls. The refusal is decisive, so a
+project file cannot promote a lower-priority user file over the system layers.
+When no usable user candidate exists, `layers/mod.rs::first_automatic_chain`
+runs, which is what still reaches system scope and the project roots and then
+appends the project chain.
+
+That fallback scan must not return the candidate the user pass refused. The
+dependency lists the `XDG_CONFIG_HOME` base candidates before every system
+candidate, so when that base is the project directory the scan would return the
+project file first and the system layers would never load.
+`layers/mod.rs::is_refused_user_candidate` therefore skips a candidate that is
+both a definite identity match for the project configuration file and one of
+the locations `user_scope_candidates` derived. Neither condition is sufficient
+alone. A project file reached only through a project root still wins the walk,
+because the dependency lists project roots last and returning it keeps the
+project-only composition path. An ambiguous key withholds every candidate's
+authority without identifying any of them, so treating it as a match would skip
+the system candidates too. Skipping the candidate loses nothing: the project
+pass loads the same chain with the project quarantine and appends it after the
+system layers.
+
+`layers/project_key.rs::ProjectKey::classify_candidate` answers that comparison
+with a closed three-state result rather than a boolean. `Project` means the
+candidate resolves to, or literally spells, the project file. `Other` means it
+provably names a different file. `Unresolved` means it neither resolved nor
+matched literally, so it cannot be ruled out as the project file.
+`ProjectIdentity` pairs the classified key with the normalizer that produced
+it, so the key and a candidate cannot be compared through different views of
+the filesystem. Its `candidate_is_project_file` accepts only `Project`, which
+is the skip, and its `candidate_is_trusted` grants authority only to `Other`:
+an unresolvable candidate still loads, but its chain cannot donate operator
+authority, which is the same fail-closed rule `is_ambiguous` applies to the
+key. Only the literal-spelling case is still identified when resolution fails,
+because the candidate's own text is evidence rather than doubt. The identity is
+constructed in `collect_file_layers_with_normalizer_and_trace` from the
+normalizer that classified the key, and travels through `automatic_base_layers`
+and `first_automatic_chain`, so every candidate is resolved through the seam
+that classified the key.
+
+The dependency filters only empty base values, so its own scan would still
+resolve a relative one against the working directory. The fallback therefore
+receives `paths/sanitised.rs::SanitisedUserBases`, an `EnvSource` view that
+applies the same `is_usable_base` predicate to `XDG_CONFIG_HOME`, `APPDATA`,
+`LOCALAPPDATA`, `HOME`, and `USERPROFILE`. A value the user pass rejected reads
+as unset for the dependency too, so neither pass can load configuration from
+wherever the tool happens to run. `XDG_CONFIG_DIRS` is deliberately outside the
+view: system-scope handling stays the dependency's.
+
+The dependency's own probe resolves a candidate inside a capability on its
+parent directory. A link whose target lies inside that directory and does not
+resolve is reported as `Ok(None)` — the same answer it gives for a file that is
+not there — while a link that escapes the directory is refused outright and
+never reaches that answer. Treating `Ok(None)` as absence would therefore skip
+a dangling link and continue to the system scope, so `load_user_candidate` asks
+a `CandidateProbe` about a candidate that did not load. The trait is the
+injectable seam; `FsCandidateProbe` is the production implementation, and its
+`candidate_entry_metadata` helper opens the candidate's parent directory through
+`cap_std` and stats the entry without following it. Both live in
+`src/cli/discovery/layers/user_candidate/probe.rs`. A genuinely absent path
+stays `NotFound` and is skipped, a link whose target exists never reaches the
+probe because the chain loads, and a path that still exists without having
+loaded fails discovery. The suite drives the two answers a directory cannot
+produce on demand — an entry the loader skipped and an inspection that failed —
+through a scripted `CandidateProbe`, and pins the production helper's error arm
+against a real parent that is not a directory. The same identity test bounds
+adoption: `ProjectIdentity::candidate_is_trusted` resolves the candidate before
+comparing it with the classified project key through
+`ProjectKey::classify_candidate`, so a home directory reached through a link is
+recognized as the same file. A false answer means the pass does not adopt the
+candidate's chain, and it stops there rather than trying a lower-priority
+candidate. What happens next depends on why the answer was false. An ambiguous
+project key withholds authority from every candidate without identifying any of
+them, so the pass refuses even a candidate that is not the project file; the
+fallback scan then runs, and whatever root it selects is untrusted. A definite
+project match is skipped by the fallback scan, so the walk continues rather
+than stopping, and the project pass appends the same chain under its existing
+project quarantine. The scan then selects the first later candidate that loads;
+every system base precedes the home fallbacks, so an installed system file
+still supplies the chain, and only when none is installed can a later home
+candidate supply it. An unresolved candidate is not skipped, because ruling it
+out as the project file is exactly what failed: the fallback scan may load it,
+in the dependency's own order, before reaching a system candidate, and it
+reports that chain as an untrusted root, so the authority to set platform
+policy is withheld. Reading the user scope first changes which candidates are
+considered and who may donate authority, not how a loaded file is trusted.
+
+Both passes retain their decisions for replay. `UserScopeTrace` records whether
+the user pass adopted a candidate or fell back, `ProjectScopeTrace` records
+what the project second pass did, and `AutomaticTrace` carries both on
+`FileLayerTrace::Automatic`. Discovery runs before the composition boundary
+raises the tracing filter, so these events are emitted when the trace is
+replayed rather than where the decision is made.
+
+Discovery reports that decision through bounded telemetry. Adopting a user
+candidate emits a `debug!` event with `scope = "user"`,
+`skipped_compose_layers = true`, a `path_hash` correlation identifier, and the
+message `automatic configuration discovery adopted a user candidate`. Falling
+back to the dependency's scan emits the same event shape with
+`scope = "system_or_project"` and `skipped_compose_layers = false`. Neither
+event carries a path; the hash is the run-local identifier described in
+`src/cli/discovery/diagnostics.rs`. The three fail-closed branches of
+`load_user_candidate` attach a `CandidateFailure` marker to the file error's
+source, so `record_discovery_outcome` reports `dangling_link`,
+`present_without_layer`, or `probe_failed` as the span's `error_category`
+instead of collapsing them into `file`. The marker is a typed payload rather
+than message text, `telemetry.rs` owns the mapping from reason to label so a
+new reason has to state how it is counted, and the `DISCOVERY_TOTAL` label set
+remains `outcome` alone.
+
+Re-check the user-path derivation on every `ortho_config` upgrade. The
+dependency's flat candidate order still places system scope before the home
+fallbacks, and `first_automatic_chain` still drops an optional candidate's load
+error when a later candidate succeeds; the user pass is what bounds both
+behaviours. The child-process regression matrix is Unix-only because it injects
+the XDG variables, so the `APPDATA` and `LOCALAPPDATA` branches are pinned by
+unit cases instead: they set the variables in the injected `TestEnv` and run on
+every platform.
+
 `explicit_config_path_with_env` is the crate-internal seam for explicit
 config-file selection. It evaluates the precedence chain in this order:
 
@@ -12561,7 +12726,7 @@ comparison, and tests alongside the main discovery flow:
   the `ConfigLoadFailureKind` enum used to classify a load failure without
   retaining error text. The de-duplication event records discovered, project,
   and appended layer counts after filtering without exposing paths.
-- `discovery/paths.rs` — `normalized_path_key` resolves a path to a
+- `discovery/paths/mod.rs` — `normalized_path_key` resolves a path to a
   comparable, canonicalized form and returns canonicalization errors to its
   caller. The discovery-side `comparison_key` fallback uses the original path
   literally when resolution fails, continues discovery, and emits a bounded

@@ -503,3 +503,8 @@ check.rule.severity = セレクター { $name } が指定した重大度 { $seve
 check.fail_on.invalid = 失敗しきい値 { $value } は不明です。次のいずれかを指定してください: { $values }。
 check.source_index = 診断のために { $path } を { $line } 行目で索引付けできませんでした: { $reason }。
 status.tool.check = 検査
+
+# 自動構成検出のメッセージ。
+config.discovery.dangling_link = シンボリックリンクのターゲットがありません。
+config.discovery.present_without_layer = エントリは存在しますが、構成レイヤーが得られませんでした。
+config.discovery.inspection_failed = エントリを検査できませんでした。

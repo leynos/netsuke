@@ -515,3 +515,8 @@ check.rule.severity = Selectorul { $name } indică severitatea { $severity }; se
 check.fail_on.invalid = Prag de eșec necunoscut { $value }; se aștepta unul dintre { $values }.
 check.source_index = Nu s-a putut indexa { $path } pentru diagnostice la linia { $line }: { $reason }.
 status.tool.check = Verificare
+
+# Mesajele descoperirii automate a configurației.
+config.discovery.dangling_link = ținta legăturii simbolice lipsește.
+config.discovery.present_without_layer = intrarea există, dar nu a furnizat niciun strat de configurare.
+config.discovery.inspection_failed = intrarea nu a putut fi inspectată.

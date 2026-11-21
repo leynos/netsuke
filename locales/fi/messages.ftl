@@ -511,3 +511,8 @@ check.rule.severity = Valitsin { $name } nimeää vakavuuden { $severity }; odot
 check.fail_on.invalid = Tuntematon virhekynnys { $value }; odotettiin jotakin näistä: { $values }.
 check.source_index = Kohdetta { $path } ei voitu indeksoida diagnostiikkaa varten rivillä { $line }: { $reason }.
 status.tool.check = Tarkistus
+
+# Automaattisen asetusten etsinnän viestit.
+config.discovery.dangling_link = symbolisen linkin kohde puuttuu.
+config.discovery.present_without_layer = merkintä on olemassa, mutta se ei tarjonnut asetuskerrosta.
+config.discovery.inspection_failed = merkintää ei voitu tarkastaa.

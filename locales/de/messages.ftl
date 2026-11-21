@@ -509,3 +509,8 @@ check.rule.severity = Der Lint-Selektor { $name } nennt den Schweregrad { $sever
 check.fail_on.invalid = Unbekannte Fehlerschwelle { $value }; erwartet wurde einer von { $values }.
 check.source_index = { $path } konnte für Lint-Diagnosen in Zeile { $line } nicht indiziert werden: { $reason }.
 status.tool.check = Prüfung
+
+# Meldungen der automatischen Konfigurationsermittlung.
+config.discovery.dangling_link = das Ziel des symbolischen Links fehlt.
+config.discovery.present_without_layer = der Eintrag ist vorhanden, lieferte aber keine Konfigurationsebene.
+config.discovery.inspection_failed = der Eintrag konnte nicht geprüft werden.

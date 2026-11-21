@@ -12,6 +12,7 @@ use rstest::rstest;
 use tempfile::tempdir;
 
 use super::event_assertions::{EventAssertion, capture_events, find_event};
+use super::layers::AutomaticTrace;
 
 /// Snapshot `assertion`'s event under `snapshot_name`, with its hash normalized.
 ///
@@ -34,9 +35,7 @@ fn resolve_and_trace(
         let resolution = resolve_config_selector(cli_config, env);
         DiscoveryTrace::new(
             &resolution,
-            FileLayerTrace::Automatic {
-                project_scope: None,
-            },
+            FileLayerTrace::Automatic(AutomaticTrace::default()),
         )
         .emit();
         Ok::<_, anyhow::Error>(resolution)

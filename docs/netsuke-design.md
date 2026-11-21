@@ -4202,20 +4202,58 @@ flowchart TD
 
 #### Discovery scopes and layered merging
 
-Automatic configuration discovery asks OrthoConfig's `ConfigDiscovery` for its
-candidate paths, then loads each candidate's `extends` chain with
-`load_config_file_as_chain()`, retaining the first chain that exists. It does
-not call `compose_layers()`, because that call returns a flattened layer list
-without reporting which candidate root supplied it, and root provenance is what
-decides whether an occurrence may declare executable policy. The restricted
-walk registers no selector environment variable and injects no explicit path,
-so every candidate it visits is an operator-location candidate or the project
+Automatic configuration discovery first runs a Netsuke-owned user-scope pass
+over the injected environment. That pass checks every user location in
+preference order and stops at the first file it can load; a user file that
+exists but cannot be loaded is an error rather than a reason to continue, and a
+candidate that resolves to the project file is refused so the pass does not
+adopt a file the project controls. A candidate is refused on the same ground
+while the project file's identity is ambiguous, because none can then be ruled
+out as the project file. Only when the pass adopts no chain does discovery ask
+OrthoConfig's `ConfigDiscovery` for its candidate paths, then load each
+candidate's `extends` chain with `load_config_file_as_chain()`, retaining the
+first chain that exists. It skips a candidate that both matches the project
+configuration file and is one of the user locations the pass derived, because
+the dependency lists the `XDG_CONFIG_HOME` base before every system directory:
+when that base is the project directory, the scan would otherwise return the
+file the user pass just refused and the system layers would never load. A
+project file reached only through a project root is still returned, since it
+cannot outrank a system candidate, and the project second pass appends the
+skipped chain with project quarantine. A candidate that neither resolves nor
+literally spells the project path is treated as unresolved: it stays in the
+walk, but the chain it supplies is loaded without operator authority, so an
+identity that cannot be established never grants trust. It does not call
+`compose_layers()`, because that call returns a flattened layer list without
+reporting which candidate root supplied it, and root provenance is what decides
+whether an occurrence may declare executable policy. The restricted walk
+registers no selector environment variable and injects no explicit path, so
+every candidate it visits is an operator-location candidate or the project
 root; explicit `--config` and `NETSUKE_CONFIG` selection remains on its own
 untrusted path. If the retained chain does not include the project-scope file,
 a second pass loads that file directly and appends its layers. Thus, this walk
 does not merge every scope, and it does not by itself establish
 project/user/system precedence. Environment variables and CLI arguments then
 override the file layers.
+
+The user pass exists because OrthoConfig 0.10.0 probes `XDG_CONFIG_DIRS` before
+its home fallbacks, so a valid system file would otherwise suppress a user file
+whenever `XDG_CONFIG_HOME` does not name that user file directly. Netsuke
+therefore owns the user-before-system ordering; see
+[ADR-0048](adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md). A
+user candidate that is present but unreadable, unparsable, or unresolvable
+through its `extends` chain fails discovery instead of falling through to a
+later candidate, so a broken user file cannot silently re-enable the system
+policy it was meant to override.
+
+OrthoConfig resolves a candidate through a capability on its parent directory,
+so it reports a link whose target does not resolve exactly as it reports a file
+that is not installed. Netsuke therefore inspects the candidate entry itself,
+without following a link at its final component: an absent entry continues to
+the next candidate, while a dangling link, or an entry the loader produced no
+layer for, fails discovery. That inspection is the only part of the rule that
+reads the directory entry directly, and it is reached through a narrow probe
+seam so both fail-closed branches, and a probe that itself errors, can be
+exercised without staging a filesystem that happens to break the loader first.
 
 Definition authority is recorded per occurrence at discovery time, before any
 flattening, so it survives quarantine and cached replay. A candidate root is
@@ -4261,26 +4299,69 @@ rejected from environment ingress by its normalized top-level spelling.
    applies. Project-chain `fetch_block_host` and `env_block_var` remain
    cumulative.
 
-3. **User scope**: Configuration files in user-specific directories:
-   - **Unix-like systems**:
-     - `$HOME/.netsuke.toml` (user home dotfile)
-     - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG (X Desktop Group) Base
-       Directory config home, typically `~/.config/netsuke/config.toml`)
-     - Fallback: `$HOME/.config/netsuke/config.toml`
-   - **Windows**:
-     - `%APPDATA%\netsuke\config.toml`
-     - `%LOCALAPPDATA%\netsuke\config.toml`
+3. **User scope**: Configuration files in user-specific directories, checked
+   before any system location, in this order:
+   - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG (X Desktop Group) Base
+     Directory config home, typically `~/.config/netsuke/config.toml`)
+   - `$XDG_CONFIG_HOME/.netsuke.toml`
+   - `%APPDATA%\netsuke\config.toml`
+   - `%APPDATA%\.netsuke.toml`
+   - `%LOCALAPPDATA%\netsuke\config.toml`
+   - `%LOCALAPPDATA%\.netsuke.toml`
+   - `$HOME/.config/netsuke/config.toml`
+   - `$HOME/.config/.netsuke.toml`
+   - `$HOME/.netsuke.toml` (user home dotfile)
 
-4. **System scope**: System-wide configuration directories:
-   - **Unix-like systems**:
-     - Each directory in `$XDG_CONFIG_DIRS/netsuke/config.toml` (XDG Base
-       Directory system config directories, defaults to
-       `/etc/xdg/netsuke/config.toml` when `XDG_CONFIG_DIRS` is unset)
+   Every variable is consulted on every platform, so a host that sets both
+   families follows this single order. An undefined variable is skipped, as is
+   one whose value is empty or not absolute: a relative base would resolve
+   against the working directory and load a file from wherever the tool
+   happened to run. On Windows the same rule excludes a rooted value without a
+   drive, such as `\config`, which would resolve on whichever drive the process
+   runs from. `HOME` supplies the home directory when it is set to an absolute
+   value; otherwise `USERPROFILE` does. The same predicate governs the
+   dependency's own scan, which filters only empty values: it receives an
+   environment view in which a rejected base reads as unset, so a relative
+   value cannot return as a working-directory relative candidate through the
+   system-scope fallback.
 
-The candidate order `ConfigDiscovery` generates determines which automatic file
-is retained first. The `-C/--directory` flag anchors the project-scope fallback
-to the specified directory while leaving the scanner's user- and system-scope
-lookups unchanged.
+4. **System scope**: System-wide configuration directories, consulted only when
+   the user pass supplies no chain — when no user file exists, or when the
+   first candidate that loads is refused because it is the project
+   configuration file, or because the project file's identity is ambiguous:
+   - **Unix-like systems**:
+     - Each directory in `$XDG_CONFIG_DIRS`, looking for
+       `netsuke/config.toml` and `.netsuke.toml` (XDG Base Directory system
+       config directories, defaulting to `/etc/xdg` when `XDG_CONFIG_DIRS` is
+       unset)
+
+   A refused candidate is not adopted; the dependency's scan then runs in its
+   own order and reports whether the root it selects may donate policy
+   authority.
+
+The Netsuke-owned user pass decides which user file is retained first, and the
+candidate order `ConfigDiscovery` generates decides only when that pass adopts
+no chain — because no user file exists, or because it refused the first one it
+could load. The `-C/--directory` flag anchors the project-scope fallback to the
+specified directory while leaving the user- and system-scope lookups unchanged.
+
+A user candidate that exists but does not load stops discovery instead of
+continuing to a lower-priority file or to system scope. That covers malformed
+TOML, an `extends` parent that does not exist, and a symbolic link whose target
+is missing, and the reported error names the user file. `ortho_config` resolves
+a candidate through its parent directory and reports a target that does not
+resolve as an absent file, so the pass also inspects each candidate entry
+without following a link at its final component: an entry that exists but does
+not resolve is rejected, while a genuinely absent entry is skipped and a link
+whose target loads selects that target. Rejecting the candidate produces an
+`OrthoError::File` whose source carries the closed failure reason, so the
+existing `netsuke_cli_config_discovery_total` series counts the pass under
+`outcome="error"`, and the discovery span records a bounded `error_category`
+naming the branch that fired: `dangling_link`, `present_without_layer`, or
+`probe_failed`. A plain file error with no such marker keeps the generic `file`
+category. A broken user file is thus observable as a failed discovery, and
+distinguishable in traces from a malformed or unreadable one, rather than as a
+silent success that loaded system policy.
 
 #### Manifest resource budget precedence
 

@@ -518,3 +518,8 @@ check.rule.severity = Mae'r dewisydd { $name } yn enwi'r difrifoldeb { $severity
 check.fail_on.invalid = Trothwy methiant anhysbys { $value }; disgwylid un o { $values }.
 check.source_index = Methwyd mynegeio { $path } ar gyfer diagnosteg ar linell { $line }: { $reason }.
 status.tool.check = Gwirio
+
+# Negeseuon darganfod ffurfweddiad awtomatig.
+config.discovery.dangling_link = mae targed y ddolen symbolaidd ar goll.
+config.discovery.present_without_layer = mae'r cofnod yn bodoli ond ni ddarparodd haen ffurfweddu.
+config.discovery.inspection_failed = nid oedd modd archwilio'r cofnod.

@@ -515,3 +515,8 @@ check.rule.severity = Селектор { $name } указывает важнос
 check.fail_on.invalid = Неизвестный порог сбоя { $value }; ожидалось одно из { $values }.
 check.source_index = Не удалось проиндексировать { $path } для диагностики в строке { $line }: { $reason }.
 status.tool.check = Проверка
+
+# Сообщения автоматического обнаружения конфигурации.
+config.discovery.dangling_link = цель символической ссылки отсутствует.
+config.discovery.present_without_layer = запись существует, но не предоставила уровень конфигурации.
+config.discovery.inspection_failed = не удалось проверить запись.
