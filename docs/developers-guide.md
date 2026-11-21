@@ -2184,8 +2184,10 @@ one contract; change them together and update the tests.
 Validation has deliberately separate responsibilities:
 
 - `tests/installer_package_wxs_tests.rs` parses the XML and checks the stable
-  WiX structure and upgrade metadata. XML parsing does not validate WiX schema
-  compatibility.
+  WiX structure and upgrade metadata. Its `roxmltree` lookups live in the shared
+  `tests/installer_package_wxs/mod.rs` helper module, so the release authoring
+  and the frozen v0.1.0-beta4 fixture are read the same way. XML parsing does
+  not validate WiX schema compatibility.
 - The release-rank example and property tests execute the repository-owned
   parser without GitHub Actions or Windows environment state.
 - The `windows-msi-upgrade` job and its local adapter compile
@@ -2209,6 +2211,52 @@ Validation has deliberately separate responsibilities:
 Only the `msiexec` phase exercises Windows Installer's actual install,
 replacement, and downgrade behaviour; passing the XML and compiler checks alone
 does not prove the upgrade path.
+
+### Windows install-location and `PATH` test harness
+
+The Windows install location is observed end to end rather than inferred from
+the authoring. `tests/windows_path_setup_example_tests.rs` runs the documented
+`PATH` fences from `docs/users-guide.md` and inspects the user environment
+value each one leaves behind. The harness lives in
+`tests/windows_path_setup/mod.rs` and `tests/windows_path_setup/wrapper.rs`,
+which embeds the PowerShell wrapper from `tests/windows_path_setup/wrapper.ps1`.
+
+Three boundaries keep a run from depending on the host:
+
+- The wrapper dot-sources the example in a child PowerShell started with
+  `env_clear`. Only a closed list of fifteen variables Windows and .NET read
+  while starting a process survives, `PATH` names system directories only, and
+  `ProgramW6432`, `ProgramFiles`, and `ProgramFiles(x86)` point at a temporary
+  tree. A real installation elsewhere on the host therefore cannot satisfy the
+  example's `Get-Command` check.
+- A named mutex, `Local\NetsukeWindowsPathSetupTest`, serializes runs that
+  would otherwise rewrite the one user `Path` value concurrently.
+- The wrapper records the existing `Path` value and its registry kind in a
+  backup file under the system temporary directory, installs a sentinel,
+  restores the original value in a `finally` block, and reports the stored
+  value and type on standard output. A run killed before that block leaves the
+  backup for the next process to restore from; a spent backup, left by a run
+  killed after restoring but before deleting the file, is recognized and
+  removed rather than refused.
+
+The harness reads the parent environment through `mockable::Env`, so the test
+process is the only ambient dependency and no helper mutates it.
+
+`ci-windows.yml` `build-test-windows` is the lane that executes the examples.
+The Linux legs have neither PowerShell nor a Windows user environment, so they
+compile the harness and check the fences only as source, in
+`tests/documentation_windows_path_setup_tests.rs`.
+
+`tests/windows_installation_docs/mod.rs` is the shared Markdown view behind
+both suites. Its `READMES` constant names the seven localized READMEs and
+`USERS_GUIDE` names the users' guide. `Paragraph::qualifies_legacy_install`
+decides whether a mention of `C:\Program Files (x86)\netsuke` is legitimate: a
+paragraph qualifies when it attributes the directory to `v0.1.0-beta4`, or when
+wording in the same clause, or one clause either side, presents the directory
+as retired or due for removal without naming the native one. Any nearby
+instruction to add it to `PATH` rejects the mention.
+`tests/documentation_windows_installation_tests.rs` and
+`tests/documentation_windows_path_setup_tests.rs` consume the module.
 
 ### Why the two Windows Rust/cache jobs are split
 
@@ -4984,12 +5032,17 @@ gate rather than queueing forever.
 equal to the set actually in use.
 
 That set is derived from the workflows rather than read back from the
-registration. A lane that selects its runner with `${{ matrix.os }}` is
-resolved against that job's own matrix, in
-`tests/workflow_contracts/runner_matrix.py`, which reads both a plain axis list
-and the `include` entries that name the axis. A selector the job does not
-declare is counted as a label, so an unreadable selector fails the comparison
-instead of excusing whatever runner it hides.
+registration. `tests/workflow_contracts/matrix_legs.py` expands a job matrix
+into the legs GitHub creates: the Cartesian product of its axes, minus the legs
+named by `exclude`, where an `include` row that matches no surviving
+combination becomes a leg of its own.
+`tests/workflow_contracts/runner_matrix.py` then resolves one `runs-on`
+selector against those legs, and
+`tests/workflow_contracts/actions_expressions.py` decides what the selector
+names: `matrix_axis` recognizes a whole `${{ matrix.<axis> }}` expression and
+`static_label` recognizes a whole expression holding one quoted literal. A
+selector the job does not declare is counted as a label, so an unreadable
+selector fails the comparison instead of excusing whatever runner it hides.
 
 Runner labels appear in no job name, so the required status-check contexts
 `build-test`, `kani-smoke`, `netsukefile`, and `release / metadata` are
