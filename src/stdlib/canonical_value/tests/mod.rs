@@ -16,11 +16,11 @@
 //! and the named witnesses that check `stable_deduplicate` against it; `sweep`
 //! owns the generated inputs that check it against the same oracle at scale and
 //! the strategy-coverage claim those inputs make; `budget` owns the exact
-//! ceilings and refusal precedence of bounded admission, with its shared
-//! fixtures in `admission_support`; `operation_scope` owns the claim that one
-//! budget serves one public operation rather than one value;
-//! `admission_properties` owns the generated chains, ceilings, and charge
+//! ceilings and refusal precedence of bounded admission; `admission` owns the
+//! shared admission fixtures and the generated chains, ceilings, and charge
 //! sequences that check those bounds over shapes no fixture names;
+//! `operation_scope` owns the claim that one budget serves one public
+//! operation rather than one value;
 //! `path_bookkeeping` owns the cost of tracking a snapshot location, which the
 //! ceilings do not bound; and `examples` owns the cases whose inputs are
 //! written out by hand. A fixture lives here rather than beside its first
@@ -41,8 +41,7 @@ use minijinja::value::{Enumerator, Object, ObjectRepr, Value, ValueKind};
 
 use super::*;
 
-mod admission_properties;
-mod admission_support;
+mod admission;
 mod boundaries;
 mod budget;
 mod diagnostics;
@@ -55,7 +54,7 @@ mod path_bookkeeping;
 mod properties;
 mod sweep;
 
-pub(super) use self::admission_support::{
+pub(super) use self::admission::support::{
     admission_budget, ensure_resource_refusal, expanded_sequence, shared_sequence,
 };
 

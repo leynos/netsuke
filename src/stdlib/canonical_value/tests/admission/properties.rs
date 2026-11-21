@@ -11,18 +11,19 @@
 //! the generated depth stays small enough that every case lands inside the
 //! production node ceiling except where a generated ceiling says otherwise.
 //!
-//! The generator lives here rather than in `properties` because it models
-//! admission's charge model rather than a general value shape: the depth and
-//! leaf text are chosen so the occurrence and byte totals are derivable, which
-//! a shape generator for canonical keys does not need.
+//! The generator lives here rather than in the `properties` battery beside
+//! this directory module because it models admission's charge model rather
+//! than a general value shape: the depth and leaf text are chosen so the
+//! occurrence and byte totals are derivable, which a shape generator for
+//! canonical keys does not need.
 
 use anyhow::Result;
 use minijinja::value::Value;
 use proptest::prelude::*;
 
-use super::*;
+use super::super::*;
 
-use super::properties::law_runner;
+use super::super::properties::law_runner;
 use crate::stdlib::canonical_value::path::PathRef;
 
 /// Deepest generated chain, counted in containers.

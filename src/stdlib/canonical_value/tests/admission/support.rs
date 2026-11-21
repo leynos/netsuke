@@ -1,8 +1,8 @@
 //! Shared fixtures and assertions for bounded canonical admission.
 //!
-//! Two batteries need the same support: `budget` checks the exact ceilings,
-//! precedence, and operation scope, while `diagnostics` pins how each refusal
-//! renders. Both need a budget built from small explicit ceilings, an assertion
+//! Several batteries need the same support: `budget` checks the exact
+//! ceilings and precedence, `operation_scope` the shared budget, and
+//! `diagnostics` how each refusal renders. Both need a budget built from small explicit ceilings, an assertion
 //! that a refusal names a particular resource, and the shared host graph whose
 //! expansion is exponential in its depth. They live here so neither battery can
 //! drift onto a private copy, and the parent module re-exports them so the
@@ -14,7 +14,7 @@ use std::sync::atomic::AtomicUsize;
 use anyhow::{Result, ensure};
 use minijinja::value::{ObjectRepr, Value};
 
-use super::*;
+use super::super::*;
 
 use crate::stdlib::canonical_value::budget::{AdmissionBudget, AdmissionLimits};
 

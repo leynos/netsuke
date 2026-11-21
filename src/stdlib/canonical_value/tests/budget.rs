@@ -36,7 +36,9 @@ const EXPONENTIAL_DEPTH: usize = 64;
 ///
 /// `path_bookkeeping` builds its wide leaf from this fixture too, so the pull
 /// counter it asserts against is the same one the ceiling cases use.
-pub(super) fn counted_sequence(bound: usize) -> (Value, Arc<AtomicUsize>) {
+pub(in crate::stdlib::canonical_value) fn counted_sequence(
+    bound: usize,
+) -> (Value, Arc<AtomicUsize>) {
     let yielded = Arc::new(AtomicUsize::new(0));
     let (value, _) = fixture(
         ObjectRepr::Seq,
@@ -53,7 +55,10 @@ pub(super) fn counted_sequence(bound: usize) -> (Value, Arc<AtomicUsize>) {
 ///
 /// Shared with `path_bookkeeping`, which stacks long-named mappings above the
 /// wide leaf.
-pub(super) fn pair_map(pairs: Vec<(Value, Value)>, len: Option<usize>) -> Value {
+pub(in crate::stdlib::canonical_value) fn pair_map(
+    pairs: Vec<(Value, Value)>,
+    len: Option<usize>,
+) -> Value {
     fixture(ObjectRepr::Map, len, Materialized::Pairs(pairs)).0
 }
 
