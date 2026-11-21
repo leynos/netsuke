@@ -1621,11 +1621,16 @@ that `.netsuke` and `.netsuke/phony` are real directories without following a
 link, and removes whatever occupies `force`; `netsuke generate` leaves the path
 alone because generation is a pure translation of the graph. The reservation
 check in `src/ninja_gen/reserved_paths/mod.rs` is pure for the same reason: it
-folds the graph's own spelling and reads nothing from disk. Namespace constants
-live there alone, and `force_run.rs` and `dyndep/staging.rs` import them.
+folds the graph's own spelling and reads nothing from disk. It also folds ASCII
+case, because a case-insensitive volume treats `.NETSUKE/PHONY` as the reserved
+tree; refusing a case variant on a case-sensitive volume is the fail-closed
+side of that trade. Namespace constants live there alone, and `force_run.rs` and
+`dyndep/staging.rs` import them.
 
 A spelling that needs the working directory cannot be judged by generation, so
-the build command judges it before it writes anything.
+the build command judges it before it publishes a dyndep sidecar, prunes an
+obsolete one, or writes anything else. The refusal covers all three reserved
+namespaces, because the rule is the one reservation, not a phony-only check.
 `GeneratedNinjaWithTargets` collects every path the graph named, and
 `phony_state::refuse_reserved_declarations` resolves each against the canonical
 working directory: the longest existing ancestor is canonicalized and the
@@ -1659,19 +1664,25 @@ properties of the emission matter when changing it. The preparation edge takes
 the recipe's own `inputs`, `implicit_deps` and `order_only_deps` as its normal
 inputs, because Ninja does not order an order-only dependency after the edge's
 other prerequisites; a prerequisite that creates the same directory with a
-non-idempotent `mkdir` therefore still runs first. The node's identity is
-content-addressed over the edge's hidden output and the directory, so two
-recipes sharing a directory share one rule but keep distinct nodes. The node is
-never created, which Ninja reads as permanently out of date, so the idempotent
-command reruns on every build that reaches it and a directory deleted since the
-last build returns; Ninja neither warns about the missing output nor cleans it.
-An edge that is not executable `phony`, and an output whose parent is the
-working directory itself, emit nothing, so graphs without a nested phony output
-keep their previous bytes. `ninja_gen::edge_metadata::is_executable_phony`
-answers the classification question, because that module owns which edges are
-lowered. The generated `mkdir` runs in the same shell and interpreter transport
-as a manifest recipe, so quoting and PowerShell encoding have one owner rather
-than a second, weaker encoder in the runner.
+non-idempotent `mkdir` therefore still runs first. In the `implicit_deps` role,
+a staged serial edge contributes the same gates the recipe statement names
+rather than the raw dependency list: the raw list is revealed late through the
+dyndep sidecars, so naming it here would expose it immediately and let a later
+stage start while an earlier one still runs.
+`tests/phony_always_runtime_tests/serial_output.rs` proves the ordering with a
+real Ninja. The node's identity is content-addressed over the edge's hidden
+output and the directory, so two recipes sharing a directory share one rule but
+keep distinct nodes. The node is never created, which Ninja reads as
+permanently out of date, so the idempotent command reruns on every build that
+reaches it and a directory deleted since the last build returns; Ninja neither
+warns about the missing output nor cleans it. An edge that is not executable
+`phony`, and an output whose parent is the working directory itself, emit
+nothing, so graphs without a nested phony output keep their previous bytes.
+`ninja_gen::edge_metadata::is_executable_phony` answers the classification
+question, because that module owns which edges are lowered. The generated
+`mkdir` runs in the same shell and interpreter transport as a manifest recipe,
+so quoting and PowerShell encoding have one owner rather than a second, weaker
+encoder in the runner.
 
 A `depfile` on an executable phony edge is a rule binding, so the hidden
 statement inherits it. Without `deps`, Ninja accepts a depfile only when its

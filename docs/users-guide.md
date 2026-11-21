@@ -1237,10 +1237,13 @@ any user graph path, including outputs, inputs, implicit dependencies,
 order-only dependencies, and default targets; they are reserved for
 Netsuke-generated gates, sidecars, and the hidden outputs and force node of
 phony work. A spelling that folds into one of those namespaces, such as
-`./.netsuke/phony/force`, is rejected during generation. Before it clears the
-force node, `netsuke build` also resolves every declared path against the
-working directory, so an absolute path, a `..` path that re-enters the
-workspace, or a symbolic-link alias is refused rather than deleted.
+`./.netsuke/phony/force`, is rejected during generation. The comparison ignores
+ASCII case, so `.NETSUKE/PHONY/force` is refused too: a case-sensitive volume
+would treat it as an ordinary path while a case-insensitive one resolves it to
+the reserved tree. Before it publishes dyndep sidecars, prunes obsolete ones,
+or clears the force node, `netsuke build` also resolves every declared path
+against the working directory, so an absolute path, a `..` path that re-enters
+the workspace, or a symbolic-link alias is refused rather than deleted.
 
 When migrating an existing manifest, see the
 [v0.1.0 migration guide](v0-1-0-migration-guide.md#opting-into-serial-dependency-ordering)

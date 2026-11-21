@@ -47,6 +47,9 @@ pub(crate) const UNSELECTED_OUTPUT_MANIFEST: &str =
 pub(crate) const PREREQUISITE_DIRECTORY_MANIFEST: &str =
     include_str!("../data/phony_prerequisite_directory.yml");
 
+/// A nested phony output whose serial prerequisites must run in order.
+pub(crate) const SERIAL_OUTPUT_MANIFEST: &str = include_str!("../data/phony_serial_output.yml");
+
 /// The force node, relative to the workspace.
 pub(crate) const FORCE_NODE: &str = ".netsuke/phony/force";
 

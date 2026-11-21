@@ -13,6 +13,8 @@
 //! and back into it, which only that directory can settle. The command layer
 //! that owns build state resolves those spellings; it lives with the runner
 //! rather than here, so this module cannot reach the filesystem by accident.
+//! Case is folded too, because a case-insensitive volume treats
+//! `.NETSUKE/PHONY` as the reserved directory itself.
 
 use camino::{Utf8Component, Utf8Path};
 
@@ -39,10 +41,17 @@ pub(crate) fn is_reserved_path(path: &Utf8Path) -> bool {
 }
 
 /// Return whether a `/`-separated relative spelling names generated state.
+///
+/// ASCII case is folded because the volume may not distinguish it. On NTFS or
+/// APFS, `.NETSUKE/PHONY/force` names the same entry as the lowercase
+/// spelling, so a case-sensitive comparison would let a declaration through and
+/// then have the build remove it as stray generated state. Refusing a case
+/// variant on a case-sensitive volume as well is the fail-closed trade-off.
 fn is_reserved_spelling(candidate: &str) -> bool {
+    let folded = candidate.to_ascii_lowercase();
     RESERVED_NAMESPACES
         .iter()
-        .any(|namespace| is_within(candidate, namespace))
+        .any(|namespace| is_within(&folded, namespace))
 }
 
 /// Return whether `candidate` equals `namespace` or lies beneath it.
