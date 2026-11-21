@@ -24,6 +24,8 @@ struct EdgeShape<'a> {
     implicit_deps: &'a [&'a Utf8Path],
     /// Order-only dependencies.
     order_only_deps: &'a [&'a Utf8Path],
+    /// Whether the dependencies run in declaration order.
+    serial: bool,
     /// Whether the edge declares itself `phony`.
     phony: bool,
 }
@@ -39,7 +41,11 @@ fn insert_edge(graph: &mut BuildGraph, action_id: &str, shape: EdgeShape<'_>) {
                 .iter()
                 .map(|path| path.to_path_buf())
                 .collect(),
-            dependency_order: DependencyOrder::Parallel,
+            dependency_order: if shape.serial {
+                DependencyOrder::Serial
+            } else {
+                DependencyOrder::Parallel
+            },
             explicit_outputs: shape
                 .outputs
                 .iter()
@@ -261,6 +267,7 @@ fn preparation_depends_on_the_recipe_prerequisites_in_every_role() {
             implicit_deps: &[Utf8Path::new("gen/generated.h")],
             order_only_deps: &[Utf8Path::new("stamp")],
             phony: true,
+            ..EdgeShape::default()
         },
     );
     let ninja =
@@ -359,3 +366,5 @@ fn preparation_nodes_are_derived_from_the_edge() {
         "the identity must be stable for one graph",
     );
 }
+
+mod serial;

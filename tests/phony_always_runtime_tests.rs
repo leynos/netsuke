@@ -16,6 +16,8 @@
 #![cfg(unix)]
 
 mod phony_runtime;
+#[path = "phony_always_runtime_tests/serial_output.rs"]
+mod serial_output;
 
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;

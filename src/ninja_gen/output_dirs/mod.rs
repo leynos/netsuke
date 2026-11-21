@@ -9,8 +9,12 @@
 //!
 //! The preparation edge depends on the recipe's own prerequisites, so it runs
 //! after them: a prerequisite that creates the same directory with a
-//! non-idempotent `mkdir` still succeeds. The edge is reached only through the
-//! recipe statement, so an unselected edge creates no directory at all.
+//! non-idempotent `mkdir` still succeeds. A staged serial recipe's dependencies
+//! are named through the gates instead of the raw list, because the raw list is
+//! what Ninja reveals late to keep the stages ordered; naming it here would
+//! expose it directly and let a later stage start early. The edge is
+//! reached only through the recipe statement, so an unselected edge creates no
+//! directory at all.
 //!
 //! The node the preparation edge declares is never created. Ninja reads that
 //! absence as permanently out of date, so the idempotent command reruns on
@@ -20,8 +24,9 @@
 //! other edge can collide with it.
 
 use super::RecipeShell;
-use super::dyndep::content_digest;
+use super::dyndep::{content_digest, serial_gate_paths};
 use super::edge_metadata;
+use super::edge_requires_gates;
 use super::error::NinjaGenError;
 use super::escape::ShellText;
 use super::force_run;
@@ -203,7 +208,9 @@ fn write_rule<W: Write>(
 ///
 /// The recipe's prerequisites are this edge's own inputs, so the directory is
 /// created after them. They are not order-only here: a prerequisite that
-/// writes into the directory must see it as that prerequisite left it.
+/// writes into the directory must see it as that prerequisite left it. A
+/// staged serial edge contributes its gates rather than its raw dependency
+/// list, because only the gates carry the ordering the manifest asked for.
 fn write_edge<W: Write>(
     out: &mut W,
     edge: &BuildEdge,
@@ -215,9 +222,11 @@ fn write_edge<W: Write>(
         join(std::slice::from_ref(&prepared.node)),
         rule_name(&prepared.directory)
     )?;
+    let gates = edge_requires_gates(edge).then(|| serial_gate_paths(edge));
+    let implicit_deps = gates.as_deref().unwrap_or(edge.implicit_deps.as_slice());
     for prerequisites in [
         edge.inputs.as_slice(),
-        edge.implicit_deps.as_slice(),
+        implicit_deps,
         edge.order_only_deps.as_slice(),
     ] {
         if !prerequisites.is_empty() {

@@ -68,7 +68,7 @@ mod render;
 mod staging;
 pub use bundle::{GeneratedDyndep, GeneratedNinja};
 use render::render_edges;
-pub(crate) use staging::content_digest;
+pub(crate) use staging::{content_digest, serial_gate_paths};
 
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};

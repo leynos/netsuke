@@ -219,6 +219,12 @@ fn execute_build(
     )?;
     let parts = generated.into_build_parts();
     let console_edge_count = parts.bundle.console_edge_count();
+    // Generation cannot judge a spelling that only the working directory can
+    // resolve, so the build refuses a manifest path that lands in generated
+    // state before it publishes a sidecar, prunes an obsolete one, or removes
+    // the force node. The check runs whether or not that state exists, because
+    // a first build must refuse as firmly as a later one.
+    refuse_reserved_declarations(cli, &parts.declared_paths)?;
     let publication = materialize_dyndep_bundle(cli, &parts.bundle)?;
     prune_dyndep_bundle(cli, parts.bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(parts.bundle.into_parts().0);
@@ -229,12 +235,6 @@ fn execute_build(
         BuildTargets::new(&args.targets)
     };
 
-    // Generation cannot judge a spelling that only the working directory can
-    // resolve, so the build refuses a manifest path that lands in generated
-    // state before anything here writes into it. The check runs whether or not
-    // that state exists, because a first build must refuse as firmly as a
-    // later one.
-    refuse_reserved_declarations(cli, &parts.declared_paths)?;
     // Ninja reads the force node's absence as "permanently dirty", so a
     // leftover path there would quietly turn off every forced edge. The
     // reservation check above has already refused a manifest path that names

@@ -65,10 +65,12 @@ decision that added the label.
 No manifest needs an edit for these two shapes, but they now behave as their
 names promised. One reservation is new: a manifest that already declares a
 target or output inside `.netsuke/phony` must move it because that spelling now
-names generated state. Generation rejects the literal and foldable spellings. A
-spelling only the working directory can resolve, such as an absolute path
-beneath it, passes that lexical check and is refused later, when the build
-resolves it against the working directory before anything is written.
+names generated state. Generation rejects the literal and foldable spellings,
+and it ignores ASCII case, because a case-insensitive volume resolves
+`.NETSUKE/PHONY` to the same tree. A spelling only the working directory can
+resolve, such as an absolute path beneath it, passes that lexical check and is
+refused later, when the build resolves it against the working directory before
+it publishes a dyndep sidecar, prunes an obsolete one, or writes anything else.
 
 Every executable action, and every target declaring `phony: true` with a
 recipe, runs each time it is reached, even when a file or directory of that

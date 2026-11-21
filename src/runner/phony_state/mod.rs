@@ -16,16 +16,17 @@
 //! anywhere, so the namespace is opened without following links and the reset
 //! is refused when either component is not a real directory.
 //!
-//! The build also refuses a manifest path that resolves into the namespace,
-//! before it removes anything. Generation rejects the literal and
-//! `./`-prefixed spellings, but an absolute path, a `..` path that re-enters
-//! the workspace, or a symbolic-link alias can only be judged against the
-//! working directory. Deleting an entry under such a spelling would destroy
-//! the very output the manifest declared, and writing one would collide with
-//! generated state, so the build stops with the reservation's own diagnostic
-//! instead. That check runs whether or not the force node exists: a first
-//! build must refuse as firmly as a later one, and a refusal that waited for
-//! generated state to appear would let the first build create the collision.
+//! The build also refuses a manifest path that resolves into any reserved
+//! namespace, before it publishes a dyndep sidecar, prunes an obsolete one, or
+//! removes the force node. Generation rejects the literal and `./`-prefixed
+//! spellings, but an absolute path, a `..` path that re-enters the workspace,
+//! or a symbolic-link alias can only be judged against the working directory.
+//! Deleting an entry under such a spelling would destroy the very output the
+//! manifest declared, and writing one would collide with generated state, so
+//! the build stops with the reservation's own diagnostic instead. That check
+//! runs whether or not the force node exists: a first build must refuse as
+//! firmly as a later one, and a refusal that waited for generated state to
+//! appear would let the first build create the collision.
 //!
 //! That resolution lives in [`resolve`] rather than in generation, because
 //! reading the filesystem is the command layer's work: generation stays a pure

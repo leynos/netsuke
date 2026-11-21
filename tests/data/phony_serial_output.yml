@@ -1,0 +1,12 @@
+netsuke_version: '1.0.0'
+targets:
+  - name: setup
+    command: echo setup >> serial.log && sleep 2 && echo ready > setup.marker && touch setup
+  - name: check
+    command: test -e setup.marker && echo check >> serial.log && touch check
+  - name: build/report
+    phony: true
+    dependency_order: serial
+    deps: [setup, check]
+    command: echo report > build/report
+defaults: [build/report]

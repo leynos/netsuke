@@ -21,7 +21,7 @@ use crate::hex;
 use crate::ir::BuildEdge;
 use crate::ninja_gen::reserved_paths::{DYNDEP_NAMESPACE, SERIAL_NAMESPACE};
 use crate::ninja_gen::{NinjaGenError, validated_ninja_path};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -60,7 +60,7 @@ pub(super) fn render_serial_block(
 ) -> Result<(), NinjaGenError> {
     let parent = parent_identity(edge);
     for (index, dep) in edge.implicit_deps.iter().enumerate() {
-        let gate = parent.join(format!("{index:03}"));
+        let gate = gate_path(&parent, index);
         let relay = parent.join(format!("{RELAY_PREFIX}{index:03}"));
         let content = sidecar_content(&gate, &relay)?;
         let digest = sidecar_digest(&content);
@@ -100,6 +100,24 @@ pub(super) fn render_serial_block(
         gate_paths.push(gate);
     }
     Ok(())
+}
+
+/// Return the gate paths the staged statements for `edge` declare.
+///
+/// Any other statement that must wait for the edge's serial dependencies has
+/// to name these gates rather than the raw dependency list. Naming the raw list
+/// would let Ninja start a later stage while an earlier one still runs, which
+/// is exactly what the staging exists to prevent.
+pub(crate) fn serial_gate_paths(edge: &BuildEdge) -> Vec<Utf8PathBuf> {
+    let parent = parent_identity(edge);
+    (0..edge.implicit_deps.len())
+        .map(|index| gate_path(&parent, index))
+        .collect()
+}
+
+/// Name one stage's gate beneath the edge's parent identity.
+fn gate_path(parent: &Utf8Path, index: usize) -> Utf8PathBuf {
+    parent.join(format!("{index:03}"))
 }
 
 /// Derive the stable parent (gate-set) identity for a serial edge.
