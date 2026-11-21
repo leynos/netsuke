@@ -9,7 +9,7 @@
 
 use super::super::case_nesting::CaseObservation;
 use super::super::command_substitution::{
-    CommandSubstitution, CommandSubstitutionDelimiter, SubstitutionBoundary,
+    CommandSubstitution, CommandSubstitutionDelimiter, SubstitutionBoundary, SubstitutionStart,
     reject_ambiguous_case_comment, reject_unplaced_case,
 };
 use super::super::posix_lexical::SubstitutionKind;
@@ -28,10 +28,11 @@ impl SubstitutionTraversal<'_, '_> {
         };
         match delimiter {
             CommandSubstitutionDelimiter::Start => {
-                self.command_substitutions.push(CommandSubstitution::new(
-                    pos,
-                    SubstitutionKind::at(self.chars, pos),
-                ));
+                self.command_substitutions
+                    .push(CommandSubstitution::new(SubstitutionStart {
+                        pos,
+                        kind: SubstitutionKind::at(self.chars, pos),
+                    }));
                 self.posix_lexical.enter_command_substitution_region();
                 self.output.push_str("$(");
                 Ok(Some(pos + 2))

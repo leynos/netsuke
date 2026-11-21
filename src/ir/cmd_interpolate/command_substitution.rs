@@ -35,20 +35,32 @@ pub(super) struct CommandSubstitution {
     pub(super) case_nesting: CaseNesting,
 }
 
+/// Describe the `$(` delimiter that opened a command substitution.
+///
+/// The opener's position and the kind of body it introduced describe one
+/// delimiter, so they travel together rather than as adjacent arguments a
+/// caller could transpose.
+#[derive(Clone, Copy)]
+pub(super) struct SubstitutionStart {
+    /// The `$` that opened the substitution, kept for source-range checks.
+    pub(super) pos: usize,
+    /// What the delimiter opened: a command list or an arithmetic body.
+    pub(super) kind: SubstitutionKind,
+}
+
 impl CommandSubstitution {
     /// Initialise the state required after a `$(` delimiter.
     ///
-    /// `start` is the `$` that opened the substitution, kept for source-range
-    /// checks. `kind` records whether the delimiter was `$((`, so a caller can
+    /// The recorded kind says whether the delimiter was `$((`, so a caller can
     /// keep arithmetic operators such as `<<` away from shell heredoc tracking.
     /// Arithmetic bodies expand numbers, so they never hold a heredoc
     /// declaration.
-    pub(super) const fn new(start: usize, kind: SubstitutionKind) -> Self {
+    pub(super) const fn new(start: SubstitutionStart) -> Self {
         Self {
             quote_context: QuoteContext::Unquoted,
             parenthesis_depth: 1,
-            kind,
-            start,
+            kind: start.kind,
+            start: start.pos,
             case_nesting: CaseNesting::new(),
         }
     }
@@ -84,13 +96,6 @@ pub(super) struct CharSpan {
     pub(super) end: usize,
 }
 
-impl CharSpan {
-    /// Record the half-open span from `start` up to `end`.
-    pub(super) const fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-}
-
 /// Reject a `)#` boundary whose `)` may terminate a `case` pattern.
 ///
 /// A `)` that closes `$()` is part of the surrounding word, so `#` after it is
@@ -116,10 +121,16 @@ pub(super) fn reject_ambiguous_case_comment(
         return Ok(());
     };
     let is_comment_boundary = chars.get(boundary.pos + 1) == Some(&'#');
-    let has_case =
-        boundary.saw_case || contains_case_keyword(chars, CharSpan::new(start, boundary.pos));
+    let has_case = boundary.saw_case
+        || contains_case_keyword(
+            chars,
+            CharSpan {
+                start,
+                end: boundary.pos,
+            },
+        );
     if is_comment_boundary && has_case {
-        return Err(ambiguous_boundary_error(boundary.pos + 1));
+        return Err(ambiguous_boundary_error(boundary));
     }
     Ok(())
 }
@@ -150,8 +161,14 @@ pub(super) fn reject_unplaced_case(
         return Ok(());
     };
     let is_unplaceable_case = boundary.has_unplaced_case
-        && contains_case_in_prefix(chars, CharSpan::new(start, boundary.pos))
-        && has_marker_after(chars, boundary.pos);
+        && contains_case_in_prefix(
+            chars,
+            CharSpan {
+                start,
+                end: boundary.pos,
+            },
+        )
+        && has_marker_after(chars, boundary);
     if is_unplaceable_case {
         return Err(unplaced_case_error());
     }
@@ -165,7 +182,8 @@ pub(super) fn reject_unplaced_case(
 /// syntax into a log line; the character offset is enough to find the boundary
 /// in the source, and it survives the 160-character truncation that the
 /// invalid-command diagnostic applies.
-fn ambiguous_boundary_error(position: usize) -> IrGenError {
+fn ambiguous_boundary_error(boundary: &SubstitutionBoundary) -> IrGenError {
+    let position = boundary.pos + 1;
     let message = localization::message(keys::IR_AMBIGUOUS_SUBSTITUTION_BOUNDARY)
         .with_arg("position", position);
     IrGenError::AmbiguousSubstitutionBoundary { position, message }
@@ -187,13 +205,13 @@ const fn unplaced_case_error() -> IrGenError {
     }
 }
 
-/// Report whether a Netsuke marker appears after `pos`.
+/// Report whether a Netsuke marker appears after the boundary's closer.
 ///
 /// Only a marker that follows the closer can observe the quote context this
 /// boundary sets, so a misread boundary with no later marker changes no output
 /// and is left alone.
-fn has_marker_after(chars: &[char], pos: usize) -> bool {
-    (pos + 1..chars.len()).any(|index| find_substitution(chars, index).is_some())
+fn has_marker_after(chars: &[char], boundary: &SubstitutionBoundary) -> bool {
+    (boundary.pos + 1..chars.len()).any(|index| find_substitution(chars, index).is_some())
 }
 
 /// Report whether a whole-word `case` is followed by a whole-word `in`.
@@ -310,23 +328,8 @@ fn is_line_continuation_at(chars: &[char], pos: usize) -> bool {
 /// word. Returning `None` means the position opens the source.
 fn previous_effective_char(chars: &[char], pos: usize) -> Option<usize> {
     let mut end = pos;
-    while ends_with_continuation(chars, end) {
+    while end >= 2 && is_line_continuation_at(chars, end - 2) {
         end -= 2;
     }
     end.checked_sub(1)
-}
-
-/// Report whether a backslash-continued newline ends at `end`.
-///
-/// The pair is deleted before parsing only when the backslash is unescaped, so
-/// an index that follows one really follows the character before it. In
-/// `\\<newline>` the first backslash quotes the second and the newline is an
-/// ordinary separator, which is what lets the `in` after it start a word.
-fn ends_with_continuation(chars: &[char], end: usize) -> bool {
-    let Some(backslash) = end.checked_sub(2) else {
-        return false;
-    };
-    chars.get(end - 1) == Some(&'\n')
-        && chars.get(backslash) == Some(&'\\')
-        && is_unescaped_character(chars, backslash)
 }
