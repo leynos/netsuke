@@ -9,7 +9,7 @@ use super::staging::{SerialStages, render_serial_block};
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::ninja_gen::edge_metadata;
 use crate::ninja_gen::escape::NinjaValue;
-use crate::ninja_gen::force_run;
+use crate::ninja_gen::output_dirs;
 use crate::ninja_gen::{DisplayEdge, NinjaGenError, edge_requires_gates, ordered_edges};
 use camino::Utf8PathBuf;
 use std::fmt::Write as _;
@@ -25,7 +25,6 @@ pub(super) fn render_edges(
     out: &mut String,
     localizer: &dyn ortho_config::Localizer,
 ) -> Result<Vec<GeneratedDyndep>, NinjaGenError> {
-    force_run::write_force_statement(graph, out)?;
     let mut renderer = EdgeRenderer {
         graph,
         out,
@@ -89,6 +88,7 @@ impl EdgeRenderer<'_> {
         rendered_edge: RenderedEdge<'_>,
         implicit_deps: &[Utf8PathBuf],
     ) -> Result<(), NinjaGenError> {
+        let directory_nodes = output_dirs::nodes(self.graph, edge);
         write!(
             self.out,
             "{}",
@@ -101,6 +101,7 @@ impl EdgeRenderer<'_> {
                 description: rendered_edge.description,
                 hidden_output: rendered_edge.hidden_output,
                 needs_force: rendered_edge.needs_force,
+                directory_nodes: &directory_nodes,
             }
         )?;
         Ok(())

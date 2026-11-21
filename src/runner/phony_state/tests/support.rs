@@ -6,7 +6,8 @@
 //! describe one workspace the same way instead of each rebuilding it.
 
 use super::super::{
-    FORCE_ENTRY, NAMESPACE_LEAF, NAMESPACE_PARENT, open_verified_dir, reset_force_node,
+    FORCE_ENTRY, NAMESPACE_LEAF, NAMESPACE_PARENT, open_verified_dir, refuse_reserved_declarations,
+    reset_force_node,
 };
 use crate::cli::Cli;
 use anyhow::{Context, Result};
@@ -58,14 +59,20 @@ pub(super) fn stray_force_node(root: &Dir) -> Result<()> {
         .context("write a stray force node")
 }
 
-/// Run the reset with `root` as the working directory and `declared` as the
-/// manifest's paths.
+/// Run the reservation refusal, then the reset, as a build does.
+///
+/// The experiment builds a `Cli` whose working directory is `root`, so a
+/// spelling only that directory can resolve reaches the same code the build
+/// command runs. The refusal comes first here exactly as it does in
+/// `execute_build`, which keeps these cases honest about the ordering the
+/// production path relies on.
 pub(super) fn reset(root: &Utf8Path, declared: &[Utf8PathBuf]) -> Result<()> {
     let cli = Cli {
         directory: Some(root.to_owned()),
         ..Cli::default()
     };
-    reset_force_node(&cli, declared)
+    refuse_reserved_declarations(&cli, declared)?;
+    reset_force_node(&cli)
 }
 
 /// Report whether an entry still occupies the force node.

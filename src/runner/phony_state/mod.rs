@@ -16,16 +16,22 @@
 //! anywhere, so the namespace is opened without following links and the reset
 //! is refused when either component is not a real directory.
 //!
-//! The removal also refuses when a manifest path resolves into the namespace.
-//! Generation rejects the literal and `./`-prefixed spellings, but an absolute
-//! path, a `..` path that re-enters the workspace, or a symbolic-link alias can
-//! only be judged against the working directory. Deleting the entry under such
-//! a spelling would destroy the very output the manifest declared, so the
-//! build stops with the reservation's own diagnostic instead. That resolution
-//! lives in [`resolve`] rather than in generation, because reading the
-//! filesystem is the command layer's work: generation stays a pure translation
-//! of the graph. Keeping it in its own module also keeps the filesystem
-//! questions separate from the namespace handles and the removal they guard.
+//! The build also refuses a manifest path that resolves into the namespace,
+//! before it removes anything. Generation rejects the literal and
+//! `./`-prefixed spellings, but an absolute path, a `..` path that re-enters
+//! the workspace, or a symbolic-link alias can only be judged against the
+//! working directory. Deleting an entry under such a spelling would destroy
+//! the very output the manifest declared, and writing one would collide with
+//! generated state, so the build stops with the reservation's own diagnostic
+//! instead. That check runs whether or not the force node exists: a first
+//! build must refuse as firmly as a later one, and a refusal that waited for
+//! generated state to appear would let the first build create the collision.
+//!
+//! That resolution lives in [`resolve`] rather than in generation, because
+//! reading the filesystem is the command layer's work: generation stays a pure
+//! translation of the graph. Keeping it in its own module also keeps the
+//! filesystem questions separate from the namespace handles and the removal
+//! they guard.
 //!
 //! [`resolve`]: self::resolve
 
@@ -49,19 +55,45 @@ const NAMESPACE_LEAF: &str = "phony";
 /// Entry inside the namespace occupied by the shared force node.
 const FORCE_ENTRY: &str = "force";
 
+/// Refuse a build whose manifest names a path inside reserved generated state.
+///
+/// Every declared spelling is resolved against the working directory, so an
+/// absolute path, a `..` path that re-enters the workspace, and a symbolic-link
+/// alias are judged as well as the relative spellings generation already
+/// rejects. The check runs on every build, before the build removes or creates
+/// anything: a manifest that names the force node must not have it deleted, and
+/// a manifest that names a hidden output's parent must not have that directory
+/// created, because either would collide with generated state the build owns.
+///
+/// # Errors
+///
+/// Returns an error when the working directory cannot be resolved, when a
+/// declared path cannot be resolved, or when one resolves into a reserved
+/// namespace.
+pub(in crate::runner) fn refuse_reserved_declarations(
+    cli: &Cli,
+    declared: &[Utf8PathBuf],
+) -> Result<()> {
+    let workspace = canonical_working_directory(cli)?;
+    for path in declared {
+        if resolves_into_reserved_state(&workspace, path)? {
+            return Err(alias_refusal(path));
+        }
+    }
+    Ok(())
+}
+
 /// Remove a stray path occupying the shared force node.
 ///
-/// `declared` holds every path the manifest names, as written. They are
-/// checked only when something is present to remove, because an absent force
-/// node cannot destroy anything.
+/// The caller has already refused any manifest path that resolves into reserved
+/// state, so a removal here cannot destroy a declared output.
 ///
 /// # Errors
 ///
 /// Returns an error when the working directory cannot be opened, when the
-/// reserved namespace is not a real directory, when a declared path resolves
-/// into a reserved namespace, or when a path present at the force node cannot
-/// be inspected or removed.
-pub(in crate::runner) fn reset_force_node(cli: &Cli, declared: &[Utf8PathBuf]) -> Result<()> {
+/// reserved namespace is not a real directory, or when a path present at the
+/// force node cannot be inspected or removed.
+pub(in crate::runner) fn reset_force_node(cli: &Cli) -> Result<()> {
     let root = open_effective_dir(cli)?;
     let parent = Utf8Path::new(NAMESPACE_PARENT);
     let Some(netsuke) = open_verified_dir(&root, NAMESPACE_PARENT, parent)? else {
@@ -73,12 +105,6 @@ pub(in crate::runner) fn reset_force_node(cli: &Cli, declared: &[Utf8PathBuf]) -
     };
     if !force_entry_exists(&phony)? {
         return Ok(());
-    }
-    let workspace = canonical_working_directory(cli)?;
-    for path in declared {
-        if resolves_into_reserved_state(&workspace, path)? {
-            return Err(alias_refusal(path));
-        }
     }
     remove_path(&phony, Utf8Path::new(FORCE_ENTRY))
 }

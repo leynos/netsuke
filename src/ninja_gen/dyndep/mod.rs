@@ -74,9 +74,9 @@ use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
 use crate::ninja_gen::reserved_paths::is_reserved_path;
 use crate::ninja_gen::{
-    InterpreterBinding, NinjaGenError, RecipeShell, graph_requires_dyndep, join,
-    ordered_default_targets, reject_unsupported_path_characters, resolve_default_interpreter,
-    write_action_rules,
+    InterpreterBinding, NinjaGenError, RecipeShell, force_run, graph_requires_dyndep, join,
+    ordered_default_targets, output_dirs, reject_unsupported_path_characters,
+    resolve_default_interpreter, write_action_rules,
 };
 use crate::recipe_shell::InterpreterExecutable;
 use std::fmt::Write as _;
@@ -232,6 +232,8 @@ fn generate_bundle_inner(
     }
 
     write_action_rules(graph, &mut out, shell, binding)?;
+    force_run::write_force_statement(graph, &mut out)?;
+    output_dirs::write_statements(graph, &mut out, shell, binding)?;
 
     let localizer = localization::localizer();
     let dyndep_files = render_edges(graph, &mut out, localizer.as_ref())?;

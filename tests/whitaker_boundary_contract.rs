@@ -66,10 +66,6 @@ const WHICH_LOOKUP_BOUNDARY: &str = "netsuke::stdlib::which::lookup";
 /// submodule holding only that `sync_all`.
 const RUNNER_SYNC_BOUNDARY: &str = "netsuke::runner::process::file_io::ambient_sync";
 
-/// Directory preparation for executable `phony` outputs, which a manifest may
-/// declare outside the working directory and so outside any capability handle.
-const RUNNER_OUTPUT_DIRS_BOUNDARY: &str = "netsuke::runner::output_dirs";
-
 /// Manifest tables that can carry a `metadata.dylint` block, either of which
 /// Dylint would honour to resolve lint libraries from a pinned git source.
 const METADATA_TABLES: [&str; 2] = ["workspace", "package"];
@@ -225,7 +221,6 @@ fn crate_is_not_exempted_wholesale(#[case] crate_name: &str) -> Result<()> {
 #[rstest]
 #[case::which_lookup(WHICH_LOOKUP_BOUNDARY, "netsuke::stdlib::which")]
 #[case::runner_ambient_sync(RUNNER_SYNC_BOUNDARY, "netsuke::runner::process::file_io")]
-#[case::runner_output_dirs(RUNNER_OUTPUT_DIRS_BOUNDARY, "netsuke::runner")]
 fn production_boundaries_stay_narrowly_scoped(
     #[case] required: &str,
     #[case] widened: &str,

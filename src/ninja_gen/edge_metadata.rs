@@ -1,8 +1,9 @@
 //! Compose the shared rule name, restat flag and progress description for an edge.
 //!
 //! This module is the single owner of edge metadata used by ordinary generation
-//! and dyndep rendering. Keep its callers limited to those two writers so they
-//! emit the same action lookup, progress-label and Ninja-escaping decisions.
+//! and dyndep rendering. Keep its callers limited to those two writers and the
+//! prepared-directory generator so all three emit the same action lookup,
+//! classification, progress-label and Ninja-escaping decisions.
 
 use super::escape::{NinjaValue, escape_metadata_value};
 use super::force_run::{self, edge_needs_force};
@@ -93,25 +94,21 @@ pub(super) fn for_edge<'a>(
     })
 }
 
-/// Return every path an executable `phony` edge publishes as an output.
+/// Return whether one edge is lowered to a hidden executable statement.
 ///
 /// Ninja creates an edge's output directories immediately before it runs that
 /// edge's recipe, but an executable `phony` edge's statement names only its
-/// hidden output; its declared names are a native `phony` alias, whose outputs
-/// Ninja never prepares. The build command asks for these names so it can
-/// create their parents itself. The classification stays here rather than in
-/// the caller, because this module owns the decision about which edges are
-/// lowered. An edge whose action is missing yields nothing: generation reports
-/// that fault before any lowering exists to describe.
-pub(crate) fn executable_phony_outputs(graph: &BuildGraph) -> impl Iterator<Item = &Utf8PathBuf> {
-    graph
-        .edges()
-        .filter(|edge| {
-            graph.actions.get(&edge.action_id).is_some_and(|action| {
-                classify(edge, action.recipe.is_dependency_only()) == EdgeClass::ExecutablePhony
-            })
-        })
-        .flat_map(|edge| edge.explicit_outputs.iter().chain(&edge.implicit_outputs))
+/// hidden output, and its declared names are a native `phony` alias whose
+/// outputs Ninja never prepares. The prepared-directory generator therefore
+/// asks this predicate which edges write under declared names. The
+/// classification stays here rather than in the caller, because this module
+/// owns the decision about which edges are lowered. An edge whose action is
+/// missing yields `false`: generation reports that fault before any lowering
+/// exists to describe.
+pub(super) fn is_executable_phony(graph: &BuildGraph, edge: &BuildEdge) -> bool {
+    graph.actions.get(&edge.action_id).is_some_and(|action| {
+        classify(edge, action.recipe.is_dependency_only()) == EdgeClass::ExecutablePhony
+    })
 }
 
 /// Classify one edge from its recipe shape and its `phony` flag.

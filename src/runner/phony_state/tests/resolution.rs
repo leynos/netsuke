@@ -2,10 +2,11 @@
 //!
 //! Each case declares the force node through a different route — an absolute
 //! path, a `..` that leaves and returns, a symbolic link, or a link that
-//! leaves the workspace — and expects the reset to refuse rather than delete
-//! the output the manifest named. The cases also cover the two ways the guard
-//! could fail quietly: treating an unresolvable path as unrelated, and
-//! creating state while deciding.
+//! leaves the workspace — and expects the build to refuse rather than delete
+//! the output the manifest named. The cases also cover the three ways the guard
+//! could fail quietly: treating an unresolvable path as unrelated, creating
+//! state while deciding, and waiting for generated state to exist before it
+//! judges a spelling at all.
 
 use super::super::{NAMESPACE_LEAF, NAMESPACE_PARENT, resolves_into_reserved_state};
 use super::support::{force_node_exists, reset, stray_force_node, workspace};
@@ -54,6 +55,32 @@ fn an_absolute_alias_stops_the_reset() -> Result<()> {
     ensure!(
         force_node_exists(&workspace.dir)?,
         "the refused reset must leave the declared output in place",
+    );
+    Ok(())
+}
+
+/// An absolute declaration is refused even when no generated state exists.
+///
+/// The refusal used to live inside the force-node reset, which returns early
+/// when the node is absent. A first build would therefore accept the spelling,
+/// create a directory at the node, and then fail every later build on the alias
+/// check. The guard now runs before anything is created, so the first build
+/// refuses and leaves no state behind.
+#[test]
+fn an_absolute_alias_is_refused_before_any_generated_state_exists() -> Result<()> {
+    let workspace = workspace()?;
+    let declared = vec![workspace.root.join(FORCE_PATH).join("report")];
+    let outcome = reset(&workspace.root, &declared);
+    ensure!(
+        outcome.is_err(),
+        "an absolute alias must be refused before the namespace exists",
+    );
+    ensure!(
+        !workspace
+            .dir
+            .try_exists(NAMESPACE_PARENT)
+            .context("check the namespace")?,
+        "a refused build must not create the reserved namespace",
     );
     Ok(())
 }

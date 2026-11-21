@@ -127,6 +127,10 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
 - [x] Fifth review's five documentation corrections applied to the ExecPlan,
       users' guide and ADR-0084, and the two test-support helper entries added
       to the developers' guide.
+- [x] Sixth review's two Major findings fixed. The reserved-path check now runs
+      unconditionally in `execute_build` before the force-node reset, and
+      directory preparation moved out of the runner into generation as
+      order-only preparation edges, with unit and real-Ninja tests.
 
 ## Surprises & discoveries
 
@@ -271,14 +275,25 @@ Probed against the repository's Ninja 1.11.1 in a scratch directory:
   a command-layer pre-step driven by the generator's own classification, not a
   hidden output per declared name: a per-name hidden tree would either land
   outside the workspace for an absolute spelling or collide with a user's own
-  `.netsuke` directory beneath the declared parent.
+  `.netsuke` directory beneath the declared parent. The sixth review superseded
+  the command-layer placement; the reason a per-name hidden tree was rejected
+  still holds, and generation now emits preparation edges instead. See
+  [Outcomes & retrospective](#outcomes--retrospective).
 - A `depfile` is emitted as a rule binding, so every edge using that rule
-  inherits it, and Ninja requires the depfile's first output to equal the
-  edge's first output before it loads any discovered dependency. The hidden
-  statement satisfies that for a depfile written against `$out`; a depfile
-  naming the declared public name is ignored, which is the consequence recorded
-  in ADR-0084. `Action.depfile` is always `None` from the manifest loader, so
-  the regression test builds the IR directly.
+  inherits it, and Ninja requires the depfile's first target to equal the
+  edge's first output before it loads any discovered dependency.
+  `Action.depfile` is always `None` from the manifest loader, so the regression
+  test builds the IR directly.
+
+  _Superseded (2026-11-21)._ An earlier version of this discovery claimed the
+  hidden statement satisfies that requirement for a depfile written against
+  `$out`. It does not: `$out` is a literal shell variable like every other
+  recipe dollar, not the hidden Ninja output, so a recipe-written depfile
+  cannot name the hidden path.
+  [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md)
+  records the corrected contract: without `deps`, a recipe-written depfile is
+  refused and orders nothing; with `deps`, its inputs are recorded against the
+  hidden output and order later builds.
 
 ## Decision log
 
@@ -479,6 +494,24 @@ entry name; the runtime test file moved its manifests under `tests/data/` to
 stay within the 400-line limit; and both migration guides qualify "no manifest
 needs an edit" for a manifest that already declares a path inside
 `.netsuke/phony`.
+
+The sixth review moved directory preparation into generation, superseding the
+command-layer pre-step the fourth review introduced. That pre-step ran for
+every executable phony edge before Ninja selected targets, so an unselected
+edge could fail an unrelated build, and it ran before the edge's prerequisites,
+so a prerequisite's plain `mkdir` failed with `File exists`. A command-layer
+step cannot fix the ordering, because Ninja schedules the edge's dependencies,
+not the runner. `src/ninja_gen/output_dirs/mod.rs` therefore emits one
+content-addressed rule per distinct declared-output parent and one order-only
+node per edge and directory, and each preparation edge takes the recipe's own
+inputs, implicit dependencies and order-only dependencies as its inputs. The
+selection and ordering behaviour is pinned by real-Ninja tests in
+`tests/phony_always_runtime_tests.rs`, and the emission rules by
+`src/ninja_gen/output_dirs/tests.rs`. The same review found that the alias
+guard ran inside the force-node reset, which returns early when the node is
+absent; `execute_build` now calls `refuse_reserved_declarations`
+unconditionally before the reset, so a first build refuses as firmly as a later
+one and creates no reserved state while deciding.
 
 Retrospective: the largest avoidable detour was diagnosing two failing text
 assertions whose premises were wrong rather than whose implementation was. One

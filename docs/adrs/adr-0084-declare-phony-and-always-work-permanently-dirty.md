@@ -142,8 +142,8 @@ build out: check in | .netsuke/phony/force
 The edge-level `restat = 1` is kept exactly as before. Ninja records each
 output's modification time after the run and treats an output whose time did
 not change as clean, so a recipe that leaves the output's time alone prunes its
-dependants. Rewriting the file, even with identical bytes, updates the time and
-rebuilds them.
+dependants. A rewrite rebuilds them only when it changes the recorded
+modification time; a rewrite that leaves that time unchanged still prunes them.
 
 ### Shared details
 
@@ -170,19 +170,39 @@ rebuilds them.
 - Ninja creates the parent directories of the outputs on an edge it is about to
   run. Before the lowering, that covered a recipe writing a nested output such
   as `build/report`; afterwards the only output Ninja sees is the hidden path,
-  so `netsuke build` creates the parents of every executable phony edge's
-  declared outputs itself, before it invokes Ninja. The collection is derived
-  from the graph by `ninja_gen::edge_metadata`, which owns the lowering
-  decision, and the creation stays in the runner's command layer: generation
-  remains a pure translation, and a manifest may declare an absolute or `..`
-  spelling that no capability handle beneath the workspace can create. This is
-  the same division of labour as the force-node reset, and the ambient call is
-  a narrowly scoped Whitaker exclusion.
+  so generation emits a preparation edge for each distinct declared-output
+  parent, and the recipe statement names those nodes after `||` as order-only
+  dependencies. Order-only keeps a missing directory from making the recipe
+  permanently dirty on its own; the preparation edge itself takes the recipe's
+  `inputs`, `implicit_deps` and `order_only_deps` as its normal inputs, because
+  Ninja does not order an order-only dependency after the edge's other
+  prerequisites, and a prerequisite that creates the same directory with a plain
+  `mkdir` must still run first. Each node's identity is content-addressed over
+  the edge's hidden output and the directory, so two recipes sharing a
+  directory share one rule and keep distinct nodes. The node is never created,
+  which Ninja reads as permanently out of date: the idempotent command reruns
+  whenever the statement is selected, so a directory deleted since the last
+  build returns, and neither a missing-output warning nor a `clean` entry
+  results. An unselected edge prepares nothing, and an output whose parent is
+  the working directory emits no statement at all. `ninja_gen::edge_metadata`
+  answers which edges are lowered, because it owns that classification, and the
+  emitted command goes through the same shell and interpreter transport as a
+  manifest recipe, so quoting and PowerShell encoding keep one owner.
 
-  _Addendum (2026-11-20)._ The preparation was added after review: without it,
-  a phony recipe whose output names a directory Ninja no longer saw failed on a
-  clean workspace, because the directory the previous lowering created for it
-  was gone. A real-Ninja regression test pins the nested-output case.
+  _Amendment (2026-11-21)._ Preparation first lived in the runner's command
+  layer: it created every executable phony edge's parent directories before
+  invoking Ninja. Review found two consequences of that placement. It ran for
+  unselected edges, so a manifest naming `optional/report` where `optional` was
+  a regular file failed an unrelated build before Ninja started. And it ran
+  before the edge's prerequisites, so a prerequisite that created the same
+  directory with a plain `mkdir` failed with `File exists` once Ninja reached
+  it. Generating the preparation as an ordinary edge fixes both: it is reached
+  only through the selected recipe statement and runs after that recipe's
+  prerequisites. Generation remains a pure translation of the graph, because a
+  generated statement is text like any other, so the command layer needs no
+  filesystem access of its own and the runner-side Whitaker exclusion is gone.
+  Real-Ninja tests pin the nested-output case, the unselected case, the
+  prerequisite case, and the recreation of a deleted directory.
 
 ## Goals and non-goals
 
@@ -247,6 +267,10 @@ manifest gains corrected behaviour without an edit:
   `.netsuke/phony` directory.
 - Ninja creates the `.netsuke/phony` directory when it first runs a hidden
   recipe, so a build that skips every such edge never creates it.
+- A preparation node is never created, so an edge that reaches it re-runs its
+  idempotent `mkdir` on every build. That is the same mechanism the lowering
+  relies on elsewhere, and the command is chosen to be safe to repeat; the cost
+  is one extra shell per selected nested phony output, per build.
 - A `depfile` on an executable phony edge is a rule binding, so the hidden
   statement inherits it. Without a `deps` binding, Ninja reads the depfile at
   scan time and accepts it only when its first target equals the edge's first

@@ -1017,8 +1017,10 @@ generated output beneath `.netsuke/phony`, so:
   generated output instead;
 - a recipe may write a nested output such as `build/report`. Ninja creates the
   parent directories of the outputs it sees on an edge, and the lowering moves
-  the recipe onto a hidden output, so `netsuke build` creates the declared
-  outputs' parent directories before it invokes Ninja.
+  the recipe onto a hidden output, so the generated plan creates the declared
+  outputs' parent directories just before that recipe runs. Preparation belongs
+  to the edge, so a target the build does not reach creates nothing, and a
+  prerequisite that creates the same directory still runs first.
 
 A `depfile` on an executable phony action is a rule binding, so the hidden
 statement inherits it. Without a `deps` binding, Ninja reads the depfile at
