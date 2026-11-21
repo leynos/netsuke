@@ -23,6 +23,58 @@ $wrapperMutex = [System.Threading.Mutex]::new($false, 'Local\NetsukeWindowsPathS
 # variable instead of the failure that got there.
 $wrapperMutexHeld = $false
 $wrapperKey = $null
+# Whether the example wrote the key is not visible from the value it leaves: a
+# write that restores the text that was already there looks exactly like no
+# write at all, and the key's last-write time is too coarse to separate a write
+# from the sentinel write the wrapper performs immediately before the example.
+# A change notification is signalled for every write whatever the text, so it
+# is the oracle the zero-write and one-write assertions rest on.
+$wrapperWatchType = 'NetsukeRegistryWatch'
+if (-not ($wrapperWatchType -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+public static class NetsukeRegistryWatch
+{
+    private static readonly IntPtr CurrentUser = new IntPtr(unchecked((int)0x80000001));
+    private const int NotifyAccess = 0x0010;
+    private const int ChangeLastSet = 0x00000004;
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern int RegOpenKeyEx(
+        IntPtr key, string subKey, int options, int rights, out IntPtr opened);
+
+    [DllImport("advapi32.dll")]
+    private static extern int RegCloseKey(IntPtr key);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern int RegNotifyChangeKeyValue(
+        IntPtr key, bool watchSubtree, int filter, IntPtr changeEvent, bool asynchronous);
+
+    public static IntPtr OpenUserEnvironment()
+    {
+        IntPtr opened;
+        int status = RegOpenKeyEx(CurrentUser, "Environment", 0, NotifyAccess, out opened);
+        if (status != 0) { throw new Win32Exception(status); }
+        return opened;
+    }
+
+    public static void Watch(IntPtr key, IntPtr changeEvent)
+    {
+        int status = RegNotifyChangeKeyValue(
+            key, false, ChangeLastSet, changeEvent, true);
+        if (status != 0) { throw new Win32Exception(status); }
+    }
+
+    public static void Close(IntPtr key)
+    {
+        RegCloseKey(key);
+    }
+}
+'@
+}
 try {
     # An abandoned mutex means its owner was killed, which is the case the
     # backup file exists for; WaitOne throws but acquires the mutex anyway.
@@ -168,7 +220,36 @@ try {
             $wrapperStdout.Flush()
             [System.Environment]::Exit(1)
         }
-        . $ExamplePath
+        # The watch is armed after the sentinel write above and read before the
+        # restore below, so the only write it can observe is the example's.
+        $wrapperProcessPathBefore = $env:Path
+        $wrapperWatchKey = [NetsukeRegistryWatch]::OpenUserEnvironment()
+        $wrapperWatchEvent = [System.Threading.ManualResetEvent]::new($false)
+        try {
+            [NetsukeRegistryWatch]::Watch(
+                $wrapperWatchKey,
+                $wrapperWatchEvent.SafeWaitHandle.DangerousGetHandle()
+            )
+            try {
+                . $ExamplePath
+            }
+            finally {
+                # A throwing example skips everything after the dot-source, so
+                # what the run observed is reported from here. The bounded wait
+                # is what a run that wrote nothing spends: no notification can
+                # arrive for a key that was never changed.
+                $wrapperKeyChanged = $wrapperWatchEvent.WaitOne(
+                    [TimeSpan]::FromSeconds(5)
+                )
+                $wrapperStdout.WriteLine("PROCESS_BEFORE=$wrapperProcessPathBefore")
+                $wrapperStdout.WriteLine("PROCESS_AFTER=$env:Path")
+                $wrapperStdout.WriteLine("KEYCHANGED=$wrapperKeyChanged")
+            }
+        }
+        finally {
+            $wrapperWatchEvent.Dispose()
+            [NetsukeRegistryWatch]::Close($wrapperWatchKey)
+        }
         $wrapperStored = [string]$wrapperKey.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
         $wrapperStdout.WriteLine("RESULT=$wrapperStored")
         $wrapperStdout.WriteLine("KIND=$($wrapperKey.GetValueKind('Path'))")

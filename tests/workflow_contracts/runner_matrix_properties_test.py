@@ -9,11 +9,19 @@ excluded leg, an include row that re-adds an excluded value, a later row that
 overrides an earlier one, or an axis sharing values with another axis is easy
 to miss.
 
+The selector's two leaf readers are property-tested here as well. A quoted
+literal must read back as the text it was written from, however many quotes
+that text holds, and an empty literal must select nothing at all. A matrix
+selector must be read only from a whole expression that names one axis: text
+that merely contains such an expression selects no label the resolver may
+silently drop.
+
 Run via ``make test-workflow-contracts``.
 """
 
 import operator
 
+from actions_expressions import matrix_axis, static_label
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from runner_matrix import selected_labels
@@ -33,6 +41,8 @@ _LABEL = st.text(
     min_size=1,
     max_size=16,
 )
+#: Text that survives ``strip()``, so it cannot be trimmed from around a value.
+_VISIBLE_TEXT = st.text(min_size=1, max_size=8).filter(lambda text: bool(text.strip()))
 
 
 def _selector(axis: str) -> str:
@@ -223,3 +233,67 @@ def test_a_bare_label_is_never_resolved_through_the_matrix(
     assert actual == [value], (
         f"the bare label {value!r} must pass through unchanged, got {actual!r}"
     )
+
+
+@settings(max_examples=200, derandomize=True, deadline=None)
+@given(literal=st.text(max_size=24))
+def test_a_quoted_literal_round_trips_through_the_quote_escape(literal: str) -> None:
+    """A literal reads back as the text it was escaped from, quotes included."""
+    escaped = literal.replace("'", "''")
+    actual = static_label("${{ '" + escaped + "' }}")
+    expected = literal or None
+    assert actual == expected, (
+        f"the literal {literal!r}, written escaped as {escaped!r}, should read "
+        f"back as {expected!r}, got {actual!r}"
+    )
+
+
+def test_an_empty_literal_selects_no_label() -> None:
+    """An empty literal is not a runner label, and neither is a nameless axis."""
+    assert static_label("${{ '' }}") is None, (
+        "an empty literal must not become an empty runner label"
+    )
+    assert matrix_axis("${{ matrix. }}") is None, (
+        "an axis expression with no axis name must not resolve"
+    )
+
+
+@settings(max_examples=200, derandomize=True, deadline=None)
+@given(literal=st.text(min_size=1, max_size=16), decoration=_VISIBLE_TEXT)
+def test_a_literal_inside_larger_text_is_not_a_static_label(
+    literal: str, decoration: str
+) -> None:
+    """A label literal resolves only when it is the whole value."""
+    expression = "${{ '" + literal.replace("'", "''") + "' }}"
+    for composed in (decoration + expression, expression + decoration):
+        assert static_label(composed) is None, (
+            f"{composed!r} mixes a literal with other text, so it selects no "
+            "single label"
+        )
+
+
+@settings(max_examples=200, derandomize=True, deadline=None)
+@given(axis=_AXIS, other=_AXIS)
+def test_a_matrix_axis_is_read_only_from_a_whole_expression_naming_it(
+    axis: str, other: str
+) -> None:
+    """Composed text that contains a selector is not itself a selector."""
+    selector = _selector(axis)
+    assert matrix_axis(selector) == axis, (
+        f"the whole expression {selector!r} should read axis {axis!r}"
+    )
+    composed = [
+        f"{selector} {_selector(other)}",
+        f"{selector}-suffix",
+        f"prefix-{selector}",
+        f"${{{{ matrix.{axis} || 'fallback' }}}}",
+        f"${{{{ matrix.{axis}.field }}}}",
+        f"${{{{ matrix.{axis} }}}}-${{{{ matrix.{other} }}}}",
+        f"${{{{ inputs.{axis} }}}}",
+        axis,
+    ]
+    for value in composed:
+        assert matrix_axis(value) is None, (
+            f"{value!r} does not consist of one matrix expression, so it must "
+            "not resolve through the matrix"
+        )

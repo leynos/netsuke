@@ -6,7 +6,10 @@
 //! its type, and restores the original value whatever the script does. The
 //! child PowerShell gets a cleared environment with only the variables Windows
 //! needs to start it, so nothing the host happens to export can decide which
-//! directory the example resolves.
+//! directory the example resolves. The report also carries the child process
+//! `PATH` the example started and ended with, and whether the example wrote the
+//! environment key at all; [`observation`] turns that report into the
+//! assertions the behavioural test makes.
 //!
 //! The harness reads the parent environment through [`mockable::Env`], so the
 //! process is the only ambient dependency and a test could supply fixed values
@@ -26,6 +29,7 @@ use test_support::fs as test_fs;
 
 use crate::documentation_examples::DocumentedExample;
 
+pub mod observation;
 pub mod wrapper;
 
 /// Variables the wrapper inherits unchanged from the test process.

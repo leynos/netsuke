@@ -2220,6 +2220,8 @@ the authoring. `tests/windows_path_setup_example_tests.rs` runs the documented
 value each one leaves behind. The harness lives in
 `tests/windows_path_setup/mod.rs` and `tests/windows_path_setup/wrapper.rs`,
 which embeds the PowerShell wrapper from `tests/windows_path_setup/wrapper.ps1`.
+`tests/windows_path_setup/observation.rs` parses the report a run writes and
+turns each observation into the assertion the behavioural test makes.
 
 Three boundaries keep a run from depending on the host:
 
@@ -2234,10 +2236,17 @@ Three boundaries keep a run from depending on the host:
 - The wrapper records the existing `Path` value and its registry kind in a
   backup file under the system temporary directory, installs a sentinel,
   restores the original value in a `finally` block, and reports the stored
-  value and type on standard output. A run killed before that block leaves the
-  backup for the next process to restore from; a spent backup, left by a run
-  killed after restoring but before deleting the file, is recognized and
-  removed rather than refused.
+  value and type on standard output. It arms a registry change notification
+  before dot-sourcing the example and reads it before the restore, so the
+  report says whether the example wrote the key at all: a value comparison
+  cannot show a write that restored the text that was already there, and the
+  key's last-write time is too coarse to separate such a write from the
+  wrapper's own sentinel write. The report also carries the child process
+  `PATH` before and after the example, so a fence that fails its existence
+  guard is shown to leave the process value alone as well as the user one. A
+  run killed before that block leaves the backup for the next process to
+  restore from; a spent backup, left by a run killed after restoring but before
+  deleting the file, is recognized and removed rather than refused.
 
 The harness reads the parent environment through `mockable::Env`, so the test
 process is the only ambient dependency and no helper mutates it.

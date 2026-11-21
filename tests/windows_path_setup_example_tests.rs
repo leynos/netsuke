@@ -28,7 +28,9 @@ use anyhow::{Context, Result, bail, ensure};
 use documentation_examples::{DocumentedExample, documented_example};
 use test_support::fs as test_fs;
 use windows_path_setup::{
-    run_example, run_example_interrupted, run_example_leaving_spent_backup, wrapper::SENTINEL_PATH,
+    observation::{RunReport, describe, marker, require_success},
+    run_example, run_example_interrupted, run_example_leaving_spent_backup,
+    wrapper::SENTINEL_PATH,
 };
 
 /// Verify the whole documented `PATH` contract: each script appends its
@@ -233,7 +235,9 @@ fn assert_example_persists_the_directory(example: &DocumentedExample) -> Result<
     let install = install_directory(root.path())?;
     stage_binary(&install)?;
     let output = run_example(root.path(), example)?;
-    assert_persisted(&output, &install, example)
+    RunReport::read(&output, example)?
+        .require_success()?
+        .assert_persisted(&install)
 }
 
 /// Run one documented example without an installed executable and check that
@@ -246,15 +250,7 @@ fn assert_missing_executable_changes_nothing(example: &DocumentedExample) -> Res
     let root = workspace(example)?;
     let install = install_directory(root.path())?;
     let output = run_example(root.path(), example)?;
-    assert_untouched(&output, example)?;
-    ensure!(
-        !output.status.success(),
-        "{} should fail when {} holds no netsuke.exe, exited with {}",
-        example.id,
-        install.display(),
-        output.status
-    );
-    Ok(())
+    RunReport::read(&output, example)?.assert_untouched(&install)
 }
 
 /// Create a temporary workspace for one run of `example`.
@@ -289,96 +285,4 @@ fn stage_binary(install: &Path) -> Result<()> {
     test_fs::copy(binary, &staged)
         .with_context(|| format!("copy {} to {}", binary.display(), staged.display()))?;
     Ok(())
-}
-
-/// Assert that the run stored the staged directory and kept the value type.
-fn assert_persisted(output: &Output, install: &Path, example: &DocumentedExample) -> Result<()> {
-    let stdout = require_success(output, example)?;
-    let stored = marker(&stdout, "RESULT")
-        .with_context(|| describe(output, example, "did not report RESULT"))?;
-    let kind = marker(&stdout, "KIND")
-        .with_context(|| describe(output, example, "did not report KIND"))?;
-    let expected = format!("{SENTINEL_PATH};{}", install.display());
-    ensure!(
-        stored == expected,
-        "{} should append {} to the raw user PATH, stored {stored:?}",
-        example.id,
-        install.display()
-    );
-    ensure!(
-        kind == "ExpandString",
-        "{} should preserve the PATH value type, stored {kind:?}",
-        example.id
-    );
-    assert_restored(output, example)
-}
-
-/// Assert that a run which had to fail left the user `PATH` alone.
-fn assert_untouched(output: &Output, example: &DocumentedExample) -> Result<()> {
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    ensure!(
-        marker(&stdout, "RESULT").is_none(),
-        "{}",
-        describe(
-            output,
-            example,
-            "changed the user PATH despite the missing executable"
-        )
-    );
-    let leftover = marker(&stdout, "LEFTOVER")
-        .with_context(|| describe(output, example, "did not report LEFTOVER"))?;
-    ensure!(
-        leftover == SENTINEL_PATH,
-        "{}",
-        describe(
-            output,
-            example,
-            &format!("should leave the user PATH at the sentinel, left {leftover:?}")
-        )
-    );
-    assert_restored(output, example)
-}
-
-/// Return the wrapper's standard output, or the whole run as a failure.
-fn require_success(output: &Output, example: &DocumentedExample) -> Result<String> {
-    if !output.status.success() {
-        bail!("{}", describe(output, example, "failed"));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-}
-
-/// Assert that the wrapper put the original value back.
-fn assert_restored(output: &Output, example: &DocumentedExample) -> Result<()> {
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let original = marker(&stdout, "ORIGINAL")
-        .with_context(|| describe(output, example, "did not report ORIGINAL"))?;
-    let restored = marker(&stdout, "RESTORED")
-        .with_context(|| describe(output, example, "did not report RESTORED"))?;
-    ensure!(
-        restored == original,
-        "{} wrapper should restore the original PATH, {restored:?} vs {original:?}",
-        example.id
-    );
-    Ok(())
-}
-
-/// Describe a run in enough detail to diagnose it.
-///
-/// The wrapper's output is the only evidence of what the script did, so every
-/// failure carries it rather than just the missing marker.
-fn describe(output: &Output, example: &DocumentedExample, detail: &str) -> String {
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    format!(
-        "{} {detail}; wrapper exited with {}\nstdout:\n{stdout}\nstderr:\n{stderr}",
-        example.id, output.status
-    )
-}
-
-/// Read the value of a `NAME=value` line the wrapper printed.
-fn marker<'a>(stdout: &'a str, name: &str) -> Option<&'a str> {
-    let prefix = format!("{name}=");
-    stdout
-        .lines()
-        .find_map(|line| line.strip_prefix(prefix.as_str()))
 }
