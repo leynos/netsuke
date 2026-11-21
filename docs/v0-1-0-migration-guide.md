@@ -20,6 +20,7 @@ sections that match the features they use.
 | Review if enabled                          | Rust `Action.pool` choices   | Move console scheduling onto the edge; keep custom pools off it.        |
 | Required                                   | `NinjaGenError` matches      | Add arms for the two new console variants.                              |
 | Required                                   | `InvalidCommand` matches     | Bind `reason` instead of the removed `snippet` field.                   |
+| Required                                   | Shared PowerShell lists      | Close each entry's regions, or merge it with the next entry.            |
 | Required                                   | File-reading filters         | Move reads that leave the workspace into it, or name a path beneath it. |
 | Optional                                   | Existing manifests           | Omit `console` to retain ordinary scheduling; it defaults to false.     |
 | Optional                                   | Scripts parsing stdout       | Tolerate the forwarding-failure warning on stdout.                      |
@@ -664,6 +665,19 @@ action identity; existing manifests need no migration. See
 [Rules and recipes](users-guide.md#rules-and-recipes) and the
 [Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)
 for the syntax and shell-specific behaviour.
+
+## Close every shared PowerShell command-list entry
+
+A `shared` PowerShell `command` list runs as one script, so PowerShell parses
+each entry where the previous one stopped. An entry that ends inside a single-
+or double-quoted string, a here-string, a block comment, a `$()` substitution,
+or a trailing backtick escape is now rejected, because the next entry's path
+literal would otherwise be parsed inside that region. Close the region within
+its entry, or merge the entries into one. Comment openers are recognized only
+at an unescaped token boundary: a backtick-escaped separator before `<#` or
+`#`, or an escaped `<`, is not comment syntax, so a marker that follows one
+fails closed. See the [users' guide](users-guide.md#author-a-manifest) for the
+full shared-list contract.
 
 ## Replace script `$in` and `$out` path substitution
 

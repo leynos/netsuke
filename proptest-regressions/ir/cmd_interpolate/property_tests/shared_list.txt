@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 839ff8c99cf2a084d0ba1ee59accb8bed59d911f31bedf8399cfea2e4507a922 # shrinks to sequence = [MidTokenOpener, Marker], input = "; path ''"
+cc cc0e6d02641009e217322553ac411cee3af42dcb23a66cfbdc6b6d88d2399abb # shrinks to sequence = [MidTokenOpener, Marker, OpenQuote], input = "; path ''"
