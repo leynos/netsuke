@@ -113,8 +113,9 @@ Every input inside the ceilings behaves exactly as it did before this decision.
 An input beyond one does not: a single string larger than 8 MiB, a value deeper
 than 128 edges, or a value expanding past 100,000 occurrences was previously
 admitted whenever the host could allocate it, and is now refused with a typed
-error before admission starts. That refusal is the decision rather than an
-accident, and it defines the supported input domain from this ADR onwards.
+error during admission, before the over-limit subtree or copy is constructed.
+That refusal is the decision rather than an accident, and it defines the
+supported input domain from this ADR onwards.
 
 ## Consequences
 
