@@ -88,7 +88,7 @@ pub(super) enum Interpolators {
 
 impl Interpolators {
     /// Return the interpolator functions this selection exercises.
-    const fn select(self) -> &'static [Interpolator] {
+    pub(super) const fn select(self) -> &'static [Interpolator] {
         match self {
             Self::Both => &BOTH_INTERPOLATORS,
             Self::ScriptOnly => &SCRIPT_INTERPOLATOR,

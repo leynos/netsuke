@@ -67,24 +67,55 @@ fn case_substitution_without_comment_boundary_is_accepted() {
     }
 }
 
-// Verify a marker after the pattern terminator stays inside the substitution.
+// Verify markers in a case arm stay inside a command substitution.
 //
-// The `)` that ends `x)` must not pop the tracked substitution, so the marker
-// in the case body is still refused rather than lowered as outer text. Popping
-// early would encode it unquoted while the shell treats it as substitution
-// source. The refusal is an invalid command rather than an ambiguous boundary,
-// because nothing about this closer is unprovable: the substitution simply
-// never closes where the recipe needs it to.
-#[test]
-fn case_body_marker_after_pattern_terminator_is_refused() {
-    let template = format!("echo $(case x in x) {INS_TOKEN} ;; esac)");
+// A `)` that terminates a pattern must not pop the tracked substitution, so a
+// marker in the arm is refused rather than lowered as outer text. Popping early
+// would encode it for the enclosing quote context while the shell still reads
+// it as substitution source. Each case is a way the tracker could lose the
+// construct: a pattern terminator, the enclosing double quotes, Bash's optional
+// pattern opener, a brace group, and a function body inside the substitution.
+// The refusal is an invalid command rather than an ambiguous boundary, because
+// nothing about the closer is unprovable: the substitution simply never closes
+// where the recipe needs it to.
+#[rstest]
+#[case::pattern_terminator(
+    "echo $(case x in x) {INS_TOKEN} ;; esac)",
+    "a marker inside the case body must stay in the substitution",
+    Interpolators::Both
+)]
+#[case::outer_quotes(
+    "echo \"$(case x in x) echo {INS_TOKEN} ;; esac)\"",
+    "a marker in an outer-quoted case arm must stay protected",
+    Interpolators::Both
+)]
+#[case::pattern_opener(
+    "echo \"$(case esac in (esac) printf %s {INS_TOKEN} ;; esac)\"",
+    "a marker in a parenthesised case arm must stay protected",
+    Interpolators::Both
+)]
+#[case::brace_group(
+    "echo \"$( {{ case x in x) echo {INS_TOKEN} ;; esac; }} )\"",
+    "a marker in a brace-grouped case arm must stay protected",
+    Interpolators::Both
+)]
+#[case::function_body(
+    "echo \"$( helper() {{ case x in x) echo {INS_TOKEN} ;; esac; }}; helper )\"",
+    "a marker in a function-scoped case arm must stay protected",
+    Interpolators::ScriptOnly
+)]
+fn case_arm_markers_inside_substitutions_are_refused(
+    #[case] template: &str,
+    #[case] context: &str,
+    #[case] interpolators: Interpolators,
+) {
+    let expanded = template.replace("{INS_TOKEN}", INS_TOKEN);
     let bindings = hostile_posix_bindings();
-    for interpolate in both_interpolators() {
-        let error = interpolate(&template, &bindings)
-            .expect_err("a marker inside the case body must stay in the substitution");
+    for interpolate in interpolators.select() {
+        let error = interpolate(&expanded, &bindings).expect_err(context);
         assert!(
             matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered as outer text: {error:?}"
+            "the marker must not be lowered for the outer quote context: {error:?}"
         );
     }
 }
@@ -210,71 +241,6 @@ fn case_substitution_inside_outer_quotes_fails_closed() {
     assert_both_reject(
         &template,
         "an outer-quoted case substitution closer before '#' must fail closed",
-    );
-}
-
-// Verify a marker in a double-quoted substitution's case arm stays protected.
-//
-// The reported trigger pairs the enclosing double quotes with a `case` arm
-// inside `$( )`. The pattern terminator must leave the substitution open, so
-// the marker in the arm is refused rather than encoded with the outer
-// double-quote context. Lowering it there would place executable shell syntax
-// inside the substitution body the shell evaluates.
-#[test]
-fn case_body_marker_inside_outer_quotes_is_refused() {
-    let template = format!("echo \"$(case x in x) echo {INS_TOKEN} ;; esac)\"");
-    let bindings = hostile_posix_bindings();
-    for interpolate in both_interpolators() {
-        let error = interpolate(&template, &bindings)
-            .expect_err("a marker in an outer-quoted case arm must stay protected");
-        assert!(
-            matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {error:?}"
-        );
-    }
-}
-
-// Verify a case inside a brace group keeps its pattern terminator distinct.
-//
-// `{ case ...; }` is the POSIX grouping form a trusted script may use to keep
-// a case construct together inside `$( )`. The `case` keyword is the first word
-// of a command there, so it opens a construct exactly as it would at the start
-// of the substitution. A tracker that models only separators and a fixed list
-// of compound-command keywords misses it, reads the pattern terminator as the
-// substitution closer, and lowers the arm's marker for the outer quote context.
-#[test]
-fn case_inside_a_brace_group_keeps_the_substitution_open() {
-    let template = format!("echo \"$( {{ case x in x) echo {INS_TOKEN} ;; esac; }} )\"");
-    let bindings = hostile_posix_bindings();
-
-    for interpolate in both_interpolators() {
-        let error = interpolate(&template, &bindings)
-            .expect_err("a marker in a brace-grouped case arm must stay protected");
-        assert!(
-            matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {error:?}"
-        );
-    }
-}
-
-// Verify a case in a function body keeps the substitution protection active.
-//
-// A function definition inside `$( )` puts its body in a brace group. The
-// `case` keyword follows the body's `{`, which stands in command position, and
-// the arm's marker must remain inside the substitution. This is the shape a
-// trusted script uses when it factors a case arm into a helper before calling
-// it from the substitution.
-#[test]
-fn case_in_a_function_body_keeps_the_substitution_open() {
-    let template =
-        format!("echo \"$( helper() {{ case x in x) echo {INS_TOKEN} ;; esac; }}; helper )\"");
-    let bindings = hostile_posix_bindings();
-
-    let error = interpolate_script_with_bindings(&template, &bindings)
-        .expect_err("a marker in a function-scoped case arm must stay protected");
-    assert!(
-        matches!(error, IrGenError::InvalidCommand { .. }),
-        "the marker must not be lowered for the outer quote context: {error:?}"
     );
 }
 

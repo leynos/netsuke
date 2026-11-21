@@ -160,24 +160,29 @@ impl CaseNesting {
             .any(|frame| frame.depth == parenthesis_depth)
     }
 
-    /// Report whether a `(` at this depth opens a pattern list.
+    /// Consume the optional `(` before a pattern list, reporting whether this
+    /// position is one.
     ///
     /// Bash accepts one optional `(` immediately before a pattern list. The
     /// traversal cannot tell it from a grouped expression without the
     /// construct's phase, so the tracker answers from the frame open at this
-    /// depth. Only a list that has not started yet can begin with the opener:
-    /// after a pattern word the `(` is a group, and after a `|` alternative
-    /// Bash rejects one outright.
-    pub(super) fn takes_pattern_opener(&self, parenthesis_depth: usize) -> bool {
-        self.frames
-            .iter()
-            .rev()
-            .find(|frame| frame.depth == parenthesis_depth)
-            .is_some_and(|frame| {
-                let is_pattern_phase = matches!(frame.phase, CasePhase::Pattern);
-                let is_at_list_start = !frame.pattern_started && !frame.after_alternative;
-                is_pattern_phase && is_at_list_start
-            })
+    /// depth and records that the list has started. Recording it is what keeps
+    /// an `esac` written as the first pattern from closing the construct: the
+    /// closer is valid only where a pattern list would start, and after the
+    /// opener that position is pattern text. Only a list that has not started
+    /// yet can begin with the opener: after a pattern word the `(` is a group,
+    /// and after a `|` alternative Bash rejects one outright.
+    pub(super) fn consume_pattern_opener(&mut self, parenthesis_depth: usize) -> bool {
+        let Some(frame) = self.open_construct_at_mut(parenthesis_depth) else {
+            return false;
+        };
+        let is_pattern_phase = matches!(frame.phase, CasePhase::Pattern);
+        let is_at_list_start = !frame.pattern_started && !frame.after_alternative;
+        let is_opener = is_pattern_phase && is_at_list_start;
+        if is_opener {
+            frame.pattern_started = true;
+        }
+        is_opener
     }
 
     /// Report whether a `case` keyword appeared anywhere in this substitution.

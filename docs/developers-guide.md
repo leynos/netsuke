@@ -10008,10 +10008,15 @@ and operator handling both skip over to reach the construct that governs the
 position. Bash also accepts one optional `(` immediately before a pattern list,
 and that opener is pattern syntax rather than a group: the traversal asks the
 tracker before raising the depth, and the tracker answers yes only while the
-list has not started. `case z in (x) …` therefore keeps its terminator at the
-case's own depth, while a `(` after pattern text still deepens a group. After
-`|` the shell rejects a `(` outright, so no encoding decision depends on that
-form.
+list has not started. Consuming it also records that the list has started, so
+the closer test no longer reads a pattern spelled `esac` as the terminator: in
+`case esac in (esac) …` the `esac` is pattern text and the arm stays inside the
+substitution. Without that record the tracker closed the construct at the
+pattern and read the next `)` as the substitution closer, lowering an arm
+marker for the enclosing quote context. `case z in (x) …` therefore keeps its
+terminator at the case's own depth, while a `(` after pattern text still
+deepens a group. After `|` the shell rejects a `(` outright, so no encoding
+decision depends on that form.
 
 Bash recognizes a reserved word before quote removal, so only a bare spelling
 counts. In a pattern list, `esac""` and `e\sac` both spell the word `esac`, but

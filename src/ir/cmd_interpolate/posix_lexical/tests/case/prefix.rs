@@ -9,41 +9,50 @@ use super::super::*;
 
 use rstest::rstest;
 
-// Verify a `case` behind a `time` option keeps the substitution open.
+// Verify a `case` behind a compound-command prefix keeps the substitution open.
 //
-// Bash's `time` takes `-p` before its command, so the `case` there is a
-// reserved word even though it is not the first word. A tracker that completes
-// the command at `-p` reads the pattern terminator as the substitution closer
-// and lowers the arm's marker for the enclosing double-quote context, which is
-// the reported defect in one more spelling.
-#[test]
-fn case_behind_a_time_option_keeps_the_substitution_open() {
-    let template = format!("echo \"$(time -p case x in x) echo {INS_TOKEN} ;; esac)\"");
+// Bash keeps a command position open after the `time` options and after a
+// `coproc` name, so the `case` written there is the substitution's command word
+// even though it is not the first. A tracker that completes the command at the
+// prefix reads the pattern terminator as the substitution closer and lowers the
+// arm's marker for the enclosing double-quote context. Each case names one
+// prefix spelling: `time` with an option, `coproc` with a name, and a quoted
+// `coproc` name or a keyword hidden behind a line continuation, which the word
+// tracker cannot read and the fail-closed guard must reject instead.
+#[rstest]
+#[case::time_option(
+    "time -p case x in x) echo {INS_TOKEN} ;; esac)",
+    "a marker in a time-prefixed case arm must stay protected"
+)]
+#[case::coproc_name(
+    "coproc jobs case x in x) echo {INS_TOKEN} ;; esac)",
+    "a marker in a named coproc's case arm must stay protected"
+)]
+#[case::quoted_coproc_name(
+    "coproc \"jobs\" case x in x) echo {INS_TOKEN} ;; esac)",
+    "a case behind a quoted coproc name must fail closed"
+)]
+#[case::continued_case_keyword(
+    "coproc \"jobs\" c\\\nase x in x) echo {INS_TOKEN} ;; esac)",
+    "a line-continued case header behind a quoted coproc name must fail closed"
+)]
+#[case::continued_in_keyword(
+    "coproc \"jobs\" case x i\\\nn x) echo {INS_TOKEN} ;; esac)",
+    "a line-continued case header behind a quoted coproc name must fail closed"
+)]
+#[case::escaped_backslash(
+    "coproc \"jobs\" case \\\\\nin x) echo {INS_TOKEN} ;; esac)",
+    "an escaped backslash must not hide the header from the guard"
+)]
+fn case_behind_a_compound_command_prefix_keeps_the_substitution_open(
+    #[case] substitution: &str,
+    #[case] context: &str,
+) {
+    let template = format!("echo \"$({substitution})\"").replace("{INS_TOKEN}", INS_TOKEN);
     let bindings = hostile_bash_bindings();
 
     for interpolate in both_interpolators() {
-        let error = interpolate(&template, &bindings)
-            .expect_err("a marker in a time-prefixed case arm must stay protected");
-        assert!(
-            matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {error:?}"
-        );
-    }
-}
-
-// Verify a `case` behind a `coproc` name keeps the substitution open.
-//
-// `coproc NAME command` names the coprocess before the command word, so the
-// `case` after the name is again that command. Missing the name slot has the
-// same consequence as missing the `time` option.
-#[test]
-fn case_behind_a_coproc_name_keeps_the_substitution_open() {
-    let template = format!("echo \"$(coproc jobs case x in x) echo {INS_TOKEN} ;; esac)\"");
-    let bindings = hostile_bash_bindings();
-
-    for interpolate in both_interpolators() {
-        let error = interpolate(&template, &bindings)
-            .expect_err("a marker in a named coproc's case arm must stay protected");
+        let error = interpolate(&template, &bindings).expect_err(context);
         assert!(
             matches!(error, IrGenError::InvalidCommand { .. }),
             "the marker must not be lowered for the outer quote context: {error:?}"
@@ -74,53 +83,28 @@ fn coproc_simple_command_keeps_the_case_terminator_a_keyword() {
     }
 }
 
-// Verify `esac` after `|` is pattern text, not the construct's terminator.
+// Verify pattern-text spellings of `esac` keep the substitution open.
 //
-// Bash reads `esac` as the terminator only where a pattern would start, so a
-// `|` makes it an alternative pattern instead: `case x in x|esac)` is valid and
-// the `)` after it still terminates the pattern. A tracker that closes the
-// construct at that `esac` reads the pattern terminator as the substitution
-// closer and lowers the arm's marker for the enclosing double quotes, which is
-// the reported defect in one more spelling. The subject may itself be `esac`,
-// which must be read as header data rather than as a closer.
+// Bash recognizes a reserved word only when it is genuinely unquoted and
+// unescaped, and only where a pattern would start. These cases put `esac` where
+// the shell reads it as pattern text: as a quoted or escaped pattern, an
+// alternative after `|`, an extglob group, and a quoted command word in an
+// arm's list. A tracker that closed the construct at any of them would read the
+// next pattern terminator as the substitution closer and lower the arm's
+// marker for the enclosing double quotes. A backslash-newline pair is spliced
+// before tokenizing, so only a quote or an escape of a real character makes the
+// word pattern text; that continued spelling is pinned by the closer test
+// below.
 #[rstest]
-#[case::subject_matches("case x in x|esac) printf %s")]
-#[case::esac_subject("case esac in x|esac) printf %s")]
-fn esac_after_a_pattern_alternative_keeps_the_substitution_open(#[case] prefix: &str) {
-    let template = format!("echo \"$({prefix} {INS_TOKEN} ;; esac)\"");
-
-    for interpolate in both_interpolators() {
-        let hostile = interpolate(&template, &hostile_bash_bindings())
-            .expect_err("a marker in the arm must stay encoded for the substitution");
-        assert!(
-            matches!(hostile, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {hostile:?}"
-        );
-        // A marker inside a substitution is refused even for a benign path, so
-        // this fails too if the construct closed at the `esac` and the marker
-        // was lowered as outer text.
-        let benign = interpolate(&template, &bash_bindings())
-            .expect_err("a marker inside the substitution must stay inside it");
-        assert!(
-            matches!(benign, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered as outer text: {benign:?}"
-        );
-    }
-}
-
-// Verify a pattern group does not hide the construct from the tracker.
-//
-// A pattern may be spelled as an extglob group, and Bash accepts `@(case)` as
-// a pattern in its own right once `extglob` is enabled: the `)` that closes the
-// group is followed by the pattern terminator. The word inside the group is
-// pattern text, so it must not open a nested construct whose deeper depth hides
-// the outer one. The group's `(` is consumed as a substitution delimiter rather
-// than word data, which also leaves the keyword outside command position, so
-// the tracker and the fail-closed guard refuse this shape together; the point
-// pinned here is that the arm's marker is never lowered as outer text.
-#[test]
-fn extglob_pattern_keeps_the_substitution_open() {
-    let template = format!("echo \"$(case x in @(case)) printf %s {INS_TOKEN} ;; esac)\"");
+#[case::quoted_suffix("case x in esac\"\") printf %s {INS_TOKEN} ;; esac)")]
+#[case::leading_quote("case x in \"\"esac) printf %s {INS_TOKEN} ;; esac)")]
+#[case::escaped_letter("case x in e\\sac) printf %s {INS_TOKEN} ;; esac)")]
+#[case::alternative("case x in x|esac) printf %s {INS_TOKEN} ;; esac)")]
+#[case::esac_subject_alternative("case esac in x|esac) printf %s {INS_TOKEN} ;; esac)")]
+#[case::extglob_group("case x in @(case)) printf %s {INS_TOKEN} ;; esac)")]
+#[case::quoted_esac_in_arm("case x in x) esac\"\" foo ;; y) printf %s {INS_TOKEN} ;; esac)")]
+fn esac_as_pattern_text_keeps_the_substitution_open(#[case] substitution: &str) {
+    let template = format!("echo \"$({substitution})\"").replace("{INS_TOKEN}", INS_TOKEN);
     let bindings = hostile_bash_bindings();
 
     for interpolate in both_interpolators() {
@@ -129,39 +113,6 @@ fn extglob_pattern_keeps_the_substitution_open() {
         assert!(
             matches!(error, IrGenError::InvalidCommand { .. }),
             "the marker must not be lowered for the outer quote context: {error:?}"
-        );
-        assert!(
-            interpolate(&template, &bash_bindings()).is_err(),
-            "a marker inside the substitution must stay inside it"
-        );
-    }
-}
-
-// Verify a quoted or escaped `esac` in a pattern list is pattern text.
-//
-// Bash recognizes a reserved word only when it is genuinely unquoted and
-// unescaped. In a pattern list, `esac""`, `""esac`, and `e\sac` all spell the
-// word `esac`, but none is the terminator: Bash accepts each as a pattern and
-// reads the `)` after it as the pattern terminator. A tracker that finishes the
-// word at a quote, or folds the escape into the word, sees a bare `esac` and
-// closes the construct there, so it reads that `)` as the substitution closer
-// and lowers the arm's marker for the enclosing double quotes. Bash splices a
-// backslash-newline pair before tokenizing, so a continued spelling stays a
-// keyword; only a quote, or an escape of a real character, makes the word
-// pattern text.
-#[rstest]
-#[case::quoted_suffix("esac\"\"")]
-#[case::leading_quote("\"\"esac")]
-#[case::escaped_letter("e\\sac")]
-fn quoted_or_escaped_esac_in_a_pattern_keeps_the_substitution_open(#[case] pattern: &str) {
-    let template = format!("echo \"$(case x in {pattern}) printf %s {INS_TOKEN} ;; esac)\"");
-
-    for interpolate in both_interpolators() {
-        let hostile = interpolate(&template, &hostile_bash_bindings())
-            .expect_err("a marker in the arm must stay encoded for the substitution");
-        assert!(
-            matches!(hostile, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {hostile:?}"
         );
         assert!(
             interpolate(&template, &bash_bindings()).is_err(),
@@ -188,105 +139,6 @@ fn continued_esac_still_closes_the_case() {
                 .expect("Bash reads the continued esac as the case terminator"),
             expected,
             "the marker after the real closer must lower to its path"
-        );
-    }
-}
-
-// Verify a quoted `esac` in an arm's command list does not close the case.
-//
-// In an arm, `esac""` is a command name rather than the terminator, so the
-// construct stays open into the next pattern list. A tracker that closed there
-// would read the second arm's pattern terminator as the substitution closer and
-// lower that arm's marker for the enclosing double quotes.
-#[test]
-fn quoted_esac_in_an_arm_does_not_close_the_case() {
-    let template =
-        format!("echo \"$(case x in x) esac\"\" foo ;; y) printf %s {INS_TOKEN} ;; esac)\"");
-    let bindings = hostile_bash_bindings();
-
-    for interpolate in both_interpolators() {
-        let error = interpolate(&template, &bindings)
-            .expect_err("a marker in the second arm must stay encoded for the substitution");
-        assert!(
-            matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {error:?}"
-        );
-        assert!(
-            interpolate(&template, &bash_bindings()).is_err(),
-            "a marker inside the substitution must stay inside it"
-        );
-    }
-}
-
-// Verify a quoted `coproc` name cannot hide a `case` from the guard.
-//
-// Bash accepts a quoted name, and a quoted word is not word data, so the
-// tracker cannot tell whether the next word is the name or the command. Rather
-// than guess, the boundary check fails closed: the `case` is a whole-word
-// keyword with its `in` before the closer, and a marker follows it.
-#[test]
-fn quoted_coproc_name_before_a_case_fails_closed() {
-    let template = format!("echo \"$(coproc \"jobs\" case x in x) echo {INS_TOKEN} ;; esac)\"");
-    let bindings = hostile_bash_bindings();
-
-    for interpolate in both_interpolators() {
-        let error = interpolate(&template, &bindings)
-            .expect_err("a case behind a quoted coproc name must fail closed");
-        assert!(
-            matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {error:?}"
-        );
-    }
-}
-
-// Verify a line-continued keyword behind a quoted `coproc` name fails closed.
-//
-// Bash deletes a backslash-newline pair before parsing, so `c` + continuation +
-// `ase` spells the keyword and `i` + continuation + `n` completes the header.
-// The tracker reads both spellings; the raw-source check must read them the same
-// way, or an unplaced `case` goes unrecognized and the arm's marker is lowered
-// for the outer quote context.
-#[rstest]
-#[case::continued_case("coproc \"jobs\" c\\\nase x in x)")]
-#[case::continued_in("coproc \"jobs\" case x i\\\nn x)")]
-fn continued_keywords_behind_a_quoted_coproc_name_fail_closed(#[case] substitution: &str) {
-    let template = format!("echo \"$({substitution} echo {INS_TOKEN} ;; esac)\"");
-    let bindings = hostile_bash_bindings();
-
-    for interpolate in both_interpolators() {
-        let error = interpolate(&template, &bindings).expect_err(
-            "a line-continued case header behind a quoted coproc name must fail closed",
-        );
-        assert!(
-            matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {error:?}"
-        );
-    }
-}
-
-// Verify an escaped backslash does not continue the line before the header.
-//
-// Bash deletes a backslash-newline pair only when the backslash is unescaped.
-// In `\\<newline>` the first backslash quotes the second, so the newline is an
-// ordinary command terminator and the `in` after it starts a word. A scan that
-// removes the escaped pair anyway reads `in` as argument data, so the unplaced
-// `case` behind a quoted `coproc` name goes unrecognized and the arm's marker
-// is lowered for the enclosing double quotes.
-#[test]
-fn escaped_backslash_before_in_still_fails_closed() {
-    let template = format!("echo \"$(coproc \"jobs\" case \\\\\nin x) echo {INS_TOKEN} ;; esac)\"");
-    let bindings = hostile_bash_bindings();
-
-    for interpolate in both_interpolators() {
-        let error = interpolate(&template, &bindings)
-            .expect_err("an escaped backslash must not hide the header from the guard");
-        assert!(
-            matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {error:?}"
-        );
-        assert!(
-            interpolate(&template, &bash_bindings()).is_err(),
-            "a marker inside the substitution must stay inside it"
         );
     }
 }

@@ -192,89 +192,63 @@ fn esac_used_as_a_command_argument_fails_closed() {
 
 // Verify a `;;` split by a line continuation still ends the arm.
 //
-// Bash deletes an unquoted backslash-newline pair before tokenising, so `;` +
-// continuation + `;` is the `;;` arm terminator. A tracker that records the
-// backslash as the character before the second semicolon never sees the pair:
-// it reads the next pattern list as arm text, lets the `esac` in that list
-// close the construct, and then treats the pattern terminator that follows as
-// the substitution closer. The arm's marker is lowered for the enclosing double
-// quotes instead of staying inside the substitution.
-#[test]
-fn arm_terminator_split_by_a_continuation_fails_closed() {
-    let template =
-        format!("echo \"$(case x in a) : ;\\\n; x|esac) printf %s {INS_TOKEN} ;; esac)\"");
+// Verify the pattern-list grammar keeps the substitution boundary intact.
+//
+// Each rejected row is a way the tracker could misread an operator. Bash
+// deletes an unquoted backslash-newline pair before tokenising, so `;` + a
+// continuation + `;` is the `;;` arm terminator: a tracker that records the
+// backslash never sees the pair, reads the next pattern list as arm text, lets
+// the `esac` in that list close the construct, and treats the following pattern
+// terminator as the substitution closer. Bash also accepts an optional `(`
+// before a pattern list, so `(x)` is the pattern `x`: counting that `(` as a
+// group reads the terminator at a deeper depth, where it closes nothing, and
+// leaves the construct in its pattern phase. Each accepted row holds the same
+// grammar without a marker, which is supported Bash and must keep its text.
+#[rstest]
+#[case::continued_terminator(
+    "echo \"$(case x in a) : ;\\\n; x|esac) printf %s {INS_TOKEN} ;; esac)\"",
+    Some("a `;;` split by a continuation must still end the arm"),
+    "a `;;` split by a continuation is supported Bash"
+)]
+#[case::optional_opener(
+    "echo \"$(case z in (x) case y in y) : ;; esac ;; z) printf %s {INS_TOKEN} ;; esac)\"",
+    Some("an optional pattern opener must not hide the nested construct"),
+    "Bash accepts an optional pattern opener"
+)]
+#[case::continued_terminator_without_markers(
+    "echo \"$(case x in a) : ;\\\n; esac)\"",
+    None,
+    "a `;;` split by a continuation is supported Bash"
+)]
+#[case::optional_opener_without_markers(
+    "echo \"$(case z in (x) : ;; esac)\"",
+    None,
+    "Bash accepts an optional pattern opener"
+)]
+fn pattern_list_grammar_keeps_the_substitution_boundary(
+    #[case] template: &str,
+    #[case] rejection: Option<&str>,
+    #[case] acceptance: &str,
+) {
+    let expanded = template.replace("{INS_TOKEN}", INS_TOKEN);
+    let hostile = hostile_posix_bindings();
     for interpolate in both_interpolators() {
-        let error = interpolate(&template, &hostile_posix_bindings())
-            .expect_err("a `;;` split by a continuation must still end the arm");
+        let Some(context) = rejection else {
+            assert_eq!(
+                interpolate(&expanded, &bindings()).expect(acceptance),
+                expanded,
+                "a supported `case` substitution must keep its text"
+            );
+            continue;
+        };
+        let error = interpolate(&expanded, &hostile).expect_err(context);
         assert!(
             matches!(error, IrGenError::InvalidCommand { .. }),
             "the marker must not be lowered for the outer quote context: {error:?}"
         );
         assert!(
-            interpolate(&template, &bindings()).is_err(),
+            interpolate(&expanded, &bindings()).is_err(),
             "a marker inside the substitution must stay inside it"
-        );
-    }
-}
-
-// Verify the same continued terminator interpolates without markers.
-//
-// Splitting `;;` across a continuation is supported Bash, so recognising it
-// must not reject a recipe whose substitution holds no marker. This pins the
-// supported side of the fix above.
-#[test]
-fn continued_arm_terminator_without_markers_is_accepted() {
-    let template = "echo \"$(case x in a) : ;\\\n; esac)\"";
-    for interpolate in both_interpolators() {
-        assert_eq!(
-            interpolate(template, &bindings())
-                .expect("a `;;` split by a continuation is supported Bash"),
-            template,
-            "a supported `case` substitution must keep its text"
-        );
-    }
-}
-
-// Verify the optional pattern opener does not swallow the pattern terminator.
-//
-// Bash accepts an optional `(` before a pattern list, so `(x)` is the pattern
-// `x` with its opener. A traversal that counts that `(` as a grouped
-// expression reads the pattern terminator at the deeper depth, where it closes
-// nothing, and leaves the construct in its pattern phase. The nested `case` is
-// then read as pattern data, its `esac` closes the outer construct, and the
-// `)` after it closes the substitution early, so the arm's marker is lowered
-// for the enclosing double quotes.
-#[test]
-fn optional_pattern_opener_fails_closed() {
-    let template = format!(
-        "echo \"$(case z in (x) case y in y) : ;; esac ;; z) printf %s {INS_TOKEN} ;; esac)\""
-    );
-    for interpolate in both_interpolators() {
-        let error = interpolate(&template, &hostile_posix_bindings())
-            .expect_err("an optional pattern opener must not hide the nested construct");
-        assert!(
-            matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {error:?}"
-        );
-        assert!(
-            interpolate(&template, &bindings()).is_err(),
-            "a marker inside the substitution must stay inside it"
-        );
-    }
-}
-
-// Verify an optional pattern opener without markers is still accepted.
-//
-// The opener is part of the shell's grammar rather than an unsupported form, so
-// the fix must keep interpolating it unchanged.
-#[test]
-fn optional_pattern_opener_without_markers_is_accepted() {
-    let template = "echo \"$(case z in (x) : ;; esac)\"";
-    for interpolate in both_interpolators() {
-        assert_eq!(
-            interpolate(template, &bindings()).expect("Bash accepts an optional pattern opener"),
-            template,
-            "a supported `case` substitution must keep its text"
         );
     }
 }

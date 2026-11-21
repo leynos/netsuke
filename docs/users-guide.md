@@ -3209,22 +3209,25 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   `$(time -p case x in x) ... ;; esac)`, and
   `$(coproc jobs case x in x) ... ;; esac)` all keep their bodies inside the
   substitution. Bash's optional `(` before a pattern list is recognized too, so
-  `$(case x in (x) ... ;; esac)` interpolates normally. A `case` hidden behind
-  a quoted or expanded `coproc` name, a quoted `time` word, or a variable
-  assignment or redirection is not recognized; Netsuke rejects the recipe with
-  an invalid-command diagnostic when a later path marker would otherwise be
-  encoded for the wrong context, so write such a case at the start of the
-  substitution or of a brace group. That rejection matches raw text too, so
-  argument data such as `grep case in file` in a substitution followed by a
-  later marker is rejected as well. The scanner cannot otherwise distinguish a
-  pattern terminator from one that closes a substitution, so a substitution
-  containing the `case` reserved word is rejected when a `)` is immediately
-  followed by `#`. That check matches the substitution's raw source text, so it
-  can also reject a substitution whose `case` appears only inside quotes or a
-  comment; that over-approximation keeps the check independent of a second
-  parse of the substitution. To clear a rejection, separate a real comment from
-  the closer with whitespace, or keep a literal `#` in a quoted region or
-  escape it as `\#`; the
+  `$(case x in (x) ... ;; esac)` interpolates normally. The opener starts the
+  pattern list, so a pattern spelled `esac`, as in
+  `$(case esac in (esac) ... ;; esac)`, is pattern text rather than the
+  construct's end; a marker in that arm is refused like any other marker inside
+  a substitution. A `case` hidden behind a quoted or expanded `coproc` name, a
+  quoted `time` word, or a variable assignment or redirection is not
+  recognized; Netsuke rejects the recipe with an invalid-command diagnostic
+  when a later path marker would otherwise be encoded for the wrong context, so
+  write such a case at the start of the substitution or of a brace group. That
+  rejection matches raw text too, so argument data such as `grep case in file`
+  in a substitution followed by a later marker is rejected as well. The scanner
+  cannot otherwise distinguish a pattern terminator from one that closes a
+  substitution, so a substitution containing the `case` reserved word is
+  rejected when a `)` is immediately followed by `#`. That check matches the
+  substitution's raw source text, so it can also reject a substitution whose
+  `case` appears only inside quotes or a comment; that over-approximation keeps
+  the check independent of a second parse of the substitution. To clear a
+  rejection, separate a real comment from the closer with whitespace, or keep a
+  literal `#` in a quoted region or escape it as `\#`; the
   [v0.1.0 migration guide](v0-1-0-migration-guide.md#separate-a-substitution-closer-and-a-following-)
   shows a form that preserves the emitted word and one that turns the text
   into a comment. A non-breaking space or another non-ASCII space before `#`

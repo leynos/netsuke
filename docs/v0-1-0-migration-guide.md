@@ -827,6 +827,28 @@ changes behaviour whether or not it places `#` after a substitution closer. The
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary)
 describes the full comment and substitution rules.
 
+## Keep a `case` pattern list inside its command substitution
+
+A `case` construct inside a POSIX or Bash `$(...)` substitution no longer ends
+the substitution early. The scanner tracks the construct's pattern lists and
+arms, so the `)` that terminates a pattern stays inside the substitution and
+only the real closer is checked. A path marker in the arm is still refused,
+because Netsuke does not lower a marker inside a command substitution; move the
+marker after the substitution, or compute the value first and use a shell
+variable inside it.
+
+Bash allows one optional `(` before a pattern list, and the whole list may be
+spelled `esac`, as in `case esac in (esac) …`. The opener now starts the list,
+so that pattern is text rather than the construct's end. A recipe that placed a
+path marker in such an arm used to be accepted with the marker encoded for the
+enclosing quote context; it is rejected like any other marker inside a command
+substitution.
+
+The check also scans raw source, so a substitution whose text reads as a
+`case ... in` header, such as `grep case in file`, is rejected when a later
+marker follows. Move the marker before that substitution, or pass the word
+through a variable so the substitution no longer contains the header.
+
 ## Update heredoc delimiters the tracker cannot model
 
 Netsuke tracks POSIX heredoc bodies so it never lowers a path marker into text

@@ -71,21 +71,23 @@ pub(super) struct SubstitutionBoundary {
     pub(super) has_unplaced_case: bool,
 }
 
-impl SubstitutionBoundary {
-    /// Record the `)` at `pos`, the substitution opener it closed, and what the
-    /// tracker saw of `case` keywords.
-    pub(super) const fn new(
-        pos: usize,
-        start: Option<usize>,
-        saw_case: bool,
-        has_unplaced_case: bool,
-    ) -> Self {
-        Self {
-            pos,
-            start,
-            saw_case,
-            has_unplaced_case,
-        }
+/// Describe a half-open span of character positions in the source.
+///
+/// The boundary checks ask several helpers about the same range, so the two
+/// indices travel together rather than as adjacent `usize` arguments that a
+/// caller could transpose.
+#[derive(Clone, Copy)]
+pub(super) struct CharSpan {
+    /// Index of the first character in the span.
+    pub(super) start: usize,
+    /// Index one past the last character in the span.
+    pub(super) end: usize,
+}
+
+impl CharSpan {
+    /// Record the half-open span from `start` up to `end`.
+    pub(super) const fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
     }
 }
 
@@ -114,7 +116,8 @@ pub(super) fn reject_ambiguous_case_comment(
         return Ok(());
     };
     let is_comment_boundary = chars.get(boundary.pos + 1) == Some(&'#');
-    let has_case = boundary.saw_case || contains_case_keyword(chars, start, boundary.pos);
+    let has_case =
+        boundary.saw_case || contains_case_keyword(chars, CharSpan::new(start, boundary.pos));
     if is_comment_boundary && has_case {
         return Err(ambiguous_boundary_error(boundary.pos + 1));
     }
@@ -147,7 +150,7 @@ pub(super) fn reject_unplaced_case(
         return Ok(());
     };
     let is_unplaceable_case = boundary.has_unplaced_case
-        && contains_case_in_prefix(chars, start, boundary.pos)
+        && contains_case_in_prefix(chars, CharSpan::new(start, boundary.pos))
         && has_marker_after(chars, boundary.pos);
     if is_unplaceable_case {
         return Err(unplaced_case_error());
@@ -204,9 +207,9 @@ fn has_marker_after(chars: &[char], pos: usize) -> bool {
 /// is the earliest `case`, and any later `in` completes its header. Rescanning
 /// the suffix from every `case` would make a long run of `case` arguments
 /// quadratic before the recipe is even accepted.
-fn contains_case_in_prefix(chars: &[char], start: usize, end: usize) -> bool {
+fn contains_case_in_prefix(chars: &[char], span: CharSpan) -> bool {
     let mut saw_case = false;
-    for pos in start..end {
+    for pos in span.start..span.end {
         if !saw_case && is_keyword_at(chars, pos, &CASE_KEYWORD) {
             saw_case = true;
             continue;
@@ -218,14 +221,14 @@ fn contains_case_in_prefix(chars: &[char], start: usize, end: usize) -> bool {
     false
 }
 
-/// Report whether `chars[start..end]` contains the `case` reserved word.
+/// Report whether `chars[span]` contains the `case` reserved word.
 ///
 /// The scan is deliberately lexical: it does not skip quotes, comments, or
 /// nested substitutions, so it can report a `case` that is not a keyword. That
 /// over-approximation is safe because the caller fails closed on any match
 /// rather than guessing which `)` closes the substitution.
-pub(super) fn contains_case_keyword(chars: &[char], start: usize, end: usize) -> bool {
-    contains_keyword(chars, start, end, &CASE_KEYWORD)
+pub(super) fn contains_case_keyword(chars: &[char], span: CharSpan) -> bool {
+    contains_keyword(chars, span, &CASE_KEYWORD)
 }
 
 /// Spell the `case` reserved word.
@@ -234,9 +237,9 @@ const CASE_KEYWORD: [char; 4] = ['c', 'a', 's', 'e'];
 /// Spell the `in` reserved word that completes a `case` header.
 const IN_KEYWORD: [char; 2] = ['i', 'n'];
 
-/// Report whether `chars[start..end]` contains `keyword` as a whole word.
-fn contains_keyword(chars: &[char], start: usize, end: usize, keyword: &[char]) -> bool {
-    (start..end).any(|pos| is_keyword_at(chars, pos, keyword))
+/// Report whether `chars[span]` contains `keyword` as a whole word.
+fn contains_keyword(chars: &[char], span: CharSpan, keyword: &[char]) -> bool {
+    (span.start..span.end).any(|pos| is_keyword_at(chars, pos, keyword))
 }
 
 /// Report whether `keyword` appears at `pos` as a whole word.

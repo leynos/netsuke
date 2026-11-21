@@ -70,15 +70,18 @@ impl SubstitutionTraversal<'_, '_> {
         self.command_substitutions
             .last()
             .filter(|substitution| substitution.parenthesis_depth == 1)
-            .map_or_else(
-                || SubstitutionBoundary::new(pos, None, false, false),
-                |substitution| {
-                    SubstitutionBoundary::new(
-                        pos,
-                        Some(substitution.start),
-                        substitution.case_nesting.saw_case(),
-                        substitution.case_nesting.has_unplaced_case(),
-                    )
+            .map_or(
+                SubstitutionBoundary {
+                    pos,
+                    start: None,
+                    saw_case: false,
+                    has_unplaced_case: false,
+                },
+                |substitution| SubstitutionBoundary {
+                    pos,
+                    start: Some(substitution.start),
+                    saw_case: substitution.case_nesting.saw_case(),
+                    has_unplaced_case: substitution.case_nesting.has_unplaced_case(),
                 },
             )
     }
@@ -144,7 +147,7 @@ impl SubstitutionTraversal<'_, '_> {
 
     /// Classify a character that delimits an active command substitution.
     fn classify_command_substitution_delimiter(
-        &self,
+        &mut self,
         pos: usize,
         ch: char,
     ) -> Option<CommandSubstitutionDelimiter> {
@@ -185,21 +188,21 @@ impl SubstitutionTraversal<'_, '_> {
     /// recognises it. Reading the opener as a group would move the terminator
     /// one level deeper, where it closes nothing and leaves the construct in
     /// its pattern phase.
-    fn starts_nested_command_substitution_parenthesis(&self, ch: char) -> bool {
+    fn starts_nested_command_substitution_parenthesis(&mut self, ch: char) -> bool {
         let opens_group =
             self.is_in_command_substitution() && self.matches_unquoted_quote_context();
         let is_parenthesis = opens_group && ch == '(';
-        is_parenthesis && !self.takes_pattern_opener()
+        is_parenthesis && !self.consume_pattern_opener()
     }
 
-    /// Report whether a `(` at the active depth opens a `case` pattern list.
-    fn takes_pattern_opener(&self) -> bool {
+    /// Consume a `(` at the active depth that opens a `case` pattern list.
+    fn consume_pattern_opener(&mut self) -> bool {
         self.command_substitutions
-            .last()
+            .last_mut()
             .is_some_and(|substitution| {
                 substitution
                     .case_nesting
-                    .takes_pattern_opener(substitution.parenthesis_depth)
+                    .consume_pattern_opener(substitution.parenthesis_depth)
             })
     }
 

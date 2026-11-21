@@ -104,12 +104,14 @@ pub(super) struct CaseFrame {
     pub(super) phase: CasePhase,
     /// Whether the last thing read in a pattern list was `|`.
     pub(super) after_alternative: bool,
-    /// Whether any pattern text has been read in the current pattern list.
+    /// Whether the current pattern list has started.
     ///
     /// Bash accepts one optional `(` immediately before a pattern list, and the
     /// traversal must not read that opener as a grouped expression. The flag
-    /// says whether the list has started: after a pattern word the following
-    /// `(` is a group instead, and a `|` alternative admits no opener at all.
+    /// says whether the list has started, whether by the opener or by a pattern
+    /// word: after either, a following `(` is a group instead, a `|`
+    /// alternative admits no opener at all, and an `esac` is pattern text
+    /// rather than the construct's closer.
     pub(super) pattern_started: bool,
 }
 
@@ -130,7 +132,10 @@ impl CaseFrame {
     /// Bash reads `esac` as the construct's closer only where a pattern would
     /// start and only in its bare spelling, so neither `case x in x|esac)` nor
     /// `case x in esac"")` is closed by the word: the first is an alternative
-    /// pattern, the second quoted pattern text.
+    /// pattern, the second quoted pattern text. A list that has already begun
+    /// — with pattern text or with the optional `(` opener — has no closer
+    /// position there either, which is what keeps `case x in (esac)` reading
+    /// its only pattern as data rather than ending the construct early.
     pub(super) fn is_closed_by(
         &self,
         parenthesis_depth: usize,
@@ -139,7 +144,8 @@ impl CaseFrame {
     ) -> bool {
         let is_terminator = self.depth == parenthesis_depth && word == "esac";
         let is_bare_closer = is_literal && !self.after_alternative;
-        is_terminator && is_bare_closer
+        let is_at_list_start = is_bare_closer && !self.pattern_started;
+        is_terminator && is_at_list_start
     }
 
     /// Move the construct across an operator written at its own depth.
@@ -251,9 +257,11 @@ impl super::CaseNesting {
 
     /// Record that pattern text has been read at this depth.
     ///
-    /// The flag tells [`Self::takes_pattern_opener`] that a following `(` is a
-    /// grouped expression rather than the pattern list's optional opener, so
-    /// `x(y)` keeps its group and `(x)` gets its opener.
+    /// The flag tells
+    /// [`Self::consume_pattern_opener`](super::CaseNesting::consume_pattern_opener)
+    /// that a following `(` is a grouped expression rather than the pattern
+    /// list's optional opener, so `x(y)` keeps its group and `(x)` gets its
+    /// opener.
     fn mark_pattern_text(&mut self, parenthesis_depth: usize) {
         if let Some(frame) = self
             .open_construct_at_mut(parenthesis_depth)
