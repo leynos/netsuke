@@ -28,6 +28,7 @@ sections that match the features they use.
 | Required                                   | Reusable release callers     | Pass `publish: true` to publish from a reusable call.                   |
 | Review if automation parses Netsuke errors | Ninja failure diagnostics    | Match the two diagnostic codes instead of the old summary text.         |
 | Required                                   | `RunnerError` matches        | Add arms for `NinjaSpawnFailed` and `NinjaFailed`, or a wildcard arm.   |
+| Optional                                   | Stored `generate` output     | Refresh it; phony and always edges change shape.                        |
 
 _Table 1: migration obligations for the beta series and console-pool option._
 
@@ -1183,10 +1184,18 @@ The `generate` command materializes its supporting dyndep sidecars beneath
 `.netsuke/dyndep` in the effective working directory while writing the
 generated Ninja manifest. The `build` and `clean` commands materialize the
 sidecars before invoking Ninja with the generated Ninja file. User targets must
-not use `.netsuke/dyndep` or `.netsuke/serial`: both namespaces are reserved
-for Netsuke's generated state. Sidecars are immutable and content-addressed.
-Retention keeps the current bundle plus at most 32 obsolete `.dd` files and 1
-MiB of obsolete `.dd` bytes; stale `.tmp` files are cleaned while the exclusive
+not use `.netsuke/dyndep`, `.netsuke/serial`, or `.netsuke/phony`: those
+namespaces are reserved for Netsuke's generated state. Generation rejects a
+spelling that folds into one of them, and `netsuke build` additionally refuses
+a spelling that only the working directory can settle — an absolute path, a
+`..` path that returns to it, or a symbolic-link alias — before it clears the
+force node. That check runs only when something occupies the force node,
+because a build with nothing there clears nothing and inspects no declared
+path; a manifest whose output reaches the namespace through such a spelling can
+therefore pass that build, and is refused from the first build that finds a
+force entry to clear. Sidecars are immutable and content-addressed. Retention
+keeps the current bundle plus at most 32 obsolete `.dd` files and 1 MiB of
+obsolete `.dd` bytes; stale `.tmp` files are cleaned while the exclusive
 sidecar-directory lease is held. `clean` prunes only after successful
 `ninja -t clean`, not after a failure. An old arbitrary `generate --output`
 manifest needs regeneration only if retention has removed any of its referenced
@@ -1211,6 +1220,25 @@ sidecar-free `clean` can remove its declared build outputs before it reports
 the alias. See
 [Run direct dependencies serially](users-guide.md#run-direct-dependencies-serially)
 and [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md).
+
+## Expect phony and always work to run
+
+An action or target declaring `phony: true` with a recipe, and a target
+declaring `always: true`, now run every time they are reached. No manifest
+needs an edit for that reason: the names meant this all along, and both
+lowerings publish into the reserved `.netsuke/phony` namespace. A manifest that
+already declares a target or output inside `.netsuke/phony` must move it,
+because that spelling now names generated state and generation rejects it.
+Because the generated Ninja text changes shape for these edges, a manifest that
+compares `netsuke generate` output against a stored copy must update that copy.
+See the
+[v0.1.1 migration guide](v0-1-1-migration-guide.md#expect-phony-and-always-work-to-run)
+for what changes for files left behind by earlier runs and how `netsuke clean`
+treats them. The
+[users' guide](users-guide.md#rely-on-phony-and-always-work-running) documents
+the behaviour, and
+[ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md)
+records the decision.
 
 ## Discover targets and actions
 

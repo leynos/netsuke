@@ -3,8 +3,16 @@
 //! This module gives tests one shared way to check edge-local metadata such as
 //! `pool = console`. Keep it limited to simple generated-manifest assertions;
 //! parsing arbitrary Ninja syntax belongs in a real parser.
+//!
+//! A generated `phony` alias carries no bindings of its own: the recipe, and
+//! the metadata attached to it, live on the hidden output the alias names. The
+//! lookup below follows that one hop, so a test written against the manifest
+//! name asserts the statement that actually runs.
 
 use anyhow::{Context, Result};
+
+/// Prefix of the hidden output an executable `phony` edge relays to.
+const HIDDEN_PREFIX: &str = ".netsuke/phony/edge-";
 
 /// Return whether the named output edge selects Ninja's console pool.
 ///
@@ -60,17 +68,47 @@ pub fn edge_pool_bindings(ninja: &str, output: &str) -> Result<Vec<String>> {
         .collect())
 }
 
+/// Return the build statement that carries `output`'s dependencies.
+///
+/// A generated executable `phony` edge renders as a `phony` alias over a
+/// hidden content-addressed output; the recipe's dependency classes live on
+/// the hidden statement, so the lookup follows that one hop.
+///
+/// # Examples
+///
+/// ```
+/// use test_support::ninja_edge::edge_build_line;
+///
+/// let ninja = concat!(
+///     "build .netsuke/phony/edge-abc: command src | dep\n\n",
+///     "build check: phony .netsuke/phony/edge-abc\n",
+/// );
+/// assert!(edge_build_line(ninja, "check")?.contains("| dep"));
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns an error when the named build edge is absent.
+pub fn edge_build_line<'a>(ninja: &'a str, output: &str) -> Result<&'a str> {
+    let lines: Vec<_> = ninja.lines().collect();
+    let index = effective_edge_index(&lines, output)?;
+    lines
+        .get(index)
+        .copied()
+        .with_context(|| format!("missing Ninja build edge for {output}"))
+}
+
 /// Return the indented binding lines that follow the named build statement.
 ///
 /// Ninja ends an edge at the first line that is not indented, so taking the
 /// contiguous indented run scopes every lookup to one build statement and
-/// keeps a neighbouring edge's binding from satisfying an assertion.
+/// keeps a neighbouring edge's binding from satisfying an assertion. A
+/// generated `phony` alias relays to exactly one hidden output, whose
+/// statement holds the recipe's bindings; the lookup follows that hop once.
 fn edge_bindings<'a>(ninja: &'a str, output: &str) -> Result<Vec<&'a str>> {
     let lines: Vec<_> = ninja.lines().collect();
-    let edge_index = lines
-        .iter()
-        .position(|line| build_edge_has_output(line, output))
-        .with_context(|| format!("missing Ninja build edge for {output}"))?;
+    let edge_index = effective_edge_index(&lines, output)?;
 
     Ok(lines
         .iter()
@@ -78,6 +116,46 @@ fn edge_bindings<'a>(ninja: &'a str, output: &str) -> Result<Vec<&'a str>> {
         .take_while(|line| line.starts_with("  "))
         .copied()
         .collect())
+}
+
+/// Locate the statement that carries `output`'s bindings and dependencies.
+///
+/// Following a generated `phony` alias costs one extra search, and doing it
+/// here keeps the binding and dependency lookups from disagreeing about which
+/// statement an output names.
+fn effective_edge_index(lines: &[&str], output: &str) -> Result<usize> {
+    let mut edge_index = edge_index_for(lines, output)?;
+    if let Some(relay) = lines
+        .get(edge_index)
+        .and_then(|line| phony_relay_output(line))
+    {
+        edge_index = edge_index_for(lines, &relay)?;
+    }
+    Ok(edge_index)
+}
+
+/// Locate the build statement that produces `output`.
+fn edge_index_for(lines: &[&str], output: &str) -> Result<usize> {
+    lines
+        .iter()
+        .position(|line| build_edge_has_output(line, output))
+        .with_context(|| format!("missing Ninja build edge for {output}"))
+}
+
+/// Return the hidden output a generated `phony` alias relays to.
+///
+/// Only the shape the generator emits qualifies: `build <names>: phony
+/// <hidden>` with a single dependency under `.netsuke/phony/edge-`. Requiring
+/// the prefix keeps an unrelated `phony` statement with one dependency from
+/// being followed. A dependency-only aggregate renders as
+/// `build <names>: phony | <deps>`, whose first dependency slot is empty, so
+/// it is not mistaken for a relay either.
+fn phony_relay_output(line: &str) -> Option<String> {
+    let dependencies = line.strip_prefix("build ")?.split_once(": ")?.1;
+    match ninja_output_tokens(dependencies).as_slice() {
+        [rule, relay] if rule == "phony" && relay.starts_with(HIDDEN_PREFIX) => Some(relay.clone()),
+        _ => None,
+    }
 }
 
 /// Return whether a generated build statement names `output` in its output list.
@@ -127,7 +205,7 @@ fn ninja_output_tokens(outputs: &str) -> Vec<String> {
 mod tests {
     //! Cover output-list matching for generated Ninja build statements.
 
-    use super::{edge_has_console_pool, edge_pool_bindings};
+    use super::{edge_build_line, edge_has_console_pool, edge_pool_bindings};
     use anyhow::{Result, ensure};
 
     #[test]
@@ -180,5 +258,61 @@ mod tests {
     #[test]
     fn pool_bindings_report_a_missing_edge() {
         assert!(edge_pool_bindings("build present: command\n", "absent").is_err());
+    }
+
+    #[test]
+    fn phony_alias_lookup_follows_the_hidden_relay() -> Result<()> {
+        let ninja = concat!(
+            "build .netsuke/phony/edge-abc: command\n  pool = console\n\n",
+            "build lint: phony .netsuke/phony/edge-abc\n",
+        );
+
+        ensure!(
+            edge_pool_bindings(ninja, "lint")? == vec!["pool = console".to_owned()],
+            "a phony alias must report the bindings of the statement it relays to"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn phony_alias_outside_the_hidden_namespace_is_not_followed() -> Result<()> {
+        let ninja = concat!(
+            "build real: command\n  pool = console\n\n",
+            "build alias: phony real\n",
+        );
+
+        ensure!(
+            edge_pool_bindings(ninja, "alias")?.is_empty(),
+            "only a .netsuke/phony/edge- relay is a generated alias"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn edge_build_line_reports_the_statement_behind_an_alias() -> Result<()> {
+        let ninja = concat!(
+            "build .netsuke/phony/edge-abc: command src | dep\n\n",
+            "build lint: phony .netsuke/phony/edge-abc\n",
+        );
+
+        ensure!(
+            edge_build_line(ninja, "lint")?.contains("| dep"),
+            "an alias must report the statement that carries its dependencies"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn dependency_only_aggregate_bindings_stay_on_its_own_statement() -> Result<()> {
+        let ninja = concat!(
+            "build .netsuke/phony/edge-abc: command\n  pool = console\n\n",
+            "build all: phony | dep\n",
+        );
+
+        ensure!(
+            edge_pool_bindings(ninja, "all")?.is_empty(),
+            "a dependency-only aggregate is not an alias over a hidden output"
+        );
+        Ok(())
     }
 }

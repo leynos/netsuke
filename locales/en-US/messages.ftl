@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = Failed to apply generated dyndep retention beneath { $path }.
 runner.io.dyndep.alias = The generated dyndep path { $path } is a symbolic link, junction, or not a directory; replace it with a real directory.
 runner.io.dyndep.open = Failed to open the generated dyndep directory { $path }.
+runner.io.phony.inspect = Failed to inspect the reserved phony state at { $path }.
+runner.io.phony.reset = Failed to clear the reserved phony state at { $path }.
 cli.about = Netsuke compiles YAML + Jinja manifests into Ninja build plans.
 cli.long_about = Netsuke transforms YAML + Jinja manifests into reproducible Ninja graphs and runs Ninja with safe defaults.
 cli.usage = { $usage }
@@ -217,7 +219,7 @@ ninja_gen.console_dependency_only = Build edge '{ $output }' cannot select the c
 ninja_gen.console_pool_conflict = Build edge '{ $output }' selects the console pool but its action requests custom pool '{ $pool }'.
 ninja_gen.format = Failed to format the Ninja manifest output.
 ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's generated build state.
 ninja_gen.unsupported_path_character = The path '{ $path }' contains the unsupported Ninja path character '{ $character }'.
 ninja_gen.progress.inline = Building { $name }
 ninja_gen.progress.command_list = { $count ->

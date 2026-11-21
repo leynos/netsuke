@@ -11,10 +11,12 @@ use super::super::{
     Cli, Context, LocalizationKey, PipelineStage, Result, StatusReporter, dyndep, generation,
     load_manifest_with_stage_reporting, path_helpers, report_pipeline_stage,
 };
+use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedNinja;
 use crate::recipe_shell::InterpreterExecutable;
 use crate::runner::process::command_list_targets::CommandListTargetIndex;
+use camino::Utf8PathBuf;
 use monotony::MonotonicClock;
 
 /// Supply the dependencies that select and measure graph generation.
@@ -56,6 +58,26 @@ pub(in crate::runner) struct GeneratedNinjaWithTargets {
     bundle: GeneratedNinja,
     /// Bounded output names keyed by the generated command-list fingerprint.
     command_list_targets: CommandListTargetIndex,
+    /// Every path the manifest named, in the graph's own spelling.
+    ///
+    /// The build command consults them before it removes or creates generated
+    /// state, so a spelling that only the working directory can resolve cannot
+    /// collide with it.
+    declared_paths: Vec<Utf8PathBuf>,
+}
+
+/// Everything one CLI build needs from a generated bundle.
+///
+/// The fields travel together because the build command needs all four before
+/// it invokes Ninja, and two adjacent path lists are easy to swap when they are
+/// returned as a tuple.
+pub(in crate::runner) struct BuildParts {
+    /// Main Ninja file and any sidecars produced for this invocation.
+    pub(in crate::runner) bundle: GeneratedNinja,
+    /// Bounded output names keyed by the generated command-list fingerprint.
+    pub(in crate::runner) command_list_targets: CommandListTargetIndex,
+    /// Every path the manifest named, in the graph's own spelling.
+    pub(in crate::runner) declared_paths: Vec<Utf8PathBuf>,
 }
 
 impl GeneratedNinjaWithTargets {
@@ -64,10 +86,31 @@ impl GeneratedNinjaWithTargets {
         self.bundle
     }
 
-    /// Return the bundle and lookup for one synchronous CLI build.
-    pub(in crate::runner) fn into_build_parts(self) -> (GeneratedNinja, CommandListTargetIndex) {
-        (self.bundle, self.command_list_targets)
+    /// Return the bundle and the prepared paths for one CLI build.
+    pub(in crate::runner) fn into_build_parts(self) -> BuildParts {
+        BuildParts {
+            bundle: self.bundle,
+            command_list_targets: self.command_list_targets,
+            declared_paths: self.declared_paths,
+        }
     }
+}
+
+/// Collect every path the manifest declares, in the graph's own spelling.
+fn declared_paths(graph: &BuildGraph) -> Vec<Utf8PathBuf> {
+    graph
+        .edges()
+        .flat_map(|edge| {
+            edge.explicit_outputs
+                .iter()
+                .chain(&edge.implicit_outputs)
+                .chain(&edge.inputs)
+                .chain(&edge.implicit_deps)
+                .chain(&edge.order_only_deps)
+        })
+        .chain(&graph.default_targets)
+        .cloned()
+        .collect()
 }
 
 /// Generate a Ninja bundle from the manifest referenced by `cli`.
@@ -121,5 +164,6 @@ pub(in crate::runner) fn generate_ninja_with_shell(
     Ok(GeneratedNinjaWithTargets {
         bundle,
         command_list_targets,
+        declared_paths: declared_paths(&graph),
     })
 }

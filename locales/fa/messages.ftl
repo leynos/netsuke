@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = ‏ اعمال نگه‌داری dyndep تولیدشده در زیر ‏{ $path } ممکن نبود.
 runner.io.dyndep.alias = مسیر dyndep تولیدشده { $path } یک پیوند نمادین یا نقطه اتصال است، یا پوشه نیست؛ آن را با یک پوشه واقعی جایگزین کنید.
 runner.io.dyndep.open = باز کردن پوشه dyndep تولیدشده { $path } ناموفق بود.
+runner.io.phony.inspect = ‏ بررسی وضعیت phony رزروشده در ‏{ $path } ممکن نبود.
+runner.io.phony.reset = ‏ پاک‌کردن وضعیت phony رزروشده در ‏{ $path } ممکن نبود.
 cli.about = ‏Netsuke مانیفست‌های YAML + Jinja را به طرح‌های ساخت Ninja ترجمه می‌کند.
 cli.long_about = ‏Netsuke مانیفست‌های YAML + Jinja را به گراف‌های تکرارپذیر Ninja تبدیل می‌کند و Ninja را با پیش‌فرض‌های ایمن اجرا می‌کند.
 cli.usage = { $usage }

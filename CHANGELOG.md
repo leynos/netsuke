@@ -100,6 +100,30 @@
   are usable. Indexed `__N` list variables remain unsupported
   ([#1147](https://github.com/leynos/netsuke/issues/1147), [ADR-0083](docs/adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md)).
 
+### Fixed
+
+- Run every action, and every target declaring `phony: true`, every time it is
+  reached, even when a file or directory of the same name exists, and stop
+  `netsuke clean` from removing that path. A phony executable edge now
+  publishes its name as a native Ninja `phony` alias over a hidden output under
+  `.netsuke/phony`; an `always: true` edge gains a shared, permanently dirty
+  prerequisite, so its recipe re-runs while an output whose modification time
+  is unchanged still prunes downstream work. `netsuke build` clears a stray
+  path left at that prerequisite's reserved name, so it cannot silently turn
+  forcing off, and generates a preparation edge for each directory a phony
+  edge's declared outputs need, since Ninja no longer sees those names on the
+  hidden statement
+  ([#1144](https://github.com/leynos/netsuke/issues/1144), [ADR-0084](docs/adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md))
+- Bound `shell_join`'s encoded output: the filter appends encoded members into
+  one buffer and rejects a join whose encoded output exceeds a fixed 1 MiB
+  ceiling with `netsuke::jinja::shell::join_limit`, instead of materializing an
+  encoded copy of every member and then the joined string
+  ([#970](https://github.com/leynos/netsuke/issues/970))
+- Install the x64 and Arm64 Windows MSIs under `C:\Program Files\netsuke`
+  rather than `C:\Program Files (x86)\netsuke`, and migrate a v0.1.0-beta4
+  installation out of the 32-bit directory on upgrade
+  ([#1143](https://github.com/leynos/netsuke/issues/1143))
+
 ### Security
 
 - Preserve `script` bytes byte for byte through the `printf %b` transport, so a
@@ -118,19 +142,6 @@
   accepted filename could introduce another argument into a trusted recipe; the
   portable unquoted-path allowlist now excludes the comma (CWE-88)
   ([#1017](https://github.com/leynos/netsuke/issues/1017))
-
-<!-- markdownlint-disable-next-line MD024 -->
-### Fixed
-
-- Bound `shell_join`'s intermediate allocation: the filter appends into one
-  buffer under a fixed 1 MiB ceiling and rejects an over-limit join with
-  `netsuke::jinja::shell::join_limit`, instead of materializing an encoded copy
-  of every member and then the joined string
-  ([#970](https://github.com/leynos/netsuke/issues/970))
-- Install the x64 and Arm64 Windows MSIs under `C:\Program Files\netsuke`
-  rather than `C:\Program Files (x86)\netsuke`, and migrate a v0.1.0-beta4
-  installation out of the 32-bit directory on upgrade
-  ([#1143](https://github.com/leynos/netsuke/issues/1143))
 
 ## [0.1.0-beta4] - 2026-09-26
 

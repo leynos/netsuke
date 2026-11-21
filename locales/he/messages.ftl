@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = ‏לא ניתן להחיל את שמירת קובץ dyndep שנוצר מתחת ל־‏{ $path }.
 runner.io.dyndep.alias = הנתיב dyndep שנוצר { $path } הוא קישור סמלי, צומת או שאינו תיקייה; החלף אותו בתיקייה אמיתית.
 runner.io.dyndep.open = פתיחת תיקיית ה-dyndep שנוצרה { $path } נכשלה.
+runner.io.phony.inspect = ‏לא ניתן היה לבדוק את מצב phony השמור ב־‏{ $path }.
+runner.io.phony.reset = ‏לא ניתן היה לנקות את מצב phony השמור ב־‏{ $path }.
 cli.about = ‏Netsuke מהדר מניפסטים של YAML + Jinja לתוכניות בנייה של Ninja.
 cli.long_about = ‏Netsuke ממיר מניפסטים של YAML + Jinja לגרפים ברי‑שחזור של Ninja ומריץ את Ninja עם ברירות מחדל בטוחות.
 cli.usage = { $usage }

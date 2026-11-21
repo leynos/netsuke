@@ -16,8 +16,12 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     generate_with_shell(graph, RecipeShell::Posix)
 }
 
+// The two phony lowerings — an executable `phony` edge's hidden output and
+// alias, and the `always` force prerequisite — are covered by
+// `tests/ninja_phony_lowering_tests.rs`, which reads the emitted statements
+// rather than matching a digest-bearing whole file.
 #[rstest]
-#[case::phony_target_runs_command(
+#[case::always_target_reruns_through_the_force_node(
     Action {
         recipe: Recipe::Command { command: "true".into(), isolation: netsuke::ast::CommandIsolation::Shared },
         description: None,
@@ -35,14 +39,16 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         progress_label: None,
-        phony: true,
-        always: false,
+        phony: false,
+        always: true,
         output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     },
     concat!(
         "rule a\n",
         "  command = true\n\n",
-        "build out: a in\n\n",
+        "build .netsuke/phony/force: phony\n\n",
+        "build out: a in | .netsuke/phony/force\n",
+        "  restat = 1\n\n",
     ),
 )]
 #[case::standard_build(
@@ -183,34 +189,6 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         "rule b\n",
         "  command = true\n\n",
         "build out: b in | dep || stamp\n\n",
-    ),
-)]
-#[case::phony_action_with_implicit_deps(
-    Action {
-        recipe: Recipe::Command { command: "true".into(), isolation: netsuke::ast::CommandIsolation::Shared },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    },
-    BuildEdge {
-        action_id: "phony".into(),
-        inputs: Vec::new(),
-        implicit_deps: vec![Utf8PathBuf::from("dep")],
-        dependency_order: netsuke::ir::DependencyOrder::Parallel,
-        explicit_outputs: vec![Utf8PathBuf::from("phony_action")],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        progress_label: None,
-        phony: true,
-        always: false,
-        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
-    },
-    concat!(
-        "rule phony\n",
-        "  command = true\n\n",
-        "build phony_action: phony | dep\n\n",
     ),
 )]
 fn generate_ninja_scenarios(

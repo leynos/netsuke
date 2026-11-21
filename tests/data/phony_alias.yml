@@ -1,0 +1,6 @@
+netsuke_version: '1.0.0'
+targets:
+  - name: '{force_node}'
+    always: true
+    command: echo run >> runs.log
+defaults: ['{force_node}']

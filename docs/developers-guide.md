@@ -1517,12 +1517,136 @@ edge-level `description`. Named-rule metadata remains on the rule, where its
 description continues to control progress.
 
 `src/ninja_gen/edge_metadata.rs` owns the shared action lookup, rule-name
-selection, `restat` value and escaped progress description for generated edges.
-Its only callers are `generate_into_with_shell` and
-`EdgeRenderer::render_edge`; each passes the graph edge and the localizer
-resolved once for generation, then forwards the returned metadata to
-`DisplayEdge`. Keep action identity, command text, named-rule metadata and
-Ninja text emission outside this helper.
+selection, `restat` value, escaped progress description, and the phony/always
+classification for generated edges. Its only callers are
+`generate_into_with_shell` and `EdgeRenderer::render_edge`; each passes the
+graph edge and the localizer resolved once for generation, then forwards the
+returned metadata to `DisplayEdge`. Keep action identity, command text,
+named-rule metadata and Ninja text emission outside this helper.
+
+### Phony and always lowering
+
+`src/ninja_gen/force_run.rs` owns the reserved force node, the hidden-output
+identity, the graph-level predicate that decides whether the force statement is
+needed, and the statement itself. Three shapes come out of the classification,
+and each is deliberate:
+
+- A **dependency-only** edge is unchanged: a rule-less `build all: phony | dep`
+  line, whatever the edge's own `phony` flag says.
+- An **executable phony** edge moves its recipe onto
+  `.netsuke/phony/edge-<digest>` and republishes its declared names as
+  `build <name>: phony <hidden>`. The alias carries the implicit outputs; the
+  hidden statement carries the recipe, its `description` and `pool`, and no
+  `restat`, because the hidden path is never written.
+- An **always, non-phony** edge keeps its declared output and gains
+  `.netsuke/phony/force` as a render-time implicit dependency, retaining the
+  edge-level `restat` so an unchanged output still prunes dependants.
+
+`write_force_statement` emits `build .netsuke/phony/force: phony` once, after
+the rules and before the first edge, and only when some rendered edge consumes
+it. Both emission paths call it, so the bundle and the string generator agree
+byte for byte; a test asserts that agreement, and another asserts that a graph
+using neither flag keeps its previous bytes. The hidden identity hashes the
+explicit then implicit outputs under the schema tag `netsuke-phony-v1`, with
+NUL-separated paths and a `U+0001` group separator; path validation already
+rejects those characters, so the encoding cannot be forged. Never add the force
+node or a hidden output to the default targets, and never reuse the namespace
+for a user-visible path. See
+[ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).
+
+A fixed case is the readable example of each shape;
+`tests/ninja_phony_lowering_property_tests.rs` carries the combinatorial claim.
+It generates graphs whose action names, output names, commands, `restat` flags,
+`phony` and `always` flags, input lists and edge counts all vary, then requires
+that every rotation and the reversal of the edge set render identically, that
+hidden identities stay distinct, that exactly the forced edges name the force
+node, and that `restat` is cleared on a hidden statement and retained on an
+`always` edge unless its rule already declares it. Extend the properties when a
+new flag feeds the classification; keep the fixed cases for the statement
+shapes a reader can check by eye.
+
+Clearing the force node belongs to the command layer, not to generation.
+`src/runner/phony_state/mod.rs` opens the effective working directory, verifies
+that `.netsuke` and `.netsuke/phony` are real directories without following a
+link, and removes whatever occupies `force`; `netsuke generate` leaves the path
+alone because generation is a pure translation of the graph. The reservation
+check in `src/ninja_gen/reserved_paths/mod.rs` is pure for the same reason: it
+folds the graph's own spelling and reads nothing from disk. It also folds ASCII
+case, because a case-insensitive volume treats `.NETSUKE/PHONY` as the reserved
+tree; refusing a case variant on a case-sensitive volume is the fail-closed
+side of that trade. Namespace constants live there alone, and `force_run.rs` and
+`dyndep/staging.rs` import them.
+
+A spelling that needs the working directory cannot be judged by generation, so
+the build command judges it before it publishes a dyndep sidecar, prunes an
+obsolete one, or writes anything else. The refusal covers all three reserved
+namespaces, because the rule is the one reservation, not a phony-only check.
+`GeneratedNinjaWithTargets` collects every path the graph named, and
+`phony_state::refuse_reserved_declarations` resolves each against the canonical
+working directory: the longest existing ancestor is canonicalized and the
+components that do not exist yet are folded onto it. That catches an absolute
+path, a `..` path that leaves the workspace and returns, and a symbolic-link
+alias, each of which names a declared output that a reset or a generated node
+would otherwise occupy. The check runs unconditionally, before the force-node
+reset and before Ninja reads the build file, because a first build must refuse
+as firmly as a later one; a check that ran only once `.netsuke` existed would
+accept a reserved spelling on a clean workspace and fail every build after it.
+The resolution rule lives in `src/runner/phony_state/resolve.rs`, apart from
+the namespace handles and the removal in `mod.rs`, so the filesystem questions
+have their own unit. It reports every canonicalization failure other than an
+absent component rather than folding the failure into "not reserved": a
+permission or symbolic-link error must stop the build, because a guard that
+failed open would delete the output it exists to protect. Resolution only
+reads; the removal itself always goes through the verified namespace handles. A
+refused build reports the same reservation diagnostic generation uses, because
+it is the same rule.
+
+Preparing the declared outputs' directories is generated work, not
+command-layer work. Ninja creates the parent directories of the outputs on an
+edge it is about to run, and the hidden statement names only
+`.netsuke/phony/edge-*`, so a phony recipe writing `build/report` would find no
+`build/` on a clean workspace. `src/ninja_gen/output_dirs/mod.rs` therefore
+emits one preparation edge per distinct declared-output parent, and the recipe
+statement lists those nodes after `||` as order-only dependencies. Order-only
+is deliberate: the directory must exist before the recipe runs without the
+directory's absence making the recipe permanently dirty on its own. Three
+properties of the emission matter when changing it. The preparation edge takes
+the recipe's own `inputs`, `implicit_deps` and `order_only_deps` as its normal
+inputs, because Ninja does not order an order-only dependency after the edge's
+other prerequisites; a prerequisite that creates the same directory with a
+non-idempotent `mkdir` therefore still runs first. In the `implicit_deps` role,
+a staged serial edge contributes the same gates the recipe statement names
+rather than the raw dependency list: the raw list is revealed late through the
+dyndep sidecars, so naming it here would expose it immediately and let a later
+stage start while an earlier one still runs.
+`tests/phony_always_runtime_tests/serial_output.rs` proves the ordering with a
+real Ninja. The node's identity is content-addressed over the edge's hidden
+output and the directory, so two recipes sharing a directory share one rule but
+keep distinct nodes. The node is never created, which Ninja reads as
+permanently out of date, so the idempotent command reruns on every build that
+reaches it and a directory deleted since the last build returns; Ninja neither
+warns about the missing output nor cleans it. An edge that is not executable
+`phony`, and an output whose parent is the working directory itself, emit
+nothing, so graphs without a nested phony output keep their previous bytes.
+`ninja_gen::edge_metadata::is_executable_phony` answers the classification
+question, because that module owns which edges are lowered. The generated
+`mkdir` runs in the same shell and interpreter transport as a manifest recipe,
+so quoting and PowerShell encoding have one owner rather than a second, weaker
+encoder in the runner.
+
+A `depfile` on an executable phony edge is a rule binding, so the hidden
+statement inherits it. Without `deps`, Ninja accepts a depfile only when its
+first target equals the edge's first output, now the hidden path; no recipe can
+name that path, because `{{ outs }}` is lowered from the declared names and
+`$out` is a literal shell variable, so that form orders nothing. With `deps`,
+Ninja records the depfile's inputs in its dependency log against the hidden
+output and orders them on later builds. `tests/ninja_phony_depfile_tests.rs`
+pins both outcomes with a real Ninja: a pre-written depfile naming the hidden
+output orders the discovered producer at scan time, a recipe-written depfile
+with `deps` orders it on the next build, and the same recipe without `deps`
+never orders it. The manifest loader never sets `Action.depfile` or
+`Action.deps_format` in beta4, so only programmatic IR construction reaches the
+binding.
 
 ## Adding a lint rule
 
@@ -9575,11 +9699,12 @@ be built first. The decision and whole-manifest scope are recorded in
 with more than one dependency. It produces a `GeneratedNinja` bundle: the main
 build-file text plus immutable, content-addressed `GeneratedDyndep` sidecars.
 The generated phony gates live under `.netsuke/serial`; sidecars live under
-`.netsuke/dyndep`. Those are reserved graph namespaces, validated before
-generation. User graph paths in outputs, inputs, implicit dependencies, and
-order-only dependencies cannot use either namespace. A string-only generator
-must return `DyndepFilesRequired` for a graph that needs sidecars rather than
-returning an incomplete build file.
+`.netsuke/dyndep`; the hidden outputs and force node of `phony` and `always`
+lowering live under `.netsuke/phony`. Those are reserved graph namespaces,
+validated before generation. User graph paths in outputs, inputs, implicit
+dependencies, and order-only dependencies cannot use any of them. A string-only
+generator must return `DyndepFilesRequired` for a graph that needs sidecars
+rather than returning an incomplete build file.
 
 Generated bundles need Ninja 1.10 or newer only when a serial direct-dependency
 list has at least two items and therefore needs staged ordering; parallel lists
@@ -10610,6 +10735,18 @@ claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
 
+### `test_support::ninja`
+
+`test_support::ninja::resolve_ninja_program` (`test_support/src/ninja.rs`)
+returns the absolute path of the first executable `ninja` on the ambient
+`PATH`, or `None` when none is found. It is the test-side resolver, distinct
+from the production `src/runner/process/ninja/program.rs` seam. Tests use it so
+that the probe which decides whether a Ninja-backed test can run and the child
+process that test launches select the same executable: both walk `PATH` with
+one executability rule and resolve relative entries against the current
+directory. Invoke it only from tests and test-support code; production code
+must resolve Ninja through its own injected seam.
+
 ### `test_support::ninja_script`
 
 `test_support::ninja_script::write_fake_ninja_script` writes a small fake Ninja
@@ -10725,6 +10862,15 @@ for an ordinary edge. The property test in
 `src/ninja_gen/property_tests/console.rs` uses it for user-edge, serial-parent
 and synthetic-gate assertions. Keep this helper within test-support and test
 code; it does not parse general Ninja syntax.
+
+`test_support::ninja_edge::edge_build_line` returns the generated `build`
+statement that carries an output's dependencies after following one `phony`
+alias hop. An executable `phony` edge renders as an alias over a hidden output,
+so a test written against the manifest name must assert on the hidden
+statement; this helper performs that lookup once so callers do not each
+re-implement it. It returns borrowed text from the generated file, so a failure
+message can quote the exact statement. Permitted call sites are test-support
+and test code only, and it does not parse general Ninja syntax.
 
 The local `edge_factory` fixture in `src/ninja_gen/tests/console.rs` constructs
 parallel, single-output edges for console generator tests. Keep it within that

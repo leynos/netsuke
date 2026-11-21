@@ -56,4 +56,8 @@ Feature: Ninja file generation
     And the graph target "fallback-alpha" has implicit deps "build/alpha.o, shared/action.cfg"
     When the ninja file is generated
     Then the ninja file contains "build fallback-alpha: "
-    And the ninja file contains " src/alpha.in | build/alpha.o shared/action.cfg || order/alpha.stamp"
+    # An action is phony work, so its statement also depends on the shared
+    # force node; that dependency is the last implicit one, before `||`. The
+    # assertion is scoped to the statement the alias relays to, so a
+    # neighbouring edge cannot satisfy it.
+    And the Ninja edge "fallback-alpha" has a statement containing " src/alpha.in | build/alpha.o shared/action.cfg .netsuke/phony/force || order/alpha.stamp"

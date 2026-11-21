@@ -1,0 +1,9 @@
+netsuke_version: '1.0.0'
+targets:
+  - name: prepared
+    command: mkdir build && echo seed > build/seed
+  - name: build/report
+    phony: true
+    sources: [prepared]
+    command: echo report > build/report
+defaults: [build/report]

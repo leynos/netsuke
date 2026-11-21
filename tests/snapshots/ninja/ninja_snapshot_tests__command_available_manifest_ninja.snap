@@ -8,7 +8,11 @@ rule 001cc863ffad2333bb5b4a22fde35146827965e79233821681254065519a1ce2
 rule e8c3bab461990fead7f11b007334dcd68b89db712472c5a294c69609dd7302b5
   command = echo fallback
 
-build fallback-action: e8c3bab461990fead7f11b007334dcd68b89db712472c5a294c69609dd7302b5
+build .netsuke/phony/force: phony
+
+build .netsuke/phony/edge-26985e307d175a5697dfb1321ff358c710b61e5c3b6bcfada4e8134afab0ca0b: e8c3bab461990fead7f11b007334dcd68b89db712472c5a294c69609dd7302b5 | .netsuke/phony/force
   description = Building ⁨fallback-action⁩
+
+build fallback-action: phony .netsuke/phony/edge-26985e307d175a5697dfb1321ff358c710b61e5c3b6bcfada4e8134afab0ca0b
 
 build out/result: 001cc863ffad2333bb5b4a22fde35146827965e79233821681254065519a1ce2 in/source

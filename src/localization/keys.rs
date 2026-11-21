@@ -120,6 +120,8 @@ define_keys! {
     RUNNER_IO_DYNDEP_RETENTION => "runner.io.dyndep.retention",
     RUNNER_IO_DYNDEP_ALIAS => "runner.io.dyndep.alias",
     RUNNER_IO_DYNDEP_OPEN => "runner.io.dyndep.open",
+    RUNNER_IO_PHONY_INSPECT => "runner.io.phony.inspect",
+    RUNNER_IO_PHONY_RESET => "runner.io.phony.reset",
     IR_RULE_NOT_FOUND => "ir.rule_not_found",
     IR_MULTIPLE_RULES => "ir.multiple_rules",
     IR_EMPTY_RULE => "ir.empty_rule",
@@ -348,3 +350,4 @@ define_keys! {
     EXAMPLE_FILES_PROCESSED => "example.files_processed",
     EXAMPLE_ERRORS_FOUND => "example.errors_found",
 }
+// weave: run 'weave explain src/localization/keys.rs' for per-hunk detail, 'weave check' to verify your resolution

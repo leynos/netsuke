@@ -68,22 +68,18 @@ mod render;
 mod staging;
 pub use bundle::{GeneratedDyndep, GeneratedNinja};
 use render::render_edges;
+pub(crate) use staging::{content_digest, serial_gate_paths};
 
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
+use crate::ninja_gen::reserved_paths::is_reserved_path;
 use crate::ninja_gen::{
-    InterpreterBinding, NinjaGenError, RecipeShell, graph_requires_dyndep, join,
-    ordered_default_targets, reject_unsupported_path_characters, resolve_default_interpreter,
-    write_action_rules,
+    InterpreterBinding, NinjaGenError, RecipeShell, force_run, graph_requires_dyndep, join,
+    ordered_default_targets, output_dirs, reject_unsupported_path_characters,
+    resolve_default_interpreter, write_action_rules,
 };
 use crate::recipe_shell::InterpreterExecutable;
 use std::fmt::Write as _;
-
-/// Reserved state namespace for serial gate paths.
-const SERIAL_NAMESPACE: &str = ".netsuke/serial";
-
-/// Reserved state namespace for dyndep sidecar files.
-const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
 
 /// Generate a complete Ninja bundle for `graph`, materializing staged dyndep
 /// sidecars for every multi-dependency serial edge.
@@ -94,8 +90,8 @@ const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
 /// # Errors
 ///
 /// Returns [`NinjaGenError::ReservedOutputPath`] when a user output or
-/// dependency collides with the reserved `.netsuke/serial` or
-/// `.netsuke/dyndep` namespace, and [`NinjaGenError::MissingAction`] when an
+/// dependency collides with the reserved `.netsuke/serial`, `.netsuke/dyndep`
+/// or `.netsuke/phony` namespace, and [`NinjaGenError::MissingAction`] when an
 /// edge references an unknown action. Returns
 /// [`NinjaGenError::ConsoleDependencyOnly`] when a console edge uses a
 /// dependency-only action, and [`NinjaGenError::ConsolePoolConflict`] when its
@@ -208,8 +204,8 @@ pub(crate) fn generate_bundle_for_shell_with_interpreter(
 ///
 /// Returns [`NinjaGenError::UnsupportedPathCharacter`] when a graph path
 /// contains a character Ninja cannot represent, and
-/// [`NinjaGenError::ReservedOutputPath`] when a graph path collides with the
-/// reserved serial-ordering namespaces. Returns
+/// [`NinjaGenError::ReservedOutputPath`] when a graph path collides with a
+/// reserved generated-state namespace. Returns
 /// [`NinjaGenError::EmptyCommandRecipe`],
 /// [`NinjaGenError::MultipleBackgroundJobs`],
 /// [`NinjaGenError::UnsupportedCommandListExec`],
@@ -236,6 +232,8 @@ fn generate_bundle_inner(
     }
 
     write_action_rules(graph, &mut out, shell, binding)?;
+    force_run::write_force_statement(graph, &mut out)?;
+    output_dirs::write_statements(graph, &mut out, shell, binding)?;
 
     let localizer = localization::localizer();
     let dyndep_files = render_edges(graph, &mut out, localizer.as_ref())?;
@@ -255,34 +253,28 @@ fn generate_bundle_inner(
     })
 }
 
-/// Reject user outputs or dependencies that collide with the reserved
-/// serial-ordering state namespace.
+/// Reject user outputs, dependencies, or defaults that collide with a reserved
+/// generated-state namespace.
+///
+/// Default targets are checked as well as edge paths: a `default` statement
+/// naming `.netsuke/phony/force` would make a generated-state node a build
+/// root, and naming `.netsuke/phony/edge-...` would expose a hidden statement.
 pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenError> {
-    for edge in graph.edges() {
-        for path in edge
-            .explicit_outputs
+    let edge_paths = graph.edges().flat_map(|edge| {
+        edge.explicit_outputs
             .iter()
             .chain(&edge.implicit_outputs)
             .chain(&edge.inputs)
             .chain(&edge.implicit_deps)
             .chain(&edge.order_only_deps)
-        {
-            let as_str = path.as_str();
-            let is_reserved = [SERIAL_NAMESPACE, DYNDEP_NAMESPACE]
-                .iter()
-                .any(|namespace| {
-                    as_str == *namespace
-                        || as_str
-                            .strip_prefix(namespace)
-                            .is_some_and(|suffix| suffix.starts_with('/'))
-                });
-            if is_reserved {
-                return Err(NinjaGenError::ReservedOutputPath {
-                    path: path.clone(),
-                    message: localization::message(keys::NINJA_GEN_RESERVED_OUTPUT_PATH)
-                        .with_arg("path", as_str),
-                });
-            }
+    });
+    for path in edge_paths.chain(&graph.default_targets) {
+        if is_reserved_path(path) {
+            return Err(NinjaGenError::ReservedOutputPath {
+                path: path.clone(),
+                message: localization::message(keys::NINJA_GEN_RESERVED_OUTPUT_PATH)
+                    .with_arg("path", path.as_str()),
+            });
         }
     }
     Ok(())

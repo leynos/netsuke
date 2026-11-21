@@ -5,8 +5,8 @@
 //! This module covers the orthogonal question of what a path may contain. Each
 //! graph position is swept because the checks live at different layers: some
 //! reject during string generation, some only in bundle generation, and the
-//! reserved-namespace check runs over every edge path field. Default targets
-//! are not checked against the reserved namespaces.
+//! reserved-namespace check runs over every edge path field and over the
+//! graph's default targets.
 
 use super::{graph_with_edge, parallel_edge, serial_edge};
 use crate::ir::BuildEdge;
@@ -169,10 +169,22 @@ fn whitespace_paths_are_escaped_in_every_path_field(
 #[case::input(EdgePathField::Input)]
 #[case::implicit_dependency(EdgePathField::ImplicitDependency)]
 #[case::order_only_dependency(EdgePathField::OrderOnlyDependency)]
-fn reserved_output_namespace_is_rejected(#[case] field: EdgePathField) -> Result<()> {
+fn reserved_namespace_is_rejected(
+    #[case] field: EdgePathField,
+    // Every namespace the generator writes into, including the two fixed names
+    // the phony lowering emits, so a manifest cannot forge or shadow them.
+    #[values(
+        ".netsuke/serial/x",
+        ".netsuke/dyndep/x",
+        ".netsuke/phony/x",
+        ".netsuke/phony/force",
+        ".netsuke/phony/edge-0123456789abcdef"
+    )]
+    path: &str,
+) -> Result<()> {
     let mut edge = parallel_edge("all", &["dep"]);
-    set_edge_path(&mut edge, field, ".netsuke/serial/x");
-    if edge.explicit_outputs == [Utf8PathBuf::from(".netsuke/serial/x")] {
+    set_edge_path(&mut edge, field, path);
+    if edge.explicit_outputs == [Utf8PathBuf::from(path)] {
         edge.explicit_outputs.insert(0, Utf8PathBuf::from("all"));
     }
     let graph = graph_with_edge(edge);
@@ -183,6 +195,53 @@ fn reserved_output_namespace_is_rejected(#[case] field: EdgePathField) -> Result
         matches!(err, NinjaGenError::ReservedOutputPath { .. }),
         "expected ReservedOutputPath, got {err:?}"
     );
+    Ok(())
+}
+
+#[rstest]
+#[case::exact(".netsuke/phony/force")]
+#[case::child(".netsuke/phony/edge-0123456789abcdef")]
+#[case::serial(".netsuke/serial/x")]
+#[case::dyndep(".netsuke/dyndep/x")]
+#[case::empty_segment(".netsuke//phony/force")]
+#[case::dot_prefix("./.netsuke/phony/force")]
+#[case::dot_segment(".netsuke/./phony/force")]
+#[case::parent_round_trip("out/../.netsuke/phony/force")]
+fn reserved_default_target_is_rejected(#[case] path: &str) -> Result<()> {
+    let mut graph = graph_with_edge(parallel_edge("all", &["dep"]));
+    graph.default_targets = vec![Utf8PathBuf::from(path)];
+
+    let err = generate_bundle(&graph)
+        .err()
+        .context("a reserved default target must be rejected")?;
+    ensure!(
+        matches!(err, NinjaGenError::ReservedOutputPath { .. }),
+        "expected ReservedOutputPath for {path}, got {err:?}"
+    );
+    Ok(())
+}
+
+/// A backslash is an ordinary filename character on Unix.
+///
+/// Normalizing through the platform path type would rewrite this spelling's
+/// separators on Windows; the comparison must stay component-based so a Unix
+/// name containing literal backslashes is not mistaken for the namespace.
+#[cfg(unix)]
+#[test]
+fn a_literal_backslash_does_not_name_a_reserved_namespace() -> Result<()> {
+    let mut graph = graph_with_edge(parallel_edge("all", &["dep"]));
+    graph.default_targets = vec![Utf8PathBuf::from(".netsuke\\phony\\force")];
+
+    generate_bundle(&graph).context("a literal backslash must not reach generated state")?;
+    Ok(())
+}
+
+#[test]
+fn unreserved_default_target_is_accepted() -> Result<()> {
+    let mut graph = graph_with_edge(parallel_edge("all", &["dep"]));
+    graph.default_targets = vec![Utf8PathBuf::from("./out/all")];
+
+    generate_bundle(&graph)?;
     Ok(())
 }
 

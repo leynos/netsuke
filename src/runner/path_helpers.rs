@@ -1,7 +1,7 @@
 //! Path resolution helpers for the runner module.
 //!
-//! Centralises manifest and output path logic so the main runner module stays
-//! focused on command dispatch.
+//! Centralises manifest, output, and working-directory logic so the main
+//! runner module stays focused on command dispatch.
 
 use crate::cli::Cli;
 use crate::localization::{self, keys};
@@ -58,6 +58,49 @@ pub(super) fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path
     } else {
         Cow::Borrowed(path)
     }
+}
+
+/// Return the working directory `-C/--directory` selects.
+///
+/// `-C/--directory` behaves like a working directory change for the child
+/// process, so every command that inspects or clears generated build state
+/// resolves paths against this directory rather than the caller's process
+/// working directory. An unset option keeps the process working directory.
+fn selected_directory(cli: &Cli) -> Utf8PathBuf {
+    cli.directory
+        .clone()
+        .unwrap_or_else(|| Utf8PathBuf::from("."))
+}
+
+/// Open the working directory Ninja will run in, through a capability handle.
+///
+/// # Errors
+///
+/// Returns an error when the directory cannot be opened.
+pub(super) fn open_effective_dir(cli: &Cli) -> Result<Dir> {
+    let selected = selected_directory(cli);
+    Dir::open_ambient_dir(&selected, ambient_authority()).with_context(|| {
+        localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR).with_arg("path", selected.as_str())
+    })
+}
+
+/// Resolve the working directory to an absolute path with links resolved.
+///
+/// A capability handle cannot resolve a path above its own root, so a check
+/// that must judge a `..` spelling against the workspace needs the absolute
+/// base instead. Reading this path has no effect of its own: callers use it
+/// only to compare spellings, and any actual access still goes through the
+/// handle from [`open_effective_dir`].
+///
+/// # Errors
+///
+/// Returns an error when the directory does not exist, cannot be read, or
+/// resolves to a path that is not valid UTF-8.
+pub(super) fn canonical_working_directory(cli: &Cli) -> Result<Utf8PathBuf> {
+    let selected = selected_directory(cli);
+    selected.canonicalize_utf8().with_context(|| {
+        localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR).with_arg("path", selected.as_str())
+    })
 }
 
 /// Verify the selected manifest exists, reporting `PipelineStage::ManifestIngestion`

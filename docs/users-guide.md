@@ -628,7 +628,9 @@ The top-level fields are:
 - `macros`: named Jinja macro definitions registered before other fields
   render.
 - `rules`: reusable recipes referenced by targets or actions.
-- `actions`: implicitly phony operations, such as `test` or `lint`.
+- `actions`: implicitly phony operations, such as `test` or `lint`. Their name
+  is not a file, so the recipe runs whenever the action is reached in the
+  selected target graph, even when a file or directory of that name exists.
 - `targets`: required list of file-producing or logical build nodes. An empty
   list is valid for an action-only manifest.
 - `defaults`: target or action names used when `build` receives no explicit
@@ -962,8 +964,14 @@ A target supports these fields:
   dependent target.
 - `vars`: values that override global variables for this target. The `env`
   and `glob` restriction above applies here too.
-- `phony`: marks a logical target that does not represent a file.
-- `always`: forces the recipe to run whenever the target is requested.
+- `phony`: marks a logical target that does not represent a file. The recipe
+  runs whenever the target is requested, and a file or directory with the same
+  name neither suppresses it nor is removed by `netsuke clean`.
+- `always`: forces the recipe to run whenever the target is requested, even
+  when its inputs and output are unchanged. The edge compares the output's
+  modification time afterwards, so a recipe that leaves that time unchanged
+  still prunes downstream work that depends only on this output; a dependant
+  with another changed input can still run.
 - `console`: selects Ninja's serial console pool for this executable action or
   target. It defaults to `false` and is unavailable to dependency-only
   aggregates.
@@ -974,6 +982,71 @@ A target supports these fields:
 
 `name`, `sources`, `deps`, and `order_only_deps` accept either one string or a
 list of strings.
+
+### Rely on phony and always work running
+
+An `actions` entry and a target with `phony: true` declare that the name is not
+a file. Netsuke publishes that name to Ninja as a native `phony` alias over a
+generated output beneath `.netsuke/phony`, so:
+
+- the recipe runs every time the target is reached, including after a
+  successful run;
+- a file or directory with the same name cannot make the target look up to
+  date, and the recipe may itself write a path with that name;
+- `netsuke clean` leaves a user path of that name in place and removes the
+  generated output instead;
+- a recipe may write a nested output such as `build/report`. Ninja creates the
+  parent directories of the outputs it sees on an edge, and the lowering moves
+  the recipe onto a hidden output, so the generated plan creates the declared
+  outputs' parent directories just before that recipe runs. Preparation belongs
+  to the edge, so a target the build does not reach creates nothing, and a
+  prerequisite that creates the same directory still runs first.
+
+A `depfile` on an executable phony action is a rule binding, so the hidden
+statement inherits it. Without a `deps` binding, Ninja reads the depfile at
+scan time and accepts it only when its first target names the edge's first
+output, the hidden path. A recipe cannot name that path: `{{ outs }}` is
+lowered from the declared names during graph construction, and `$out` is a
+literal shell variable, as for every other recipe. A Makefile-style depfile
+written by such a recipe therefore orders nothing. A rule that also sets `deps`
+differs: Ninja records the depfile's inputs against the hidden output in its
+dependency log, so they order later builds, though a build cannot use inputs it
+records itself.
+
+A target with `always: true` keeps its declared output, so it may produce a
+real file. Netsuke makes its edge permanently dirty, so the recipe runs every
+time the target is reached, even when its inputs and output are unchanged.
+Afterwards the edge compares the output's modification time. When the recipe
+leaves that time unchanged, `restat` stops the unchanged output from forcing
+its dependant; a dependant with another changed input can still run. Rewriting
+the file normally updates its time and rebuilds the dependants; a recipe that
+restores the original modification time still lets `restat` skip them.
+
+Both lowerings depend on a shared force node, `.netsuke/phony/force`, whose
+dirtiness is its absence from disk. `netsuke build` removes any file,
+directory, or symbolic link left at that path before it invokes Ninja, and
+warns when it does, so a stray path cannot quietly stop forced work. Removal
+happens only through a real directory: if `.netsuke` or `.netsuke/phony` is a
+symbolic link or another kind of entry, the build refuses instead of following
+it. The build also refuses the removal when a declared path resolves to that
+node or its namespace — an absolute path, a `..` path that returns to the
+working directory, or a symbolic-link alias — because removing the entry would
+destroy the output the manifest named. `netsuke generate` leaves
+`.netsuke/phony/force` alone, because generation is a pure translation of the
+graph, so running the generated file by hand requires that path to be absent.
+Before removing it manually, apply the same check the build applies: an
+absolute spelling, a `..` path that returns to the working directory, and a
+symbolic-link alias all resolve to the same node, and a declared output behind
+any of them is destroyed by the removal rather than generated state.
+
+The flags are independent. An entry in `actions` is implicitly phony and not
+always; it may also set `always: true`, though the phony lowering already runs
+it every time it is reached. A dependency-only aggregate — an entry whose
+`deps` are its whole operation — is phony whatever its own `phony` flag says.
+
+See
+[ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md)
+for the generated statement shapes and the rejected alternatives.
 
 ### Stream long-running output with the console pool
 
@@ -1139,9 +1212,18 @@ symbolic link; only the generated-state components beneath it are checked.
 An older arbitrary manifest written with `generate --output` may lose its
 referenced sidecars after a later command. Regenerate that manifest before
 using it if retention has removed any of its sidecars. The paths
-`.netsuke/serial` and `.netsuke/dyndep` must not occur in any user graph path,
-including outputs, inputs, implicit dependencies, and order-only dependencies;
-they are reserved for Netsuke-generated gates and sidecars.
+`.netsuke/serial`, `.netsuke/dyndep`, and `.netsuke/phony` must not occur in
+any user graph path, including outputs, inputs, implicit dependencies,
+order-only dependencies, and default targets; they are reserved for
+Netsuke-generated gates, sidecars, and the hidden outputs and force node of
+phony work. A spelling that folds into one of those namespaces, such as
+`./.netsuke/phony/force`, is rejected during generation. The comparison ignores
+ASCII case, so `.NETSUKE/PHONY/force` is refused too: a case-sensitive volume
+would treat it as an ordinary path while a case-insensitive one resolves it to
+the reserved tree. Before it publishes dyndep sidecars, prunes obsolete ones,
+or clears the force node, `netsuke build` also resolves every declared path
+against the working directory, so an absolute path, a `..` path that re-enters
+the workspace, or a symbolic-link alias is refused rather than deleted.
 
 When migrating an existing manifest, see the
 [v0.1.0 migration guide](v0-1-0-migration-guide.md#opting-into-serial-dependency-ordering)

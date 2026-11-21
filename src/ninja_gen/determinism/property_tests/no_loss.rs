@@ -20,11 +20,16 @@
 //! a clean-looking error and every uninteresting one into the only evidence.
 //!
 //! Neither the assertion nor its oracle can be satisfied by the other half of
-//! the emitter restoring a dropped edge's output. Gates and sidecars are
-//! written under `.netsuke/serial` and `.netsuke/dyndep`, which
-//! `reject_reserved_paths` keeps clear of every path the generator can name, so
-//! no gate or sidecar can ever supply a user output's left-hand side. A dropped
-//! edge's outputs disappear from the text and nothing puts them back.
+//! the emitter restoring a dropped edge's output. Gates, sidecars, the shared
+//! force node and hidden phony outputs are written under `.netsuke/serial`,
+//! `.netsuke/dyndep` and `.netsuke/phony`, which `reject_reserved_paths` keeps
+//! clear of every path the generator can name, so none of them can ever supply
+//! a user output's left-hand side. A dropped edge's outputs disappear from the
+//! text and nothing puts them back.
+//!
+//! An executable `phony` edge still satisfies the obligation: its declared
+//! outputs head the alias line and its hidden output heads the statement that
+//! carries the recipe, so each declared output is counted once.
 
 use super::support::{HEAVY_SHRINK_TIME_MS, coverage_runner, emit, materialize};
 use crate::ast::{CommandIsolation, Recipe, StringOrList};
