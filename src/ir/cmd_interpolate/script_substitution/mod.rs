@@ -22,7 +22,7 @@ mod delimiters;
 
 mod heredoc;
 
-use backticks::{BacktickRegion, toggle_quote_context};
+use backticks::{BacktickRegion, escapes_backtick_body_character, toggle_quote_context};
 use delimiters::ScriptCommandSubstitution;
 
 /// Track quote context while interpolating one POSIX or Bash script.
@@ -273,6 +273,10 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
 
     /// Report whether a backslash begins an escape of the following character.
     ///
+    /// An open backtick body is checked first: its escape rule applies to the
+    /// whole body before the body is parsed, so it governs a `$()` frame opened
+    /// inside the body and the quotes in that frame as well.
+    ///
     /// # Errors
     ///
     /// Returns an invalid-command error when the escape would modify a marker
@@ -281,30 +285,63 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if ch != '\\' {
             return Ok(false);
         }
-        if let Some(region) = self.backtick_region
-            && self.command_substitutions.len() == region.owner_depth
-        {
-            let escapes = region.escapes_body_character(self.chars, pos);
-            // An escape that would consume the first character of a marker
-            // must be rejected here: the marker scan starts at that character,
-            // so letting the escape win would copy the rest of the internal
-            // token into the lowered script instead of failing closed. A body
-            // escape that is not taken leaves the marker to the ordinary scan.
-            if escapes && backslash_escapes_marker(self.chars, pos, false, None) {
-                return Err(invalid_command_error(self.template.to_owned()));
-            }
+        if let Some(escapes) = self.starts_body_escape(pos)? {
             return Ok(escapes);
         }
         if self.active_quote_context() == ShellQuoteContext::SingleQuoted {
             return Ok(false);
         }
+        self.reject_marker_escape(pos)?;
+        Ok(true)
+    }
+
+    /// Classify a backslash under an open backtick body.
+    ///
+    /// Returns `None` when the body's rules do not decide the escape and the
+    /// innermost region's own quoting must. The body's escape rule is applied
+    /// to the whole body before the body is parsed, so it reaches a `$()` frame
+    /// opened in the body even from inside that frame's quotes; taking it here
+    /// keeps an escaped backtick from closing the body early.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when the escape would modify a marker
+    /// lowered immediately after it.
+    fn starts_body_escape(&self, pos: usize) -> Result<Option<bool>, IrGenError> {
+        let Some(region) = self.backtick_region else {
+            return Ok(None);
+        };
+        if escapes_backtick_body_character(self.chars, pos) {
+            return Ok(Some(true));
+        }
+        if self.command_substitutions.len() != region.owner_depth {
+            return Ok(None);
+        }
+        let escapes = region.escapes_body_character(self.chars, pos);
+        if escapes {
+            self.reject_marker_escape(pos)?;
+        }
+        Ok(Some(escapes))
+    }
+
+    /// Reject an escape that would consume a marker's first character.
+    ///
+    /// The marker scan starts at that character, so letting the escape win
+    /// would copy the rest of the internal token into the lowered script
+    /// instead of failing closed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when the following character begins a
+    /// marker token.
+    fn reject_marker_escape(&self, pos: usize) -> Result<(), IrGenError> {
         if backslash_escapes_marker(self.chars, pos, false, None) {
             return Err(invalid_command_error(
                 self.template.to_owned(),
                 RejectionReason::EscapeBeforeMarker,
             ));
         }
-        Ok(true)
+        Ok(())
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.

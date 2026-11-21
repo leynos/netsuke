@@ -115,6 +115,8 @@ enum Outcome {
 enum Case {
     /// A backslash escapes the backtick, so the region continues.
     EscapedBacktickInQuotedBody,
+    /// A backtick escaped inside a `$()` frame in the body stays literal.
+    EscapedBacktickInNestedFrame,
     /// An escaped `)` in unquoted body text is literal, not a closer.
     EscapedParenthesisInUnquotedBody,
     /// An escape that would consume a marker's first character is rejected.
@@ -157,6 +159,9 @@ impl Case {
         match self {
             Self::EscapedBacktickInQuotedBody => {
                 format!(r"printf '%s' `printf '%s' '\`'` {INS_TOKEN}")
+            }
+            Self::EscapedBacktickInNestedFrame => {
+                format!(r#"printf '<%s>\n' `printf %s "$(printf %s '\`')"` {INS_TOKEN}"#)
             }
             Self::EscapedParenthesisInUnquotedBody => {
                 format!(r"printf '%s' $(printf %s `printf \)`) {INS_TOKEN}")
@@ -227,6 +232,9 @@ impl Case {
     const fn description(self) -> &'static str {
         match self {
             Self::EscapedBacktickInQuotedBody => "an escaped backtick in a quoted body",
+            Self::EscapedBacktickInNestedFrame => {
+                "an escaped backtick inside a $() frame in the body"
+            }
             Self::EscapedParenthesisInUnquotedBody => "an escaped ) in an unquoted body",
             Self::EscapedMarkerInUnquotedBody => "a backslash before a marker",
             Self::NestedSubstitutionInQuotedBody => "a $() inside a double-quoted backtick body",
@@ -334,6 +342,7 @@ fn script_marker_after_backtick_in_command_substitution_uses_owning_region(
 /// fail closed with `IrGenError::InvalidCommand` rather than guess.
 #[rstest]
 #[case::escaped_backtick(Case::EscapedBacktickInQuotedBody)]
+#[case::escaped_backtick_nested_frame(Case::EscapedBacktickInNestedFrame)]
 #[case::escaped_parenthesis(Case::EscapedParenthesisInUnquotedBody)]
 #[case::escaped_marker(Case::EscapedMarkerInUnquotedBody)]
 #[case::nested_substitution(Case::NestedSubstitutionInQuotedBody)]

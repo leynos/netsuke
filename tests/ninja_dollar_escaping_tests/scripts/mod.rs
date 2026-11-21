@@ -182,6 +182,34 @@ fn backtick_inside_command_substitution_cannot_unquote_a_script_marker(
     Ok(())
 }
 
+/// Verify a backtick escaped inside a nested `$()` frame stays literal.
+///
+/// The backtick body's escape rule is applied to the whole body before the
+/// body is parsed, so it reaches a backtick inside a `$()` frame and its
+/// quotes there: the escaped backtick is data, not the closer. A marker after
+/// the substitution must still be lowered for its own region, and a hostile
+/// path must stay one argument.
+#[cfg(unix)]
+#[rstest]
+fn escaped_backtick_inside_nested_frame_keeps_the_region_open() -> Result<()> {
+    let case = ScriptCase {
+        target: "out".to_owned(),
+        manifest: "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'a; touch injected; echo b'\n    script: |\n      printf '<%s>\\n' `printf %s \"$(printf %s '\\`')\"` {{ ins }}\n".to_owned(),
+    };
+    let command = lower_script(&case)?;
+    let run = run_script(&command)?;
+    ensure!(
+        run.output.stdout == b"<`>\n<a; touch injected; echo b>\n",
+        "the escaped backtick must stay literal and the marker stay one argument, got: {}",
+        String::from_utf8_lossy(&run.output.stdout)
+    );
+    ensure!(
+        !run.workspace.path().join("injected").exists(),
+        "the marker after the substitution must not execute the injected touch command"
+    );
+    Ok(())
+}
+
 /// Verify a no-break space before `#` cannot turn a quoted marker into syntax.
 ///
 /// A POSIX shell ends a word only at blank, newline, or an operator, so the

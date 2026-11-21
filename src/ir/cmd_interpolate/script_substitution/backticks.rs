@@ -45,30 +45,47 @@ impl BacktickRegion {
 
     /// Report whether the backslash at `pos` quotes the next body character.
     ///
-    /// The shell finds the closing backtick before it parses the body, so a
-    /// backslash protects a following dollar sign, backtick, or backslash even
-    /// where the body's own quoting would make a backslash literal. Every other
-    /// escape belongs to the body's own quoting: an unquoted body lets a
-    /// backslash quote the next character, the body's double quotes also
-    /// protect their own closing delimiter, and its single quotes give a
-    /// backslash no special meaning. Keeping the shell's escapes separate from
-    /// the body's is what stops an escaped apostrophe from swallowing the quote
-    /// that closes a single-quoted body.
+    /// The shell finds the closing backtick before it parses the body, so the
+    /// body's own escape rule is applied to the whole body first: see
+    /// [`escapes_backtick_body_character`], which the caller consults ahead of
+    /// this method because it reaches into a `$()` frame opened in the body.
+    /// Every other escape belongs to the region whose quoting is active: an
+    /// unquoted body lets a backslash quote the next character, the body's
+    /// double quotes also protect their own closing delimiter, and its single
+    /// quotes give a backslash no special meaning. Keeping the shell's escapes
+    /// separate from the body's is what stops an escaped apostrophe from
+    /// swallowing the quote that closes a single-quoted body.
     ///
     /// A backslash before a newline is a line continuation in the first two
     /// contexts: the newline is removed rather than ending the command line, so
     /// it must not start a heredoc body that is still queued from an earlier
     /// word. Inside the body's single quotes the newline is literal data.
     pub(super) fn escapes_body_character(&self, chars: &[char], pos: usize) -> bool {
+        if escapes_backtick_body_character(chars, pos) {
+            return true;
+        }
         let Some(next) = chars.get(pos + 1) else {
             return false;
         };
         match self.body_context {
-            ShellQuoteContext::SingleQuoted => matches!(next, '$' | '`' | '\\'),
-            ShellQuoteContext::DoubleQuoted => matches!(next, '$' | '`' | '\\' | '"' | '\n'),
+            ShellQuoteContext::SingleQuoted => false,
+            ShellQuoteContext::DoubleQuoted => matches!(next, '"' | '\n'),
             ShellQuoteContext::Unquoted => true,
         }
     }
+}
+
+/// Report whether the backtick body's escape rule protects the character after
+/// the backslash at `pos`.
+///
+/// The shell removes the backslash before a dollar sign, a backtick, or a
+/// backslash while it searches for the closing backtick, before the body is
+/// parsed. That search spans the whole body, so the rule also governs a
+/// backtick inside a `$()` frame opened in the body and inside that frame's
+/// quotes: the escaped backtick is data there, not a closer. Every other
+/// escape is left to the innermost region's own quoting.
+pub(super) fn escapes_backtick_body_character(chars: &[char], pos: usize) -> bool {
+    matches!(chars.get(pos + 1), Some('$' | '`' | '\\'))
 }
 
 /// Apply one quote delimiter to `context` and report whether `ch` was one.
