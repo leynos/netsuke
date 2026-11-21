@@ -134,7 +134,9 @@
   parses. An entry that leaves a quoted string, here-string, block comment, or
   `$()` substitution open, or that ends in a backtick escape, is now rejected
   instead of letting the next entry's path literal be reclassified as
-  executable syntax (CWE-78)
+  executable syntax. Comment openers are recognized only at an unescaped token
+  boundary, so a backtick-escaped separator cannot hide a later entry's marker
+  inside a quoted region (CWE-78)
   ([#993](https://github.com/leynos/netsuke/issues/993))
 
 <!-- markdownlint-disable-next-line MD024 -->

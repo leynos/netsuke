@@ -223,6 +223,23 @@ fn shared_power_shell_lists_reject_an_entry_that_leaves_a_quote_open(
     "$x=$null# <#\nWrite-Output \" #>",
     "double_quoted_string"
 )]
+// A backtick-escaped space stays inside the argument token, so the following
+// `<#` is literal text and the quote after it opens an expandable string.
+#[case::escaped_separator_before_block_comment(
+    "Write-Output prefix` <#\" #>",
+    "double_quoted_string"
+)]
+// A backtick that escapes the `<` also keeps the opener inside the token.
+#[case::escaped_block_comment_opener(
+    "Write-Output prefix`<# \" #>",
+    "double_quoted_string"
+)]
+// An escaped space before a hash keeps the hash mid-token, so the quote after
+// it opens an expandable string rather than starting a line comment.
+#[case::escaped_separator_before_line_comment(
+    "Write-Output prefix` #\"",
+    "double_quoted_string"
+)]
 fn shared_power_shell_lists_reject_other_unfinished_regions(
     #[case] unfinished: &str,
     #[case] region: &str,

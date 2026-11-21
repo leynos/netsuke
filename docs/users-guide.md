@@ -753,10 +753,12 @@ the entry with its successor. This boundary check does not apply to `isolated`
 lists, whose entries are separate scripts, but isolation does not repair an
 incomplete entry: each isolated entry must be syntactically complete on its
 own. PowerShell starts a block comment only where a token can begin, so a `<#`
-inside an argument is literal text. Netsuke treats such an opener as
-unrecognized syntax: an entry that contains one is accepted, but a marker that
-follows it in the list is refused rather than guessed at. The check is not a
-complete PowerShell parser.
+inside an argument is literal text. A backtick-escaped separator does not end
+the argument token either, so a `<#` or `#` after one, or a `<` that is itself
+escaped, is not comment syntax. Netsuke treats such openers as unrecognized
+syntax: an entry that contains one is accepted, but a marker that follows it in
+the list is refused rather than guessed at. The check is not a complete
+PowerShell parser.
 
 Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
 `$env:NAME` reads an environment variable. PowerShell parses the braced

@@ -676,7 +676,11 @@ PowerShell recognizes `<#` only where a token can begin, so an opener inside an
 argument token — where the quotes around it still form an expandable string —
 fails closed instead of opening a comment. A block opener after a mid-token
 hash whose comment status is unknown fails closed for the same reason: a line
-comment would make `<#` ordinary text.
+comment would make `<#` ordinary text. Escape state participates in that
+boundary: a backtick keeps the character after it inside the current argument
+token, so a `<#` or `#` after an escaped separator, or a `<` that is itself
+escaped, is not comment syntax and fails closed rather than hiding the quoted
+text that follows.
 
 Entries that end at a neutral boundary are unaffected, including a closed
 here-string, a `#` line comment, a `--%` stop-parsing region, and a closed

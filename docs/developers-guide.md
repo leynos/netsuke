@@ -9873,7 +9873,8 @@ The `src/ir/cmd_interpolate/substitution/powershell/` module groups focused
 PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 `lexical/comments.rs` tracks fail-closed comment state,
 `lexical/block_comments.rs` tracks non-nesting block comments at token
-boundaries and fails closed on a mid-token opener, `lexical/boundary.rs`
+boundaries and fails closed on a mid-token or escaped-boundary opener,
+`lexical/boundary.rs`
 describes the region one entry leaves for the next, `stop_parsing.rs` tracks
 raw native-command arguments, and `tokens/mod.rs` recognizes the token
 boundaries and syntax used by those scanners. `substitution/shared_list.rs`
@@ -10027,9 +10028,13 @@ declaration order through `interpolate_shared_power_shell_entry` in
 `src/ir/cmd_interpolate/substitution/shared_list.rs`. An entry that leaves a
 single- or double-quoted string, here-string, block comment, or `$()`
 substitution open, or that ends in a backtick escape, is rejected with a
-localized diagnostic naming the entry and a language-neutral region code. The
-traversal also carries the sticky fail-closed classification forward, so a
-later marker stays protected after earlier scanner-sensitive text. Scalar
+localized diagnostic naming the entry and a language-neutral region code. A
+backtick keeps the character after it inside the current argument token, so the
+token-boundary check reads escape state as well as the adjacent character: a
+`<#` or `#` after an escaped separator, or a `<` that is itself escaped, is not
+comment syntax and fails closed. The traversal also carries the sticky
+fail-closed classification forward, so a later marker stays protected after
+earlier scanner-sensitive text. Scalar
 commands, `isolated` lists, and POSIX or Bash lists keep their existing
 per-entry handling; the boundary check applies only to a shared PowerShell
 list. Isolation is not a remedy for an entry that is itself incomplete, because

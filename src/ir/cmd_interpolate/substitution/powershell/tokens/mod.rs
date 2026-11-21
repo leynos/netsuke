@@ -113,8 +113,17 @@ impl<'source> PowerShellSourceCharacter<'source> {
     }
 
     /// Report whether this source character begins a PowerShell token.
+    ///
+    /// A backtick escapes the character after it, so a separator written after
+    /// a backtick stays inside the current argument token. PowerShell
+    /// recognises comment, here-string, stop-parsing, and block-comment syntax
+    /// only where a token can begin, so an escaped separator must not be read
+    /// as one.
     pub(super) fn is_token_boundary(self) -> bool {
-        self.previous().is_none_or(Self::is_token_separator)
+        !self.is_escaped_by_backtick()
+            && self.previous().is_none_or(|previous| {
+                previous.is_token_separator() && !previous.is_escaped_by_backtick()
+            })
     }
 
     /// Report whether this position can begin a here-string expression.
