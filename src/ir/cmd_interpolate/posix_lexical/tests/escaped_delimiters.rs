@@ -26,11 +26,25 @@ const HOSTILE_PATHS: [&str; 4] = [
     "x\"; touch injected; echo \"y",
 ];
 
+/// A path of shell metacharacters that must stay delimiter data.
+///
+/// Naming the corpus entry keeps the helper signatures about the scenario
+/// rather than about a bare string, and stops the module's argument list from
+/// reading as string plumbing.
+struct HostilePath<'a>(&'a str);
+
+impl<'a> HostilePath<'a> {
+    /// Borrow the path text bound into the test command.
+    fn as_str(&self) -> &'a str {
+        self.0
+    }
+}
+
 /// Build bindings that bind the same path to both markers.
-fn bindings_for(shell: RecipeShell, path: &str) -> CommandBindings {
+fn bindings_for(shell: RecipeShell, path: &HostilePath<'_>) -> CommandBindings {
     CommandBindings::new(
-        &[Utf8PathBuf::from(path)],
-        &[Utf8PathBuf::from(path)],
+        &[Utf8PathBuf::from(path.as_str())],
+        &[Utf8PathBuf::from(path.as_str())],
         shell,
     )
 }
@@ -74,7 +88,7 @@ fn assert_invalid_command(error: &IrGenError, template: &str) {
 #[case::backtick_and_dollar(HOSTILE_PATHS[2])]
 #[case::quote_and_semicolon(HOSTILE_PATHS[3])]
 fn unquoted_delimiter_marker_after_an_active_escape_is_rejected(#[case] path: &str) {
-    let bindings = bindings_for(RecipeShell::Posix, path);
+    let bindings = bindings_for(RecipeShell::Posix, &HostilePath(path));
     for marker in [INS_TOKEN, OUTS_TOKEN] {
         let source = format!("\\{marker}");
         assert!(
@@ -84,11 +98,51 @@ fn unquoted_delimiter_marker_after_an_active_escape_is_rejected(#[case] path: &s
     }
 }
 
-/// Reject the same trigger through both POSIX traversals and both shells.
+/// Build the unquoted, double-quoted, and mid-word delimiter templates.
+///
+/// Each form places the marker after one backslash at a different site, so a
+/// guard that only inspects the start of the delimiter word cannot pass the
+/// matrix by accident.
+fn escaped_delimiter_templates(marker: &str, path: &HostilePath<'_>) -> [String; 3] {
+    let path_text = path.as_str();
+    [
+        format!("cat <<\\{marker}\nbody\n\\{path_text}"),
+        format!("cat <<\"\\{marker}\"\nbody\n\\{path_text}"),
+        format!("cat <<pre\\{marker}\nbody\n\\pre{path_text}"),
+    ]
+}
+
+/// Assert both POSIX traversals reject one template with its original text.
 ///
 /// The script traversal does not apply the command traversal's `shlex` and
-/// backtick validation, so this matrix proves each traversal reaches the shared
-/// delimiter guard rather than relying on a later syntax check.
+/// backtick validation, so each traversal must reach the shared delimiter
+/// guard rather than relying on a later syntax check.
+fn assert_both_traversals_reject(template: &str, bindings: &CommandBindings) {
+    for interpolate in [
+        interpolate_command_with_bindings
+            as fn(&str, &CommandBindings) -> Result<String, IrGenError>,
+        interpolate_script_with_bindings,
+    ] {
+        let error =
+            interpolate(template, bindings).expect_err("an escaped delimiter marker must fail");
+        assert_invalid_command(&error, template);
+    }
+}
+
+/// Assert one shell rejects every marker and delimiter template for a path.
+fn assert_shell_rejects_every_escaped_marker(shell: RecipeShell, path: &HostilePath<'_>) {
+    let bindings = bindings_for(shell, path);
+    for marker in [INS_TOKEN, OUTS_TOKEN] {
+        for template in escaped_delimiter_templates(marker, path) {
+            assert_both_traversals_reject(&template, &bindings);
+        }
+    }
+}
+
+/// Reject the same trigger through both POSIX traversals and both shells.
+///
+/// The matrix keeps every hostile path shape, both markers, and all three
+/// delimiter sites while each helper stays shallow enough to read.
 #[rstest]
 #[case::posix(RecipeShell::Posix)]
 #[case::bash(RecipeShell::Bash)]
@@ -96,24 +150,7 @@ fn both_traversals_reject_a_delimiter_marker_after_an_unpaired_backslash(
     #[case] shell: RecipeShell,
 ) {
     for path in HOSTILE_PATHS {
-        let bindings = bindings_for(shell, path);
-        for marker in [INS_TOKEN, OUTS_TOKEN] {
-            for template in [
-                format!("cat <<\\{marker}\nbody\n\\{path}"),
-                format!("cat <<\"\\{marker}\"\nbody\n\\{path}"),
-                format!("cat <<pre\\{marker}\nbody\n\\pre{path}"),
-            ] {
-                for interpolate in [
-                    interpolate_command_with_bindings
-                        as fn(&str, &CommandBindings) -> Result<String, IrGenError>,
-                    interpolate_script_with_bindings,
-                ] {
-                    let error = interpolate(&template, &bindings)
-                        .expect_err("an escaped delimiter marker must fail closed");
-                    assert_invalid_command(&error, &template);
-                }
-            }
-        }
+        assert_shell_rejects_every_escaped_marker(shell, &HostilePath(path));
     }
 }
 
@@ -127,7 +164,8 @@ fn both_traversals_reject_a_delimiter_marker_after_an_unpaired_backslash(
 #[case::bash(RecipeShell::Bash)]
 fn a_single_quoted_backslash_leaves_a_delimiter_marker_eligible(#[case] shell: RecipeShell) {
     for path in HOSTILE_PATHS {
-        let bindings = bindings_for(shell, path);
+        let hostile = HostilePath(path);
+        let bindings = bindings_for(shell, &hostile);
         for marker in [INS_TOKEN, OUTS_TOKEN] {
             let source = format!("'\\{marker}'");
             let rendered =
@@ -159,8 +197,8 @@ fn a_single_quoted_backslash_leaves_a_delimiter_marker_eligible(#[case] shell: R
 #[case::three(3)]
 #[case::four(4)]
 fn backslash_parity_before_a_delimiter_marker(#[case] backslashes: usize) {
-    let path = HOSTILE_PATHS[3];
-    let bindings = bindings_for(RecipeShell::Posix, path);
+    let path = HostilePath(HOSTILE_PATHS[3]);
+    let bindings = bindings_for(RecipeShell::Posix, &path);
     for marker in [INS_TOKEN, OUTS_TOKEN] {
         let source = format!("{}{marker}", "\\".repeat(backslashes));
         let rendered = render_word(&source, &bindings);
@@ -176,7 +214,11 @@ fn backslash_parity_before_a_delimiter_marker(#[case] backslashes: usize) {
             .expect("an even backslash count must render one delimiter word");
         assert_eq!(
             terminator.text,
-            format!("{}{path}", "\\".repeat(backslashes.div_euclid(2))),
+            format!(
+                "{}{}",
+                "\\".repeat(backslashes.div_euclid(2)),
+                path.as_str()
+            ),
             "each escaped pair must render one literal backslash before the path"
         );
         assert!(
@@ -224,7 +266,8 @@ proptest! {
         path in hostile_path(),
         backslashes in 0usize..=4,
     ) {
-        let bindings = bindings_for(RecipeShell::Posix, &path);
+        let hostile = HostilePath(&path);
+        let bindings = bindings_for(RecipeShell::Posix, &hostile);
         for marker in [INS_TOKEN, OUTS_TOKEN] {
             let source = format!("{}{marker}", "\\".repeat(backslashes));
             let rendered = render_word(&source, &bindings);
