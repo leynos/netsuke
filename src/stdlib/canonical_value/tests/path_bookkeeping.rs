@@ -10,8 +10,7 @@
 //! The cases drive the public surface, so they measure the traversal the
 //! canonicalizer really runs rather than a stand-in for it.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::Ordering;
 
 use anyhow::{Result, ensure};
 use minijinja::value::Value;
@@ -19,7 +18,7 @@ use rstest::rstest;
 
 use super::*;
 
-use super::budget::{counted_sequence, pair_map};
+use super::budget::{CountedSequence, counted_sequence, pair_map};
 
 use crate::stdlib::canonical_value::path::take_step_clones;
 
@@ -52,19 +51,19 @@ fn long_member_name(level: usize) -> String {
 
 /// Build a wide leaf sequence beneath [`PATH_LEVELS`] long-named mappings.
 ///
-/// The counter records how many items admission pulled from the leaf, so a case
-/// can show that the work tracks occurrences rather than the name bytes above
-/// them.
-fn wide_leaf_under_long_names() -> (Value, Arc<AtomicUsize>) {
-    let (leaf, pulls) = counted_sequence(PATH_LEAF_WIDTH);
-    let mut current = leaf;
+/// The counters record how many items admission pulled from the leaf and how
+/// often it asked the leaf to enumerate, so a case can show that the work
+/// tracks occurrences rather than the name bytes above them.
+fn wide_leaf_under_long_names() -> (Value, CountedSequence) {
+    let counted = counted_sequence(PATH_LEAF_WIDTH);
+    let mut current = counted.value.clone();
     for level in 0..PATH_LEVELS {
         current = pair_map(
             vec![(Value::from(long_member_name(level)), current)],
             Some(1),
         );
     }
-    (current, pulls)
+    (current, counted)
 }
 
 /// Admission's path bookkeeping does not copy ancestor names.
@@ -81,7 +80,14 @@ fn wide_leaf_under_long_names() -> (Value, Arc<AtomicUsize>) {
 /// not name bytes, so the leaf is pulled once per item and never re-read.
 #[rstest]
 fn path_bookkeeping_does_not_copy_ancestor_names() -> Result<()> {
-    let (value, pulls) = wide_leaf_under_long_names();
+    let (
+        value,
+        CountedSequence {
+            pulls,
+            enumerations,
+            ..
+        },
+    ) = wide_leaf_under_long_names();
     // Reset the thread's counter, so the measurement covers only this case.
     let _ = take_step_clones();
     let key = canonical_key(&value).expect("the fixture is inside every default ceiling");
@@ -99,6 +105,11 @@ fn path_bookkeeping_does_not_copy_ancestor_names() -> Result<()> {
     ensure!(
         pulled == PATH_LEAF_WIDTH,
         "the leaf must be pulled once per item, got {pulled} pulls",
+    );
+    let calls = enumerations.load(Ordering::SeqCst);
+    ensure!(
+        calls == 1,
+        "the leaf must be enumerated exactly once, got {calls} calls",
     );
     Ok(())
 }

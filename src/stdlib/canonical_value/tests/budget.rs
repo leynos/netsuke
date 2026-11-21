@@ -32,23 +32,42 @@ use crate::stdlib::canonical_value::path::PathRef;
 /// completing it.
 const EXPONENTIAL_DEPTH: usize = 64;
 
-/// Build a sequence fixture that can yield `bound` items, counting each pull.
+/// A counted sequence and the two kinds of work admission asked of it.
+///
+/// The counters are kept apart because they answer different questions. `pulls`
+/// counts items yielded, so it shows how far a bounded enumeration read;
+/// `enumerations` counts calls to the host's `enumerate`, so it shows whether
+/// admission asked the host to enumerate at all. A container refused before
+/// dispatch must leave both at zero — a traversal that returned before the
+/// first pull would leave `pulls` at zero while still having called the host.
+pub(in crate::stdlib::canonical_value) struct CountedSequence {
+    /// The host value built from the fixture.
+    pub(in crate::stdlib::canonical_value) value: Value,
+    /// Items yielded so far.
+    pub(in crate::stdlib::canonical_value) pulls: Arc<AtomicUsize>,
+    /// Calls to the host's `enumerate` so far.
+    pub(in crate::stdlib::canonical_value) enumerations: Arc<AtomicUsize>,
+}
+
+/// Build a sequence fixture that can yield `bound` items, counting the work.
 ///
 /// `path_bookkeeping` builds its wide leaf from this fixture too, so the pull
 /// counter it asserts against is the same one the ceiling cases use.
-pub(in crate::stdlib::canonical_value) fn counted_sequence(
-    bound: usize,
-) -> (Value, Arc<AtomicUsize>) {
-    let yielded = Arc::new(AtomicUsize::new(0));
-    let (value, _) = fixture(
+pub(in crate::stdlib::canonical_value) fn counted_sequence(bound: usize) -> CountedSequence {
+    let pulls = Arc::new(AtomicUsize::new(0));
+    let (value, enumerations) = fixture(
         ObjectRepr::Seq,
         Some(bound),
         Materialized::Counted {
             bound,
-            yielded: Arc::clone(&yielded),
+            yielded: Arc::clone(&pulls),
         },
     );
-    (value, yielded)
+    CountedSequence {
+        value,
+        pulls,
+        enumerations,
+    }
 }
 
 /// Build a map fixture from literal pairs, reporting `len` as its length.
@@ -212,10 +231,16 @@ fn depth_refusal_names_the_first_value_past_the_ceiling() -> Result<()> {
 ///
 /// The counted sequence is the value the ceiling refuses, not an ancestor of
 /// it, so a traversal that checked depth only after dispatching into a
-/// container would pull at least once before refusing and fail the count.
+/// container would call the host and fail one of the two counts. Both are
+/// asserted: a call with no pull still means the refused container was
+/// enumerated.
 #[rstest]
 fn a_container_past_the_depth_ceiling_is_refused_before_it_enumerates() -> Result<()> {
-    let (counted, pulls) = counted_sequence(10);
+    let CountedSequence {
+        value: counted,
+        pulls,
+        enumerations,
+    } = counted_sequence(10);
     let nested = Value::from(vec![Value::from(vec![counted])]);
     let refusal = canonical_key_within(&nested, &mut admission_budget(1, 100, 100))
         .expect_err("the counted sequence sits two edges below a one-edge ceiling");
@@ -223,7 +248,12 @@ fn a_container_past_the_depth_ceiling_is_refused_before_it_enumerates() -> Resul
     let pulled = pulls.load(Ordering::SeqCst);
     ensure!(
         pulled == 0,
-        "the refused container must not be enumerated, got {pulled} pulls",
+        "the refused container must not yield an item, got {pulled} pulls",
+    );
+    let calls = enumerations.load(Ordering::SeqCst);
+    ensure!(
+        calls == 0,
+        "the refused container must not be asked to enumerate, got {calls} calls",
     );
     Ok(())
 }
@@ -231,16 +261,25 @@ fn a_container_past_the_depth_ceiling_is_refused_before_it_enumerates() -> Resul
 /// An over-long sequence stops one pull past the remaining node allowance.
 #[rstest]
 fn oversized_sequence_stops_one_item_past_the_allowance() -> Result<()> {
-    let (sequence, yielded) = counted_sequence(1_000_000);
+    let CountedSequence {
+        value: sequence,
+        pulls,
+        enumerations,
+    } = counted_sequence(1_000_000);
     let refusal = canonical_key_within(&sequence, &mut admission_budget(100, 4, 100))
         .expect_err("a million items exceed a four-node allowance");
     ensure_resource_refusal(&refusal, CanonicalResource::Nodes)?;
     // The root charges one node, leaving three; one pull beyond that allowance
     // is what distinguishes a refused overflow from a silently truncated read.
-    let pulled = yielded.load(Ordering::SeqCst);
+    let pulled = pulls.load(Ordering::SeqCst);
     ensure!(
         pulled == 4,
         "the enumeration must stop after four pulls, got {pulled}",
+    );
+    let calls = enumerations.load(Ordering::SeqCst);
+    ensure!(
+        calls == 1,
+        "the sequence must be asked to enumerate exactly once, got {calls}",
     );
     Ok(())
 }
