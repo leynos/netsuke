@@ -96,7 +96,7 @@ fn unfinished_power_shell_region_error(
         .with_arg("region", region_code);
     IrGenError::InvalidCommand {
         command: template.to_owned(),
-        snippet: region_code.to_owned(),
+        reason: region_code,
         message,
     }
 }

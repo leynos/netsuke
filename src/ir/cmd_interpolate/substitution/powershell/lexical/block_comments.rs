@@ -7,7 +7,7 @@
 //! entry close its comment and hand a neutral boundary to its successor.
 
 use super::super::super::{
-    IrGenError, SubstitutionTraversal, find_substitution, invalid_command_error,
+    IrGenError, RejectionReason, SubstitutionTraversal, find_substitution, invalid_command_error,
 };
 use super::super::tokens::PowerShellSourceCharacter;
 use super::PowerShellLexicalState;
@@ -71,7 +71,10 @@ impl SubstitutionTraversal<'_, '_> {
     ) -> Result<usize, IrGenError> {
         let pos = character.position();
         if find_substitution(self.chars, pos).is_some() {
-            return Err(invalid_command_error(self.template.to_owned()));
+            return Err(invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::MarkerInProtectedRegion,
+            ));
         }
         if character.ends_block_comment() {
             self.power_shell_lexical.close_block_comment();
