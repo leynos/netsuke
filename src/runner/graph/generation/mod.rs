@@ -6,9 +6,6 @@
 
 mod telemetry;
 
-#[cfg(test)]
-mod tests;
-
 use super::super::manifest_structure_telemetry::record_manifest_structure;
 use super::super::{
     Cli, Context, LocalizationKey, PipelineStage, Result, StatusReporter, dyndep, generation,
@@ -16,12 +13,11 @@ use super::super::{
 };
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
-use crate::ninja_gen::{GeneratedNinja, executable_phony_outputs};
+use crate::ninja_gen::GeneratedNinja;
 use crate::recipe_shell::InterpreterExecutable;
 use crate::runner::process::command_list_targets::CommandListTargetIndex;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use monotony::MonotonicClock;
-use std::collections::BTreeSet;
 
 /// Supply the dependencies that select and measure graph generation.
 ///
@@ -64,17 +60,10 @@ pub(in crate::runner) struct GeneratedNinjaWithTargets {
     command_list_targets: CommandListTargetIndex,
     /// Every path the manifest named, in the graph's own spelling.
     ///
-    /// The build command consults them before it removes generated state, so a
-    /// spelling that only the working directory can resolve cannot destroy a
-    /// declared output.
+    /// The build command consults them before it removes or creates generated
+    /// state, so a spelling that only the working directory can resolve cannot
+    /// collide with it.
     declared_paths: Vec<Utf8PathBuf>,
-    /// Parent directories of every executable `phony` edge's outputs.
-    ///
-    /// Ninja prepares an edge's output directories before running its recipe,
-    /// but a `phony` edge's executable statement names only a hidden output.
-    /// The build command creates these parents so a recipe that writes a nested
-    /// output keeps the directory it used to be given.
-    phony_output_dirs: Vec<Utf8PathBuf>,
 }
 
 /// Everything one CLI build needs from a generated bundle.
@@ -89,8 +78,6 @@ pub(in crate::runner) struct BuildParts {
     pub(in crate::runner) command_list_targets: CommandListTargetIndex,
     /// Every path the manifest named, in the graph's own spelling.
     pub(in crate::runner) declared_paths: Vec<Utf8PathBuf>,
-    /// Parent directories of every executable `phony` edge's outputs.
-    pub(in crate::runner) phony_output_dirs: Vec<Utf8PathBuf>,
 }
 
 impl GeneratedNinjaWithTargets {
@@ -105,7 +92,6 @@ impl GeneratedNinjaWithTargets {
             bundle: self.bundle,
             command_list_targets: self.command_list_targets,
             declared_paths: self.declared_paths,
-            phony_output_dirs: self.phony_output_dirs,
         }
     }
 }
@@ -124,22 +110,6 @@ fn declared_paths(graph: &BuildGraph) -> Vec<Utf8PathBuf> {
         })
         .chain(&graph.default_targets)
         .cloned()
-        .collect()
-}
-
-/// Collect the directories that must exist before an executable `phony` recipe.
-///
-/// A bare output such as `report` has an empty parent, which means the working
-/// directory itself and needs no preparation. The set is deduplicated and
-/// sorted so a shared directory is created once and the order a diagnostic
-/// names is stable for one graph.
-fn phony_output_dirs(graph: &BuildGraph) -> Vec<Utf8PathBuf> {
-    executable_phony_outputs(graph)
-        .filter_map(|output| output.parent())
-        .filter(|parent| !parent.as_str().is_empty())
-        .map(Utf8Path::to_path_buf)
-        .collect::<BTreeSet<_>>()
-        .into_iter()
         .collect()
 }
 
@@ -195,6 +165,5 @@ pub(in crate::runner) fn generate_ninja_with_shell(
         bundle,
         command_list_targets,
         declared_paths: declared_paths(&graph),
-        phony_output_dirs: phony_output_dirs(&graph),
     })
 }

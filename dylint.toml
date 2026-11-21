@@ -49,15 +49,6 @@ excluded_paths = [
     # canonicalizing them; `cap_std` refuses symlinks that leave the directory,
     # so these operations cannot be capability-scoped.
     "netsuke::stdlib::which::lookup",
-    # Creates the parent directories of executable `phony` edges' declared
-    # outputs. Ninja did that itself before the lowering moved an executable
-    # `phony` edge's product to a hidden output, and a manifest may declare an
-    # output outside the working directory — an absolute path, or a `..`
-    # spelling that leaves it — which a capability handle cannot reach. The
-    # recipe already runs with full ambient authority, so this grants nothing
-    # the build does not hold; scoping the exemption to this one module keeps
-    # every other runner path under the policy.
-    "netsuke::runner::output_dirs",
     # Syncs the ambient temporary file the runner writes its Ninja file to.
     # `tempfile` creates that file in the ambient system temporary directory, so
     # no directory handle covers it and the open file descriptor is the narrowest

@@ -64,16 +64,24 @@ decision that added the label.
 
 No manifest needs an edit for these two shapes, but they now behave as their
 names promised. One reservation is new: a manifest that already declares a
-target or output inside `.netsuke/phony` must move it, because that spelling
-now names generated state and generation rejects it.
+target or output inside `.netsuke/phony` must move it because that spelling now
+names generated state. Generation rejects the literal and foldable spellings. A
+spelling only the working directory can resolve, such as an absolute path
+beneath it, passes that lexical check and is refused later, when the build
+resolves it against the working directory before anything is written.
 
-An action or target declaring `phony: true` with a recipe runs every time it is
-reached, even when a file or directory of that name exists. Previously such a
-path made the edge look up to date, so the recipe was skipped after its first
-run. `netsuke clean` now leaves that path alone and removes the generated
-output under `.netsuke/phony` instead. A dependency-only aggregate has no
-recipe and no generated recipe output; it keeps its dependency-only `phony`
-form whether or not it declares the flag.
+Every executable action, and every target declaring `phony: true` with a
+recipe, runs each time it is reached, even when a file or directory of that
+name exists. An action is implicitly phony, so it needs no flag to acquire this
+behaviour. Previously such a path made the edge look up to date, so the recipe
+was skipped after its first run. `netsuke clean` now leaves that path alone and
+removes the generated output under `.netsuke/phony` instead. A dependency-only
+aggregate has no recipe and no generated recipe output; it keeps its
+dependency-only `phony` form whether or not it declares the flag.
+
+A phony recipe may still write a nested output such as `build/report`. The
+generated plan creates that directory just before the recipe runs, and only for
+a target the build actually reaches.
 
 A recipe that previously wrote a file at its declared name left that file
 behind as the edge's declared output. `netsuke clean` no longer removes it, and
@@ -81,8 +89,8 @@ will not remove it after the upgrade either, because the generated
 `.netsuke/phony` output does not replace the old path. Identify stale build
 products from earlier runs and delete only the ones you have confirmed the
 recipe created. A recipe that still writes its declared name recreates it on
-every build, so it has to be removed on every run rather than once. Do not
-delete unrelated files that merely share a target's name.
+every build. Remove that file on every run only when it is no longer wanted. Do
+not delete unrelated files that merely share a target's name.
 
 A target declaring `always: true` re-runs on every invocation that reaches it,
 even when its inputs and output are unchanged. Ninja records the output's

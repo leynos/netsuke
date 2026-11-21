@@ -59,7 +59,6 @@ pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 mod graph;
 mod help;
 mod ninja;
-mod output_dirs;
 mod path_helpers;
 mod phony_state;
 mod process;
@@ -80,9 +79,8 @@ pub use recipe_shell::telemetry::{
 
 use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
 use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
-use output_dirs::create_output_dirs;
 use path_helpers::resolve_output_path;
-use phony_state::reset_force_node;
+use phony_state::{refuse_reserved_declarations, reset_force_node};
 use recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 
 /// Runtime dependencies shared by command dispatch handlers.
@@ -231,14 +229,17 @@ fn execute_build(
         BuildTargets::new(&args.targets)
     };
 
+    // Generation cannot judge a spelling that only the working directory can
+    // resolve, so the build refuses a manifest path that lands in generated
+    // state before anything here writes into it. The check runs whether or not
+    // that state exists, because a first build must refuse as firmly as a
+    // later one.
+    refuse_reserved_declarations(cli, &parts.declared_paths)?;
     // Ninja reads the force node's absence as "permanently dirty", so a
-    // leftover path there would quietly turn off every forced edge. The reset
-    // takes the manifest's paths because a spelling that only the working
-    // directory can resolve must not delete a declared output.
-    reset_force_node(cli, &parts.declared_paths)?;
-    // A `phony` edge's executable statement names only its hidden output, so
-    // Ninja no longer creates the declared outputs' directories for it.
-    create_output_dirs(cli, &parts.phony_output_dirs)?;
+    // leftover path there would quietly turn off every forced edge. The
+    // reservation check above has already refused a manifest path that names
+    // it, so the removal cannot destroy a declared output.
+    reset_force_node(cli)?;
     let build_file = process::create_temp_ninja_file(&ninja)?;
     let build_path = build_file.as_path();
     let ninja_program = context.ninja_program;

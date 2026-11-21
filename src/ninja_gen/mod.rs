@@ -66,7 +66,6 @@ const CONSOLE_POOL: &str = "console";
 mod display_edge;
 pub(crate) use display_edge::DisplayEdge;
 mod edge_metadata;
-pub(crate) use edge_metadata::executable_phony_outputs;
 mod force_run;
 // Only in-crate tests compare the force node's component spelling against this
 // constant; production code reaches it through `force_run` itself.
@@ -74,6 +73,7 @@ mod force_run;
 pub(crate) use force_run::FORCE_PATH;
 mod named_action;
 mod order;
+mod output_dirs;
 mod progress_label;
 pub(crate) mod reserved_paths;
 pub(crate) use named_action::NamedAction;
@@ -304,8 +304,10 @@ pub(crate) fn generate_into_with_binding<W: Write>(
     }
     write_action_rules(graph, out, shell, binding)?;
     force_run::write_force_statement(graph, out)?;
+    output_dirs::write_statements(graph, out, shell, binding)?;
     for edge in ordered_edges(graph.edges()) {
         let metadata = edge_metadata::for_edge(graph, edge, localizer.as_ref())?;
+        let directory_nodes = output_dirs::nodes(graph, edge);
         write!(
             out,
             "{}",
@@ -318,6 +320,7 @@ pub(crate) fn generate_into_with_binding<W: Write>(
                 description: metadata.description.as_ref(),
                 hidden_output: metadata.hidden_output.as_ref(),
                 needs_force: metadata.needs_force,
+                directory_nodes: &directory_nodes,
             }
         )?;
     }

@@ -110,13 +110,14 @@
   prerequisite, so its recipe re-runs while an output whose modification time
   is unchanged still prunes downstream work. `netsuke build` clears a stray
   path left at that prerequisite's reserved name, so it cannot silently turn
-  forcing off, and creates the parent directories of a phony edge's declared
-  outputs, which Ninja no longer sees on the hidden statement
+  forcing off, and generates a preparation edge for each directory a phony
+  edge's declared outputs need, since Ninja no longer sees those names on the
+  hidden statement
   ([#1144](https://github.com/leynos/netsuke/issues/1144), [ADR-0084](docs/adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md))
-- Bound `shell_join`'s intermediate allocation: the filter appends into one
-  buffer under a fixed 1 MiB ceiling and rejects an over-limit join with
-  `netsuke::jinja::shell::join_limit`, instead of materializing an encoded copy
-  of every member and then the joined string
+- Bound `shell_join`'s encoded output: the filter appends encoded members into
+  one buffer and rejects a join whose encoded output exceeds a fixed 1 MiB
+  ceiling with `netsuke::jinja::shell::join_limit`, instead of materializing an
+  encoded copy of every member and then the joined string
   ([#970](https://github.com/leynos/netsuke/issues/970))
 - Install the x64 and Arm64 Windows MSIs under `C:\Program Files\netsuke`
   rather than `C:\Program Files (x86)\netsuke`, and migrate a v0.1.0-beta4

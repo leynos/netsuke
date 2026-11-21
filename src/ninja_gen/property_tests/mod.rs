@@ -41,6 +41,7 @@ fn format_edge(edge: &BuildEdge) -> String {
         description: None,
         hidden_output: None,
         needs_force: false,
+        directory_nodes: &[],
     }
     .to_string()
 }

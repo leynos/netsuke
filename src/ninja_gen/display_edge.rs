@@ -32,6 +32,12 @@ pub(crate) struct DisplayEdge<'a> {
     /// Whether the executable statement depends on the shared no-input force
     /// node, so the recipe runs on every invocation.
     pub(crate) needs_force: bool,
+    /// Generated nodes that create the directories the recipe writes into.
+    ///
+    /// Only a hidden executable statement carries them; every other statement
+    /// leaves the list empty, because Ninja prepares a real output's parents
+    /// itself.
+    pub(crate) directory_nodes: &'a [Utf8PathBuf],
 }
 
 impl Display for DisplayEdge<'_> {
@@ -93,16 +99,24 @@ impl DisplayEdge<'_> {
 
     /// Write one `build` statement up to and including its dependencies.
     ///
-    /// `with_implicit_outputs` is false only for the hidden statement, whose
-    /// real implicit outputs are claimed by the public alias.
+    /// `is_public` distinguishes the declared-name statement from the hidden
+    /// one. The hidden statement is the only one that takes the edge's
+    /// directory nodes, and it leaves the real implicit outputs to the public
+    /// alias. Those nodes join the order-only group, where a node that must run
+    /// first and must never make the statement stale belongs.
     fn write_build_line(
         &self,
         output: &mut Formatter<'_>,
         outputs: &[Utf8PathBuf],
-        with_implicit_outputs: bool,
+        is_public: bool,
     ) -> fmt::Result {
+        let directory_nodes = if is_public {
+            &[][..]
+        } else {
+            self.directory_nodes
+        };
         write!(output, "build {}", join(outputs))?;
-        if with_implicit_outputs && !self.edge.implicit_outputs.is_empty() {
+        if is_public && !self.edge.implicit_outputs.is_empty() {
             write!(output, " | {}", join(&self.edge.implicit_outputs))?;
         }
         write!(output, ": {}", self.action_name)?;
@@ -110,8 +124,19 @@ impl DisplayEdge<'_> {
             write!(output, " {}", join(&self.edge.inputs))?;
         }
         self.write_implicit_deps(output)?;
-        if !self.edge.order_only_deps.is_empty() {
-            write!(output, " || {}", join(&self.edge.order_only_deps))?;
+        match (
+            self.edge.order_only_deps.is_empty(),
+            directory_nodes.is_empty(),
+        ) {
+            (true, true) => {}
+            (false, true) => write!(output, " || {}", join(&self.edge.order_only_deps))?,
+            (true, false) => write!(output, " || {}", join(directory_nodes))?,
+            (false, false) => write!(
+                output,
+                " || {} {}",
+                join(&self.edge.order_only_deps),
+                join(directory_nodes)
+            )?,
         }
         writeln!(output)
     }

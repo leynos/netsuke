@@ -1575,37 +1575,53 @@ folds the graph's own spelling and reads nothing from disk. Namespace constants
 live there alone, and `force_run.rs` and `dyndep/staging.rs` import them.
 
 A spelling that needs the working directory cannot be judged by generation, so
-the build command judges it before it deletes anything.
+the build command judges it before it writes anything.
 `GeneratedNinjaWithTargets` collects every path the graph named, and
-`reset_force_node` resolves each against the canonical working directory: the
-longest existing ancestor is canonicalized and the components that do not exist
-yet are folded onto it. That catches an absolute path, a `..` path that leaves
-the workspace and returns, and a symbolic-link alias, each of which names a
-declared output that the reset would otherwise destroy. The resolution rule
-lives in `src/runner/phony_state/resolve.rs`, apart from the namespace handles
-and the removal in `mod.rs`, so the filesystem questions have their own unit.
-It reports every canonicalization failure other than an absent component rather
-than folding the failure into "not reserved": a permission or symbolic-link
-error must stop the reset, because a guard that failed open would delete the
-output it exists to protect. Resolution only reads; the removal itself always
-goes through the verified namespace handles. A refused build reports the same
-reservation diagnostic generation uses, because it is the same rule.
+`phony_state::refuse_reserved_declarations` resolves each against the canonical
+working directory: the longest existing ancestor is canonicalized and the
+components that do not exist yet are folded onto it. That catches an absolute
+path, a `..` path that leaves the workspace and returns, and a symbolic-link
+alias, each of which names a declared output that a reset or a generated node
+would otherwise occupy. The check runs unconditionally, before the force-node
+reset and before Ninja reads the build file, because a first build must refuse
+as firmly as a later one; a check that ran only once `.netsuke` existed would
+accept a reserved spelling on a clean workspace and fail every build after it.
+The resolution rule lives in `src/runner/phony_state/resolve.rs`, apart from
+the namespace handles and the removal in `mod.rs`, so the filesystem questions
+have their own unit. It reports every canonicalization failure other than an
+absent component rather than folding the failure into "not reserved": a
+permission or symbolic-link error must stop the build, because a guard that
+failed open would delete the output it exists to protect. Resolution only
+reads; the removal itself always goes through the verified namespace handles. A
+refused build reports the same reservation diagnostic generation uses, because
+it is the same rule.
 
-Preparing the declared outputs' directories is the second half of that
+Preparing the declared outputs' directories is generated work, not
 command-layer work. Ninja creates the parent directories of the outputs on an
 edge it is about to run, and the hidden statement names only
 `.netsuke/phony/edge-*`, so a phony recipe writing `build/report` would find no
-`build/` on a clean workspace.
-`ninja_gen::edge_metadata::executable_phony_outputs` answers which names need
-preparing, because that module owns the classification and a caller must not
-re-derive it. `GeneratedNinjaWithTargets` deduplicates their parents into
-`phony_output_dirs`, and `src/runner/output_dirs.rs` creates them against the
-effective working directory before Ninja runs. That module carries this
-feature's Whitaker `excluded_paths` entry: a manifest may spell an output
-absolutely or through `..`, which `cap_std` refuses to create beneath the
-workspace capability. Keep the classification in `edge_metadata` and the
-creation in the command layer; moving either would duplicate the lowering rule
-or make generation impure.
+`build/` on a clean workspace. `src/ninja_gen/output_dirs/mod.rs` therefore
+emits one preparation edge per distinct declared-output parent, and the recipe
+statement lists those nodes after `||` as order-only dependencies. Order-only
+is deliberate: the directory must exist before the recipe runs without the
+directory's absence making the recipe permanently dirty on its own. Three
+properties of the emission matter when changing it. The preparation edge takes
+the recipe's own `inputs`, `implicit_deps` and `order_only_deps` as its normal
+inputs, because Ninja does not order an order-only dependency after the edge's
+other prerequisites; a prerequisite that creates the same directory with a
+non-idempotent `mkdir` therefore still runs first. The node's identity is
+content-addressed over the edge's hidden output and the directory, so two
+recipes sharing a directory share one rule but keep distinct nodes. The node is
+never created, which Ninja reads as permanently out of date, so the idempotent
+command reruns on every build that reaches it and a directory deleted since the
+last build returns; Ninja neither warns about the missing output nor cleans it.
+An edge that is not executable `phony`, and an output whose parent is the
+working directory itself, emit nothing, so graphs without a nested phony output
+keep their previous bytes. `ninja_gen::edge_metadata::is_executable_phony`
+answers the classification question, because that module owns which edges are
+lowered. The generated `mkdir` runs in the same shell and interpreter transport
+as a manifest recipe, so quoting and PowerShell encoding have one owner rather
+than a second, weaker encoder in the runner.
 
 A `depfile` on an executable phony edge is a rule binding, so the hidden
 statement inherits it. Without `deps`, Ninja accepts a depfile only when its
