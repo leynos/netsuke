@@ -7,11 +7,20 @@
 
 use super::super::case_nesting::{CaseNesting, CaseObservation};
 use super::super::command_substitution::{
-    SubstitutionBoundary, reject_ambiguous_case_comment, reject_unplaced_case,
+    SourceText, SubstitutionBoundary, reject_ambiguous_case_comment, reject_unplaced_case,
 };
 use super::super::posix_lexical::SubstitutionKind;
 use super::super::{RejectionReason, invalid_command_error};
 use super::{IrGenError, ScriptSubstitutionTraversal, ShellQuoteContext};
+
+
+//! Recognise and track `$()` delimiters inside one POSIX or Bash script.
+//!
+//! The `)` that closes a command substitution stays part of the surrounding
+//! word, so its position must survive into the next comment check. These
+//! helpers own that nesting state, keeping the parent traversal within the
+//! repository's module-size cap.
+};
 
 /// Track one nested POSIX command substitution while traversing a script.
 pub(super) struct ScriptCommandSubstitution {
@@ -125,9 +134,9 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             return Ok(None);
         };
         if is_closed {
-            reject_unplaced_case(self.chars, &boundary)?;
+            reject_unplaced_case(SourceText::new(self.chars), &boundary)?;
             self.posix_lexical.leave_command_substitution_region();
-            reject_ambiguous_case_comment(self.chars, &boundary)?;
+            reject_ambiguous_case_comment(SourceText::new(self.chars), &boundary)?;
             self.posix_lexical.record_closed_command_substitution(pos);
         }
         self.output.push(ch);

@@ -9,8 +9,8 @@
 
 use super::super::case_nesting::CaseObservation;
 use super::super::command_substitution::{
-    CommandSubstitution, CommandSubstitutionDelimiter, SubstitutionBoundary, SubstitutionStart,
-    reject_ambiguous_case_comment, reject_unplaced_case,
+    CommandSubstitution, CommandSubstitutionDelimiter, SourceText, SubstitutionBoundary,
+    SubstitutionStart, reject_ambiguous_case_comment, reject_unplaced_case,
 };
 use super::super::posix_lexical::SubstitutionKind;
 use super::{IrGenError, SubstitutionTraversal};
@@ -54,7 +54,7 @@ impl SubstitutionTraversal<'_, '_> {
         }
         let boundary = self.boundary_at(pos);
         if self.decrement_command_substitution_parenthesis_depth() {
-            reject_unplaced_case(self.chars, &boundary)?;
+            reject_unplaced_case(SourceText::new(self.chars), &boundary)?;
             self.posix_lexical.leave_command_substitution_region();
             self.reject_ambiguous_boundary(&boundary)?;
             self.posix_lexical.record_closed_command_substitution(pos);
@@ -95,7 +95,7 @@ impl SubstitutionTraversal<'_, '_> {
         let is_checked =
             self.bindings.shell != RecipeShell::PowerShell || self.matches_unquoted_quote_context();
         if is_checked {
-            reject_ambiguous_case_comment(self.chars, boundary)?;
+            reject_ambiguous_case_comment(SourceText::new(self.chars), boundary)?;
         }
         Ok(())
     }

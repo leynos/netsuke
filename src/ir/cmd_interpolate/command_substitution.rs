@@ -96,6 +96,40 @@ pub(super) struct CharSpan {
     pub(super) end: usize,
 }
 
+/// A view of the recipe source that the boundary checks scan.
+///
+/// Every check in this module reads the same character buffer at different
+/// positions, so the buffer travels as one value rather than as a bare slice
+/// beside unrelated indices. The wrapper also states what the checks may read:
+/// the recipe source, never the lowered command or the surrounding word.
+#[derive(Clone, Copy)]
+pub(super) struct SourceText<'a> {
+    /// The recipe characters being scanned.
+    chars: &'a [char],
+}
+
+impl<'a> SourceText<'a> {
+    /// View `chars` as the recipe source the boundary checks scan.
+    pub(super) const fn new(chars: &'a [char]) -> Self {
+        Self { chars }
+    }
+
+    /// Return the character at `index`, when the source has one there.
+    fn get(self, index: usize) -> Option<char> {
+        self.chars.get(index).copied()
+    }
+
+    /// Return the number of characters in the source.
+    const fn len(self) -> usize {
+        self.chars.len()
+    }
+
+    /// Borrow the characters for helpers that search the whole buffer.
+    const fn as_slice(self) -> &'a [char] {
+        self.chars
+    }
+}
+
 /// Reject a `)#` boundary whose `)` may terminate a `case` pattern.
 ///
 /// A `)` that closes `$()` is part of the surrounding word, so `#` after it is
@@ -114,16 +148,16 @@ pub(super) struct CharSpan {
 /// Returns [`IrGenError::AmbiguousSubstitutionBoundary`] when the boundary is
 /// ambiguous.
 pub(super) fn reject_ambiguous_case_comment(
-    chars: &[char],
+    source: SourceText<'_>,
     boundary: &SubstitutionBoundary,
 ) -> Result<(), IrGenError> {
     let Some(start) = boundary.start else {
         return Ok(());
     };
-    let is_comment_boundary = chars.get(boundary.pos + 1) == Some(&'#');
+    let is_comment_boundary = source.get(boundary.pos + 1) == Some('#');
     let has_case = boundary.saw_case
         || contains_case_keyword(
-            chars,
+            source,
             CharSpan {
                 start,
                 end: boundary.pos,
@@ -154,7 +188,7 @@ pub(super) fn reject_ambiguous_case_comment(
 /// Returns [`IrGenError::InvalidCommand`] when a `case` construct may begin at
 /// a position the traversal read as argument data.
 pub(super) fn reject_unplaced_case(
-    chars: &[char],
+    source: SourceText<'_>,
     boundary: &SubstitutionBoundary,
 ) -> Result<(), IrGenError> {
     let Some(start) = boundary.start else {
@@ -162,13 +196,13 @@ pub(super) fn reject_unplaced_case(
     };
     let is_unplaceable_case = boundary.has_unplaced_case
         && contains_case_in_prefix(
-            chars,
+            source,
             CharSpan {
                 start,
                 end: boundary.pos,
             },
         )
-        && has_marker_after(chars, boundary);
+        && has_marker_after(source, boundary);
     if is_unplaceable_case {
         return Err(unplaced_case_error());
     }
@@ -210,8 +244,9 @@ const fn unplaced_case_error() -> IrGenError {
 /// Only a marker that follows the closer can observe the quote context this
 /// boundary sets, so a misread boundary with no later marker changes no output
 /// and is left alone.
-fn has_marker_after(chars: &[char], boundary: &SubstitutionBoundary) -> bool {
-    (boundary.pos + 1..chars.len()).any(|index| find_substitution(chars, index).is_some())
+fn has_marker_after(source: SourceText<'_>, boundary: &SubstitutionBoundary) -> bool {
+    (boundary.pos + 1..source.len())
+        .any(|index| find_substitution(source.as_slice(), index).is_some())
 }
 
 /// Report whether a whole-word `case` is followed by a whole-word `in`.
@@ -225,28 +260,28 @@ fn has_marker_after(chars: &[char], boundary: &SubstitutionBoundary) -> bool {
 /// is the earliest `case`, and any later `in` completes its header. Rescanning
 /// the suffix from every `case` would make a long run of `case` arguments
 /// quadratic before the recipe is even accepted.
-fn contains_case_in_prefix(chars: &[char], span: CharSpan) -> bool {
+fn contains_case_in_prefix(source: SourceText<'_>, span: CharSpan) -> bool {
     let mut saw_case = false;
     for pos in span.start..span.end {
-        if !saw_case && is_keyword_at(chars, pos, &CASE_KEYWORD) {
+        if !saw_case && is_keyword_at(source, pos, &CASE_KEYWORD) {
             saw_case = true;
             continue;
         }
-        if saw_case && is_keyword_at(chars, pos, &IN_KEYWORD) {
+        if saw_case && is_keyword_at(source, pos, &IN_KEYWORD) {
             return true;
         }
     }
     false
 }
 
-/// Report whether `chars[span]` contains the `case` reserved word.
+/// Report whether `source[span]` contains the `case` reserved word.
 ///
 /// The scan is deliberately lexical: it does not skip quotes, comments, or
 /// nested substitutions, so it can report a `case` that is not a keyword. That
 /// over-approximation is safe because the caller fails closed on any match
 /// rather than guessing which `)` closes the substitution.
-pub(super) fn contains_case_keyword(chars: &[char], span: CharSpan) -> bool {
-    contains_keyword(chars, span, &CASE_KEYWORD)
+fn contains_case_keyword(source: SourceText<'_>, span: CharSpan) -> bool {
+    contains_keyword(source, span, &CASE_KEYWORD)
 }
 
 /// Spell the `case` reserved word.
@@ -255,9 +290,9 @@ const CASE_KEYWORD: [char; 4] = ['c', 'a', 's', 'e'];
 /// Spell the `in` reserved word that completes a `case` header.
 const IN_KEYWORD: [char; 2] = ['i', 'n'];
 
-/// Report whether `chars[span]` contains `keyword` as a whole word.
-fn contains_keyword(chars: &[char], span: CharSpan, keyword: &[char]) -> bool {
-    (span.start..span.end).any(|pos| is_keyword_at(chars, pos, keyword))
+/// Report whether `source[span]` contains `keyword` as a whole word.
+fn contains_keyword(source: SourceText<'_>, span: CharSpan, keyword: &[char]) -> bool {
+    (span.start..span.end).any(|pos| is_keyword_at(source, pos, keyword))
 }
 
 /// Report whether `keyword` appears at `pos` as a whole word.
@@ -273,27 +308,27 @@ fn contains_keyword(chars: &[char], span: CharSpan, keyword: &[char]) -> bool {
 /// position inside a run of continuations is rejected in constant time instead
 /// of walking the rest of the run. A keyword written after a continuation is
 /// still found at the index of its first letter.
-fn is_keyword_at(chars: &[char], pos: usize, keyword: &[char]) -> bool {
-    if chars.get(pos) != keyword.first() {
+fn is_keyword_at(source: SourceText<'_>, pos: usize, keyword: &[char]) -> bool {
+    if source.get(pos) != keyword.first().copied() {
         return false;
     }
     let mut cursor = pos;
     for expected in keyword {
-        cursor = skip_line_continuations(chars, cursor);
-        if chars.get(cursor) != Some(expected) {
+        cursor = skip_line_continuations(source, cursor);
+        if source.get(cursor) != Some(*expected) {
             return false;
         }
         cursor += 1;
     }
-    let starts_word = previous_effective_char(chars, pos).is_none_or(|index| {
-        chars
+    let starts_word = previous_effective_char(source, pos).is_none_or(|index| {
+        source
             .get(index)
-            .is_some_and(|ch| SourceChar::new(*ch).is_word_terminator())
+            .is_some_and(|ch| SourceChar::new(ch).is_word_terminator())
     });
-    let after = skip_line_continuations(chars, cursor);
-    let ends_word = chars
+    let after = skip_line_continuations(source, cursor);
+    let ends_word = source
         .get(after)
-        .is_none_or(|ch| SourceChar::new(*ch).is_word_terminator());
+        .is_none_or(|ch| SourceChar::new(ch).is_word_terminator());
     starts_word && ends_word
 }
 
@@ -303,8 +338,8 @@ fn is_keyword_at(chars: &[char], pos: usize, keyword: &[char]) -> bool {
 /// parsing, so the character the shell reads next is the one after the pair. A
 /// backslash that is itself escaped starts no pair: in `\\<newline>` the
 /// newline is an ordinary terminator.
-fn skip_line_continuations(chars: &[char], mut pos: usize) -> usize {
-    while is_line_continuation_at(chars, pos) {
+fn skip_line_continuations(source: SourceText<'_>, mut pos: usize) -> usize {
+    while is_line_continuation_at(source, pos) {
         pos += 2;
     }
     pos
@@ -316,9 +351,9 @@ fn skip_line_continuations(chars: &[char], mut pos: usize) -> usize {
 /// `ase` still spells `case`. The test is one predicate so the scan above keeps
 /// a single branch, and each of its own conditions stays within the branch
 /// limit.
-fn is_line_continuation_at(chars: &[char], pos: usize) -> bool {
-    let is_pair = chars.get(pos) == Some(&'\\') && chars.get(pos + 1) == Some(&'\n');
-    is_pair && is_unescaped_character(chars, pos)
+fn is_line_continuation_at(source: SourceText<'_>, pos: usize) -> bool {
+    let is_pair = source.get(pos) == Some('\\') && source.get(pos + 1) == Some('\n');
+    is_pair && is_unescaped_character(source.as_slice(), pos)
 }
 
 /// Return the index of the character that really precedes `pos`.
@@ -326,9 +361,9 @@ fn is_line_continuation_at(chars: &[char], pos: usize) -> bool {
 /// Continuations are deleted before parsing, so a keyword preceded by one is
 /// preceded by the character before the pair, which decides whether it starts a
 /// word. Returning `None` means the position opens the source.
-fn previous_effective_char(chars: &[char], pos: usize) -> Option<usize> {
+fn previous_effective_char(source: SourceText<'_>, pos: usize) -> Option<usize> {
     let mut end = pos;
-    while end >= 2 && is_line_continuation_at(chars, end - 2) {
+    while end >= 2 && is_line_continuation_at(source, end - 2) {
         end -= 2;
     }
     end.checked_sub(1)
