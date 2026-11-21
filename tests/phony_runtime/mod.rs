@@ -54,8 +54,8 @@ pub(crate) const FORCE_NODE: &str = ".netsuke/phony/force";
 ///
 /// The spelling is absolute, so only the runner's working-directory resolution
 /// can tell that it names generated state.
-pub(crate) fn alias_manifest(force_node: &str) -> String {
-    include_str!("../data/phony_alias.yml").replace("{force_node}", force_node)
+pub(crate) fn alias_manifest(force_node: impl AsRef<Utf8Path>) -> String {
+    include_str!("../data/phony_alias.yml").replace("{force_node}", force_node.as_ref().as_str())
 }
 
 /// Provide a temporary workspace, or skip when Ninja is unavailable.
@@ -89,7 +89,11 @@ pub(crate) enum Shadow {
 
 impl Shadow {
     /// Create the shadowing path inside `workspace`.
-    pub(crate) fn create(self, workspace: &Workspace, name: &str) -> Result<()> {
+    ///
+    /// The shadow's location is a workspace-relative path, so it is typed as
+    /// one rather than as free text that happens to look like a path.
+    pub(crate) fn create(self, workspace: &Workspace, path: impl AsRef<Utf8Path>) -> Result<()> {
+        let name = path.as_ref();
         match self {
             Self::Directory => {
                 workspace
@@ -110,10 +114,11 @@ impl Shadow {
     }
 
     /// Return the path that must still exist after the build and clean.
-    pub(crate) fn survivor(self, name: &str) -> Utf8PathBuf {
+    pub(crate) fn survivor(self, path: impl AsRef<Utf8Path>) -> Utf8PathBuf {
+        let name = path.as_ref();
         match self {
-            Self::Directory => Utf8Path::new(name).join("keep.txt"),
-            Self::File => Utf8PathBuf::from(name),
+            Self::Directory => name.join("keep.txt"),
+            Self::File => name.to_path_buf(),
         }
     }
 }
@@ -171,7 +176,8 @@ impl Workspace {
     }
 
     /// Read `name` as lines, treating a missing file as no lines.
-    pub(crate) fn lines(&self, name: &str) -> Result<Vec<String>> {
+    pub(crate) fn lines(&self, path: impl AsRef<Utf8Path>) -> Result<Vec<String>> {
+        let name = path.as_ref();
         let exists = self
             .root
             .try_exists(name)
@@ -187,35 +193,40 @@ impl Workspace {
     }
 
     /// Report whether `name` exists in the workspace.
-    pub(crate) fn exists(&self, name: &str) -> Result<bool> {
+    pub(crate) fn exists(&self, path: impl AsRef<Utf8Path>) -> Result<bool> {
+        let name = path.as_ref();
         self.root
             .try_exists(name)
             .with_context(|| format!("check whether {name} exists"))
     }
 
     /// Create `name` and its parents inside the workspace.
-    pub(crate) fn create_dir_all(&self, name: &str) -> Result<()> {
+    pub(crate) fn create_dir_all(&self, path: impl AsRef<Utf8Path>) -> Result<()> {
+        let name = path.as_ref();
         self.root
             .create_dir_all(name)
             .with_context(|| format!("create {name}"))
     }
 
     /// Remove `name` and everything beneath it.
-    pub(crate) fn remove_dir_all(&self, name: &str) -> Result<()> {
+    pub(crate) fn remove_dir_all(&self, path: impl AsRef<Utf8Path>) -> Result<()> {
+        let name = path.as_ref();
         self.root
             .remove_dir_all(name)
             .with_context(|| format!("remove {name}"))
     }
 
     /// Write `contents` to `name`.
-    pub(crate) fn write(&self, name: &str, contents: &[u8]) -> Result<()> {
+    pub(crate) fn write(&self, path: impl AsRef<Utf8Path>, contents: &[u8]) -> Result<()> {
+        let name = path.as_ref();
         self.root
             .write(name, contents)
             .with_context(|| format!("write {name}"))
     }
 
     /// Read `name` as text.
-    pub(crate) fn read_to_string(&self, name: &str) -> Result<String> {
+    pub(crate) fn read_to_string(&self, path: impl AsRef<Utf8Path>) -> Result<String> {
+        let name = path.as_ref();
         self.root
             .read_to_string(name)
             .with_context(|| format!("read {name}"))
