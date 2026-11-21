@@ -91,6 +91,7 @@ REQUIRED_RUNNER_ASSIGNMENTS = {
     # expanded into one assignment per leg rather than read as a single label.
     "ci-windows.windows-msi-upgrade.x64": "windows-latest",
     "ci-windows.windows-msi-upgrade.arm64": "windows-11-arm",
+    "ci-macos.read-policy": "macos-latest",
     "ci.kani-smoke": UBICLOUD_DEFAULT_LABEL,
     "ci-default-features.default-features": UBICLOUD_LARGE_LABEL,
     "coverage-main.coverage-upload": UBICLOUD_LARGE_LABEL,
@@ -121,6 +122,7 @@ GITHUB_HOSTED_ONLY_KEYS = (
     "ci-windows.build-test-windows",
     "ci-windows.windows-msi-upgrade.x64",
     "ci-windows.windows-msi-upgrade.arm64",
+    "ci-macos.read-policy",
     "delayed-pr-comment.delay_and_comment",
     "release.metadata",
     "release.build-windows",

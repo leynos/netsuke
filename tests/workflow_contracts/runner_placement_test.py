@@ -42,6 +42,7 @@ DIRECT_RUNNER_SOURCES = (
     ("ci-windows.build-test-windows", "ci-windows.yml", "build-test-windows"),
     # The MSI gate selects its runner from a matrix and is expanded by
     # `_msi_matrix_legs` rather than read as one literal label.
+    ("ci-macos.read-policy", "ci-macos.yml", "read-policy"),
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
     (
         "ci-default-features.default-features",

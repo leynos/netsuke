@@ -2908,6 +2908,15 @@ final component is judged that way: a directory link earlier in the path is
 resolved as described above, so a reparse point there is followed when its
 target is written as a relative path and stays within the workspace.
 
+On Unix the refusal is stated twice, because the two paths a read can take
+consult different things. Linux normally resolves the whole path in one
+`openat2` call, where the open's own `O_NOFOLLOW` flag is decisive. macOS,
+Linux kernels before 5.6, and any host whose security policy refuses `openat2`
+make cap-std resolve the path one component at a time instead, and that
+resolver consults cap-std's logical policy rather than the raw flag. Netsuke
+sets both, so the policy holds on every path. A template cannot observe the
+difference: a final symlink is refused with the same diagnostic either way.
+
 `follow_symlinks=true` waives that final-component refusal, and only that. The
 capability that anchors every read in the workspace is unaffected, so the
 absolute-target rule above still applies: such a link is refused with a

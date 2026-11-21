@@ -99,6 +99,11 @@
   `false` and is then rejected by the no-input policy, so only `true` and `1`
   are usable. Indexed `__N` list variables remain unsupported
   ([#1147](https://github.com/leynos/netsuke/issues/1147), [ADR-0083](docs/adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md)).
+- Raise the `cap-std` and `cap-primitives` floor from 3.4.4 to 3.4.6, including
+  the build-dependency copy of `cap-std`, and add `cap-fs-ext` 3.4.6 for its
+  `OpenOptionsFollowExt` surface. The floor takes the manual-resolver sandbox
+  fix for RUSTSEC-2026-0482
+  ([#1009](https://github.com/leynos/netsuke/issues/1009)).
 
 ### Security
 
@@ -118,6 +123,13 @@
   accepted filename could introduce another argument into a trusted recipe; the
   portable unquoted-path allowlist now excludes the comma (CWE-88)
   ([#1017](https://github.com/leynos/netsuke/issues/1017))
+- Refuse a symlink in the final component for the `contents`, `linecount`,
+  `hash`, and `digest` filters on every host. The Unix open already passed
+  `O_NOFOLLOW`, but `cap-std`'s component-at-a-time resolver decides from its
+  logical `FollowSymlinks` policy, whose default is `Yes`, so on macOS and on
+  Linux hosts without `openat2` the target was dereferenced and read despite
+  `follow_symlinks: false`. Both the policy and the platform flag now refuse
+  the link (CWE-59) ([#1009](https://github.com/leynos/netsuke/issues/1009))
 
 <!-- markdownlint-disable-next-line MD024 -->
 ### Fixed

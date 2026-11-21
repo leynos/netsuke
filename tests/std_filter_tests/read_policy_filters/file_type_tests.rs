@@ -2,21 +2,20 @@
 //!
 //! The default policy opens the final path component without following
 //! symlinks and rejects anything that is not a regular file; the
-//! `follow_symlinks` opt-in resolves a link but must not reintroduce a
-//! blocking open. Both clauses are asserted for every entry point through the
-//! shared filter table.
+//! `follow_symlinks` opt-in resolves a link. Both clauses are asserted for
+//! every entry point through the shared filter table. The FIFO cases live in
+//! `fifo_tests`, and the Windows reparse-point case in this module's
+//! `#[cfg(windows)]` half.
 use anyhow::{Context, Result, ensure};
 use minijinja::ErrorKind;
 use rstest::rstest;
 use test_support::fluent::normalize_fluent_isolates;
 
-#[cfg(unix)]
-use super::create_fifo;
 use super::fallible;
 #[cfg(windows)]
 use super::require_real_junction;
 use super::{
-    CONTENTS, DIGEST, FilterCase, HASH, LINECOUNT, ReadTarget, rejection, render_case,
+    CONTENTS, DIGEST, FilterCase, HASH, LINECOUNT, Policy, ReadTarget, rejection, render_case,
     require_real_symlink,
 };
 
@@ -56,12 +55,26 @@ fn skip_without_junction_support(case: FilterCase) {
     );
 }
 
+/// The default and explicit `false` policies must both refuse a final symlink.
+///
+/// The two spellings are the same policy, so one table asserts both: a caller
+/// that omits `follow_symlinks` and a caller that writes `false` must reach the
+/// same refusal.
+///
+/// Native Linux resolves this through `openat2`, where the raw `O_NOFOLLOW`
+/// flag already refuses the link. The manual resolver consults cap-std's
+/// logical policy instead, so a caller that omits `FollowSymlinks::No` reads
+/// the target on macOS and on every fallback path; `resolver_fallback_tests`
+/// forces that resolver and provides the pre-fix failure evidence.
 #[rstest]
 #[case::contents(CONTENTS)]
 #[case::linecount(LINECOUNT)]
 #[case::hash(HASH)]
 #[case::digest(DIGEST)]
-fn reading_filters_reject_symlinks_by_default(#[case] case: FilterCase) -> Result<()> {
+fn reading_filters_reject_symlinks(
+    #[case] case: FilterCase,
+    #[values(Policy::Omitted, Policy::FollowFalse)] policy: Policy,
+) -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
     let Some(link) = fallible::file_symlink_fixture(&root)? else {
         skip_without_symlink_support(case);
@@ -72,14 +85,14 @@ fn reading_filters_reject_symlinks_by_default(#[case] case: FilterCase) -> Resul
         case,
         render_case(
             case,
-            "symlink",
+            &format!("symlink_{}", policy.suffix()),
             ReadTarget::new(&root, &link, 1024),
-            &case.template(),
+            &policy.template(case),
         )?,
     )?;
     ensure!(
         err.kind() == ErrorKind::InvalidOperation,
-        "{}: should report InvalidOperation for a symlink but was {:?}",
+        "{}: should report InvalidOperation for a symlink under {policy:?} but was {:?}",
         case.name,
         err.kind()
     );
@@ -119,6 +132,39 @@ fn follow_symlinks_opt_in_reads_the_link_target(#[case] case: FilterCase) -> Res
         "{}: expected the opt-in to follow the link and render {} but rendered {rendered}",
         case.name,
         case.followed
+    );
+    Ok(())
+}
+
+/// A regular file must read normally under every spelling of the policy.
+///
+/// The symlink cases prove a rejection; this case proves the rejection is
+/// scoped to the link and does not refuse an ordinary file, under the default,
+/// the explicit `false`, or the `true` opt-in.
+#[rstest]
+#[case::contents(CONTENTS)]
+#[case::linecount(LINECOUNT)]
+#[case::hash(HASH)]
+#[case::digest(DIGEST)]
+fn reading_filters_read_regular_files_under_every_policy(
+    #[case] case: FilterCase,
+    #[values(Policy::Omitted, Policy::FollowFalse, Policy::FollowTrue)] policy: Policy,
+) -> Result<()> {
+    let (_temp, root) = fallible::filter_workspace()?;
+    let file = root.join("file");
+    let rendered = render_case(
+        case,
+        &format!("regular_{}", policy.suffix()),
+        ReadTarget::new(&root, &file, 1024),
+        &policy.template(case),
+    )?
+    .with_context(|| format!("{}: render a regular file under {:?}", case.name, policy))?;
+    ensure!(
+        rendered == case.followed,
+        "{}: expected {} for a regular file under {:?} but rendered {rendered}",
+        case.name,
+        case.followed,
+        policy
     );
     Ok(())
 }
@@ -167,75 +213,6 @@ fn reading_filters_reject_a_junction(#[case] case: FilterCase) -> Result<()> {
     ensure!(
         message.contains("not a regular file"),
         "{}: error should explain the rejection: {message}",
-        case.name
-    );
-    Ok(())
-}
-
-#[cfg(unix)]
-#[rstest]
-#[case::contents(CONTENTS)]
-#[case::linecount(LINECOUNT)]
-#[case::hash(HASH)]
-#[case::digest(DIGEST)]
-fn reading_filters_reject_a_fifo(#[case] case: FilterCase) -> Result<()> {
-    let (_temp, root) = fallible::filter_workspace()?;
-    let pipe = create_fifo(&root, "pipe")?;
-    let err = rejection(
-        case,
-        render_case(
-            case,
-            "fifo",
-            ReadTarget::new(&root, &pipe, 1024),
-            &case.template(),
-        )?,
-    )?;
-    ensure!(
-        err.kind() == ErrorKind::InvalidOperation,
-        "{}: should report InvalidOperation for a FIFO but was {:?}",
-        case.name,
-        err.kind()
-    );
-    Ok(())
-}
-
-/// The symlink opt-in must not reintroduce a blocking open.
-///
-/// `O_NONBLOCK` is what keeps this open from wedging the render worker under
-/// either policy: opening a FIFO for reading with neither a writer nor
-/// `O_NONBLOCK` blocks until a writer appears, and the test would only end when
-/// `nextest` terminates it. `O_NOFOLLOW` is not the guard here — it refuses a
-/// symlink final component, and a FIFO is not one. The FIFO therefore reaches
-/// the read-only open, returns because of `O_NONBLOCK`, and is rejected by the
-/// regular-file check on the opened handle, which is what this case asserts.
-#[cfg(unix)]
-#[rstest]
-#[case::contents(CONTENTS)]
-#[case::linecount(LINECOUNT)]
-#[case::hash(HASH)]
-#[case::digest(DIGEST)]
-fn reading_filters_reject_a_fifo_when_following_symlinks(#[case] case: FilterCase) -> Result<()> {
-    let (_temp, root) = fallible::filter_workspace()?;
-    let pipe = create_fifo(&root, "pipe")?;
-    let err = rejection(
-        case,
-        render_case(
-            case,
-            "fifo_follow",
-            ReadTarget::new(&root, &pipe, 1024),
-            &case.template_with("follow_symlinks=true"),
-        )?,
-    )?;
-    ensure!(
-        err.kind() == ErrorKind::InvalidOperation,
-        "{}: should report InvalidOperation for a FIFO but was {:?}",
-        case.name,
-        err.kind()
-    );
-    let message = normalize_fluent_isolates(&err.to_string());
-    ensure!(
-        message.contains("not a regular file"),
-        "{}: a non-blocking open should reach the regular-file check: {message}",
         case.name
     );
     Ok(())

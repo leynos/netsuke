@@ -7,6 +7,7 @@
 use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
 #[cfg(unix)]
 use cap_std::fs_utf8::OpenOptionsExt;
 use cap_std::{
@@ -87,11 +88,17 @@ pub(crate) fn not_regular_file_error(path: &Utf8Path) -> Error {
 ///
 /// The default policy opens the final path component without following a link
 /// on either platform, and the decision is taken from the handle the caller
-/// then reads: Unix asks for that in the open itself with `O_NOFOLLOW`, and
-/// Windows asks the open not to traverse a reparse point and then judges the
-/// returned handle's attributes (see `windows_reparse`). Neither platform
-/// consults a separate path lookup, so a concurrent replace of the final
-/// component cannot make the decision and the read disagree.
+/// then reads. Two mechanisms state that refusal together: cap-std's logical
+/// `FollowSymlinks` policy, which its component-at-a-time resolver consults,
+/// and the platform's own open flags — `O_NOFOLLOW` on Unix and a
+/// non-traversing open followed by an attribute check on Windows (see
+/// `windows_reparse`). The logical policy is required as well as the flag:
+/// when `openat2` is unavailable — macOS, Linux before 5.6, or any host whose
+/// seccomp policy refuses it — cap-std resolves one component at a time and
+/// dereferences a final link from `FollowSymlinks::Yes`, the default, even
+/// though the raw flag bits would have refused it. Neither platform consults a
+/// separate path lookup, so a concurrent replace of the final component cannot
+/// make the decision and the read disagree.
 ///
 /// On Unix the open is also non-blocking, so a FIFO or device final component
 /// cannot wedge the render worker inside `open` even when the caller opted
@@ -119,6 +126,14 @@ pub(crate) fn open_file_checked(path: &Utf8Path, scope: ReadScope<'_>) -> Result
         .map_or_else(|| ".".to_owned(), str::to_owned);
     let mut options = OpenOptions::new();
     options.read(true);
+    // The logical policy, not the raw flag bits, is what cap-std's manual
+    // resolver reads when it dereferences the final component, so state the
+    // refusal here as well as in the platform flags below. Leaving the
+    // `FollowSymlinks::Yes` default in place let a link be followed on every
+    // `openat2`-less path; see issue #1009.
+    if !limits.follow_symlinks {
+        options.follow(FollowSymlinks::No);
+    }
     // `O_NONBLOCK` is applied unconditionally so a FIFO or device cannot block
     // the open under either symlink policy; `O_NOFOLLOW` is added only by the
     // default policy, which rejects a symlink final component.

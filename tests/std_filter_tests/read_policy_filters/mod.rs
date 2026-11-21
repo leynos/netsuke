@@ -14,10 +14,13 @@ use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::context;
 
-// Only `create_fifo` builds one, and only Unix has FIFOs to build.
-#[cfg(unix)]
+// Only `create_fifo` builds one, and it needs `mknodat`, which rustix offers
+// on Linux alone: macOS has `mknod` but no `*at` form of it. The FIFO cases
+// are therefore a Linux lane, and the macOS read-policy lane covers the
+// symlink policy without them.
+#[cfg(target_os = "linux")]
 use anyhow::anyhow;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use rustix::fs::{Dev, FileType as RxFileType, Mode, mknodat};
 
 pub(super) use super::support::fallible;
@@ -128,6 +131,74 @@ pub(super) const DIGEST: FilterCase = FilterCase {
     linked: "e6487c5f",
 };
 
+/// The `follow_symlinks` policy a policy test renders under.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Policy {
+    /// The filter's default, which refuses a final symlink.
+    Omitted,
+    /// The explicit `follow_symlinks=false` spelling of the default.
+    FollowFalse,
+    /// The opt-in that resolves a final symlink.
+    FollowTrue,
+}
+
+impl Policy {
+    /// Every policy, in the order the policy tables exercise them.
+    ///
+    /// Only the manual-resolver modules iterate this list, and both are Linux
+    /// test modules, so it is compiled where it has a caller; a lane that
+    /// compiles the file-type tables alone already names each policy explicitly
+    /// and would otherwise see this constant as dead code.
+    #[cfg(target_os = "linux")]
+    pub(super) const ALL: [Self; 3] = [Self::Omitted, Self::FollowFalse, Self::FollowTrue];
+
+    /// Build a template that reads `path` through `case` under this policy.
+    pub(super) fn template(self, case: FilterCase) -> String {
+        self.kwargs()
+            .map_or_else(|| case.template(), |kwargs| case.template_with(kwargs))
+    }
+
+    /// The stable label used in fixture and template names.
+    pub(super) fn suffix(self) -> &'static str {
+        match self {
+            Self::Omitted => "default",
+            Self::FollowFalse => "false",
+            Self::FollowTrue => "true",
+        }
+    }
+
+    /// Whether this policy asks the resolver to follow a final symlink.
+    ///
+    /// The FIFO cases and the manual-resolver cases ask this question; the
+    /// cross-platform file-type table spells each expected outcome out per
+    /// case instead. Both callers are Linux test modules, so the method is
+    /// gated like `Self::ALL`: Windows and macOS compile neither caller and
+    /// would otherwise see it as dead code.
+    #[cfg(target_os = "linux")]
+    pub(super) fn follows(self) -> bool {
+        self == Self::FollowTrue
+    }
+
+    /// The keyword argument spelling, or `None` for the omitted default.
+    fn kwargs(self) -> Option<&'static str> {
+        match self {
+            Self::Omitted => None,
+            Self::FollowFalse => Some("follow_symlinks=false"),
+            Self::FollowTrue => Some("follow_symlinks=true"),
+        }
+    }
+}
+
+/// Open `root` as an ambient capability for fixture setup.
+///
+/// Every fixture helper needs the workspace root as a directory capability
+/// before it can create or inspect an entry, and the same ambient open with a
+/// purpose-named failure would otherwise be repeated in each of them.
+fn fixture_dir(root: &Utf8Path, purpose: &str) -> Result<Dir> {
+    Dir::open_ambient_dir(root, ambient_authority())
+        .with_context(|| format!("open workspace root {root} to {purpose}"))
+}
+
 /// Assert that `link` really is a symlink, failing setup when it is not.
 ///
 /// The metadata read does not follow the link, so a regular file sitting at the
@@ -136,8 +207,7 @@ pub(super) const DIGEST: FilterCase = FilterCase {
 /// not substitute a regular file, which here would invert the assertion — the
 /// filters would be expected to reject a perfectly ordinary file.
 pub(super) fn require_real_symlink(root: &Utf8Path, link: &Utf8Path) -> Result<()> {
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open workspace root {root} to stat the symlink fixture"))?;
+    let dir = fixture_dir(root, "stat the symlink fixture")?;
     let name = link
         .file_name()
         .with_context(|| format!("symlink fixture {link} has no file name"))?;
@@ -172,8 +242,7 @@ pub(super) fn require_real_junction(root: &Utf8Path, link: &Utf8Path) -> Result<
     /// is what distinguishes a junction from the plain directory it points at.
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
 
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open workspace root {root} to stat the junction fixture"))?;
+    let dir = fixture_dir(root, "stat the junction fixture")?;
     let name = link
         .file_name()
         .with_context(|| format!("junction fixture {link} has no file name"))?;
@@ -195,11 +264,36 @@ pub(super) fn write_fixture(
     name: &str,
     contents: &[u8],
 ) -> Result<camino::Utf8PathBuf> {
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open workspace root {root} to write {name}"))?;
+    let dir = fixture_dir(root, &format!("write {name}"))?;
     dir.write(name, contents)
         .with_context(|| format!("write fixture {name}"))?;
     Ok(root.join(name))
+}
+
+/// Create a relative symlink named `link` inside `root`, returning its path.
+///
+/// The target is a sibling name rather than an absolute path so the fixture
+/// stays inside the workspace on every platform. Callers verify the entry with
+/// [`require_real_symlink`] before rendering, because a host that silently
+/// substituted a regular file would invert a rejection assertion.
+///
+/// Only the Linux harness modules create a link explicitly; the cross-platform
+/// file-type tables go through `fallible::file_symlink_fixture`, so the helper
+/// is gated with its callers.
+///
+/// # Errors
+///
+/// Returns the setup error when the link cannot be created.
+#[cfg(target_os = "linux")]
+pub(super) fn create_symlink(
+    root: &Utf8Path,
+    link: &str,
+    target: &str,
+) -> Result<camino::Utf8PathBuf> {
+    let dir = fixture_dir(root, &format!("create symlink {link}"))?;
+    dir.symlink(target, link)
+        .with_context(|| format!("create fixture symlink {link} -> {target}"))?;
+    Ok(root.join(link))
 }
 
 /// Create a FIFO named `name` inside `root`, returning its path.
@@ -208,10 +302,12 @@ pub(super) fn write_fixture(
 /// one for reading blocks until a writer appears unless the open carries
 /// `O_NONBLOCK`, so a policy that omits the flag wedges the calling thread
 /// rather than returning a rejection.
-#[cfg(unix)]
+///
+/// `mknodat` is a Linux entry point in rustix, so the fixture — and the FIFO
+/// module that owns its cases — is Linux only.
+#[cfg(target_os = "linux")]
 pub(super) fn create_fifo(root: &Utf8Path, name: &str) -> Result<camino::Utf8PathBuf> {
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open workspace root {root} to create the FIFO fixture"))?;
+    let dir = fixture_dir(root, "create the FIFO fixture")?;
     mknodat(
         &dir,
         name,
@@ -285,6 +381,19 @@ mod budget_tests;
 
 mod confinement_tests;
 
+// The FIFO fixture needs `mknodat`, which rustix offers on Linux alone.
+#[cfg(target_os = "linux")]
+mod fifo_tests;
+
 mod file_type_tests;
+
+#[cfg(target_os = "linux")]
+mod resolver_child_tests;
+
+#[cfg(target_os = "linux")]
+mod resolver_fallback_tests;
+
+#[cfg(target_os = "linux")]
+mod resolver_trace;
 
 mod unknown_kwargs_tests;
