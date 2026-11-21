@@ -9969,16 +9969,16 @@ proptest over shell-metacharacter paths. The CLI contract in
 `tests/heredoc_delimiter_escape_e2e_tests.rs` runs the real binary with a
 sentinel Ninja and asserts that the human diagnostic names the active escape;
 the sentinel proves lowering failed before Ninja started, and the cases use a
-fake Ninja, so they need no real installation. The
-real-Ninja control in `tests/ninja_dollar_escaping_tests/heredoc.rs` shows
-paired backslashes keep a hostile body quoted and its markers inert. Those
-shell-executing cases are Unix-only. The real-Ninja control propagates an error
-when Ninja is unavailable, so it fails rather than skips;
-`NETSUKE_REQUIRE_NINJA=1` converts skips elsewhere in the suite into failures
-but does not change that control. A multiline heredoc therefore belongs in
-`script:`: Ninja generation rejects a multiline `command:` value as
-`UnsafeNinjaValue`, so a `command:` case can only exercise the delimiter on one
-line. PowerShell has no heredoc delimiter and is outside this coverage.
+fake Ninja, so they need no real installation. The real-Ninja control in
+`tests/ninja_dollar_escaping_tests/heredoc.rs` shows paired backslashes keep a
+hostile body quoted and its markers inert. Those shell-executing cases are
+Unix-only. The real-Ninja control propagates an error when Ninja is
+unavailable, so it fails rather than skips; `NETSUKE_REQUIRE_NINJA=1` converts
+skips elsewhere in the suite into failures but does not change that control. A
+multiline heredoc therefore belongs in `script:`: Ninja generation rejects a
+multiline `command:` value as `UnsafeNinjaValue`, so a `command:` case can only
+exercise the delimiter on one line. PowerShell has no heredoc delimiter and is
+outside this coverage.
 
 POSIX and Bash `script:` recipes use the POSIX-aware scanner; PowerShell
 `command:` and `script:` recipes share the PowerShell-aware scanner and reject
