@@ -1068,6 +1068,10 @@ can carry the allowlist, declare it in an operator-owned layer instead:
 `netsuke` from a directory other than `$HOME` also helps, because the home
 dotfile is then no longer the project file and is adopted as user
 configuration, which replaces the system file as the paragraph above describes.
+Change the selected project directory, not only the shell's working directory:
+`-C/--directory` takes precedence over the working directory, so an invocation
+that still passes `-C "$HOME"` keeps `$HOME/.netsuke.toml` selected and must
+drop or retarget that argument.
 
 A user file that exists but cannot be loaded now stops discovery; it no longer
 falls back to a system file. That covers malformed TOML, an `extends` parent
