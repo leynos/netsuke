@@ -80,6 +80,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-windows-help",
     "guide-windows-help-install",
     "guide-windows-path",
+    "guide-windows-path-beta4",
     "readme-backtick-rejection-manifest",
     "readme-binstall-install",
     "readme-crates-io-install",
@@ -294,6 +295,7 @@ fn serial_aggregate_example_generates_a_dependency_only_node() -> Result<()> {
     );
     Ok(())
 }
+
 #[test]
 fn documented_fetch_expression_is_registered_but_not_executed() -> Result<()> {
     let example = documented_example("stdlib-fetch-expression")?;

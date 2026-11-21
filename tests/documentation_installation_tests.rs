@@ -1,7 +1,8 @@
 //! Executable contracts for the installation and release examples in the
 //! public user documentation.
 //!
-//! Split from `documentation_examples_tests.rs` to keep that file within the
+//! The Windows install-location, migration, and PATH setup contracts live in
+//! `documentation_windows_installation_tests.rs` so both files stay within the
 //! repository's 400-line cap; the shared fixtures live in the
 //! `documentation_examples` directory module, which every documentation test
 //! binary declares independently.
@@ -25,7 +26,7 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
     );
     ensure!(readme.body == expected, "README source install drifted");
     ensure!(guide.body == expected, "user guide source install drifted");
-    assert_windows_setup_examples()
+    Ok(())
 }
 
 #[test]
@@ -185,7 +186,7 @@ fn assert_release_installation_contract() -> Result<()> {
         "Windows Installer (`.msi`)",
         "x86-64 (`amd64`) and Arm64 (`arm64`)",
         "Installer packages do not have checksum",
-        "The Windows MSI installs to `C:\\Program Files\\netsuke`",
+        "installs to `C:\\Program Files\\netsuke`",
     ];
     for path in ["README.md", "docs/users-guide.md"] {
         let document = test_fs::read_to_string(path).with_context(|| format!("read {path}"))?;
@@ -197,59 +198,5 @@ fn assert_release_installation_contract() -> Result<()> {
             );
         }
     }
-    let users_guide =
-        test_fs::read_to_string("docs/users-guide.md").context("read docs/users-guide.md")?;
-    let expected_msi_replacement_fragments = [
-        "installing a later beta or final MSI",
-        "replaces the existing installation",
-    ];
-    ensure!(
-        expected_msi_replacement_fragments
-            .into_iter()
-            .all(|fragment| users_guide.contains(fragment)),
-        "users' guide should document MSI replacement within a version series"
-    );
-    Ok(())
-}
-
-/// Check the documented Windows help, PATH, and staging contracts.
-fn assert_windows_setup_examples() -> Result<()> {
-    let windows = documented_example("guide-windows-help")?;
-    ensure!(windows.body == "Get-Help Netsuke -Full\n", "help drifted");
-    let windows_path = documented_example("guide-windows-path")?;
-    let windows_path_fragments = [
-        "SetEnvironmentVariable",
-        "$netsukeDirectory",
-        "SetEnvironmentVariable('Path', $newUserPath, 'User')",
-    ];
-    ensure!(
-        windows_path_fragments
-            .into_iter()
-            .all(|fragment| windows_path.body.contains(fragment)),
-        "Windows PATH setup should persist the MSI installation directory"
-    );
-    let windows_help_install = documented_example("guide-windows-help-install")?;
-    let windows_help_fragments = [
-        "Import-Module",
-        concat!(
-            "$moduleDirectory = Join-Path $moduleRoot 'Netsuke\\",
-            env!("CARGO_PKG_VERSION"),
-            "'"
-        ),
-        "Import-Module (Join-Path $moduleDirectory 'Netsuke.psd1')",
-        "*windows-$architecture*",
-    ];
-    ensure!(
-        windows_help_fragments
-            .into_iter()
-            .all(|fragment| windows_help_install.body.contains(fragment)),
-        "Windows help setup should import the downloaded sidecars"
-    );
-    let staging = test_fs::read_to_string(".github/release-staging.toml")
-        .context("read release staging configuration")?;
-    ensure!(
-        staging.contains("Netsuke-help.xml") && staging.contains("about_Netsuke.help.txt"),
-        "Windows release should stage the help consumed by Get-Help"
-    );
     Ok(())
 }

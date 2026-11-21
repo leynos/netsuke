@@ -138,6 +138,85 @@ def contains_unquoted_or(expression: str) -> bool:
     )
 
 
+#: A whole expression holding exactly one single-quoted string literal.
+_LITERAL_EXPRESSION = re.compile(r"^\$\{\{\s*'(?P<literal>(?:[^']|'')*)'\s*\}\}$")
+
+#: A whole expression reading one value of the matrix context.
+_MATRIX_EXPRESSION = re.compile(
+    r"^\$\{\{\s*matrix\.(?P<axis>[A-Za-z_][A-Za-z0-9_-]*)\s*\}\}$"
+)
+
+
+def static_label(value: str) -> str | None:
+    """Return the one label a whole literal expression selects, if it does.
+
+    GitHub interpolates an expression anywhere in a string, so
+    ``${{ 'private-runner' }}`` selects exactly what ``private-runner``
+    selects. An expression that computes its value, a value mixing literals
+    and expressions, and a plain literal all return ``None``: only a whole
+    expression holding one quoted literal resolves here.
+
+    Parameters
+    ----------
+    value : str
+        A scalar read from a workflow, such as a `runs-on` label.
+
+    Returns
+    -------
+    str | None
+        The quoted literal, with doubled quotes unescaped, or ``None`` when
+        the value is not one whole literal expression.
+
+    Examples
+    --------
+    >>> static_label("${{ 'private-runner' }}")
+    'private-runner'
+    >>> static_label("${{ 'it''s' }}")
+    "it's"
+    >>> static_label("${{ matrix.runner }}") is None
+    True
+    >>> static_label("${{ 'a' }}-${{ 'b' }}") is None
+    True
+    """
+    match = _LITERAL_EXPRESSION.fullmatch(value.strip())
+    if match is None:
+        return None
+    return match["literal"].replace("''", "'") or None
+
+
+def matrix_axis(value: str) -> str | None:
+    """Return the matrix axis a whole expression reads, if it reads one.
+
+    Such an expression names no label of its own: the matrix legs hold the
+    labels, so a caller resolves the axis against the job that declares it
+    rather than reading the expression as a runner label.
+
+    Parameters
+    ----------
+    value : str
+        A scalar read from a workflow, such as a `runs-on` label.
+
+    Returns
+    -------
+    str | None
+        The axis name, or ``None`` when the value is not exactly one whole
+        ``matrix.<axis>`` expression.
+
+    Examples
+    --------
+    >>> matrix_axis("${{ matrix.os }}")
+    'os'
+    >>> matrix_axis("${{ matrix.runner }}")
+    'runner'
+    >>> matrix_axis("${{ inputs.runner }}") is None
+    True
+    >>> matrix_axis("windows-latest") is None
+    True
+    """
+    match = _MATRIX_EXPRESSION.fullmatch(value.strip())
+    return match["axis"] if match is not None else None
+
+
 def top_level_conjuncts(expression: str) -> list[str]:
     """Return the clauses an expression conjoins at the top level, stripped.
 

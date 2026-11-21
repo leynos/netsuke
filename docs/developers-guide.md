@@ -2124,7 +2124,7 @@ The Windows packaging workflow passes the repository-owned authoring file as
 `wxs-path: installer/Package.wxs` to the pinned
 `leynos/shared-actions/.github/actions/windows-package` action. Keep that input
 when changing the packaging action: the caller owns the WiX v4 authoring and
-the shared action passes it to the pinned WiX compiler unchanged.
+the shared action passes it to the WiX compiler it installs unchanged.
 
 Callers of `.github/workflows/release.yml` may set the `wix-extension-version`
 `workflow_call` input to select the `WixToolset.UI.wixext` version. The input
@@ -2134,17 +2134,36 @@ values containing carriage returns or line feeds. The metadata job exposes the
 resolved value as `wix_extension_version`; `build-windows` passes that output to
 `build-and-package.yml` as `wix-extension-version`.
 
-The merge gate's dedicated `windows-msi-upgrade` job runs on `windows-latest`.
-It uses the local `.github/actions/windows-msi-upgrade-validation` adapter for
-fixture creation, package builds, and the install-transition checks. Keep the
-adapter scoped to this repository's deterministic MSI fixtures; it must not
-replace or rewrite caller-provided WiX authoring.
+The merge gate's dedicated `windows-msi-upgrade` job runs one leg per shipping
+architecture: `windows-latest` builds and installs the x64 package, and
+`windows-11-arm` does the same for Arm64. It uses the local
+`.github/actions/windows-msi-upgrade-validation` adapter for fixture creation,
+package builds, architecture forwarding, and the install-transition checks.
+Keep the adapter scoped to this repository's deterministic MSI fixtures; it
+must not replace or rewrite caller-provided WiX authoring. An architecture the
+gate does not exercise is not proven, and because the payload directory follows
+the package architecture, one leg cannot stand in for the other.
 
 The MSI `UpgradeCode` in `installer/Package.wxs` is a stable upgrade-family
 identifier and must not change between releases. The `ProductCode` is not
 authored explicitly; WiX generates a new product identity for each package
 build. This combination lets Windows Installer treat a new package as a major
 upgrade while retaining one upgrade family.
+
+`INSTALLFOLDER` is rooted at `ProgramFiles6432Folder`, not
+`ProgramFilesFolder`. In WiX v4 the latter always names the 32-bit directory,
+even for a 64-bit package, which placed the x64 and Arm64 payloads under
+`C:\Program Files (x86)`. `ProgramFiles6432Folder` follows the built package:
+`C:\Program Files` for the x64 and Arm64 packages the release builds, and the
+32-bit directory only for an x86 package.
+
+Moving the executable to a different target location makes it a new Windows
+Installer component, so `BinaryComponent` carries a new GUID. The GUID that
+v0.1.0-beta4 shipped must not be reused: Windows Installer would keep the old
+component pointed at the 32-bit directory while the package claimed to place
+its key path elsewhere. The `ReleaseRank` registry value keeps its registry
+location and remains in the component that carries the executable, so an older
+MSI still finds the rank that refuses its downgrade.
 
 The packaging workflow derives `NETSUKE_RELEASE_RANK` with the repository's
 release-rank helper before invoking the action. The accepted version formats are
@@ -2165,23 +2184,92 @@ one contract; change them together and update the tests.
 Validation has deliberately separate responsibilities:
 
 - `tests/installer_package_wxs_tests.rs` parses the XML and checks the stable
-  WiX structure and upgrade metadata. XML parsing does not validate WiX schema
-  compatibility.
+  WiX structure and upgrade metadata. Its `roxmltree` lookups live in the shared
+  `tests/installer_package_wxs/mod.rs` helper module, so the release authoring
+  and the frozen v0.1.0-beta4 fixture are read the same way. XML parsing does
+  not validate WiX schema compatibility.
 - The release-rank example and property tests execute the repository-owned
   parser without GitHub Actions or Windows environment state.
 - The `windows-msi-upgrade` job and its local adapter compile
-  `installer/Package.wxs` with the pinned WiX CLI and UI extension while
-  building beta1, beta2, and final fixtures. They use temporary executable and
-  RTF fixtures and do not compile the Rust application, so WiX schema or
-  extension incompatibilities fail the merge gate.
+  `installer/Package.wxs` with the UI extension pinned to version `7` while
+  building the beta2 and final fixtures. The adapter pins the packaging action
+  to a commit, but passes no WiX tool version, so this repository does not
+  constrain the CLI version and the action installs or updates it. The beta1
+  fixture is built from
+  `.github/actions/windows-msi-upgrade-validation/fixtures/legacy-program-files-x86.wxs`,
+  a frozen copy of the v0.1.0-beta4 authoring that keeps its
+  `ProgramFilesFolder` root and legacy component GUID; do not update that file
+  with the release authoring. The fixtures use temporary executable and RTF
+  files and do not compile the Rust application, so WiX schema or extension
+  incompatibilities fail the merge gate.
 - The same adapter then uses quiet `msiexec` installs and preserved logs to
-  verify replacement, registry `ReleaseRank`, product identity, and refused
-  downgrades. An unconditional cleanup step removes every fixture installation,
-  including the final release.
+  verify the move from the 32-bit directory to `C:\Program Files`, replacement,
+  registry `ReleaseRank`, product identity, and refused downgrades. An
+  unconditional cleanup step removes every fixture installation, including the
+  final release.
 
 Only the `msiexec` phase exercises Windows Installer's actual install,
 replacement, and downgrade behaviour; passing the XML and compiler checks alone
 does not prove the upgrade path.
+
+### Windows install-location and `PATH` test harness
+
+The Windows install location is observed end to end rather than inferred from
+the authoring. `tests/windows_path_setup_example_tests.rs` runs the documented
+`PATH` fences from `docs/users-guide.md` and inspects the user environment
+value each one leaves behind. The harness lives in
+`tests/windows_path_setup/mod.rs` and `tests/windows_path_setup/wrapper.rs`,
+which embeds the PowerShell wrapper from `tests/windows_path_setup/wrapper.ps1`.
+`tests/windows_path_setup/observation.rs` parses the report a run writes and
+turns each observation into the assertion the behavioural test makes.
+
+Three boundaries keep a run from depending on the host:
+
+- The wrapper dot-sources the example in a child PowerShell started with
+  `env_clear`. Only a closed list of fifteen variables Windows and .NET read
+  while starting a process survives, `PATH` names system directories only, and
+  `ProgramW6432`, `ProgramFiles`, and `ProgramFiles(x86)` point at a temporary
+  tree. A real installation elsewhere on the host therefore cannot satisfy the
+  example's `Get-Command` check.
+- A named mutex, `Local\NetsukeWindowsPathSetupTest`, serializes runs that
+  would otherwise rewrite the one user `Path` value concurrently.
+- The wrapper records the existing `Path` value and its registry kind in a
+  backup file under the system temporary directory, installs a sentinel,
+  restores the original value in a `finally` block, and reports the stored
+  value and type on standard output. It arms a registry change notification
+  before dot-sourcing the example and reads it before the restore, because the
+  value the example leaves cannot show whether it touched the key: a change
+  that restores the text that was already there looks exactly like no change at
+  all. The notification reports a change to a value of the key rather than a
+  write, and the documentation does not say what a write that stores the text
+  already present does, so the report is not read as a write count. The watch
+  is armed after the wrapper's own sentinel write, so a write by the example
+  changes the value and is reported, while a guard that returns before writing
+  performs no write and reports nothing. The report also carries the child
+  process `PATH` before and after the example, so a fence that fails its
+  existence guard is shown to leave the process value alone as well as the user
+  one. A run killed before that block leaves the backup for the next process to
+  restore from; a spent backup, left by a run killed after restoring but before
+  deleting the file, is recognized and removed rather than refused.
+
+The harness reads the parent environment through `mockable::Env`, so the test
+process is the only ambient dependency and no helper mutates it.
+
+`ci-windows.yml` `build-test-windows` is the lane that executes the examples.
+The Linux legs have neither PowerShell nor a Windows user environment, so they
+compile the harness and check the fences only as source, in
+`tests/documentation_windows_path_setup_tests.rs`.
+
+`tests/windows_installation_docs/mod.rs` is the shared Markdown view behind
+both suites. Its `READMES` constant names the seven localized READMEs and
+`USERS_GUIDE` names the users' guide. `Paragraph::qualifies_legacy_install`
+decides whether a mention of `C:\Program Files (x86)\netsuke` is legitimate: a
+paragraph qualifies when it attributes the directory to `v0.1.0-beta4`, or when
+wording in the same clause, or one clause either side, presents the directory
+as retired or due for removal without naming the native one. Any nearby
+instruction to add it to `PATH` rejects the mention.
+`tests/documentation_windows_installation_tests.rs` and
+`tests/documentation_windows_path_setup_tests.rs` consume the module.
 
 ### Why the two Windows Rust/cache jobs are split
 
@@ -5242,8 +5330,22 @@ console before anything else.
 Register every intentional Ubicloud label in
 [`.github/actionlint.yaml`](../.github/actionlint.yaml). actionlint rejects an
 unregistered self-hosted label, so a typo or an unreviewed shape fails the lint
-gate rather than queueing forever. The contract tests hold the registered set
+gate rather than queueing forever.
+`tests/workflow_contracts/runner_registry_test.py` holds the registered set
 equal to the set actually in use.
+
+That set is derived from the workflows rather than read back from the
+registration. `tests/workflow_contracts/matrix_legs.py` expands a job matrix
+into the legs GitHub creates: the Cartesian product of its axes, minus the legs
+named by `exclude`, where an `include` row that matches no surviving
+combination becomes a leg of its own.
+`tests/workflow_contracts/runner_matrix.py` then resolves one `runs-on`
+selector against those legs, and
+`tests/workflow_contracts/actions_expressions.py` decides what the selector
+names: `matrix_axis` recognizes a whole `${{ matrix.<axis> }}` expression and
+`static_label` recognizes a whole expression holding one quoted literal. A
+selector the job does not declare is counted as a label, so an unreadable
+selector fails the comparison instead of excusing whatever runner it hides.
 
 Runner labels appear in no job name, so the required status-check contexts
 `build-test`, `kani-smoke`, `netsukefile`, and `release / metadata` are

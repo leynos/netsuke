@@ -12,6 +12,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
+from actions_expressions import static_label
 from fork_fallback import owned_runner
 from runner_placement_invariants import (
     CALLEE_SELECTED_RUNNER,
@@ -29,6 +30,7 @@ from workflow_loading import (
     REPO_ROOT,
     job_steps,
     load_workflow,
+    require_list,
     require_mapping,
     workflow_job,
 )
@@ -38,7 +40,8 @@ DIRECT_RUNNER_SOURCES = (
     ("ci.build-test", "ci.yml", "build-test"),
     ("ci-windows.lint-windows", "ci-windows.yml", "lint-windows"),
     ("ci-windows.build-test-windows", "ci-windows.yml", "build-test-windows"),
-    ("ci-windows.windows-msi-upgrade", "ci-windows.yml", "windows-msi-upgrade"),
+    # The MSI gate selects its runner from a matrix and is expanded by
+    # `_msi_matrix_legs` rather than read as one literal label.
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
     (
         "ci-default-features.default-features",
@@ -70,7 +73,6 @@ DIRECT_RUNNER_SOURCES = (
         ("ci.yml", "build-test", UBICLOUD_LARGE_LABEL),
         ("ci-windows.yml", "lint-windows", "windows-latest"),
         ("ci-windows.yml", "build-test-windows", "windows-latest"),
-        ("ci-windows.yml", "windows-msi-upgrade", "windows-latest"),
         ("ci.yml", "kani-smoke", UBICLOUD_DEFAULT_LABEL),
         ("coverage-main.yml", "coverage-upload", UBICLOUD_LARGE_LABEL),
         ("delayed-pr-comment.yml", "delay_and_comment", "ubuntu-latest"),
@@ -105,8 +107,7 @@ def test_windows_macos_and_administrative_jobs_stay_github_hosted(
     """Keep every job without a Ubicloud option on a GitHub-hosted runner.
 
     Ubicloud publishes Ubuntu images only, so a Windows or macOS job has no
-    Ubicloud placement at all. The remaining jobs here are API-bound or not
-    developer-blocking, so a build shape would buy nothing.
+    placement at all; the rest are API-bound or not developer-blocking.
     """
     runner = REQUIRED_RUNNER_ASSIGNMENTS[assignment_key]
     assert not is_ubicloud_label(runner), (
@@ -225,6 +226,50 @@ def test_package_workflow_exposes_native_windows_tool_profile() -> None:
     )
 
 
+def test_windows_msi_gate_runs_one_leg_per_shipping_architecture() -> None:
+    """Run the MSI gate on x64 and Arm64, each on a runner of that platform.
+
+    The install location follows the package architecture, so an x64-only gate
+    would leave the Arm64 program files folder unproven. Two explicitly named
+    legs also stop a later edit from quietly dropping one architecture.
+    """
+    job = workflow_job(
+        load_workflow(WORKFLOW_DIR / "ci-windows.yml"), "windows-msi-upgrade"
+    )
+    assert job.get("runs-on") == "${{ matrix.runner }}", (
+        "the MSI gate must let its matrix legs decide the runner, "
+        f"got {job.get('runs-on')!r}"
+    )
+    legs = _msi_matrix_legs()
+    assert legs == {
+        "x64": "windows-latest",
+        "arm64": "windows-11-arm",
+    }, f"unexpected Windows MSI gate matrix: {legs!r}"
+
+
+@pytest.mark.parametrize(
+    ("value", "label"),
+    [
+        ("${{ 'private-runner' }}", "private-runner"),
+        ("${{ matrix.runner }}", None),
+        ("${{ vars.PREFIX }}-private-${{ vars.SUFFIX }}", None),
+    ],
+)
+def test_a_literal_expression_resolves_to_the_label_it_selects(
+    value: str, label: str | None
+) -> None:
+    """A fixed label inside an expression must reach the label inventory.
+
+    GitHub interpolates expressions inside strings, so a label expressed this
+    way selects that runner exactly as the bare literal; unresolved, it would
+    escape the registry comparison. A matrix selector is resolved against its
+    job's own matrix in `runner_matrix`, which `runner_matrix_test` covers.
+    """
+    assert static_label(value) == label, (
+        f"{value!r} must resolve to {label!r}, got {static_label(value)!r}"
+    )
+
+
 def test_checked_in_workflows_satisfy_runner_assignment_contract() -> None:
     """Apply the generated runner-assignment model to checked-in workflows."""
     assignments = _checked_in_runner_assignments()
@@ -247,6 +292,43 @@ def _all_workflow_text() -> str:
     )
 
 
+def _msi_matrix_legs() -> dict[str, str]:
+    """Return the Windows MSI gate's architecture-to-runner matrix legs.
+
+    Returns
+    -------
+    dict[str, str]
+        Each MSI architecture mapped to the runner label its leg uses.
+    """
+    job = workflow_job(
+        load_workflow(WORKFLOW_DIR / "ci-windows.yml"), "windows-msi-upgrade"
+    )
+    strategy = require_mapping(job.get("strategy"), "jobs.windows-msi-upgrade.strategy")
+    matrix = require_mapping(
+        strategy.get("matrix"), "jobs.windows-msi-upgrade.strategy.matrix"
+    )
+    # An extra axis multiplies the legs GitHub creates without adding a matrix
+    # entry, so only the include list is allowed here.
+    assert set(matrix) == {"include"}, (
+        "the windows-msi-upgrade matrix must declare only its include entries, "
+        f"got {sorted(matrix)!r}"
+    )
+    includes = require_list(
+        matrix.get("include"), "the windows-msi-upgrade matrix include"
+    )
+    # A duplicate architecture would collapse in the dictionary below and hide
+    # its leg from every caller, so the entry count is checked first.
+    assert len(includes) == 2, (
+        "the windows-msi-upgrade matrix must declare exactly two legs, "
+        f"got {includes!r}"
+    )
+    return {
+        str(item["architecture"]): str(item["runner"])
+        for item in includes
+        if isinstance(item, dict)
+    }
+
+
 def _checked_in_runner_assignments() -> dict[str, str]:
     """Normalize checked-in direct, matrix, and reusable runner ownership."""
     assignments = {
@@ -255,6 +337,12 @@ def _checked_in_runner_assignments() -> dict[str, str]:
         )
         for key, workflow, job in DIRECT_RUNNER_SOURCES
     }
+    # The MSI gate names one matrix leg per architecture, so its ownership is
+    # read leg by leg rather than from the `${{ matrix.runner }}` expression.
+    assignments.update({
+        f"ci-windows.windows-msi-upgrade.{architecture}": runner
+        for architecture, runner in _msi_matrix_legs().items()
+    })
 
     release = load_workflow(WORKFLOW_DIR / "release.yml")
     for job_name in ("build-linux", "build-windows"):

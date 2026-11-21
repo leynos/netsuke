@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Frozen v0.1.0-beta4 release layout, not a copy to keep in step.
+
+  v0.1.0-beta4 installed the payload under the 32-bit program files directory,
+  because INSTALLFOLDER was rooted at ProgramFilesFolder and BinaryComponent
+  carried the GUID below. The Windows MSI upgrade gate builds its beta1 fixture
+  from this file, so the gate proves an installed beta4 layout migrates to
+  C:\Program Files\netsuke. Do not update this file with installer/Package.wxs;
+  a change here changes what the gate claims to migrate from.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="$(env.PRODUCT_NAME) $(var.Version)"
+      Version="$(var.Version)"
+      Manufacturer="$(env.MANUFACTURER)"
+      UpgradeCode="{870359C0-A975-4DCB-992A-AD67D97292DD}"
+      Language="1033"
+      Scope="perMachine">
+    <SummaryInformation Description="$(env.PRODUCT_NAME) command line interface" />
+    <MediaTemplate EmbedCab="yes" />
+    <!-- Prerelease SemVer suffixes collapse to one MSI major.minor.patch
+         version, and Windows Installer compares only those first three fields. -->
+    <Property Id="NETSUKE_RELEASE_RANK" Value="$(env.NETSUKE_RELEASE_RANK)" />
+    <Property Id="PREVIOUS_NETSUKE_RELEASE_RANK">
+      <RegistrySearch
+          Id="PreviousNetsukeReleaseRank"
+          Root="HKLM"
+          Key="Software\Leynos\Netsuke\$(var.Version)"
+          Name="ReleaseRank"
+          Type="raw" />
+    </Property>
+    <Launch
+        Condition="Installed OR NOT PREVIOUS_NETSUKE_RELEASE_RANK OR NETSUKE_RELEASE_RANK >= PREVIOUS_NETSUKE_RELEASE_RANK"
+        Message="A newer prerelease or final version of [ProductName] is already installed." />
+    <MajorUpgrade
+        AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version of [ProductName] is already installed."
+        Schedule="afterInstallInitialize" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(env.LICENSE_RTF_PATH)" />
+    <UI Id="WixUI_Minimal" />
+    <Feature Id="MainApplication" Title="$(env.PRODUCT_NAME)" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLFOLDER" Name="$(env.PRODUCT_NAME)" />
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="ProductComponents">
+      <Component Id="BinaryComponent" Guid="{8A7AA941-A8C3-4314-8A7D-3195B4806511}" Directory="INSTALLFOLDER">
+        <File Id="Executable" Source="$(env.APPLICATION_SPEC)" KeyPath="yes" />
+        <RegistryValue
+            Root="HKLM"
+            Key="Software\Leynos\Netsuke\$(var.Version)"
+            Name="ReleaseRank"
+            Type="string"
+            Value="$(env.NETSUKE_RELEASE_RANK)" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

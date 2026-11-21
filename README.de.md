@@ -90,8 +90,11 @@ verfügbar:
 Die Linux-Pakete installieren die `netsuke`-Handbuchseite und deklarieren
 `ninja-build` als Abhängigkeit. Ninja muss bei Verwendung des macOS- oder
 Windows-Installationsprogramms separat installiert werden. Die Windows-MSI
-installiert nach `C:\Program Files\netsuke` und aktualisiert `PATH` nicht.
-SHA-256-Prüfsummendateien begleiten eigenständige Binärdateien sowie
+aktualisiert `PATH` nicht. Das oben verlinkte Paket v0.1.0-beta4 installiert
+nach `C:\Program Files (x86)\netsuke`, weil diese Version eine 64-Bit-Anwendung
+im 32-Bit-Programmverzeichnis ablegte; eine spätere MSI installiert nach
+`C:\Program Files\netsuke` und aktualisiert eine beta4-Installation an Ort und
+Stelle. SHA-256-Prüfsummendateien begleiten eigenständige Binärdateien sowie
 bereitgestellte Hilfe- und Lizenzdateien. Installationspakete verfügen in
 v0.1.0-beta4 nicht über begleitende Prüfsummen. Siehe das
 [Benutzerhandbuch](docs/users-guide.md#install-netsuke) für

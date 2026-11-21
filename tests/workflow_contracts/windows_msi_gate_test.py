@@ -29,12 +29,14 @@ from workflow_loading import (
     CI_WINDOWS_WORKFLOW_PATH,
     MSI_VALIDATION_ACTION_PATH,
     PACKAGE_WORKFLOW_PATH,
+    RELEASE_WORKFLOW_PATH,
     job_steps,
     load_workflow,
     named_step,
     read_workflow_document,
     require_list,
     require_mapping,
+    workflow_job,
 )
 
 MSI_JOB = "windows-msi-upgrade"
@@ -59,12 +61,33 @@ MSI_FIXTURE_VERSIONS = {
     "Build beta2 MSI fixture": "1.2.3-beta2",
     "Build final MSI fixture": "1.2.3",
 }
+#: The frozen beta4 authoring beta1 must be built from.
+MSI_LEGACY_FIXTURE = (
+    ".github/actions/windows-msi-upgrade-validation/fixtures/"
+    "legacy-program-files-x86.wxs"
+)
+#: Each fixture's WXS. beta1 reproduces the shipped beta4 layout, so the gate
+#: proves a real installed payload moves; beta2 and final use the release
+#: authoring under test. A beta1 switched to the release authoring would make
+#: the sequence start where it is supposed to end, and nothing would move.
+MSI_FIXTURE_WXS_PATHS = {
+    "Build beta1 MSI fixture": MSI_LEGACY_FIXTURE,
+    "Build beta2 MSI fixture": "installer/Package.wxs",
+    "Build final MSI fixture": "installer/Package.wxs",
+}
 #: Both repository-owned scripts the gate drives: the first runs the
 #: transitions, the second removes whatever the run installed.
 MSI_VALIDATION_SCRIPTS = (
     "windows-msi-upgrade-validation.ps1",
     "windows-msi-upgrade-cleanup.ps1",
 )
+#: The Windows release targets and the WiX architecture each MSI is built for.
+#: Both targets carry a 64-bit payload, so both must resolve the native
+#: program files directory rather than the 32-bit one.
+EXPECTED_MSI_ARCHITECTURES = {
+    "x86_64-pc-windows-msvc": "x64",
+    "aarch64-pc-windows-msvc": "arm64",
+}
 
 
 def _windows_package_sha(step: dict[str, object], description: str) -> str:
@@ -97,6 +120,38 @@ def _msi_fixture_steps() -> dict[str, dict[str, object]]:
         for index, step in enumerate(require_list(runs.get("steps"), "the steps"))
     ]
     return {name: named_step(steps, name) for name in MSI_FIXTURE_STEPS}
+
+
+def _windows_msi_rows(includes: list[object]) -> dict[object, object]:
+    """Return each Windows release target's MSI architecture.
+
+    A duplicate target is refused rather than merged, because building the
+    mapping directly lets a later row overwrite an earlier one: a target
+    wrongly mapped to ``arm64`` followed by a correct ``x64`` row would read
+    back as exactly the expected mapping.
+
+    Returns
+    -------
+    dict[object, object]
+        Each matrix entry's target mapped to its MSI architecture.
+
+    Raises
+    ------
+    AssertionError
+        When two entries declare the same target.
+    """
+    pairs = [
+        (entry.get("target"), entry.get("msi_arch"))
+        for entry in includes
+        if isinstance(entry, dict)
+    ]
+    targets = [target for target, _ in pairs]
+    if len(targets) != len(set(targets)):
+        message = (
+            f"the release must declare one row per Windows target, got {targets!r}"
+        )
+        raise AssertionError(message)
+    return dict(pairs)
 
 
 def test_msi_gate_exercises_the_release_authoring_and_upgrade_path() -> None:
@@ -143,13 +198,15 @@ def test_msi_fixtures_preserve_the_release_authoring_contract() -> None:
     before final — so a fixture that silently reused another's version would
     leave an upgrade path untested while the suite still passed. Reading them
     from the parsed ``with`` block ties each version to its own step, which a
-    text scan of the file cannot do.
+    text scan of the file cannot do. beta1's frozen legacy authoring is part
+    of the same contract: it is what gives the sequence a real starting layout
+    to migrate from.
     """
     fixtures = _msi_fixture_steps()
     for name, version in MSI_FIXTURE_VERSIONS.items():
         inputs = require_mapping(fixtures[name].get("with"), f"{name} inputs")
-        assert inputs.get("wxs-path") == "installer/Package.wxs", (
-            f"{name} must build the release custom authoring, "
+        assert inputs.get("wxs-path") == MSI_FIXTURE_WXS_PATHS[name], (
+            f"{name} must build {MSI_FIXTURE_WXS_PATHS[name]!r}, "
             f"got {inputs.get('wxs-path')!r}"
         )
         assert inputs.get("wix-extension-version") == "7", (
@@ -160,6 +217,46 @@ def test_msi_fixtures_preserve_the_release_authoring_contract() -> None:
             f"{name} must build version {version!r} so the upgrade sequence "
             f"stays ordered, got {inputs.get('version')!r}"
         )
+
+
+def test_msi_action_builds_every_fixture_for_its_requested_architecture() -> None:
+    """Build all three fixtures for the architecture the gate leg requests.
+
+    An MSI built for the wrong architecture still installs and still passes
+    payload checks, so a hard-coded ``x64`` in one fixture step would leave the
+    Arm64 leg silently testing an x64 package. The default stays in the action
+    for direct callers, but each step must forward the input.
+    """
+    document = require_mapping(
+        read_workflow_document(MSI_VALIDATION_ACTION_PATH),
+        "the MSI upgrade validation action",
+    )
+    inputs = require_mapping(document.get("inputs"), "the action's inputs")
+    architecture_input = require_mapping(
+        inputs.get("architecture"), "the action's architecture input"
+    )
+    assert architecture_input.get("default") == "x64", (
+        "direct callers must keep an x64 default, "
+        f"got {architecture_input.get('default')!r}"
+    )
+    fixtures = _msi_fixture_steps()
+    for name in MSI_FIXTURE_STEPS:
+        with_ = require_mapping(fixtures[name].get("with"), f"{name} inputs")
+        assert with_.get("architecture") == "${{ inputs.architecture }}", (
+            f"{name} must build for the requested architecture, "
+            f"got {with_.get('architecture')!r}"
+        )
+
+
+def test_msi_gate_forwards_each_matrix_architecture_to_the_action() -> None:
+    """Pass the gate leg's architecture into the repository-owned action."""
+    msi_steps = job_steps(load_workflow(CI_WINDOWS_WORKFLOW_PATH), MSI_JOB)
+    validation_step = named_step(msi_steps, "Validate Windows MSI upgrade paths")
+    with_ = require_mapping(validation_step.get("with"), "the validation step inputs")
+    assert with_.get("architecture") == "${{ matrix.architecture }}", (
+        "the MSI gate must forward its matrix architecture, "
+        f"got {with_.get('architecture')!r}"
+    )
 
 
 def test_msi_scripts_receive_paths_through_quoted_environment_values() -> None:
@@ -205,4 +302,67 @@ def test_msi_gate_invokes_its_repository_owned_scripts(script: str) -> None:
     assert script in MSI_VALIDATION_ACTION_PATH.read_text(encoding="utf-8"), (
         f"the MSI integration action must invoke {script!r}; without it the "
         "gate cannot exercise the transitions or leave a clean runner"
+    )
+
+
+def test_release_maps_windows_targets_to_their_msi_architectures() -> None:
+    """The release must build each Windows target's MSI for that architecture.
+
+    An MSI built for the wrong architecture would still install, so the
+    program-files location could look correct while the payload and package
+    targeted the other platform. The mapping is read from the release matrix
+    and the forwarding expression from its caller inputs, so a rename or a
+    literal `x64` in the package step fails here.
+    """
+    workflow = load_workflow(RELEASE_WORKFLOW_PATH)
+    build_windows = workflow_job(workflow, "build-windows")
+    strategy = require_mapping(
+        build_windows.get("strategy"), "jobs.build-windows.strategy"
+    )
+    matrix = require_mapping(strategy.get("matrix"), "jobs.build-windows.matrix")
+    # An extra axis would multiply the effective legs beyond the include rows
+    # this contract reads, leaving the added legs unchecked.
+    assert set(matrix) == {"include"}, (
+        "the build-windows matrix must declare only its include entries, "
+        f"got {sorted(matrix)!r}"
+    )
+    includes = require_list(matrix.get("include"), "jobs.build-windows includes")
+    actual = _windows_msi_rows(includes)
+    assert actual == EXPECTED_MSI_ARCHITECTURES, (
+        "the release must map each Windows target to its MSI architecture, "
+        f"got {actual!r} against {EXPECTED_MSI_ARCHITECTURES!r}"
+    )
+    inputs = require_mapping(build_windows.get("with"), "jobs.build-windows.with")
+    assert inputs.get("msi-arch") == "${{ matrix.msi_arch }}", (
+        "build-windows must pass its matrix entry to build-and-package.yml, "
+        f"got {inputs.get('msi-arch')!r}"
+    )
+    assert inputs.get("target") == "${{ matrix.target }}", (
+        "build-windows must forward its matrix target, not a hard-coded one, "
+        f"got {inputs.get('target')!r}"
+    )
+
+
+def test_the_release_reader_refuses_a_duplicate_windows_target() -> None:
+    """A repeated target must fail rather than overwrite an earlier row.
+
+    Building the mapping directly kept only the last row for a target, so a
+    wrongly mapped `x86_64-pc-windows-msvc` entry followed by a correct one
+    produced exactly the expected mapping and the contract passed.
+    """
+    with pytest.raises(AssertionError, match="one row per Windows target"):
+        _windows_msi_rows([
+            {"target": "x86_64-pc-windows-msvc", "msi_arch": "arm64"},
+            {"target": "x86_64-pc-windows-msvc", "msi_arch": "x64"},
+        ])
+
+
+def test_package_workflow_forwards_the_msi_architecture_to_packaging() -> None:
+    """The packaging action must receive the architecture of the release target."""
+    workflow = load_workflow(PACKAGE_WORKFLOW_PATH)
+    step = named_step(job_steps(workflow, "build"), "Build Windows installer package")
+    inputs = require_mapping(step.get("with"), "the Windows packaging inputs")
+    assert inputs.get("architecture") == "${{ inputs['msi-arch'] }}", (
+        "windows-package must build for the caller-selected MSI architecture, "
+        f"got {inputs.get('architecture')!r}"
     )

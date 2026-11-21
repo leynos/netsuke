@@ -13,6 +13,7 @@ sections that match the features they use.
 | ------------------------------------------ | ---------------------------- | ----------------------------------------------------------------------- |
 | Required                                   | Checkout source builds       | Use the pinned Rust toolchain before building from a checkout.          |
 | Required                                   | Linux checkout builds        | Install the pinned `mold` linker before building from a checkout.       |
+| Required                                   | Windows MSI installations    | Remove the old `PATH` entry; uninstall beta2 and beta3 by hand.         |
 | Review if enabled                          | Manifest scheduling          | Opt in only where immediate console output is useful.                   |
 | Required                                   | `Target` literals            | Add `description` and `console` to every literal.                       |
 | Required                                   | `BuildEdge` literals         | Add `output_visibility` to every literal.                               |
@@ -205,6 +206,35 @@ The [users' guide](users-guide.md#install-netsuke) covers the same ground in
 more detail, and the
 [developers' guide](developers-guide.md#the-build-standard) records the
 standard's rationale and its exclusions.
+
+## Install Windows MSIs under the native program files directory
+
+The x64 and Arm64 MSIs now install the payload under `C:\Program Files\netsuke`
+instead of `C:\Program Files (x86)\netsuke`. The earlier authoring named
+`ProgramFilesFolder`, which WiX resolves to the 32-bit directory even for a
+64-bit package, so a 64-bit `netsuke.exe` was installed beneath the directory
+reserved for 32-bit programs. The root now names `ProgramFiles6432Folder`,
+which follows the package architecture: both shipping MSIs install natively,
+and only an x86 package would use the 32-bit directory.
+
+Installing beta5 over a beta4 installation moves the payload. Windows Installer
+removes the installed MSI payload, but the old directory disappears only when
+nothing else remains in it; leave any unrelated files alone. The MSI does not
+edit `PATH`, so a beta4 entry still names `C:\Program Files (x86)\netsuke`
+after the upgrade and must be removed by hand. Follow
+[Complete Windows setup](users-guide.md#complete-windows-setup) to add the
+directory beta5 uses instead. The executable's target location changed, which
+Windows Installer treats as a new component, so the component that owns it also
+carries a new identity; the previous identity remains only in a frozen fixture
+that the release's MSI gate builds to prove the migration.
+
+The beta2 and beta3 MSIs were built from generated authoring with a different
+upgrade identity, so beta5 does not replace them. Uninstall either version from
+Installed apps first, then install beta5. A beta4 installation does not need to
+be uninstalled first: installing beta5 replaces it in place.
+
+Nothing else changes. Manifests, the executable name, and the package contents
+are unaffected, and the MSI still ships for both x64 and Arm64.
 
 ## Netsuke is a build tool, not a library
 

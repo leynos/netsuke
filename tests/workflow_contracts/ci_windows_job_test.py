@@ -94,9 +94,9 @@ def lane_steps() -> list[dict[str, object]]:
     return [step for name in RUST_WINDOWS_JOBS for step in job_steps(workflow, name)]
 
 
-@pytest.mark.parametrize("job_name", WINDOWS_JOBS)
+@pytest.mark.parametrize("job_name", RUST_WINDOWS_JOBS)
 def test_windows_jobs_run_on_a_github_hosted_runner(job_name: str) -> None:
-    """Both Windows jobs must run on a GitHub-hosted Windows runner.
+    """Both Rust Windows jobs must run on a GitHub-hosted Windows runner.
 
     Ubicloud publishes Ubuntu images only, so `windows-latest` is the durable
     placement for this lane rather than a fallback. Both halves compile the

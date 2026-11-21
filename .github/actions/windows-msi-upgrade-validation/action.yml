@@ -1,6 +1,11 @@
 ---
 name: Validate Windows MSI upgrades
 description: Build and exercise ordered Netsuke MSI upgrade fixtures.
+inputs:
+  architecture:
+    description: MSI architecture the fixtures are built for (x64 or arm64)
+    required: false
+    default: x64
 runs:
   using: composite
   steps:
@@ -48,13 +53,16 @@ runs:
       env:
         NETSUKE_RELEASE_RANK: ${{ env.MSI_VALIDATION_BETA1_RANK }}
       with:
-        wxs-path: installer/Package.wxs
+        # beta1 reproduces the beta4 release layout, so the sequence proves a
+        # real installed payload moves out of the 32-bit program files folder.
+        wxs-path: >-
+          .github/actions/windows-msi-upgrade-validation/fixtures/legacy-program-files-x86.wxs
         product-name: Netsuke MSI Upgrade Validation
         manufacturer: Leynos
         install-dir-name: NetsukeMsiUpgradeValidation
         application-path: ${{ env.MSI_VALIDATION_BETA1_APPLICATION_PATH }}
         license-rtf-path: ${{ env.MSI_VALIDATION_LICENSE_PATH }}
-        architecture: x64
+        architecture: ${{ inputs.architecture }}
         version: 1.2.3-beta1
         output-basename: beta1
         output-directory: ${{ env.MSI_VALIDATION_DIRECTORY }}
@@ -73,7 +81,7 @@ runs:
         install-dir-name: NetsukeMsiUpgradeValidation
         application-path: ${{ env.MSI_VALIDATION_BETA2_APPLICATION_PATH }}
         license-rtf-path: ${{ env.MSI_VALIDATION_LICENSE_PATH }}
-        architecture: x64
+        architecture: ${{ inputs.architecture }}
         version: 1.2.3-beta2
         output-basename: beta2
         output-directory: ${{ env.MSI_VALIDATION_DIRECTORY }}
@@ -92,7 +100,7 @@ runs:
         install-dir-name: NetsukeMsiUpgradeValidation
         application-path: ${{ env.MSI_VALIDATION_FINAL_APPLICATION_PATH }}
         license-rtf-path: ${{ env.MSI_VALIDATION_LICENSE_PATH }}
-        architecture: x64
+        architecture: ${{ inputs.architecture }}
         version: 1.2.3
         output-basename: final
         output-directory: ${{ env.MSI_VALIDATION_DIRECTORY }}

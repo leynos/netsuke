@@ -29,6 +29,7 @@
 use super::*;
 use proptest::collection::{btree_map, vec};
 use proptest::prelude::*;
+use std::ops::RangeInclusive;
 
 /// Select lexically, accepting each candidate that still fits both budgets.
 ///
@@ -91,6 +92,41 @@ fn hash(bytes: &[u8]) -> u64 {
     })
 }
 
+/// Return whether `name` is a Windows reserved device name.
+///
+/// Windows resolves `con`, `prn`, `aux`, `nul`, `com1`–`com9` and `lpt1`–`lpt9`
+/// to devices in every directory and whatever extension they carry, so
+/// `prn.dd` cannot be created as a sidecar there even though it matches the
+/// generated name shape. Such a name can never reach the retention pass on the
+/// host it would fail on, so generating one only tests the filesystem.
+fn is_windows_device_name(name: &str) -> bool {
+    let stem = name.strip_suffix(".dd").unwrap_or(name);
+    if matches!(stem, "con" | "prn" | "aux" | "nul") {
+        return true;
+    }
+    ["com", "lpt"].iter().any(|prefix| {
+        stem.strip_prefix(prefix).is_some_and(|number| {
+            // Only the single digits 1–9 name devices; `com0` and `com10` are
+            // ordinary filenames.
+            number.len() == 1 && number != "0" && number.bytes().all(|b| b.is_ascii_digit())
+        })
+    })
+}
+
+/// Generate candidate sidecars that a Windows host can actually create.
+///
+/// The properties materialise their candidates as files, so the generator
+/// excludes names no host in the CI matrix can write. Filtering here rather
+/// than in each property keeps the two candidate sets shaped alike.
+fn writable_candidates(
+    values: RangeInclusive<u64>,
+) -> impl Strategy<Value = BTreeMap<String, u64>> {
+    btree_map("[a-z]{1,4}\\.dd", values, 0..12).prop_filter(
+        "generated sidecars must be creatable on Windows",
+        |candidates| candidates.keys().all(|name| !is_windows_device_name(name)),
+    )
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(64))]
 
@@ -100,7 +136,7 @@ proptest! {
     /// written rule over the same inputs.
     #[test]
     fn ascending_arrivals_match_the_whole_set_greedy_selection(
-        candidates in btree_map("[a-z]{1,4}\\.dd", 0u64..=40, 0..12),
+        candidates in writable_candidates(0..=40),
         max_files in 0usize..=4,
         max_bytes in 0u64..=80,
     ) {
@@ -133,7 +169,7 @@ proptest! {
     /// agree with this oracle only by luck of the listing order.
     #[test]
     fn shuffled_creation_order_yields_the_whole_set_greedy_selection(
-        candidates in btree_map("[a-z]{1,4}\\.dd", 1u64..=40, 0..12),
+        candidates in writable_candidates(1..=40),
         max_files in 0usize..=4,
         max_bytes in 0u64..=80,
         seed in any::<u64>(),
@@ -232,6 +268,47 @@ proptest! {
         prop_assert!(
             dir.open(latest_sidecar.relative_path()).is_ok(),
             "retention must preserve the latest bundle's sidecar"
+        );
+    }
+}
+
+/// The candidate generator must never offer a name Windows cannot create.
+///
+/// A generated `prn.dd` reaches `materialize_dyndep_files` on the Windows CI
+/// legs and fails to be written, which is a property of that host rather than
+/// of retention. Pin the predicate and the strategy that uses it, so widening
+/// the generated name shape fails here rather than on a Windows runner.
+#[test]
+fn generated_candidates_exclude_windows_device_names() {
+    let device_names = [
+        "con.dd", "prn.dd", "aux.dd", "nul.dd", "com1.dd", "com9.dd", "lpt1.dd", "lpt9.dd",
+    ];
+    for name in device_names {
+        assert!(
+            is_windows_device_name(name),
+            "{name} is a Windows device name"
+        );
+    }
+    let ordinary_names = ["com0.dd", "com10.dd", "printer.dd", "conx.dd"];
+    for name in ordinary_names {
+        assert!(
+            !is_windows_device_name(name),
+            "{name} is an ordinary sidecar name"
+        );
+    }
+}
+
+proptest! {
+    /// The candidate generator never offers a name Windows cannot create.
+    ///
+    /// The predicate test above pins the classification; this checks that the
+    /// strategy actually applies it, so a later widening of the generated name
+    /// shape fails here instead of on a Windows runner.
+    #[test]
+    fn generated_candidates_are_writable_sidecars(candidates in writable_candidates(0..=40)) {
+        prop_assert!(
+            candidates.keys().all(|name| !is_windows_device_name(name)),
+            "the generator offered a Windows device name: {candidates:?}"
         );
     }
 }
