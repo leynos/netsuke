@@ -44,11 +44,11 @@ required job covering every harness on pushes to `main`, nightly schedules, and
 manual dispatches, and on pull requests it runs only when a proof input changes
 (see
 [ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).[^3]
-The 17 harnesses live in three verification modules:
-`src/ir/cycle/verification.rs` (11), `src/ir/from_manifest/verification.rs`
-(4), and `src/ir/cmd_interpolate/verification.rs` (2).
-`src/ir/graph/kani_map.rs` is `cfg(kani)` support code those harnesses use, not
-a harness location.
+The 24 harnesses live in four verification modules:
+`src/ir/cycle/verification.rs` (11), `src/ir/from_manifest/verification.rs` (4),
+`src/ir/cmd_interpolate/verification.rs` (2), and
+`src/stdlib/resource_bounds/verification.rs` (7). `src/ir/graph/kani_map.rs` is
+`cfg(kani)` support code those harnesses use, not a harness location.
 
 The Makefile pins `rust-prover-tools` to
 [`592558f7183b554fc749696246984c5d7300d029`][upstream]. Kani and Verus
@@ -63,12 +63,15 @@ changing the global PATH order used to select the pinned `mold`. The repository
 no longer carries a Kani downloader. `make install-kani` uses the verified
 prebuilt release on Linux x86_64 and keeps the Cargo compile fallback for other
 local hosts. CI passes explicit paths for the Kani front-end and verified
-archives. Two Verus kernels are committed: `verus/canonical_value/main.rs` and
-`verus/configured_shells/main.rs`. `make verus` defaults to the first, so a
-maintainer proof run covers one kernel unless `VERUS_FLAGS` selects more;
-callers repeat `--proof-file` through that variable to run an ordered batch.
-The runner stops at the first failed proof and returns the verifier's status.
-The developers' guide documents the commands and their local usage.
+archives. Three Verus kernels are committed: `verus/canonical_value/main.rs`,
+`verus/configured_shells/main.rs`, and `verus/resource_bounds/main.rs`.
+`make verus` defaults to the first, so a maintainer proof run covers one kernel
+unless `VERUS_FLAGS` selects more; callers repeat `--proof-file` through that
+variable to run an ordered batch. The runner stops at the first failed proof
+and returns the verifier's status. `proofs.yml` runs the canonical-value,
+configured-shells, and resource-bounds proofs as three separate steps, so the
+latter two are selected with `VERUS_FLAGS` rather than left to the default. The
+developers' guide documents the commands and their local usage.
 
 The composite [Kani cache action](../.github/actions/kani-cache/action.yml) owns
 `.kani-cargo`, `.kani-home`, and `.kani-rustup` under a key that includes the
@@ -177,8 +180,9 @@ Verus is optional in phase 1 and remains proof-kernel-only. A proof kernel is a
 small proof-specific model for one mathematical contract; it is not a
 production subsystem, a replacement implementation, or a normal developer
 workflow gate. The repository provides `make install-verus` and `make verus` as
-maintainer tools, has no Verus installer script, runs the proof in CI through
-`make verus` (`proofs.yml`), and keeps Verus files outside ordinary Cargo.
+maintainer tools, has no Verus installer script, runs every repository proof in
+CI through `make verus` (`proofs.yml`, one step per proof), and keeps Verus
+files outside ordinary Cargo.
 
 Verus is not the correct first tool for the manifest or command-interpolation
 layers. Three kernels are accepted, and all three are narrow normalization or
@@ -216,8 +220,27 @@ reserved name, and a duplicate in the last position. Runtime correspondence is
 carried by the independent quadratic oracle in
 `src/cli/config/shells/tests/oracle.rs`, not by Verus.
 
+The fourth is the resource-bounds arithmetic behind
+`src/stdlib/resource_bounds/kernel.rs`, proved in
+`verus/resource_bounds/main.rs` across eight files under one crate root. It
+establishes the checked product's zero-operand, zero-exponent, and repeat cases
+and its power-of-base form, the binomial kernel's symmetry, absorption, step,
+and monotonicity lemmas together with the caps that keep its intermediate
+`u128` arithmetic safe, the falling factorial's monotonicity and iteration cap,
+and the admission and running-total rules that keep a count or a stream total
+inside its ceiling. It also composes each kernel with `classify` and states the
+three outcomes of the pair — an admitted count at or below the ceiling, an
+exceeded refusal for a representable count above it, and an overflow refusal
+only when the true count is unrepresentable — because the halves are not the
+property a caller reaches. The proof is a transcription of the production
+algorithm into abstract specifications, so the production functions themselves
+are outside it; seven Kani harnesses in
+`src/stdlib/resource_bounds/verification.rs` drive those production kernels
+instead, and each has a committed mutation patch under
+`docs/verification/mutations/`.
+
 Production `HashMap` structures, MiniJinja values, filesystem helpers, and
-subprocess orchestration remain outside all three proof boundaries. The second
+subprocess orchestration remain outside all four proof boundaries. The second
 kernel's keys are an abstract sort standing in for the runtime's byte strings,
 so the template-to-key conversion, the runtime's own membership structure, and
 the production adapter are each outside what it proves, and the kernel carries
@@ -281,9 +304,10 @@ stands; parts of it were never adopted. The `tools/` entries are real, and
 `tools/verus/VERSION` and `tools/verus/SHA256SUMS` are the pins that
 `make install-verus` and `make verus` read. The `verus/` filenames and the three
 `src/` harness modules are illustrative: the repository instead colocated its
-Kani harnesses beside the helpers they exercise, and its Verus kernels are
-`verus/canonical_value/main.rs` and `verus/configured_shells/main.rs`. The
-`## Current repository state` section above records the actual layout.
+Kani harnesses beside the helpers they exercise, and its three Verus kernels are
+`verus/canonical_value/main.rs`, `verus/configured_shells/main.rs`, and
+`verus/resource_bounds/main.rs`. The `## Current repository state` section
+above records the actual layout.
 
 Kani and Verus installation and execution should be delegated to the
 `rust-prover-tools` CLI rather than repository-local shell scripts. Netsuke
@@ -357,10 +381,10 @@ When the proofs run, it:
 
 - installs the pinned Kani front-end and release bundle from checksummed
   archives, then checks the reported version against `tools/kani/VERSION`,
-- runs the bounded harness suite through `make kani-ir` (17 harnesses across
-  the manifest, cycle, and command-interpolation verification modules), then
-  `make install-build-tools` and the mutation patch compile gate through
-  `make test-kani-mutations`,
+- runs the bounded harness suite through `make kani-ir` (24 harnesses across
+  the manifest, cycle, command-interpolation, and stdlib resource-bounds
+  verification modules), then `make install-build-tools` and the mutation patch
+  compile gate through `make test-kani-mutations`,
 - restores `.kani-cargo`, `.kani-home`, and `.kani-rustup` together under a key
   containing the runner lane and Kani version, and saves only on a cache miss
   from a push to `main`,

@@ -42,7 +42,8 @@ jobs:
       # declarations; cargo-mutants does not evaluate that cfg, so
       # mutants there would compile to nothing and survive as noise.
       exclude-globs: "src/ir/cycle/verification.rs,src/ir/cmd_interpolate/verification.rs,\
-        src/ir/from_manifest/verification.rs,src/ir/graph/kani_map.rs"
+        src/ir/from_manifest/verification.rs,src/ir/graph/kani_map.rs,\
+        src/stdlib/resource_bounds/verification.rs"
       # Match the CI baseline (`make test` runs --all-features) so
       # feature-gated tests (legacy-digests) run against mutants.
       extra-args: "--all-features"

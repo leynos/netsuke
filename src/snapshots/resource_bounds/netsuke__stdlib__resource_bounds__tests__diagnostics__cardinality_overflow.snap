@@ -1,0 +1,5 @@
+---
+source: src/stdlib/resource_bounds/tests/diagnostics.rs
+expression: rendered
+---
+combinatorial cardinality exceeds 18446744073709551615; the ceiling is 100000 output tuples
