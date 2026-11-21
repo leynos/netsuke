@@ -3424,10 +3424,9 @@ and the scanner fails closed rather than hiding the quoted sections around it.
 Escape state participates in that boundary: a backtick keeps the character
 after it inside the current argument token, so a `<#` or `#` after an escaped
 separator, or a `<` that is itself escaped, is not comment syntax and likewise
-fails closed.
-The check is deliberately a boundary check over the regions the scanner models,
-not a complete PowerShell parser; RFC 0036 carries the longer-term
-harmonization under version-matched grammar.
+fails closed. The check is deliberately a boundary check over the regions the
+scanner models, not a complete PowerShell parser; RFC 0036 carries the
+longer-term harmonization under version-matched grammar.
 
 In `command:` recipes on the POSIX and Bash routes, unbalanced backticks or
 command text that `shlex` cannot parse produce an IR error before an action is

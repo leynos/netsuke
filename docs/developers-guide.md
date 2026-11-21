@@ -9874,21 +9874,20 @@ PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 `lexical/comments.rs` tracks fail-closed comment state,
 `lexical/block_comments.rs` tracks non-nesting block comments at token
 boundaries and fails closed on a mid-token or escaped-boundary opener,
-`lexical/boundary.rs`
-describes the region one entry leaves for the next, `stop_parsing.rs` tracks
-raw native-command arguments, and `tokens/mod.rs` recognizes the token
-boundaries and syntax used by those scanners. `substitution/shared_list.rs`
-owns the shared-list entry API: it interpolates one entry, rejects a region
-left open across the entry boundary, and carries the sticky fail-closed
-classification forward. Keep that entry API as the only way lowering scans a
-shared PowerShell list, so a future caller cannot reintroduce per-entry
-isolation. The private `tokens/member_expressions.rs` helper recognizes
-variable roots through member and index chains; keep it within the PowerShell
-token scanner rather than reusing it as a general expression parser. They share
-a shell-specific boundary but keep distinct state responsibilities.
-`PowerShellSourceCharacter` binds a Unicode-scalar index to the borrowed source
-buffer and provides checked lookaround only within the PowerShell scanner; it
-is not a shared shell abstraction. The sibling
+`lexical/boundary.rs` describes the region one entry leaves for the next,
+`stop_parsing.rs` tracks raw native-command arguments, and `tokens/mod.rs`
+recognizes the token boundaries and syntax used by those scanners.
+`substitution/shared_list.rs` owns the shared-list entry API: it interpolates
+one entry, rejects a region left open across the entry boundary, and carries
+the sticky fail-closed classification forward. Keep that entry API as the only
+way lowering scans a shared PowerShell list, so a future caller cannot
+reintroduce per-entry isolation. The private `tokens/member_expressions.rs`
+helper recognizes variable roots through member and index chains; keep it
+within the PowerShell token scanner rather than reusing it as a general
+expression parser. They share a shell-specific boundary but keep distinct state
+responsibilities. `PowerShellSourceCharacter` binds a Unicode-scalar index to
+the borrowed source buffer and provides checked lookaround only within the
+PowerShell scanner; it is not a shared shell abstraction. The sibling
 `src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
 parenthesis state needed to keep protected `$()` bodies isolated.
 
@@ -10034,11 +10033,10 @@ token-boundary check reads escape state as well as the adjacent character: a
 `<#` or `#` after an escaped separator, or a `<` that is itself escaped, is not
 comment syntax and fails closed. The traversal also carries the sticky
 fail-closed classification forward, so a later marker stays protected after
-earlier scanner-sensitive text. Scalar
-commands, `isolated` lists, and POSIX or Bash lists keep their existing
-per-entry handling; the boundary check applies only to a shared PowerShell
-list. Isolation is not a remedy for an entry that is itself incomplete, because
-each isolated entry runs as its own script.
+earlier scanner-sensitive text. Scalar commands, `isolated` lists, and POSIX or
+Bash lists keep their existing per-entry handling; the boundary check applies
+only to a shared PowerShell list. Isolation is not a remedy for an entry that
+is itself incomplete, because each isolated entry runs as its own script.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies
