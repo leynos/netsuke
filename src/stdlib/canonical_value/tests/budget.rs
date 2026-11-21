@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{Result, ensure};
-use minijinja::value::{ObjectRepr, Value};
+use minijinja::value::Value;
 use rstest::rstest;
 
 use super::*;
@@ -31,55 +31,6 @@ use crate::stdlib::canonical_value::path::PathRef;
 /// so the case can pass only by refusing before expansion rather than by
 /// completing it.
 const EXPONENTIAL_DEPTH: usize = 64;
-
-/// A counted sequence and the two kinds of work admission asked of it.
-///
-/// The counters are kept apart because they answer different questions. `pulls`
-/// counts items yielded, so it shows how far a bounded enumeration read;
-/// `enumerations` counts calls to the host's `enumerate`, so it shows whether
-/// admission asked the host to enumerate at all. A container refused before
-/// dispatch must leave both at zero — a traversal that returned before the
-/// first pull would leave `pulls` at zero while still having called the host.
-pub(in crate::stdlib::canonical_value) struct CountedSequence {
-    /// The host value built from the fixture.
-    pub(in crate::stdlib::canonical_value) value: Value,
-    /// Items yielded so far.
-    pub(in crate::stdlib::canonical_value) pulls: Arc<AtomicUsize>,
-    /// Calls to the host's `enumerate` so far.
-    pub(in crate::stdlib::canonical_value) enumerations: Arc<AtomicUsize>,
-}
-
-/// Build a sequence fixture that can yield `bound` items, counting the work.
-///
-/// `path_bookkeeping` builds its wide leaf from this fixture too, so the pull
-/// counter it asserts against is the same one the ceiling cases use.
-pub(in crate::stdlib::canonical_value) fn counted_sequence(bound: usize) -> CountedSequence {
-    let pulls = Arc::new(AtomicUsize::new(0));
-    let (value, enumerations) = fixture(
-        ObjectRepr::Seq,
-        Some(bound),
-        Materialized::Counted {
-            bound,
-            yielded: Arc::clone(&pulls),
-        },
-    );
-    CountedSequence {
-        value,
-        pulls,
-        enumerations,
-    }
-}
-
-/// Build a map fixture from literal pairs, reporting `len` as its length.
-///
-/// Shared with `path_bookkeeping`, which stacks long-named mappings above the
-/// wide leaf.
-pub(in crate::stdlib::canonical_value) fn pair_map(
-    pairs: Vec<(Value, Value)>,
-    len: Option<usize>,
-) -> Value {
-    fixture(ObjectRepr::Map, len, Materialized::Pairs(pairs)).0
-}
 
 /// Assert the recorded enumerations total no more than `limit`.
 fn ensure_enumeration_bounded(counters: &[Arc<AtomicUsize>], limit: usize) -> Result<()> {

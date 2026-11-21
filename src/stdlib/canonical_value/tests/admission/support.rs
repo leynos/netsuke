@@ -1,8 +1,11 @@
 //! Shared fixtures and assertions for bounded canonical admission.
 //!
 //! Several batteries need the same support: `budget` checks the exact
-//! ceilings and precedence, `operation_scope` the shared budget, and
-//! `diagnostics` how each refusal renders. Both need a budget built from small explicit ceilings, an assertion
+//! ceilings and precedence, `operation_scope` the shared budget,
+//! `diagnostics` how each refusal renders, and `path_bookkeeping` the cost of
+//! tracking a location. The counted fixtures live here with the rest, so a
+//! battery that needs a host which reports what admitted work asked of it does
+//! not build a private copy. Both need a budget built from small explicit ceilings, an assertion
 //! that a refusal names a particular resource, and the shared host graph whose
 //! expansion is exponential in its depth. They live here so neither battery can
 //! drift onto a private copy, and the parent module re-exports them so the
@@ -50,6 +53,55 @@ pub(in crate::stdlib::canonical_value) fn ensure_resource_refusal(
         "expected a {expected} refusal, got {refusal}",
     );
     Ok(())
+}
+
+/// A counted sequence and the two kinds of work admission asked of it.
+///
+/// The counters are kept apart because they answer different questions. `pulls`
+/// counts items yielded, so it shows how far a bounded enumeration read;
+/// `enumerations` counts calls to the host's `enumerate`, so it shows whether
+/// admission asked the host to enumerate at all. A container refused before
+/// dispatch must leave both at zero — a traversal that returned before the
+/// first pull would leave `pulls` at zero while still having called the host.
+pub(in crate::stdlib::canonical_value) struct CountedSequence {
+    /// The host value built from the fixture.
+    pub(in crate::stdlib::canonical_value) value: Value,
+    /// Items yielded so far.
+    pub(in crate::stdlib::canonical_value) pulls: Arc<AtomicUsize>,
+    /// Calls to the host's `enumerate` so far.
+    pub(in crate::stdlib::canonical_value) enumerations: Arc<AtomicUsize>,
+}
+
+/// Build a sequence fixture that can yield `bound` items, counting the work.
+///
+/// `path_bookkeeping` builds its wide leaf from this fixture too, so the pull
+/// counter it asserts against is the same one the ceiling cases use.
+pub(in crate::stdlib::canonical_value) fn counted_sequence(bound: usize) -> CountedSequence {
+    let pulls = Arc::new(AtomicUsize::new(0));
+    let (value, enumerations) = fixture(
+        ObjectRepr::Seq,
+        Some(bound),
+        Materialized::Counted {
+            bound,
+            yielded: Arc::clone(&pulls),
+        },
+    );
+    CountedSequence {
+        value,
+        pulls,
+        enumerations,
+    }
+}
+
+/// Build a map fixture from literal pairs, reporting `len` as its length.
+///
+/// Shared with `path_bookkeeping`, which stacks long-named mappings above the
+/// wide leaf.
+pub(in crate::stdlib::canonical_value) fn pair_map(
+    pairs: Vec<(Value, Value)>,
+    len: Option<usize>,
+) -> Value {
+    fixture(ObjectRepr::Map, len, Materialized::Pairs(pairs)).0
 }
 
 /// Build a shared host graph of `depth` nested two-item sequences.

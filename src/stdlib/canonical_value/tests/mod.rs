@@ -55,7 +55,8 @@ mod properties;
 mod sweep;
 
 pub(super) use self::admission::support::{
-    admission_budget, ensure_resource_refusal, expanded_sequence, shared_sequence,
+    CountedSequence, admission_budget, counted_sequence, ensure_resource_refusal,
+    expanded_sequence, pair_map, shared_sequence,
 };
 
 /// The material classes the generator must be seen to emit.

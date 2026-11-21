@@ -18,7 +18,7 @@ use rstest::rstest;
 
 use super::*;
 
-use super::budget::{CountedSequence, counted_sequence, pair_map};
+use super::{CountedSequence, counted_sequence, pair_map};
 
 use crate::stdlib::canonical_value::path::take_step_clones;
 
