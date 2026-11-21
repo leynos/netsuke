@@ -23,12 +23,13 @@ $wrapperMutex = [System.Threading.Mutex]::new($false, 'Local\NetsukeWindowsPathS
 # variable instead of the failure that got there.
 $wrapperMutexHeld = $false
 $wrapperKey = $null
-# Whether the example wrote the key is not visible from the value it leaves: a
-# write that restores the text that was already there looks exactly like no
-# write at all, and the key's last-write time is too coarse to separate a write
-# from the sentinel write the wrapper performs immediately before the example.
-# A change notification is signalled for every write whatever the text, so it
-# is the oracle the zero-write and one-write assertions rest on.
+# Whether the example changed the key's value is not visible from the value it
+# leaves: a change that restores the text that was already there looks exactly
+# like no change at all, and the key's last-write time is too coarse to separate
+# a change from the sentinel write the wrapper performs immediately before the
+# example. `REG_NOTIFY_CHANGE_LAST_SET` reports a change to a value of the key,
+# and a write that stores the text already present is not such a change, so the
+# report establishes a value change rather than counting writes.
 $wrapperWatchType = 'NetsukeRegistryWatch'
 if (-not ($wrapperWatchType -as [type])) {
     Add-Type -TypeDefinition @'

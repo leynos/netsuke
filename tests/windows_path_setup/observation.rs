@@ -2,7 +2,7 @@
 //!
 //! The wrapper is the only witness to what a documented fence did: it reports
 //! the user `PATH` value it recorded, the value the example left behind,
-//! whether the example wrote the environment key at all, the child process
+//! whether the example changed the environment key's value, the child process
 //! `PATH` before and after the example, and the value it restored. Parsing
 //! that report once here keeps the behavioural test reading as the contract
 //! rather than as marker handling, and gives every failure the whole report as
@@ -75,7 +75,7 @@ pub struct RunReport<'a> {
     process_before: String,
     /// The child process `PATH` the example left behind.
     process_after: String,
-    /// Whether the example changed the environment key at all.
+    /// Whether the example changed the environment key's value at all.
     key_changed: bool,
 }
 
@@ -175,7 +175,7 @@ impl<'a> RunReport<'a> {
             describe(
                 self.output,
                 self.example,
-                "stored the directory without the environment key recording a write"
+                "stored the directory without the environment key recording a change"
             )
         );
         let expected_process = format!("{};{}", self.process_before, install.display());
@@ -196,9 +196,9 @@ impl<'a> RunReport<'a> {
     /// The existence guard is the only thing standing between a user who has
     /// not installed Netsuke and a `PATH` entry pointing at nothing, so the
     /// failure is observed on every surface it could reach: the user value, the
-    /// fact that the key was never written, the process `PATH`, and the exit
-    /// status. Checking only the stored value would accept a run that wrote and
-    /// restored it.
+    /// fact that the key's value never changed, the process `PATH`, and the exit
+    /// status. Checking only the stored value would accept a run that changed it
+    /// and changed it back.
     ///
     /// # Errors
     ///
@@ -239,7 +239,7 @@ impl<'a> RunReport<'a> {
             describe(
                 self.output,
                 self.example,
-                "wrote the environment key even though the executable is missing"
+                "changed the environment key even though the executable is missing"
             )
         );
         ensure!(

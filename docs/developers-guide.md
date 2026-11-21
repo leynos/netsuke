@@ -2238,13 +2238,15 @@ Three boundaries keep a run from depending on the host:
   restores the original value in a `finally` block, and reports the stored
   value and type on standard output. It arms a registry change notification
   before dot-sourcing the example and reads it before the restore, so the
-  report says whether the example wrote the key at all: a value comparison
-  cannot show a write that restored the text that was already there, and the
-  key's last-write time is too coarse to separate such a write from the
-  wrapper's own sentinel write. The report also carries the child process
-  `PATH` before and after the example, so a fence that fails its existence
-  guard is shown to leave the process value alone as well as the user one. A
-  run killed before that block leaves the backup for the next process to
+  report says whether the example changed the key's value: a value comparison
+  cannot show a change that was undone, and the key's last-write time is too
+  coarse to separate such a change from the wrapper's own sentinel write. The
+  notification reports a change to a value of the key, and a write that stores
+  the text already present is not such a change, so the report establishes a
+  value change rather than counting writes. The report also carries the child
+  process `PATH` before and after the example, so a fence that fails its
+  existence guard is shown to leave the process value alone as well as the user
+  one. A run killed before that block leaves the backup for the next process to
   restore from; a spent backup, left by a run killed after restoring but before
   deleting the file, is recognized and removed rather than refused.
 
