@@ -17,6 +17,9 @@ use test_support::write_exec_with_content;
 /// The quote-leading path bound to the marker in each scenario.
 const INJECTING_PATH: &str = "\"; touch injected; #";
 
+/// Fixed description every rejection must render.
+const ESCAPE_REASON: &str = "escape sequence before a recipe marker";
+
 /// One CLI rejection scenario.
 struct EscapeCase {
     /// Target body carrying the escaped heredoc declaration.
@@ -25,8 +28,6 @@ struct EscapeCase {
     target: &'static str,
     /// Whether the scenario binds the hostile path as a source.
     has_hostile_source: bool,
-    /// Internal marker text the diagnostic must name.
-    fragment: &'static str,
 }
 
 /// Render a Netsukefile around one scenario's target body.
@@ -66,12 +67,9 @@ fn assert_rejected_before_ninja(case: &EscapeCase) -> Result<()> {
         .to_str()
         .context("Ninja sentinel path should be UTF-8")?;
 
-    // The human renderer reports only the runner's graph context and drops the
-    // inner interpolation diagnostic, so ask for the JSON report, whose cause
-    // chain carries the localized rejection the assertion below names.
     let output = run_netsuke_in_with_env(
         workspace.path(),
-        &["--json", "--locale", "en-US", "--no-input", "build"],
+        &["--locale", "en-US", "--no-input", "build"],
         &[
             ("NETSUKE_NINJA", ninja),
             ("NETSUKE_NINJA_SENTINEL", sentinel_path),
@@ -89,9 +87,8 @@ fn assert_rejected_before_ninja(case: &EscapeCase) -> Result<()> {
         "the diagnostic must name the interpolation failure: {stderr}"
     );
     ensure!(
-        stderr.contains(case.fragment),
-        "the diagnostic must name the escaped marker {}: {stderr}",
-        case.fragment
+        stderr.contains(ESCAPE_REASON),
+        "the diagnostic must name the active escape: {stderr}"
     );
     ensure!(
         !sentinel.exists(),
@@ -114,13 +111,11 @@ fn assert_rejected_before_ninja(case: &EscapeCase) -> Result<()> {
 "#,
     target: "out",
     has_hostile_source: true,
-    fragment: r"\\__NETSUKE_INS_PLACEHOLDER__",
 })]
 #[case::command(EscapeCase {
     recipe: "    command: 'cat <<\\{{ ins }} > out'\n",
     target: "out",
     has_hostile_source: true,
-    fragment: r"\\__NETSUKE_INS_PLACEHOLDER__",
 })]
 fn escaped_input_delimiter_marker_is_rejected(#[case] case: EscapeCase) -> Result<()> {
     assert_rejected_before_ninja(&case)
@@ -136,13 +131,11 @@ fn escaped_input_delimiter_marker_is_rejected(#[case] case: EscapeCase) -> Resul
 "#,
     target: INJECTING_PATH,
     has_hostile_source: false,
-    fragment: r"\\__NETSUKE_OUTS_PLACEHOLDER__",
 })]
 #[case::command(EscapeCase {
     recipe: "    command: 'cat <<\\{{ outs }} > /dev/null'\n",
     target: INJECTING_PATH,
     has_hostile_source: false,
-    fragment: r"\\__NETSUKE_OUTS_PLACEHOLDER__",
 })]
 fn escaped_output_delimiter_marker_is_rejected(#[case] case: EscapeCase) -> Result<()> {
     assert_rejected_before_ninja(&case)

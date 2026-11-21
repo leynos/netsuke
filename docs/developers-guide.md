@@ -9967,10 +9967,9 @@ unquoted, double-quoted, and mid-word delimiters, checks the single-quoted
 positive control, tabulates odd and even backslash counts, and runs a bounded
 proptest over shell-metacharacter paths. The CLI contract in
 `tests/heredoc_delimiter_escape_e2e_tests.rs` runs the real binary with a
-sentinel Ninja under `--json`, because the human renderer reports only the
-runner's graph context; the JSON cause chain carries the localized
-interpolation rejection, and the sentinel proves lowering failed before Ninja
-started; those cases use a fake Ninja, so they need no real installation. The
+sentinel Ninja and asserts that the human diagnostic names the active escape;
+the sentinel proves lowering failed before Ninja started, and the cases use a
+fake Ninja, so they need no real installation. The
 real-Ninja control in `tests/ninja_dollar_escaping_tests/heredoc.rs` shows
 paired backslashes keep a hostile body quoted and its markers inert. Those
 shell-executing cases are Unix-only. The real-Ninja control propagates an error

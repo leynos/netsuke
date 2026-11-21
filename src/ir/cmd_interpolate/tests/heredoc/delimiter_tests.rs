@@ -223,7 +223,7 @@ fn a_delimiter_marker_rendering_as_multiple_words_is_rejected(
     ] {
         let error = result.expect_err("a multi-word rendered delimiter must be rejected");
         let IrGenError::InvalidCommand {
-            command, snippet, ..
+            command, reason, ..
         } = &error
         else {
             panic!("expected an invalid-command error, got {error:?}");
@@ -233,8 +233,12 @@ fn a_delimiter_marker_rendering_as_multiple_words_is_rejected(
             "the rejection must report the original template"
         );
         assert_eq!(
-            snippet, "unsupported heredoc delimiter syntax: rendered delimiter",
+            *reason, "unsupported heredoc delimiter syntax: rendered delimiter",
             "the diagnostic must name the rendered delimiter"
+        );
+        assert!(
+            error.to_string().contains("rendered delimiter"),
+            "the rendered diagnostic must name the rejected delimiter: {error}"
         );
     }
 }

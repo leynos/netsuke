@@ -55,14 +55,14 @@ fn render_word(source: &str, bindings: &CommandBindings) -> Result<String, Escap
     render_delimiter(&chars, 0, chars.len(), bindings)
 }
 
-/// Assert one interpolator rejects `template` with the original command text.
+/// Assert one interpolator pins the rejected command and the escape reason.
 ///
-/// The heredoc renderer is a pure transformation, so a rejected declaration can
-/// only report the source it refused to lower. Both the command and its bounded
-/// snippet must therefore match the unlowered template.
+/// The renderer keeps the source text for callers that inspect it, while the
+/// rendered diagnostic names only the fixed escape reason. The template must
+/// therefore match the error field and must not appear in its display text.
 fn assert_invalid_command(error: &IrGenError, template: &str) {
     let IrGenError::InvalidCommand {
-        command, snippet, ..
+        command, reason, ..
     } = error
     else {
         panic!("expected an invalid-command error, got {error:?}");
@@ -71,10 +71,13 @@ fn assert_invalid_command(error: &IrGenError, template: &str) {
         command, template,
         "the rejection must report the original template"
     );
-    let expected_snippet: String = template.chars().take(160).collect();
     assert_eq!(
-        snippet, &expected_snippet,
-        "the snippet must be the first 160 characters of the template"
+        *reason, "escape sequence before a recipe marker",
+        "the diagnostic must name the active escape"
+    );
+    assert!(
+        !error.to_string().contains(template),
+        "the diagnostic must not quote the rejected template"
     );
 }
 
