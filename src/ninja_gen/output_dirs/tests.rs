@@ -17,13 +17,13 @@ use rstest::rstest;
 #[derive(Clone, Copy, Default)]
 struct EdgeShape<'a> {
     /// Explicit outputs, in declaration order.
-    outputs: &'a [&'a str],
+    outputs: &'a [&'a Utf8Path],
     /// Ordinary inputs.
-    inputs: &'a [&'a str],
+    inputs: &'a [&'a Utf8Path],
     /// Implicit dependencies.
-    implicit_deps: &'a [&'a str],
+    implicit_deps: &'a [&'a Utf8Path],
     /// Order-only dependencies.
-    order_only_deps: &'a [&'a str],
+    order_only_deps: &'a [&'a Utf8Path],
     /// Whether the edge declares itself `phony`.
     phony: bool,
 }
@@ -33,15 +33,23 @@ fn insert_edge(graph: &mut BuildGraph, action_id: &str, shape: EdgeShape<'_>) {
     graph
         .insert_edge(BuildEdge {
             action_id: action_id.to_owned(),
-            inputs: shape.inputs.iter().map(Utf8PathBuf::from).collect(),
-            implicit_deps: shape.implicit_deps.iter().map(Utf8PathBuf::from).collect(),
+            inputs: shape.inputs.iter().map(|path| path.to_path_buf()).collect(),
+            implicit_deps: shape
+                .implicit_deps
+                .iter()
+                .map(|path| path.to_path_buf())
+                .collect(),
             dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: shape.outputs.iter().map(Utf8PathBuf::from).collect(),
+            explicit_outputs: shape
+                .outputs
+                .iter()
+                .map(|path| path.to_path_buf())
+                .collect(),
             implicit_outputs: Vec::new(),
             order_only_deps: shape
                 .order_only_deps
                 .iter()
-                .map(Utf8PathBuf::from)
+                .map(|path| path.to_path_buf())
                 .collect(),
             progress_label: None,
             phony: shape.phony,
@@ -52,7 +60,7 @@ fn insert_edge(graph: &mut BuildGraph, action_id: &str, shape: EdgeShape<'_>) {
 }
 
 /// Generate one graph whose single edge has the supplied shape.
-fn ninja_for(outputs: &[&str], inputs: &[&str], phony: bool) -> String {
+fn ninja_for(outputs: &[&Utf8Path], inputs: &[&Utf8Path], phony: bool) -> String {
     let mut graph = BuildGraph::default();
     graph.actions.insert(
         "run".to_owned(),
@@ -97,11 +105,11 @@ fn count_lines(ninja: &str, prefix: &str) -> usize {
 }
 
 #[rstest]
-#[case::nested_phony(&["build/report"], true, true)]
-#[case::bare_phony(&["report"], true, false)]
-#[case::nested_ordinary(&["build/report"], false, false)]
+#[case::nested_phony(&[Utf8Path::new("build/report")], true, true)]
+#[case::bare_phony(&[Utf8Path::new("report")], true, false)]
+#[case::nested_ordinary(&[Utf8Path::new("build/report")], false, false)]
 fn only_a_nested_phony_output_is_prepared(
-    #[case] outputs: &[&str],
+    #[case] outputs: &[&Utf8Path],
     #[case] phony: bool,
     #[case] prepared: bool,
 ) {
@@ -124,7 +132,7 @@ fn a_dependency_only_edge_is_never_prepared() {
         &mut graph,
         "group",
         EdgeShape {
-            outputs: &["build/report"],
+            outputs: &[Utf8Path::new("build/report")],
             phony: true,
             ..EdgeShape::default()
         },
@@ -139,7 +147,7 @@ fn a_dependency_only_edge_is_never_prepared() {
 
 #[test]
 fn a_nested_phony_output_gets_a_rule_and_a_node() {
-    let ninja = ninja_for(&["build/report"], &[], true);
+    let ninja = ninja_for(&[Utf8Path::new("build/report")], &[], true);
     let rule = line_starting_with(&ninja, "rule netsuke_mkdir_");
     let name = rule
         .strip_prefix("rule ")
@@ -174,7 +182,7 @@ fn edges_sharing_a_directory_share_one_rule_and_keep_distinct_nodes() {
         &mut graph,
         "first",
         EdgeShape {
-            outputs: &["build/one"],
+            outputs: &[Utf8Path::new("build/one")],
             phony: true,
             ..EdgeShape::default()
         },
@@ -183,7 +191,7 @@ fn edges_sharing_a_directory_share_one_rule_and_keep_distinct_nodes() {
         &mut graph,
         "second",
         EdgeShape {
-            outputs: &["build/two"],
+            outputs: &[Utf8Path::new("build/two")],
             phony: true,
             ..EdgeShape::default()
         },
@@ -248,10 +256,10 @@ fn preparation_depends_on_the_recipe_prerequisites_in_every_role() {
         &mut graph,
         "run",
         EdgeShape {
-            outputs: &["build/report"],
-            inputs: &["src/input.txt"],
-            implicit_deps: &["gen/generated.h"],
-            order_only_deps: &["stamp"],
+            outputs: &[Utf8Path::new("build/report")],
+            inputs: &[Utf8Path::new("src/input.txt")],
+            implicit_deps: &[Utf8Path::new("gen/generated.h")],
+            order_only_deps: &[Utf8Path::new("stamp")],
             phony: true,
         },
     );
@@ -268,7 +276,11 @@ fn preparation_depends_on_the_recipe_prerequisites_in_every_role() {
 /// A recipe with several inputs keeps them in declaration order.
 #[test]
 fn preparation_keeps_the_declaration_order_of_its_inputs() {
-    let ninja = ninja_for(&["build/report"], &["b.txt", "a.txt"], true);
+    let ninja = ninja_for(
+        &[Utf8Path::new("build/report")],
+        &[Utf8Path::new("b.txt"), Utf8Path::new("a.txt")],
+        true,
+    );
     let edge = line_starting_with(&ninja, "build .netsuke/phony/dir-");
     assert_eq!(
         prerequisites(edge),
@@ -328,7 +340,7 @@ fn preparation_nodes_are_derived_from_the_edge() {
         &mut graph,
         "run",
         EdgeShape {
-            outputs: &["build/report"],
+            outputs: &[Utf8Path::new("build/report")],
             phony: true,
             ..EdgeShape::default()
         },
