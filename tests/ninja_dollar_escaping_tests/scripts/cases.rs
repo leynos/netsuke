@@ -139,6 +139,8 @@ pub(super) enum EscapedScript {
     EscapedBacktickInNestedFrame,
     /// A `\\` pair that leaves a backslash before a parenthesis.
     SurvivingBackslashBeforeParenthesis,
+    /// A `\\` pair inside single quotes leaves a literal backslash only.
+    SurvivingBackslashInSingleQuotes,
 }
 
 #[cfg(unix)]
@@ -152,6 +154,9 @@ impl EscapedScript {
             Self::SurvivingBackslashBeforeParenthesis => {
                 r"printf '<%s>\n' $(printf %s `printf %s \\)`) {{ ins }}"
             }
+            Self::SurvivingBackslashInSingleQuotes => {
+                r"printf '<%s>\n' $(printf %s `printf %s '\\' ')'`) {{ ins }}"
+            }
         }
     }
 
@@ -160,6 +165,7 @@ impl EscapedScript {
         match self {
             Self::EscapedBacktickInNestedFrame => b"<`>\n<a; touch injected; echo b>\n",
             Self::SurvivingBackslashBeforeParenthesis => b"<)>\n<a; touch injected; echo b>\n",
+            Self::SurvivingBackslashInSingleQuotes => b"<\\)>\n<a; touch injected; echo b>\n",
         }
     }
 }

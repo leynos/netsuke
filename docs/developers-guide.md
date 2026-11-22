@@ -9742,25 +9742,27 @@ inside a `$()` frame opened in the body: the traversal consults
 escaped in that frame's single quotes is data rather than the closer. That
 removal is only the first parse: the body is read again, where a `\\` pair
 leaves one literal backslash that is still an escape.
-`append_backtick_body_escape` records the survivor, and
-`append_residual_escape_character` keeps the next character from opening a
-quote, closing a frame, or starting a substitution, so `\\)` in unquoted body
-text is a literal `)`. Every other escape follows the body's own quoting: in
-unquoted body text a backslash makes the next character literal, so an escaped
-`)` never reaches the delimiter check, and in the body's double quotes it also
-protects the closing quote. A backslash before a newline continues the line in
-both of those contexts, so the newline is consumed before the pending-heredoc
-check runs. In the body's single quotes a backslash has no effect, so it cannot
-swallow the quote that closes them. A newline anywhere inside the body, quoted
-or not, leaves a queued heredoc pending: `append_substitution_at_position`
-starts the body only when the character is plain script text, so quoted script
-text and backtick bodies cannot start it before the shell would.
-`script_substitution/delimiters.rs` rejects an unquoted `)` that would pop the
-region owning an open backtick, and the closing backtick itself rejects a depth
-that no longer matches its owner; both produce `IrGenError::InvalidCommand`.
-The command traversal in `substitution/posix.rs` keeps its boolean
-`in_backticks` toggle instead and does not share this record, so command
-lowering is unchanged.
+`append_backtick_body_escape` records the survivor only where the active
+quoting gives a backslash meaning, and `append_residual_escape_character` keeps
+the next character from opening a quote, closing a frame, or starting a
+substitution, so `\\)` in unquoted body text is a literal `)`. In the body's
+single quotes the survivor is literal, so the pair marks nothing and the quote
+after it still closes the quote. Every other escape follows the body's own
+quoting: in unquoted body text a backslash makes the next character literal, so
+an escaped `)` never reaches the delimiter check, and in the body's double
+quotes it also protects the closing quote. A backslash before a newline
+continues the line in both of those contexts, so the newline is consumed before
+the pending-heredoc check runs. In the body's single quotes a backslash has no
+effect, so it cannot swallow the quote that closes them. A newline anywhere
+inside the body, quoted or not, leaves a queued heredoc pending:
+`append_substitution_at_position` starts the body only when the character is
+plain script text, so quoted script text and backtick bodies cannot start it
+before the shell would. `script_substitution/delimiters.rs` rejects an unquoted
+`)` that would pop the region owning an open backtick, and the closing backtick
+itself rejects a depth that no longer matches its owner; both produce
+`IrGenError::InvalidCommand`. The command traversal in `substitution/posix.rs`
+keeps its boolean `in_backticks` toggle instead and does not share this record,
+so command lowering is unchanged.
 
 Heredoc declaration handling is also shared rather than duplicated: the helper
 decides what a declaration is, and each traversal supplies only the context

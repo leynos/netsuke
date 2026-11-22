@@ -23,6 +23,10 @@ impl ScriptSubstitutionTraversal<'_, '_> {
     /// parse, which escapes whichever character reaches it next. Recording it
     /// here keeps the two escapes distinct: the pair is consumed for the
     /// delimiter scan, while the survivor is still active.
+    ///
+    /// The active quoting decides whether the survivor is active at all. In
+    /// the body's single quotes a backslash has no meaning, so the character
+    /// after the pair is ordinary data and must still toggle quotes.
     pub(super) fn append_backtick_body_escape(&mut self, pos: usize, ch: char) -> Option<usize> {
         if self.backtick_region.is_none() || ch != '\\' {
             return None;
@@ -33,9 +37,10 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         let next = *self.chars.get(pos + 1)?;
         self.output.push(ch);
         self.output.push(next);
-        if next == '\\'
-            && let Some(region) = self.backtick_region.as_mut()
-        {
+        if next != '\\' || self.active_quote_context() == ShellQuoteContext::SingleQuoted {
+            return Some(pos + 2);
+        }
+        if let Some(region) = self.backtick_region.as_mut() {
             region.mark_residual_escape();
         }
         Some(pos + 2)

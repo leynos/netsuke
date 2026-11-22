@@ -946,6 +946,9 @@ The body is parsed twice, so a `\\` pair leaves one literal backslash for that
 second parse. In unquoted body text `\\)` is therefore a literal `)`, not the
 end of the owning `$()`, and a recipe such as
 ``printf '<%s>\n' $(printf %s `printf %s \\)`) {{ ins }}`` lowers and runs.
+Inside the body's single quotes the survivor is literal instead, so
+`` `printf %s '\\'` `` is a backslash and the quote after it still closes the
+quote.
 
 See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for

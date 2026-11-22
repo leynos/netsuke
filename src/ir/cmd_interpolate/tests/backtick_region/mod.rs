@@ -7,7 +7,10 @@
 //! fails closed. They also pin the body's own quoting and escape rules.
 
 use super::*;
+use cases::Case;
 use rstest::rstest;
+
+mod cases;
 
 /// Build bindings whose encoded text names the quote context that was chosen.
 ///
@@ -109,162 +112,6 @@ enum Outcome {
     Rejects,
 }
 
-/// Name one script shape that the backtick ownership rules must handle.
-#[derive(Clone, Copy)]
-enum Case {
-    /// A backslash escapes the backtick, so the region continues.
-    EscapedBacktickInQuotedBody,
-    /// A backtick escaped inside a `$()` frame in the body stays literal.
-    EscapedBacktickInNestedFrame,
-    /// An escaped `)` in unquoted body text is literal, not a closer.
-    EscapedParenthesisInUnquotedBody,
-    /// An escape that would consume a marker's first character is rejected.
-    EscapedMarkerInUnquotedBody,
-    /// A `$()` opened inside a quoted body closes its own frame.
-    NestedSubstitutionInQuotedBody,
-    /// A `\\` pair leaves a backslash that escapes the body's own parenthesis.
-    DoubleBackslashBeforeParenthesis,
-    /// A `\\` pair leaves a backslash that escapes a body quote.
-    DoubleBackslashBeforeQuote,
-    /// A backslash does not escape the quote that closes a body's single quote.
-    BackslashBeforeBodyQuote,
-    /// A `)` inside a body's single quotes is data.
-    QuotedParenthesisInSingleQuotedBody,
-    /// A `)` inside a body's double quotes is data.
-    QuotedParenthesisInDoubleQuotedBody,
-    /// A continued newline in unquoted body text keeps the line open.
-    ContinuationInUnquotedBody,
-    /// A continued newline in double-quoted body text keeps the line open.
-    ContinuationInDoubleQuotedBody,
-    /// A literal newline in a single-quoted body does not end the command line.
-    LiteralNewlineInSingleQuotedBody,
-    /// A top-level backtick outside quotes restores script-level unquoted text.
-    TopLevelBacktickUnquoted,
-    /// A top-level backtick in a quoted word restores unquoted script text.
-    TopLevelBacktickAfterDoubleQuoted,
-    /// A top-level backtick inside double quotes restores that quoting.
-    TopLevelBacktickInsideDoubleQuotes,
-    /// A `$()` inside a backtick may close before the backtick does.
-    SubstitutionInsideBacktickClosesFirst,
-    /// Two `$()` levels inside a backtick restore the outermost region.
-    TwoLevelSubstitutionInsideBacktick,
-    /// A `$()` that closes before the backtick it owns is rejected.
-    FrameClosesBeforeBacktick,
-    /// A backtick that closes before the `$()` it opened is rejected.
-    BacktickClosesBeforeSubstitution,
-    /// A marker inside a still-open body is rejected.
-    MarkerInsideOpenBacktick,
-}
-
-impl Case {
-    /// Return the script template this case lowers.
-    fn command(self) -> String {
-        match self {
-            Self::EscapedBacktickInQuotedBody => {
-                format!(r"printf '%s' `printf '%s' '\`'` {INS_TOKEN}")
-            }
-            Self::EscapedBacktickInNestedFrame => {
-                format!(r#"printf '<%s>\n' `printf %s "$(printf %s '\`')"` {INS_TOKEN}"#)
-            }
-            Self::EscapedParenthesisInUnquotedBody => {
-                format!(r"printf '%s' $(printf %s `printf \)`) {INS_TOKEN}")
-            }
-            Self::EscapedMarkerInUnquotedBody => {
-                format!("printf '%s' `printf %s \\{INS_TOKEN}`")
-            }
-            Self::NestedSubstitutionInQuotedBody => {
-                format!(r#"printf '%s' `printf '%s' "$(printf x)"` {INS_TOKEN}"#)
-            }
-            Self::DoubleBackslashBeforeParenthesis => {
-                format!(r"printf '<%s>\n' $(printf %s `printf %s \\)`) {INS_TOKEN}")
-            }
-            Self::DoubleBackslashBeforeQuote => {
-                format!(r"printf '%s' `printf %s \\'` {INS_TOKEN}")
-            }
-            Self::BackslashBeforeBodyQuote => {
-                format!(r"printf '%s' $(printf %s `printf '%s' 'x\' )` {INS_TOKEN}")
-            }
-            Self::QuotedParenthesisInSingleQuotedBody => {
-                format!("printf '%s' $(printf %s `printf ')'`) {INS_TOKEN}")
-            }
-            Self::QuotedParenthesisInDoubleQuotedBody => {
-                format!("printf '%s' $(printf %s `printf \")\"`) {INS_TOKEN}")
-            }
-            Self::ContinuationInUnquotedBody => {
-                format!("cat <<EOF `echo x \\\ny` {INS_TOKEN}\nEOF\n")
-            }
-            Self::ContinuationInDoubleQuotedBody => {
-                format!("cat <<EOF `\"echo x \\\ny\"` {INS_TOKEN}\nEOF\n")
-            }
-            Self::LiteralNewlineInSingleQuotedBody => {
-                format!("cat <<EOF `printf '%s' 'x\\\ny'` {INS_TOKEN}\npayload\nEOF\n")
-            }
-            Self::TopLevelBacktickUnquoted => format!("printf '%s' `printf x` {INS_TOKEN}"),
-            Self::TopLevelBacktickAfterDoubleQuoted => {
-                format!("printf '%s' \"`printf x`\" {INS_TOKEN}")
-            }
-            Self::TopLevelBacktickInsideDoubleQuotes => {
-                format!("printf '%s' \"`printf x` {INS_TOKEN}\"")
-            }
-            Self::SubstitutionInsideBacktickClosesFirst => {
-                format!("printf '%s' `echo $(date)` {INS_TOKEN}")
-            }
-            Self::TwoLevelSubstitutionInsideBacktick => {
-                format!("printf '%s' $(printf %s \"$(printf %s \"`printf x`\")\") {INS_TOKEN}")
-            }
-            Self::FrameClosesBeforeBacktick => {
-                format!("printf '%s' $(printf %s `printf x) printf y` {INS_TOKEN}")
-            }
-            Self::BacktickClosesBeforeSubstitution => {
-                format!("printf '%s' `printf %s $(printf x` {INS_TOKEN}")
-            }
-            Self::MarkerInsideOpenBacktick => {
-                format!("printf '%s' $(printf %s `printf x {INS_TOKEN}")
-            }
-        }
-    }
-
-    /// State what lowering must do with this case.
-    const fn outcome(self) -> Outcome {
-        match self {
-            Self::EscapedMarkerInUnquotedBody
-            | Self::BackslashBeforeBodyQuote
-            | Self::FrameClosesBeforeBacktick
-            | Self::BacktickClosesBeforeSubstitution
-            | Self::MarkerInsideOpenBacktick => Outcome::Rejects,
-            Self::TopLevelBacktickInsideDoubleQuotes => Outcome::Lowers(Encoding::DoubleQuoted),
-            _ => Outcome::Lowers(Encoding::Unquoted),
-        }
-    }
-
-    /// Describe this case in a failure message.
-    const fn description(self) -> &'static str {
-        match self {
-            Self::EscapedBacktickInQuotedBody => "an escaped backtick in a quoted body",
-            Self::EscapedBacktickInNestedFrame => "an escaped backtick in a nested frame",
-            Self::EscapedParenthesisInUnquotedBody => "an escaped ) in an unquoted body",
-            Self::EscapedMarkerInUnquotedBody => "a backslash before a marker",
-            Self::NestedSubstitutionInQuotedBody => "a $() inside a double-quoted backtick body",
-            Self::DoubleBackslashBeforeParenthesis => "a surviving backslash before a body )",
-            Self::DoubleBackslashBeforeQuote => "a surviving backslash before a body quote",
-            Self::BackslashBeforeBodyQuote => "a backslash before a body's closing quote",
-            Self::QuotedParenthesisInSingleQuotedBody => "a quoted ) in a single-quoted body",
-            Self::QuotedParenthesisInDoubleQuotedBody => "a quoted ) in a double-quoted body",
-            Self::ContinuationInUnquotedBody => "a line continuation in an unquoted body",
-            Self::ContinuationInDoubleQuotedBody => "a line continuation in a quoted body",
-            Self::LiteralNewlineInSingleQuotedBody => "a literal newline in a single-quoted body",
-            Self::TopLevelBacktickUnquoted => "a top-level backtick outside quotes",
-            Self::TopLevelBacktickAfterDoubleQuoted => "a quoted top-level backtick",
-            Self::TopLevelBacktickInsideDoubleQuotes => "a top-level backtick inside quotes",
-            Self::SubstitutionInsideBacktickClosesFirst => "a $() nested inside a backtick",
-            Self::TwoLevelSubstitutionInsideBacktick => "two $() levels inside a backtick",
-            Self::FrameClosesBeforeBacktick => "a $() that outlives its own backtick",
-            Self::BacktickClosesBeforeSubstitution => "a backtick that closes before its $()",
-            Self::MarkerInsideOpenBacktick => "a marker inside an open backtick body",
-        }
-    }
-}
-
 /// Encode each marker after a backtick for the region that owns it.
 ///
 /// The enclosing substitution opens at script level, so the marker after the
@@ -357,6 +204,11 @@ fn script_marker_after_backtick_in_command_substitution_uses_owning_region(
 #[case::nested_substitution(Case::NestedSubstitutionInQuotedBody)]
 #[case::double_backslash_parenthesis(Case::DoubleBackslashBeforeParenthesis)]
 #[case::double_backslash_quote(Case::DoubleBackslashBeforeQuote)]
+#[case::double_backslash_single_quotes(Case::DoubleBackslashInSingleQuotes)]
+#[case::double_backslash_single_quotes_parenthesis(
+    Case::DoubleBackslashInSingleQuotesBeforeParenthesis
+)]
+#[case::double_backslash_nested_frame_single_quotes(Case::DoubleBackslashInNestedFrameSingleQuotes)]
 #[case::backslash_before_body_quote(Case::BackslashBeforeBodyQuote)]
 #[case::quoted_parenthesis_single(Case::QuotedParenthesisInSingleQuotedBody)]
 #[case::quoted_parenthesis_double(Case::QuotedParenthesisInDoubleQuotedBody)]
