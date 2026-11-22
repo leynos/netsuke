@@ -71,6 +71,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-output-streams",
     "guide-project-anchor",
     "guide-project-config",
+    "guide-release-candidate-action",
     "guide-release-publish-input",
     "guide-release-wix-extension-version",
     "guide-serial-dependency-order-manifest",
@@ -381,3 +382,4 @@ fn linked_repository_example_generates_ninja(#[case] path: &str) -> Result<()> {
     )?;
     assert_generates_valid_ninja(&run, path)
 }
+// weave: run 'weave explain tests/documentation_examples_tests.rs' for per-hunk detail, 'weave check' to verify your resolution

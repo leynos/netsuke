@@ -260,6 +260,8 @@ jobs:
       - name: Fetch dependencies
         # Tests start their own cargo offline; fetch once so none resolves cold.
         run: cargo fetch --locked
+      - name: Downstream canary tooling tests
+        run: make test-downstream-canary
       - name: Test and Measure Coverage
         # The only test execution on this lane: measuring and testing in one
         # instrumented run costs one compile instead of two, so the flags must

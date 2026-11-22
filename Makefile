@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-read-policy test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-prover-tools-integration test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python interrogate lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper test-kani-check-isolation test-verus-e2e install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean fetch test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-read-policy test-windows-msi-release-rank test-release-admission test-downstream-canary test-coverage-artifact test-linux-package-metadata test-ci-scripts test-prover-tools-integration test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python interrogate lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper test-kani-check-isolation test-verus-e2e install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -432,6 +432,17 @@ test-release-admission: ## Validate the release-admission runtime contract
 		scripts/tests/test_release_admission_cross_repository.py \
 		scripts/tests/test_release_admission_sink_persistence.py \
 		scripts/tests/test_release_admission_harness_isolation.py -c /dev/null \
+		--rootdir=. -p no:cacheprovider
+
+test-downstream-canary: ## Validate the downstream migration-canary tooling
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with pytest==9.0.2 python -m pytest \
+		scripts/tests/test_resolve_release_candidate.py \
+		scripts/tests/test_run_downstream_canary.py \
+		scripts/tests/test_downstream_canary_arguments.py \
+		.github/scripts/resolve_release_candidate.py \
+		scripts/run_downstream_canary.py scripts/downstream_canary_arguments.py \
+		scripts/downstream_canary_provenance.py --doctest-modules -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 test-coverage-artifact: ## Test hostile LCOV artefact validation

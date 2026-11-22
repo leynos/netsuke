@@ -1,0 +1,32 @@
+name: Install Netsuke release candidate
+description: Build one exact Netsuke revision and expose its binary to a downstream canary
+
+inputs:
+  revision:
+    description: Full Git revision of the proposed Netsuke release candidate
+    required: true
+  expected-version:
+    description: Package version expected from `netsuke --version`
+    required: true
+
+outputs:
+  binary:
+    description: Absolute path to the built Netsuke binary
+    value: ${{ steps.install.outputs.binary }}
+  revision:
+    description: Resolved Netsuke commit
+    value: ${{ steps.install.outputs.revision }}
+  version:
+    description: Resolved Netsuke package version
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build the pinned candidate
+      id: install
+      shell: bash
+      env:
+        NETSUKE_CANDIDATE_REVISION: ${{ inputs.revision }}
+        NETSUKE_CANDIDATE_VERSION: ${{ inputs.expected-version }}
+      run: bash "${GITHUB_ACTION_PATH}/install.sh"
