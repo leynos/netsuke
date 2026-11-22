@@ -141,6 +141,10 @@ pub(super) enum EscapedScript {
     SurvivingBackslashBeforeParenthesis,
     /// A `\\` pair inside single quotes leaves a literal backslash only.
     SurvivingBackslashInSingleQuotes,
+    /// A backslash-dollar exposes a command substitution to the body's parse.
+    ExposedSubstitutionAfterEscapedDollar,
+    /// A comment inside the body hides the parenthesis on its line.
+    CommentInsideBodyHidesParenthesis,
 }
 
 #[cfg(unix)]
@@ -157,6 +161,15 @@ impl EscapedScript {
             Self::SurvivingBackslashInSingleQuotes => {
                 r"printf '<%s>\n' $(printf %s `printf %s '\\' ')'`) {{ ins }}"
             }
+            Self::ExposedSubstitutionAfterEscapedDollar => {
+                r#"printf '<%s>\n' $(printf %s `printf %s "\$(printf %s ")")"`) {{ ins }}"#
+            }
+            Self::CommentInsideBodyHidesParenthesis => {
+                // The manifest renders this inside a block scalar, so the
+                // continuation line carries the same six-space indent the
+                // case function adds to the first line.
+                "printf '<%s>\\n' $(printf %s `printf x # )\n      `) {{ ins }}"
+            }
         }
     }
 
@@ -164,8 +177,10 @@ impl EscapedScript {
     pub(super) const fn expected(self) -> &'static [u8] {
         match self {
             Self::EscapedBacktickInNestedFrame => b"<`>\n<a; touch injected; echo b>\n",
-            Self::SurvivingBackslashBeforeParenthesis => b"<)>\n<a; touch injected; echo b>\n",
+            Self::SurvivingBackslashBeforeParenthesis
+            | Self::ExposedSubstitutionAfterEscapedDollar => b"<)>\n<a; touch injected; echo b>\n",
             Self::SurvivingBackslashInSingleQuotes => b"<\\)>\n<a; touch injected; echo b>\n",
+            Self::CommentInsideBodyHidesParenthesis => b"<x>\n<a; touch injected; echo b>\n",
         }
     }
 }

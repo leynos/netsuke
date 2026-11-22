@@ -59,8 +59,10 @@ impl ScriptSubstitutionTraversal<'_, '_> {
 
     /// Return whether the cursor sits in plain, executable script text.
     ///
-    /// Comments and heredoc declarations are recognized only here: quoted text
-    /// and backtick bodies belong to the surrounding shell region.
+    /// Heredoc declarations are recognized only here: quoted text and backtick
+    /// bodies belong to the surrounding shell region, so a `<<` there is not
+    /// modelled. Comment detection is wider: an open backtick body is its own
+    /// command region, so `starts_comment` also accepts unquoted body text.
     pub(super) fn is_plain_script_text(&self) -> bool {
         self.active_quote_context() == ShellQuoteContext::Unquoted && self.backtick_region.is_none()
     }

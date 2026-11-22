@@ -194,6 +194,8 @@ fn backtick_inside_command_substitution_cannot_unquote_a_script_marker(
 #[case::escaped_backtick_nested_frame(EscapedScript::EscapedBacktickInNestedFrame)]
 #[case::surviving_backslash_parenthesis(EscapedScript::SurvivingBackslashBeforeParenthesis)]
 #[case::surviving_backslash_single_quotes(EscapedScript::SurvivingBackslashInSingleQuotes)]
+#[case::exposed_substitution(EscapedScript::ExposedSubstitutionAfterEscapedDollar)]
+#[case::comment_hides_parenthesis(EscapedScript::CommentInsideBodyHidesParenthesis)]
 fn escaped_body_characters_keep_the_marker_safe(#[case] script: EscapedScript) -> Result<()> {
     let case = ScriptCase {
         target: "out".to_owned(),

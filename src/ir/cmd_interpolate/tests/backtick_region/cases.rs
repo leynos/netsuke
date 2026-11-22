@@ -26,6 +26,10 @@ pub(super) enum Case {
     DoubleBackslashBeforeQuote,
     /// A `\\` pair inside single quotes leaves a literal backslash only.
     DoubleBackslashInSingleQuotes,
+    /// A backslash-dollar exposes a command substitution to the body's parse.
+    ExposedSubstitutionAfterEscapedDollar,
+    /// A comment inside the body hides the parenthesis on its line.
+    CommentInsideBodyHidesParenthesis,
     /// A single-quoted `\\` pair before a quoted parenthesis is literal.
     DoubleBackslashInSingleQuotesBeforeParenthesis,
     /// A single-quoted `\\` pair in a `$()` frame in the body is literal.
@@ -93,6 +97,12 @@ impl Case {
             }
             Self::DoubleBackslashInSingleQuotes => {
                 format!(r"printf '<%s>\n' `printf %s '\\'` {INS_TOKEN}")
+            }
+            Self::ExposedSubstitutionAfterEscapedDollar => {
+                format!(r#"printf '%s' $(printf %s `printf %s "\$(printf %s ")")"`) {INS_TOKEN}"#)
+            }
+            Self::CommentInsideBodyHidesParenthesis => {
+                format!("printf '%s' $(printf %s `printf x # )\n`) {INS_TOKEN}")
             }
             Self::DoubleBackslashInSingleQuotesBeforeParenthesis => {
                 format!(r"printf '<%s>\n' $(printf %s `printf %s '\\' ')'`) {INS_TOKEN}")
@@ -177,6 +187,10 @@ impl Case {
             Self::DoubleBackslashBeforeParenthesis => "a surviving backslash before a body )",
             Self::DoubleBackslashBeforeQuote => "a surviving backslash before a body quote",
             Self::DoubleBackslashInSingleQuotes => "a \\\\ pair inside body single quotes",
+            Self::ExposedSubstitutionAfterEscapedDollar => {
+                "a substitution exposed by an escaped dollar sign"
+            }
+            Self::CommentInsideBodyHidesParenthesis => "a comment hiding a body parenthesis",
             Self::DoubleBackslashInSingleQuotesBeforeParenthesis => {
                 "a single-quoted \\\\ pair before a quoted parenthesis"
             }

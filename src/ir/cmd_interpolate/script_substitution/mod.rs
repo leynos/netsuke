@@ -192,6 +192,9 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         pos: usize,
         ch: char,
     ) -> Result<Option<usize>, IrGenError> {
+        if let Some(next) = self.close_backtick_comment(pos, ch)? {
+            return Ok(Some(next));
+        }
         match self.copy_inert_character(pos, ch) {
             Some(InertCharacterOutcome::CommentEnded) => {
                 self.start_pending_heredoc_after(self.newline_context())?;
@@ -282,7 +285,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     /// suspends comment detection inside arithmetic, so this guard keeps both
     /// traversals on the same contract.
     fn starts_comment(&self, pos: usize, ch: char) -> bool {
-        self.is_plain_script_text()
+        self.active_quote_context() == ShellQuoteContext::Unquoted
             && !self.is_in_arithmetic_expansion()
             && self
                 .posix_lexical
@@ -431,4 +434,3 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         self.output
     }
 }
-// refused_by: merge_ladder_exhausted · collision: none (1 contested hunk(s), neither side deleted the other's lines)

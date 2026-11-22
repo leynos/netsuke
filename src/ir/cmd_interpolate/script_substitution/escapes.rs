@@ -9,7 +9,7 @@
 
 use super::super::{
     IrGenError, RejectionReason, find_script_substitution, invalid_command_error,
-    posix_lexical::backslash_escapes_marker,
+    posix_lexical::{SourceChar, backslash_escapes_marker},
 };
 use super::backticks::{BacktickRegion, escapes_backtick_body_character};
 use super::{ScriptSubstitutionTraversal, ShellQuoteContext};
@@ -36,6 +36,13 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         }
         let next = *self.chars.get(pos + 1)?;
         self.output.push(ch);
+        if next == '$' {
+            // The delimiter scan removes this backslash, so the body's own
+            // parse sees a dollar sign that may open a substitution. Copy only
+            // the backslash and let the next character go through the ordinary
+            // path, which opens a `$()` frame when one follows.
+            return Some(pos + 1);
+        }
         self.output.push(next);
         if next != '\\' || self.active_quote_context() == ShellQuoteContext::SingleQuoted {
             return Some(pos + 2);
@@ -80,12 +87,54 @@ impl ScriptSubstitutionTraversal<'_, '_> {
                 return Ok(Some(pos + 2));
             }
         }
+        self.reject_residual_marker(pos)?;
+        self.output.push(ch);
+        Ok(Some(pos + 1))
+    }
+
+    /// Reject a marker that a surviving backslash would keep from the scan.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a marker begins at `pos`.
+    fn reject_residual_marker(&self, pos: usize) -> Result<(), IrGenError> {
         if find_script_substitution(self.chars, pos).is_some() {
             return Err(invalid_command_error(
                 self.template.to_owned(),
                 RejectionReason::MarkerInProtectedRegion,
             ));
         }
+        Ok(())
+    }
+
+    /// End a backtick body's comment at the backtick that closes the region.
+    ///
+    /// The shell finds the closing backtick before it parses the body, so a
+    /// `#` comment inside the body cannot run past that backtick. Ending the
+    /// comment first keeps the closer from being copied as inert comment text,
+    /// which would leave the region open for the rest of the script.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when the closing backtick is reached at
+    /// a different `$()` depth from the one that opened the region.
+    pub(super) fn close_backtick_comment(
+        &mut self,
+        pos: usize,
+        ch: char,
+    ) -> Result<Option<usize>, IrGenError> {
+        let Some(region) = self.backtick_region else {
+            return Ok(None);
+        };
+        if !self
+            .posix_lexical
+            .backtick_closes_comment(self.chars, pos, SourceChar::new(ch))
+        {
+            return Ok(None);
+        }
+        self.posix_lexical.end_comment();
+        self.end_case_comment();
+        self.close_backtick_region(region)?;
         self.output.push(ch);
         Ok(Some(pos + 1))
     }
