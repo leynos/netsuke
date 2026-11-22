@@ -3245,9 +3245,18 @@ boundaries:
   because the shell performs no expansion on it. Either form quotes the
   delimiter, and the shell then performs no expansion anywhere in the body, so
   keep an unquoted literal delimiter such as `<<END` when the body must expand.
+- A marker immediately after an unpaired backslash is rejected here too, for
+  the reason given in
+  [Review the safety boundary](#review-the-safety-boundary). Each escaped
+  backslash pair renders one literal backslash before the marker, so
+  `<<\\{{ ins }}` is accepted and its terminator line begins with that one
+  backslash. Single quotes make a backslash literal, so `<<'\{{ ins }}'` is
+  also accepted.
 - A marker inside a delimiter expands to every bound path, so a marker that
-  binds more than one path renders several words. Netsuke rejects that rather
-  than guessing which word the shell keeps.
+  binds more than one path renders several words. Netsuke reparses the whole
+  rendered word and rejects one that leaves text outside it, rather than
+  guessing which word the shell keeps. A repeated marker that joins two
+  multi-path bindings fails for the same reason.
 - An unquoted delimiter leaves the body subject to shell expansion, so the
   shell removes backslash-newline throughout the body before it looks for the
   terminator. A trailing backslash run of odd length therefore continues the
