@@ -135,8 +135,8 @@
   `$()` substitution open, or that ends in a backtick escape, is now rejected
   instead of letting the next entry's path literal be reclassified as
   executable syntax. Comment openers are recognized only at an unescaped token
-  boundary, so a backtick-escaped separator cannot hide a later entry's marker
-  inside a quoted region (CWE-78)
+  boundary, so a backtick-escaped separator cannot turn a later `<#` into a
+  comment that hides a marker (CWE-78)
   ([#993](https://github.com/leynos/netsuke/issues/993))
 
 <!-- markdownlint-disable-next-line MD024 -->

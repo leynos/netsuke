@@ -674,10 +674,12 @@ or double-quoted string, a here-string, a block comment, a `$()` substitution,
 or a trailing backtick escape is now rejected, because the next entry's path
 literal would otherwise be parsed inside that region. Close the region within
 its entry, or merge the entries into one. Comment openers are recognized only
-at an unescaped token boundary: a backtick-escaped separator before `<#` or
-`#`, or an escaped `<`, is not comment syntax, so a marker that follows one
-fails closed. See the [users' guide](users-guide.md#author-a-manifest) for the
-full shared-list contract.
+at an unescaped token boundary: a backtick-escaped separator before `<#`, or an
+escaped `<`, is not comment syntax, so a marker that follows one fails closed. A
+`#` after an escaped separator starts no line comment either, so the text
+after it stays argument text. See the
+[users' guide](users-guide.md#author-a-manifest) for the full shared-list
+contract.
 
 ## Replace script `$in` and `$out` path substitution
 

@@ -678,9 +678,12 @@ fails closed instead of opening a comment. A block opener after a mid-token
 hash whose comment status is unknown fails closed for the same reason: a line
 comment would make `<#` ordinary text. Escape state participates in that
 boundary: a backtick keeps the character after it inside the current argument
-token, so a `<#` or `#` after an escaped separator, or a `<` that is itself
-escaped, is not comment syntax and fails closed rather than hiding the quoted
-text that follows.
+token, so a `<#` after an escaped separator, a `<` that a backtick escapes, and
+a `#` after an escaped separator are not comment syntax. The two openers that
+would otherwise have started a region — `<#` and an escaped `<` — fail closed
+rather than hiding the quoted text that follows; the escaped hash starts no
+region, so the text after it stays ordinary argument text and an open quote
+there is reported by the unfinished-region rule.
 
 Entries that end at a neutral boundary are unaffected, including a closed
 here-string, a `#` line comment, a `--%` stop-parsing region, and a closed
