@@ -255,3 +255,35 @@ fn an_absolute_alias_through_a_link_stops_the_reset() -> Result<()> {
     );
     Ok(())
 }
+
+/// Refuse a dangling alias whose target is reserved state.
+///
+/// The alias exists while its target does not, so canonicalization reports the
+/// spelling as absent; accepting it would let a recipe write through the link
+/// and create the force node the next build refuses. The refusal must leave the
+/// alias itself in place.
+#[cfg(unix)]
+#[test]
+fn a_dangling_alias_into_the_namespace_stops_the_reset() -> Result<()> {
+    let workspace = workspace()?;
+    workspace
+        .dir
+        .symlink(
+            Utf8Path::new(NAMESPACE_PARENT)
+                .join(NAMESPACE_LEAF)
+                .join(FORCE_ENTRY),
+            "alias",
+        )
+        .context("link a dangling alias to the force node")?;
+    let declared = vec![Utf8PathBuf::from("alias")];
+    let outcome = reset(&workspace.root, &declared);
+    ensure!(
+        outcome.is_err(),
+        "a dangling alias into reserved state must stop the reset",
+    );
+    ensure!(
+        workspace.dir.symlink_metadata("alias").is_ok(),
+        "the refused reset must leave the alias in place",
+    );
+    Ok(())
+}

@@ -23,7 +23,10 @@
 //! or a symbolic-link alias can only be judged against the working directory.
 //! Deleting an entry under such a spelling would destroy the very output the
 //! manifest declared, and writing one would collide with generated state, so
-//! the build stops with the reservation's own diagnostic instead. That check
+//! the build stops with the reservation's own diagnostic instead. The selected
+//! `--file` manifest is checked with the declared paths, because it is a path
+//! the build owns even though the manifest does not declare it, and a dangling
+//! link is resolved to the path a write through it would create. That check
 //! runs whether or not the force node exists: a first build must refuse as
 //! firmly as a later one, and a refusal that waited for generated state to
 //! appear would let the first build create the collision.
@@ -66,35 +69,51 @@ const FORCE_ENTRY: &str = "force";
 /// a manifest that names a hidden output's parent must not have that directory
 /// created, because either would collide with generated state the build owns.
 ///
+/// The selected manifest is checked too. It is not a declared output, so
+/// nothing else would refuse `--file .netsuke/phony/force`, and the reset would
+/// then delete the very file the build was asked to read. A manifest the build
+/// has already compiled is by definition present, so an absolute or relative
+/// spelling of it resolves like any other declared path.
+///
 /// # Errors
 ///
-/// Returns an error when the working directory cannot be resolved, when a
-/// declared path cannot be resolved, or when one resolves into a reserved
-/// namespace.
+/// Returns [`ReservedStateChecked`] when every path is safe, and otherwise an
+/// error when the working directory cannot be resolved, when a declared path
+/// cannot be resolved, or when one resolves into a reserved namespace.
 pub(in crate::runner) fn refuse_reserved_declarations(
     cli: &Cli,
     declared: &[Utf8PathBuf],
-) -> Result<()> {
+) -> Result<ReservedStateChecked> {
     let workspace = canonical_working_directory(cli)?;
-    for path in declared {
+    for path in std::iter::once(&cli.file).chain(declared) {
         if resolves_into_reserved_state(&workspace, path)? {
             return Err(alias_refusal(path));
         }
     }
-    Ok(())
+    Ok(ReservedStateChecked(()))
 }
+
+/// Proof that a build's paths were refused against reserved generated state.
+///
+/// Only [`refuse_reserved_declarations`] constructs this value, and
+/// [`reset_force_node`] requires one, so the destructive reset cannot be
+/// reached without the refusal that keeps declared outputs and the selected
+/// manifest safe. The value carries nothing: it records that the check ran.
+pub(in crate::runner) struct ReservedStateChecked(());
 
 /// Remove a stray path occupying the shared force node.
 ///
-/// The caller has already refused any manifest path that resolves into reserved
-/// state, so a removal here cannot destroy a declared output.
+/// The [`ReservedStateChecked`] argument is the refusal's own proof, so a
+/// removal through this function cannot destroy a declared output or the
+/// selected manifest. The caller must still run the refusal before it publishes
+/// or prunes dyndep state; the token only orders that check ahead of the reset.
 ///
 /// # Errors
 ///
 /// Returns an error when the working directory cannot be opened, when the
 /// reserved namespace is not a real directory, or when a path present at the
 /// force node cannot be inspected or removed.
-pub(in crate::runner) fn reset_force_node(cli: &Cli) -> Result<()> {
+pub(in crate::runner) fn reset_force_node(cli: &Cli, _checked: ReservedStateChecked) -> Result<()> {
     let root = open_effective_dir(cli)?;
     let parent = Utf8Path::new(NAMESPACE_PARENT);
     let Some(netsuke) = open_verified_dir(&root, NAMESPACE_PARENT, parent)? else {

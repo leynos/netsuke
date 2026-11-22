@@ -3,8 +3,9 @@
 //! The scenario files drive the `netsuke` CLI against an actual `ninja` binary
 //! and assert observable effects. They share this module so each scenario reads
 //! as the behaviour it checks rather than as workspace setup. The child process
-//! receives its own `PATH` and `NETSUKE_NINJA`, so no in-process environment
-//! mutation is involved even though the scenarios run in parallel.
+//! receives its own `PATH`, `NETSUKE_NINJA`, and English locale, so no
+//! in-process environment mutation is involved even though the scenarios run in
+//! parallel, and a localized refusal cannot change the words they assert on.
 //!
 //! When Ninja is unavailable the scenarios skip, unless the injected
 //! `NETSUKE_REQUIRE_NINJA=1` setting has made a missing installation fatal.
@@ -166,6 +167,9 @@ impl Workspace {
             &[
                 ("PATH", RECIPE_PATH),
                 ("NETSUKE_NINJA", self.ninja.as_str()),
+                // Refusal diagnostics are localized, and these scenarios assert
+                // on English words, so the child must not inherit a host locale.
+                ("NETSUKE_LOCALE", "en-US"),
             ],
         )
         .with_context(|| format!("run netsuke {}", arguments.join(" ")))

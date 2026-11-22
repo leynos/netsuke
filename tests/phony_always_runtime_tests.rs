@@ -296,6 +296,38 @@ fn a_declared_alias_of_the_force_node_stops_the_build(
     Ok(())
 }
 
+/// Refuse a manifest that is itself the force node.
+///
+/// `--file` names a path the build reads rather than an output the manifest
+/// declares, so a declared-path refusal would miss it, and the force-node reset
+/// would delete the manifest before Ninja ran.
+#[rstest]
+fn a_manifest_at_the_force_node_is_refused(temp_workspace: Result<Option<TempDir>>) -> Result<()> {
+    let Some(directory) = temp_workspace? else {
+        return Ok(());
+    };
+    let workspace = Workspace::new(directory)?;
+    workspace.create_dir_all(".netsuke/phony")?;
+    workspace.write(FORCE_NODE, ALWAYS_MANIFEST.as_bytes())?;
+
+    let run = workspace.run(&["--file", FORCE_NODE, "build"])?;
+
+    ensure!(
+        !run.success,
+        "a manifest that is itself the force node must be refused",
+    );
+    ensure!(
+        run.stderr.contains("reserved"),
+        "the refusal must report the reservation, not a Ninja failure: {}",
+        run.stderr,
+    );
+    ensure!(
+        workspace.exists(FORCE_NODE)?,
+        "the refused build must leave its own manifest in place",
+    );
+    Ok(())
+}
+
 /// Refuse the alias on a clean workspace, before any generated state exists.
 ///
 /// The refusal must not depend on the force node being present, and it must not

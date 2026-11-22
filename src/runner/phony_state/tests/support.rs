@@ -71,8 +71,8 @@ pub(super) fn reset(root: &Utf8Path, declared: &[Utf8PathBuf]) -> Result<()> {
         directory: Some(root.to_owned()),
         ..Cli::default()
     };
-    refuse_reserved_declarations(&cli, declared)?;
-    reset_force_node(&cli)
+    let reservation = refuse_reserved_declarations(&cli, declared)?;
+    reset_force_node(&cli, reservation)
 }
 
 /// Report whether an entry still occupies the force node.

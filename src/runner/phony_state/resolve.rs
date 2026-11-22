@@ -4,7 +4,13 @@
 //! do. An absolute path, a `..` that leaves the working directory and returns,
 //! or a symbolic-link alias names generated state only once the filesystem
 //! answers what it reaches, so that question is asked here, in the command
-//! layer, and only for a build that already found something to remove.
+//! layer, on every build.
+//!
+//! A link whose target does not exist yet is resolved too. Canonicalization
+//! reports it as absent, but the link itself exists and says where a write
+//! would land, so `alias -> .netsuke/phony/force` must be refused before a
+//! recipe writes through it and creates reserved state. Link traversal is
+//! bounded, and a chain longer than the bound fails closed.
 //!
 //! Resolution reads and writes nothing. Every failure other than an absent
 //! component is reported rather than folded into "not reserved": a directory
@@ -13,9 +19,28 @@
 
 use super::inspect_context;
 use crate::ninja_gen::reserved_paths::is_reserved_path;
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use std::io::ErrorKind;
+
+/// Maximum symbolic links followed for one declared spelling.
+///
+/// A build path that reaches further than this cannot be written either, so the
+/// bound only decides which diagnosis a pathological manifest receives.
+const MAX_LINK_HOPS: usize = 40;
+
+/// One step in resolving a spelling against the filesystem.
+enum Resolution {
+    /// The longest existing prefix resolved; the absent tail was folded on.
+    Resolved(Option<Utf8PathBuf>),
+    /// The longest existing prefix ends in a link whose target is absent.
+    DanglingLink {
+        /// The link itself, which still exists.
+        link: Utf8PathBuf,
+        /// Target the link names, made absolute against the link's directory.
+        target: Utf8PathBuf,
+    },
+}
 
 /// Return whether `path`, resolved against `workspace`, names generated state.
 ///
@@ -84,29 +109,100 @@ fn within_namespace(workspace: &Utf8Path, resolved: Option<&Utf8Path>) -> bool {
 /// re-enters the workspace visible: the spelling alone cannot say where it
 /// lands once the filesystem has resolved each component.
 ///
+/// A dangling symbolic link also reports its target as absent, so the walk
+/// cannot stop at the first absent component: when the longest existing prefix
+/// is a link, its target is substituted and resolution continues from there.
+/// The hop bound keeps a link cycle or an excessive chain from looping; such a
+/// spelling fails closed rather than passing as unrelated.
+///
 /// # Errors
 ///
 /// Returns an error when canonicalizing an ancestor fails for any reason other
-/// than [`ErrorKind::NotFound`].
+/// than [`ErrorKind::NotFound`], when a link cannot be read, or when the hop
+/// bound is exhausted.
 fn resolved_target(workspace: &Utf8Path, path: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
-    let candidate = workspace.join(path);
-    let mut ancestor = candidate.as_path();
+    let mut candidate = workspace.join(path);
+    for _ in 0..=MAX_LINK_HOPS {
+        match resolve_once(&candidate)? {
+            Resolution::Resolved(resolved) => return Ok(resolved),
+            Resolution::DanglingLink { link, target } => {
+                let Ok(tail) = candidate.strip_prefix(&link) else {
+                    return Ok(None);
+                };
+                candidate = join_tail(&target, tail);
+            }
+        }
+    }
+    // The bound is the diagnosis: a spelling that still names links after this
+    // many substitutions cannot be written, so the build refuses to guess.
+    Err(Error::msg(inspect_context(path).to_string()))
+}
+
+/// Resolve one spelling until an existing prefix appears or a dangling link does.
+///
+/// # Errors
+///
+/// Returns an error when canonicalizing an ancestor fails for any reason other
+/// than [`ErrorKind::NotFound`], or when probing a link fails for any reason
+/// other than an absent entry or a non-link.
+fn resolve_once(candidate: &Utf8Path) -> Result<Resolution> {
+    let mut ancestor = candidate;
     loop {
         match ancestor.canonicalize_utf8() {
             Ok(canonical) => {
                 let Ok(tail) = candidate.strip_prefix(ancestor) else {
-                    return Ok(None);
+                    return Ok(Resolution::Resolved(None));
                 };
-                return Ok(fold_tail(&canonical, tail));
+                return Ok(Resolution::Resolved(fold_tail(&canonical, tail)));
             }
             Err(error) if error.kind() == ErrorKind::NotFound => {
+                // A dangling link reports its target as absent, but reading the
+                // link itself succeeds. A missing entry and a non-link both
+                // report `NotFound` or `InvalidInput`, so the walk continues.
+                match ancestor.read_link_utf8() {
+                    Ok(target) => {
+                        return Ok(Resolution::DanglingLink {
+                            link: ancestor.to_path_buf(),
+                            target: dangling_target(ancestor, target)?,
+                        });
+                    }
+                    Err(inner)
+                        if inner.kind() == ErrorKind::NotFound
+                            || inner.kind() == ErrorKind::InvalidInput => {}
+                    Err(inner) => return Err(inner).context(inspect_context(ancestor)),
+                }
                 let Some(parent) = ancestor.parent() else {
-                    return Ok(None);
+                    return Ok(Resolution::Resolved(None));
                 };
                 ancestor = parent;
             }
-            Err(error) => return Err(error).context(inspect_context(path)),
+            Err(error) => return Err(error).context(inspect_context(candidate)),
         }
+    }
+}
+
+/// Make a dangling link's target absolute against the link's directory.
+///
+/// # Errors
+///
+/// Returns an error when the link sits at the filesystem root, so a relative
+/// target has no directory to resolve against.
+fn dangling_target(link: &Utf8Path, target: Utf8PathBuf) -> Result<Utf8PathBuf> {
+    if target.is_absolute() {
+        return Ok(target);
+    }
+    let Some(directory) = link.parent() else {
+        return Err(Error::msg(inspect_context(link).to_string()));
+    };
+    Ok(directory.join(target))
+}
+
+/// Append a relative tail to an already-resolved directory.
+fn join_tail(directory: &Utf8Path, tail: &Utf8Path) -> Utf8PathBuf {
+    if tail.as_str().is_empty() {
+        directory.to_path_buf()
+    } else {
+        directory.join(tail)
     }
 }
 

@@ -37,6 +37,7 @@ use super::reserved_paths::PHONY_NAMESPACE;
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::shell_word::{ShellDialect, quote_word};
 use camino::{Utf8Path, Utf8PathBuf};
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 /// Prefix naming a prepared directory's node inside the reserved namespace.
@@ -99,14 +100,18 @@ pub(super) fn write_statements<W: Write>(
 }
 
 /// Return every prepared directory once, in the order the graph first names it.
+///
+/// The vector keeps the graph's order so the emitted text stays deterministic;
+/// the set answers membership without a linear scan, so a graph naming many
+/// directories does not pay a quadratic scan before it renders. The set is
+/// ordered so it stays outside the unordered-collection contract in
+/// `tests/ninja_gen_hashmap_boundary.rs`; its iteration order is never used.
 fn distinct_directories(prepared: &[(&BuildEdge, Vec<OutputDir>)]) -> Vec<Utf8PathBuf> {
+    let mut seen: BTreeSet<&Utf8Path> = BTreeSet::new();
     let mut directories: Vec<Utf8PathBuf> = Vec::new();
     for (_, prepared_dirs) in prepared {
         for prepared_dir in prepared_dirs {
-            if !directories
-                .iter()
-                .any(|directory| directory == &prepared_dir.directory)
-            {
+            if seen.insert(prepared_dir.directory.as_path()) {
                 directories.push(prepared_dir.directory.clone());
             }
         }

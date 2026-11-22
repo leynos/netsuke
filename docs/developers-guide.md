@@ -1615,6 +1615,13 @@ node, and that `restat` is cleared on a hidden statement and retained on an
 new flag feeds the classification; keep the fixed cases for the statement
 shapes a reader can check by eye.
 
+`tests/phony_always_runtime_tests.rs` drives those shapes through the `netsuke`
+CLI against a real Ninja, with `tests/phony_runtime/mod.rs` supplying the
+shared workspace, manifest fixtures, and child environment. Scenarios assert
+observable effects rather than generated text. The child gets a cleared
+environment with `PATH`, `NETSUKE_NINJA`, and an English locale pinned, so a
+host locale cannot change a diagnostic a scenario asserts on.
+
 Clearing the force node belongs to the command layer, not to generation.
 `src/runner/phony_state/mod.rs` opens the effective working directory, verifies
 that `.netsuke` and `.netsuke/phony` are real directories without following a
@@ -1631,25 +1638,33 @@ A spelling that needs the working directory cannot be judged by generation, so
 the build command judges it before it publishes a dyndep sidecar, prunes an
 obsolete one, or writes anything else. The refusal covers all three reserved
 namespaces, because the rule is the one reservation, not a phony-only check.
-`GeneratedNinjaWithTargets` collects every path the graph named, and
+`GeneratedNinjaWithTargets` carries `BuildParts`, whose `declared_paths` field
+collects every path the graph named, and
 `phony_state::refuse_reserved_declarations` resolves each against the canonical
 working directory: the longest existing ancestor is canonicalized and the
-components that do not exist yet are folded onto it. That catches an absolute
-path, a `..` path that leaves the workspace and returns, and a symbolic-link
-alias, each of which names a declared output that a reset or a generated node
-would otherwise occupy. The check runs unconditionally, before the force-node
-reset and before Ninja reads the build file, because a first build must refuse
-as firmly as a later one; a check that ran only once `.netsuke` existed would
-accept a reserved spelling on a clean workspace and fail every build after it.
-The resolution rule lives in `src/runner/phony_state/resolve.rs`, apart from
-the namespace handles and the removal in `mod.rs`, so the filesystem questions
-have their own unit. It reports every canonicalization failure other than an
-absent component rather than folding the failure into "not reserved": a
-permission or symbolic-link error must stop the build, because a guard that
-failed open would delete the output it exists to protect. Resolution only
-reads; the removal itself always goes through the verified namespace handles. A
-refused build reports the same reservation diagnostic generation uses, because
-it is the same rule.
+components that do not exist yet are folded onto it. The selected `--file`
+manifest is checked with them, because it is a path the build owns even though
+the manifest does not declare it. That catches an absolute path, a `..` path
+that leaves the workspace and returns, and a symbolic-link alias, each of which
+names a declared output that a reset or a generated node would otherwise
+occupy. A dangling link is resolved to the path a write through it would
+create, with link traversal bounded; a chain past the bound fails closed. The
+check runs unconditionally, before the force-node reset and before Ninja reads
+the build file, because a first build must refuse as firmly as a later one; a
+check that ran only once `.netsuke` existed would accept a reserved spelling on
+a clean workspace and fail every build after it. Its success value,
+`ReservedStateChecked`, is the only proof `reset_force_node` accepts, so the
+destructive half cannot be called without the refusal. The working directory
+handles those two functions share, including `open_effective_dir`, live in
+`src/runner/path_helpers.rs`. The resolution rule lives in
+`src/runner/phony_state/resolve.rs`, apart from the namespace handles and the
+removal in `mod.rs`, so the filesystem questions have their own unit. It
+reports every canonicalization failure other than an absent component rather
+than folding the failure into "not reserved": a permission or symbolic-link
+error must stop the build, because a guard that failed open would delete the
+output it exists to protect. Resolution only reads; the removal itself always
+goes through the verified namespace handles. A refused build reports the same
+reservation diagnostic generation uses, because it is the same rule.
 
 Preparing the declared outputs' directories is generated work, not
 command-layer work. Ninja creates the parent directories of the outputs on an

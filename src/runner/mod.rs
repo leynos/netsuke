@@ -223,8 +223,9 @@ fn execute_build(
     // resolve, so the build refuses a manifest path that lands in generated
     // state before it publishes a sidecar, prunes an obsolete one, or removes
     // the force node. The check runs whether or not that state exists, because
-    // a first build must refuse as firmly as a later one.
-    refuse_reserved_declarations(cli, &parts.declared_paths)?;
+    // a first build must refuse as firmly as a later one. Its proof is what
+    // lets the reset below run at all.
+    let reservation = refuse_reserved_declarations(cli, &parts.declared_paths)?;
     let publication = materialize_dyndep_bundle(cli, &parts.bundle)?;
     prune_dyndep_bundle(cli, parts.bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(parts.bundle.into_parts().0);
@@ -237,9 +238,9 @@ fn execute_build(
 
     // Ninja reads the force node's absence as "permanently dirty", so a
     // leftover path there would quietly turn off every forced edge. The
-    // reservation check above has already refused a manifest path that names
-    // it, so the removal cannot destroy a declared output.
-    reset_force_node(cli)?;
+    // reservation proof is the refusal's own token, so the removal cannot run
+    // before that check or destroy a path the check protects.
+    reset_force_node(cli, reservation)?;
     let build_file = process::create_temp_ninja_file(&ninja)?;
     let build_path = build_file.as_path();
     let ninja_program = context.ninja_program;
