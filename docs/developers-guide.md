@@ -13455,13 +13455,21 @@ operation whose values each pass `canonical_key` independently. Successful
 deduplication is unaffected: it still retains the same first representatives,
 and only an operation that exceeds a ceiling is refused.
 
-Refusal precedence within one container is fixed, so a refusal never depends on
-host enumeration order: the bounded enumeration and its node charge, then the
-reported-length check, then the non-string-key check, then, for each member in
-host order, the member-name byte charge and the duplicate-name check, and
-finally the member values in sorted name order. A mapping therefore refuses a
-non-string key, a repeated name, or an over-budget member name before any
-member value is admitted.
+Refusal precedence within one container is fixed by phase: the bounded
+enumeration and its node charge, then the reported-length check, then the
+non-string-key check, then, for each member in host order, the member-name byte
+charge and the duplicate-name check, and finally the member values in sorted
+name order. A mapping therefore refuses a non-string key, a repeated name, or
+an over-budget member name before any member value is admitted, and the lowest
+key kind decides when several keys are not strings, so that refusal does not
+depend on host enumeration order.
+
+Within the member phase the order is per member rather than across members:
+each member's name is charged before that member's duplicate check, and the
+phase walks the host's order. When one member's name would exceed the byte
+ceiling while a different pair of members repeats a name, either refusal may be
+the one reported, depending on which member the host yields first. Successful
+mappings are unaffected: sorted name order still decides the canonical bytes.
 
 Location bookkeeping is borrowed rather than owned: traversal extends a
 borrowed chain of edges and materializes the owned path only when it renders a

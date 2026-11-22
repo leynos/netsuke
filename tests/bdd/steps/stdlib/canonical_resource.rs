@@ -95,6 +95,7 @@ fn ensure_shares_child(graph: &Value) -> Result<()> {
 // Given steps
 // ---------------------------------------------------------------------------
 
+/// Give a shared sequence and an independently allocated equivalent.
 #[given("a shared host sequence and an independently allocated equivalent")]
 pub(crate) fn shared_and_expanded(world: &TestWorld) -> Result<()> {
     let shared = shared_sequence(SHARED_DEPTH);
@@ -104,6 +105,7 @@ pub(crate) fn shared_and_expanded(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+/// Give a shared sequence deep enough that its expansion cannot be built.
 #[given("a deeply shared host sequence")]
 pub(crate) fn deeply_shared(world: &TestWorld) -> Result<()> {
     let graph = shared_sequence(EXPONENTIAL_DEPTH);
@@ -116,6 +118,7 @@ pub(crate) fn deeply_shared(world: &TestWorld) -> Result<()> {
 // When steps
 // ---------------------------------------------------------------------------
 
+/// Attempt canonical admission and record the rendered refusal.
 #[when("canonical admission is attempted")]
 pub(crate) fn attempt_admission(world: &TestWorld) -> Result<()> {
     let value = world
@@ -133,6 +136,7 @@ pub(crate) fn attempt_admission(world: &TestWorld) -> Result<()> {
 // Then steps
 // ---------------------------------------------------------------------------
 
+/// Assert the shared graph keys and compares as its expansion does.
 #[then("the shared graph has the same key as its expansion")]
 pub(crate) fn shared_matches_expansion(world: &TestWorld) -> Result<()> {
     let shared = world
@@ -163,6 +167,7 @@ pub(crate) fn shared_matches_expansion(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+/// Assert admission was refused by the node ceiling, not by a value kind.
 #[then("canonical admission is refused with a resource limit")]
 pub(crate) fn refused_with_resource_limit(world: &TestWorld) -> Result<()> {
     let rendered = world
