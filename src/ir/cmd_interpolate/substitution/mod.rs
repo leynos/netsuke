@@ -15,35 +15,18 @@ mod posix;
 
 mod powershell;
 
+mod protection;
+
 mod quotes;
 
 mod shared_list;
 
 use powershell::{PowerShellLexicalState, PowerShellSourceCharacter, PowerShellStopParsingState};
+use protection::MarkerProtection;
 pub(crate) use shared_list::{PowerShellListCarry, interpolate_shared_power_shell_entry};
 
 #[cfg(test)]
 pub(crate) use shared_list::shared_power_shell_entry_is_neutral;
-
-/// Classify whether the active shell region permits recipe-marker lowering.
-#[derive(Clone, Copy)]
-enum MarkerProtection {
-    /// Reject a marker because the shell region cannot safely encode it.
-    Protected,
-    /// Lower a marker using the current shell quote context.
-    Unprotected,
-}
-
-impl MarkerProtection {
-    /// Classify a shell-context predicate without exposing a Boolean at call sites.
-    const fn from_protected_region(is_protected: bool) -> Self {
-        if is_protected {
-            Self::Protected
-        } else {
-            Self::Unprotected
-        }
-    }
-}
 
 /// Track one-pass substitution with template context and mutable output state.
 ///

@@ -9716,22 +9716,24 @@ registry. The module also defines the `CommandBindings` path encodings, the
 `QuoteContext` classification, and the `find_substitution` marker recognizer.
 The sibling `src/ir/cmd_interpolate/substitution/mod.rs` owns
 `SubstitutionTraversal`, which walks one recipe and applies those bindings only
-after analysing its shell context. Keep this split private to `ir`; it is an
-implementation boundary, not a public command-template API.
-`substitution/posix.rs` owns the POSIX half of that traversal: it resolves
-heredoc declarations, comments, escapes, and backtick toggling before marker
-handling runs, so an inert or rejected region never reaches the lowering logic.
-`script_substitution/delimiters.rs` owns the `$()` nesting state that the
-script traversal needs: `ScriptCommandSubstitution` records the quote context,
-parenthesis depth, opening `$`, and `case` nesting of one command substitution.
-A closer's position survives into the next comment check because the `)` that
-ends `$()` stays part of the surrounding word, while a `)` that ends a subshell
-or a `case` pattern is an operator. Both modules are split out of their parents
-to stay inside the module-size cap; they are not separate shell parsers and
-have no callers outside command interpolation. `substitution/quotes.rs` is
-split out for the same reason: it holds the quote-context queries and updates,
-each of which has to name the innermost active shell region rather than the
-traversal's own state, because a substitution carries its own quote context.
+after analysing its shell context. `substitution/protection.rs` owns the
+per-character classification of whether a marker site may be lowered. Keep this
+split private to `ir`; it is an implementation boundary, not a public
+command-template API. `substitution/posix.rs` owns the POSIX half of that
+traversal: it resolves heredoc declarations, comments, escapes, and backtick
+toggling before marker handling runs, so an inert or rejected region never
+reaches the lowering logic. `script_substitution/delimiters.rs` owns the `$()`
+nesting state that the script traversal needs: `ScriptCommandSubstitution`
+records the quote context, parenthesis depth, opening `$`, and `case` nesting
+of one command substitution. A closer's position survives into the next comment
+check because the `)` that ends `$()` stays part of the surrounding word, while
+a `)` that ends a subshell or a `case` pattern is an operator. Both modules are
+split out of their parents to stay inside the module-size cap; they are not
+separate shell parsers and have no callers outside command interpolation.
+`substitution/quotes.rs` is split out for the same reason: it holds the
+quote-context queries and updates, each of which has to name the innermost
+active shell region rather than the traversal's own state, because a
+substitution carries its own quote context.
 
 Heredoc declaration handling is also shared rather than duplicated: the helper
 decides what a declaration is, and each traversal supplies only the context

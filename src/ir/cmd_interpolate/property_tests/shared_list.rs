@@ -63,6 +63,14 @@ impl SequenceEntry {
     const fn is_marker(self) -> bool {
         matches!(self, Self::Marker)
     }
+
+    /// Report whether the carry rejects this entry at its own position.
+    ///
+    /// An unfinished region is rejected immediately; a marker is rejected once
+    /// an earlier entry has made the carry fail closed.
+    const fn is_rejected_with(self, is_fail_closed: bool) -> bool {
+        self.leaves_region_open() || (is_fail_closed && self.is_marker())
+    }
 }
 
 /// Predict the first entry a generated sequence must reject.
@@ -75,7 +83,7 @@ impl SequenceEntry {
 fn expected_rejection_index(sequence: &[SequenceEntry]) -> Option<usize> {
     let mut is_fail_closed = false;
     for (index, entry) in sequence.iter().enumerate() {
-        if entry.leaves_region_open() || (entry.is_marker() && is_fail_closed) {
+        if entry.is_rejected_with(is_fail_closed) {
             return Some(index);
         }
         is_fail_closed |= entry.fails_closed();
