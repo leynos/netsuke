@@ -88,6 +88,29 @@ pub(super) fn backslash_escapes_marker(
     bound.is_none_or(|end| pos + 1 + skip <= end)
 }
 
+/// Report whether the ANSI-C quote at `pos` is read differently by POSIX rules.
+///
+/// Bash reads `$'…'` as an ANSI-C string, where a backslash escapes the next
+/// character. POSIX single-quote rules instead end the string at the first
+/// `'`, so an escape inside the text leaves the two readings with different
+/// quote state at later newlines. Text with no escape ends at the same quote
+/// under both readings, so only the ambiguous form is reported. An
+/// unterminated string also returns `false`: both readings stay inside it.
+pub(super) fn ansic_quote_is_ambiguous(chars: &[char], pos: usize) -> bool {
+    if chars.get(pos) != Some(&'$') || chars.get(pos + 1) != Some(&'\'') {
+        return false;
+    }
+    let mut saw_escape = false;
+    for &ch in chars.get(pos + 2..).into_iter().flatten() {
+        match ch {
+            '\\' => saw_escape = true,
+            '\'' => return saw_escape,
+            _ => {}
+        }
+    }
+    false
+}
+
 /// Classify what a `$(` delimiter opens.
 ///
 /// Both recipe traversals must agree on this boundary. An arithmetic body
@@ -273,6 +296,17 @@ impl PosixLexicalState {
                 Err(HeredocActivationRejection::ParameterExpansionNewline)
             }
         }
+    }
+
+    /// Report whether this position must be refused for a pending body.
+    ///
+    /// The answer is a lexical fact: a declaration is queued and the ANSI-C
+    /// quote here is one the POSIX quote rules misread. Keeping both halves
+    /// here lets the traversals ask one question, and keeps the predicate out
+    /// of reach of `missing_const_for_fn`, which cannot be satisfied on the
+    /// Dylint suite's older toolchain.
+    pub(super) fn rejects_ansic_quote(&self, chars: &[char], pos: usize) -> bool {
+        !self.pending_heredocs.is_empty() && ansic_quote_is_ambiguous(chars, pos)
     }
 
     /// Begin the next queued heredoc body, if its declaration has completed.

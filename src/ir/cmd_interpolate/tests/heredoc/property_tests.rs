@@ -5,7 +5,10 @@
 //! evidence about the tracker rather than a restatement of its implementation.
 
 use super::super::*;
-use super::support::{Lowering, Recipe, assert_both_traversals_lower};
+use super::support::{
+    HOSTILE_UNQUOTED, Lowering, Recipe, assert_both_traversals_lower,
+    assert_both_traversals_lower_with, hostile_bindings,
+};
 
 use proptest::prelude::*;
 
@@ -341,6 +344,54 @@ proptest! {
             &Lowering {
                 text: &expected,
                 rule: "a heredoc body must end where the shell ends it",
+            },
+        );
+    }
+}
+
+/// Generate a quoted argument whose text may span more than one newline.
+///
+/// The character class excludes every character that would open a nested
+/// construct the model does not describe: the quote characters, backslash,
+/// dollar, and backtick. What remains is ordinary argument text that both the
+/// shell and the tracker copy verbatim.
+fn quoted_argument() -> impl Strategy<Value = (char, String)> {
+    let text = "[a-z0-9 ;#{},()]{0,12}";
+    prop_oneof![
+        text.prop_map(|argument| ('\'', argument)),
+        text.prop_map(|argument| ('"', argument)),
+    ]
+}
+
+proptest! {
+    /// A quoted newline never starts the body, whatever the argument holds.
+    ///
+    /// The reference model is the shell's rule: the command line continues
+    /// through the quoted newline, so the body starts only after the closing
+    /// quote. The marker on the first body line must therefore survive as
+    /// inert text, and the marker after the terminator must carry the encoding
+    /// of an unquoted site. A tracker that started the body early would lose
+    /// the closing quote, keep the stale quote state, and encode that marker
+    /// for quotes the shell has already closed.
+    #[test]
+    fn quoted_newlines_never_start_the_body(
+        (quote, argument) in quoted_argument(),
+        lines in prop::collection::vec("[a-z ]{0,8}", 1..4),
+    ) {
+        let spaced = format!("{argument}\nsecond line");
+        let body = lines.join("\n");
+        let template = format!(
+            "cat <<EOF {quote}{spaced}{quote}\n{INS_TOKEN}\n{body}\nEOF\necho {OUTS_TOKEN}"
+        );
+        let expected = format!(
+            "cat <<EOF {quote}{spaced}{quote}\n{INS_TOKEN}\n{body}\nEOF\necho {HOSTILE_UNQUOTED}"
+        );
+        assert_both_traversals_lower_with(
+            Recipe(&template),
+            &hostile_bindings(),
+            &Lowering {
+                text: &expected,
+                rule: "a quoted newline must not start the pending heredoc body",
             },
         );
     }

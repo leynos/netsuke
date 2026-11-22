@@ -385,14 +385,18 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   Markers inside command substitutions or backticks are rejected. A heredoc
   body begins only at the unquoted newline that ends the command line declaring
   it, so a newline inside a quoted argument leaves the body pending; a
-  declaration that would have to start inside a command substitution,
-  arithmetic expansion, open parameter expansion, or already-closed region is
-  rejected instead. Comment and heredoc recognition ends a POSIX word only at a
-  space, tab, newline, or one of `;`, `&`, `|`, `(`, `)`, `<`, and `>`;
-  non-ASCII whitespace before `#` is word data and does not start a comment. A
-  `)` that closes a command or arithmetic expansion also stays in the
-  surrounding word, so `#` immediately after it does not start a comment. A `)`
-  that terminates a `case` pattern is an operator instead, and the two are
+  declaration whose command-line newline would lie in a shell region other than
+  the declaring one, such as a command substitution, backtick body, arithmetic
+  expansion, open parameter expansion, or already-closed region, is rejected
+  instead, while a heredoc declared and completed inside a single `$()` region
+  remains supported. A declaring line carrying an ANSI-C quote with an escape
+  is rejected as well, because Bash and the POSIX quote rules disagree about
+  where that string ends. Comment and heredoc recognition ends a POSIX word
+  only at a space, tab, newline, or one of `;`, `&`, `|`, `(`, `)`, `<`, and
+  `>`; non-ASCII whitespace before `#` is word data and does not start a
+  comment. A `)` that closes a command or arithmetic expansion also stays in
+  the surrounding word, so `#` immediately after it does not start a comment. A
+  `)` that terminates a `case` pattern is an operator instead, and the two are
   lexically identical without the `case` grammar, so a substitution whose
   source contains `case` is rejected when a `)` is immediately followed by `#`.
   PowerShell permits markers only at unquoted sites and rejects other

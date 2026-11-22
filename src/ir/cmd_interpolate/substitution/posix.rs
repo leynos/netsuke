@@ -8,8 +8,8 @@
 use super::super::invalid_heredoc_boundary_error;
 use super::super::invalid_heredoc_delimiter_error;
 use super::super::posix_lexical::{
-    EscapeBeforeMarker, HeredocBoundary, HeredocDeclaration, InertCharacterOutcome, NewlineContext,
-    PosixCharacter, SourceChar, backslash_escapes_marker,
+    EscapeBeforeMarker, HeredocActivationRejection, HeredocBoundary, HeredocDeclaration,
+    InertCharacterOutcome, NewlineContext, PosixCharacter, SourceChar, backslash_escapes_marker,
 };
 use super::{
     IrGenError, MarkerProtection, RejectionReason, SubstitutionTraversal, invalid_command_error,
@@ -42,6 +42,7 @@ impl SubstitutionTraversal<'_, '_> {
             Some(InertCharacterOutcome::Consumed) => return Ok(pos + 1),
             Some(InertCharacterOutcome::NotInert) | None => {}
         }
+        self.reject_ambiguous_ansic_quote(pos)?;
         self.observe_case_word(pos, ch);
         if let Some(next) = self.append_escaped_character(pos, ch)? {
             return Ok(next);
@@ -93,6 +94,29 @@ impl SubstitutionTraversal<'_, '_> {
         self.posix_lexical
             .activate_pending_heredoc(boundary)
             .map_err(|reason| invalid_heredoc_boundary_error(self.template.to_owned(), reason))
+    }
+
+    /// Reject an ANSI-C quote whose extent the POSIX quote rules misread.
+    ///
+    /// Bash reads `$'a\'b'` as one ANSI-C string, while the tracker's single
+    /// quote rule ends that string at the escaped quote. While a body is
+    /// pending that disagreement decides where the body starts, so the
+    /// declaration fails closed. Without a pending declaration no boundary
+    /// decision depends on the quote here, so it is left alone.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error naming the untrackable quote.
+    fn reject_ambiguous_ansic_quote(&self, pos: usize) -> Result<(), IrGenError> {
+        if !self.matches_unquoted_quote_context()
+            || !self.posix_lexical.rejects_ansic_quote(self.chars, pos)
+        {
+            return Ok(());
+        }
+        Err(invalid_heredoc_boundary_error(
+            self.template.to_owned(),
+            HeredocActivationRejection::AnsiCQuoting,
+        ))
     }
 
     /// End a comment at the backtick that closes a legacy substitution.

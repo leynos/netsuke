@@ -3196,9 +3196,16 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   spells the delimiter, so a marker on a later line is interpolated again. The
   body starts only at the unquoted newline that ends the command line declaring
   it, so a newline inside a quoted argument on that line does not start it.
-  Netsuke rejects a declaration whose body would have to start at a newline
-  inside `$()`, backticks, `$(( ))`, an open `${ }`, or a substitution region
-  that has already closed, rather than guess where that body ends. A `<<-`
+  Netsuke rejects a declaration whose command-line newline would lie in a shell
+  region other than the one that declared it, such as `$()`, backticks,
+  `$(( ))`, an open `${ }`, or a substitution region that has already closed,
+  rather than guess where that body ends; a heredoc declared and completed
+  inside a single `$()` region remains supported. A declaring line that carries
+  an ANSI-C quote containing an escape, such as `$'a\'b'`, is rejected while a
+  body is pending, because Bash and the POSIX quote rules end that string at
+  different quotes. Elsewhere a marker inside an ANSI-C string is encoded as if
+  the string were POSIX single-quoted, which is correct only when its text
+  contains no backslash escape; place such markers outside `$'...'`. A `<<-`
   heredoc allows a tab-indented delimiter line, and Netsuke strips the leading
   tabs before comparing it. The delimiter word ends only where the shell's
   token rule ends it: at an ASCII space, tab, or newline, or at one of `;`, `&`,
@@ -3323,13 +3330,19 @@ boundaries:
   so arithmetic expressions pass through unchanged.
 - A body starts only at the unquoted newline that ends its declaring command
   line. A newline inside a quoted argument is part of that argument, so the
-  body waits for the line that closes the quote. A newline inside `$()`,
-  backticks, `$(( ))`, an open `${ }`, or a substitution region that has
-  already closed cannot be placed at the declaring line, so a pending body
-  there is rejected with an invalid-command diagnostic naming the rejected
-  boundary rather than started in the wrong place. The end of the script is not
-  a boundary: a body that never reaches its terminator is not reported, and the
-  remaining text is copied literally, so keep the terminator inside the script.
+  body waits for the line that closes the quote. A newline in a shell region
+  other than the one that declared the body, such as `$()`, backticks,
+  `$(( ))`, an open `${ }`, or a substitution region that has already closed,
+  cannot be placed at the declaring line, so a pending body there is rejected
+  with an invalid-command diagnostic naming the rejected boundary rather than
+  started in the wrong place. A declaration and its newline inside the same
+  `$()` region remain supported. A declaring line that carries an ANSI-C quote
+  containing an escape, such as `$'a\'b'`, is also rejected: Bash and the POSIX
+  quote rules end that string at different quotes, so the boundary cannot be
+  placed. The end of the script is not a boundary: in a script, a body that
+  never reaches its terminator is not reported, and the remaining text is
+  copied literally. A command recipe rejects an unmatched quote in that text as
+  an invalid command, so keep the terminator inside the recipe.
 
 ## Compatibility links for the imported `rstest-bdd` guides
 

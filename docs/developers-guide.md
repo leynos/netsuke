@@ -9824,6 +9824,15 @@ are in `src/ir/cmd_interpolate/tests/heredoc/boundary_tests.rs`, and the
 quoted-newline injection path runs through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
 
+Both traversals also refuse an ANSI-C quote on a declaring line while a body is
+pending. Bash reads `$'a\'b'` as one ANSI-C string, whereas the POSIX
+single-quote rule the tracker implements ends that string at the escaped quote,
+so the newline that follows would be classified `QuotedArgument` and the body
+deferred into text the shell copies literally. `ansic_quote_is_ambiguous`
+reports only text that contains an escape, because an escape-free ANSI-C string
+ends at the same quote under both readings; the guard fires only while a
+declaration is pending, so ordinary ANSI-C quoting is unaffected.
+
 The rendered word is reparsed under the same grammar after marker lowering, so
 a path that would split the word, or introduce a rejected form, fails closed;
 the quoting recorded for body matching is the rendered word's, because a path

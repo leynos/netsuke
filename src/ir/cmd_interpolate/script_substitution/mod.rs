@@ -8,8 +8,8 @@ use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, RejectionReason,
     find_script_substitution, invalid_command_error, invalid_heredoc_boundary_error,
     posix_lexical::{
-        HeredocBoundary, InertCharacterOutcome, NewlineContext, PosixCharacter, PosixLexicalState,
-        SourceChar, backslash_escapes_marker,
+        HeredocActivationRejection, HeredocBoundary, InertCharacterOutcome, NewlineContext,
+        PosixCharacter, PosixLexicalState, SourceChar, backslash_escapes_marker,
     },
 };
 
@@ -134,6 +134,30 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             .map_err(|reason| invalid_heredoc_boundary_error(self.template.to_owned(), reason))
     }
 
+    /// Reject an ANSI-C quote whose extent the POSIX quote rules misread.
+    ///
+    /// Bash reads `$'a\'b'` as one ANSI-C string, but the tracker's single
+    /// quote rule ends that string at the escaped quote. While a body is
+    /// pending the disagreement decides where the body starts, so the
+    /// declaration fails closed rather than deferring the body into text the
+    /// shell copies literally. Outside that pending declaration the quote is
+    /// left alone, because no boundary decision depends on it here.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error naming the untrackable quote.
+    fn reject_ambiguous_ansic_quote(&self, pos: usize) -> Result<(), IrGenError> {
+        if self.active_quote_context() != ShellQuoteContext::Unquoted
+            || !self.posix_lexical.rejects_ansic_quote(self.chars, pos)
+        {
+            return Ok(());
+        }
+        Err(invalid_heredoc_boundary_error(
+            self.template.to_owned(),
+            HeredocActivationRejection::AnsiCQuoting,
+        ))
+    }
+
     /// Process source characters that do not require placeholder substitution.
     ///
     /// A newline that ends a comment is offered to the pending-heredoc queue
@@ -161,6 +185,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.is_escaped = false;
             return Ok(Some(pos + 1));
         }
+        self.reject_ambiguous_ansic_quote(pos)?;
         self.observe_case_word(pos, ch);
         if self.starts_escape(pos, ch)? {
             self.output.push(ch);

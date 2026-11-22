@@ -184,3 +184,62 @@ fn untracked_newlines_fail_closed_for_each_posix_script_shell(#[case] shell: Rec
         );
     }
 }
+
+// Verify an ANSI-C quote on the declaring line is rejected, not deferred.
+//
+// Bash reads `$'a\'b'` as one ANSI-C string, so the newline after it ends the
+// command line and starts the body. POSIX single-quote rules read the `\'` as
+// closing the quote, so the scanner would call that newline quoted and defer
+// the body, lowering markers in text Bash treats as inert. The whole point of
+// deferral is that the body has not started, so the divergence has to fail
+// closed instead.
+#[rstest]
+#[case::boundary("cat <<EOF $'a\\'b'\nbody\nEOF")]
+#[case::with_marker(&format!("cat <<EOF $'a\\'b'\n{INS_TOKEN}\nEOF\necho {OUTS_TOKEN}"))]
+fn ambiguous_ansic_quote_on_the_declaring_line_is_rejected(#[case] template: &str) {
+    assert_both_traversals_reject_heredoc_boundary(
+        Recipe(template),
+        "an ANSI-C quote the POSIX rules misread must fail closed",
+    );
+}
+
+// Verify an escape-free ANSI-C quote keeps the supported lowering.
+//
+// Without a backslash the ANSI-C and POSIX readings end at the same quote, so
+// the newline after it starts the body under both. Rejecting this form would
+// refuse an input the tracker reads correctly.
+#[rstest]
+#[case::boundary("cat <<EOF $'ab'\nbody\nEOF")]
+#[case::with_marker(&format!("cat <<EOF $'ab'\nbody {INS_TOKEN}\nEOF\necho {OUTS_TOKEN}"))]
+fn escape_free_ansic_quote_still_starts_the_body(#[case] template: &str) {
+    let expected = template.replace(OUTS_TOKEN, "output");
+    assert_both_traversals_lower_with(
+        Recipe(template),
+        &CommandBindings::new(
+            &[Utf8PathBuf::from("input")],
+            &[Utf8PathBuf::from("output")],
+            RecipeShell::Posix,
+        ),
+        &Lowering {
+            text: &expected,
+            rule: "an escape-free ANSI-C quote agrees with the POSIX reading",
+        },
+    );
+}
+
+// Verify ANSI-C text without a pending declaration is left alone.
+//
+// The rejection is scoped to a declaration whose boundary is at stake, so an
+// ordinary script that uses ANSI-C quoting is copied through unchanged.
+#[rstest]
+#[case::escaped("echo $'a\\'b'")]
+#[case::plain("echo $'plain text'")]
+fn ansic_quote_without_a_pending_declaration_is_accepted(#[case] template: &str) {
+    let bindings = CommandBindings::new(&[], &[], RecipeShell::Bash);
+    let lowered = substitute_script(template, &bindings)
+        .expect("ANSI-C quoting without a pending heredoc must lower");
+    assert_eq!(
+        lowered, template,
+        "unrelated ANSI-C quoting must be copied verbatim"
+    );
+}
