@@ -348,7 +348,9 @@ impl CaseNesting {
     /// classified by the command positions that apply everywhere else. The
     /// distinction matters because a pattern list is the one place where a
     /// reserved word is data: `case x in esac)` closes the construct, while
-    /// `case x in x|esac)` has `esac` as an alternative pattern.
+    /// `case x in x|esac)` has `esac` as an alternative pattern. The header's
+    /// first word is the subject whatever it spells, so `case in in (in) …`
+    /// reads its second `in` as the keyword rather than as the subject.
     fn classify_within_construct(&self, parenthesis_depth: usize) -> Option<WordRole> {
         let frame = self
             .frames
@@ -358,6 +360,9 @@ impl CaseNesting {
         let is_at_own_depth = frame.depth == parenthesis_depth;
         let word = self.word.as_str();
         match frame.phase {
+            CasePhase::Header if is_at_own_depth && !frame.subject_seen => {
+                Some(WordRole::CaseSubject)
+            }
             CasePhase::Header if is_at_own_depth && word == "in" => Some(WordRole::EnterPattern),
             CasePhase::Pattern
                 if frame.is_closed_by(parenthesis_depth, word, self.word_is_literal) =>

@@ -104,6 +104,11 @@ fn case_substitution_without_comment_boundary_is_accepted() {
     "a marker in a function-scoped case arm must stay protected",
     Interpolators::ScriptOnly
 )]
+#[case::in_subject(
+    "echo \"$(case in in (in) printf %s {INS_TOKEN} ;; esac)\"",
+    "a marker in an arm whose subject is spelled in must stay protected",
+    Interpolators::Both
+)]
 fn case_arm_markers_inside_substitutions_are_refused(
     #[case] template: &str,
     #[case] context: &str,
@@ -116,6 +121,28 @@ fn case_arm_markers_inside_substitutions_are_refused(
         assert!(
             matches!(error, IrGenError::InvalidCommand { .. }),
             "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+    }
+}
+
+// Verify a subject spelled `in` does not move the tracker into the patterns.
+//
+// The header is `case WORD in`, so the first word after `case` is the subject
+// even when it spells `in`. Reading it as the keyword starts the pattern list
+// one word early: the optional `(` then looks like a group, the arm never
+// enters its command phase, and the construct stays open past the real
+// substitution closer, so a marker written after the substitution is wrongly
+// refused. This pins the supported side of that distinction.
+#[test]
+fn case_subject_spelled_in_keeps_the_substitution_boundary() {
+    let bindings = bindings();
+    let template = format!("echo \"$(case in in (in) printf yes ;; esac)\" {INS_TOKEN}");
+    let expected = "echo \"$(case in in (in) printf yes ;; esac)\" input";
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(&template, &bindings).expect("a subject spelled `in` is supported Bash"),
+            expected,
+            "a supported case substitution must keep its text and lower the outer marker"
         );
     }
 }

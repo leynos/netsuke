@@ -102,6 +102,13 @@ pub(super) struct CaseFrame {
     pub(super) depth: usize,
     /// The part of the construct the tracker is reading.
     pub(super) phase: CasePhase,
+    /// Whether the header's subject word has been read.
+    ///
+    /// The header is `case WORD in`, and the subject may itself be spelled
+    /// `in`. Recording the first word separately keeps that subject from being
+    /// mistaken for the keyword, which would move the tracker into the pattern
+    /// phase one word early and leave the construct open past its real closer.
+    pub(super) subject_seen: bool,
     /// Whether the last thing read in a pattern list was `|`.
     pub(super) after_alternative: bool,
     /// Whether the current pattern list has started.
@@ -188,6 +195,8 @@ impl CaseFrame {
 pub(super) enum WordRole {
     /// A `case` keyword in command position: open a construct.
     OpenCase,
+    /// The subject word that follows `case`, which may itself be `in`.
+    CaseSubject,
     /// The `in` keyword: the construct's header is complete and a pattern
     /// list follows.
     EnterPattern,
@@ -218,10 +227,17 @@ impl super::CaseNesting {
                 self.frames.push(CaseFrame {
                     depth: parenthesis_depth,
                     phase: CasePhase::Header,
+                    subject_seen: false,
                     after_alternative: false,
                     pattern_started: false,
                 });
                 self.sightings.record_placed();
+                self.expects_command = false;
+            }
+            WordRole::CaseSubject => {
+                if let Some(frame) = self.open_construct_at_mut(parenthesis_depth) {
+                    frame.subject_seen = true;
+                }
                 self.expects_command = false;
             }
             WordRole::EnterPattern => {

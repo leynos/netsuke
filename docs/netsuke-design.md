@@ -411,24 +411,25 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   function body, behind a `time` option, and behind a `coproc` name. It also
   reads each construct's phase, so an `esac` after a `|` is another alternative
   pattern rather than the terminator, and requires a bare spelling, so a quoted
-  or escaped `esac` stays pattern text. An optional `(` immediately before a
-  pattern list belongs to the pattern syntax and starts the list, so an `esac`
-  written inside it is pattern text rather than the terminator, and a `;;`
-  split by a line continuation still ends the arm. A pattern terminator then no
-  longer closes the substitution, and a substitution whose source contains
-  `case` is rejected when a `)` is immediately followed by `#`. A `case`
-  written where the scanner's word model cannot place it, such as behind a
-  quoted `coproc` name, fails closed when a whole-word `in` precedes the closer
-  and a path marker follows, so a pattern terminator is never mistaken for the
-  closer while a marker depends on the answer. PowerShell permits markers only
-  at unquoted sites and rejects other shell-sensitive contexts. Longer
-  identifiers such as `$input` and `$output`, and non-placeholder text inside
-  backticks, remain unchanged. A scalar command is emitted unchanged, but still
-  undergoes marker lowering and backend conversion such as escaping and
-  validation. On Unix and the explicit Windows Bash compatibility route, a list
-  is lowered to brace groups that evaluate each entry through a shell-quoted
-  `eval` payload and are joined by `&&`. The literal `command_isolation` field
-  selects `shared` or `isolated` and defaults to `shared`. Only `isolated` is
+  or escaped `esac` stays pattern text. The header's first word is the subject
+  even when it spells `in`. An optional `(` immediately before a pattern list
+  belongs to the pattern syntax and starts the list, so an `esac` written
+  inside it is pattern text rather than the terminator, and a `;;` split by a
+  line continuation still ends the arm. A pattern terminator then no longer
+  closes the substitution, and a substitution whose source contains `case` is
+  rejected when a `)` is immediately followed by `#`. A `case` written where
+  the scanner's word model cannot place it, such as behind a quoted `coproc`
+  name, fails closed when a whole-word `in` precedes the closer and a path
+  marker follows, so a pattern terminator is never mistaken for the closer
+  while a marker depends on the answer. PowerShell permits markers only at
+  unquoted sites and rejects other shell-sensitive contexts. Longer identifiers
+  such as `$input` and `$output`, and non-placeholder text inside backticks,
+  remain unchanged. A scalar command is emitted unchanged, but still undergoes
+  marker lowering and backend conversion such as escaping and validation. On
+  Unix and the explicit Windows Bash compatibility route, a list is lowered to
+  brace groups that evaluate each entry through a shell-quoted `eval` payload
+  and are joined by `&&`. The literal `command_isolation` field selects
+  `shared` or `isolated` and defaults to `shared`. Only `isolated` is
   serialized; omitting `shared` preserves legacy action hashes, while
   `isolated` contributes to action identity. The mode is preserved during
   rendering, rule resolution, and interpolation, and is not templated. Shared
