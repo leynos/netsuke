@@ -395,7 +395,10 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.backtick_region = None;
             return Ok(());
         }
-        Err(invalid_command_error(self.template.to_owned()))
+        Err(invalid_command_error(
+            self.template.to_owned(),
+            RejectionReason::UnmatchedBacktick,
+        ))
     }
 
     /// Append a safe replacement or reject a placeholder in a protected region.

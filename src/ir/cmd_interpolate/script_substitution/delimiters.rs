@@ -8,8 +8,8 @@
 use super::super::command_substitution::{
     CaseNesting, CaseObservation, SubstitutionBoundary, reject_ambiguous_case_comment,
 };
-use super::super::invalid_command_error;
 use super::super::posix_lexical::SubstitutionKind;
+use super::super::{RejectionReason, invalid_command_error};
 use super::{IrGenError, ScriptSubstitutionTraversal, ShellQuoteContext};
 
 /// Track one nested POSIX command substitution while traversing a script.
@@ -114,7 +114,10 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             return Ok(Some(pos + 1));
         }
         if self.closes_backtick_owner() {
-            return Err(invalid_command_error(self.template.to_owned()));
+            return Err(invalid_command_error(
+                self.template.to_owned(),
+                RejectionReason::UnmatchedBacktick,
+            ));
         }
         let boundary = self.boundary_at(pos);
         let Some(is_closed) = self.decrement_command_substitution_parenthesis_depth() else {
