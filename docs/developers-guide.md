@@ -9934,9 +9934,10 @@ terminators; the `)` that finally closes it is the one checked. Its sibling
 `state.rs` holds the tracker's state values — the keywords seen, the open
 compound-command prefix, the role a completed word plays, and each open
 construct's depth and phase — together with the transitions those roles apply,
-and `lexical.rs` holds the word-boundary and command-position predicates. When
-that closer is immediately followed by `#` and the substitution's source
-contains `case`, both POSIX traversals fail closed with
+`scan.rs` turns the character stream into words, comments, and operators, and
+`lexical.rs` holds the word-boundary and command-position predicates. When that
+closer is immediately followed by `#` and the substitution's source contains
+`case`, both POSIX traversals fail closed with
 `IrGenError::AmbiguousSubstitutionBoundary` rather than guessing a quote
 context. The check over-approximates on purpose: it scans the raw source, so a
 `case` inside quotes or a comment also triggers it, and it does not consult the

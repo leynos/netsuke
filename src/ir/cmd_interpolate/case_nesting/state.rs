@@ -328,7 +328,7 @@ impl super::CaseNesting {
     /// pattern text rather than a keyword, so closing there would read the
     /// pattern terminator as the substitution closer.
     fn is_bare_esac_closing(&self, parenthesis_depth: usize) -> bool {
-        let is_bare_command_word = self.expects_command && self.word_is_literal;
+        let is_bare_command_word = self.expects_command && self.spelling.is_literal();
         let is_open_here = is_bare_command_word && self.is_open_at(parenthesis_depth);
         self.word == "esac" && is_open_here
     }
