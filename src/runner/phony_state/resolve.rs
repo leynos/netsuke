@@ -138,18 +138,29 @@ fn reserved_ancestor(workspace: &Utf8Path, path: &Utf8Path) -> Result<bool> {
         if !current.starts_with(workspace) {
             return Ok(false);
         }
-        match current.canonicalize_utf8() {
-            Ok(canonical) => {
-                if within_namespace(workspace, Some(&canonical)) {
-                    return Ok(true);
-                }
-            }
-            Err(error) if error.kind() == ErrorKind::NotFound => {}
-            Err(error) => return Err(error).context(inspect_context(current)),
+        if ancestor_is_reserved(workspace, current)? {
+            return Ok(true);
         }
         ancestor = current.parent();
     }
     Ok(false)
+}
+
+/// Report whether one existing ancestor canonicalizes into reserved state.
+///
+/// An absent ancestor cannot be reserved, and canonicalization is what follows
+/// the links on the way to it.
+///
+/// # Errors
+///
+/// Returns an error when canonicalizing the ancestor fails for any reason other
+/// than an absent entry.
+fn ancestor_is_reserved(workspace: &Utf8Path, ancestor: &Utf8Path) -> Result<bool> {
+    match ancestor.canonicalize_utf8() {
+        Ok(canonical) => Ok(within_namespace(workspace, Some(&canonical))),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).context(inspect_context(ancestor)),
+    }
 }
 
 /// Resolve `path`'s parent and keep its final component as written.

@@ -122,6 +122,16 @@ fn a_parent_relative_alias_that_reenters_stops_the_reset() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn a_symlinked_alias_stops_the_reset() -> Result<()> {
+    assert_state_alias_is_refused(Utf8PathBuf::from("state").join(FORCE_ENTRY))
+}
+
+/// Refuse `declared` when `state` links the workspace into the namespace.
+///
+/// Both alias cases set up the same workspace: a stray force node and a link
+/// named `state` to `.netsuke/phony`. Only the spelling that reaches through
+/// it differs, so the setup and the refusal assertions live here once.
+#[cfg(unix)]
+fn assert_state_alias_is_refused(declared: Utf8PathBuf) -> Result<()> {
     let workspace = workspace()?;
     stray_force_node(&workspace.dir)?;
     workspace
@@ -131,8 +141,7 @@ fn a_symlinked_alias_stops_the_reset() -> Result<()> {
             "state",
         )
         .context("link an alias to the namespace")?;
-    let declared = vec![Utf8PathBuf::from("state").join(FORCE_ENTRY)];
-    let outcome = reset(&workspace.root, &declared);
+    let outcome = reset(&workspace.root, &[declared]);
     ensure!(
         outcome.is_err(),
         "a symbolic-link alias must not delete the node it names",
@@ -298,26 +307,7 @@ fn a_dangling_alias_into_the_namespace_stops_the_reset() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn a_cancelled_parent_component_cannot_hide_a_reserved_link() -> Result<()> {
-    let workspace = workspace()?;
-    stray_force_node(&workspace.dir)?;
-    workspace
-        .dir
-        .symlink(
-            Utf8Path::new(NAMESPACE_PARENT).join(NAMESPACE_LEAF),
-            "state",
-        )
-        .context("link the visible name to the namespace")?;
-    let declared = vec![Utf8PathBuf::from("missing/../state").join(FORCE_ENTRY)];
-    let outcome = reset(&workspace.root, &declared);
-    ensure!(
-        outcome.is_err(),
-        "a cancelled `..` must not hide a reserved link",
-    );
-    ensure!(
-        force_node_exists(&workspace.dir)?,
-        "the refused reset must leave the declared output in place",
-    );
-    Ok(())
+    assert_state_alias_is_refused(Utf8PathBuf::from("missing/../state").join(FORCE_ENTRY))
 }
 
 /// Refuse a manifest reached through a reserved ancestor.
