@@ -9,27 +9,28 @@ sections that match the features they use.
 
 ## Impact at a glance
 
-| Priority                                   | Area                         | What to do                                                              |
-| ------------------------------------------ | ---------------------------- | ----------------------------------------------------------------------- |
-| Required                                   | Checkout source builds       | Use the pinned Rust toolchain before building from a checkout.          |
-| Required                                   | Linux checkout builds        | Install the pinned `mold` linker before building from a checkout.       |
-| Required                                   | Windows MSI installations    | Remove the old `PATH` entry; uninstall beta2 and beta3 by hand.         |
-| Review if enabled                          | Manifest scheduling          | Opt in only where immediate console output is useful.                   |
-| Required                                   | `Target` literals            | Add `description` and `console` to every literal.                       |
-| Required                                   | `BuildEdge` literals         | Add `output_visibility` to every literal.                               |
-| Review if enabled                          | Rust `Action.pool` choices   | Move console scheduling onto the edge; keep custom pools off it.        |
-| Required                                   | `NinjaGenError` matches      | Add arms for the two new console variants.                              |
-| Required                                   | `InvalidCommand` matches     | Bind `reason` instead of the removed `snippet` field.                   |
-| Required                                   | Shared PowerShell lists      | Close each entry's regions, or merge it with the next entry.            |
-| Required                                   | File-reading filters         | Move reads that leave the workspace into it, or name a path beneath it. |
-| Optional                                   | Existing manifests           | Omit `console` to retain ordinary scheduling; it defaults to false.     |
-| Optional                                   | Scripts parsing stdout       | Tolerate the forwarding-failure warning on stdout.                      |
-| Optional                                   | Scripts parsing stderr       | Tolerate the additional cause lines in human output.                    |
-| Optional                                   | Configured shell definitions | Declare `[[shells]]` only in operator configuration.                    |
-| Required                                   | Reusable release callers     | Pass `publish: true` to publish from a reusable call.                   |
-| Review if automation parses Netsuke errors | Ninja failure diagnostics    | Match the two diagnostic codes instead of the old summary text.         |
-| Required                                   | `RunnerError` matches        | Add arms for `NinjaSpawnFailed` and `NinjaFailed`, or a wildcard arm.   |
-| Required                                   | Shell ANSI-C recipes         | Move `{{ ins }}` and `{{ outs }}` outside `$'…'` for POSIX and Bash.    |
+| Priority                                   | Area                         | What to do                                                                                                                    |
+| ------------------------------------------ | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Required                                   | Checkout source builds       | Use the pinned Rust toolchain before building from a checkout.                                                                |
+| Required                                   | Linux checkout builds        | Install the pinned `mold` linker before building from a checkout.                                                             |
+| Required                                   | Windows MSI installations    | Remove the old `PATH` entry; uninstall beta2 and beta3 by hand.                                                               |
+| Review if enabled                          | Manifest scheduling          | Opt in only where immediate console output is useful.                                                                         |
+| Required                                   | `Target` literals            | Add `description` and `console` to every literal.                                                                             |
+| Required                                   | `BuildEdge` literals         | Add `output_visibility` to every literal.                                                                                     |
+| Review if enabled                          | Rust `Action.pool` choices   | Move console scheduling onto the edge; keep custom pools off it.                                                              |
+| Required                                   | `NinjaGenError` matches      | Add arms for the two new console variants.                                                                                    |
+| Required                                   | `InvalidCommand` matches     | Bind `reason` instead of the removed `snippet` field.                                                                         |
+| Required                                   | Shared PowerShell lists      | Close each entry's regions, or merge it with the next entry.                                                                  |
+| Required                                   | File-reading filters         | Move reads that leave the workspace into it, or name a path beneath it.                                                       |
+| Optional                                   | Existing manifests           | Omit `console` to retain ordinary scheduling; it defaults to false.                                                           |
+| Optional                                   | Scripts parsing stdout       | Tolerate the forwarding-failure warning on stdout.                                                                            |
+| Optional                                   | Scripts parsing stderr       | Tolerate the additional cause lines in human output.                                                                          |
+| Optional                                   | Configured shell definitions | Declare `[[shells]]` only in operator configuration.                                                                          |
+| Required                                   | Reusable release callers     | Pass `publish: true` to publish from a reusable call.                                                                         |
+| Review if automation parses Netsuke errors | Ninja failure diagnostics    | Match the two diagnostic codes instead of the old summary text.                                                               |
+| Required                                   | `RunnerError` matches        | Add arms for `NinjaSpawnFailed` and `NinjaFailed`, or a wildcard arm.                                                         |
+| Required                                   | Shell ANSI-C recipes         | Move `{{ ins }}` and `{{ outs }}` outside `$'…'` for POSIX and Bash.                                                          |
+| Required                                   | Backtick substitutions       | Move markers out of the newly rejected nesting; see [the section below](#backtick-substitutions-restore-their-owning-region). |
 
 _Table 1: migration obligations for the beta series and console-pool option._
 
@@ -913,6 +914,37 @@ example `unsupported heredoc boundary: command substitution newline`.
 See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
 the full heredoc contract.
+## Backtick substitutions restore their owning region
+
+A closing backtick now restores the quote state of the shell region that opened
+it, rather than the script-level state. A marker after the substitution is
+encoded for that region, so a recipe that used to lower a marker with the wrong
+quoting now produces a correctly quoted argument. Most recipes see no
+difference: a top-level backtick still restores the script level.
+
+Three shapes that could not be lowered safely now fail closed at IR lowering
+with an `ir.invalid_command` diagnostic instead of producing a command whose
+quoting disagrees with the shell:
+
+- An unquoted `)` that would close the `$()` region owning an open backtick,
+  as in ``printf '%s' $(printf %s `printf x) printf y` {{ ins }}``.
+- A closing backtick reached while an inner `$()` is still open, as in
+  ``printf '%s' `printf %s $(printf x` {{ ins }}``.
+- A backslash that would consume the first character of a marker inside a
+  backtick body, as in ``printf '%s' `printf %s \{{ ins }}` ``.
+
+Move the marker outside the substitution, or rewrite the nesting so each
+backtick closes inside the region that opened it.
+
+A backtick escaped inside a `$()` frame in the body is now accepted, because
+the shell protects it before it parses the body: in
+``printf '%s' `printf %s "$(printf %s '\`')"` {{ ins }}`` the escaped backtick
+is data, not the closer. Every other escape still follows the innermost
+region's own quoting.
+
+See the
+[users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
+the full backtick and substitution contract.
 
 ## Remove markers from Bash ANSI-C strings
 

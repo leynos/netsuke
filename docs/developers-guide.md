@@ -9767,10 +9767,9 @@ the sibling `delimiters.rs` and `backticks.rs`, keeps each file inside the
 400-line limit without introducing a second shell parser. The tests follow the
 same shape: `src/ir/cmd_interpolate/tests/heredoc/` is a directory module
 holding the shared assertions in `support.rs` and the boundary, delimiter,
-expansion, and
-property test groups, and `tests/ninja_dollar_escaping_tests/heredoc.rs` checks
-the same contract end to end by running the generated Ninja build through a
-real child shell.
+expansion, and property test groups, and
+`tests/ninja_dollar_escaping_tests/heredoc.rs` checks the same contract end to
+end by running the generated Ninja build through a real child shell.
 
 The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. Its
