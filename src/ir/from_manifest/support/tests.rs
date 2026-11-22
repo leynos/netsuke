@@ -10,8 +10,13 @@ use rstest::rstest;
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::{EnLocalizer, en_localizer};
 
-/// The hostile source path shared by the regression fixtures.
-const HOSTILE_SOURCE: &str = "; New-Item pwned; Write-Output x";
+#[path = "tests/fixtures.rs"]
+mod fixtures;
+
+use fixtures::{
+    Entries, RejectionCase, assert_unfinished_region_rejected, lower_shared_power_shell_list,
+    single_command_entries,
+};
 
 #[test]
 fn large_command_list_prepares_path_bindings_once() {
@@ -41,12 +46,32 @@ fn large_command_list_prepares_path_bindings_once() {
     );
 }
 
+/// Name the recipe form a quoted-marker case uses.
+#[derive(Clone, Copy, Debug)]
+enum RecipeKind {
+    /// A scalar or list `command` recipe.
+    Command,
+    /// A `script` recipe.
+    Script,
+}
+
+impl RecipeKind {
+    /// Return the manifest key that selects this recipe form.
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Command => "command",
+            Self::Script => "script",
+        }
+    }
+}
+
 #[rstest]
-#[case::script("script")]
-#[case::command("command")]
-fn power_shell_manifest_rejects_quoted_input_marker(#[case] recipe_kind: &str) {
+#[case::script(RecipeKind::Script)]
+#[case::command(RecipeKind::Command)]
+fn power_shell_manifest_rejects_quoted_input_marker(#[case] recipe_kind: RecipeKind) {
+    let recipe_key = recipe_kind.as_str();
     let source = format!(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: output\n    sources: \"; New-Item pwned; Write-Output x\"\n    {recipe_kind}: \"Write-Output '{{{{ ins }}}}' > {{{{ outs }}}}\"\n"
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: output\n    sources: \"; New-Item pwned; Write-Output x\"\n    {recipe_key}: \"Write-Output '{{{{ ins }}}}' > {{{{ outs }}}}\"\n"
     );
     let manifest = manifest::render_manifest(
         manifest::from_str(&source).expect("the manifest should parse"),
@@ -66,122 +91,23 @@ fn power_shell_manifest_rejects_quoted_input_marker(#[case] recipe_kind: &str) {
     );
 }
 
-/// Encode one command-list entry as a YAML double-quoted scalar.
-///
-/// The fixture entries carry quotes, backticks, and line breaks, so the scalar
-/// must be escaped rather than relying on YAML block indentation.
-fn yaml_entry(entry: &str) -> String {
-    let mut escaped = String::with_capacity(entry.len() + 2);
-    escaped.push('"');
-    for character in entry.chars() {
-        match character {
-            '\\' => escaped.push_str("\\\\"),
-            '"' => escaped.push_str("\\\""),
-            '\n' => escaped.push_str("\\n"),
-            other => escaped.push(other),
+/// Name which shared-list marker an example interpolates.
+#[derive(Clone, Copy, Debug)]
+enum Marker {
+    /// The first input path.
+    Inputs,
+    /// The first output path.
+    Outputs,
+}
+
+impl Marker {
+    /// Return the internal token the manifest carries for this marker.
+    const fn token(self) -> &'static str {
+        match self {
+            Self::Inputs => INS_TOKEN,
+            Self::Outputs => OUTS_TOKEN,
         }
     }
-    escaped.push('"');
-    escaped
-}
-
-/// Render a manifest whose recipe is one shared PowerShell command list.
-fn shared_power_shell_manifest(entries: &[&str], is_rule_backed: bool) -> String {
-    let list = entries.iter().fold(String::new(), |mut list, entry| {
-        list.push_str("      - ");
-        list.push_str(&yaml_entry(entry));
-        list.push('\n');
-        list
-    });
-    if is_rule_backed {
-        format!(
-            concat!(
-                "netsuke_version: '1.0.0'\n",
-                "rules:\n",
-                "  - name: emit\n",
-                "    command:\n",
-                "{list}",
-                "targets:\n",
-                "  - name: out.txt\n",
-                "    sources: \"{source}\"\n",
-                "    rule: emit\n",
-            ),
-            list = list,
-            source = HOSTILE_SOURCE,
-        )
-    } else {
-        format!(
-            concat!(
-                "netsuke_version: '1.0.0'\n",
-                "targets:\n",
-                "  - name: out.txt\n",
-                "    sources: \"{source}\"\n",
-                "    command:\n",
-                "{list}",
-            ),
-            list = list,
-            source = HOSTILE_SOURCE,
-        )
-    }
-}
-
-/// Lower a shared PowerShell command list into its build graph.
-fn lower_shared_power_shell_list(
-    entries: &[&str],
-    is_rule_backed: bool,
-) -> Result<BuildGraph, IrGenError> {
-    let source = shared_power_shell_manifest(entries, is_rule_backed);
-    let manifest = manifest::render_manifest(
-        manifest::from_str(&source).expect("the fixture manifest should parse"),
-        &minijinja::Environment::new(),
-    )
-    .expect("the fixture manifest template should render");
-    BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)
-}
-
-/// Return the interpolated entries of the graph's single command action.
-fn single_command_entries(graph: &BuildGraph) -> Vec<String> {
-    let action = graph
-        .actions
-        .values()
-        .next()
-        .expect("the fixture should lower exactly one action");
-    let Recipe::Command { command, .. } = &action.recipe else {
-        panic!(
-            "the fixture should lower a command recipe, got {:?}",
-            action.recipe
-        );
-    };
-    command.to_string_vec()
-}
-
-/// Assert that lowering rejected the entry that left its lexical region open.
-fn assert_unfinished_region_rejected(
-    error: &IrGenError,
-    template: &str,
-    entry_index: usize,
-    region: &str,
-) {
-    let IrGenError::InvalidCommand { command, .. } = error else {
-        panic!("expected an InvalidCommand rejection, got {error:?}");
-    };
-    assert_eq!(
-        command, template,
-        "the diagnostic must carry the unfinished entry's original template"
-    );
-    let rendered = normalize_fluent_isolates(&error.to_string());
-    assert!(
-        rendered.contains(&format!("entry {entry_index}")),
-        "the diagnostic must name the offending entry: {rendered}"
-    );
-    assert!(
-        rendered.contains(region),
-        "the diagnostic must name the unfinished {region}: {rendered}"
-    );
-    assert!(
-        !rendered.contains("New-Item"),
-        "the diagnostic must not carry interpolated path text: {rendered}"
-    );
 }
 
 /// Reject a shared PowerShell entry that leaves a quote open for its successor.
@@ -190,21 +116,31 @@ fn assert_unfinished_region_rejected(
 /// string reclassifies the next entry's marker: path text that was lowered as a
 /// standalone literal becomes executable syntax instead.
 #[rstest]
-#[case::direct_inputs(false, "{{ ins }}")]
-#[case::direct_outputs(false, "{{ outs }}")]
-#[case::rule_inputs(true, "{{ ins }}")]
-#[case::rule_outputs(true, "{{ outs }}")]
+#[case::direct_inputs(false, Marker::Inputs)]
+#[case::direct_outputs(false, Marker::Outputs)]
+#[case::rule_inputs(true, Marker::Inputs)]
+#[case::rule_outputs(true, Marker::Outputs)]
 fn shared_power_shell_lists_reject_an_entry_that_leaves_a_quote_open(
     #[case] is_rule_backed: bool,
-    #[case] marker: &str,
+    #[case] marker: Marker,
     en_localizer: EnLocalizer,
 ) {
     let _localizer = en_localizer;
     let unfinished = "Write-Output 'prefix";
-    let marker_entry = format!("Copy-Item {marker}");
-    let error = lower_shared_power_shell_list(&[unfinished, &marker_entry], is_rule_backed)
-        .expect_err("an unfinished single-quoted string must fail during lowering");
-    assert_unfinished_region_rejected(&error, unfinished, 1, "single_quoted_string");
+    let marker_entry = format!("Copy-Item {}", marker.token());
+    let error = lower_shared_power_shell_list(
+        Entries::from(&[unfinished, marker_entry.as_str()][..]),
+        is_rule_backed,
+    )
+    .expect_err("an unfinished single-quoted string must fail during lowering");
+    assert_unfinished_region_rejected(
+        &error,
+        RejectionCase {
+            template: unfinished,
+            entry_index: 1,
+            region: "single_quoted_string",
+        },
+    );
 }
 
 /// Reject every shared PowerShell region the scanner can leave unfinished.
@@ -240,9 +176,19 @@ fn shared_power_shell_lists_reject_other_unfinished_regions(
     en_localizer: EnLocalizer,
 ) {
     let _localizer = en_localizer;
-    let error = lower_shared_power_shell_list(&[unfinished, "Write-Output {{ ins }}"], false)
-        .expect_err("an unfinished lexical region must fail during lowering");
-    assert_unfinished_region_rejected(&error, unfinished, 1, region);
+    let error = lower_shared_power_shell_list(
+        Entries::from(&[unfinished, "Write-Output {{ ins }}"][..]),
+        false,
+    )
+    .expect_err("an unfinished lexical region must fail during lowering");
+    assert_unfinished_region_rejected(
+        &error,
+        RejectionCase {
+            template: unfinished,
+            entry_index: 1,
+            region,
+        },
+    );
 }
 
 /// Reject markers that a mid-token `<#` would otherwise hide.
@@ -252,15 +198,15 @@ fn shared_power_shell_lists_reject_other_unfinished_regions(
 /// marker still form an expandable string. Modelling it as a comment would hide
 /// that string and accept the marker as a standalone literal.
 #[rstest]
-#[case::inputs(INS_TOKEN)]
-#[case::outputs(OUTS_TOKEN)]
+#[case::inputs(Marker::Inputs)]
+#[case::outputs(Marker::Outputs)]
 fn shared_power_shell_lists_reject_a_mid_token_block_comment_opener(
-    #[case] marker: &str,
+    #[case] marker: Marker,
     en_localizer: EnLocalizer,
 ) {
     let _localizer = en_localizer;
-    let entry = format!("Write-Output prefix<#\" #> {marker} <# \" #>");
-    let error = lower_shared_power_shell_list(&[&entry], false)
+    let entry = format!("Write-Output prefix<#\" #> {} <# \" #>", marker.token());
+    let error = lower_shared_power_shell_list(Entries::from(&[entry.as_str()][..]), false)
         .expect_err("a marker inside a mid-token quote sequence must fail");
     let IrGenError::InvalidCommand { command, .. } = &error else {
         panic!("expected an InvalidCommand rejection, got {error:?}");
@@ -282,8 +228,9 @@ fn shared_power_shell_lists_keep_fail_closed_after_a_mid_token_opener(en_localiz
     let _localizer = en_localizer;
     let opener = "Write-Output prefix<#";
     let marker_entry = format!("Copy-Item {INS_TOKEN}");
-    let error = lower_shared_power_shell_list(&[opener, &marker_entry], false)
-        .expect_err("a later marker must stay protected after a mid-token opener");
+    let error =
+        lower_shared_power_shell_list(Entries::from(&[opener, marker_entry.as_str()][..]), false)
+            .expect_err("a later marker must stay protected after a mid-token opener");
     let IrGenError::InvalidCommand { command, .. } = &error else {
         panic!("expected an InvalidCommand rejection, got {error:?}");
     };
@@ -299,11 +246,18 @@ fn shared_power_shell_lists_name_the_unfinished_entry_index(en_localizer: EnLoca
     let _localizer = en_localizer;
     let unfinished = "Write-Output 'prefix";
     let error = lower_shared_power_shell_list(
-        &["Write-Output first", "Write-Output second", unfinished],
+        Entries::from(&["Write-Output first", "Write-Output second", unfinished][..]),
         false,
     )
     .expect_err("a later unfinished entry must still fail during lowering");
-    assert_unfinished_region_rejected(&error, unfinished, 3, "single_quoted_string");
+    assert_unfinished_region_rejected(
+        &error,
+        RejectionCase {
+            template: unfinished,
+            entry_index: 3,
+            region: "single_quoted_string",
+        },
+    );
 }
 
 /// Keep entries whose lexical regions are finished accepted in a shared list.
@@ -340,7 +294,7 @@ fn shared_power_shell_lists_accept_entries_that_end_neutral(
     #[case] entries: &[&str],
     #[case] expected_marker_entry: &str,
 ) {
-    let graph = lower_shared_power_shell_list(entries, false)
+    let graph = lower_shared_power_shell_list(Entries::from(entries), false)
         .expect("entries that end at a neutral boundary should lower");
     let resolved = single_command_entries(&graph);
     assert_eq!(
