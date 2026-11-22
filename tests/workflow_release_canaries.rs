@@ -51,8 +51,7 @@ fn text<'a>(mapping: &'a Mapping, key: &str) -> &'a str {
 fn needs(job: &Mapping) -> Vec<&str> {
     mapping_value(job, "needs")
         .and_then(YamlValue::as_sequence)
-        .map(|entries| entries.iter().filter_map(YamlValue::as_str).collect())
-        .unwrap_or_default()
+        .map_or_default(|entries| entries.iter().filter_map(YamlValue::as_str).collect())
 }
 
 /// Return every matrix row of a canary job.
