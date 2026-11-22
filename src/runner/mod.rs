@@ -13,6 +13,7 @@ mod dispatch;
 mod dyndep;
 mod error;
 mod failure_diagnostic;
+mod generated_state;
 mod manifest_structure_telemetry;
 mod reporter;
 #[cfg(test)]
@@ -78,9 +79,10 @@ pub use recipe_shell::telemetry::{
 };
 
 use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
+use generated_state::publish_then_reset;
 use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
-use phony_state::{refuse_reserved_declarations, reset_force_node};
+use phony_state::{Workspace, refuse_reserved_declarations};
 use recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 
 /// Runtime dependencies shared by command dispatch handlers.
@@ -219,15 +221,17 @@ fn execute_build(
     )?;
     let parts = generated.into_build_parts();
     let console_edge_count = parts.bundle.console_edge_count();
+    // The workspace is resolved once and the same value judges the refusal and
+    // guards the reset, so no second lookup can answer differently.
+    let workspace = Workspace::resolve(cli)?;
     // Generation cannot judge a spelling that only the working directory can
     // resolve, so the build refuses a manifest path that lands in generated
     // state before it publishes a sidecar, prunes an obsolete one, or removes
     // the force node. The check runs whether or not that state exists, because
     // a first build must refuse as firmly as a later one. Its proof is what
-    // lets the reset below run at all.
-    let reservation = refuse_reserved_declarations(cli, &parts.declared_paths)?;
-    let publication = materialize_dyndep_bundle(cli, &parts.bundle)?;
-    prune_dyndep_bundle(cli, parts.bundle.dyndep_files(), &publication)?;
+    // lets the reset run at all.
+    let reservation = refuse_reserved_declarations(&workspace, &cli.file, &parts.declared_paths)?;
+    let publication = publish_then_reset(cli, &workspace, &parts.bundle, &reservation)?;
     let ninja = NinjaContent::new(parts.bundle.into_parts().0);
     let command_list_targets = parts.command_list_targets;
     let targets = if args.targets.is_empty() {
@@ -236,11 +240,6 @@ fn execute_build(
         BuildTargets::new(&args.targets)
     };
 
-    // Ninja reads the force node's absence as "permanently dirty", so a
-    // leftover path there would quietly turn off every forced edge. The
-    // reservation proof is the refusal's own token, so the removal cannot run
-    // before that check or destroy a path the check protects.
-    reset_force_node(cli, reservation)?;
     let build_file = process::create_temp_ninja_file(&ninja)?;
     let build_path = build_file.as_path();
     let ninja_program = context.ninja_program;

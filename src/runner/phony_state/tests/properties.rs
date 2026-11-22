@@ -4,7 +4,7 @@
 //! encodes the assumption that a path climbing above the working directory is
 //! safe: a climb can leave and return, and the oracle follows it.
 
-use super::super::resolves_into_reserved_state;
+use super::super::resolve::resolves_into_reserved_state;
 use super::support::workspace;
 use camino::Utf8PathBuf;
 use proptest::prelude::*;

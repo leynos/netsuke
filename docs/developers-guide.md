@@ -1574,6 +1574,34 @@ graph edge and the localizer resolved once for generation, then forwards the
 returned metadata to `DisplayEdge`. Keep action identity, command text,
 named-rule metadata and Ninja text emission outside this helper.
 
+`EdgeClass` and `classify` are the classification itself: `DependencyOnly`,
+`Executable`, and `ExecutablePhony`, chosen from the edge and whether its
+recipe is empty. `classify` gives the dependency-only answer precedence over the
+`phony` flag, so an aggregate that declares `phony: true` without a recipe
+stays a plain phony line rather than acquiring a hidden output.
+`is_executable_phony` is the same question exposed to its own module, and is
+what `output_dirs` and the dyndep staging consult; do not re-derive the
+classification at a call site.
+
+Identity derivation has one owner. `content_digest(schema, content)` in
+`src/ninja_gen/dyndep/staging.rs` is the crate-visible, schema-tagged SHA-256
+helper. Its callers are `force_run.rs` (tag `netsuke-phony-v1`),
+`output_dirs/mod.rs` (tag `netsuke-phony-dir-v1`, used for both the node and
+the rule name), and `sidecar_digest` in the same file (tag `DYNDEP_SCHEMA`). A
+new digest must use a new schema tag: the tag is what keeps two identities that
+happen to hash the same content apart, so reusing one silently couples two
+unrelated names. `serial_gate_paths(edge)` in the same module returns one gate
+path per implicit dependency, in index order; only `output_dirs` calls it, and
+only for a staged serial edge, so the preparation edge names the gates the
+recipe statement names instead of the raw list the dyndep sidecars reveal late.
+
+`.codescene/code-health-rules.json` carries two exemptions, for
+`test_support/src/ninja_edge.rs` and `tests/bdd/steps/ninja.rs`. Both waive the
+String Heavy Function Arguments rule, and each entry's
+`matching_content_path_doc` records the reason and the condition that would
+retire it. Read the exemption before adding a third: it exists because the
+subject is Ninja text a test inspects, not because the rule is inconvenient.
+
 ### Phony and always lowering
 
 `src/ninja_gen/force_run.rs` owns the reserved force node, the hidden-output
@@ -1623,15 +1651,16 @@ environment with `PATH`, `NETSUKE_NINJA`, and an English locale pinned, so a
 host locale cannot change a diagnostic a scenario asserts on.
 
 Clearing the force node belongs to the command layer, not to generation.
-`src/runner/phony_state/mod.rs` opens the effective working directory, verifies
-that `.netsuke` and `.netsuke/phony` are real directories without following a
-link, and removes whatever occupies `force`; `netsuke generate` leaves the path
-alone because generation is a pure translation of the graph. The reservation
-check in `src/ninja_gen/reserved_paths/mod.rs` is pure for the same reason: it
-folds the graph's own spelling and reads nothing from disk. It also folds ASCII
-case, because a case-insensitive volume treats `.NETSUKE/PHONY` as the reserved
-tree; refusing a case variant on a case-sensitive volume is the fail-closed
-side of that trade. Namespace constants live there alone, and `force_run.rs` and
+`src/runner/phony_state/reset.rs` opens the working directory, verifies that
+`.netsuke` and `.netsuke/phony` are real directories without following a link,
+and removes whatever occupies `force`, returning a `ResetOutcome` rather than
+logging; the caller reports a removal. `netsuke generate` leaves the path alone
+because generation is a pure translation of the graph. The reservation check in
+`src/ninja_gen/reserved_paths/mod.rs` is pure for the same reason: it folds the
+graph's own spelling and reads nothing from disk. It also folds ASCII case,
+because a case-insensitive volume treats `.NETSUKE/PHONY` as the reserved tree;
+refusing a case variant on a case-sensitive volume is the fail-closed side of
+that trade. Namespace constants live there alone, and `force_run.rs` and
 `dyndep/staging.rs` import them.
 
 A spelling that needs the working directory cannot be judged by generation, so
@@ -1654,17 +1683,31 @@ the build file, because a first build must refuse as firmly as a later one; a
 check that ran only once `.netsuke` existed would accept a reserved spelling on
 a clean workspace and fail every build after it. Its success value,
 `ReservedStateChecked`, is the only proof `reset_force_node` accepts, so the
-destructive half cannot be called without the refusal. The working directory
-handles those two functions share, including `open_effective_dir`, live in
-`src/runner/path_helpers.rs`. The resolution rule lives in
-`src/runner/phony_state/resolve.rs`, apart from the namespace handles and the
-removal in `mod.rs`, so the filesystem questions have their own unit. It
-reports every canonicalization failure other than an absent component rather
-than folding the failure into "not reserved": a permission or symbolic-link
-error must stop the build, because a guard that failed open would delete the
-output it exists to protect. Resolution only reads; the removal itself always
-goes through the verified namespace handles. A refused build reports the same
-reservation diagnostic generation uses, because it is the same rule.
+destructive half cannot be called without the refusal; the proof records the
+workspace it judged and the paths it checked, and the reset re-verifies that
+workspace and re-checks those paths, so a proof from another workspace cannot
+authorize a removal. `tests/reserved_state_proof_ui_tests.rs` pins both halves
+by compiling fixtures: the proof's fields are private, and the reset takes two
+arguments.
+
+`src/runner/phony_state/` splits the work by question. `workspace.rs` resolves
+the working directory once, into a canonical `Utf8Path` and a `Dir` handle, and
+`execute_build` passes that one value to the refusal and the reset so no second
+lookup can answer differently. `policy.rs` owns the refusal, its proof, and the
+verification the reset runs. `resolve.rs` answers whether one spelling reaches
+reserved state: it first cancels `.` and `..` lexically the way Ninja does,
+because Ninja removes a `..` against a component that need not exist, then
+resolves links, then checks every existing ancestor so a path that passes
+through the namespace and leaves it again is still refused. It reports every
+canonicalization failure other than an absent component rather than folding the
+failure into "not reserved": a permission or symbolic-link error must stop the
+build, because a guard that failed open would delete the output it exists to
+protect. Resolution only reads; the removal always goes through the verified
+namespace handles. A refused build reports the same reservation diagnostic
+generation uses, because it is the same rule. Publication, pruning, and the
+reset are sequenced by `publish_then_reset` in `src/runner/mod.rs`, so the
+order is a named function rather than a set of comments; the publication lease
+it returns stays alive until Ninja exits.
 
 Preparing the declared outputs' directories is generated work, not
 command-layer work. Ninja creates the parent directories of the outputs on an

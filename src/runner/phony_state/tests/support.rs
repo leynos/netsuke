@@ -5,11 +5,8 @@
 //! directory. Keeping that setup here lets the example tests and the properties
 //! describe one workspace the same way instead of each rebuilding it.
 
-use super::super::{
-    FORCE_ENTRY, NAMESPACE_LEAF, NAMESPACE_PARENT, open_verified_dir, refuse_reserved_declarations,
-    reset_force_node,
-};
-use crate::cli::Cli;
+use super::super::reset::{FORCE_ENTRY, NAMESPACE_LEAF, NAMESPACE_PARENT, open_verified_dir};
+use super::super::{Workspace as BuildWorkspace, refuse_reserved_declarations, reset_force_node};
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -61,18 +58,26 @@ pub(super) fn stray_force_node(root: &Dir) -> Result<()> {
 
 /// Run the reservation refusal, then the reset, as a build does.
 ///
-/// The experiment builds a `Cli` whose working directory is `root`, so a
-/// spelling only that directory can resolve reaches the same code the build
-/// command runs. The refusal comes first here exactly as it does in
-/// `execute_build`, which keeps these cases honest about the ordering the
-/// production path relies on.
+/// The workspace is injected directly, so the case reaches the same code the
+/// build command runs without building the application configuration. The
+/// refusal comes first here exactly as it does in `execute_build`, which keeps
+/// these cases honest about the ordering the production path relies on.
 pub(super) fn reset(root: &Utf8Path, declared: &[Utf8PathBuf]) -> Result<()> {
-    let cli = Cli {
-        directory: Some(root.to_owned()),
-        ..Cli::default()
-    };
-    let reservation = refuse_reserved_declarations(&cli, declared)?;
-    reset_force_node(&cli, reservation)
+    reset_with_manifest(root, Utf8Path::new("Netsukefile"), declared)
+}
+
+/// Run the refusal for `manifest` and `declared`, then the reset.
+///
+/// Cases that select the manifest itself use this form, because the refusal
+/// judges the manifest path alongside the declared ones.
+pub(super) fn reset_with_manifest(
+    root: &Utf8Path,
+    manifest: &Utf8Path,
+    declared: &[Utf8PathBuf],
+) -> Result<()> {
+    let workspace = BuildWorkspace::open(root)?;
+    let reservation = refuse_reserved_declarations(&workspace, manifest, declared)?;
+    reset_force_node(&workspace, &reservation).map(|_outcome| ())
 }
 
 /// Report whether an entry still occupies the force node.

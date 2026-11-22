@@ -12,7 +12,8 @@ mod properties;
 mod resolution;
 mod support;
 
-use super::{FORCE_ENTRY, NAMESPACE_LEAF, NAMESPACE_PARENT, open_verified_dir, remove_path};
+use super::reset::{FORCE_ENTRY, NAMESPACE_LEAF, NAMESPACE_PARENT, open_verified_dir, remove_path};
+use super::{Workspace as BuildWorkspace, refuse_reserved_declarations, reset_force_node};
 use crate::ninja_gen::FORCE_PATH;
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -199,6 +200,32 @@ fn a_symlinked_phony_leaf_is_refused() -> Result<()> {
     ensure!(
         refused.is_err(),
         "a linked phony leaf could point outside the reserved namespace",
+    );
+    Ok(())
+}
+
+/// Refuse a reservation proof issued for another workspace.
+///
+/// The proof records the workspace it judged, so a caller cannot reuse one
+/// workspace's refusal to authorise a reset somewhere else. Without the check,
+/// the removal would run against a directory the refusal never saw.
+#[test]
+fn a_reservation_for_one_workspace_cannot_authorise_another() -> Result<()> {
+    let first = workspace()?;
+    let second = workspace()?;
+    support::stray_force_node(&second.dir)?;
+    let first_build = BuildWorkspace::open(&first.root)?;
+    let second_build = BuildWorkspace::open(&second.root)?;
+    let reservation =
+        refuse_reserved_declarations(&first_build, Utf8Path::new("Netsukefile"), &[])?;
+    let outcome = reset_force_node(&second_build, &reservation);
+    ensure!(
+        outcome.is_err(),
+        "a proof from another workspace must be refused",
+    );
+    ensure!(
+        support::force_node_exists(&second.dir)?,
+        "the refused reset must leave the force node in place",
     );
     Ok(())
 }

@@ -17,7 +17,7 @@
 //! that cannot be read must stop the reset, because a guard that fails open
 //! would delete the very output it exists to protect.
 
-use super::inspect_context;
+use super::reset::inspect_context;
 use crate::ninja_gen::reserved_paths::is_reserved_path;
 use anyhow::{Context, Error, Result};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
@@ -79,13 +79,77 @@ enum Step {
 /// treating the path as unreserved keeps the guard from weakening silently
 /// when the filesystem cannot answer.
 pub(super) fn resolves_into_reserved_state(workspace: &Utf8Path, path: &Utf8Path) -> Result<bool> {
-    if is_reserved_path(path) {
+    let spelling = cancel_spelling(path);
+    if spelling.as_deref().is_some_and(is_reserved_path) {
         return Ok(true);
     }
-    let target = resolved_target(workspace, path)?;
-    let entry = declared_entry(workspace, path)?;
+    let candidate = spelling.as_deref().unwrap_or(path);
+    let target = resolved_target(workspace, candidate)?;
+    let entry = declared_entry(workspace, candidate)?;
     Ok(within_namespace(workspace, target.as_deref())
-        || within_namespace(workspace, entry.as_deref()))
+        || within_namespace(workspace, entry.as_deref())
+        || reserved_ancestor(workspace, candidate)?)
+}
+
+/// Cancel `.` and `..` components lexically, as Ninja does when it parses.
+///
+/// Ninja removes a `..` against the component before it even when that
+/// component does not exist. Resolution against the filesystem alone would keep
+/// the nonexistent prefix and miss the path Ninja actually uses, so the
+/// spelling is cancelled first and only then resolved, the same way Ninja reads
+/// it. Returns `None` when a `..` climbs above an absolute root, which names no
+/// reachable path.
+fn cancel_spelling(path: &Utf8Path) -> Option<Utf8PathBuf> {
+    let mut cancelled = Utf8PathBuf::new();
+    for component in path.components() {
+        match component {
+            Utf8Component::Prefix(prefix) => cancelled.push(prefix.as_str()),
+            Utf8Component::RootDir => cancelled.push(Utf8Path::new("/")),
+            Utf8Component::CurDir => {}
+            Utf8Component::Normal(segment) => cancelled.push(segment),
+            Utf8Component::ParentDir => {
+                if !cancelled.pop() {
+                    return None;
+                }
+            }
+        }
+    }
+    Some(cancelled)
+}
+
+/// Return whether an existing ancestor resolves into reserved state.
+///
+/// A path can pass through the reserved namespace and leave it again through a
+/// link, so the entry it finally reaches is ordinary while the reset would
+/// still delete the reserved ancestor it passed through. The selected manifest
+/// is the case that matters: a build that removed `force/` would delete the
+/// link the manifest was read through. Each ancestor is canonicalized, which
+/// follows any link on the way to it, and stops at the workspace because
+/// nothing above it can be reserved state.
+///
+/// # Errors
+///
+/// Returns an error when canonicalizing an ancestor fails for any reason other
+/// than an absent entry.
+fn reserved_ancestor(workspace: &Utf8Path, path: &Utf8Path) -> Result<bool> {
+    let candidate = workspace.join(path);
+    let mut ancestor = candidate.parent();
+    while let Some(current) = ancestor {
+        if !current.starts_with(workspace) {
+            return Ok(false);
+        }
+        match current.canonicalize_utf8() {
+            Ok(canonical) => {
+                if within_namespace(workspace, Some(&canonical)) {
+                    return Ok(true);
+                }
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => return Err(error).context(inspect_context(current)),
+        }
+        ancestor = current.parent();
+    }
+    Ok(false)
 }
 
 /// Resolve `path`'s parent and keep its final component as written.

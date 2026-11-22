@@ -293,6 +293,10 @@ fn a_declared_alias_of_the_force_node_stops_the_build(
         workspace.exists(FORCE_NODE)?,
         "the refused build must leave the declared output in place",
     );
+    ensure!(
+        workspace.read_to_string(FORCE_NODE)? == "declared output",
+        "the refused build must not truncate or rewrite the declared output",
+    );
     Ok(())
 }
 
@@ -324,6 +328,10 @@ fn a_manifest_at_the_force_node_is_refused(temp_workspace: Result<Option<TempDir
     ensure!(
         workspace.exists(FORCE_NODE)?,
         "the refused build must leave its own manifest in place",
+    );
+    ensure!(
+        workspace.read_to_string(FORCE_NODE)? == ALWAYS_MANIFEST,
+        "the refused build must leave the selected manifest byte for byte",
     );
     Ok(())
 }
