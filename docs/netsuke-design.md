@@ -3423,12 +3423,12 @@ only where a token can begin, a `<#` inside an argument token is literal text,
 and the scanner fails closed rather than hiding the quoted sections around it.
 Escape state participates in that boundary: a backtick keeps the character
 after it inside the current argument token, so a `<#` after an escaped
-separator, or a `<` that a backtick escapes, is not a comment opener and
-likewise fails closed. A `#` after an escaped separator starts no line comment,
-so the text after it remains argument text. The check is deliberately a
-boundary check over the regions the scanner models, not a complete PowerShell
-parser; RFC 0036 carries the longer-term harmonization under version-matched
-grammar.
+separator is not a comment opener and likewise fails closed. A `<` that a
+backtick escapes is copied as argument text, and a `#` after an escaped
+separator starts no line comment, so the text after either remains argument
+text. The check is deliberately a boundary check over the regions the scanner
+models, not a complete PowerShell parser; RFC 0036 carries the longer-term
+harmonization under version-matched grammar.
 
 In `command:` recipes on the POSIX and Bash routes, unbalanced backticks or
 command text that `shlex` cannot parse produce an IR error before an action is

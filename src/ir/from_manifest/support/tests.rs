@@ -290,6 +290,18 @@ fn shared_power_shell_lists_name_the_unfinished_entry_index(en_localizer: EnLoca
     &["<# outer <# inner #> body", "Write-Output {{ ins }}"][..],
     "Write-Output '; New-Item pwned; Write-Output x'"
 )]
+// An escaped `<` is copied as one unit, so the following `#` is ordinary token
+// text and the entry ends neutral for its successor's marker.
+#[case::escaped_block_comment_opener(
+    &["Write-Output prefix`<#", "Write-Output {{ ins }}"][..],
+    "Write-Output '; New-Item pwned; Write-Output x'"
+)]
+// A hash after an escaped separator starts no comment, so it stays argument
+// text and does not set the fail-closed flag.
+#[case::escaped_separator_before_hash(
+    &["Write-Output prefix` #", "Write-Output {{ ins }}"][..],
+    "Write-Output '; New-Item pwned; Write-Output x'"
+)]
 fn shared_power_shell_lists_accept_entries_that_end_neutral(
     #[case] entries: &[&str],
     #[case] expected_marker_entry: &str,

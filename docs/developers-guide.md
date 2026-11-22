@@ -10032,16 +10032,16 @@ substitution open, or that ends in a backtick escape, is rejected with a
 localized diagnostic naming the entry and a language-neutral region code. A
 backtick keeps the character after it inside the current argument token, so the
 token-boundary check reads escape state as well as the adjacent character: a
-`<#` after an escaped separator, or a `<` that a backtick escapes, is not a
-comment opener and fails closed. A `#` after an escaped separator starts no
-line comment, so the text after it stays argument text and any open quote there
-is reported by the unfinished-region rule. The traversal also carries the
-sticky fail-closed classification forward, so a later marker stays protected
-after earlier scanner-sensitive text. Scalar commands, `isolated` lists, and
-POSIX or Bash lists keep their existing per-entry handling; the boundary check
-applies only to a shared PowerShell list. Isolation is not a remedy for an
-entry that is itself incomplete, because each isolated entry runs as its own
-script.
+`<#` after an escaped separator is not a comment opener and fails closed. A `<`
+that a backtick escapes is copied as argument text, and a `#` after an escaped
+separator starts no line comment, so the text after either stays argument text
+and any open quote there is reported by the unfinished-region rule. The
+traversal also carries the sticky fail-closed classification forward, so a
+later marker stays protected after earlier scanner-sensitive text. Scalar
+commands, `isolated` lists, and POSIX or Bash lists keep their existing
+per-entry handling; the boundary check applies only to a shared PowerShell
+list. Isolation is not a remedy for an entry that is itself incomplete, because
+each isolated entry runs as its own script.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies

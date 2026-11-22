@@ -679,11 +679,12 @@ hash whose comment status is unknown fails closed for the same reason: a line
 comment would make `<#` ordinary text. Escape state participates in that
 boundary: a backtick keeps the character after it inside the current argument
 token, so a `<#` after an escaped separator, a `<` that a backtick escapes, and
-a `#` after an escaped separator are not comment syntax. The two openers that
-would otherwise have started a region — `<#` and an escaped `<` — fail closed
-rather than hiding the quoted text that follows; the escaped hash starts no
-region, so the text after it stays ordinary argument text and an open quote
-there is reported by the unfinished-region rule.
+a `#` after an escaped separator are not comment syntax. A `<#` whose preceding
+separator is escaped fails closed rather than hiding the quoted text that
+follows. A `<` that a backtick escapes is copied as argument text and starts no
+region, and a `#` after an escaped separator starts no comment, so the text
+after either stays ordinary argument text and an open quote there is reported
+by the unfinished-region rule.
 
 Entries that end at a neutral boundary are unaffected, including a closed
 here-string, a `#` line comment, a `--%` stop-parsing region, and a closed
