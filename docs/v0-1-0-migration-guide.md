@@ -831,6 +831,34 @@ See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
 the full heredoc contract.
 
+## Update heredoc boundaries the tracker cannot place
+
+Netsuke starts a queued heredoc body only at the unquoted newline that ends the
+command line declaring it, and rejects a boundary it cannot place rather than
+guessing. A recipe that relied on one of the rejected forms below now fails at
+IR lowering with an `ir.invalid_command` diagnostic naming the reason, for
+example `unsupported heredoc boundary: command substitution newline`.
+
+- **Newline inside a quoted argument.** A newline that is part of a quoted
+  argument no longer starts the body; the body waits for the line that closes
+  the quote. Supported recipes are unaffected, but check any recipe that
+  expected a marker inside what the shell reads as an argument to be treated as
+  body text.
+- **Newline in a different shell region**: a pending body whose command-line
+  newline lies inside `$()`, backticks, `$(( ))`, an open `${ }`, or a
+  substitution region that has already closed. Write the declaration so its
+  body starts on the declaring line. A heredoc declared and completed inside a
+  single `$()` region remains supported.
+- **Escape-bearing ANSI-C string**, such as `$'a\'b'`. Bash and the POSIX
+  quote rules end the string at different quotes, so Netsuke cannot place the
+  boundary or encode a later marker. Rewrite it as an ordinary quoted string,
+  for example `'a'\''b'` or `"a'b"`, or drop the escape. An escape-free
+  `$'...'` string is accepted.
+- **End of script.** The end of the input is not a boundary. In a script, a
+  body that never reaches its terminator is copied literally and not reported;
+  in a command recipe the unmatched quote fails the rendered command as an
+  invalid command. Keep the terminator inside the recipe.
+
 ## Resolve build-graph outputs through the accessors
 
 The intermediate build graph now owns each logical build edge once, however

@@ -745,12 +745,13 @@ prose, so a new rejection variant needs no locale entry in any catalogue.
 
 Neither reading of the quoting rules is enough on its own for Bash's ANSI-C
 strings. Bash reads `$'a\'b'` as one string, while the POSIX single-quote rule
-ends it at the escaped quote, so the following newline would be offered as
-`QuotedArgument` and the body deferred into text Bash copies literally.
-`ansic_quote_is_ambiguous` detects exactly the escape-bearing form, and both
-traversals reject it as a boundary refusal while a declaration is pending;
-escape-free ANSI-C strings end at the same quote under both readings and stay
-supported.
+ends it at the escaped quote and reopens it at the real closer, so a `<<`
+between the two is never recognized and the following newline cannot be placed.
+Rejecting only a declaration that is already pending leaves that earlier order
+exploitable, because the body is then lowered as script text. Both traversals
+therefore reject an escape-bearing ANSI-C string anywhere in a POSIX or Bash
+recipe, through `RejectionReason::AmbiguousAnsiCQuote`, and escape-free strings
+end at the same quote under both readings and stay supported.
 
 A newline that ends a comment is routed through the same entry point rather
 than activating the queue inside the lexical state, so comment text stays

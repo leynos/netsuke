@@ -8,8 +8,8 @@
 use super::super::invalid_heredoc_boundary_error;
 use super::super::invalid_heredoc_delimiter_error;
 use super::super::posix_lexical::{
-    EscapeBeforeMarker, HeredocActivationRejection, HeredocBoundary, HeredocDeclaration,
-    InertCharacterOutcome, NewlineContext, PosixCharacter, SourceChar, backslash_escapes_marker,
+    EscapeBeforeMarker, HeredocBoundary, HeredocDeclaration, InertCharacterOutcome, NewlineContext,
+    PosixCharacter, SourceChar, ansic_quote_is_ambiguous, backslash_escapes_marker,
 };
 use super::{
     IrGenError, MarkerProtection, RejectionReason, SubstitutionTraversal, invalid_command_error,
@@ -99,23 +99,22 @@ impl SubstitutionTraversal<'_, '_> {
     /// Reject an ANSI-C quote whose extent the POSIX quote rules misread.
     ///
     /// Bash reads `$'a\'b'` as one ANSI-C string, while the tracker's single
-    /// quote rule ends that string at the escaped quote. While a body is
-    /// pending that disagreement decides where the body starts, so the
-    /// declaration fails closed. Without a pending declaration no boundary
-    /// decision depends on the quote here, so it is left alone.
+    /// quote rule ends that string at the escaped quote. Every later decision
+    /// on that line or body would then be made in the wrong quote state, so
+    /// the recipe fails closed instead of lowering a marker into text the
+    /// shell expands. Escape-free strings end at the same quote under both
+    /// readings and are left alone.
     ///
     /// # Errors
     ///
     /// Returns an invalid-command error naming the untrackable quote.
     fn reject_ambiguous_ansic_quote(&self, pos: usize) -> Result<(), IrGenError> {
-        if !self.matches_unquoted_quote_context()
-            || !self.posix_lexical.rejects_ansic_quote(self.chars, pos)
-        {
+        if !self.matches_unquoted_quote_context() || !ansic_quote_is_ambiguous(self.chars, pos) {
             return Ok(());
         }
-        Err(invalid_heredoc_boundary_error(
+        Err(invalid_command_error(
             self.template.to_owned(),
-            HeredocActivationRejection::AnsiCQuoting,
+            RejectionReason::AmbiguousAnsiCQuote,
         ))
     }
 

@@ -33,6 +33,8 @@ pub(super) enum RejectionReason {
     UnmatchedBacktick,
     /// The rendered command is not parseable as a shell command.
     UnparseableCommand,
+    /// An escape-bearing ANSI-C string the POSIX quote rules misread.
+    AmbiguousAnsiCQuote,
 }
 
 impl RejectionReason {
@@ -46,6 +48,7 @@ impl RejectionReason {
             Self::UnsupportedMarkerPosition => "recipe marker at an unsupported source position",
             Self::UnmatchedBacktick => "unmatched backtick",
             Self::UnparseableCommand => "unparseable shell syntax",
+            Self::AmbiguousAnsiCQuote => "escape-bearing ANSI-C quote",
         }
     }
 }

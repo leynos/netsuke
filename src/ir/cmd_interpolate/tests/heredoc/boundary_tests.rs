@@ -185,33 +185,46 @@ fn untracked_newlines_fail_closed_for_each_posix_script_shell(#[case] shell: Rec
     }
 }
 
-// Verify an ANSI-C quote on the declaring line is rejected, not deferred.
+// Verify an escape-bearing ANSI-C quote is rejected wherever it appears.
 //
 // Bash reads `$'a\'b'` as one ANSI-C string, so the newline after it ends the
-// command line and starts the body. POSIX single-quote rules read the `\'` as
-// closing the quote, so the scanner would call that newline quoted and defer
-// the body, lowering markers in text Bash treats as inert. The whole point of
-// deferral is that the body has not started, so the divergence has to fail
-// closed instead.
+// command line and starts a body declared on that line. POSIX single-quote
+// rules instead end the string at the `\'`, and the tracker then reopens it at
+// the real closer: a `<<EOF` between the two is never recognised, so the body
+// marker is lowered with a quoted encoding and Bash expands it. Rejecting only
+// the after-declaration order leaves that earlier order exploitable, so the
+// detector is not gated on the pending queue.
 #[rstest]
-#[case::boundary("cat <<EOF $'a\\'b'\nbody\nEOF")]
-#[case::with_marker(&format!("cat <<EOF $'a\\'b'\n{INS_TOKEN}\nEOF\necho {OUTS_TOKEN}"))]
-fn ambiguous_ansic_quote_on_the_declaring_line_is_rejected(#[case] template: &str) {
-    assert_both_traversals_reject_heredoc_boundary(
-        Recipe(template),
-        "an ANSI-C quote the POSIX rules misread must fail closed",
-    );
+#[case::after_declaration("cat <<EOF $'a\\'b'\nbody\nEOF")]
+#[case::before_declaration("cat $'a\\'b' <<EOF\nbody\nEOF")]
+#[case::before_declaration_with_marker(&format!("cat $'a\\'b' <<EOF\n{INS_TOKEN}\nEOF\necho {OUTS_TOKEN}"))]
+fn ambiguous_ansic_quote_is_rejected(#[case] template: &str) {
+    let bindings = CommandBindings::new(&[], &[], RecipeShell::Bash);
+    for result in [
+        substitute(template, &bindings),
+        substitute_script(template, &bindings),
+    ] {
+        let error = result.expect_err("an escape-bearing ANSI-C quote must fail closed");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "expected an invalid-command error, got {error:?}"
+        );
+        assert!(
+            error.to_string().contains("escape-bearing ANSI-C quote"),
+            "the diagnostic must name the untrackable quote: {error}"
+        );
+    }
 }
 
 // Verify an escape-free ANSI-C quote keeps the supported lowering.
 //
 // Without a backslash the ANSI-C and POSIX readings end at the same quote, so
-// the newline after it starts the body under both. Rejecting this form would
-// refuse an input the tracker reads correctly.
+// no later decision changes and the recipe lowers as before.
 #[rstest]
 #[case::boundary("cat <<EOF $'ab'\nbody\nEOF")]
 #[case::with_marker(&format!("cat <<EOF $'ab'\nbody {INS_TOKEN}\nEOF\necho {OUTS_TOKEN}"))]
-fn escape_free_ansic_quote_still_starts_the_body(#[case] template: &str) {
+#[case::plain("echo $'plain text'")]
+fn escape_free_ansic_quote_still_lowers(#[case] template: &str) {
     let expected = template.replace(OUTS_TOKEN, "output");
     assert_both_traversals_lower_with(
         Recipe(template),
@@ -224,22 +237,5 @@ fn escape_free_ansic_quote_still_starts_the_body(#[case] template: &str) {
             text: &expected,
             rule: "an escape-free ANSI-C quote agrees with the POSIX reading",
         },
-    );
-}
-
-// Verify ANSI-C text without a pending declaration is left alone.
-//
-// The rejection is scoped to a declaration whose boundary is at stake, so an
-// ordinary script that uses ANSI-C quoting is copied through unchanged.
-#[rstest]
-#[case::escaped("echo $'a\\'b'")]
-#[case::plain("echo $'plain text'")]
-fn ansic_quote_without_a_pending_declaration_is_accepted(#[case] template: &str) {
-    let bindings = CommandBindings::new(&[], &[], RecipeShell::Bash);
-    let lowered = substitute_script(template, &bindings)
-        .expect("ANSI-C quoting without a pending heredoc must lower");
-    assert_eq!(
-        lowered, template,
-        "unrelated ANSI-C quoting must be copied verbatim"
     );
 }

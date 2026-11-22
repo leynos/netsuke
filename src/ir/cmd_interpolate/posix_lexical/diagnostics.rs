@@ -81,8 +81,6 @@ pub(in crate::ir::cmd_interpolate) enum HeredocActivationRejection {
     ArithmeticNewline,
     /// The newline is inside an open parameter expansion.
     ParameterExpansionNewline,
-    /// The declaring line carries an ANSI-C quote the POSIX rules misread.
-    AnsiCQuoting,
 }
 
 impl HeredocActivationRejection {
@@ -97,7 +95,6 @@ impl HeredocActivationRejection {
             Self::ParameterExpansionNewline => {
                 "unsupported heredoc boundary: parameter expansion newline"
             }
-            Self::AnsiCQuoting => "unsupported heredoc boundary: ANSI-C quoting",
         }
     }
 }

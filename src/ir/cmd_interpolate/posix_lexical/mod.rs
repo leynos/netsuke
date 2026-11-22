@@ -298,17 +298,6 @@ impl PosixLexicalState {
         }
     }
 
-    /// Report whether this position must be refused for a pending body.
-    ///
-    /// The answer is a lexical fact: a declaration is queued and the ANSI-C
-    /// quote here is one the POSIX quote rules misread. Keeping both halves
-    /// here lets the traversals ask one question, and keeps the predicate out
-    /// of reach of `missing_const_for_fn`, which cannot be satisfied on the
-    /// Dylint suite's older toolchain.
-    pub(super) fn rejects_ansic_quote(&self, chars: &[char], pos: usize) -> bool {
-        !self.pending_heredocs.is_empty() && ansic_quote_is_ambiguous(chars, pos)
-    }
-
     /// Begin the next queued heredoc body, if its declaration has completed.
     fn begin_next_heredoc(&mut self) {
         let Some(delimiter) = self.pending_heredocs.pop_front() else {
