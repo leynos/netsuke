@@ -88,6 +88,14 @@ pub(super) struct CaseNesting {
     /// accumulated word, because a quote ends the word without ending the
     /// token: `esac""` and `e\sac` are one token each.
     word_is_literal: bool,
+    /// Record whether the current token has begun, even with an empty buffer.
+    ///
+    /// Quoted characters do not enter `word`, so a wholly quoted token such as
+    /// the subject in `case "x" in …` would otherwise complete no word at all.
+    /// The flag is set when a quote is read and cleared when the token ends, so
+    /// the header can still record its subject and a pattern list can still
+    /// record that it has started.
+    token_started: bool,
     /// Record that the traversal is inside an unquoted `#` comment.
     in_comment: bool,
     /// Record whether the next unquoted word would stand in command position.
@@ -111,6 +119,7 @@ impl CaseNesting {
             frames: Vec::new(),
             word: String::new(),
             word_is_literal: true,
+            token_started: false,
             in_comment: false,
             expects_command: true,
             previous: None,
@@ -129,6 +138,7 @@ impl CaseNesting {
     pub(super) fn begin_comment(&mut self) {
         self.in_comment = true;
         self.word.clear();
+        self.token_started = false;
     }
 
     /// Record that the traversal consumed the newline that ended a comment.
@@ -142,6 +152,7 @@ impl CaseNesting {
     pub(super) fn end_comment(&mut self) {
         self.in_comment = false;
         self.word.clear();
+        self.token_started = false;
         self.word_is_literal = true;
         self.expects_command = true;
     }
@@ -218,8 +229,10 @@ impl CaseNesting {
     pub(super) fn observe(&mut self, observation: CaseObservation) {
         if !observation.is_unquoted {
             // Quoting is part of the token even where it ends the word, so the
-            // fragment completed here is not a reserved word.
+            // fragment completed here is not a reserved word. The quote also
+            // begins a token that may leave the word buffer empty.
             self.word_is_literal = false;
+            self.token_started = true;
             self.finish_word(observation.parenthesis_depth);
             // Quoted text is part of a word, so whatever follows it is not
             // in command position.
@@ -286,6 +299,8 @@ impl CaseNesting {
         self.word_is_literal &= starts_word;
         self.finish_word(parenthesis_depth);
         self.word_is_literal = starts_word;
+        // A quote at the boundary also begins the token that follows it.
+        self.token_started = !starts_word;
     }
 
     /// Move the construct that contains this position across an operator.
@@ -319,12 +334,33 @@ impl CaseNesting {
     /// moves exactly the state that role owns.
     fn finish_word(&mut self, parenthesis_depth: usize) {
         if self.word.is_empty() {
+            if self.token_started {
+                self.record_quoted_token(parenthesis_depth);
+                self.token_started = false;
+            }
             return;
         }
         let role = self.classify_word(parenthesis_depth);
         self.prefix_slot = PrefixSlot::None;
         self.apply_role(role, parenthesis_depth);
         self.word.clear();
+        self.token_started = false;
+    }
+
+    /// Record a quoted token that left no characters in the word buffer.
+    ///
+    /// A quote ends the fragment being accumulated and belongs to the same
+    /// token, so a wholly quoted word never fills `word`. The phase alone says
+    /// what the token completed: the header's first word is the subject, and a
+    /// token inside a pattern list starts that list.
+    fn record_quoted_token(&mut self, parenthesis_depth: usize) {
+        if let Some(frame) = self.open_construct_at_mut(parenthesis_depth) {
+            match frame.phase {
+                CasePhase::Header if !frame.subject_seen => frame.subject_seen = true,
+                CasePhase::Pattern => frame.pattern_started = true,
+                CasePhase::Header | CasePhase::Arm => {}
+            }
+        }
     }
 
     /// Classify the completed word by its effect on the tracker.

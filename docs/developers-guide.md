@@ -10007,13 +10007,16 @@ word inside a pattern group such as `@(case)`: the group only deepens the
 parenthesis depth, which classification and operator handling both skip over to
 reach the construct that governs the position. The header's first word is the
 subject even when it spells `in`, so `case in in (in) …` reads the second `in`
-as the keyword. Bash also accepts one optional `(` immediately before a pattern
-list, and that opener is pattern syntax rather than a group: the traversal asks
-the tracker before raising the depth, and the tracker answers yes only while
-the list has not started. Consuming it also records that the list has started,
-so the closer test no longer reads a pattern spelled `esac` as the terminator:
-in `case esac in (esac) …` the `esac` is pattern text and the arm stays inside
-the substitution. Without that record the tracker closed the construct at the
+as the keyword. A wholly quoted subject such as `case "x" in …` also counts:
+the quote begins a token that never enters the word buffer, so the tracker
+records the token separately and still marks the subject as read. Bash also
+accepts one optional `(` immediately before a pattern list, and that opener is
+pattern syntax rather than a group: the traversal asks the tracker before
+raising the depth, and the tracker answers yes only while the list has not
+started. Consuming it also records that the list has started, so the closer
+test no longer reads a pattern spelled `esac` as the terminator: in
+`case esac in (esac) …` the `esac` is pattern text and the arm stays inside the
+substitution. Without that record the tracker closed the construct at the
 pattern and read the next `)` as the substitution closer, lowering an arm
 marker for the enclosing quote context. `case z in (x) …` therefore keeps its
 terminator at the case's own depth, while a `(` after pattern text still

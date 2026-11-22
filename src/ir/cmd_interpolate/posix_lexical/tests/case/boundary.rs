@@ -109,6 +109,11 @@ fn case_substitution_without_comment_boundary_is_accepted() {
     "a marker in an arm whose subject is spelled in must stay protected",
     Interpolators::Both
 )]
+#[case::quoted_subject(
+    "echo \"$(case \"x\" in (x) printf %s {INS_TOKEN} ;; esac)\"",
+    "a marker in an arm whose subject is quoted must stay protected",
+    Interpolators::Both
+)]
 fn case_arm_markers_inside_substitutions_are_refused(
     #[case] template: &str,
     #[case] context: &str,
@@ -125,22 +130,28 @@ fn case_arm_markers_inside_substitutions_are_refused(
     }
 }
 
-// Verify a subject spelled `in` does not move the tracker into the patterns.
+// Verify supported subjects do not move the tracker into the patterns.
 //
 // The header is `case WORD in`, so the first word after `case` is the subject
-// even when it spells `in`. Reading it as the keyword starts the pattern list
-// one word early: the optional `(` then looks like a group, the arm never
-// enters its command phase, and the construct stays open past the real
-// substitution closer, so a marker written after the substitution is wrongly
-// refused. This pins the supported side of that distinction.
-#[test]
-fn case_subject_spelled_in_keeps_the_substitution_boundary() {
+// whatever it spells. Reading it as the keyword starts the pattern list one
+// word early: the optional `(` then looks like a group, the arm never enters
+// its command phase, and the construct stays open past the real substitution
+// closer, so a marker written after the substitution is wrongly refused. A
+// subject spelled `in` is one such word; a quoted or empty-quoted subject is
+// another, because quoted characters never enter the word buffer.
+#[rstest]
+#[case::in_subject("case in in (in) printf yes ;; esac)")]
+#[case::quoted_subject("case \"x\" in (x) printf yes ;; esac)")]
+#[case::quoted_in_subject("case \"in\" in (in) printf yes ;; esac)")]
+#[case::mixed_quoted_subject("case x\"y\" in (x) printf yes ;; esac)")]
+#[case::empty_quoted_subject("case \"\" in (x) printf yes ;; esac)")]
+fn supported_case_subjects_keep_the_substitution_boundary(#[case] substitution: &str) {
     let bindings = bindings();
-    let template = format!("echo \"$(case in in (in) printf yes ;; esac)\" {INS_TOKEN}");
-    let expected = "echo \"$(case in in (in) printf yes ;; esac)\" input";
+    let template = format!("echo \"$({substitution}\" {INS_TOKEN}");
+    let expected = format!("echo \"$({substitution}\" input");
     for interpolate in both_interpolators() {
         assert_eq!(
-            interpolate(&template, &bindings).expect("a subject spelled `in` is supported Bash"),
+            interpolate(&template, &bindings).expect("a quoted subject is a supported case header"),
             expected,
             "a supported case substitution must keep its text and lower the outer marker"
         );
