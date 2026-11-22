@@ -1241,9 +1241,10 @@ phony work. A spelling that folds into one of those namespaces, such as
 ASCII case, so `.NETSUKE/PHONY/force` is refused too: a case-sensitive volume
 would treat it as an ordinary path while a case-insensitive one resolves it to
 the reserved tree. Before it publishes dyndep sidecars, prunes obsolete ones,
-or clears the force node, `netsuke build` also resolves every declared path
-against the working directory, so an absolute path, a `..` path that re-enters
-the workspace, or a symbolic-link alias is refused rather than deleted.
+or clears the force node, `netsuke build` also resolves every path it owns —
+the declared paths and the selected `--file` manifest — against the working
+directory, so an absolute path, a `..` path that re-enters the workspace, a
+symbolic-link alias, or a dangling alias is refused rather than deleted.
 
 When migrating an existing manifest, see the
 [v0.1.0 migration guide](v0-1-0-migration-guide.md#opting-into-serial-dependency-ordering)
