@@ -29,7 +29,7 @@ path.
 **Y-statement:** In the context of declaration-ordered direct dependencies, and
 facing the forces of shared-work reuse, failure short-circuiting,
 unrelated-branch concurrency, backend-neutral IR, and executable generated
-output, we decided to use staged Ninja dyndep sidecars for
+output, the decision is to use staged Ninja dyndep sidecars for
 `dependency_order: serial`, accepting the Ninja 1.10 floor, reserved generated
 state beneath `.netsuke`, and a path-scoped ordering guarantee.
 

@@ -1344,11 +1344,11 @@ Existing manifests need no changes, but integrations must not treat a
 conditional catalogue entry as a confirmed selected entry. Full rendering for
 `build`, `generate`, and normal manifest output retains the full standard
 library and its existing semantics; these restrictions apply only to
-manifest-query rendering. See the detailed [help targets documentation]
-(users-guide.md#generate-and-inspect-artefacts). Add `--json` to receive the
-versioned JSON result document; its `result.command` is `help-targets`. The
-command and the new descriptions are beta-series additions and remain subject
-to the stability caveat above.
+manifest-query rendering. See the detailed
+[help targets documentation](users-guide.md#generate-and-inspect-artefacts). Add
+`--json` to receive the versioned JSON result document; its `result.command` is
+`help-targets`. The command and the new descriptions are beta-series additions
+and remain subject to the stability caveat above.
 
 ## Configure shell definitions
 

@@ -378,7 +378,7 @@ Otherwise, `unquoted-char` excludes the four `whitespace` code points, U+0022
 (`&`), U+003B (`;`), U+003C (`<`), and U+003E (`>`). `single-char` excludes
 only U+0027, and `double-char` excludes only U+0022; the `expression` check
 therefore also applies within both literal productions. The escape alternatives
-are checked before `double-char`, so only the two-code- point sequence `\"`
+are checked before `double-char`, so only the two-code-point sequence `\"`
 yields one literal `"` and only `\\` yields one literal `\`. Every other
 backslash is literal, including a terminal backslash in an unquoted or
 single-literal run; there is no general backslash escape and no dangling-escape
