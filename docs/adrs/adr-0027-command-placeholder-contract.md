@@ -749,9 +749,12 @@ ends it at the escaped quote and reopens it at the real closer, so a `<<`
 between the two is never recognized and the following newline cannot be placed.
 Rejecting only a declaration that is already pending leaves that earlier order
 exploitable, because the body is then lowered as script text. Both traversals
-therefore reject an escape-bearing ANSI-C string anywhere in a POSIX or Bash
-recipe, through `RejectionReason::AmbiguousAnsiCQuote`, and escape-free strings
-end at the same quote under both readings and stay supported.
+therefore reject an escape-bearing ANSI-C string wherever they scan command
+text, through `RejectionReason::AmbiguousAnsiCQuote`; the detector steps over
+unquoted backslash-newline continuations, which Bash removes before reading the
+string. Comments and heredoc bodies are copied before it runs, so an ANSI-C
+string there stays inert data, and escape-free strings end at the same quote
+under both readings and stay supported.
 
 A newline that ends a comment is routed through the same entry point rather
 than activating the queue inside the lexical state, so comment text stays

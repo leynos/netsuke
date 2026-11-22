@@ -197,6 +197,7 @@ fn untracked_newlines_fail_closed_for_each_posix_script_shell(#[case] shell: Rec
 #[rstest]
 #[case::after_declaration("cat <<EOF $'a\\'b'\nbody\nEOF")]
 #[case::before_declaration("cat $'a\\'b' <<EOF\nbody\nEOF")]
+#[case::split_by_continuation("cat $\\\n'a\\'b' <<EOF\nbody\nEOF")]
 #[case::before_declaration_with_marker(&format!("cat $'a\\'b' <<EOF\n{INS_TOKEN}\nEOF\necho {OUTS_TOKEN}"))]
 fn ambiguous_ansic_quote_is_rejected(#[case] template: &str) {
     let bindings = CommandBindings::new(&[], &[], RecipeShell::Bash);
@@ -238,4 +239,19 @@ fn escape_free_ansic_quote_still_lowers(#[case] template: &str) {
             rule: "an escape-free ANSI-C quote agrees with the POSIX reading",
         },
     );
+}
+
+// Verify a heredoc body may contain an ANSI-C string without being scanned.
+//
+// Body text is copied before the ANSI-C detector runs, so a command
+// substitution inside the body is inert data to Netsuke. Rejecting it would
+// refuse a body the shell treats literally; the warning about ANSI-C strings
+// therefore applies to scanned command text, not to bodies.
+#[rstest]
+#[case::body_command_substitution("cat <<EOF\n$(printf '%s' $'a\\'b')\nEOF")]
+fn ansic_quote_inside_a_heredoc_body_is_copied(#[case] template: &str) {
+    let bindings = CommandBindings::new(&[], &[], RecipeShell::Bash);
+    let lowered = substitute_script(template, &bindings)
+        .expect("heredoc body text must be copied without the ANSI-C check");
+    assert_eq!(lowered, template, "a heredoc body must be copied verbatim");
 }

@@ -389,11 +389,12 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   the declaring one, such as a command substitution, backtick body, arithmetic
   expansion, open parameter expansion, or already-closed region, is rejected
   instead, while a heredoc declared and completed inside a single `$()` region
-  remains supported. An escape-bearing ANSI-C string is rejected anywhere in a
-  POSIX or Bash recipe, because Bash and the POSIX quote rules disagree about
-  where it ends and every later decision would use the wrong quote state.
-  Comment and heredoc recognition ends a POSIX word only at a space, tab,
-  newline, or one of `;`, `&`, `|`, `(`, `)`, `<`, and `>`; non-ASCII
+  remains supported. An escape-bearing ANSI-C string is rejected wherever
+  command text is scanned in a POSIX or Bash recipe, because Bash and the POSIX
+  quote rules disagree about where it ends and every later decision would use
+  the wrong quote state; heredoc bodies and comments are copied without that
+  check. Comment and heredoc recognition ends a POSIX word only at a space,
+  tab, newline, or one of `;`, `&`, `|`, `(`, `)`, `<`, and `>`; non-ASCII
   whitespace before `#` is word data and does not start a comment. A `)` that
   closes a command or arithmetic expansion also stays in the surrounding word,
   so `#` immediately after it does not start a comment. A `)` that terminates a

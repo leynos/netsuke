@@ -9824,15 +9824,19 @@ are in `src/ir/cmd_interpolate/tests/heredoc/boundary_tests.rs`, and the
 quoted-newline injection path runs through real Ninja in
 `tests/ninja_dollar_escaping_tests/heredoc.rs`.
 
-Both traversals also refuse an escape-bearing ANSI-C string anywhere in a
-recipe. Bash reads `$'a\'b'` as one ANSI-C string, whereas the POSIX
+Both traversals also refuse an escape-bearing ANSI-C string wherever they scan
+command text. Bash reads `$'a\'b'` as one ANSI-C string, whereas the POSIX
 single-quote rule the tracker implements ends that string at the escaped quote
 and reopens it at the real closer. A `<<` between the two is then never
 recognized as a declaration, so the body marker is lowered with a quoted
 encoding into text Bash expands. Gating the guard on a pending declaration
 would leave that earlier order exploitable, so `ansic_quote_is_ambiguous`
-reports the string wherever it appears. Escape-free ANSI-C strings end at the
-same quote under both readings and stay supported.
+reports the string wherever it appears. It steps over unquoted
+backslash-newline continuations between the `$` and the quote, because Bash
+removes those before reading the string. Comments and heredoc bodies are copied
+before the detector runs, so an ANSI-C string there stays inert data.
+Escape-free ANSI-C strings end at the same quote under both readings and stay
+supported.
 
 The rendered word is reparsed under the same grammar after marker lowering, so
 a path that would split the word, or introduce a rejected form, fails closed;

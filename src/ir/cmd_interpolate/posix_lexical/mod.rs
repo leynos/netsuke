@@ -96,12 +96,25 @@ pub(super) fn backslash_escapes_marker(
 /// quote state at later newlines. Text with no escape ends at the same quote
 /// under both readings, so only the ambiguous form is reported. An
 /// unterminated string also returns `false`: both readings stay inside it.
+///
+/// Bash removes an unquoted backslash-newline continuation before it reads the
+/// character that follows, so `$`, a continuation, and the opening quote name
+/// the same ANSI-C string. The scan steps over those pairs first; an escaped
+/// backslash stops it, because the newline after an escape pair is a real
+/// newline rather than a continuation.
 pub(super) fn ansic_quote_is_ambiguous(chars: &[char], pos: usize) -> bool {
-    if chars.get(pos) != Some(&'$') || chars.get(pos + 1) != Some(&'\'') {
+    if chars.get(pos) != Some(&'$') {
+        return false;
+    }
+    let mut quote_pos = pos + 1;
+    while chars.get(quote_pos) == Some(&'\\') && chars.get(quote_pos + 1) == Some(&'\n') {
+        quote_pos += 2;
+    }
+    if chars.get(quote_pos) != Some(&'\'') {
         return false;
     }
     let mut saw_escape = false;
-    for &ch in chars.get(pos + 2..).into_iter().flatten() {
+    for &ch in chars.get(quote_pos + 1..).into_iter().flatten() {
         match ch {
             '\\' => saw_escape = true,
             '\'' => return saw_escape,
