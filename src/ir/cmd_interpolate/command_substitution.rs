@@ -228,16 +228,20 @@ fn ambiguous_boundary_error(boundary: &SubstitutionBoundary) -> IrGenError {
 /// The recipe is left out for the same reason as the ambiguity diagnostic, and
 /// so is a position: the condition is about the whole substitution rather than
 /// one character. The explanation is its own Fluent message rather than a
-/// snippet argument, so a non-English locale does not render an English
-/// sentence inside a translated diagnostic.
+/// reason argument, so a non-English locale does not render an English
+/// sentence inside a translated diagnostic; the bounded reason names the
+/// rejected syntax for programmatic readers.
 const fn unplaced_case_error() -> IrGenError {
     let message = localization::message(keys::IR_UNPLACED_CASE);
     IrGenError::InvalidCommand {
         command: String::new(),
-        snippet: String::new(),
+        reason: UNPLACED_CASE_REASON,
         message,
     }
 }
+
+/// Spell the bounded description of a `case` the tracker could not place.
+const UNPLACED_CASE_REASON: &str = "case outside a recognized command position";
 
 /// Report whether a Netsuke marker appears after the boundary's closer.
 ///

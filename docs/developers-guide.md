@@ -9989,9 +9989,10 @@ followed by a later marker is rejected too, and so is a `case` behind an
 assignment or redirection prefix. The shell reads the latter as a syntax error,
 so the alternative is not a silently different context. The rejection has its
 own `ir.unplaced_case` Fluent message, so the explanation is localized rather
-than carried as an English snippet argument inside the translated
-`ir.invalid_command` text. The recipe and snippet stay empty for the same
-redaction reason as the ambiguity diagnostic. An `esac` also closes only the
+than carried as an English reason argument inside the translated
+`ir.invalid_command` text. The recipe stays empty and the bounded `reason`
+names the rejected syntax for the same redaction reason as the ambiguity
+diagnostic. An `esac` also closes only the
 construct open at its own depth, so a pattern spelled `esac` does not end an
 outer case. The phase of that construct decides whether a reserved word is a
 keyword at all: `esac` where a pattern would start closes it, but after a `|`
