@@ -210,3 +210,132 @@ fn deeper_paths_report_every_omitted_edge() -> Result<()> {
     assert_rendered("path_elided_deeply", &refusal);
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Resource-limit refusals
+// ---------------------------------------------------------------------------
+
+/// Build a shared map graph whose member names differ at every level.
+///
+/// Two members of each level hold clones of one child, so the expansion is
+/// exponential in the depth, and naming the pair after its level keeps an
+/// elided path's head and tail distinguishable in the snapshot.
+fn shared_named_maps(depth: usize) -> Value {
+    (0..depth).fold(Value::from(0_i64), |child, level| {
+        let (node, _) = fixture(
+            ObjectRepr::Map,
+            Some(2),
+            Materialized::Pairs(vec![
+                (Value::from(format!("m{level:02}")), child.clone()),
+                (Value::from(format!("m{level:02}b")), child),
+            ]),
+        );
+        node
+    })
+}
+
+/// One pinned resource refusal: how to provoke it and what it must show.
+#[derive(Clone, Copy, Debug)]
+enum ResourceCase {
+    /// A depth refusal whose path renders in full.
+    DepthShort,
+    /// A depth refusal whose path is elided.
+    ///
+    /// The depth is one past the production ceiling recorded in the
+    /// developers' guide, so this case also shows that the default budget is
+    /// the one stated there. The literal is deliberate: reading the constant
+    /// would let a changed default pass silently.
+    DepthElided,
+    /// A node refusal at the root of a flat sequence.
+    NodesShort,
+    /// A node refusal reached through a shared graph.
+    ///
+    /// The graph is the same shape as the reported trigger: far more
+    /// occurrences than objects. Its refusal path is deep enough to be elided,
+    /// which is why this case, rather than the flat one, covers the elided node
+    /// message.
+    NodesElided,
+    /// A byte refusal for a scalar at the root.
+    BytesShort,
+    /// A byte refusal for a member-name chain long enough to be elided.
+    BytesElided,
+}
+
+impl ResourceCase {
+    /// Return the resource this case must name.
+    const fn resource(self) -> CanonicalResource {
+        match self {
+            Self::DepthShort | Self::DepthElided => CanonicalResource::Depth,
+            Self::NodesShort | Self::NodesElided => CanonicalResource::Nodes,
+            Self::BytesShort | Self::BytesElided => CanonicalResource::Bytes,
+        }
+    }
+
+    /// Return the snapshot this case is pinned to.
+    const fn snapshot(self) -> &'static str {
+        match self {
+            Self::DepthShort => "resource_depth_short",
+            Self::DepthElided => "resource_depth_elided",
+            Self::NodesShort => "resource_nodes_short",
+            Self::NodesElided => "resource_nodes_elided",
+            Self::BytesShort => "resource_bytes_short",
+            Self::BytesElided => "resource_bytes_elided",
+        }
+    }
+
+    /// Report whether the rendered path must show elided edges.
+    const fn is_elided(self) -> bool {
+        matches!(
+            self,
+            Self::DepthElided | Self::NodesElided | Self::BytesElided
+        )
+    }
+
+    /// Produce the refusal this case pins.
+    fn provoke(self) -> CanonicalValueError {
+        match self {
+            Self::DepthShort => canonical_key_within(
+                &member_path_of_depth(2, Value::from(1_i64)),
+                &mut admission_budget(1, 100, 100),
+            ),
+            Self::DepthElided => canonical_key(&member_path_of_depth(129, Value::from(1_i64))),
+            Self::NodesShort => canonical_key_within(
+                &Value::from([1_i64, 2, 3]),
+                &mut admission_budget(100, 3, 100),
+            ),
+            Self::NodesElided => canonical_key(&shared_named_maps(64)),
+            Self::BytesShort => {
+                canonical_key_within(&Value::from("abc"), &mut admission_budget(100, 100, 2))
+            }
+            Self::BytesElided => canonical_key_within(
+                &member_path_of_depth(12, Value::from("abcdefgh")),
+                &mut admission_budget(100, 100, 40),
+            ),
+        }
+        .expect_err("every fixture is built to be refused")
+    }
+}
+
+/// Each resource refusal renders the message its snapshot pins.
+///
+/// The typed check runs first, so a snapshot that still matches cannot hide a
+/// refusal that names the wrong resource.
+#[rstest]
+#[case::depth_short(ResourceCase::DepthShort)]
+#[case::depth_elided(ResourceCase::DepthElided)]
+#[case::nodes_short(ResourceCase::NodesShort)]
+#[case::nodes_elided(ResourceCase::NodesElided)]
+#[case::bytes_short(ResourceCase::BytesShort)]
+#[case::bytes_elided(ResourceCase::BytesElided)]
+fn resource_refusal_message_is_pinned(#[case] case: ResourceCase) -> Result<()> {
+    let refusal = case.provoke();
+    ensure_resource_refusal(&refusal, case.resource())?;
+    let rendered = refusal.to_string();
+    ensure!(
+        !case.is_elided() || rendered.contains("more)"),
+        "the {} path must be abbreviated, got {rendered}",
+        case.snapshot(),
+    );
+    assert_rendered(case.snapshot(), &refusal);
+    Ok(())
+}

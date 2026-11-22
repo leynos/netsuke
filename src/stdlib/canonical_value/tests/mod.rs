@@ -15,10 +15,16 @@
 //! shared runners; `oracle` owns the independent quadratic first-index oracle
 //! and the named witnesses that check `stable_deduplicate` against it; `sweep`
 //! owns the generated inputs that check it against the same oracle at scale and
-//! the strategy-coverage claim those inputs make; and `examples` owns the cases
-//! whose inputs are written out by hand. A fixture lives here rather than
-//! beside its first caller so that a battery cannot quietly drift onto a
-//! private copy of it.
+//! the strategy-coverage claim those inputs make; `budget` owns the exact
+//! ceilings and refusal precedence of bounded admission; `admission` owns the
+//! shared admission fixtures and the generated chains, ceilings, and charge
+//! sequences that check those bounds over shapes no fixture names;
+//! `operation_scope` owns the claim that one budget serves one public
+//! operation rather than one value;
+//! `path_bookkeeping` owns the cost of tracking a snapshot location, which the
+//! ceilings do not bound; and `examples` owns the cases whose inputs are
+//! written out by hand. A fixture lives here rather than beside its first
+//! caller so that a battery cannot quietly drift onto a private copy of it.
 //!
 //! EP-V3's independent quadratic first-index oracle lives in `oracle`, and the
 //! standalone Verus proof over the abstract kernel lives in
@@ -35,14 +41,23 @@ use minijinja::value::{Enumerator, Object, ObjectRepr, Value, ValueKind};
 
 use super::*;
 
+mod admission;
 mod boundaries;
+mod budget;
 mod diagnostics;
 mod examples;
 mod host_traversal;
+mod operation_scope;
 mod oracle;
 mod parity;
+mod path_bookkeeping;
 mod properties;
 mod sweep;
+
+pub(super) use self::admission::support::{
+    CountedSequence, admission_budget, counted_sequence, ensure_resource_refusal,
+    expanded_sequence, pair_map, shared_sequence,
+};
 
 /// The material classes the generator must be seen to emit.
 const REQUIRED_CLASSES: [&str; 7] = ["null", "bool", "int", "float", "string", "seq", "map"];
@@ -138,6 +153,17 @@ pub(super) enum Materialized {
     /// Enumerate a fixed length through `Enumerator::Seq`, reading items by
     /// index, so a reported length can be made to disagree with the yield.
     Seeded,
+    /// Yield up to `bound` distinct items, counting every item pulled.
+    ///
+    /// A visitor that stops early leaves the count short of `bound`, which is
+    /// what makes an enumeration budget observable: the count is the number of
+    /// items the adapter actually asked for, not the length the host offers.
+    Counted {
+        /// Number of items this iterator can yield.
+        bound: usize,
+        /// Items yielded so far.
+        yielded: Arc<AtomicUsize>,
+    },
 }
 
 /// A host object whose representation, length, and enumeration are all chosen
@@ -186,6 +212,16 @@ impl Object for FixtureObject {
             }
             Materialized::NonEnumerable => Enumerator::NonEnumerable,
             Materialized::Seeded => Enumerator::Seq(3),
+            Materialized::Counted { bound, yielded } => {
+                // The counter is advanced as each item is produced, so an
+                // adapter that stops after `take(n)` leaves exactly `n` counted.
+                let counter = Arc::clone(yielded);
+                let items = *bound;
+                Enumerator::Iter(Box::new((0..items).map(move |index| {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    Value::from(index as u64)
+                })))
+            }
         }
     }
 

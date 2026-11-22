@@ -13454,8 +13454,8 @@ canonical-JSON keys are byte-identical; `stable_deduplicate` retains the first
 representative of each key in input order.
 [RFC 0006 §6.7](rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md#67-canonical-value-equality)
 specifies the relation and this module supplies it as a foundation. The public
-surface is five names re-exported from `src/stdlib`: `CanonicalKey`,
-`CanonicalValueError`, `canonical_key`, `canonical_eq`, and
+surface is six names re-exported from `src/stdlib`: `CanonicalKey`,
+`CanonicalValueError`, `CanonicalResource`, `canonical_key`, `canonical_eq`, and
 `stable_deduplicate`.
 
 **Re-use policy:** a new helper that needs value equality or deduplication
@@ -13482,6 +13482,63 @@ representation cannot arrive carrying a second copy of the rule; it is an
 internal seam of the module and is not part of the public surface above.
 Refusals name their location as a JSON-pointer-like path, and a refusal at the
 root value renders a marker rather than an empty location.
+
+**Bounded admission.** `MiniJinja` values are reference-counted, so a compact
+host graph can share one descendant between many parents. Admission allocates
+one snapshot subtree per *occurrence*, so its work is proportional to the
+expansion rather than to the object count: a depth-`d` chain of two-item
+sequences is `d + 1` objects but `2^(d + 1) - 1` occurrences. Every public
+operation therefore runs under one `AdmissionBudget` with ceilings of 128 edges
+below the snapshot root, 100,000 snapshot nodes, and 8 MiB of admitted string
+and member-name bytes
+([ADR-0085](adrs/adr-0085-bound-canonical-admission-resources.md)). The root
+and every enumerated item or pair are charged one node, string scalars and
+member names are charged their UTF-8 length before the copy, and depth is
+checked before a container enumerates. A charge that lands exactly on a ceiling
+succeeds; one that would exceed it is refused with
+`CanonicalValueError::ResourceLimitExceeded { resource, limit, path }` and
+leaves the counter unchanged. `CanonicalResource` names which ceiling was
+exhausted, and `kind()` returns `None` for the variant because no value kind is
+at fault. The ceilings are internal: they are a safety bound rather than
+operator policy, and no public API configures them.
+
+`canonical_eq` shares one budget across its left and right operands, and
+`stable_deduplicate` shares one across every input, so either can refuse an
+operation whose values each pass `canonical_key` independently. Successful
+deduplication is unaffected: it still retains the same first representatives,
+and only an operation that exceeds a ceiling is refused.
+
+Refusal precedence within one container is fixed by phase: the bounded
+enumeration and its node charge, then the reported-length check, then the
+non-string-key check, then, for each member in host order, the member-name byte
+charge and the duplicate-name check, and finally the member values in sorted
+name order. A mapping therefore refuses a non-string key, a repeated name, or
+an over-budget member name before any member value is admitted, and the lowest
+key kind decides when several keys are not strings, so that refusal does not
+depend on host enumeration order.
+
+Within the member phase the order is per member rather than across members:
+each member's name is charged before that member's duplicate check, and the
+phase walks the host's order. When one member's name would exceed the byte
+ceiling while a different pair of members repeats a name, either refusal may be
+the one reported, depending on which member the host yields first. Successful
+mappings are unaffected: sorted name order still decides the canonical bytes.
+
+Location bookkeeping is borrowed rather than owned: traversal extends a
+borrowed chain of edges and materializes the owned path only when it renders a
+refusal, so a child's path costs the same whether its ancestors' names are one
+byte or a megabyte. An owned path extended once per child would copy every
+ancestor name once per descendant, making that bookkeeping scale with the
+product of the node and byte ceilings instead of with the work each ceiling
+bounds. A rendered refusal retains only the names admission already charged
+against its byte ceiling.
+
+Admitted nodes and bytes, together with JSON escaping expansion, transitively
+bound the canonicalizer's output, so no separate output cap is added. Internal
+buffering inside `serde_json_canonicalizer` 0.3.2 and MiniJinja fuel governance
+were not verified as part of this decision. Cycles remain an undetected caller
+precondition: a cyclic value terminates as a `Depth` refusal and an endless
+enumeration as a `Nodes` refusal, but neither condition is diagnosed as such.
 
 Refusals are errors, not `false`. Values outside the supported domain —
 undefined, invalid, bytes, plain objects, iterables, callables, non-string
