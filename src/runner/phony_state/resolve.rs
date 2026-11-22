@@ -42,6 +42,14 @@ enum Resolution {
     },
 }
 
+/// What inspecting one ancestor established.
+enum Step {
+    /// The ancestor answered the question.
+    Done(Resolution),
+    /// The ancestor does not exist and is not a link; try its parent.
+    Missing,
+}
+
 /// Return whether `path`, resolved against `workspace`, names generated state.
 ///
 /// Text alone cannot answer this for every spelling: `../project/force` and
@@ -148,36 +156,63 @@ fn resolved_target(workspace: &Utf8Path, path: &Utf8Path) -> Result<Option<Utf8P
 fn resolve_once(candidate: &Utf8Path) -> Result<Resolution> {
     let mut ancestor = candidate;
     loop {
-        match ancestor.canonicalize_utf8() {
-            Ok(canonical) => {
-                let Ok(tail) = candidate.strip_prefix(ancestor) else {
-                    return Ok(Resolution::Resolved(None));
-                };
-                return Ok(Resolution::Resolved(fold_tail(&canonical, tail)));
-            }
-            Err(error) if error.kind() == ErrorKind::NotFound => {
-                // A dangling link reports its target as absent, but reading the
-                // link itself succeeds. A missing entry and a non-link both
-                // report `NotFound` or `InvalidInput`, so the walk continues.
-                match ancestor.read_link_utf8() {
-                    Ok(target) => {
-                        return Ok(Resolution::DanglingLink {
-                            link: ancestor.to_path_buf(),
-                            target: dangling_target(ancestor, target)?,
-                        });
-                    }
-                    Err(inner)
-                        if inner.kind() == ErrorKind::NotFound
-                            || inner.kind() == ErrorKind::InvalidInput => {}
-                    Err(inner) => return Err(inner).context(inspect_context(ancestor)),
-                }
+        match inspect_ancestor(candidate, ancestor)? {
+            Step::Done(resolution) => return Ok(resolution),
+            Step::Missing => {
                 let Some(parent) = ancestor.parent() else {
                     return Ok(Resolution::Resolved(None));
                 };
                 ancestor = parent;
             }
-            Err(error) => return Err(error).context(inspect_context(candidate)),
         }
+    }
+}
+
+/// Inspect one ancestor, folding the absent tail when it exists.
+///
+/// # Errors
+///
+/// Returns an error when canonicalizing the ancestor fails for any reason other
+/// than an absent entry, or when probing a possible link fails for any reason
+/// other than an absent entry or a non-link.
+fn inspect_ancestor(candidate: &Utf8Path, ancestor: &Utf8Path) -> Result<Step> {
+    match ancestor.canonicalize_utf8() {
+        Ok(canonical) => Ok(Step::Done(fold_onto(candidate, ancestor, &canonical))),
+        Err(error) if error.kind() == ErrorKind::NotFound => dangling_step(ancestor),
+        Err(error) => Err(error).context(inspect_context(candidate)),
+    }
+}
+
+/// Fold the components below `ancestor` onto its canonical path.
+fn fold_onto(candidate: &Utf8Path, ancestor: &Utf8Path, canonical: &Utf8Path) -> Resolution {
+    let Ok(tail) = candidate.strip_prefix(ancestor) else {
+        return Resolution::Resolved(None);
+    };
+    Resolution::Resolved(fold_tail(canonical, tail))
+}
+
+/// Decide whether an absent ancestor is a link whose target is absent.
+///
+/// A dangling link reports its target as absent, but reading the link itself
+/// succeeds. A missing entry and a non-link both report [`ErrorKind::NotFound`]
+/// or [`ErrorKind::InvalidInput`], so the walk continues.
+///
+/// # Errors
+///
+/// Returns an error when reading the link fails for any reason other than those
+/// two kinds, or when its relative target has no directory to resolve against.
+fn dangling_step(ancestor: &Utf8Path) -> Result<Step> {
+    match ancestor.read_link_utf8() {
+        Ok(target) => Ok(Step::Done(Resolution::DanglingLink {
+            link: ancestor.to_path_buf(),
+            target: dangling_target(ancestor, target)?,
+        })),
+        Err(error)
+            if error.kind() == ErrorKind::NotFound || error.kind() == ErrorKind::InvalidInput =>
+        {
+            Ok(Step::Missing)
+        }
+        Err(error) => Err(error).context(inspect_context(ancestor)),
     }
 }
 
