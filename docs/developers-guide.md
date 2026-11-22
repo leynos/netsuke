@@ -12214,15 +12214,21 @@ them, so the pass refuses even a candidate that is not the project file; the
 fallback scan then runs, and whatever root it selects is untrusted. A definite
 project match is skipped by the fallback scan, so the walk continues rather
 than stopping, and the project pass appends the same chain under its existing
-project quarantine. The scan then selects the first later candidate that loads;
-every system base precedes the home fallbacks, so an installed system file
-still supplies the chain, and only when none is installed can a later home
-candidate supply it. An unresolved candidate is not skipped, because ruling it
-out as the project file is exactly what failed: the fallback scan may load it,
-in the dependency's own order, before reaching a system candidate, and it
-reports that chain as an untrusted root, so the authority to set platform
-policy is withheld. Reading the user scope first changes which candidates are
-considered and who may donate authority, not how a loaded file is trusted.
+project quarantine. The scan then selects the first later candidate that loads.
+That candidate is not necessarily a system file: a base contributes its nested
+`netsuke/config.toml` before its `.netsuke.toml`, and classification resolves
+links, so a nested spelling that links to the project file is skipped while a
+distinct dotfile in the same base still loads, ahead of every system directory.
+Beyond the refused candidate's own base, the system bases outrank `APPDATA`,
+`LOCALAPPDATA`, and the home bases, so a system file supplies the chain
+whenever the rest of that base holds nothing loadable, and only when no system
+file loads can one of the later bases supply it. An unresolved candidate is not
+skipped, because ruling it out as the project file is exactly what failed: the
+fallback scan may load it, in the dependency's own order, before reaching a
+system candidate, and it reports that chain as an untrusted root, so the
+authority to set platform policy is withheld. Reading the user scope first
+changes which candidates are considered and who may donate authority, not how a
+loaded file is trusted.
 
 Both passes retain their decisions for replay. `UserScopeTrace` records whether
 the user pass adopted a candidate or fell back, `ProjectScopeTrace` records

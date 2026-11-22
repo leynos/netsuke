@@ -178,6 +178,55 @@ fn project_file_candidate_reached_through_a_link_is_not_adopted() -> Result<()> 
     Ok(())
 }
 
+/// A distinct dotfile in the refused candidate's base supplies the chain.
+///
+/// `XDG_CONFIG_HOME` contributes `netsuke/config.toml` before `.netsuke.toml`,
+/// and classification resolves links, so a nested spelling that links to the
+/// project file is refused. The refusal is decisive for the user pass, but the
+/// dependency's walk resumes at the next candidate, and the base's distinct
+/// dotfile loads before any system directory. The system layer therefore does
+/// not supply the chain in this layout, which is why the documented rule is
+/// the first later candidate that loads rather than the system file.
+#[cfg(unix)]
+#[rstest]
+fn distinct_dotfile_in_the_refused_base_supplies_the_fallback_chain() -> Result<()> {
+    let case = Case::new()?;
+    let base = case.base("xdg")?;
+    let project_dir = base.join("netsuke");
+    test_support::fs::create_dir(&project_dir).context("create the project directory")?;
+    let project_file = write_config(&project_dir.join(".netsuke.toml"), "jobs = 9\n")?;
+    // The target is relative so the link stays inside the candidate's parent
+    // directory: the loader reads a candidate through a capability on it and
+    // rejects an absolute link escaping that directory outright.
+    test_support::fs::symlink(Path::new(".netsuke.toml"), project_dir.join("config.toml"))
+        .context("link the nested candidate at the project file")?;
+    let user_file = write_config(&base.join(".netsuke.toml"), "jobs = 4\n")?;
+
+    let environment = case.scoped_environment(
+        TestEnv::default()
+            .with_var("HOME", case.home().as_os_str())
+            .with_var("XDG_CONFIG_HOME", base.as_os_str()),
+    );
+    let found = run_with_project_key(&environment, &project_file, Some(&project_dir))
+        .context("the refused nested candidate must not fail discovery")?;
+
+    ensure!(
+        found.user_scope == UserScopeTrace::Fallback,
+        "the nested alias of the project file must not be adopted, got {:?}",
+        found.user_scope
+    );
+    ensure!(
+        layer_paths(&found)? == vec![canonical(&user_file)?],
+        "the distinct user file in the refused base must supply the chain alone, got {:?}",
+        layer_paths(&found)?
+    );
+    ensure!(
+        found.is_trusted_root,
+        "a candidate provably distinct from the project file keeps operator authority"
+    );
+    Ok(())
+}
+
 /// A user candidate whose identity cannot be established is not adopted.
 ///
 /// Trust is granted only to a candidate that provably names another file. The
