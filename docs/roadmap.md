@@ -2234,9 +2234,11 @@ runs prove the failure boundary before any job receives release permissions.
     outcome in the job summary. The workflow now enforces the gate on
     publishing runs and observes it on pull-request dry runs, and every job
     that writes depends on the gate's success. Publication is therefore
-    refused until a real evidence producer (#598) both uploads the manifest the
-    gate verifies and attests that upload: an enforcing run reports a missing
-    manifest as `missing_evidence` and an unattributable one as
+    refused until every required result has a producer. The downstream canary
+    results come from the `release-admission-evidence` job, which publishes a
+    digest the gate verifies; the history-scan and release-candidate results
+    still have none. An enforcing run reports a missing manifest or result as
+    `missing_evidence`, and a document the producer did not write as
     `untrusted_evidence`. See [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md)
     and the
     [release-admission observability

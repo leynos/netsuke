@@ -553,3 +553,52 @@ question by execution rather than argument: it builds two real Git
 repositories, runs the gate from the candidate checkout and from the verifier
 checkout, in both observation and enforcement modes, and fails if the
 verifier's repository ever contains the caller's candidate.
+
+## Addendum (2026-11-22): The evidence producer and digest attribution
+
+The 2026-11-15 and 2026-11-17 addenda place the producer, the attributed
+upload, and the downstream canaries within #598. Their text is preserved as
+written. The state they describe is superseded here.
+
+The release workflow now contains the producer. The
+`release-admission-evidence` job runs after both downstream canary jobs,
+whatever they concluded. It runs
+`.github/scripts/write_release_admission_evidence.py` from the verifier
+checkout, declares one result per downstream canary, writes the schema-1
+manifest, and publishes the SHA-256 of the exact bytes it wrote as its
+`evidence_sha256` output. The admission job waits for that job and passes the
+digest to the gate in `NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256`.
+
+Attribution is derived from that digest, and the declared literal is removed.
+The gate admits a document only when the digest is 64 lowercase hexadecimal
+characters equal to the SHA-256 of the bytes the gate read, compared in
+constant time. `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`, which stood in for
+attribution and shipped as `false`, is no longer read. Only this repository's
+workflow can name the producer job's output, so a document that a caller
+uploads under the artefact name does not match the digest and is refused as
+`untrusted_evidence`. A caller that pre-empts the artefact name makes the
+producer's own upload fail, which fails the producer job and so prevents
+admission. Observation mode still ignores attribution.
+
+The binding ties the document to a job output of this workflow file. It does
+not authenticate a producer against a caller that replaces the whole workflow,
+which also replaces the guards, as the 2026-11-17 addendum records.
+
+The required result set now names the downstream canaries.
+`policy.REQUIRED_RESULTS` holds `history_scan`, `release_candidate`, and one
+`downstream_<canary>` result for each canary, with hyphens written as
+underscores. These result names are manifest keys, not metric labels. The
+bounded `Canary` vocabulary in `policy.py` is unchanged, so no metric or trace
+series gains a value. The provenance records and the producer's manifest are
+workflow artefacts, not metric or trace series.
+
+The admission job needs the producer, so its download no longer tolerates an
+absent artefact. A missing producer is a broken job graph rather than a refused
+admission.
+
+Publication remains refused. The `history_scan` and `release_candidate` results
+have no producer, so an enforcing run still refuses with `missing_evidence`,
+and publication stays fail-closed. The end-to-end demonstration of one admitted
+and one refused publishing run is outstanding follow-up. It needs a real
+release tag, and an admitted run also needs the two missing producers. This
+addendum does not record that demonstration as done.

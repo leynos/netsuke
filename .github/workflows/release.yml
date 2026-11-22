@@ -439,7 +439,11 @@ jobs:
         run: sccache --show-stats --stats-format=json
 
   release-admission-canaries:
-    needs: metadata
+    # Waits for the evidence producer, and through it for every downstream
+    # canary, so admission always reads a manifest this run wrote.
+    needs:
+      - metadata
+      - release-admission-evidence
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -502,25 +506,22 @@ jobs:
           # contract requires the pin rather than only this comment.
           version: '0.13.2'
           enable-cache: false
-      # No producer uploads this artefact yet (#598 supplies it, together with
-      # the downstream canaries admission is to require). Failing here would
-      # report a missing producer rather than a refused admission, so absence
-      # is tolerated: the verifier then records `missing_evidence`, and an
-      # enforcing run fails closed on that category.
+      # The producer job above uploads this artefact, and this job needs it,
+      # so a missing producer is a broken job graph rather than a refused
+      # admission: nothing here tolerates the artefact's absence.
       #
       # This download is not a provenance boundary: it resolves the current run,
       # and a reusable-workflow caller defines jobs in that same run, so a
       # caller that deliberately uploads under this name arrives here
-      # indistinguishably. The gate therefore stays blocked on the flag below
-      # until the producer attests its upload, which is why publication is
-      # refused even when a matching manifest is present. The verifier checkout
-      # is what keeps that refusal out of the caller's hands: the gate that
-      # reads this file is the one from this repository's own commit.
+      # indistinguishably. The binding is the digest below instead: the gate
+      # admits only bytes that hash to the value the producer job published as
+      # its own output. The verifier checkout is what keeps that check out of
+      # the caller's hands: the gate that reads this file is the one from this
+      # repository's own commit.
       - name: Download the release-admission evidence
         uses: >-
           actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         # v8.0.1
-        continue-on-error: true
         with:
           name: release-admission-evidence
           path: ${{ runner.temp }}/release-admission-evidence
@@ -534,13 +535,13 @@ jobs:
           # keep observing so the read-only lane stays reachable.
           NETSUKE_RELEASE_ADMISSION_ENFORCE: >-
             ${{ needs.metadata.outputs.should_publish == 'true' }}
-          # The interim publication block. While this literal is not `true`, an
-          # enforcing run refuses every manifest -- including one a same-run
-          # supplier uploaded -- with `untrusted_evidence`, because nothing in
-          # the run authenticates the producer. #598 supplies the producer that
-          # attests the upload; only then does this become derivable from its
-          # output, and only this file can change it, never the caller.
-          NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED: 'false'
+          # Producer attribution, derived rather than declared: the SHA-256
+          # the producer job published for the manifest it wrote. Only this
+          # workflow file can name that job's output, never the caller, so an
+          # enforcing run refuses with `untrusted_evidence` any document whose
+          # bytes do not hash to it.
+          NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256: >-
+            ${{ needs.release-admission-evidence.outputs.evidence_sha256 }}
           NETSUKE_RELEASE_ADMISSION_TAG: ${{ needs.metadata.outputs.release_tag }}
           NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE: >-
             ${{ runner.temp }}/release-admission-evidence/evidence.json
@@ -730,12 +731,18 @@ jobs:
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
-          # Not the workspace root: the downstream checkout sits beside this
-          # one so Cargo never reads Netsuke's `.cargo/config.toml` there.
-          path: netsuke
+          # Only the canary action and the scripts it runs, at the workspace
+          # root so `uses:` names the action by its own path. The non-cone
+          # patterns check out no root file: Cargo and rustup read
+          # `.cargo/config.toml` and `rust-toolchain.toml` from every ancestor
+          # of the downstream checkout, so Netsuke's own must not be there.
+          sparse-checkout: |
+            /.github/actions/
+            /scripts/
+          sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Run the downstream canary
-        uses: ./netsuke/.github/actions/downstream-canary
+        uses: ./.github/actions/downstream-canary
         with:
           canary: ${{ matrix.canary }}
           repository: ${{ matrix.repository }}
@@ -751,7 +758,6 @@ jobs:
             || '' }}
           forbid: ${{ matrix.forbid }}
           tools: ${{ matrix.tools }}
-          upload-provenance: ${{ needs.metadata.outputs.should_upload_workflow_artifacts }}
 
   downstream-canaries-windows:
     # OrthoConfig's Windows gate on a normal GitHub-hosted Windows runner,
@@ -779,10 +785,14 @@ jobs:
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
-          path: netsuke
+          # The same sparse layout as the Linux canaries, for the same reason.
+          sparse-checkout: |
+            /.github/actions/
+            /scripts/
+          sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Run the downstream canary
-        uses: ./netsuke/.github/actions/downstream-canary
+        uses: ./.github/actions/downstream-canary
         with:
           canary: ${{ matrix.canary }}
           repository: ${{ matrix.repository }}
@@ -791,7 +801,82 @@ jobs:
           platform: windows
           netsuke-commit: ${{ needs.release-candidate.outputs.commit }}
           netsuke-version: ${{ needs.release-candidate.outputs.version }}
-          upload-provenance: ${{ needs.metadata.outputs.should_upload_workflow_artifacts }}
+
+  release-admission-evidence:
+    # The release-admission evidence producer. It reads every downstream
+    # canary's provenance record and writes the schema-1 manifest the admission
+    # gate verifies, declaring one result per canary: a failure, never an
+    # omission, when a canary failed, was skipped, or built another candidate.
+    # It runs whatever the canaries concluded, so a failed canary reaches
+    # admission as a refused result rather than as a skipped job.
+    #
+    # The binding to admission is the manifest's SHA-256, published as this
+    # job's output. Only this workflow file can name a job's outputs, so the
+    # gate admits the bytes this job wrote and nothing a same-run caller
+    # uploads under the artefact name. Like the gate, the producer runs this
+    # repository's own script at the workflow's commit, not the caller's copy.
+    if: >-
+      !cancelled() && needs.metadata.result == 'success'
+    needs:
+      - metadata
+      - downstream-canaries
+      - downstream-canaries-windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      evidence_sha256: ${{ steps.write_evidence.outputs.evidence-sha256 }}
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          persist-credentials: false
+          repository: leynos/netsuke
+          ref: ${{ job.workflow_sha }}
+          path: gate
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.14'
+          version: '0.13.2'
+          enable-cache: false
+      # Absent when the canaries did not run, as on a draft pull request; the
+      # producer declares each missing record as that canary's failure.
+      - name: Download the downstream canary provenance
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1
+        continue-on-error: true
+        with:
+          pattern: downstream-canary-provenance-*
+          path: ${{ runner.temp }}/downstream-canary-provenance
+      - id: write_evidence
+        name: Write the release-admission evidence
+        env:
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.candidate_commit }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.release_tag || github.ref_name }}
+          LINUX_RESULT: ${{ needs.downstream-canaries.result }}
+          WINDOWS_RESULT: ${{ needs.downstream-canaries-windows.result }}
+        run: >-
+          uv run --no-config --no-project --script
+          gate/.github/scripts/write_release_admission_evidence.py
+          --repository "$RELEASE_REPOSITORY" --commit "$RELEASE_COMMIT"
+          --tag "$RELEASE_TAG" --run-id "$GITHUB_RUN_ID"
+          --provenance-dir "$RUNNER_TEMP/downstream-canary-provenance"
+          --linux-result "$LINUX_RESULT" --windows-result "$WINDOWS_RESULT"
+          --output "$RUNNER_TEMP/release-admission-evidence/evidence.json"
+          --github-output "$GITHUB_OUTPUT"
+      - name: Upload the release-admission evidence
+        uses: >-
+          actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        # v7.0.1
+        with:
+          name: release-admission-evidence
+          path: ${{ runner.temp }}/release-admission-evidence/evidence.json
+          if-no-files-found: error
 
   package-crate:
     # Resolves one release candidate's identity and packages the crate it
@@ -1019,9 +1104,6 @@ jobs:
       contents: read
     needs:
       - metadata
-      - release-candidate
-      - downstream-canaries
-      - downstream-canaries-windows
       - build-linux
       - build-windows
       - build-macos

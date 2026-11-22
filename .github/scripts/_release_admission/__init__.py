@@ -13,6 +13,9 @@ owns exactly one of them:
   into the gate's own command result. It is the only place a shell's status
   numbering is interpreted, and both ``commands`` and ``delivery`` call it.
 - ``environment`` reads a variable in one of Bash's two default forms.
+- ``downstream`` names the #598 downstream migration canaries, the one list
+  the evidence producer, the verifier's required results, and the workflow
+  contract all read.
 - ``manifest`` decodes the candidate-bound document a producer published: its
   schema version, its fields, and the one refusal every unreadable document
   collapses to. It is pure, so the schema is testable without a file.

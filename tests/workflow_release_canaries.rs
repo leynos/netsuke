@@ -110,37 +110,31 @@ fn is_full_commit(value: &str) -> bool {
             .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-/// Verify that publication needs both canary jobs, and canaries of this commit.
+/// Verify that admission reads evidence produced after both canary jobs.
 ///
-/// A rehearsal may build another candidate, so a green canary run admits a
-/// release only when its candidate is the release commit, and no clause may be
-/// bypassed by a disjunction.
+/// Every write-authority job requires an enforcing, successful admission of
+/// this commit. Admission needs the evidence producer, and the producer needs
+/// both canary jobs, so no publisher can run before the canaries concluded and
+/// their results were declared in the manifest the gate verifies.
 #[test]
-fn publication_requires_every_canary_against_its_own_commit() -> Result<()> {
+fn admission_reads_evidence_produced_after_every_canary() -> Result<()> {
     let release_workflow = workflow("release.yml")?;
-    let release = job(&release_workflow, "release")?;
-    let condition = text(release, "if");
+    let admission = job(&release_workflow, "release-admission-canaries")?;
+    let producer = job(&release_workflow, "release-admission-evidence")?;
 
-    for required in ["release-candidate", CANARY_JOBS[0], CANARY_JOBS[1]] {
+    ensure!(
+        needs(admission).contains(&"release-admission-evidence"),
+        "admission should need the evidence producer"
+    );
+    for required in CANARY_JOBS {
         ensure!(
-            needs(release).contains(&required),
-            "release should need {required}"
-        );
-    }
-    for clause in [
-        "needs.metadata.outputs.should_publish == 'true'",
-        "needs.downstream-canaries.result == 'success'",
-        "needs.downstream-canaries-windows.result == 'success'",
-        "needs.release-candidate.outputs.commit == github.sha",
-    ] {
-        ensure!(
-            condition.contains(clause),
-            "release should require `{clause}`"
+            needs(producer).contains(&required),
+            "the evidence producer should need {required}"
         );
     }
     ensure!(
-        !condition.contains("||"),
-        "no clause may bypass the others: {condition}"
+        !text(producer, "if").contains("||"),
+        "no clause may widen when the producer runs"
     );
     Ok(())
 }

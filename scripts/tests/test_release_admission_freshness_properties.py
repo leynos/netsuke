@@ -17,12 +17,16 @@ Run via ``make test-release-admission``.
 """
 
 import datetime as dt
+import hashlib
 import json
 import typing as typ
 
 from _release_admission import admission_evidence, configuration, evidence, policy
 from hypothesis import given
 from hypothesis import strategies as st
+from release_admission_evidence_fixtures import (
+    REQUIRED_RESULT_NAMES as REQUIRED_RESULTS,
+)
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -36,9 +40,6 @@ REPOSITORY = "leynos/netsuke"
 REVISION = "a" * 40
 TAG = "v1.2.3"
 RUN_ID = "1234567890"
-#: The results the manifest must report, spelled out here so that a verifier
-#: which stopped requiring one cannot agree with this module's document.
-REQUIRED_RESULTS = ("history_scan", "release_candidate")
 
 
 class _ManifestPort:
@@ -87,7 +88,7 @@ def _document(issued_at: float) -> bytes:
     return json.dumps(document).encode("utf-8")
 
 
-def _configuration(max_age: int) -> configuration.Configuration:
+def _configuration(max_age: int, document: bytes) -> configuration.Configuration:
     """Return an enforcing configuration whose window is *max_age* seconds."""
     # The configuration module's own fallback directory, since the decisions
     # build artefact paths from it and this case never writes one.
@@ -98,11 +99,13 @@ def _configuration(max_age: int) -> configuration.Configuration:
         "GITHUB_RUN_ID": RUN_ID,
         "RUNNER_TEMP": temporary,
         "NETSUKE_RELEASE_ADMISSION_ENFORCE": policy.ADMISSION_ENFORCEMENT_MODE,
-        # This property is about the window, so it states the producer
-        # attribution an enforcing run will report once #598 lands. The
-        # shipped block that withholds it is pinned separately, by the gate's
-        # own producer-trust case and by the workflow contract.
-        "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED": "true",
+        # This property is about the window, so it supplies the digest the
+        # producer job publishes for this document. Attribution itself is
+        # pinned separately, by the gate's own producer-trust cases and by the
+        # workflow contract.
+        "NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256": hashlib.sha256(
+            document
+        ).hexdigest(),
         "NETSUKE_RELEASE_ADMISSION_TAG": TAG,
         "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE": f"{temporary}/case.json",
         "NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS": str(max_age),
@@ -137,9 +140,10 @@ def _decide(
             raise AssertionError(message)
         return remaining.pop(0)
 
+    document = _document(issued_at)
     gate = admission_evidence.AdmissionEvidence(
-        _configuration(max_age),
-        _ManifestPort(_document(issued_at)),
+        _configuration(max_age, document),
+        _ManifestPort(document),
         read_wall_clock,
     )
     observation = gate.check_freshness()

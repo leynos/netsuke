@@ -23,9 +23,11 @@ on `ubuntu-latest` and the `downstream-canaries-windows` job on
 every canary:
 
 1. Check out the downstream repository at its pinned commit into
-   `downstream/`, beside Netsuke's own checkout rather than inside it. Cargo
-   reads `.cargo/config.toml` from every ancestor directory, so a nested
-   checkout would build with Netsuke's development `mold` flags.
+   `downstream/`. The job checks out only `.github/actions/` and `scripts/`
+   from Netsuke, sparsely and with no root file, because Cargo and rustup read
+   `.cargo/config.toml` and `rust-toolchain.toml` from every ancestor
+   directory; a full Netsuke checkout above `downstream/` would build it with
+   Netsuke's development `mold` flags and pinned nightly.
 2. Build the candidate with the
    [release-candidate installer][installer], which fetches the exact commit,
    builds it in the shipped release shape, and refuses a binary that reports a
@@ -47,8 +49,8 @@ The canaries run on every tag release and every manual rehearsal. On a pull
 request they run only when the pull request is marked ready for review, since
 each canary compiles a whole downstream workspace, and they never gate a pull
 request: the jobs are `continue-on-error` there, so a downstream failure is
-visible without blocking the merge. A release needs both canary jobs to
-succeed, and needs the candidate they built to be the release commit itself.
+visible without blocking the merge. A publishing run admits a release only when
+every canary passed on the release commit, as the next section describes.
 
 ## Pinned v0.1.0 candidate set
 
@@ -97,11 +99,34 @@ checkout is not at the pinned revision cannot pass. Command output stays in the
 job log, and a service connection string reaches the tools without being
 recorded.
 
-When workflow artefact uploads are enabled, each record is uploaded as
-`downstream-canary-provenance-<canary>`, beside the release-admission metrics
-and traces. A dry run keeps the record in the job summary. The record is a
-provenance artefact, not a metric or trace series; see
+Each record is uploaded as `downstream-canary-provenance-<canary>` on every
+run, dry runs included, because the release-admission evidence producer reads
+it. Unlike the release-admission metrics and traces, that upload is not gated
+on workflow artefact uploads. The record is a provenance artefact, not a metric
+or trace series; see
 [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md).
+
+## How the canaries reach admission
+
+The `release-admission-evidence` job runs after both canary jobs, whatever they
+concluded. It reads each canary's provenance record and declares one result per
+canary in the schema-1 manifest that the admission gate verifies. A canary
+succeeds only when its job succeeded, and its record names that canary, reports
+the release commit as its Netsuke revision, and has the outcome `passed`.
+Anything else is declared as a failure rather than omitted, including a missing
+or unreadable record, a failed target, and a skipped or cancelled job.
+
+The job publishes the SHA-256 of the manifest bytes it wrote as its
+`evidence_sha256` output. The admission job passes that digest to the gate, and
+the gate admits the uploaded document only when its bytes hash to it. The
+digest is the attribution: only this repository's workflow can name the
+producer's output, so a document that a caller uploads under the same artefact
+name is refused as `untrusted_evidence`.
+
+The producer declares the downstream results only. The `history_scan` and
+`release_candidate` results have no producer yet, so an enforcing run still
+refuses with `missing_evidence`, and publication stays fail-closed until they
+exist.
 
 ## Deliberate migration boundaries
 

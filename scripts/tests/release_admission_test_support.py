@@ -169,6 +169,8 @@ reproduce:
 """
 
 from release_admission_evidence_fixtures import (
+    ATTRIBUTED,
+    EVIDENCE_DIGEST_VARIABLE,
     FORWARD_COMPATIBLE,
     INCOMPLETE,
     MALFORMED,
@@ -231,8 +233,10 @@ from release_admission_test_records import (
 )
 
 __all__ = (
+    "ATTRIBUTED",
     "CANARY_BY_OPERATION",
     "CLOCK_ARGUMENTS",
+    "EVIDENCE_DIGEST_VARIABLE",
     "FORWARD_COMPATIBLE",
     "GITHUB_REPOSITORY",
     "INCOMPLETE",

@@ -24,6 +24,9 @@ or a child process.
 """
 
 import datetime as dt  # ruff: ignore[typing-only-standard-library-import] - examples.
+import hashlib
+import hmac
+import re
 import typing as typ
 
 from . import policy
@@ -42,10 +45,13 @@ EVIDENCE_FILE_DIAGNOSTIC = (
 TAG_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TAG"
 TAG_DIAGNOSTIC = "NETSUKE_RELEASE_ADMISSION_TAG must name the release tag"
 MAX_AGE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS"
-#: Whether the run can attribute the evidence to a producer it trusts. The
-#: workflow sets it, never the caller; an unset, empty, or misspelled value is
-#: not attribution, which is the shipped interim block.
-PRODUCER_TRUST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED"
+#: The SHA-256 of the manifest the producer job wrote, as that job published it
+#: in its own output. Only this repository's workflow can name a job's output,
+#: so a document whose bytes hash to it is the producer's; an unset, empty, or
+#: malformed value attributes nothing, and the enforcing gate refuses.
+EVIDENCE_DIGEST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256"
+#: The one spelling of a digest the producer publishes: lowercase hexadecimal.
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 #: Largest manifest the gate will read. The document is a handful of short
 #: fields, so the bound is generous; what it stops is a misconfigured path
@@ -172,6 +178,32 @@ def verify(manifest: Manifest, candidate: Candidate) -> policy.Classification:
     return policy.Classification(policy.Outcome.SUCCESS, policy.ErrorCategory.NONE)
 
 
+def is_attributed(document: bytes, published_digest: str) -> bool:
+    """Return whether the document is the one the producer job published.
+
+    The producer hashes the manifest it wrote and publishes the digest as a job
+    output. A same-run upload under the artefact name cannot change that
+    output, so only the producer's own bytes match it. The comparison is
+    constant-time for tidiness rather than secrecy: the digest is public.
+
+    Returns
+    -------
+    bool
+        Whether the published digest is well formed and names these bytes.
+
+    Examples
+    --------
+    >>> document = b"{}"
+    >>> is_attributed(document, hashlib.sha256(document).hexdigest())
+    True
+    >>> is_attributed(document, "")
+    False
+    """
+    if _SHA256.fullmatch(published_digest) is None:
+        return False
+    return hmac.compare_digest(hashlib.sha256(document).hexdigest(), published_digest)
+
+
 def is_evidence_max_age(value: str) -> bool:
     """Return whether a value is an acceptable maximum evidence age.
 
@@ -219,6 +251,7 @@ def _moments(manifest: Manifest) -> cabc.Iterator[dt.datetime]:
 
 __all__ = (
     "DEFAULT_EVIDENCE_MAX_AGE_SECONDS",
+    "EVIDENCE_DIGEST_VARIABLE",
     "EVIDENCE_FILE_DIAGNOSTIC",
     "EVIDENCE_FILE_VARIABLE",
     "MAX_AGE_VARIABLE",
@@ -226,7 +259,6 @@ __all__ = (
     "MAX_EVIDENCE_BYTES",
     "MAX_EVIDENCE_MAX_AGE_SECONDS",
     "MAX_EVIDENCE_SKEW_SECONDS",
-    "PRODUCER_TRUST_VARIABLE",
     "TAG_DIAGNOSTIC",
     "TAG_VARIABLE",
     "Candidate",
@@ -234,6 +266,7 @@ __all__ = (
     "ObservedResult",
     "Parsed",
     "classify_freshness",
+    "is_attributed",
     "is_evidence_max_age",
     "parse_manifest",
     "verify",

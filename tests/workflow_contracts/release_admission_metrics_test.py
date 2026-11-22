@@ -50,11 +50,13 @@ ADMISSION_ENVIRONMENT = {
     "NETSUKE_RELEASE_ADMISSION_ENFORCE": (
         "${{ needs.metadata.outputs.should_publish == 'true' }}"
     ),
-    # The interim publication block, pinned as the exact literal the workflow
-    # ships: no producer attests the upload yet, so an enforcing run must refuse
-    # every manifest until #598 supplies one. A change here is a deliberate act
-    # that this contract is meant to require, not an incidental edit.
-    "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED": "false",
+    # Producer attribution, pinned as the producer job's own output: the gate
+    # admits only a document whose bytes hash to the digest that job published,
+    # and only this workflow file can name it. A declared literal here would
+    # reopen the bypass the digest closes.
+    "NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256": (
+        "${{ needs.release-admission-evidence.outputs.evidence_sha256 }}"
+    ),
     "NETSUKE_RELEASE_ADMISSION_TAG": "${{ needs.metadata.outputs.release_tag }}",
     "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE": f"{EVIDENCE_DIRECTORY}/evidence.json",
     **METRICS_FILE_ENV,
@@ -241,9 +243,9 @@ def _assert_admission_job_contract(parts: WorkflowParts) -> None:
         "name": EVIDENCE_ARTIFACT,
         "path": EVIDENCE_DIRECTORY,
     }, "the gate must read the evidence uploaded for this run and no other"
-    assert evidence_step.get("continue-on-error") is True, (
-        "absent evidence must reach the verifier as missing evidence rather "
-        "than as a download failure the gate cannot classify"
+    assert "continue-on-error" not in evidence_step, (
+        "the producer is a needed job, so absent evidence is a broken graph "
+        "and must fail the download rather than reach the gate as absence"
     )
     assert admission.get("timeout-minutes") == ADMISSION_TIMEOUT_MINUTES, (
         "admission must bound its overall runtime"

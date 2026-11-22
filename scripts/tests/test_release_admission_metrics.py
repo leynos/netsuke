@@ -18,8 +18,10 @@ import typing as typ
 
 import pytest
 from release_admission_test_support import (
+    ATTRIBUTED,
     CANARY_BY_OPERATION,
     CLOCK_ARGUMENTS,
+    EVIDENCE_DIGEST_VARIABLE,
     FORWARD_COMPATIBLE,
     METRICS_VALIDATOR,
     RELEASE_TAG,
@@ -172,10 +174,10 @@ def _mode_environment(*, enforce: bool) -> dict[str, str]:
         return {"NETSUKE_RELEASE_ADMISSION_ENFORCE": "false"}
     return {
         "NETSUKE_RELEASE_ADMISSION_ENFORCE": "true",
-        # The workflow's interim block is exercised by the producer-trust
-        # cases; here an enforcing run states the attribution a bound producer
-        # will report, so this case tests admission rather than the block.
-        "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED": "true",
+        # Producer attribution is exercised by the producer-trust cases; here
+        # an enforcing run receives the digest the producer job would publish,
+        # so this case tests admission rather than attribution.
+        EVIDENCE_DIGEST_VARIABLE: ATTRIBUTED,
         "NETSUKE_RELEASE_ADMISSION_TAG": RELEASE_TAG,
     }
 

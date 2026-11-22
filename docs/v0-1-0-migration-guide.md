@@ -1535,21 +1535,22 @@ name the run's own commit. Enforcement follows the run's mode, so a
 pull-request dry run observes rather than enforces and its rehearsal lane keeps
 running after a failed package or a refused admission.
 
-The gate refuses with `error_category=missing_evidence` while no
-`release-admission-evidence` manifest exists in the run, and with
-`error_category=untrusted_evidence` when a manifest exists that the run cannot
-attribute to a trusted producer. Both refusals are deliberate: enforcement
-lands before a producer does, so the path that published without evidence is
-closed first, and the interim block closes the path that published on any
-same-run document. A caller of the reusable `release.yml` needs no new input,
+The gate refuses with `error_category=missing_evidence` while the run has no
+`release-admission-evidence` manifest, or while the manifest lacks a required
+result. It refuses with `error_category=untrusted_evidence` when the manifest's
+bytes do not hash to the digest the producer job published. The release
+workflow's `release-admission-evidence` job writes the manifest after every
+downstream canary has run, and the canaries' own results are read from their
+provenance records. Both refusals are deliberate: the path that published
+without evidence is closed, and a same-run document that the producer did not
+write is refused. A caller of the reusable `release.yml` needs no new input,
 because the producer runs inside the workflow; a caller that expected a publish
 to proceed now sees the admission job fail and every job that writes skipped.
 The admission job also runs the gate from this repository's own workflow
 commit, so a calling workflow cannot supply an older or modified gate that
-reports a more favourable decision. The producer, its provenance, and the
-downstream canaries are tracked by #598. Publication therefore stays
-unavailable until #598 lands, and it is refused on both counts rather than only
-on the absence of a document.
+reports a more favourable decision. The `history_scan` and `release_candidate`
+results still have no producer, so publication stays unavailable until both
+exist.
 
 See [Install Netsuke](users-guide.md#install-netsuke) for the caller-visible
 rules and the conditions the manifest must satisfy.

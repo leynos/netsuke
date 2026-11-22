@@ -6,13 +6,12 @@ it runs a command, reads a file, or writes a record, which is what makes the
 admission policy reviewable on its own and testable without a filesystem.
 
 The module also owns the bounded vocabularies. They are the gate's operator
-contract -- the workflow's summary step and the published artefacts both
-key off them -- so they are enumerated once, here, and every other module
-imports them rather than repeating a literal.
+contract -- the workflow's summary step and the published artefacts key off
+them -- so they are enumerated once, here, and imported everywhere else.
 
 What an external command did is one of those vocabularies, so
-:class:`CommandOutcome` and the :class:`CommandResult` carrying it are declared
-here, and :func:`classify_command_result` consumes them. The translation that
+:class:`CommandOutcome` and :class:`CommandResult` are declared here, and
+:func:`classify_command_result` consumes them. The translation that
 *produces* them -- a signal death, an elapsed bound, a launch the operating
 system refused -- is not a decision and does not live here; it belongs to the
 adapters that observed the operating system, and :mod:`statuses` performs it.
@@ -22,6 +21,8 @@ import dataclasses
 import enum
 import re
 import typing as typ
+
+from . import downstream
 
 #: Operation timeout accepted by the gate, in seconds.
 DEFAULT_OPERATION_TIMEOUT_SECONDS = 30
@@ -84,13 +85,12 @@ class Canary(Vocabulary):
     NONE = "none"
 
 
-#: The canaries an evidence manifest must report before admission is granted.
-#: #598 adds downstream canaries whose names need no change here, so this is
-#: the closed set of *required* results, not the whole producer vocabulary:
-#: presence is required here, success of every declared result.
-REQUIRED_RESULTS: typ.Final[tuple[Canary, ...]] = (
+#: Results a manifest must declare: the RFC 0005 canaries and every #598
+#: downstream canary. Success is required of every declared result.
+REQUIRED_RESULTS: typ.Final[tuple[str, ...]] = (
     Canary.HISTORY_SCAN,
     Canary.RELEASE_CANDIDATE,
+    *downstream.RESULTS,
 )
 
 

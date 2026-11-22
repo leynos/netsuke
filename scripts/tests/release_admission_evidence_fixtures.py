@@ -37,9 +37,26 @@ if typ.TYPE_CHECKING:
 
 #: The manifest schema version this module writes.
 SCHEMA_VERSION = 1
-#: The results every manifest must report. Spelled out rather than imported, so
-#: a gate that stopped requiring one of them fails the case that omits it.
-REQUIRED_RESULT_NAMES = ("history_scan", "release_candidate")
+#: The results every manifest must report: the two RFC 0005 canaries and the
+#: six #598 downstream canary rows. Spelled out rather than imported, so a gate
+#: that stopped requiring one of them fails the case that omits it.
+REQUIRED_RESULT_NAMES = (
+    "history_scan",
+    "release_candidate",
+    "downstream_repovec_appliance",
+    "downstream_mxd_postgres",
+    "downstream_mxd_sqlite",
+    "downstream_mxd_wireframe_only",
+    "downstream_ortho_config",
+    "downstream_ortho_config_windows",
+)
+#: The evidence-digest variable the producer job's output reaches the gate in.
+EVIDENCE_DIGEST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256"
+#: A placeholder a case sets as the evidence digest to mean "the digest of the
+#: document this harness wrote". The document carries timestamps taken just
+#: before the child runs, so its digest only exists once it has been written;
+#: the harness substitutes it then, as the producer job's output would.
+ATTRIBUTED = "<digest of the written evidence>"
 #: The outcome a result reports when the canary it names passed.
 SUCCESS = "success"
 #: The outcome a result reports when the canary it names failed.
@@ -130,7 +147,7 @@ _OVERSIZE_BYTES: typ.Final[int] = MAX_DOCUMENT_BYTES + 1
 _EXTRA_RESULT_NAME = "licence_scan"
 
 
-def write_evidence(path: pathlib.Path, state: str, subject: Candidate) -> None:
+def write_evidence(path: pathlib.Path, state: str, subject: Candidate) -> bytes:
     """Write the document *state* names, or nothing at all for an absent file.
 
     Parameters
@@ -142,14 +159,20 @@ def write_evidence(path: pathlib.Path, state: str, subject: Candidate) -> None:
     subject
         The candidate the child runs for, which the document must describe
         unless the state exists to describe something else.
+
+    Returns
+    -------
+    bytes
+        The bytes written, or no bytes when the state names an absent file.
     """
     document = _document(state, subject)
     if document is None:
-        return
+        return b""
     # A case may name a directory the gate itself would create, so the fixture
     # must not depend on the gate having run before the document is written.
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(document)
+    return document
 
 
 def _document(state: str, subject: Candidate) -> bytes | None:

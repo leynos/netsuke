@@ -440,7 +440,9 @@ test-downstream-canary: ## Validate the downstream migration-canary tooling
 		scripts/tests/test_resolve_release_candidate.py \
 		scripts/tests/test_run_downstream_canary.py \
 		scripts/tests/test_downstream_canary_arguments.py \
+		scripts/tests/test_write_release_admission_evidence.py \
 		.github/scripts/resolve_release_candidate.py \
+		.github/scripts/write_release_admission_evidence.py \
 		scripts/run_downstream_canary.py scripts/downstream_canary_arguments.py \
 		scripts/downstream_canary_provenance.py --doctest-modules -c /dev/null \
 		--rootdir=. -p no:cacheprovider

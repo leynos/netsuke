@@ -1775,10 +1775,13 @@ targets, and the retained Makefile boundaries; this section covers the tooling.
   publishes the commit, the version that commit's `Cargo.toml` declares, and
   the selecting rule.
 - The [downstream-canary action][downstream-canary-action] is the shared
-  bootstrap. The caller checks Netsuke out into `netsuke/`, never the workspace
-  root, because Cargo reads `.cargo/config.toml` from every ancestor and the
-  downstream checkout must not inherit Netsuke's development flags. The action
-  reaches its scripts through `GITHUB_ACTION_PATH`.
+  bootstrap. The caller checks out only `.github/actions/` and `scripts/`, in
+  non-cone sparse mode so no root file arrives, because Cargo and rustup read
+  `.cargo/config.toml` and `rust-toolchain.toml` from every ancestor and the
+  downstream checkout must not inherit Netsuke's development flags or
+  toolchain. That keeps the action at its own workspace-relative path, which
+  the shared `cv005-contracts` closure check resolves. The action reaches its
+  scripts through `GITHUB_ACTION_PATH`.
 - The [install-release-candidate action][release-candidate-action] builds the
   candidate. It fetches the exact `revision`, verifies the resolved commit,
   builds with `RUSTFLAGS` assigned as `make release` does, so the development
@@ -1790,17 +1793,27 @@ targets, and the retained Makefile boundaries; this section covers the tooling.
   phases, sharing a JSON state file. Argument parsing lives in
   `scripts/downstream_canary_arguments.py`, and the provenance schema and its
   closed status vocabulary in `scripts/downstream_canary_provenance.py`.
-  `make test-downstream-canary` tests the resolver and the runner, and CI runs
-  it.
+  `make test-downstream-canary` tests the resolver, the runner, and the
+  evidence producer below, and CI runs it.
+- `.github/scripts/write_release_admission_evidence.py` is the evidence
+  producer, run by the `release-admission-evidence` job. It reads each canary's
+  provenance record from the `downstream-canary-provenance-*` artefacts,
+  declares one result per canary, writes the schema-1 manifest, and publishes
+  the manifest's SHA-256 as the job's `evidence_sha256` output. The admission
+  job checks the uploaded `release-admission-evidence` document against that
+  digest. The producer declares only the downstream results: `history_scan` and
+  `release_candidate` have no producer yet.
 
 The canary jobs run on GitHub-hosted runners. On a pull request they run only
 when it is marked ready for review, and never gate it: they are
-`continue-on-error` there. `release` needs both canary jobs and requires the
-canaries' candidate to equal `github.sha`, so a rehearsal that built another
-ref can never admit a release. The jobs need only `contents: read`: all three
-downstream repositories are public, so the cross-repository checkout uses the
-job's own read-only token, and no credential is persisted into the downstream
-tree.
+`continue-on-error` there. The `release-admission-evidence` job needs every
+canary job and runs whatever they concluded, so a failed or skipped canary
+reaches admission as a declared failure. The publication jobs never read the
+canaries directly; `release-admission-canaries` decides them, and `release`,
+the dry-run staging job, does not wait for the canaries at all. The canary jobs
+need only `contents: read`: all three downstream repositories are public, so
+the cross-repository checkout uses the job's own read-only token, and no
+credential is persisted into the downstream tree.
 
 `tests/workflow_release_canaries.rs` holds the release wiring, pins, lanes, and
 pull-request policy, and `tests/workflow_contracts/downstream_canary_test.py`
@@ -1808,7 +1821,9 @@ holds the composite action's shape.
 
 To rehearse a release without publishing, run the **Release Dry Run** workflow
 from the Actions tab with **Run workflow**. It runs the whole release,
-including the canaries and the Windows smoke, and uploads nothing.
+including the canaries, the evidence producer, and the Windows smoke, and
+publishes nothing. The canary provenance and evidence artefacts are still
+uploaded.
 
 ## Toolchain and borrow checker
 
@@ -3286,33 +3301,39 @@ no write scope, so the jobs that must stay reachable cannot mutate anything.
 Evidence is a candidate-bound JSON manifest, not a claim about one. Schema
 version 1 names the repository, the 40-character lowercase commit, the release
 tag, the workflow run identifier, and the instant the manifest was issued, and
-carries one timestamped result per canary. Two results are required:
-`history_scan` and `release_candidate`. A manifest may carry further results
-and unknown fields, because #598 adds downstream canaries and a verifier that
-refused every name it had not been taught would make each addition a breaking
-change; a schema version the verifier does not know is refused rather than
-interpreted under the wrong rules. Admission compares the manifest with the
-release the run is about to perform, and refuses a document naming another
-repository, commit, run, or tag. The workflow downloads the producer's
+carries one timestamped result per canary. Three kinds of result are required:
+`history_scan`, `release_candidate`, and one `downstream_<name>` result for
+each downstream canary, with the canary's hyphens written as underscores, as in
+`downstream_mxd_wireframe_only`. The downstream result names are not metric
+labels, so the bounded metric vocabulary is unchanged. A manifest may carry
+further results and unknown fields, so the verifier does not refuse a name it
+has not been taught; a schema version the verifier does not know is refused
+rather than interpreted under the wrong rules. Admission compares the manifest
+with the release the run is about to perform, and refuses a document naming
+another repository, commit, run, or tag. The workflow downloads the producer's
 `release-admission-evidence` artefact into
 `${runner.temp}/release-admission-evidence` and points
-`NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE` at `evidence.json` inside it; the
-download tolerates the artefact's absence, so a missing producer reaches the
-verifier as `missing_evidence` rather than as an anonymous job failure.
+`NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE` at `evidence.json` inside it. The
+download does not tolerate the artefact's absence: the admission job needs the
+producer, so a missing producer is a broken job graph, not a refused admission.
 
-Whether the run can attribute the evidence to a producer it trusts is a
-separate input, `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`. The workflow sets
-it, never the caller: only this repository's workflow file can change it, the
-admission job checks the gate out from the commit that defines that file, and
-the shipped literal is `false`. That is the interim publication block. An
-enforcing run therefore refuses every manifest with `untrusted_evidence` unless
-the variable is exactly `true`; anything unset, empty, or misspelled leaves the
-gate unable to attribute the evidence, which is the intended state until #598
-supplies a producer whose upload attests itself. Observation mode ignores the
-variable, so a rehearsal still reports the manifest it read and the read-only
-lane stays reachable. `scripts/tests/test_release_admission_producer_trust.py`
-pins the refusal across five spellings of a non-attributing value, the
-admitting case for `true`, and the observation-mode control.
+Attribution is a separate check, and the run derives it rather than configuring
+it. The producer job publishes the SHA-256 of the manifest it wrote as its
+`evidence_sha256` output, and the admission job hands that value to the gate in
+`NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256`. The gate admits a document only
+when that value is a 64-character lowercase hexadecimal digest equal to the
+SHA-256 of the bytes the gate read, compared in constant time. Only this
+repository's workflow can name the producer's job output, so a caller cannot
+supply a digest for a document it uploaded: an enforcing run refuses such a
+document with `untrusted_evidence`, and so it refuses an unset, empty, or
+malformed digest. The old producer-trust literal is gone. Observation mode
+ignores attribution, so a rehearsal still reports the manifest it read and the
+read-only lane stays reachable.
+`scripts/tests/test_release_admission_producer_trust.py` pins the refusal for
+unset, empty, malformed, foreign, and `true` digests, the admitting case for
+the producer's own digest, and the observation-mode control.
+`scripts/tests/test_write_release_admission_evidence.py` checks the producer's
+output against the verifier's own parser.
 
 Freshness is bounded at both ends. Every recorded instant must lie within
 `NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS`, which defaults to 86,400
@@ -3342,60 +3363,48 @@ publishes six outputs — `gate-outcome`, `gate-error-category`, `enforcement`,
 `candidate-commit`, `metrics-file`, and `trace-file` — so a refused publication
 records why in the job that refused it.
 
-Publishing therefore fails until a producer uploads
-`release-admission-evidence` *and* the run can attribute that upload to it, and
-that is the intended state. Enforcement lands before any producer exists, so
-the path that would publish without evidence is closed first; connecting a
-producer first would leave that path open for however long the two changes
-landed apart. The producer is tracked by
-[#598](https://github.com/leynos/netsuke/issues/598), which also supplies the
-downstream canaries admission is to require. Publishing is now gated on
-packaging and on an enforced, successful admission (`#1070`); issue `#1065`,
-which tracked the release pipeline, is closed. No override exists: no input,
-environment variable, or workflow-dispatch field can request enforcement on a
-rehearsal or observation on a publishing run, because the mode is derived from
-the release mode the metadata job already resolved.
+Publishing is gated on packaging and on an enforced, successful admission
+(`#1070`); issue `#1065`, which tracked the release pipeline, is closed. No
+override exists: no input, environment variable, or workflow-dispatch field can
+request enforcement on a rehearsal or observation on a publishing run, because
+the mode is derived from the release mode the metadata job already resolved.
+Enforcement landed before any producer existed, so the path that would publish
+without evidence was closed first.
 
-Enabling publication is a further step, not a flip of this gate. Before a
-publishing run can succeed, `#598` has to supply a trusted producer, the
-admission job has to wait for that producer's upload rather than tolerating an
-absent artefact, and the required result set has to name the downstream
-canaries. Until then the download step keeps `continue-on-error: true` so an
-absent artefact is reported as `missing_evidence` -- a refused admission --
-rather than as a missing producer, the workflow keeps
-`NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` at `false` so a supplied document
-is reported as `untrusted_evidence`, and a successful publishing run has to be
-demonstrated end to end alongside the refused one before either changes.
-Nothing in this repository produces the manifest yet, so publication is
-deliberately blocked on both counts rather than merely untested.
+Publishing still fails closed. The downstream canaries now have a producer, the
+admission job waits for it, and the required set names every downstream canary.
+Two producers remain missing: `history_scan` and `release_candidate`. Until
+they exist, an enforcing run refuses with `missing_evidence`. A successful
+publishing run also has to be demonstrated end to end, alongside a refused one.
+That demonstration needs a real tag, and an admitted run also needs the two
+missing producers, so it is outstanding follow-up under
+[#598](https://github.com/leynos/netsuke/issues/598) rather than a completed
+step.
 
-The download is not a trust boundary, and this guide does not claim one.
-`actions/download-artifact` resolves the current run by default, so any
-artefact named `release-admission-evidence` in that run reaches the verifier.
-The identity fields are then compared with the run, which shows the document
-agrees with the candidate rather than who produced it. A workflow may also call
-`release.yml` and define its own jobs in the same run, so such a caller could
-upload under that name before admission starts; the values it would have to
-match are the run's own commit, tag, and run identifier, all of which that
-caller knows. What the gate closes is therefore the accidental path -- a run
-that publishes without packaging, or with a producer that never ran -- not a
-caller that deliberately supplies evidence of its own. That second path is
-closed by the interim block rather than by the identity fields: because
-`NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` ships `false`, an enforcing run
-refuses a same-run supplier's manifest with `untrusted_evidence` just as it
-refuses an absent one. The block is a maintainer's declaration that no trusted
-producer exists yet, not an authentication of one, so it does not establish
-provenance either; binding the evidence to a named producer job and
-authenticating that producer remains `#598`'s work, and flipping the literal
-before that lands would reopen the path this block closes.
+The download is not itself a trust boundary, and this guide does not claim one;
+the digest is the boundary. `actions/download-artifact` resolves the current
+run by default, so any artefact named `release-admission-evidence` in that run
+reaches the gate. The identity fields are then compared with the run, which
+shows the document agrees with the candidate rather than who produced it. A
+workflow may also call `release.yml` and define its own jobs in the same run,
+so such a caller could upload a matching document under that name before
+admission starts. The digest refuses that document: its bytes do not hash to
+the value only the producer job publishes, so it is refused as
+`untrusted_evidence`. A caller that pre-empts the artefact name instead makes
+the producer's own upload fail, so the producer job fails and admission never
+runs. Either way the run fails closed.
+
+The digest does not authenticate the producer beyond this repository's
+workflow. A caller that replaces the whole workflow also replaces the producer
+job and the digest comparison, as the gate-pin paragraph below records.
 
 The gate itself is pinned to this repository's own commit, which is what keeps
-that block out of a caller's reach. `release.yml` is reusable, and a called
-workflow's default checkout resolves the *caller's* repository, so an unpinned
-admission job would run whatever `release_admission.py` the caller's candidate
-contains -- including an older gate written before the producer-trust refusal,
+the digest check out of a caller's reach. `release.yml` is reusable, and a
+called workflow's default checkout resolves the *caller's* repository, so an
+unpinned admission job would run whatever `release_admission.py` the caller's
+candidate contains -- including an older gate written before the digest check,
 which would report the mode, outcome, and candidate every write job consumes
-while ignoring the literal.
+while ignoring the digest.
 
 The job therefore checks out two commits and keeps them apart. The first
 checkout is the caller's candidate at the workspace root, and its purpose is to
@@ -3455,7 +3464,7 @@ of `release.yml` verifies with this repository's gate at this repository's
 commit: a fork's own changes to the gate do not take effect until it changes
 the repository input. This pin removes the caller's choice of implementation;
 it does not authenticate a producer, because a caller that replaces the whole
-workflow also replaces the guards. Provenance remains `#598`'s work.
+workflow also replaces the guards and the producer job.
 
 The gate logic is Python, per the estate rule in
 [scripting standards](scripting-standards.md), not shell.

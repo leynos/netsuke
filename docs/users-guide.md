@@ -161,23 +161,26 @@ the `release-admission-canaries` job admitted this run's candidate: enforcement
 is `true`, the gate outcome is `success`, and the gate's candidate commit is
 the run's own commit. Enforcement follows the run's mode, so a publishing run
 enforces while a pull-request dry run only observes. A publishing run refuses
-with `missing_evidence` and writes nothing until an evidence producer uploads a
-`release-admission-evidence` manifest for the candidate. That producer runs
-inside the release workflow; it is tracked by #598, and a caller supplies no
-new input for it. The admission job runs the gate from this repository's own
-workflow commit, so a calling workflow cannot substitute a gate that reports a
-more favourable decision. It also checks out the caller's candidate separately,
-because the gate fetches the candidate commit from the caller's repository; a
-calling workflow's own commit is therefore judged even when this repository
-does not contain it, and the two checkouts are what let the same job do both.
-The gate admits only evidence that names the repository, commit, tag, and
-workflow run under release, was issued inside its freshness window, and reports
-every required canary as successful. Those fields are compared with the run,
-which shows the manifest agrees with the candidate rather than who produced it.
-Until #598 supplies a producer whose upload the run can attribute, an enforcing
-run therefore refuses every supplied manifest with `untrusted_evidence` as
-well, because a file's contents cannot establish its origin. Observation mode
-is unaffected: a pull-request dry run still reports the manifest it read.
+with `missing_evidence` and writes nothing until the release workflow produces a
+`release-admission-evidence` manifest for the candidate. The workflow's
+`release-admission-evidence` job writes that manifest after every downstream
+canary has run, and a caller supplies no new input for it. The history-scan and
+release-candidate results have no producer yet, so an enforcing run still
+refuses with `missing_evidence` until they exist. The admission job runs the
+gate from this repository's own workflow commit, so a calling workflow cannot
+substitute a gate that reports a more favourable decision. It also checks out
+the caller's candidate separately, because the gate fetches the candidate
+commit from the caller's repository; a calling workflow's own commit is
+therefore judged even when this repository does not contain it, and the two
+checkouts are what let the same job do both. The gate admits only evidence that
+names the repository, commit, tag, and workflow run under release, was issued
+inside its freshness window, reports every required result as successful, and
+hashes to the digest the producer job published. The identity fields are
+compared with the run, which shows the manifest agrees with the candidate. The
+digest shows the producer wrote the document: a manifest that another job
+uploaded in the same run does not hash to it, so an enforcing run refuses it
+with `untrusted_evidence`. Observation mode is unaffected: a pull-request dry
+run still reports the manifest it read.
 
 When a publication is interrupted, rerun the crates.io publisher job. It
 re-probes the registry before any mutation: an absent version is published from

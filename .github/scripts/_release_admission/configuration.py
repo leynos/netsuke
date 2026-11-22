@@ -76,8 +76,8 @@ class Configuration:
     max_evidence_age_seconds: str
     timeout_seconds: str
     enforcement: str
-    #: Whether this run can attribute the evidence to a producer it trusts.
-    producer_trusted: bool
+    #: The manifest digest the producer job published; empty when none was.
+    evidence_digest: str
     programs: commands.Programs
     sinks: telemetry.Sinks
 
@@ -132,8 +132,8 @@ def resolve_configuration(
     *enforcing* run must also name a tag and an evidence file; a rehearsal may
     leave both unset, which keeps the read-only lane reachable with no override.
 
-    ``producer_trusted`` is true only for the exact text ``true``; every other
-    state resolves to false, so the gate refuses evidence it cannot attribute.
+    ``evidence_digest`` is read verbatim; only a well-formed digest matching the
+    bytes read attributes the evidence, so the gate refuses everything else.
 
     Returns
     -------
@@ -187,10 +187,9 @@ def resolve_configuration(
             variables, TIMEOUT_VARIABLE, str(policy.DEFAULT_OPERATION_TIMEOUT_SECONDS)
         ),
         enforcement=enforcement,
-        producer_trusted=environment.optional(
-            variables, evidence.PRODUCER_TRUST_VARIABLE, "false"
-        )
-        == "true",
+        evidence_digest=environment.optional(
+            variables, evidence.EVIDENCE_DIGEST_VARIABLE, ""
+        ),
         programs=commands.Programs.from_environment(variables),
         sinks=telemetry.Sinks(
             metrics_file=destination.metrics_file.configured,

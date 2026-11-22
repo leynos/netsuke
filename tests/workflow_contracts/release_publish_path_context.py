@@ -90,7 +90,9 @@ def job_contexts(
     Returns
     -------
     dict[str, object]
-        The ``needs``, ``status`` and ``github`` contexts for the scenario.
+        The ``needs``, ``status`` and ``github`` contexts for the scenario. The
+        event name is the scenario's arrival, because the downstream canaries
+        and the Windows smoke decide on it.
     """
     results = scenario.effective_results if resolution is None else resolution.results
     cancelled = scenario.cancelled if resolution is None else resolution.cancelled
@@ -100,7 +102,11 @@ def job_contexts(
             for name in job_names(job.get("needs", [])) or []
         },
         "status": {"cancelled": cancelled},
-        "github": {"event": {"action": scenario.event_action}, "sha": GITHUB_SHA},
+        "github": {
+            "event": {"action": scenario.event_action},
+            "event_name": scenario.arrival.event_name,
+            "sha": GITHUB_SHA,
+        },
     }
 
 

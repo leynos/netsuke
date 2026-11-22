@@ -21,7 +21,13 @@ from local_references import (
 )
 from workflow_loading import REPO_ROOT
 
-EXEMPTIONS: dict[str, str] = {}
+EXEMPTIONS: dict[str, str] = {
+    ".github/actions/install-release-candidate": (
+        "a public action for downstream repositories' own CI, documented in the "
+        "users' guide; this repository's canaries run its install.sh directly, "
+        "and tests/release_candidate_installer.rs exercises the action contract"
+    ),
+}
 
 if typ.TYPE_CHECKING:
     from pathlib import Path

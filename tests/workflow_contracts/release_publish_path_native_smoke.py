@@ -41,7 +41,10 @@ def check_native_smoke_job(
             }
         },
         "status": {"cancelled": False},
-        "github": {"event": {"action": scenario.event_action}},
+        "github": {
+            "event": {"action": scenario.event_action},
+            "event_name": scenario.arrival.event_name,
+        },
     }
     value = evaluate_field(
         smoke_job.get("if", True),
@@ -56,9 +59,12 @@ def check_native_smoke_job(
     # The guard reads the decision's effective output, not the scenario's
     # nominal mode: a publish-shaped invocation whose authorization still
     # leaves the run in dry-run mode must skip the smoke exactly as a plain
-    # dry run does.
+    # dry run does. A manual rehearsal is the one dry run that runs it anyway,
+    # because it exists to exercise the whole release.
     should_run = metadata_succeeded and (
-        outputs.get("dry_run") != "true" or scenario.event_action == "ready_for_review"
+        outputs.get("dry_run") != "true"
+        or scenario.event_action == "ready_for_review"
+        or scenario.arrival.event_name == "workflow_dispatch"
     )
     if value is MISSING or bool(value) != should_run:
         violations.append(

@@ -17,11 +17,13 @@ description: >-
   checkout, and always writes a bounded provenance record. That record is a
   release-review artefact, not a metric or trace series.
 
-  The caller checks this repository out into `netsuke/`, never the workspace
-  root: Cargo reads `.cargo/config.toml` from every ancestor directory, so a
-  downstream checkout nested inside Netsuke's would build with Netsuke's
-  development `mold` flags. The action reaches its scripts through
-  `GITHUB_ACTION_PATH`, so it does not depend on that layout otherwise.
+  The caller checks out only `.github/actions/` and `scripts/` from this
+  repository, sparsely and with no root file: Cargo and rustup read
+  `.cargo/config.toml` and `rust-toolchain.toml` from every ancestor
+  directory, so a downstream checkout beneath a full Netsuke checkout would
+  build with Netsuke's development `mold` flags and pinned nightly. The action
+  reaches its scripts through `GITHUB_ACTION_PATH`, and the installer fetches
+  the candidate source itself, so nothing else from the checkout is needed.
   Ownership: the release workflow is the only caller.
 
 inputs:
@@ -78,12 +80,6 @@ inputs:
       are Linux-only. Ninja and uv are always installed.
     required: false
     default: ''
-  upload-provenance:
-    description: >-
-      `true` to upload `downstream-canary-provenance.json` as a workflow
-      artefact. Dry runs pass `false`; the job summary carries the record.
-    required: false
-    default: 'false'
 
 runs:
   using: composite
@@ -236,7 +232,9 @@ runs:
         --provenance "$RUNNER_TEMP/downstream-canary-provenance.json"
         --summary "$GITHUB_STEP_SUMMARY"
     - name: Upload downstream canary provenance
-      if: always() && inputs.upload-provenance == 'true'
+      # Always uploaded, dry runs included: the release-admission evidence
+      # producer reads every record, and a missing one is a failed canary.
+      if: always()
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       # v7.0.1
       with:

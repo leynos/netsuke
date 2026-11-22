@@ -51,8 +51,8 @@ PHASE_ORDER = (
     "Upload downstream canary provenance",
 )
 
-#: The downstream checkout: the matrix's repository at its pinned commit, beside
-#: rather than inside Netsuke's checkout, with no credential persisted.
+#: The downstream checkout: the matrix's repository at its pinned commit, below
+#: a sparse Netsuke checkout that holds no root file, with no credential.
 PINNED_CHECKOUT = {
     "repository": "${{ inputs.repository }}",
     "ref": "${{ inputs.ref }}",
@@ -193,18 +193,20 @@ def test_each_platform_drives_the_runner_from_its_own_shell(
         ), f"{entry.get('name')} must run under {shell} on {platform}"
 
 
-def test_provenance_is_always_recorded_and_uploaded_only_on_request() -> None:
-    """A failed canary still reports; dry runs keep the record in the summary.
+def test_provenance_is_always_recorded_and_uploaded() -> None:
+    """A failed canary still reports, and the evidence producer can read it.
 
-    Scenario: a canary fails during setup. Invariant: the record step runs
-    regardless, and the artefact upload needs the caller's explicit opt-in.
+    Scenario: a canary fails during setup, possibly in a dry run. Invariant:
+    the record step and its upload both run regardless, because the
+    release-admission evidence producer reads every record and a missing one
+    must reach it as a failed canary rather than as an unobserved one.
     """
     assert step("Record downstream canary provenance").get("if") == "always()", (
         "provenance must be recorded even when an earlier phase failed"
     )
-    assert step("Upload downstream canary provenance").get("if") == (
-        "always() && inputs.upload-provenance == 'true'"
-    ), "the provenance upload must be opt-in and survive a failed phase"
+    assert step("Upload downstream canary provenance").get("if") == "always()", (
+        "the provenance upload must survive a failed phase on every run"
+    )
 
 
 def test_extra_environment_never_reaches_the_record() -> None:
