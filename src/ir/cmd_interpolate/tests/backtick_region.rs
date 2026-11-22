@@ -3,9 +3,8 @@
 //! A backtick region saves the quote context of the shell region that opened
 //! it. These cases pin that the closing backtick restores that region rather
 //! than the script-level field, which would make a later marker use the wrong
-//! path encoding. They also pin that nesting which closes a region before its
-//! backtick fails closed instead of corrupting the enclosing quote state, and
-//! that the body's own quoting and escapes decide which delimiters are data.
+//! path encoding, and that nesting which closes a region before its backtick
+//! fails closed. They also pin the body's own quoting and escape rules.
 
 use super::*;
 use rstest::rstest;
@@ -123,6 +122,10 @@ enum Case {
     EscapedMarkerInUnquotedBody,
     /// A `$()` opened inside a quoted body closes its own frame.
     NestedSubstitutionInQuotedBody,
+    /// A `\\` pair leaves a backslash that escapes the body's own parenthesis.
+    DoubleBackslashBeforeParenthesis,
+    /// A `\\` pair leaves a backslash that escapes a body quote.
+    DoubleBackslashBeforeQuote,
     /// A backslash does not escape the quote that closes a body's single quote.
     BackslashBeforeBodyQuote,
     /// A `)` inside a body's single quotes is data.
@@ -171,6 +174,12 @@ impl Case {
             }
             Self::NestedSubstitutionInQuotedBody => {
                 format!(r#"printf '%s' `printf '%s' "$(printf x)"` {INS_TOKEN}"#)
+            }
+            Self::DoubleBackslashBeforeParenthesis => {
+                format!(r"printf '<%s>\n' $(printf %s `printf %s \\)`) {INS_TOKEN}")
+            }
+            Self::DoubleBackslashBeforeQuote => {
+                format!(r"printf '%s' `printf %s \\'` {INS_TOKEN}")
             }
             Self::BackslashBeforeBodyQuote => {
                 format!(r"printf '%s' $(printf %s `printf '%s' 'x\' )` {INS_TOKEN}")
@@ -232,12 +241,12 @@ impl Case {
     const fn description(self) -> &'static str {
         match self {
             Self::EscapedBacktickInQuotedBody => "an escaped backtick in a quoted body",
-            Self::EscapedBacktickInNestedFrame => {
-                "an escaped backtick inside a $() frame in the body"
-            }
+            Self::EscapedBacktickInNestedFrame => "an escaped backtick in a nested frame",
             Self::EscapedParenthesisInUnquotedBody => "an escaped ) in an unquoted body",
             Self::EscapedMarkerInUnquotedBody => "a backslash before a marker",
             Self::NestedSubstitutionInQuotedBody => "a $() inside a double-quoted backtick body",
+            Self::DoubleBackslashBeforeParenthesis => "a surviving backslash before a body )",
+            Self::DoubleBackslashBeforeQuote => "a surviving backslash before a body quote",
             Self::BackslashBeforeBodyQuote => "a backslash before a body's closing quote",
             Self::QuotedParenthesisInSingleQuotedBody => "a quoted ) in a single-quoted body",
             Self::QuotedParenthesisInDoubleQuotedBody => "a quoted ) in a double-quoted body",
@@ -346,6 +355,8 @@ fn script_marker_after_backtick_in_command_substitution_uses_owning_region(
 #[case::escaped_parenthesis(Case::EscapedParenthesisInUnquotedBody)]
 #[case::escaped_marker(Case::EscapedMarkerInUnquotedBody)]
 #[case::nested_substitution(Case::NestedSubstitutionInQuotedBody)]
+#[case::double_backslash_parenthesis(Case::DoubleBackslashBeforeParenthesis)]
+#[case::double_backslash_quote(Case::DoubleBackslashBeforeQuote)]
 #[case::backslash_before_body_quote(Case::BackslashBeforeBodyQuote)]
 #[case::quoted_parenthesis_single(Case::QuotedParenthesisInSingleQuotedBody)]
 #[case::quoted_parenthesis_double(Case::QuotedParenthesisInDoubleQuotedBody)]

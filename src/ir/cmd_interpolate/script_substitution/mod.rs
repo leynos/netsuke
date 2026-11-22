@@ -7,10 +7,20 @@
 use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, RejectionReason,
     find_script_substitution, invalid_command_error, invalid_heredoc_boundary_error,
-    posix_lexical::{
-        HeredocBoundary, InertCharacterOutcome, NewlineContext, PosixCharacter, PosixLexicalState,
-        SourceChar, ansic_quote_is_ambiguous, backslash_escapes_marker,
+    posix_lexical::{,
+    HeredocBoundary, InertCharacterOutcome, NewlineContext, PosixCharacter, PosixLexicalState,
+    SourceChar, ansic_quote_is_ambiguous, backslash_escapes_marker,
+    posix_lexical::{PosixCharacter, PosixLexicalState, SourceChar},
     },
+};
+
+
+//! Interpolate POSIX and Bash script placeholders with script-specific context.
+//!
+//! Keeps multi-line script syntax, comments, and heredoc bodies intact while
+//! lowering Netsuke-owned placeholders where shell quoting can preserve their
+//! path semantics. PowerShell scripts use `SubstitutionTraversal` instead.
+    posix_lexical::{
 };
 
 mod ansi_c;
@@ -20,9 +30,11 @@ mod backticks;
 
 mod delimiters;
 
+mod escapes;
+
 mod heredoc;
 
-use backticks::{BacktickRegion, escapes_backtick_body_character, toggle_quote_context};
+use backticks::{BacktickRegion, toggle_quote_context};
 use delimiters::ScriptCommandSubstitution;
 
 /// Track quote context while interpolating one POSIX or Bash script.
@@ -188,6 +200,9 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             Some(InertCharacterOutcome::Consumed) => return Ok(Some(pos + 1)),
             Some(InertCharacterOutcome::NotInert) | None => {}
         }
+        if let Some(next) = self.append_residual_escape_character(pos, ch)? {
+            return Ok(Some(next));
+        }
         if self.is_escaped {
             self.posix_lexical.observe_ansi_c_escaped_character(ch);
             self.output.push(ch);
@@ -196,6 +211,9 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         }
         self.reject_ambiguous_ansic_quote(pos)?;
         self.observe_case_word(pos, ch);
+        if let Some(next) = self.append_backtick_body_escape(pos, ch) {
+            return Ok(Some(next));
+        }
         if self.starts_escape(pos, ch)? {
             self.output.push(ch);
             self.is_escaped = true;
@@ -269,79 +287,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             && self
                 .posix_lexical
                 .starts_comment(self.chars, pos, SourceChar::new(ch))
-    }
-
-    /// Report whether a backslash begins an escape of the following character.
-    ///
-    /// An open backtick body is checked first: its escape rule applies to the
-    /// whole body before the body is parsed, so it governs a `$()` frame opened
-    /// inside the body and the quotes in that frame as well.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when the escape would modify a marker
-    /// lowered immediately after it.
-    fn starts_escape(&self, pos: usize, ch: char) -> Result<bool, IrGenError> {
-        if ch != '\\' {
-            return Ok(false);
-        }
-        if let Some(escapes) = self.starts_body_escape(pos)? {
-            return Ok(escapes);
-        }
-        if self.active_quote_context() == ShellQuoteContext::SingleQuoted {
-            return Ok(false);
-        }
-        self.reject_marker_escape(pos)?;
-        Ok(true)
-    }
-
-    /// Classify a backslash under an open backtick body.
-    ///
-    /// Returns `None` when the body's rules do not decide the escape and the
-    /// innermost region's own quoting must. The body's escape rule is applied
-    /// to the whole body before the body is parsed, so it reaches a `$()` frame
-    /// opened in the body even from inside that frame's quotes; taking it here
-    /// keeps an escaped backtick from closing the body early.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when the escape would modify a marker
-    /// lowered immediately after it.
-    fn starts_body_escape(&self, pos: usize) -> Result<Option<bool>, IrGenError> {
-        let Some(region) = self.backtick_region else {
-            return Ok(None);
-        };
-        if escapes_backtick_body_character(self.chars, pos) {
-            return Ok(Some(true));
-        }
-        if self.command_substitutions.len() != region.owner_depth {
-            return Ok(None);
-        }
-        let escapes = region.escapes_body_character(self.chars, pos);
-        if escapes {
-            self.reject_marker_escape(pos)?;
-        }
-        Ok(Some(escapes))
-    }
-
-    /// Reject an escape that would consume a marker's first character.
-    ///
-    /// The marker scan starts at that character, so letting the escape win
-    /// would copy the rest of the internal token into the lowered script
-    /// instead of failing closed.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when the following character begins a
-    /// marker token.
-    fn reject_marker_escape(&self, pos: usize) -> Result<(), IrGenError> {
-        if backslash_escapes_marker(self.chars, pos, false, None) {
-            return Err(invalid_command_error(
-                self.template.to_owned(),
-                RejectionReason::EscapeBeforeMarker,
-            ));
-        }
-        Ok(())
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.

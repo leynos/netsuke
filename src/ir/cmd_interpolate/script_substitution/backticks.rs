@@ -26,6 +26,14 @@ pub(super) struct BacktickRegion {
     /// restore. Tracking them separately keeps a quoted `)` inside the body
     /// literal instead of letting it close the owning `$()`.
     pub(super) body_context: ShellQuoteContext,
+    /// Whether a `\\` pair left a backslash active in the body's own parse.
+    ///
+    /// The delimiter scan removes the backslash of a `\` before a dollar
+    /// sign, a backtick, or a backslash, and the body is then parsed again.
+    /// A `\\` pair therefore leaves one backslash for that parse, which
+    /// escapes the character that reaches it next; that character must not be
+    /// read as a quote, a frame delimiter, or a substitution opener.
+    pending_residual_escape: bool,
 }
 
 impl BacktickRegion {
@@ -35,7 +43,20 @@ impl BacktickRegion {
             outer_context,
             owner_depth,
             body_context: ShellQuoteContext::Unquoted,
+            pending_residual_escape: false,
         }
+    }
+
+    /// Record that a `\\` pair left a backslash for the body's own parse.
+    pub(super) const fn mark_residual_escape(&mut self) {
+        self.pending_residual_escape = true;
+    }
+
+    /// Take the pending residual backslash, reporting whether it was set.
+    pub(super) const fn take_residual_escape(&mut self) -> bool {
+        let pending = self.pending_residual_escape;
+        self.pending_residual_escape = false;
+        pending
     }
 
     /// Update the body's own quoting and report whether `ch` was a delimiter.

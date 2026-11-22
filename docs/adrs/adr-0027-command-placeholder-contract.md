@@ -679,11 +679,16 @@ backslash even where the body's own quoting would make a backslash literal. An
 escaped backtick therefore does not end the region. That search spans the whole
 body, so the rule also reaches a `$()` frame opened in the body and the quotes
 inside it: a backtick escaped there, for example inside single quotes in that
-frame, is data rather than the closer. Every other escape belongs to the body's
-own quoting: in unquoted body text a backslash makes the next character
-literal, so an escaped `)` cannot close a frame, and in the body's single
-quotes a backslash has no special meaning, so it cannot swallow the quote that
-closes them. A backslash before a newline continues the line in unquoted and
+frame, is data rather than the closer. The body is parsed twice: the delimiter
+scan removes that backslash, and the body's own parse then reads a `\\` pair as
+one literal backslash. That survivor is still an escape in the second parse, so
+the character after it cannot open a quote, close a frame, or start a
+substitution; a `\\)` in unquoted body text therefore yields a literal `)`
+rather than a frame closer. Every other escape belongs to the body's own
+quoting: in unquoted body text a backslash makes the next character literal, so
+an escaped `)` cannot close a frame, and in the body's single quotes a
+backslash has no special meaning, so it cannot swallow the quote that closes
+them. A backslash before a newline continues the line in unquoted and
 double-quoted body text, so that newline still belongs to the open command line
 and must not start a heredoc body queued earlier on it. A literal newline in
 the body's single quotes is body data for the same reason: the shell begins a

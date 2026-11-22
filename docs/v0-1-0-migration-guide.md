@@ -942,6 +942,11 @@ the shell protects it before it parses the body: in
 is data, not the closer. Every other escape still follows the innermost
 region's own quoting.
 
+The body is parsed twice, so a `\\` pair leaves one literal backslash for that
+second parse. In unquoted body text `\\)` is therefore a literal `)`, not the
+end of the owning `$()`, and a recipe such as
+``printf '<%s>\n' $(printf %s `printf %s \\)`) {{ ins }}`` lowers and runs.
+
 See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
 the full backtick and substitution contract.

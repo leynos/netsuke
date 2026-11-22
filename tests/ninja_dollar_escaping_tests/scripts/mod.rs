@@ -13,7 +13,7 @@ use super::*;
 use test_support::shell_transport::{INTERPRETER_PATH, decode_bash_transport};
 
 #[cfg(unix)]
-use cases::{Comment, HostileSite, Marker};
+use cases::{Comment, EscapedScript, HostileSite, Marker};
 use cases::{ControlCharacter, UnsafePath};
 #[cfg(unix)]
 use runner::{GeneratedCommand, ScriptCase, generate_for, lower_script, run_script};
@@ -182,25 +182,30 @@ fn backtick_inside_command_substitution_cannot_unquote_a_script_marker(
     Ok(())
 }
 
-/// Verify a backtick escaped inside a nested `$()` frame stays literal.
+/// Verify an escaped body character stays literal and the marker stays safe.
 ///
-/// The backtick body's escape rule is applied to the whole body before the
-/// body is parsed, so it reaches a backtick inside a `$()` frame and its
-/// quotes there: the escaped backtick is data, not the closer. A marker after
-/// the substitution must still be lowered for its own region, and a hostile
-/// path must stay one argument.
+/// The body's escape rules decide where its own delimiters are: a backtick
+/// escaped inside a nested `$()` frame is data, and a `\\` pair leaves a
+/// backslash that escapes the body's parenthesis. Either way the substitution
+/// stays closed, the marker after it is lowered for its own region, and a
+/// hostile input path must remain one argument.
 #[cfg(unix)]
 #[rstest]
-fn escaped_backtick_inside_nested_frame_keeps_the_region_open() -> Result<()> {
+#[case::escaped_backtick_nested_frame(EscapedScript::EscapedBacktickInNestedFrame)]
+#[case::surviving_backslash_parenthesis(EscapedScript::SurvivingBackslashBeforeParenthesis)]
+fn escaped_body_characters_keep_the_marker_safe(#[case] script: EscapedScript) -> Result<()> {
     let case = ScriptCase {
         target: "out".to_owned(),
-        manifest: "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'a; touch injected; echo b'\n    script: |\n      printf '<%s>\\n' `printf %s \"$(printf %s '\\`')\"` {{ ins }}\n".to_owned(),
+        manifest: format!(
+            "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'a; touch injected; echo b'\n    script: |\n      {}\n",
+            script.script()
+        ),
     };
     let command = lower_script(&case)?;
     let run = run_script(&command)?;
     ensure!(
-        run.output.stdout == b"<`>\n<a; touch injected; echo b>\n",
-        "the escaped backtick must stay literal and the marker stay one argument, got: {}",
+        run.output.stdout == script.expected(),
+        "the escaped body character must stay literal and the marker stay one argument, got: {}",
         String::from_utf8_lossy(&run.output.stdout)
     );
     ensure!(

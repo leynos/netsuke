@@ -130,3 +130,36 @@ impl UnsafePath {
         }
     }
 }
+
+/// Name one script whose escapes must keep a following marker safe.
+#[cfg(unix)]
+#[derive(Clone, Copy)]
+pub(super) enum EscapedScript {
+    /// A backtick escaped inside a `$()` frame in the body.
+    EscapedBacktickInNestedFrame,
+    /// A `\\` pair that leaves a backslash before a parenthesis.
+    SurvivingBackslashBeforeParenthesis,
+}
+
+#[cfg(unix)]
+impl EscapedScript {
+    /// Return the script line the manifest declares.
+    pub(super) const fn script(self) -> &'static str {
+        match self {
+            Self::EscapedBacktickInNestedFrame => {
+                r#"printf '<%s>\n' `printf %s "$(printf %s '\`')"` {{ ins }}"#
+            }
+            Self::SurvivingBackslashBeforeParenthesis => {
+                r"printf '<%s>\n' $(printf %s `printf %s \\)`) {{ ins }}"
+            }
+        }
+    }
+
+    /// Return the exact standard output the generated command must print.
+    pub(super) const fn expected(self) -> &'static [u8] {
+        match self {
+            Self::EscapedBacktickInNestedFrame => b"<`>\n<a; touch injected; echo b>\n",
+            Self::SurvivingBackslashBeforeParenthesis => b"<)>\n<a; touch injected; echo b>\n",
+        }
+    }
+}
