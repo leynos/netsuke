@@ -102,6 +102,16 @@ def split_values(values: cabc.Iterable[str], separator: str | None) -> list[str]
     ]
 
 
+#: Each list argument and the separator that splits it: targets on whitespace,
+#: the rest one per line, since a forbidden pattern may contain spaces.
+_LIST_SEPARATORS: dict[str, str | None] = {
+    "selector": "\n",
+    "environment": "\n",
+    "forbid": "\n",
+    "target": None,
+}
+
+
 def normalize_lists(arguments: argparse.Namespace) -> None:
     """Split every list argument in place, and require at least one target.
 
@@ -118,11 +128,10 @@ def normalize_lists(arguments: argparse.Namespace) -> None:
     ValueError
         When a ``run`` or ``report`` step names no target.
     """
-    for name in ("selector", "environment", "forbid"):
+    for name, separator in _LIST_SEPARATORS.items():
         if hasattr(arguments, name):
-            setattr(arguments, name, split_values(getattr(arguments, name), "\n"))
-    if hasattr(arguments, "target"):
-        arguments.target = split_values(arguments.target, None)
-        if not arguments.target:
-            msg = "no target was requested"
-            raise ValueError(msg)
+            setattr(arguments, name, split_values(getattr(arguments, name), separator))
+    # A phase without a ``--target`` option has nothing to require.
+    if getattr(arguments, "target", None) == []:
+        msg = "no target was requested"
+        raise ValueError(msg)
