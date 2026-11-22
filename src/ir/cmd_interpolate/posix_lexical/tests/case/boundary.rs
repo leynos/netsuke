@@ -114,6 +114,11 @@ fn case_substitution_without_comment_boundary_is_accepted() {
     "a marker in an arm whose subject is quoted must stay protected",
     Interpolators::Both
 )]
+#[case::quoted_suffix_subject(
+    "echo \"$(case \"x\"in in (xin) printf %s {INS_TOKEN} ;; esac)\"",
+    "a marker in an arm whose subject ends in a quoted fragment must stay protected",
+    Interpolators::Both
+)]
 fn case_arm_markers_inside_substitutions_are_refused(
     #[case] template: &str,
     #[case] context: &str,
@@ -145,6 +150,7 @@ fn case_arm_markers_inside_substitutions_are_refused(
 #[case::quoted_in_subject("case \"in\" in (in) printf yes ;; esac)")]
 #[case::mixed_quoted_subject("case x\"y\" in (x) printf yes ;; esac)")]
 #[case::empty_quoted_subject("case \"\" in (x) printf yes ;; esac)")]
+#[case::quoted_suffix_subject("case \"x\"in in (xin) printf yes ;; esac)")]
 fn supported_case_subjects_keep_the_substitution_boundary(#[case] substitution: &str) {
     let bindings = bindings();
     let template = format!("echo \"$({substitution}\" {INS_TOKEN}");

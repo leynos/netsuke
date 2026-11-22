@@ -117,12 +117,21 @@ impl CaseNesting {
     /// token, so the word keeps the spelling it is classified with and the next
     /// word starts bare.
     fn finish_word_at_boundary(&mut self, boundary: char, parenthesis_depth: usize) {
-        let starts_word = !is_quote(boundary);
-        // Only the quote that ends this fragment is part of the token judged.
-        self.spelling = self.spelling.and(starts_word);
+        if is_quote(boundary) {
+            // A quote ends the fragment but not the token, so the word is
+            // judged only when the token itself ends. Classifying here would
+            // read the `in` of a subject such as `"x"in` as the keyword.
+            self.spelling = TokenSpelling::Quoted;
+            return;
+        }
+        let had_word = !self.word.is_empty();
+        let token_had_quotes = matches!(self.spelling, TokenSpelling::Quoted);
         self.finish_word(parenthesis_depth);
-        // A quote at the boundary also begins the token that follows it.
-        self.spelling = TokenSpelling::after_boundary(starts_word);
+        if !had_word && token_had_quotes {
+            self.record_quoted_token(parenthesis_depth);
+        }
+        // A blank or operator ends the token, so the next word starts bare.
+        self.spelling = TokenSpelling::Bare;
     }
 
     /// Move the construct that contains this position across an operator.
@@ -159,17 +168,12 @@ impl CaseNesting {
     /// moves exactly the state that role owns.
     fn finish_word(&mut self, parenthesis_depth: usize) {
         if self.word.is_empty() {
-            if matches!(self.spelling, TokenSpelling::Quoted) {
-                self.record_quoted_token(parenthesis_depth);
-                self.spelling = TokenSpelling::NotStarted;
-            }
             return;
         }
         let role = self.classify_word(parenthesis_depth);
         self.prefix_slot = PrefixSlot::None;
         self.apply_role(role, parenthesis_depth);
         self.word.clear();
-        self.spelling = TokenSpelling::NotStarted;
     }
 
     /// Record a quoted token that left no characters in the word buffer.
@@ -276,30 +280,5 @@ impl TokenSpelling {
     /// Report whether a word completed now is spelled bare.
     pub(super) const fn is_literal(self) -> bool {
         matches!(self, Self::Bare)
-    }
-
-    /// Report the spelling after a token boundary ended the current fragment.
-    ///
-    /// A blank or operator ends the token, so the next word starts bare. A
-    /// quote ends the fragment but belongs to the following token, which is
-    /// therefore already quoted and has begun.
-    const fn after_boundary(starts_word: bool) -> Self {
-        if starts_word {
-            Self::Bare
-        } else {
-            Self::Quoted
-        }
-    }
-
-    /// Fold a fragment boundary into the spelling of the token being judged.
-    ///
-    /// Only the quote that ends the fragment is part of the token classified,
-    /// so a bare token becomes quoted at that point and a quoted one stays so.
-    const fn and(self, starts_word: bool) -> Self {
-        if starts_word && matches!(self, Self::Bare) {
-            Self::Bare
-        } else {
-            Self::Quoted
-        }
     }
 }
