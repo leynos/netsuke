@@ -850,16 +850,18 @@ example `unsupported heredoc boundary: command substitution newline`.
   body starts on the declaring line. A heredoc declared and completed inside a
   single `$()` region remains supported.
 - **Escape-bearing ANSI-C string**, such as `$'a\'b'`, wherever command text
-  is scanned, including `$` and the quote split by a backslash-newline
-  continuation. Bash and the POSIX quote rules end the string at different
-  quotes, so Netsuke cannot place a later boundary or encode a later marker.
-  Rewrite it as an ordinary quoted string, for example `'a'\''b'` or `"a'b"`,
-  or drop the escape. An escape-free `$'...'` string is accepted, and heredoc
-  bodies and comments are copied without this check.
+  is scanned, whether or not a heredoc declaration is pending, and including
+  `$` and the quote split by a backslash-newline continuation. Bash and the
+  POSIX quote rules end the string at different quotes, so Netsuke cannot place
+  a later boundary or encode a later marker. Rewrite it as an ordinary quoted
+  string, for example `'a'\''b'` or `"a'b"`, or drop the escape. An escape-free
+  `$'...'` string is accepted, and heredoc bodies and comments are copied
+  without this check.
 - **End of script.** The end of the input is not a boundary. In a script, a
-  body that never reaches its terminator is copied literally and not reported;
-  in a command recipe the unmatched quote fails the rendered command as an
-  invalid command. Keep the terminator inside the recipe.
+  body that never reaches its terminator is copied literally and not reported.
+  A command recipe additionally runs the rendered command through the `shlex`
+  check, so it fails as an invalid command only when that check finds an
+  unmatched quote in the text. Keep the terminator inside the recipe.
 
 ## Resolve build-graph outputs through the accessors
 

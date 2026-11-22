@@ -3204,17 +3204,18 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   string, such as `$'a\'b'`, is rejected wherever the scanner reads command
   text, because Bash and the POSIX quote rules end it at different quotes and
   every later decision would be made in the wrong quote state. Heredoc bodies
-  and comments are copied without that check, so an ANSI-C string inside a body
-  stays literal. An escape-free `$'...'` string is accepted. A `<<-` heredoc
-  allows a tab-indented delimiter line, and Netsuke strips the leading tabs
-  before comparing it. The delimiter word ends only where the shell's token
-  rule ends it: at an ASCII space, tab, or newline, or at one of `;`, `&`, `|`,
-  `(`, `)`, `<`, and `>`. A non-ASCII space, carriage return, vertical tab, or
-  form feed stays part of the delimiter, so the closing line must spell the
-  complete word. For a delimiter written `EOF` followed by a no-break space and
-  `X`, a body line spelling only `EOF` stays body text, and the heredoc ends
-  only at the line spelling all three components. Netsuke rejects a delimiter
-  form it cannot model rather than guessing; see
+  and comments are copied without that check, so an ANSI-C string there is left
+  to the shell, which may expand it. An escape-free `$'...'` string is
+  accepted. A `<<-` heredoc allows a tab-indented delimiter line, and Netsuke
+  strips the leading tabs before comparing it. The delimiter word ends only
+  where the shell's token rule ends it: at an ASCII space, tab, or newline, or
+  at one of `;`, `&`, `|`, `(`, `)`, `<`, and `>`. A non-ASCII space, carriage
+  return, vertical tab, or form feed stays part of the delimiter, so the
+  closing line must spell the complete word. For a delimiter written `EOF`
+  followed by a no-break space and `X`, a body line spelling only `EOF` stays
+  body text, and the heredoc ends only at the line spelling all three
+  components. Netsuke rejects a delimiter form it cannot model rather than
+  guessing; see
   [Heredoc delimiters and bodies](#heredoc-delimiters-and-bodies). Netsuke also
   rejects a marker that directly follows an unpaired backslash, because that
   backslash would escape the first character of the substituted path; write
@@ -3340,11 +3341,12 @@ boundaries:
   `$'a\'b'`, is rejected wherever command text is scanned: Bash and the POSIX
   quote rules end that string at different quotes, so no later boundary,
   declaration, or marker can be placed reliably. Heredoc bodies and comments
-  are copied without the check. An escape-free `$'...'` string is accepted. The
-  end of the script is not a boundary: in a script, a body that never reaches
-  its terminator is not reported, and the remaining text is copied literally. A
-  command recipe rejects an unmatched quote in that text as an invalid command,
-  so keep the terminator inside the recipe.
+  are copied without the check, so an ANSI-C string there is left to the shell.
+  An escape-free `$'...'` string is accepted. The end of the script is not a
+  boundary: in a script, a body that never reaches its terminator is not
+  reported, and the remaining text is copied literally. A command recipe
+  rejects an unmatched quote in that text as an invalid command, so keep the
+  terminator inside the recipe.
 
 ## Compatibility links for the imported `rstest-bdd` guides
 

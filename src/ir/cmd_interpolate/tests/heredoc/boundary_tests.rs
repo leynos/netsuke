@@ -243,10 +243,11 @@ fn escape_free_ansic_quote_still_lowers(#[case] template: &str) {
 
 // Verify a heredoc body may contain an ANSI-C string without being scanned.
 //
-// Body text is copied before the ANSI-C detector runs, so a command
-// substitution inside the body is inert data to Netsuke. Rejecting it would
-// refuse a body the shell treats literally; the warning about ANSI-C strings
-// therefore applies to scanned command text, not to bodies.
+// Body text is copied before the ANSI-C detector runs, so Netsuke neither
+// rewrites nor rejects the string. The shell still reads the body: an
+// unquoted delimiter expands command substitutions there, and the copied text
+// is what it expands. Rejecting the string would refuse an input the shell
+// accepts, so the detector applies only to scanned command text.
 #[rstest]
 #[case::body_command_substitution("cat <<EOF\n$(printf '%s' $'a\\'b')\nEOF")]
 fn ansic_quote_inside_a_heredoc_body_is_copied(#[case] template: &str) {
