@@ -2605,8 +2605,9 @@ obligations.
   2. `binomial_kernel_matches_closed_form_for_r_up_to_two`: symbolic `u64` `n`,
      `r <= 2`, unwind 3; asserts agreement with `n * (n - 1) / 2` computed in
      `u128` and classified against `MAX`.
-  3. `binomial_kernel_never_panics_for_small_r`: `n <= 2^40`, `r <= 4`,
-     unwind 5.
+  3. `binomial_kernel_never_panics_for_small_r`: `n <= 3` with `r = 4` for
+     the `r > n` shortcut, then `8 <= n <= 64` with `r` of 1 and 2 for the
+     loop, unwind 6.
   4. `falling_factorial_kernel_matches_checked_product`: symbolic `u64` `n`,
      `r <= 4`, unwind 5; asserts agreement with a checked `u128` product.
   5. `admission_never_exceeds_ceiling`: symbolic `Option<u64>` and each
