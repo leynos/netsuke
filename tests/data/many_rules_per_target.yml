@@ -1,0 +1,17 @@
+netsuke_version: "1.0.0"
+targets:
+  - name: hello.o
+    sources: hello.c
+    rule:
+      - rule_11
+      - rule_10
+      - rule_09
+      - rule_08
+      - rule_07
+      - rule_06
+      - rule_05
+      - rule_04
+      - rule_03
+      - rule_02
+      - rule_01
+      - rule_00

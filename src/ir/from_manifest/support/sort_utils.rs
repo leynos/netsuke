@@ -6,6 +6,9 @@
 //! comparisons so the Kani harnesses can verify the orderings with bounded
 //! symbolic input.
 
+#[cfg(all(test, not(kani)))]
+use std::cell::Cell;
+
 use camino::Utf8PathBuf;
 
 use super::super::super::cycle::support::path_eq;
@@ -50,6 +53,7 @@ pub(super) fn sort_strings(values: &mut [String]) {
 /// Order two strings for deterministic rule-name sorting.
 #[cfg(not(kani))]
 fn string_cmp(left: &str, right: &str) -> std::cmp::Ordering {
+    record_string_comparison();
     left.cmp(right)
 }
 
@@ -60,6 +64,37 @@ fn string_cmp(left: &str, right: &str) -> std::cmp::Ordering {
 #[cfg(kani)]
 fn string_cmp(left: &str, right: &str) -> std::cmp::Ordering {
     first_byte_cmp(left, right)
+}
+
+#[cfg(all(test, not(kani)))]
+thread_local! {
+    /// Rule-name comparisons made by the current thread.
+    static STRING_COMPARISONS: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Count one rule-name comparison in test builds.
+#[cfg(all(test, not(kani)))]
+fn record_string_comparison() {
+    STRING_COMPARISONS.with(|count| count.set(count.get() + 1));
+}
+
+/// Skip rule-name comparison counting outside test builds.
+#[cfg(not(all(test, not(kani))))]
+const fn record_string_comparison() {}
+
+/// Reset the test-only rule-name comparison count on this thread.
+///
+/// Sorting tests read a difference, so a count left over from an earlier test
+/// on the same thread would make the measurement meaningless.
+#[cfg(all(test, not(kani)))]
+pub(super) fn reset_string_comparisons() {
+    STRING_COMPARISONS.with(|count| count.set(0));
+}
+
+/// Report how many rule-name comparisons this thread has made.
+#[cfg(all(test, not(kani)))]
+pub(super) fn string_comparisons() -> usize {
+    STRING_COMPARISONS.with(Cell::get)
 }
 
 /// Sort duplicate output paths in place.

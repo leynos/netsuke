@@ -211,6 +211,20 @@ fn ir_cycle_is(world: &TestWorld, path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Assert that the captured `MultipleRules` error reported `count` names.
+#[then("the MultipleRules error reports {count:usize} rule names")]
+fn multiple_rules_error_reports(world: &TestWorld, count: usize) -> Result<()> {
+    let reported = world
+        .generation_rule_count
+        .get()
+        .context("IR generation should have reported a MultipleRules error")?;
+    ensure!(
+        reported == count,
+        "expected the MultipleRules error to report {count} rule names, got {reported}"
+    );
+    Ok(())
+}
+
 #[then("the graph target {target:string} has inputs {paths:string}")]
 fn graph_target_inputs(world: &TestWorld, target: &str, paths: &str) -> Result<()> {
     assert_target_paths(world, target, paths, TargetPathField::Inputs)
@@ -264,6 +278,12 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
         world
             .generation_cycle
             .set(cycle.iter().map(ToString::to_string).collect());
+    }
+    if let Err(error) = &result
+        && let Some(netsuke::ir::IrGenError::MultipleRules { rules, .. }) =
+            error.downcast_ref::<netsuke::ir::IrGenError>()
+    {
+        world.generation_rule_count.set(rules.len());
     }
     let outcome = result.map_err(|error| error.to_string());
     store_parse_outcome(&world.build_graph, &world.generation_error, outcome);

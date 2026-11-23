@@ -35,6 +35,11 @@ Feature: BuildGraph
     When the manifest file "tests/data/multiple_rules_per_target.yml" is compiled to IR
     Then IR generation fails
 
+  Scenario: A long multi-rule selector reports a bounded sample
+    When the manifest file "tests/data/many_rules_per_target.yml" is compiled to IR
+    Then IR generation fails
+    And the MultipleRules error reports 8 rule names
+
   Scenario: Duplicate target outputs
     When the manifest file "tests/data/duplicate_outputs.yml" is compiled to IR
     Then IR generation fails
