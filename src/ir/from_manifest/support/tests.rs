@@ -222,21 +222,47 @@ fn shared_power_shell_lists_reject_a_mid_token_block_comment_opener(
     );
 }
 
-/// Keep a mid-token opener's fail-closed state for the rest of the list.
+/// Keep an unmodelled opener's fail-closed state for the rest of the list.
+///
+/// A mid-token `<#` and a compact comment after a static member access both
+/// leave the scanner unable to model the following text, so the carried state
+/// must reject the next entry's marker.
 #[rstest]
-fn shared_power_shell_lists_keep_fail_closed_after_a_mid_token_opener(en_localizer: EnLocalizer) {
+#[case::mid_token("Write-Output prefix<#")]
+#[case::static_member_comment("[string]::Empty# <# note #>")]
+fn shared_power_shell_lists_keep_fail_closed_after_an_unmodelled_opener(
+    #[case] opener: &str,
+    en_localizer: EnLocalizer,
+) {
     let _localizer = en_localizer;
-    let opener = "Write-Output prefix<#";
     let marker_entry = format!("Copy-Item {INS_TOKEN}");
     let error =
         lower_shared_power_shell_list(Entries::from(&[opener, marker_entry.as_str()][..]), false)
-            .expect_err("a later marker must stay protected after a mid-token opener");
+            .expect_err("a later marker must stay protected after an unmodelled opener");
     let IrGenError::InvalidCommand { command, .. } = &error else {
         panic!("expected an InvalidCommand rejection, got {error:?}");
     };
     assert_eq!(
         command, &marker_entry,
         "the carried fail-closed state must reject the later marker entry"
+    );
+}
+
+/// Accept a marker-free entry whose hash comment follows a block comment.
+///
+/// PowerShell treats `#>` as whitespace, so the apostrophe in `don't` stays
+/// inside the line comment. The comment text still makes later markers fail
+/// closed, but the entry itself has no marker and must lower.
+#[test]
+fn shared_power_shell_lists_accept_a_hash_comment_after_a_block_comment() {
+    let entry = "Write-Output ok <# note #>#  don't";
+    let graph = lower_shared_power_shell_list(Entries::from(&[entry][..]), false)
+        .expect("a hash after a completed block comment starts a valid line comment");
+    let resolved = single_command_entries(&graph);
+    assert_eq!(
+        resolved,
+        [entry],
+        "the completed block comment must not turn the hash into argument text"
     );
 }
 
@@ -300,6 +326,18 @@ fn shared_power_shell_lists_name_the_unfinished_entry_index(en_localizer: EnLoca
 // text and does not set the fail-closed flag.
 #[case::escaped_separator_before_hash(
     &["Write-Output prefix` #", "Write-Output {{ ins }}"][..],
+    "Write-Output '; New-Item pwned; Write-Output x'"
+)]
+// PowerShell treats a completed block comment as whitespace, so the hash that
+// follows `#>` starts a line comment. A comment with no scanner-sensitive text
+// leaves the carry neutral.
+#[case::block_comment_end_before_hash(
+    &["Write-Output ok <# note #># note", "Write-Output {{ ins }}"][..],
+    "Write-Output '; New-Item pwned; Write-Output x'"
+)]
+// Two adjacent block comments are both comments, so the entry ends neutral.
+#[case::adjacent_block_comments(
+    &["Write-Output ok <# a #><# b #> tail", "Write-Output {{ ins }}"][..],
     "Write-Output '; New-Item pwned; Write-Output x'"
 )]
 fn shared_power_shell_lists_accept_entries_that_end_neutral(

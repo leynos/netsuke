@@ -50,6 +50,11 @@ pub(in crate::ir::cmd_interpolate::substitution) struct PowerShellLexicalState {
     block_comment_depth: usize,
     /// Record a final backtick that would escape the character following the entry.
     has_trailing_escape: bool,
+    /// Record the source position immediately after a recognised `#>`.
+    ///
+    /// PowerShell treats a completed block comment as whitespace, so that
+    /// position begins a token even though the preceding character is `>`.
+    block_comment_end_position: Option<usize>,
 }
 
 /// Classify the current character while a here-string may be active.

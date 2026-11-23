@@ -672,13 +672,43 @@ A `shared` PowerShell `command` list runs as one script, so PowerShell parses
 each entry where the previous one stopped. An entry that ends inside a single-
 or double-quoted string, a here-string, a block comment, a `$()` substitution,
 or a trailing backtick escape is now rejected, because the next entry's path
-literal would otherwise be parsed inside that region. Close the region within
-its entry, or merge the entries into one. Comment openers are recognized only
-at an unescaped token boundary: a backtick-escaped separator before `<#` is not
-a comment opener, so a marker that follows one fails closed. An escaped `<` and
-a `#` after an escaped separator start no region, so the text after either
-stays argument text. See the [users' guide](users-guide.md#author-a-manifest)
-for the full shared-list contract.
+literal would otherwise be parsed inside that region. Close the region inside
+its entry and keep the marker at an unquoted site. Merging the entries alone
+does not help when the merged text still places the marker inside the quoted
+region.
+
+Before, the first entry leaves a double-quoted string open and the second
+entry's marker is parsed inside it:
+
+```yaml
+targets:
+  - name: out.txt
+    sources: input.txt
+    command:
+      - Write-Output "prefix
+      - Copy-Item {{ ins }} {{ outs }}
+```
+
+After, the quote closes in the first entry, so the marker is lowered at its own
+unquoted site:
+
+```yaml
+targets:
+  - name: out.txt
+    sources: input.txt
+    command:
+      - Write-Output "prefix"
+      - Copy-Item {{ ins }} {{ outs }}
+```
+
+Comment openers are recognized only at an unescaped token boundary: a
+backtick-escaped separator before `<#` is not a comment opener, so a marker
+that follows one fails closed. An escaped `<` and a `#` after an escaped
+separator start no region, so the text after either stays argument text. A
+completed block comment counts as whitespace, so a `#` or `<#` immediately after
+`#>` starts a comment of that kind. See the
+[users' guide](users-guide.md#author-a-manifest) for the full shared-list
+contract.
 
 ## Replace script `$in` and `$out` path substitution
 

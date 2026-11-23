@@ -92,6 +92,7 @@ impl PowerShellLexicalState {
             has_variable_assignment_since_boundary: false,
             block_comment_depth: 0,
             has_trailing_escape: false,
+            block_comment_end_position: None,
         }
     }
 

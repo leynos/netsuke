@@ -136,8 +136,9 @@
   instead of letting the next entry's path literal be reclassified as
   executable syntax. Comment openers are recognized only at an unescaped token
   boundary, so a backtick-escaped separator cannot turn a later `<#` into a
-  comment that hides a marker (CWE-78)
-  ([#993](https://github.com/leynos/netsuke/issues/993))
+  comment that hides a marker; compact comments after static member access such
+  as `[string]::Empty#` are tracked, and a completed block comment counts as
+  whitespace (CWE-78) ([#993](https://github.com/leynos/netsuke/issues/993))
 
 <!-- markdownlint-disable-next-line MD024 -->
 ### Fixed

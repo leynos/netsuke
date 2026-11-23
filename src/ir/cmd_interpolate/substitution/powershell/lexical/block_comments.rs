@@ -27,12 +27,32 @@ impl PowerShellLexicalState {
     }
 
     /// Record that the block comment's terminating `#>` was read.
-    const fn close_block_comment(&mut self) {
+    const fn close_block_comment(&mut self, position: usize) {
         self.block_comment_depth = 0;
+        self.block_comment_end_position = Some(position);
+    }
+
+    /// Report whether `position` immediately follows a recognised `#>`.
+    pub(super) const fn follows_block_comment_end(&self, position: usize) -> bool {
+        matches!(self.block_comment_end_position, Some(end) if end == position)
     }
 }
 
 impl SubstitutionTraversal<'_, '_> {
+    /// Report whether PowerShell can begin a token at this character.
+    ///
+    /// A completed block comment counts as whitespace, so the character after
+    /// `#>` begins a token even though the raw preceding character is `>`.
+    pub(super) fn follows_power_shell_token_boundary(
+        &self,
+        character: PowerShellSourceCharacter<'_>,
+    ) -> bool {
+        character.is_token_boundary()
+            || self
+                .power_shell_lexical
+                .follows_block_comment_end(character.position())
+    }
+
     /// Open a block comment at an unquoted PowerShell token boundary.
     ///
     /// Callers reach this check only outside here-strings, line comments, and
@@ -50,7 +70,9 @@ impl SubstitutionTraversal<'_, '_> {
         if !self.matches_unquoted_quote_context() || !character.starts_block_comment() {
             return None;
         }
-        if self.power_shell_lexical.is_in_ambiguous_comment() || !character.is_token_boundary() {
+        if self.power_shell_lexical.is_in_ambiguous_comment()
+            || !self.follows_power_shell_token_boundary(character)
+        {
             self.power_shell_lexical.note_unmodelled_syntax();
             return None;
         }
@@ -77,7 +99,7 @@ impl SubstitutionTraversal<'_, '_> {
             ));
         }
         if character.ends_block_comment() {
-            self.power_shell_lexical.close_block_comment();
+            self.power_shell_lexical.close_block_comment(pos + 2);
             self.output.push('#');
             self.output.push('>');
             return Ok(pos + 2);

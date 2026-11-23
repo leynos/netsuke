@@ -413,15 +413,15 @@ Review found that compact expressions such as `$x=1+#`, `$n=$s.Length#`, and
 `$x=5#` could place a comment marker after an attached operator, member
 expression, or numeric literal. The classifier in
 `hash_follows_ambiguous_expression_boundary` recognizes hashes after assignment
-and closing-bracket characters, unbraced variables, member access, postfix
-`++`/`--`, redirection, arithmetic operators following a variable assignment,
-and numeric literals at token or assignment boundaries. A later marker fails
-closed if the comment text contains quotes, backticks, `$()`, a here-string
-opener, a stop-parsing token, or a block-comment opener. Generic argument
-hashes such as `foo*#` remain ordinary token text, so a later balanced quoted
-argument does not trigger rejection. This keeps the partial scanner fail-closed
-where PowerShell comment syntax can desynchronize it without rejecting
-unrelated argument text.
+and closing-bracket characters, unbraced variables, instance and static member
+access, postfix `++`/`--`, redirection, arithmetic operators following a
+variable assignment, and numeric literals at token or assignment boundaries. A
+later marker fails closed if the comment text contains quotes, backticks,
+`$()`, a here-string opener, a stop-parsing token, or a block-comment opener.
+Generic argument hashes such as `foo*#` remain ordinary token text, so a later
+balanced quoted argument does not trigger rejection. This keeps the partial
+scanner fail-closed where PowerShell comment syntax can desynchronize it
+without rejecting unrelated argument text.
 
 The change fixes issue #846's PowerShell script placeholder injection finding:
 the quoted-context path bindings are standalone literals, so any scanner

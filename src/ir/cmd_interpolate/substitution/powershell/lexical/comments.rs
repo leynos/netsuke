@@ -50,7 +50,7 @@ impl SubstitutionTraversal<'_, '_> {
     ) -> bool {
         character.value() == '#'
             && self.matches_unquoted_quote_context()
-            && character.is_token_boundary()
+            && self.follows_power_shell_token_boundary(character)
     }
 
     /// Identify a mid-token hash after expression syntax that may start a comment.

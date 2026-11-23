@@ -3387,21 +3387,22 @@ backtick. PowerShell scripts do not treat comments as inert regions: plain
 line-comment text leaves later markers eligible for interpolation, while
 scanner-sensitive syntax after a comment boundary or any mid-token `#` can make
 later markers fail closed. This includes a block-comment opener, quotes,
-backticks, or substitution syntax. In particular, an apostrophe in a comment
-may make a later marker fail closed. POSIX and Bash script lowering retains
-comments and multiline shell syntax and uses the script-only
-`ScriptSubstitutionTraversal`; it encodes markers for unquoted, single-quoted,
-and double-quoted sites while rejecting protected command substitutions. The
-PowerShell comment-boundary recognizer keeps binary and hexadecimal radix
-prefixes paired with their digit bases in a private enum owned by the numeric
-literal scanner. Only that scanner selects the enum when validating a token;
-the type is not a shared shell API, and scanner callers compose character
-boundaries rather than passing arbitrary prefix/base strings. PowerShell also
-rejects markers in raw native-command arguments after an unquoted `--%` until a
-newline or pipeline; a semicolon does not end that region. Pipeline detection
-models ASCII double quotes only; a single quote, backtick, or typographic quote
-in the raw region makes later markers fail closed. The private
-`PowerShellLexicalState` in
+backticks, or substitution syntax; a compact comment after a static member
+access such as `[string]::Empty#` counts as a mid-token hash. In particular, an
+apostrophe in a comment may make a later marker fail closed. POSIX and Bash
+script lowering retains comments and multiline shell syntax and uses the
+script-only `ScriptSubstitutionTraversal`; it encodes markers for unquoted,
+single-quoted, and double-quoted sites while rejecting protected command
+substitutions. The PowerShell comment-boundary recognizer keeps binary and
+hexadecimal radix prefixes paired with their digit bases in a private enum
+owned by the numeric literal scanner. Only that scanner selects the enum when
+validating a token; the type is not a shared shell API, and scanner callers
+compose character boundaries rather than passing arbitrary prefix/base strings.
+PowerShell also rejects markers in raw native-command arguments after an
+unquoted `--%` until a newline or pipeline; a semicolon does not end that
+region. Pipeline detection models ASCII double quotes only; a single quote,
+backtick, or typographic quote in the raw region makes later markers fail
+closed. The private `PowerShellLexicalState` in
 `src/ir/cmd_interpolate/substitution/powershell/lexical/mod.rs` tracks
 here-string bodies, block-comment state, and typographic-quote fail-closed
 state, while `PowerShellStopParsingState` tracks raw native-command arguments.
@@ -3426,9 +3427,11 @@ after it inside the current argument token, so a `<#` after an escaped
 separator is not a comment opener and likewise fails closed. A `<` that a
 backtick escapes is copied as argument text, and a `#` after an escaped
 separator starts no line comment, so the text after either remains argument
-text. The check is deliberately a boundary check over the regions the scanner
-models, not a complete PowerShell parser; RFC 0036 carries the longer-term
-harmonization under version-matched grammar.
+text. A completed block comment counts as whitespace, so a `#` or `<#`
+immediately after `#>` starts a comment of that kind. The check is deliberately
+a boundary check over the regions the scanner models, not a complete PowerShell
+parser; RFC 0036 carries the longer-term harmonization under version-matched
+grammar.
 
 In `command:` recipes on the POSIX and Bash routes, unbalanced backticks or
 command text that `shlex` cannot parse produce an IR error before an action is

@@ -144,8 +144,14 @@ impl<'source> PowerShellSourceCharacter<'source> {
         }
         self.previous()
             .is_some_and(|previous| matches!(previous.value(), '=' | ']'))
-            || self.hash_follows_unbraced_variable()
+            || self.hash_follows_expression_suffix(has_variable_assignment_before_operator)
+    }
+
+    /// Report whether a mid-token hash follows an expression form that can comment.
+    fn hash_follows_expression_suffix(self, has_variable_assignment_before_operator: bool) -> bool {
+        self.hash_follows_unbraced_variable()
             || self.hash_follows_variable_member_access()
+            || self.hash_follows_static_member_access()
             || self.hash_follows_postfix_operator()
             || self.hash_follows_expression_operator(has_variable_assignment_before_operator)
             || numeric_literals::hash_follows_numeric_literal(self)
@@ -193,7 +199,6 @@ impl<'source> PowerShellSourceCharacter<'source> {
             .previous()
             .is_some_and(Self::ends_with_unescaped_variable_expression)
     }
-
     /// Report whether this variable name immediately follows an unescaped `$`.
     fn is_unescaped_variable_name_start(self) -> bool {
         self.variable_name_start()
