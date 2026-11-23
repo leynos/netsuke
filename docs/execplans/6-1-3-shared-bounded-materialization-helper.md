@@ -1275,6 +1275,26 @@ conflict in `Decision log`, and escalate.
       case counts move again because the replay brought `main`'s #1164 and
       #1060, which add tests to the same suites.
 
+  - Plan-owner rulings and the fourth replay (2026-11-23). The plan owner
+    accepted D-22's overage, D-23's whole-suite Kani bound, and D-29's third
+    proof step, and ratified D-25's proof coverage in CI. Each decision entry
+    carries an amendment recording the acceptance, so no rejected deviation
+    remains to resolve. `main` had advanced to `680fee33f` by then — #1141,
+    #1159, #1168, #1172, #1056, #1142, and #1131 — so the branch was replayed
+    onto it. #1056 added ADR-0085, which leaves this branch's 0084 free; the
+    `docs/contents.md` conflict recurred at each of the four commits that touch
+    that file and was resolved each time by keeping both sides' rows, and the
+    out-of-order index the last resolution produced was corrected in
+    `ceda48b94`. Two of `main`'s new commits touch files this branch also
+    changes — `src/stdlib/mod.rs` and `tests/bdd/fixtures/mod.rs` — and Weave
+    merged them cleanly, with one advisory that both sides add different fields
+    to the shared `TestWorld` struct. The delta against the new base
+    re-measures at 3,387 added and 1 deleted Rust lines across 54 changed
+    files. Acceptance evidence for the final commit is reported in the
+    pull-request comment that announces the rulings rather than in a further
+    commit, following the assessment's guidance that reporting the results
+    outside the commit discharges the final-commit requirement.
+
 ## Surprises & discoveries
 
 - Observation: `serde_json` 1.0.154 starts `remaining_depth` at 128 and
@@ -1811,7 +1831,12 @@ conflict in `Decision log`, and escalate.
   comment repair in `fd6a8239b` adds three net lines, so the figure is now
   3,387 added and 1 deleted, a net 3,386 — 1,386 over the bar. The file counts
   are unchanged. The breach, its breakdown, and the request for the owner's
-  acceptance stand unchanged.
+  acceptance stand unchanged. Eighth amendment of 2026-11-23: the plan owner
+  accepted the overage. Re-measured against the comparison base in force,
+  `680fee33f`, the figure is unchanged at 3,387 added and 1 deleted, a net
+  3,386 — 1,386 over the bar — and the file counts remain 54 changed, 39 with
+  the Verus crate and mutation patches excluded, and 33 with the snapshots
+  excluded too.
 - D-23. Decision: correct the Kani stopping condition rather than leave a cap
   the runs did not obey, and state the two measurements it conflated. The
   correction is recorded here; whether the whole-suite exception is acceptable
@@ -1854,7 +1879,9 @@ conflict in `Decision log`, and escalate.
   comment carries the measurement it was sized from. The residual risk is
   recorded rather than hidden — on a cold target this gate will time out on a
   host this loaded, and the recorded measurement understates that host by
-  roughly seven times. Date/Author: 2026-11-16.
+  roughly seven times. Date/Author: 2026-11-16. Amendment of 2026-11-23: the
+  plan owner accepted the whole-suite exception. The per-harness eight-minute
+  budget and the wider whole-suite bound stand as the correction states them.
 - D-25. Decision: run both repository proofs in `.github/workflows/proofs.yml`
   rather than leave the second one unrun by CI, and record that as a deliberate
   deviation from the constraint that Verus stays outside CI gates. Rationale:
@@ -1881,7 +1908,10 @@ conflict in `Decision log`, and escalate.
   kernel change would report success for a transcription nothing compared
   against the new code, which is a weaker claim than no claim at all; the
   correspondence limit belongs in the design record, where it already is, and
-  the weekly schedule is what catches a proof that stops compiling.
+  the weekly schedule is what catches a proof that stops compiling. Amendment
+  of 2026-11-23: the plan owner ratified the deviation. The workflow keeps
+  running every proof under `verus/`, and the ordinary pull-request gates
+  continue to run none of them.
 - D-26. Decision: renumber this branch's ADR from 0075 to 0082, because `main`
   allocated 0075 to *Manifest schema versions and admission* when
   [#808](https://github.com/leynos/netsuke/pull/808) merged on 2026-11-16.
@@ -1943,7 +1973,8 @@ conflict in `Decision log`, and escalate.
   the 30-minute timeout unchanged, and the invocation is the one the
   developers' guide already documents. The change ships because a workflow
   whose own header is false is the worse failure, and hosted CI validates the
-  new step on this candidate. Date/Author: 2026-11-20.
+  new step on this candidate. Date/Author: 2026-11-20. Amendment of 2026-11-23:
+  the plan owner adopted the third step.
 
 ## Outcomes & retrospective
 
