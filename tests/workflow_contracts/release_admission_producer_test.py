@@ -49,6 +49,8 @@ LINUX_CANARIES = (
 WINDOWS_CANARIES = ("ortho-config-windows",)
 #: The sparse checkout every canary job makes: the action and its scripts only.
 CANARY_CHECKOUT = {
+    "repository": "leynos/netsuke",
+    "ref": "${{ job.workflow_sha }}",
     "sparse-checkout": "/.github/actions/\n/scripts/\n",
     "sparse-checkout-cone-mode": False,
     "persist-credentials": False,

@@ -293,8 +293,10 @@ fn dry_run_offers_a_manual_rehearsal_of_the_whole_release() -> Result<()> {
         .context("the dry run should configure the release workflow")?;
 
     ensure!(
-        dispatch_input.is_some(),
-        "a manual rehearsal should accept a candidate ref"
+        dispatch_input
+            .and_then(YamlValue::as_mapping)
+            .is_some_and(|input| text(input, "default") == "auto"),
+        "a manual rehearsal should benchmark the release candidate by default"
     );
     ensure!(
         mapping_value(with, "dry-run").and_then(YamlValue::as_bool) == Some(true),

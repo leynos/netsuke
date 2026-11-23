@@ -12,11 +12,12 @@ name: Release Dry Run
       candidate-ref:
         description: >-
           Netsuke ref for the downstream canaries to build: a tag, commit, or
-          branch name. Empty builds the selected ref; `auto` picks the newest
-          `-rcN` tag, or `main` when a later version tag exists.
+          branch name. The default, `auto`, benchmarks the newest `-rcN` tag,
+          or `main` when a later version tag exists; empty builds the
+          selected ref.
         required: false
         type: string
-        default: ''
+        default: auto
 
 # A newer push to a pull request cancels the run it supersedes. Other events
 # never cancel: each `main` push, dispatch or schedule falls back to its own

@@ -746,6 +746,14 @@ jobs:
           # patterns check out no root file: Cargo and rustup read
           # `.cargo/config.toml` and `rust-toolchain.toml` from every ancestor
           # of the downstream checkout, so Netsuke's own must not be there.
+          #
+          # This repository at the workflow's own commit, never the caller's
+          # checkout: the provenance the evidence producer trusts must come
+          # from this action, so a reusable-workflow caller cannot substitute
+          # one that reports passing gates it never ran. The candidate itself
+          # is fetched by the installer at the resolved commit.
+          repository: leynos/netsuke
+          ref: ${{ job.workflow_sha }}
           sparse-checkout: |
             /.github/actions/
             /scripts/
@@ -795,7 +803,10 @@ jobs:
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
-          # The same sparse layout as the Linux canaries, for the same reason.
+          # The same pinned, sparse layout as the Linux canaries, for the same
+          # reasons.
+          repository: leynos/netsuke
+          ref: ${{ job.workflow_sha }}
           sparse-checkout: |
             /.github/actions/
             /scripts/

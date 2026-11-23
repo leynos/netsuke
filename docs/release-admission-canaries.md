@@ -8,11 +8,14 @@ repositories have materially different Makefile shapes, so together they test
 task-graph replacement on real build orchestration rather than on Netsuke's own
 manifests and quality gates.
 
-A canary failure blocks publication only when it exposes a defect in behaviour
-that v0.1.0 already claims to support. A missing ergonomic feature is a
-narrowly scoped follow-up, such as [#572][issue-572], or v0.2.0 RFC work; it is
-never a reason to weaken the canary or add manifest syntax to the hardening
-release.
+Admission is fail-closed: every canary that did not pass against the release
+commit, for whatever reason, is declared a failure and blocks publication. Its
+triage is separate. A failure that exposes a defect in behaviour v0.1.0 already
+claims to support blocks the release until that defect is fixed; an
+infrastructure failure is diagnosed and rerun, not reported as a product
+defect. A missing ergonomic feature is a narrowly scoped follow-up, such as
+[#572][issue-572], or v0.2.0 RFC work; it is never a reason to weaken the
+canary or add manifest syntax to the hardening release.
 
 ## How the canaries run
 
@@ -27,7 +30,10 @@ every canary:
    from Netsuke, sparsely and with no root file, because Cargo and rustup read
    `.cargo/config.toml` and `rust-toolchain.toml` from every ancestor
    directory; a full Netsuke checkout above `downstream/` would build it with
-   Netsuke's development `mold` flags and pinned nightly.
+   Netsuke's development `mold` flags and pinned nightly. That checkout is
+   `leynos/netsuke` at the workflow's own commit (`job.workflow_sha`), never a
+   reusable-workflow caller's, so the provenance the evidence producer trusts
+   always comes from this action.
 2. Build the candidate with the
    [release-candidate installer][installer], which fetches the exact commit,
    builds it in the shipped release shape, and refuses a binary that reports a
@@ -41,9 +47,12 @@ The candidate is resolved once per run by `release-candidate`, using
 `.github/scripts/resolve_release_candidate.py`:
 
 - A tag release and a pull request's dry run build the commit the run is for.
-- A manual rehearsal builds the ref selected in the Actions UI, unless its
-  `candidate-ref` input names another ref. `auto` selects the newest `-rcN` tag
-  while it is also the newest version tag, and otherwise `main`.
+- A manual rehearsal benchmarks the release candidate by default: its
+  `candidate-ref` input defaults to `auto`, which selects the newest `-rcN` tag
+  while it is also the newest version tag, and otherwise `main`. It may instead
+  name another ref, or be emptied to build the ref selected in the Actions UI.
+  Admission only ever counts canaries that built the run's own commit, so a
+  rehearsal of another candidate reports them as failures in observation mode.
 
 The canaries run on every tag release and every manual rehearsal. On a pull
 request they run only when the pull request is marked ready for review, since

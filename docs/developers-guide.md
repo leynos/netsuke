@@ -1770,18 +1770,20 @@ targets, and the retained Makefile boundaries; this section covers the tooling.
 - `.github/scripts/resolve_release_candidate.py` resolves the candidate in the
   `release-candidate` job. It builds the run's own commit by default. The
   `candidate-ref` input of `release.yml`, exposed by the dry run's manual
-  trigger, names another ref, or `auto`: the newest `-rcN` tag while it is also
-  the newest version tag by SemVer precedence, and otherwise `main`. It
-  publishes the commit, the version that commit's `Cargo.toml` declares, and
-  the selecting rule.
+  trigger with the default `auto`, names another ref, or `auto`: the newest
+  `-rcN` tag while it is also the newest version tag by SemVer precedence, and
+  otherwise `main`. It publishes the commit, the version that commit's
+  `Cargo.toml` declares, and the selecting rule.
 - The [downstream-canary action][downstream-canary-action] is the shared
-  bootstrap. The caller checks out only `.github/actions/` and `scripts/`, in
-  non-cone sparse mode so no root file arrives, because Cargo and rustup read
-  `.cargo/config.toml` and `rust-toolchain.toml` from every ancestor and the
-  downstream checkout must not inherit Netsuke's development flags or
-  toolchain. That keeps the action at its own workspace-relative path, which
-  the shared `cv005-contracts` closure check resolves. The action reaches its
-  scripts through `GITHUB_ACTION_PATH`.
+  bootstrap. The caller checks out only `.github/actions/` and `scripts/` from
+  `leynos/netsuke` at `job.workflow_sha`, so a reusable-workflow caller cannot
+  substitute an action that forges provenance, in non-cone sparse mode so no
+  root file arrives, because Cargo and rustup read `.cargo/config.toml` and
+  `rust-toolchain.toml` from every ancestor and the downstream checkout must
+  not inherit Netsuke's development flags or toolchain. That keeps the action
+  at its own workspace-relative path, which the shared `cv005-contracts`
+  closure check resolves. The action reaches its scripts through
+  `GITHUB_ACTION_PATH`.
 - The [install-release-candidate action][release-candidate-action] builds the
   candidate. It fetches the exact `revision`, verifies the resolved commit,
   builds with `RUSTFLAGS` assigned as `make release` does, so the development
@@ -3353,10 +3355,10 @@ producer, `stale_evidence` says a timestamp fell outside the bounded window, and
 `unknown` says a result reported a non-success outcome. Those two refuse
 different things: a mismatched document can be corrected, while an
 unattributable one has to be replaced by a producer the run trusts. Presence is
-required only for the two canary names in `policy.REQUIRED_RESULTS`; success is
-required of every result the manifest declares, so a producer that adds a
-downstream canary can report it without a change here, while a reported failure
-is refused rather than ignored. The earlier operations add `api_error`,
+required for every name in `policy.REQUIRED_RESULTS`, the two RFC 0005 results
+and each downstream canary; success is required of every result the manifest
+declares, so a further result a producer reports is checked too, and a reported
+failure is refused rather than ignored. The earlier operations add `api_error`,
 `fetch_error`, `timeout`, and `mismatch`. An operator fixes each in a different
 place, which is why they are separate words rather than one failure. The gate
 publishes six outputs — `gate-outcome`, `gate-error-category`, `enforcement`,
