@@ -11,6 +11,7 @@ use netsuke::{
     manifest,
 };
 use rstest::rstest;
+use test_support::fluent::normalize_fluent_isolates;
 use test_support::{localizer_test_lock, set_en_localizer};
 
 /// Names the diagnostic is documented to report before summarising the rest.
@@ -38,7 +39,12 @@ fn lower(source: &str) -> Result<std::result::Result<BuildGraph, IrGenError>> {
     Ok(BuildGraph::from_manifest(&manifest))
 }
 
-/// Report the target and rule names a multi-name selector produced.
+/// Report the target, rule names and rendered message a multi-name selector
+/// produced.
+///
+/// Fluent isolates every placeable with direction marks, which would sit
+/// between a numeral and its noun; the message is normalised so assertions can
+/// read it as prose.
 fn multiple_rules(source: &str) -> Result<(String, Vec<String>, String)> {
     let error = lower(source)?
         .err()
@@ -51,7 +57,11 @@ fn multiple_rules(source: &str) -> Result<(String, Vec<String>, String)> {
     else {
         anyhow::bail!("expected MultipleRules, got {error:?}");
     };
-    Ok((target_name, rules, message.to_string()))
+    Ok((
+        target_name,
+        rules,
+        normalize_fluent_isolates(&message.to_string()),
+    ))
 }
 
 /// Report every supplied name in ascending order, duplicates included.
