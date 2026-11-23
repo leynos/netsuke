@@ -932,6 +932,11 @@ quoting disagrees with the shell:
   ``printf '%s' `printf %s $(printf x` {{ ins }}``.
 - A backslash that would consume the first character of a marker inside a
   backtick body, as in ``printf '%s' `printf %s \{{ ins }}` ``.
+- A marker that relies on a parenthesis in a backtick body closing the `$()`
+  that owns the backtick, as in
+  ``printf '%s' "$( (printf %s `printf x)`) {{ ins }} )"``. The body's
+  parentheses group its own commands, so the owning substitution stays open and
+  the marker is rejected as protected.
 
 Move the marker outside the substitution, or rewrite the nesting so each
 backtick closes inside the region that opened it.

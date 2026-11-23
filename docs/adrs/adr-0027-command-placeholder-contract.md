@@ -695,13 +695,17 @@ character literal, so an escaped `)` cannot close a frame, and in the body's
 single quotes a backslash has no special meaning, so it cannot swallow the
 quote that closes them. A number sign in unquoted body text starts a comment in
 the body's own parse; it runs to the newline, or to the closing backtick when
-that comes first, and a `)` inside it is data rather than a frame closer. A
-backslash before a newline continues the line in unquoted and double-quoted
-body text, so that newline still belongs to the open command line and must not
-start a heredoc body queued earlier on it. A literal newline in the body's
-single quotes is body data for the same reason: the shell begins a queued
-heredoc only at the newline token that ends the declaring command, so no
-newline inside a backtick body, nor inside quoted script text, starts one.
+that comes first, and a `)` inside it is data rather than a frame closer.
+Parentheses in the body group commands of that region and never move the depth
+of the `$()` that owns the backtick, so a body `)` cannot stand in for the
+owner's group closer; a marker that would then sit inside the still-open `$()`
+is rejected as protected. A backslash before a newline continues the line in
+unquoted and double-quoted body text, so that newline still belongs to the open
+command line and must not start a heredoc body queued earlier on it. A literal
+newline in the body's single quotes is body data for the same reason: the shell
+begins a queued heredoc only at the newline token that ends the declaring
+command, so no newline inside a backtick body, nor inside quoted script text,
+starts one.
 
 Nesting that would leave the saved context without its owner fails closed with
 `IrGenError::InvalidCommand`; it is not approximated. Two shapes are rejected:

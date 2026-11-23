@@ -224,6 +224,14 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         if self.starts_command_substitution(pos, ch) {
             return Some(ScriptCommandSubstitutionDelimiter::Start);
         }
+        // A backtick body is its own command region. Its parentheses group
+        // commands inside that region, so they must not move the depth of the
+        // `$()` frame that owns the backtick: doing so would let a body `)`
+        // stand in for the owner's closer and leave a later marker encoded for
+        // a quoting the shell does not use.
+        if self.is_backtick_body_text() {
+            return None;
+        }
         if self.is_unquoted_command_substitution() && ch == '(' {
             return Some(ScriptCommandSubstitutionDelimiter::NestedOpen);
         }
@@ -231,6 +239,12 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             return Some(ScriptCommandSubstitutionDelimiter::Close);
         }
         None
+    }
+
+    /// Report whether the cursor sits directly in an open backtick body.
+    fn is_backtick_body_text(&self) -> bool {
+        self.backtick_region
+            .is_some_and(|region| region.owner_depth == self.command_substitutions.len())
     }
 
     /// Return whether `ch` opens an unquoted POSIX `$()` command substitution.

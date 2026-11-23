@@ -30,6 +30,8 @@ pub(super) enum Case {
     ExposedSubstitutionAfterEscapedDollar,
     /// A comment inside the body hides the parenthesis on its line.
     CommentInsideBodyHidesParenthesis,
+    /// A body parenthesis must not stand in for the group closer.
+    BodyParenthesisInsideGroupedSubstitution,
     /// A single-quoted `\\` pair before a quoted parenthesis is literal.
     DoubleBackslashInSingleQuotesBeforeParenthesis,
     /// A single-quoted `\\` pair in a `$()` frame in the body is literal.
@@ -104,6 +106,9 @@ impl Case {
             Self::CommentInsideBodyHidesParenthesis => {
                 format!("printf '%s' $(printf %s `printf x # )\n`) {INS_TOKEN}")
             }
+            Self::BodyParenthesisInsideGroupedSubstitution => {
+                format!(r#"printf '%s' "$( (printf %s `printf x)`) {INS_TOKEN} )""#)
+            }
             Self::DoubleBackslashInSingleQuotesBeforeParenthesis => {
                 format!(r"printf '<%s>\n' $(printf %s `printf %s '\\' ')'`) {INS_TOKEN}")
             }
@@ -170,7 +175,8 @@ impl Case {
             | Self::BackslashBeforeBodyQuote
             | Self::FrameClosesBeforeBacktick
             | Self::BacktickClosesBeforeSubstitution
-            | Self::MarkerInsideOpenBacktick => Outcome::Rejects,
+            | Self::MarkerInsideOpenBacktick
+            | Self::BodyParenthesisInsideGroupedSubstitution => Outcome::Rejects,
             Self::TopLevelBacktickInsideDoubleQuotes => Outcome::Lowers(Encoding::DoubleQuoted),
             _ => Outcome::Lowers(Encoding::Unquoted),
         }
@@ -191,6 +197,9 @@ impl Case {
                 "a substitution exposed by an escaped dollar sign"
             }
             Self::CommentInsideBodyHidesParenthesis => "a comment hiding a body parenthesis",
+            Self::BodyParenthesisInsideGroupedSubstitution => {
+                "a body parenthesis inside a grouped substitution"
+            }
             Self::DoubleBackslashInSingleQuotesBeforeParenthesis => {
                 "a single-quoted \\\\ pair before a quoted parenthesis"
             }

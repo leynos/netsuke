@@ -276,21 +276,35 @@ fn placeholders_inside_backticks_are_rejected_before_backend_escaping() -> Resul
     Ok(())
 }
 
-/// Verify a `$()` that closes before its backtick is rejected at lowering.
+/// Verify a backtick region cannot be closed by text that only looks like it.
 ///
-/// The saved backtick context belongs to the `$()` region that opened it. Once
-/// that region has closed there is no correct region to restore, so lowering
-/// must fail closed rather than let a later marker inherit corrupted state.
+/// Each case is a script the traversal must refuse: the body of a backtick is
+/// its own command region, so a `)` in it cannot move the depth of the `$()`
+/// that owns the backtick, and a `$()` that closes before its backtick leaves
+/// the saved context with no region to restore. Both fail with
+/// `IrGenError::InvalidCommand` rather than lowering a command whose quoting
+/// disagrees with the shell.
 #[rstest]
-fn mismatched_backtick_and_command_substitution_nesting_is_rejected() -> Result<()> {
-    let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: |\n      printf '%s' $(printf %s `printf x) printf y` {{ ins }}\n",
-    )?;
-    let error = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)
-        .expect_err("a $() that closes before its backtick must fail closed");
+#[case::frame_closes_before_backtick(
+    "printf '%s' $(printf %s `printf x) printf y` {{ ins }}",
+    "a $() that closes before its backtick must fail closed"
+)]
+#[case::body_parenthesis_in_group(
+    "printf '%s' \"$( (printf %s `printf x)`) {{ ins }} )\"",
+    "a body parenthesis must not close the owning substitution"
+)]
+fn mismatched_backtick_nesting_is_rejected(
+    #[case] script: &str,
+    #[case] expectation: &str,
+) -> Result<()> {
+    let manifest = manifest::from_str(&format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'a; touch injected; echo b'\n    script: |\n      {script}\n"
+    ))?;
+    let error =
+        BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix).expect_err(expectation);
     ensure!(
         matches!(error, netsuke::ir::IrGenError::InvalidCommand { .. }),
-        "unexpected error: {error:?}"
+        "{expectation}: unexpected error: {error:?}"
     );
     Ok(())
 }

@@ -207,6 +207,7 @@ fn script_marker_after_backtick_in_command_substitution_uses_owning_region(
 #[case::double_backslash_single_quotes(Case::DoubleBackslashInSingleQuotes)]
 #[case::exposed_substitution(Case::ExposedSubstitutionAfterEscapedDollar)]
 #[case::comment_hides_parenthesis(Case::CommentInsideBodyHidesParenthesis)]
+#[case::body_parenthesis_in_group(Case::BodyParenthesisInsideGroupedSubstitution)]
 #[case::double_backslash_single_quotes_parenthesis(
     Case::DoubleBackslashInSingleQuotesBeforeParenthesis
 )]
