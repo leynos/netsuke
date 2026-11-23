@@ -228,14 +228,17 @@ fn shared_power_shell_lists_reject_a_mid_token_block_comment_opener(
 /// leave the scanner unable to model the following text, so the carried state
 /// must reject the next entry's marker.
 #[rstest]
-#[case::mid_token("Write-Output prefix<#")]
-#[case::static_member_comment("[string]::Empty# <# note #>")]
+#[case::mid_token_inputs("Write-Output prefix<#", Marker::Inputs)]
+#[case::mid_token_outputs("Write-Output prefix<#", Marker::Outputs)]
+#[case::static_member_inputs("[string]::Empty# <# note #>", Marker::Inputs)]
+#[case::static_member_outputs("[string]::Empty# <# note #>", Marker::Outputs)]
 fn shared_power_shell_lists_keep_fail_closed_after_an_unmodelled_opener(
     #[case] opener: &str,
+    #[case] marker: Marker,
     en_localizer: EnLocalizer,
 ) {
     let _localizer = en_localizer;
-    let marker_entry = format!("Copy-Item {INS_TOKEN}");
+    let marker_entry = format!("Copy-Item {}", marker.token());
     let error =
         lower_shared_power_shell_list(Entries::from(&[opener, marker_entry.as_str()][..]), false)
             .expect_err("a later marker must stay protected after an unmodelled opener");
