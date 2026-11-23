@@ -52,11 +52,12 @@ impl CaseNesting {
     /// pattern terminator can later be matched against it.
     pub(in crate::ir::cmd_interpolate) fn observe(&mut self, observation: CaseObservation) {
         if !observation.is_unquoted {
-            // Quoting is part of the token even where it ends the word, so the
-            // fragment completed here is not a reserved word. The quote also
-            // begins a token that may leave the word buffer empty.
+            // A quote is part of the token, not a boundary: `x"y"in` is one
+            // subject token. Keep the accumulated fragment until a blank or
+            // operator ends the token, and only note that the token is now
+            // quoted and that a pattern list has started if it stands in one.
             self.spelling = TokenSpelling::Quoted;
-            self.finish_word(observation.parenthesis_depth);
+            self.mark_quoted_fragment(observation.parenthesis_depth);
             // Quoted text is part of a word, so whatever follows it is not
             // in command position.
             self.expects_command = false;
@@ -174,6 +175,19 @@ impl CaseNesting {
         self.prefix_slot = PrefixSlot::None;
         self.apply_role(role, parenthesis_depth);
         self.word.clear();
+    }
+
+    /// Record that a quoted fragment has been read at this depth.
+    ///
+    /// The token continues to its own boundary, so the subject is not complete
+    /// here; only a pattern list needs to know that its text has begun.
+    fn mark_quoted_fragment(&mut self, parenthesis_depth: usize) {
+        let pattern_frame = self
+            .open_construct_at_mut(parenthesis_depth)
+            .filter(|frame| matches!(frame.phase, CasePhase::Pattern));
+        if let Some(frame) = pattern_frame {
+            frame.pattern_started = true;
+        }
     }
 
     /// Record a quoted token that left no characters in the word buffer.
