@@ -441,6 +441,16 @@ jobs:
   release-admission-canaries:
     # Waits for the evidence producer, and through it for every downstream
     # canary, so admission always reads a manifest this run wrote.
+    #
+    # The guard is explicit because GitHub's implicit `success()` also skips a
+    # job whose *transitive* ancestors were skipped: on a draft pull request's
+    # dry run the canaries are skipped, so without it admission would be too,
+    # and the observation lane would never report. The producer still has to
+    # have succeeded, so admission never reads a manifest it did not write.
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.release-admission-evidence.result == 'success'
     needs:
       - metadata
       - release-admission-evidence

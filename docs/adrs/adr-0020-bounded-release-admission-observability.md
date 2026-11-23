@@ -594,7 +594,11 @@ workflow artefacts, not metric or trace series.
 
 The admission job needs the producer, so its download no longer tolerates an
 absent artefact. A missing producer is a broken job graph rather than a refused
-admission.
+admission. The job's guard is explicit: GitHub's implicit `success()` also
+skips a job whose transitive ancestors were skipped, so on a draft pull
+request's dry run, where the canaries are skipped, admission would otherwise be
+skipped too. The guard requires the metadata and producer jobs to have
+succeeded, so the observation lane still reports on every dry run.
 
 Publication remains refused. The `history_scan` and `release_candidate` results
 have no producer, so an enforcing run still refuses with `missing_evidence`,

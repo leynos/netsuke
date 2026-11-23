@@ -58,6 +58,10 @@ PRODUCER_SCRIPT = "gate/.github/scripts/write_release_admission_evidence.py"
 DIGEST_OUTPUT = "${{ needs.release-admission-evidence.outputs.evidence_sha256 }}"
 DIGEST_STEP_OUTPUT = "${{ steps.write_evidence.outputs.evidence-sha256 }}"
 PRODUCER_GUARD = "!cancelled() && needs.metadata.result == 'success'"
+ADMISSION_GUARD = (
+    "!cancelled() && needs.metadata.result == 'success' && "
+    "needs.release-admission-evidence.result == 'success'"
+)
 #: The producer's checkout: this repository at the workflow's own commit.
 VERIFIER_CHECKOUT = {
     "persist-credentials": False,
@@ -204,6 +208,10 @@ def test_admission_waits_for_the_producer_and_trusts_only_its_digest() -> None:
     job = workflow_job(_release(), ADMISSION_JOB)
     assert job.get("needs") == ["metadata", PRODUCER_JOB], (
         "admission must wait for the evidence producer"
+    )
+    assert job.get("if") == ADMISSION_GUARD, (
+        "admission must run once the producer succeeded, even when skipped "
+        "canaries would make GitHub's implicit success() skip it"
     )
     download = _step(ADMISSION_JOB, "Download the release-admission evidence")
     assert "continue-on-error" not in download, (
