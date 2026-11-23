@@ -44,6 +44,7 @@ REQUIRED_INFRASTRUCTURE = (
     "tests/kani_mutation_evidence_tests.rs",  # the mutation compile gate
     "tests/kani_mutation_evidence_tests/",  # its modules
     "tests/kani_scope_wrapper_e2e_tests.rs",  # the scope wrapper's own suite
+    "tests/kani_scope_wrapper_e2e_tests/",  # its support modules
     "tools/kani/",  # the verifier version and this scope
 )
 MUTATIONS_DIR = REPO_ROOT / "docs" / "verification" / "mutations"

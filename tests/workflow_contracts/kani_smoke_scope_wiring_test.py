@@ -30,6 +30,10 @@ TRAILING_ALWAYS_STEPS = ("Finalize Kani metrics", "Upload Kani metrics")
 #: The output the script writes; `kani_proof_scope_decision_test.py` runs the
 #: script and reads this exact key back from `GITHUB_OUTPUT`.
 PROOF_CONDITION = "steps.scope.outputs.run-proofs == 'true'"
+#: The wrapper's own suite, which must run before anything it bounds.
+WRAPPER_COMMAND = "make test-kani-scope-wrapper"
+#: The proof run the wrapper exists to protect.
+PROOF_COMMAND = "make kani-ir"
 PROOF_END_CONDITION = f"!cancelled() && {PROOF_CONDITION}"
 #: The jobs other than `kani-smoke`, which the nightly schedule must not run.
 SCHEDULE_EXCLUDED_JOBS = ("build-test", "windows")
@@ -160,4 +164,31 @@ def test_every_later_step_is_conditioned_on_the_decision(
     )
     assert [step.get("if") for step in later[-2:]] == ["always()", "always()"], (
         "the two metrics delivery steps must run unconditionally after proof work"
+    )
+
+
+def test_scope_wrapper_is_verified_before_the_proofs(
+    steps: list[dict[str, object]],
+) -> None:
+    """Require the wrapper's own suite first, under the same decision.
+
+    The wrapper is what bounds every proof this job runs, so a broken one must
+    be reported as itself rather than as a Kani failure. It is gated by the
+    same decision as the proofs: a pull request that cannot change them pays
+    for neither, and a push to `main` verifies both.
+    """
+    commands = [step.get("run") for step in steps]
+    assert WRAPPER_COMMAND in commands, (
+        f"`{JOB}` must run `{WRAPPER_COMMAND}`, so a broken wrapper is reported "
+        "as itself rather than as a Kani failure"
+    )
+    assert PROOF_COMMAND in commands, f"`{JOB}` must run `{PROOF_COMMAND}`"
+    wrapper = steps[commands.index(WRAPPER_COMMAND)]
+    assert wrapper.get("if") == PROOF_CONDITION, (
+        f"`{WRAPPER_COMMAND}` must carry `if: {PROOF_CONDITION}`, so a skipped "
+        "pull request pays for nothing and a push to `main` always verifies it"
+    )
+    assert commands.index(WRAPPER_COMMAND) < commands.index(PROOF_COMMAND), (
+        f"`{WRAPPER_COMMAND}` must run before `{PROOF_COMMAND}`, so a wrapper "
+        "fault is never misreported as a proof failure"
     )

@@ -8162,14 +8162,21 @@ the harness contract and must move in lockstep with new Kani-only modules.
 Never run Kani bare on a developer machine. Uncapped local runs have OOM-killed
 the machine, so every local `cargo kani` and `make kani-ir` invocation runs
 inside a `systemd-run --user --scope` wrapper that places the verifier in its
-own control group and caps what it may consume. Composed in full, the wrapper
-around `make kani-ir` is:
+own control group and caps what it may consume. The wrapper names its unit,
+collects it afterwards, and records the caller's status beside the capture, so
+a finished run leaves a durable record and no failed unit behind. Composed in
+full, the wrapper around `make kani-ir` is:
 
 ```bash
-systemd-run \
+capture=/tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out
+unit=netsuke-kani-$(date +%Y%m%dT%H%M%S)-$$
+
+CAPTURE="$capture" UNIT="$unit" systemd-run \
     --user \
     --scope \
+    --collect \
     --expand-environment=no \
+    --unit "$unit" \
     -p RuntimeMaxSec=8m \
     -p TimeoutStopSec=20s \
     -p CPUQuota=200% \
@@ -8181,8 +8188,15 @@ systemd-run \
     bash -c 'set -o pipefail; \
       env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
       make kani-ir 2>&1 \
-      | tee /tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out'
+      | tee "$CAPTURE"'
+caller_status=$?
+printf 'unit=%s.scope caller_exit=%s\n' "$unit" "$caller_status" > "$capture.status"
 ```
+
+`--expand-environment=no` stops `systemd-run` expanding `$CAPTURE` and `$UNIT`
+itself; the payload's own shell expands them from the environment the
+invocation inherits, which is what keeps the unit name in the command and in
+the sidecar identical without writing it twice.
 
 `RuntimeMaxSec=8m` is the runtime cap and `TimeoutStopSec=20s` the stop grace
 that follows it; `CPUQuota`, `MemoryMax`, `MemorySwapMax`, `TasksMax` and
@@ -8233,10 +8247,124 @@ cgroup stop does not depend on signal propagation. A double fork alone does not
 escape it: the descendant keeps the group it inherited, so the signal still
 reaches it.
 
+#### Routine collection and deferred collection
+
+`--collect` is `-G`, a shortcut for `CollectMode=inactive-or-failed`. Without
+it a transient scope keeps the default `CollectMode=inactive`, which unloads a
+unit that finishes successfully but leaves a *failed* one loaded until someone
+resets it. That is how a host accumulates failed scopes one run at a time: a
+scope stopped at its runtime deadline, killed by the OOM killer, or refused its
+resource properties stays in the manager's memory and counts towards the
+`degraded` state `systemctl --user is-system-running` reports.
+
+Use `--collect` for every routine run. A collected unit cannot accumulate, so
+no later reset is needed for the common case.
+
+Defer collection only when the evidence lives in the stopped unit. Unloading
+discards the unit's execution results — the man page's phrase is that exit
+codes, exit signals, resource consumption and other statistics "are lost,
+except for what is stored in the log subsystem". A run that must read
+`Result=timeout`, or a resource-contract breach such as `Result=oom-kill`,
+therefore has to keep its unit loaded and reset it once the values have been
+read. `tests/kani_scope_wrapper_e2e_tests.rs` does exactly that for its timeout
+scenarios, and `--collect`s everything else.
+
+#### Harvesting evidence from a routine run
+
+Collecting a unit does not remove the evidence a routine run needs, because
+none of it lives in the manager's memory:
+
+- the caller's exit status, which `systemd-run --scope` propagates from the
+  payload, including the `pipefail` masking behaviour described above;
+- the capture under `/tmp`, which `tee` writes from inside the scope;
+- the unit identity, which is what addresses the journal;
+- the journal, which survives collection and is where the stop journey is
+  recorded;
+- the status sidecar, `"$capture.status"`, holding the caller's `$?` and the
+  unit name. Write it from the invoking shell immediately after the command
+  returns, not from inside the payload: a payload stopped at its deadline never
+  reaches a trailing statement, and the caller's status is available in both
+  cases.
+
+After a non-zero status, poll until the unit is no longer loaded before reading
+the journal, so the extract includes the entries written while the unit was
+being stopped. `systemctl --user show -P LoadState <unit>.scope` answers
+`loaded` while the collection job is still pending and `not-found` once it has
+run; the transition is asynchronous, so a single read taken the instant the
+caller returns can legitimately still see `loaded`. Then write a bounded
+extract:
+
+```bash
+until [ "$(systemctl --user show -P LoadState "$unit.scope")" != loaded ]; do
+    sleep 1
+done
+journalctl --user -u "$unit.scope" --no-pager -o cat -n 40 > "$capture.journal"
+```
+
+#### Reading a scope's `Result`
+
+A scope's `Result` is assigned by the manager, not copied from the payload's
+exit status, and the two can disagree in both directions. Both were measured on
+the reference host:
+
+- A payload that exits 7 leaves a scope the manager collects as a success. A
+  scope has no main process, so nothing maps an exit status onto `Result=`. The
+  non-zero status reaches the *caller*, which is why the caller's `$?` is the
+  figure a routine run should rely on.
+- A payload that exits zero can leave a scope recorded as `Result=timeout`. The
+  runtime deadline covers the whole control group rather than the payload
+  alone, so it can fire while `tee` and the rest of the pipeline are still
+  tearing down. Driving `RuntimeMaxSec` down to 5 ms reproduced this on the
+  reference host: several runs reported caller status 0 while the unit was
+  retained as failed with `Result=timeout`.
+
+Never read `Result` without checking `LoadState` first. Querying a unit that
+does not exist is not an error: systemd answers with the defaults for the
+requested properties, `Result=success` among them. A `Result` read from a
+collected unit is therefore fabricated, and reporting it as evidence turns "the
+unit is gone" into a false success. `Result` is only meaningful on a unit whose
+`LoadState` is `loaded`.
+
+The same rule explains an observation from 2026-11-01, when several
+`netsuke-kani-wrapper-<pid>-ok.scope` units were found failed even though their
+payloads echoed and exited zero. The `-ok` in the name is the test scenario,
+not a claim about the scope: those units were stopped by a runtime deadline
+that fired during teardown, which is the second disagreement above. No wrapper
+flag was at fault, and the suite now uses a wide runtime cap for scenarios that
+expect their payload to finish, so the deadline cannot fire underneath them.
+
+#### Cleaning up a failed scope
+
+Clean up by exact unit name, never with a wildcard and never with
+`systemctl --user reset-failed` and no argument. A blanket reset hides the
+accumulation this section exists to prevent, and a glob would also clear units
+another run still needs.
+
+`systemctl --user reset-failed <unit>.scope` unloads a failed unit; the same
+command against a unit that is not loaded fails with "Unit … not loaded", so
+read `LoadState` first. A unit that is still `active` should be stopped before
+it is reset, and the stop is bounded by the scope's own `TimeoutStopSec`.
+
+One case cannot be cleaned up in-process. Nextest terminates a test that
+overruns its allowance by signalling the test's process group, which kills the
+test before any teardown can run, and a unit that is active at that moment is
+left behind. The residual units are recognizable by their shared prefix, so
+recovery after a killed run is prefix-scoped and uses a read-only query first:
+
+```bash
+systemctl --user list-units --all --state=failed --no-legend 'netsuke-kani-wrapper-*'
+systemctl --user reset-failed 'netsuke-kani-wrapper-<pid>-*'
+```
+
+The prefix includes the pid of the test process that created the unit, which is
+what keeps that reset from touching a concurrent run.
+
 The wrapper's own end-to-end suite is `tests/kani_scope_wrapper_e2e_tests.rs`,
 run by `make test-kani-scope-wrapper`; it exercises the documented shape at
-test-sized limits. The probe evidence behind the figures above is recorded in
-the 4.2.2 and 4.2.3 ExecPlans under `docs/execplans/`.
+test-sized limits. Every scenario runs inside a teardown guard, so an injected
+error, an early return and a panic all stop and reset the one unit the guard
+owns. The probe evidence behind the figures above is recorded in the 4.2.2 and
+4.2.3 ExecPlans under `docs/execplans/`.
 
 ### Kani harness inventory
 
