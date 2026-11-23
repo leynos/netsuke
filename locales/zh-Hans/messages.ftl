@@ -200,6 +200,9 @@ manifest.console_dependency_only = 仅声明依赖项的条目无法选择控制
 # 中间表示的错误。
 ir.rule_not_found = 找不到目标“{ $target }”引用的规则“{ $rule }”。
 ir.multiple_rules = 目标“{ $target }”必须只引用一条规则，却得到 { $rules }。
+ir.multiple_rules_truncated = 目标“{ $target }”必须只引用一条规则，却得到 { $rules }。{ $omitted ->
+   *[other] 另外还有 { $omitted } 个名称。
+}
 ir.empty_rule = 目标“{ $target }”必须引用一条规则。
 ir.duplicate_outputs = 检测到重复输出：{ $outputs }。
 ir.circular_dependency = 检测到循环依赖：{ $cycle }。

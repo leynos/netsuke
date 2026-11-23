@@ -9,6 +9,7 @@
 
 use super::super::sort_utils::{reset_string_comparisons, string_comparisons};
 use super::super::*;
+use test_support::fluent::normalize_fluent_isolates;
 use test_support::{EnLocalizer, en_localizer};
 
 /// Names large enough that a quadratic comparison count is unmistakable.
@@ -83,7 +84,9 @@ fn oversized_rule_selector_is_rejected_with_a_bounded_sample(en_localizer: EnLoc
         "the rejection must report the lexically smallest names in ascending order"
     );
 
-    let rendered = message.to_string();
+    // Fluent isolates every placeable with direction marks, which would sit
+    // between the numeral and its noun in the rendered text.
+    let rendered = normalize_fluent_isolates(&message.to_string());
     let omitted = OVERSIZED_SELECTOR_LEN - MAX_REPORTED_RULE_SELECTORS;
     assert!(
         rendered.contains(&format!("{omitted} more names")),

@@ -201,6 +201,10 @@ manifest.console_dependency_only = Poster, der kun angiver afhængigheder, kan i
 # Fejl i den interne repræsentation.
 ir.rule_not_found = Reglen "{ $rule }", som målet "{ $target }" henviser til, blev ikke fundet.
 ir.multiple_rules = Målet "{ $target }" skal henvise til præcis én regel, men gav { $rules }.
+ir.multiple_rules_truncated = Målet "{ $target }" skal henvise til præcis én regel, men gav { $rules } og { $omitted ->
+    [one] { $omitted } navn mere.
+   *[other] { $omitted } navne mere.
+}
 ir.empty_rule = Målet "{ $target }" skal henvise til en regel.
 ir.duplicate_outputs = Der blev fundet dublerede output: { $outputs }.
 ir.circular_dependency = Der blev fundet en cirkulær afhængighed: { $cycle }.

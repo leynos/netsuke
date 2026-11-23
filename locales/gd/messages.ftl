@@ -201,6 +201,12 @@ manifest.console_dependency_only = Chan urrainn do dh’inntrigidhean a tha ag a
 # Mearachdan an riochdachaidh mheadhanaich.
 ir.rule_not_found = Cha deach an riaghailt “{ $rule }” air a bheil an targaid “{ $target }” a' toirt iomradh a lorg.
 ir.multiple_rules = Feumaidh an targaid “{ $target }” iomradh a thoirt air aon riaghailt a-mhàin, ach fhuaireadh { $rules }.
+ir.multiple_rules_truncated = Feumaidh an targaid “{ $target }” iomradh a thoirt air aon riaghailt a-mhàin, ach fhuaireadh { $rules } agus { $omitted ->
+    [one] { $omitted } ainm eile.
+    [two] { $omitted } ainm eile.
+    [few] { $omitted } ainmean eile.
+   *[other] { $omitted } ainmean eile.
+}
 ir.empty_rule = Feumaidh an targaid “{ $target }” iomradh a thoirt air riaghailt.
 ir.duplicate_outputs = Chaidh às-chuir dhùblaichte a lorg: { $outputs }.
 ir.circular_dependency = Chaidh eisimeileachd chuairteach a lorg: { $cycle }.

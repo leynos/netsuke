@@ -201,6 +201,10 @@ manifest.console_dependency_only = Oppføringer som bare angir avhengigheter kan
 # Feil i den interne representasjonen.
 ir.rule_not_found = Regelen «{ $rule }» som målet «{ $target }» viser til, ble ikke funnet.
 ir.multiple_rules = Målet «{ $target }» må vise til nøyaktig én regel, men ga { $rules }.
+ir.multiple_rules_truncated = Målet «{ $target }» må vise til nøyaktig én regel, men ga { $rules } og { $omitted ->
+    [one] { $omitted } navn til.
+   *[other] { $omitted } navn til.
+}
 ir.empty_rule = Målet «{ $target }» må vise til en regel.
 ir.duplicate_outputs = Det ble funnet dupliserte utdata: { $outputs }.
 ir.circular_dependency = Det ble funnet en sirkulær avhengighet: { $cycle }.

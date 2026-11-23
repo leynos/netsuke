@@ -201,6 +201,12 @@ manifest.console_dependency_only = Записи, объявляющие толь
 # Ошибки промежуточного представления.
 ir.rule_not_found = Правило «{ $rule }», на которое ссылается цель «{ $target }», не найдено.
 ir.multiple_rules = Цель «{ $target }» должна ссылаться ровно на одно правило, получено { $rules }.
+ir.multiple_rules_truncated = Цель «{ $target }» должна ссылаться ровно на одно правило, получено { $rules } и ещё { $omitted ->
+    [one] { $omitted } имя.
+    [few] { $omitted } имени.
+    [many] { $omitted } имён.
+   *[other] { $omitted } имени.
+}
 ir.empty_rule = Цель «{ $target }» должна ссылаться на правило.
 ir.duplicate_outputs = Обнаружены повторяющиеся выходные файлы: { $outputs }.
 ir.circular_dependency = Обнаружена циклическая зависимость: { $cycle }.

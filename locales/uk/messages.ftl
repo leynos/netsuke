@@ -201,6 +201,12 @@ manifest.console_dependency_only = Записи, що містять лише з
 # Помилки проміжного подання.
 ir.rule_not_found = Правило «{ $rule }», на яке посилається ціль «{ $target }», не знайдено.
 ir.multiple_rules = Ціль «{ $target }» має посилатися рівно на одне правило, отримано { $rules }.
+ir.multiple_rules_truncated = Ціль «{ $target }» має посилатися рівно на одне правило, отримано { $rules } і ще { $omitted ->
+    [one] { $omitted } назва.
+    [few] { $omitted } назви.
+    [many] { $omitted } назв.
+   *[other] { $omitted } назви.
+}
 ir.empty_rule = Ціль «{ $target }» має посилатися на правило.
 ir.duplicate_outputs = Виявлено повторювані вихідні файли: { $outputs }.
 ir.circular_dependency = Виявлено циклічну залежність: { $cycle }.

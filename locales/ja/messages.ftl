@@ -201,6 +201,9 @@ manifest.console_dependency_only = 依存関係のみを宣言する項目は、
 # 中間表現のエラー。
 ir.rule_not_found = ターゲット「{ $target }」が参照する規則「{ $rule }」が見つかりません。
 ir.multiple_rules = ターゲット「{ $target }」は規則をちょうど 1 つ参照しなければなりませんが、{ $rules } が得られました。
+ir.multiple_rules_truncated = ターゲット「{ $target }」は規則をちょうど 1 つ参照しなければなりませんが、{ $rules } が得られました。{ $omitted ->
+   *[other] ほかに { $omitted } 件の名前があります。
+}
 ir.empty_rule = ターゲット「{ $target }」は規則を参照しなければなりません。
 ir.duplicate_outputs = 出力の重複を検出しました: { $outputs }。
 ir.circular_dependency = 循環依存を検出しました: { $cycle }。

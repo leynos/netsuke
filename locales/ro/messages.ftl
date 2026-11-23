@@ -201,6 +201,11 @@ manifest.console_dependency_only = Intrările care declară doar dependențe nu 
 # Erori ale reprezentării intermediare.
 ir.rule_not_found = Regula „{ $rule }” la care face referire ținta „{ $target }” nu a fost găsită.
 ir.multiple_rules = Ținta „{ $target }” trebuie să facă referire la o singură regulă; s-a primit { $rules }.
+ir.multiple_rules_truncated = Ținta „{ $target }” trebuie să facă referire la o singură regulă; s-a primit { $rules } și { $omitted ->
+    [one] { $omitted } nume.
+    [few] { $omitted } nume.
+   *[other] { $omitted } de nume.
+}
 ir.empty_rule = Ținta „{ $target }” trebuie să facă referire la o regulă.
 ir.duplicate_outputs = Au fost detectate ieșiri duplicate: { $outputs }.
 ir.circular_dependency = A fost detectată o dependență circulară: { $cycle }.

@@ -202,6 +202,10 @@ manifest.console_dependency_only = Les entrées qui ne déclarent que des dépen
 # Erreurs de la représentation intermédiaire.
 ir.rule_not_found = La règle « { $rule } » référencée par la cible « { $target } » est introuvable.
 ir.multiple_rules = La cible « { $target } » doit référencer une seule règle, reçu { $rules }.
+ir.multiple_rules_truncated = La cible « { $target } » doit référencer une seule règle, reçu { $rules } et { $omitted ->
+    [one] { $omitted } autre nom.
+   *[other] { $omitted } autres noms.
+}
 ir.empty_rule = La cible « { $target } » doit référencer une règle.
 ir.duplicate_outputs = Sorties en double détectées : { $outputs }.
 ir.circular_dependency = Dépendance circulaire détectée : { $cycle }.

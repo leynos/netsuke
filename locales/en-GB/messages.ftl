@@ -201,6 +201,10 @@ manifest.console_dependency_only = Dependency-only entries cannot select the con
 # IR errors.
 ir.rule_not_found = Rule '{ $rule }' referenced by target '{ $target }' was not found.
 ir.multiple_rules = Target '{ $target }' must reference a single rule, got { $rules }.
+ir.multiple_rules_truncated = Target '{ $target }' must reference a single rule, got { $rules } and { $omitted ->
+    [one] { $omitted } more name.
+   *[other] { $omitted } more names.
+}
 ir.empty_rule = Target '{ $target }' must reference a rule.
 ir.duplicate_outputs = Duplicate outputs detected: { $outputs }.
 ir.circular_dependency = Circular dependency detected: { $cycle }.

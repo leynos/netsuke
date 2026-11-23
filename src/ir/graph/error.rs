@@ -97,7 +97,12 @@ pub enum IrGenError {
     MultipleRules {
         /// Name of the target that specified conflicting rules.
         target_name: String,
-        /// Set of rule identifiers provided simultaneously.
+        /// Lexically smallest supplied rule identifiers, in ascending order.
+        ///
+        /// Duplicates are retained, so a selector naming the same rule twice
+        /// reports it twice. The list is capped at eight names: a selector
+        /// supplying more reports its eight smallest here and states the
+        /// omitted count in `message`.
         rules: Vec<String>,
         /// Localized error message.
         message: LocalizedMessage,

@@ -201,6 +201,9 @@ manifest.console_dependency_only = Các mục chỉ khai báo phần phụ thu�
 # Lỗi của biểu diễn trung gian.
 ir.rule_not_found = Không tìm thấy quy tắc “{ $rule }” mà đích “{ $target }” tham chiếu.
 ir.multiple_rules = Đích “{ $target }” phải tham chiếu đúng một quy tắc, nhưng nhận được { $rules }.
+ir.multiple_rules_truncated = Đích “{ $target }” phải tham chiếu đúng một quy tắc, nhưng nhận được { $rules } và { $omitted ->
+   *[other] { $omitted } tên nữa.
+}
 ir.empty_rule = Đích “{ $target }” phải tham chiếu một quy tắc.
 ir.duplicate_outputs = Phát hiện đầu ra trùng lặp: { $outputs }.
 ir.circular_dependency = Phát hiện phụ thuộc vòng: { $cycle }.

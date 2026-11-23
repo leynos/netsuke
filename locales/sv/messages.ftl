@@ -201,6 +201,10 @@ manifest.console_dependency_only = Poster som bara anger beroenden kan inte väl
 # Fel i den interna representationen.
 ir.rule_not_found = Regeln ”{ $rule }” som målet ”{ $target }” hänvisar till hittades inte.
 ir.multiple_rules = Målet ”{ $target }” måste hänvisa till exakt en regel, men gav { $rules }.
+ir.multiple_rules_truncated = Målet ”{ $target }” måste hänvisa till exakt en regel, men gav { $rules } och { $omitted ->
+    [one] { $omitted } namn till.
+   *[other] { $omitted } namn till.
+}
 ir.empty_rule = Målet ”{ $target }” måste hänvisa till en regel.
 ir.duplicate_outputs = Dubblerade utdata upptäcktes: { $outputs }.
 ir.circular_dependency = Ett cirkulärt beroende upptäcktes: { $cycle }.

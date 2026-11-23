@@ -201,6 +201,12 @@ manifest.console_dependency_only = רשומות שמציינות תלויות ב
 # שגיאות הייצוג הביניימי.
 ir.rule_not_found = הכלל „{ $rule }” שאליו מפנה היעד „{ $target }” לא נמצא.
 ir.multiple_rules = היעד „{ $target }” חייב להפנות לכלל אחד בלבד, אך התקבל { $rules }.
+ir.multiple_rules_truncated = היעד „{ $target }” חייב להפנות לכלל אחד בלבד, אך התקבל { $rules } ועוד { $omitted ->
+    [one] { $omitted } שם נוסף.
+    [two] { $omitted } שמות נוספים.
+    [many] { $omitted } שמות נוספים.
+   *[other] { $omitted } שמות נוספים.
+}
 ir.empty_rule = היעד „{ $target }” חייב להפנות לכלל.
 ir.duplicate_outputs = זוהו פלטים כפולים: { $outputs }.
 ir.circular_dependency = זוהתה תלות מעגלית: { $cycle }.

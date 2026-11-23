@@ -201,6 +201,10 @@ manifest.console_dependency_only = Yalnızca bağımlılık bildiren girdiler ko
 # Ara gösterim hataları.
 ir.rule_not_found = "{ $target }" hedefinin başvurduğu "{ $rule }" kuralı bulunamadı.
 ir.multiple_rules = "{ $target }" hedefi tek bir kurala başvurmalıdır, { $rules } alındı.
+ir.multiple_rules_truncated = "{ $target }" hedefi tek bir kurala başvurmalıdır, ancak { $rules } ve { $omitted ->
+    [one] { $omitted } ad daha geldi.
+   *[other] { $omitted } ad daha geldi.
+}
 ir.empty_rule = "{ $target }" hedefi bir kurala başvurmalıdır.
 ir.duplicate_outputs = Yinelenen çıktılar bulundu: { $outputs }.
 ir.circular_dependency = Döngüsel bağımlılık bulundu: { $cycle }.
