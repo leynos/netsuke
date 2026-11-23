@@ -669,7 +669,17 @@ aggregate form is preferred over a no-op command such as `command: ":"`:
 
 - `command`: one shell command, or an ordered list of commands.
 - `script`: a multi-line script interpreted by the selected recipe shell.
-- `rule`: the name of another rule to use.
+- `rule`: exactly one rule, named as a scalar or a one-element list.
+
+`rule` selects one existing rule; it does not chain recipes. An empty selector,
+written `rule: []`, and a selector naming two or more rules are both rejected.
+A multi-name rejection reports at most the eight lexically smallest supplied
+names, in ascending order, together with the number of names it left out, so
+the diagnostic stays readable however long the selector was. This is a separate
+contract from two nearby ones: a target still supplies exactly one recipe field
+in total, so giving both `rule` and `command` is rejected as a field conflict
+rather than as a selector problem, and `netsuke check --rule` sets lint
+severities rather than choosing a build recipe.
 
 Rules may also provide `description`, text used for Ninja's progress display.
 

@@ -8266,6 +8266,22 @@ not select a Netsuke marker. Scanner, protected-placeholder, and guard
 behaviour remains covered by the adversarial Proptest suite over the documented
 256-character, eight-placeholder range.
 
+`multiple_rule_shape_is_rejected` drives `resolve_rule` with two symbolic rule
+orderings. The rejection reports a bounded sample rather than the whole
+selector: `sort_utils::smallest_names` retains at most
+`MAX_REPORTED_RULE_SELECTORS` names in stable ascending order, so a selector of
+any length is rejected after at most eight comparisons per supplied name. The
+helper's two loops fit the harness's existing `#[kani::unwind(8)]` bound, and
+nothing in the Kani path formats the omitted count. The harness's mutation
+patch,
+`docs/verification/mutations/ir__from_manifest__verification__multiple_rule_shape_is_rejected.patch`,
+inverts the helper's comparison, so a sample that came out in descending order
+fails the preserved-name assertions. Full-width ordering, the linear-cost
+bound, and the plural-aware message are owned by the unit and integration
+tests, which drive names longer than Kani's single-byte symbolic alphabet; a
+`cfg(all(test, not(kani)))` comparison counter is what lets those tests measure
+the bound instead of assuming it.
+
 Table: Kani harnesses for Netsuke's intermediate-representation invariants.
 
 | Harness                                                     | Module                                   | Property                                                                                                | Bound                 | Notes                                                                                                                                                                     |

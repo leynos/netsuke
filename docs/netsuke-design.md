@@ -494,13 +494,19 @@ Each entry in `targets` defines a build edge; placing a target in the optional
   single string or a list of strings.
 
 - `rule`: The name of the rule (from the `rules` section) to use for building
-  this target. A YAML list may be supplied to run multiple rules sequentially.
+  this target, written either as a scalar or as a one-element list.
 
 ```yaml
 rule:
   - build
-  - clean-up
 ```
+
+A list naming more than one rule is not a chain of recipes. Lowering rejects it
+with `IrGenError::MultipleRules` before any lookup, reporting at most the eight
+lexically smallest supplied names in ascending order and the number omitted.
+Selecting that sample is one pass over the selector, so the rejection costs at
+most eight comparisons per supplied name instead of a full sort, and the
+diagnostic does not grow with the selector.
 
 - `command`: A command string or non-empty ordered list of command strings to
   run directly for this target. Direct target lists follow the same per-entry
@@ -3151,7 +3157,10 @@ edge-level choice does not affect action identity.
   shell-quoted file paths, two targets share an identifier only when both the
   command text and file sets match exactly.
 - Multiple rule references in a single target are not yet supported. The IR
-  generator reports `IrGenError::MultipleRules` when encountered.
+  generator reports `IrGenError::MultipleRules` when encountered, carrying at
+  most the eight lexically smallest supplied names in ascending order and
+  stating how many it omitted, so a rejected selector is diagnosed in one
+  linear pass rather than by sorting the whole list.
 - Duplicate output files are rejected. Attempting to define the same output
   path twice results in `IrGenError::DuplicateOutput`.
 - The Ninja generator sorts canonical arena edges before output. Output indexing

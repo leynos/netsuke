@@ -162,6 +162,12 @@
   rather than `C:\Program Files (x86)\netsuke`, and migrate a v0.1.0-beta4
   installation out of the 32-bit directory on upgrade
   ([#1143](https://github.com/leynos/netsuke/issues/1143))
+- Reject a `rule` selector naming several rules without first cloning and
+  sorting the whole selector. The rejection now reports the eight lexically
+  smallest supplied names, in ascending order, plus the number it omitted, so a
+  reverse-ordered selector no longer costs a quadratic number of comparisons
+  before the diagnostic is built
+  ([#976](https://github.com/leynos/netsuke/issues/976))
 
 ## [0.1.0-beta4] - 2026-09-26
 
