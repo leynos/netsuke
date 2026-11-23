@@ -506,3 +506,8 @@ check.rule.severity = گزینشگر { $name } شدت { $severity } را نام 
 check.fail_on.invalid = آستانهٔ شکست ناشناخته { $value }؛ یکی از { $values } انتظار می‌رفت.
 check.source_index = نمایه‌سازی { $path } برای تشخیص در خط { $line } ممکن نشد: { $reason }.
 status.tool.check = بررسی
+
+# پیام‌های کشف خودکار پیکربندی.
+config.discovery.dangling_link = هدف پیوند نمادین وجود ندارد.
+config.discovery.present_without_layer = ورودی وجود دارد اما هیچ لایه پیکربندی ارائه نکرد.
+config.discovery.inspection_failed = ورودی بررسی نشد.

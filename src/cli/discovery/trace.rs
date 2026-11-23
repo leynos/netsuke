@@ -10,7 +10,7 @@ use super::diagnostics::{
     BoundedConfigPath, ConfigLoadWarning, debug_config_path_from_fields,
     trace_config_path_variable_from_fields,
 };
-use super::layers::ProjectScopeTrace;
+use super::layers::AutomaticTrace;
 use super::selector::ConfigPathResolution;
 
 /// Track only the authority category and coarse count of removed grants.
@@ -167,11 +167,8 @@ pub(super) enum FileLayerTrace {
         /// The explicitly selected configuration path.
         path: BoundedConfigPath,
     },
-    /// Selector-free discovery, with any project-scope second-pass outcome.
-    Automatic {
-        /// Trail of the project-scope second pass, when one ran.
-        project_scope: Option<ProjectScopeTrace>,
-    },
+    /// Selector-free discovery and the decisions it retained for replay.
+    Automatic(AutomaticTrace),
 }
 
 impl FileLayerTrace {
@@ -181,11 +178,9 @@ impl FileLayerTrace {
             Self::Explicit { path } => {
                 debug_config_path_from_fields("using explicit config path", path);
             }
-            Self::Automatic { project_scope } => {
+            Self::Automatic(trace) => {
                 debug!("using config discovery");
-                if let Some(trace) = project_scope {
-                    trace.emit();
-                }
+                trace.emit();
             }
         }
     }

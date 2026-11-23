@@ -394,3 +394,7 @@ fn project_config_overrides_system_and_system_only_field_merges() -> Result<()> 
     );
     Ok(())
 }
+
+#[cfg(unix)]
+#[path = "config_discovery_scopes/user_precedence.rs"]
+mod user_precedence;

@@ -511,3 +511,8 @@ check.rule.severity = Ο επιλογέας { $name } ονομάζει τη σο
 check.fail_on.invalid = Άγνωστο κατώφλι αποτυχίας { $value }· αναμενόταν ένα από { $values }.
 check.source_index = Δεν ήταν δυνατή η ευρετηρίαση του { $path } για διαγνωστικά στη γραμμή { $line }: { $reason }.
 status.tool.check = Έλεγχος
+
+# Μηνύματα αυτόματης ανακάλυψης ρυθμίσεων.
+config.discovery.dangling_link = ο στόχος του συμβολικού συνδέσμου λείπει.
+config.discovery.present_without_layer = η καταχώριση υπάρχει αλλά δεν παρείχε επίπεδο ρυθμίσεων.
+config.discovery.inspection_failed = δεν ήταν δυνατός ο έλεγχος της καταχώρισης.

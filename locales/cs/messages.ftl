@@ -517,3 +517,8 @@ check.rule.severity = Selektor { $name } uvádí závažnost { $severity }; oče
 check.fail_on.invalid = Neznámý práh selhání { $value }; očekáván jeden z { $values }.
 check.source_index = Nepodařilo se indexovat { $path } pro diagnostiku na řádku { $line }: { $reason }.
 status.tool.check = Kontrola
+
+# Hlášení automatického zjišťování konfigurace.
+config.discovery.dangling_link = cíl symbolického odkazu chybí.
+config.discovery.present_without_layer = záznam existuje, ale neposkytl žádnou konfigurační vrstvu.
+config.discovery.inspection_failed = záznam nebylo možné prozkoumat.

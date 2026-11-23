@@ -503,3 +503,8 @@ check.rule.severity = 선택자 { $name }이(가) 심각도 { $severity }을(를
 check.fail_on.invalid = 알 수 없는 실패 임계값 { $value }. 다음 중 하나여야 합니다: { $values }.
 check.source_index = 진단을 위해 { $path }의 { $line } 행을 색인할 수 없습니다: { $reason }.
 status.tool.check = 검사
+
+# 자동 구성 검색 메시지.
+config.discovery.dangling_link = 심볼릭 링크 대상이 없습니다.
+config.discovery.present_without_layer = 항목이 존재하지만 구성 계층을 제공하지 않았습니다.
+config.discovery.inspection_failed = 항목을 검사할 수 없습니다.

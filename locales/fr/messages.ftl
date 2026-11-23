@@ -511,3 +511,8 @@ check.rule.severity = Le sélecteur { $name } nomme la sévérité { $severity }
 check.fail_on.invalid = Seuil d'échec inconnu { $value } ; attendu l'un de { $values }.
 check.source_index = Impossible d'indexer { $path } pour les diagnostics à la ligne { $line } : { $reason }.
 status.tool.check = Vérification
+
+# Messages de la découverte automatique de configuration.
+config.discovery.dangling_link = la cible du lien symbolique est absente.
+config.discovery.present_without_layer = l'entrée existe mais n'a fourni aucune couche de configuration.
+config.discovery.inspection_failed = l'entrée n'a pas pu être inspectée.

@@ -78,6 +78,14 @@ already-removed `prepend_dir_to_path` helper, so it requires no migration.
 - **Continue accepting non-UTF-8 build paths.** Rejected because it leaves
   support accidental and diagnostics dependent on arbitrary downstream code.
 
+## Addendum — 2026-11-19
+
+The carve-out named above moved when `src/cli/discovery/paths.rs` became
+`src/cli/discovery/paths/mod.rs` with a `paths/sanitised.rs` sibling, so the
+decision now applies to both files. The split separates the path helpers from
+the environment view that shares the base-validity predicate with them; the
+`std::path` rationale and the Accepted status are unchanged.
+
 ## Implementation references
 
 - Path convention: [`AGENTS.md`](../../AGENTS.md) and

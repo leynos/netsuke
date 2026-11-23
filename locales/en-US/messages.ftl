@@ -516,3 +516,8 @@ check.rule.severity = Lint selector { $name } names severity { $severity }; expe
 check.fail_on.invalid = Unknown failure threshold { $value }; expected one of { $values }.
 check.source_index = Could not index { $path } for lint diagnostics at line { $line }: { $reason }.
 status.tool.check = Check
+
+# Automatic configuration discovery messages.
+config.discovery.dangling_link = the symbolic link target is missing.
+config.discovery.present_without_layer = the entry exists but supplied no configuration layer.
+config.discovery.inspection_failed = the entry could not be inspected.

@@ -7,6 +7,7 @@ use super::super::super::super::paths::{
     FailingPathNormalizer, FsPathNormalizer, UnreadablePathNormalizer,
 };
 use super::super::super::super::project_policy::RootAuthority;
+use super::super::super::project_key::CandidateIdentity;
 use super::super::super::{ProjectKey, ScopedFileLayer, scope_discovered_occurrence};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
@@ -225,4 +226,83 @@ fn non_utf8_project_root_still_resolves() -> Result<()> {
         "the key must recognize the recorded spelling of the file it classified"
     );
     Ok(())
+}
+
+/// A candidate that resolves to the project file is identified as such.
+#[test]
+fn resolved_project_candidate_is_identified() -> Result<()> {
+    let project = ProjectFixture::new()?;
+
+    let identity = project
+        .key()
+        .classify_candidate(&FsPathNormalizer, &project.file());
+
+    ensure!(
+        identity == CandidateIdentity::Project,
+        "the project file's own path must be identified, got {identity:?}"
+    );
+    Ok(())
+}
+
+/// A candidate that resolves elsewhere is provably not the project file.
+#[test]
+fn resolved_other_candidate_is_not_the_project_file() -> Result<()> {
+    let project = ProjectFixture::new()?;
+    let other = write_other_config(&project)?;
+
+    let identity = project.key().classify_candidate(&FsPathNormalizer, &other);
+
+    ensure!(
+        identity == CandidateIdentity::Other,
+        "a resolved path that differs from the key must be identified as other, got {identity:?}"
+    );
+    Ok(())
+}
+
+/// A literal spelling still identifies the project file when resolution fails.
+///
+/// This is the one resolution failure that is evidence rather than doubt: the
+/// candidate's own text names the project path, so treating it as unresolved
+/// would grant authority to a candidate that is provably project-controlled.
+#[test]
+fn unresolvable_candidate_literally_matching_the_key_is_identified() -> Result<()> {
+    let project = ProjectFixture::new()?;
+    let literal = PathBuf::from(canonical(&project.file())?);
+
+    let identity = project
+        .key()
+        .classify_candidate(&FailingPathNormalizer, &literal);
+
+    ensure!(
+        identity == CandidateIdentity::Project,
+        "an exactly-spelled path must stay identified when it cannot resolve, got {identity:?}"
+    );
+    Ok(())
+}
+
+/// A candidate that neither resolves nor matches literally is unresolved.
+///
+/// Reporting it as a plain miss would let an identity that cannot be
+/// established donate operator authority, so the state has to be distinct.
+#[test]
+fn unresolvable_candidate_with_another_spelling_is_unresolved() -> Result<()> {
+    let project = ProjectFixture::new()?;
+    let literal = PathBuf::from(canonical(&write_other_config(&project)?)?);
+
+    let identity = project
+        .key()
+        .classify_candidate(&FailingPathNormalizer, &literal);
+
+    ensure!(
+        identity == CandidateIdentity::Unresolved,
+        "a candidate that cannot be ruled out as the project file must report so, got {identity:?}"
+    );
+    Ok(())
+}
+
+/// Write a configuration file that is not the project configuration.
+fn write_other_config(project: &ProjectFixture) -> Result<PathBuf> {
+    let other = project.path().join("other.toml");
+    test_support::fs::write(&other, "jobs = 5\n").context("write the other config")?;
+    Ok(other)
 }

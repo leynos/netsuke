@@ -276,6 +276,7 @@ impact
 | Optional           | Release packaging            | The release workflow validates the packaged candidate offline before upload: the identity, the archive digest, and the packaged manifest must agree, and a dry run must record no release tag.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Release packaging validation](#release-packaging-validates-its-candidate-offline)                                                        |
 | Optional           | Release upload               | The publishing lane uploads only the assets this run declared: producer records are bound to the candidate commit and the workflow run, and a stale, missing, doubled, or undeclared release-shaped artefact is refused before any release asset is transferred. The job may already have checked for or created the draft release, which touches the release API; selection and declaration come after that and before the upload. An attached asset with the recorded digest is skipped; one with different bytes stops the run and is never replaced.                                                                                                                                                                                                                                                                                                                                                                                                                                                | [Release uploads](#release-uploads-only-the-assets-this-run-declared)                                                                     |
 | Required if called | POSIX heredoc delimiters     | **Breaking:** a delimiter form whose quote removal Netsuke cannot reproduce now fails closed instead of being copied: a missing delimiter, a leading unquoted `#`, an unclosed quote, a trailing backslash, a line continuation, and an unescaped `$` or backtick outside single quotes. Quote the literal part instead, for example `<<'$DELIM'`; quoting any part of the delimiter also stops expansion in the body, so keep an unquoted literal delimiter such as `<<END` when the body must expand.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Heredoc delimiters](#update-heredoc-delimiters-the-tracker-cannot-model)                                                                 |
+| Required           | Configuration precedence     | **Breaking:** automatic discovery checks every user location before any system location, so on Unix a user file now overrides `/etc/xdg` system configuration when `XDG_CONFIG_HOME` is unset. A user file that exists but cannot load stops discovery instead of falling back to a system file.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | [Review automatic configuration precedence](#review-automatic-configuration-precedence)                                                   |
 | Required if called | Project blocklists           | **Breaking:** project `env_block_var` and `fetch_block_host` values must be arrays; a non-array or invalid element stops loading with a field-named validation error instead of clearing the operator's block entries.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | [Write project blocklists as arrays](#write-project-blocklists-as-arrays)                                                                 |
 
 ## Remove order-only dependency cycles
@@ -1030,6 +1031,62 @@ the gate and are not counted. Discovery queries and `netsuke test` runs reach
 the gate but do not record. See the users' guide's
 [manifest schema-admission metrics](users-guide.md#manifest-schema-admission-metrics)
 section.
+
+## Review automatic configuration precedence
+
+Automatic configuration discovery now checks every user location before any
+system location. On Unix, with `XDG_CONFIG_HOME` unset, `$HOME/.netsuke.toml`
+and `$HOME/.config/netsuke/config.toml` now outrank `/etc/xdg` system
+configuration.
+
+The two scopes are not merged. The winning user file and the `extends` parents
+it names replace the system file, so every setting that exists only in the
+system file stops applying. A system file that sets `fetch_default_deny = true`
+no longer restricts a user file that sets only `jobs`, and the same loss
+applies to every other system-only setting. Operators who keep both files must
+review their fetch and `env_allow_var` policy and move any restriction they
+still require into the user file or into another layer they trust, since a
+restriction left only in the system file no longer takes effect.
+
+That advice does not apply to a user location that is also the project
+configuration: `$HOME/.netsuke.toml` when `netsuke` runs from `$HOME`, or a
+user candidate that resolves to the project file. Netsuke does not adopt such a
+candidate as the user scope, so it does not replace the system file. The system
+file's `env_block_var` and `fetch_default_deny` restrictions keep applying, and
+the project file is appended as project configuration. Its own `env_allow_var`
+and fetch allow entries remain quarantined as project policy, so an allowlist
+that must restrict environment reads belongs in the system file.
+
+A distinct user file supplies the allowlist only when discovery reaches it
+before the project candidate. The refusal is decisive, so the user locations
+after the project file are not consulted in this layout: with
+`XDG_CONFIG_HOME=$HOME` and the project file at `$HOME/.netsuke.toml`, the
+candidate `$HOME/.config/netsuke/config.toml` never loads. When neither file
+can carry the allowlist, declare it in an operator-owned layer instead:
+`NETSUKE_ENV_ALLOW_VAR`, a repeated `--env-allow-var`, or an explicit
+`--config` selection of a file that is not the project configuration. Running
+`netsuke` from a directory other than `$HOME` also helps, because the home
+dotfile is then no longer the project file and is adopted as user
+configuration, which replaces the system file as the paragraph above describes.
+Change the selected project directory, not only the shell's working directory:
+`-C/--directory` takes precedence over the working directory, so an invocation
+that still passes `-C "$HOME"` keeps `$HOME/.netsuke.toml` selected and must
+drop or retarget that argument.
+
+A user file that exists but cannot be loaded now stops discovery; it no longer
+falls back to a system file. That covers malformed TOML, an `extends` parent
+that does not exist, and a symbolic link whose target is missing. The reported
+error names the user file, so the remedy is to repair or remove it.
+
+A user location variable that is empty or names a relative path is ignored
+rather than resolved against the working directory. On Windows that also covers
+a rooted path without a drive, such as `\config`. Netsuke only reads a base
+directory from an absolute value, so a misconfigured `XDG_CONFIG_HOME`,
+`APPDATA`, `LOCALAPPDATA`, `HOME`, or `USERPROFILE` cannot make the
+configuration that applies depend on the directory, or the current drive, the
+tool was run from.
+
+See [Configure Netsuke](users-guide.md#configure-netsuke) for the full order.
 
 ## Review the project fetch-policy boundary
 

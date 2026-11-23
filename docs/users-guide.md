@@ -2029,13 +2029,47 @@ Configuration precedence, from lowest to highest, is:
 4. Explicit command-line options.
 
 System and user configuration are discovered from platform conventions rather
-than merged as two separately named Netsuke layers. On Unix, this means the XDG
-base directories and the home directory; on Windows it means the
-application-data directories, such as `%APPDATA%\netsuke\config.toml`.
-Automatic discovery chooses one exclusive winner among system configuration,
-user configuration, and built-in defaults. Netsuke then appends the project
+than merged as two separately named Netsuke layers. Netsuke checks every user
+location before any system location, so a user file always outranks a system
+file. The user locations are checked in this order on every platform:
+
+1. `$XDG_CONFIG_HOME/netsuke/config.toml`
+2. `$XDG_CONFIG_HOME/.netsuke.toml`
+3. `%APPDATA%\netsuke\config.toml`
+4. `%APPDATA%\.netsuke.toml`
+5. `%LOCALAPPDATA%\netsuke\config.toml`
+6. `%LOCALAPPDATA%\.netsuke.toml`
+7. `$HOME/.config/netsuke/config.toml`
+8. `$HOME/.config/.netsuke.toml`
+9. `$HOME/.netsuke.toml`
+
+An undefined variable is skipped, as is one whose value is empty or not an
+absolute path, because a relative base would resolve against the working
+directory and load a file from wherever the tool happened to be run. On Windows
+a value that begins with a separator but names no drive, such as `\config`, is
+skipped for the same reason: it would resolve on whichever drive the process
+runs from. `HOME` supplies the home directory when it is set to an absolute
+path; otherwise `USERPROFILE` does.
+
+System configuration is consulted only when no user file exists. A candidate
+that is the project `.netsuke.toml` is not a user file for this purpose; see
+below. On Unix the system scope means each directory in `$XDG_CONFIG_DIRS`,
+defaulting to `/etc/xdg`, looking for `netsuke/config.toml` and `.netsuke.toml`.
+
+Automatic discovery chooses one exclusive winner among user configuration,
+system configuration, and built-in defaults. Netsuke then appends the project
 configuration chain, so ordinary project values can override the winner while
 fields present only in the winner remain available.
+
+When the discovered user file is the same file as the project `.netsuke.toml` —
+which happens when the working directory is the home directory, or when a user
+location resolves to the project file — Netsuke does not adopt it as the user
+scope, and does not consult the user locations after it. The dependency scan
+runs instead, so the system file is still consulted and its `env_block_var` and
+`fetch_default_deny` restrictions still apply, and the project file is then
+appended as project configuration. That single occurrence keeps its project
+quarantine: its `env_allow_var` and fetch allow entries are not honoured as
+operator policy.
 
 Fetch-policy fields are the security-sensitive exception to this ordinary
 precedence. Every occurrence selected through the project `.netsuke.toml` and
@@ -2065,9 +2099,13 @@ project-scoped for fetch and environment allow policy. An unrelated explicit
 configuration chain remains operator-scoped.
 
 When automatic discovery finds no configuration file, Netsuke uses its built-in
-defaults. When it finds a candidate that cannot be loaded, such as malformed
-TOML or a file whose `extends` parent is missing, Netsuke reports the load
-error. A broken discovered configuration is therefore not treated as absent.
+defaults. When a user file exists but cannot be loaded, such as malformed TOML,
+a file whose `extends` parent is missing, or a symbolic link whose target is
+missing, Netsuke reports the load error and stops discovery: it does not fall
+back to a system file, because doing so would silently replace the operator's
+own settings. System files follow `OrthoConfig`'s own scan instead, which
+continues to a later system file and reports a broken one only when no system
+file loads.
 
 ### Resource budgets
 

@@ -512,3 +512,8 @@ check.rule.severity = चयनकर्ता { $name } गंभीरता {
 check.fail_on.invalid = अज्ञात विफलता सीमा { $value }; { $values } में से एक अपेक्षित था।
 check.source_index = पंक्ति { $line } पर निदान हेतु { $path } को अनुक्रमित नहीं किया जा सका: { $reason }।
 status.tool.check = जाँच
+
+# स्वचालित कॉन्फ़िगरेशन खोज के संदेश.
+config.discovery.dangling_link = सांकेतिक लिंक का लक्ष्य अनुपस्थित है।
+config.discovery.present_without_layer = प्रविष्टि मौजूद है पर उसने कोई कॉन्फ़िगरेशन परत नहीं दी।
+config.discovery.inspection_failed = प्रविष्टि की जाँच नहीं हो सकी।

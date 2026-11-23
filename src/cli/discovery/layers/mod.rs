@@ -1,11 +1,13 @@
 //! Discover configuration layers while preserving each root's authority.
 //!
 //! Runs the `OrthoConfig` scan and applies the project-scope second pass, so a
-//! project `.netsuke.toml` outranks user-scope files. Project-chain occurrences
-//! retain project authority through quarantine; the same file reached from an
-//! operator root keeps operator authority. The project file's comparison key
-//! and its fallback policy live in [`project_key`] because that policy is a
-//! discovery decision.
+//! project `.netsuke.toml` outranks user-scope files. Automatic discovery reads
+//! the user scope first, because the dependency's own candidate order consults
+//! system locations before the home fallbacks. Project-chain occurrences retain
+//! project authority through quarantine; the same file reached from an operator
+//! root keeps operator authority. The project file's comparison key and its
+//! fallback policy live in [`project_key`] because that policy is a discovery
+//! decision.
 
 #[cfg(test)]
 use ortho_config::MapEnv;
@@ -18,72 +20,21 @@ use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::Arc;
 
-use super::diagnostics::{
-    BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
-};
+use super::diagnostics::{BoundedConfigPath, ProjectLayerDeduplication};
 use super::paths::{PathNormalizer, project_scope_file};
 use super::project_policy::scope_project_chain;
-
-mod project_key;
-use project_key::ProjectKey;
-
 pub(super) use super::project_policy::{
     ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
 };
 
-/// Project-scope outcome retained for a later trace replay.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum ProjectScopeTrace {
-    /// The primary discovery scan already yielded the project configuration.
-    Included(BoundedConfigPath),
-    /// The project configuration was loaded by the second pass.
-    Appended {
-        /// Project config path loaded by the fallback pass.
-        path: BoundedConfigPath,
-        /// Bounded de-duplication outcome, when one was recorded.
-        deduplication: Option<ProjectLayerDeduplication>,
-    },
-    /// The second pass found only layers already returned by discovery.
-    Deduplicated {
-        /// Project config path already returned by the primary scan.
-        path: BoundedConfigPath,
-        /// Bounded de-duplication outcome for the repeated project layer.
-        deduplication: ProjectLayerDeduplication,
-    },
-}
+mod project_key;
+use project_key::{ProjectIdentity, ProjectKey};
 
-impl ProjectScopeTrace {
-    /// Replay the original project-scope diagnostic from bounded metadata.
-    pub(super) fn emit(&self) {
-        match self {
-            Self::Included(path) => {
-                debug_optional_config_path_from_fields(
-                    "discovery included project-scope layers",
-                    path,
-                );
-            }
-            Self::Appended {
-                path,
-                deduplication,
-            } => {
-                if let Some(counts) = deduplication {
-                    counts.emit();
-                }
-                debug_optional_config_path_from_fields("appending project-scope layers", path);
-            }
-            Self::Deduplicated {
-                path,
-                deduplication,
-            } => {
-                deduplication.emit();
-                debug_optional_config_path_from_fields(
-                    "project-scope layers already discovered",
-                    path,
-                );
-            }
-        }
-    }
-}
+mod trace;
+pub(in crate::cli::discovery) use trace::{AutomaticTrace, ProjectScopeTrace};
+
+pub(super) mod user_candidate;
+use user_candidate::{AutomaticLayers, automatic_base_layers};
 
 /// Authority evidence for one discovered root.
 ///
@@ -114,7 +65,10 @@ struct ProjectScope<'a> {
 /// candidates: it registers no selector environment variable and injects no
 /// explicit path, so every candidate is an operator-location or project-root
 /// candidate and the walk cannot be steered from the environment or CLI.
-fn config_discovery(directory: Option<&PathBuf>, env_source: SharedEnvSource) -> ConfigDiscovery {
+pub(super) fn config_discovery(
+    directory: Option<&PathBuf>,
+    env_source: SharedEnvSource,
+) -> ConfigDiscovery {
     let mut builder = ConfigDiscovery::builder("netsuke").env_source(env_source);
     if let Some(dir) = directory {
         builder = builder.clear_project_roots().add_project_root(dir);
@@ -128,16 +82,31 @@ fn config_discovery(directory: Option<&PathBuf>, env_source: SharedEnvSource) ->
 /// order, a missing candidate continues to the next one, and the first chain
 /// found wins. Load errors are retained only for the no-chain case, matching
 /// the optional-error handling the previous single call produced.
-fn first_automatic_chain(
+///
+/// One candidate is skipped: a user-scope location that the user pass already
+/// refused because it is the project configuration file. The dependency lists
+/// the `XDG_CONFIG_HOME` base candidates before every system candidate, so when
+/// that base is the project directory the project file would otherwise win this
+/// walk and the system layers would never load. Skipping it is safe because the
+/// project pass appends the same chain with project quarantine, which is the
+/// composition the refusal rule already promises.
+///
+/// `identity` pairs the project key with the resolution seam that classified it,
+/// so a candidate and the key it is compared with are resolved through the same
+/// view.
+pub(super) fn first_automatic_chain(
     discovery: &ConfigDiscovery,
-    project_key: Option<&ProjectKey>,
+    user_candidates: &[PathBuf],
+    identity: ProjectIdentity<'_>,
 ) -> OrthoResult<(Vec<MergeLayer<'static>>, bool)> {
     let mut optional_errors = Vec::new();
     for candidate in discovery.candidates() {
+        if is_refused_user_candidate(identity, user_candidates, &candidate) {
+            continue;
+        }
         match load_config_file_as_chain(&candidate) {
             Ok(Some(chain)) => {
-                let is_trusted = !project_key
-                    .is_some_and(|key| key.is_ambiguous() || key.matches_path(&candidate));
+                let is_trusted = identity.candidate_is_trusted(&candidate);
                 return Ok((chain_layers(chain), is_trusted));
             }
             Ok(None) => {}
@@ -150,8 +119,34 @@ fn first_automatic_chain(
         .map_or_else(|| Ok((Vec::new(), true)), Err)
 }
 
+/// Report whether the scan must skip a candidate the user pass already refused.
+///
+/// Two conditions must both hold. The candidate must be a definite identity
+/// match for the project configuration file, and it must be one of the
+/// user-scope locations the user pass itself derived. A candidate reached only
+/// through a project root still wins the walk: it cannot outrank a system
+/// candidate, because the dependency lists project roots last, and returning it
+/// preserves the project-only composition path.
+///
+/// Neither an ambiguous key nor an unresolvable candidate is a match. The key's
+/// ambiguity withholds every candidate's authority without identifying any of
+/// them, so treating it as a match would skip the system candidates too. A
+/// candidate whose identity cannot be established is likewise only *possibly*
+/// the project file: skipping it could drop an ordinary user chain, so it stays
+/// in the walk and is loaded untrusted instead.
+fn is_refused_user_candidate(
+    identity: ProjectIdentity<'_>,
+    user_candidates: &[PathBuf],
+    candidate: &Path,
+) -> bool {
+    identity.candidate_is_project_file(candidate)
+        && user_candidates
+            .iter()
+            .any(|user_candidate| user_candidate.as_path() == candidate)
+}
+
 /// Flatten a file layer chain into owned merge layers.
-fn chain_layers(chain: FileLayerChain) -> Vec<MergeLayer<'static>> {
+pub(super) fn chain_layers(chain: FileLayerChain) -> Vec<MergeLayer<'static>> {
     chain
         .values
         .into_iter()
@@ -178,22 +173,28 @@ pub(super) fn collect_file_layers_with_normalizer(
         .map(|layers| layers.into_iter().map(|scoped| scoped.layer).collect())
 }
 
-/// Build the discovery chain and project-scope trace using `normalizer`.
+/// Build the discovery chain and automatic trace using `normalizer`.
 pub(super) fn collect_file_layers_with_normalizer_and_trace(
     directory: Option<&Path>,
     normalizer: &impl PathNormalizer,
     env_source: SharedEnvSource,
-) -> (Option<ProjectScopeTrace>, OrthoResult<Vec<ScopedFileLayer>>) {
+) -> (AutomaticTrace, OrthoResult<Vec<ScopedFileLayer>>) {
     let project_file = project_scope_file(directory);
     let project_key = project_file
         .as_deref()
         .map(|path| ProjectKey::classify(normalizer, path));
-    let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), env_source);
-    let (file_layers, is_trusted_root) =
-        match first_automatic_chain(&discovery, project_key.as_ref()) {
-            Ok(found) => found,
-            Err(error) => return (None, Err(error)),
-        };
+    let identity = ProjectIdentity::new(normalizer, project_key.as_ref());
+    let AutomaticLayers {
+        layers: file_layers,
+        is_trusted_root,
+        user_scope,
+    } = match automatic_base_layers(directory, env_source, identity) {
+        Ok(found) => found,
+        // The pass failed before it reached a decision, so there is no
+        // user-scope outcome to replay; discovery telemetry records the
+        // failure itself.
+        Err(error) => return (AutomaticTrace::default(), Err(error)),
+    };
 
     let project_index = project_key.as_ref().and_then(|key| {
         file_layers
@@ -203,12 +204,15 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
     let project_trace_path = BoundedConfigPath::from_path(project_file.as_deref());
     if let Some(index) = project_index.filter(|index| *index + 1 == file_layers.len()) {
         return (
-            Some(ProjectScopeTrace::Included(project_trace_path)),
+            AutomaticTrace::new(
+                Some(user_scope),
+                Some(ProjectScopeTrace::Included(project_trace_path)),
+            ),
             Ok(scope_project_chain(file_layers, index)),
         );
     }
 
-    merge_project_scope_layers(
+    let (project_scope, result) = merge_project_scope_layers(
         file_layers,
         ProjectScope {
             file: project_file.as_deref(),
@@ -218,7 +222,8 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
                 project_key: project_key.as_ref(),
             },
         },
-    )
+    );
+    (AutomaticTrace::new(Some(user_scope), project_scope), result)
 }
 
 /// Load project layers and preserve authority when operator and project paths overlap.
@@ -353,11 +358,15 @@ fn project_scope_layers(project_file: Option<&Path>) -> OrthoResult<Vec<MergeLay
 
 #[cfg(test)]
 mod property_tests;
+
 #[cfg(test)]
 mod quarantine_trace_tests;
+
 #[cfg(test)]
 mod replay_tests;
+
 #[cfg(test)]
 mod selector_tests;
+
 #[cfg(test)]
 mod tests;

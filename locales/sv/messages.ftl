@@ -506,3 +506,8 @@ check.rule.severity = Väljaren { $name } anger allvarsgraden { $severity }; en 
 check.fail_on.invalid = Okänd feltröskel { $value }; en av { $values } förväntades.
 check.source_index = Kunde inte indexera { $path } för diagnostik på rad { $line }: { $reason }.
 status.tool.check = Kontroll
+
+# Meddelanden för automatisk konfigurationsidentifiering.
+config.discovery.dangling_link = målobjektet för den symboliska länken saknas.
+config.discovery.present_without_layer = posten finns men gav inget konfigurationslager.
+config.discovery.inspection_failed = posten kunde inte granskas.

@@ -508,3 +508,8 @@ check.rule.severity = A(z) { $name } választó a(z) { $severity } súlyosságot
 check.fail_on.invalid = Ismeretlen hibaküszöb: { $value }; a várt értékek: { $values }.
 check.source_index = A(z) { $path } nem indexelhető a diagnosztikához a(z) { $line }. sorban: { $reason }.
 status.tool.check = Ellenőrzés
+
+# Az automatikus konfigurációfelderítés üzenetei.
+config.discovery.dangling_link = a szimbolikus hivatkozás célja hiányzik.
+config.discovery.present_without_layer = a bejegyzés létezik, de nem adott konfigurációs réteget.
+config.discovery.inspection_failed = a bejegyzést nem sikerült megvizsgálni.

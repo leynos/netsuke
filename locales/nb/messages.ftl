@@ -506,3 +506,8 @@ check.rule.severity = Velgeren { $name } nevner alvorsgraden { $severity }; forv
 check.fail_on.invalid = Ukjent feilterskel { $value }; forventet en av { $values }.
 check.source_index = Kunne ikke indeksere { $path } for diagnostikk på linje { $line }: { $reason }.
 status.tool.check = Kontroll
+
+# Meldinger for automatisk konfigurasjonsregistrering.
+config.discovery.dangling_link = målet for den symbolske lenken mangler.
+config.discovery.present_without_layer = oppføringen finnes, men ga ingen konfigurasjonslag.
+config.discovery.inspection_failed = oppføringen kunne ikke undersøkes.
