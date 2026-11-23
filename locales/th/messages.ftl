@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = จำกัดจำนวน�
 cli.flag.manifest_source_bytes.help = จำกัดจำนวนไบต์ของแหล่งที่มาของเทมเพลตและแมโครที่ใช้ต่อ manifest
 cli.flag.manifest_foreach_cardinality.help = จำกัดจำนวนค่าที่ประมวลผลโดยการขยาย foreach หนึ่งครั้ง
 cli.flag.manifest_expanded_entries.help = จำกัดจำนวนเป้าหมายและการกระทำที่ขยายจาก manifest หนึ่งรายการ
+cli.flag.manifest_expanded_bytes.help = จำกัดไบต์ที่เก็บไว้โดยรายการ foreach ที่ขยายแล้ว
 cli.flag.json.help = แสดงผลเป็น JSON ที่เครื่องอ่านได้
 cli.flag.no_input.help = ไม่อ่านข้อมูลนำเข้าแบบโต้ตอบเลย
 cli.flag.color.help = นโยบายการแสดงผลแบบมีสี (auto, always, never)

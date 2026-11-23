@@ -19,9 +19,10 @@ pub use no_input::NoInput;
 pub use policies::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub(super) mod policy_definitions;
 use budget::{
-    DEFAULT_MANIFEST_EVALUATION_FUEL, DEFAULT_MANIFEST_EXPANDED_ENTRIES,
-    DEFAULT_MANIFEST_FOREACH_CARDINALITY, DEFAULT_MANIFEST_FUEL, DEFAULT_MANIFEST_RENDERED_BYTES,
-    DEFAULT_MANIFEST_RENDERED_VALUE_BYTES, DEFAULT_MANIFEST_SOURCE_BYTES,
+    DEFAULT_MANIFEST_EVALUATION_FUEL, DEFAULT_MANIFEST_EXPANDED_BYTES,
+    DEFAULT_MANIFEST_EXPANDED_ENTRIES, DEFAULT_MANIFEST_FOREACH_CARDINALITY, DEFAULT_MANIFEST_FUEL,
+    DEFAULT_MANIFEST_RENDERED_BYTES, DEFAULT_MANIFEST_RENDERED_VALUE_BYTES,
+    DEFAULT_MANIFEST_SOURCE_BYTES,
 };
 use defaults::default_manifest_path;
 use shells::ShellDefinition;
@@ -170,6 +171,13 @@ pub struct CliConfig {
         cli(value_name = "COUNT")
     )]
     pub manifest_expanded_entries: usize,
+
+    /// Maximum modelled bytes retained by expanded `foreach` entries.
+    #[ortho_config(
+        default = DEFAULT_MANIFEST_EXPANDED_BYTES,
+        cli(value_name = "BYTES")
+    )]
+    pub manifest_expanded_bytes: usize,
 
     /// Emit machine-readable JSON output.
     #[ortho_config(default = false)]

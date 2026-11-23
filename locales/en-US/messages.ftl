@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered acro
 cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
 cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
 cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_expanded_bytes.help = Limit bytes retained by expanded foreach entries.
 cli.flag.json.help = Emit machine-readable JSON output.
 cli.flag.no_input.help = Never read interactive input.
 cli.flag.color.help = Colour output policy (auto, always, never).

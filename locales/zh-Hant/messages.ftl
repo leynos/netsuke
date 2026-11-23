@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = 限制轉譯至單一資訊清�
 cli.flag.manifest_source_bytes.help = 限制每份資訊清單消耗的範本與巨集來源位元組數。
 cli.flag.manifest_foreach_cardinality.help = 限制單次 foreach 展開處理的值數量。
 cli.flag.manifest_expanded_entries.help = 限制從單一資訊清單展開的目標與動作數量。
+cli.flag.manifest_expanded_bytes.help = 限制展開的 foreach 項目所保留的位元組數。
 cli.flag.json.help = 輸出機器可讀的 JSON。
 cli.flag.no_input.help = 絕不讀取互動式輸入。
 cli.flag.color.help = 彩色輸出原則（auto、always、never）。

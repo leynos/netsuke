@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Tek bir manifeste işlenen topl
 cli.flag.manifest_source_bytes.help = Manifest başına kullanılan şablon ve makro kaynak baytlarını sınırla.
 cli.flag.manifest_foreach_cardinality.help = Tek bir foreach genişletmesinin işlediği değer sayısını sınırla.
 cli.flag.manifest_expanded_entries.help = Tek bir manifestten genişletilen hedef ve eylem sayısını sınırla.
+cli.flag.manifest_expanded_bytes.help = Genişletilmiş foreach girdilerinin tuttuğu baytları sınırlayın.
 cli.flag.json.help = Makinece okunabilir JSON çıktısı üret.
 cli.flag.no_input.help = Etkileşimli girdi hiçbir zaman okunmasın.
 cli.flag.color.help = Renkli çıktı ilkesi (auto, always, never).

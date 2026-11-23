@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Die insgesamt in ein Manifest g
 cli.flag.manifest_source_bytes.help = Die pro Manifest verbrauchten Bytes aus Template- und Makroquellen begrenzen.
 cli.flag.manifest_foreach_cardinality.help = Die von einer foreach-Erweiterung verarbeiteten Werte begrenzen.
 cli.flag.manifest_expanded_entries.help = Die aus einem Manifest erweiterten Ziele und Aktionen begrenzen.
+cli.flag.manifest_expanded_bytes.help = Die von erweiterten foreach-Einträgen belegten Bytes begrenzen.
 cli.flag.json.help = Maschinenlesbare JSON-Ausgabe erzeugen.
 cli.flag.no_input.help = Niemals interaktive Eingaben lesen.
 cli.flag.color.help = Richtlinie für Farbausgabe (auto, always, never).

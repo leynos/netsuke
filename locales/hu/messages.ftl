@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Egy jegyzékbe renderelt bájto
 cli.flag.manifest_source_bytes.help = A jegyzékenként felhasznált sablon- és makróforrás-bájtok korlátozása.
 cli.flag.manifest_foreach_cardinality.help = Egy foreach-bővítés által feldolgozott értékek korlátozása.
 cli.flag.manifest_expanded_entries.help = Egy jegyzékből kibővített célok és műveletek korlátozása.
+cli.flag.manifest_expanded_bytes.help = A kibővített foreach-bejegyzések által megtartott bájtok korlátozása.
 cli.flag.json.help = Géppel olvasható JSON kimenet előállítása.
 cli.flag.no_input.help = Soha ne olvasson interaktív bemenetet.
 cli.flag.color.help = A színes kimenet szabálya (auto, always, never).

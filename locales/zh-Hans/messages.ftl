@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = 限制渲染到单个清单中�
 cli.flag.manifest_source_bytes.help = 限制每个清单消耗的模板和宏源字节数。
 cli.flag.manifest_foreach_cardinality.help = 限制单次 foreach 展开处理的值数量。
 cli.flag.manifest_expanded_entries.help = 限制从单个清单展开的目标和操作数量。
+cli.flag.manifest_expanded_bytes.help = 限制展开的 foreach 条目保留的字节数。
 cli.flag.json.help = 输出机器可读的 JSON。
 cli.flag.no_input.help = 绝不读取交互式输入。
 cli.flag.color.help = 彩色输出策略（auto、always、never）。

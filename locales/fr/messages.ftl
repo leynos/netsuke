@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Limiter le nombre total d’oct
 cli.flag.manifest_source_bytes.help = Limiter les octets de source de modèles et de macros consommés par manifeste.
 cli.flag.manifest_foreach_cardinality.help = Limiter les valeurs traitées par une expansion foreach.
 cli.flag.manifest_expanded_entries.help = Limiter les cibles et les actions développées depuis un manifeste.
+cli.flag.manifest_expanded_bytes.help = Limiter les octets conservés par les entrées foreach développées.
 cli.flag.json.help = Produire une sortie JSON exploitable par une machine.
 cli.flag.no_input.help = Ne jamais lire d'entrée interactive.
 cli.flag.color.help = Politique de couleur en sortie (auto, always, never).

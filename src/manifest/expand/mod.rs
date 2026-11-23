@@ -1,7 +1,7 @@
 //! Expands manifest foreach directives into concrete targets and actions.
 use super::{
     ManifestMap, ManifestValue,
-    budget::{ManifestBudget, ManifestBudgetStage},
+    budget::{ManifestBudget, ManifestBudgetStage, retained_size},
 };
 use crate::manifest::budget::adapter::BudgetErrorExt;
 use anyhow::{Context, Result};
@@ -207,6 +207,16 @@ fn expand_foreach_target(
     let Some(expression) = map.get("foreach") else {
         return Ok(Vec::new());
     };
+    // Every admitted item retains one clone of this source, so its structural
+    // size is charged per item. Estimate it once, before lazy iteration can
+    // allocate anything.
+    let source_bytes = retained_size::source_map_bytes(map, context.budget.expanded_bytes_limit())
+        .ok_or_else(|| {
+            context
+                .budget
+                .expanded_bytes_exhaustion(ManifestBudgetStage::ExpansionAggregate)
+        })
+        .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
     let values = parse_foreach_values(expression, context)?;
     let iter = values.try_iter().context(crate::localization::message(
         crate::localization::keys::MANIFEST_FOREACH_NOT_ITERABLE,
@@ -215,6 +225,7 @@ fn expand_foreach_target(
     for (index, item) in iter.enumerate() {
         let foreach_item = ForeachItem {
             source: map,
+            source_bytes,
             item: &item,
             index,
         };
@@ -229,6 +240,8 @@ fn expand_foreach_target(
 struct ForeachItem<'a> {
     /// Holds the target or action mapping to clone after its budget charge.
     source: &'a ManifestMap,
+    /// Holds the modelled bytes retained by one source clone.
+    source_bytes: usize,
     /// Holds the current lazily consumed iterator item.
     item: &'a minijinja::value::Value,
     /// Identifies the zero-based iterator position.
@@ -249,25 +262,92 @@ fn expand_foreach_item(
         .budget
         .charge_expanded_entry(ManifestBudgetStage::ExpansionAggregate)
         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
-    let mut entry = foreach_item.source.clone();
-    entry.remove("foreach");
-    match when_allows(
-        &mut entry,
+    // Refuse an item that cannot fit the remaining allowance before `when`
+    // copies it into a temporary condition context.
+    let item_bytes = retained_size::item_value_bytes(
+        foreach_item.item,
+        context.budget.remaining_expanded_bytes(),
+    )
+    .ok_or_else(|| {
+        context
+            .budget
+            .expanded_bytes_exhaustion(ManifestBudgetStage::ExpansionAggregate)
+    })
+    .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
+    let resolution = when_allows(
+        foreach_item.source,
         context,
         Some((foreach_item.item, foreach_item.index)),
         report.has_filtered_entry_capacity(),
-    )? {
-        WhenResolution::Include => {}
+    )?;
+    let is_conditional = match resolution {
+        WhenResolution::Include => false,
         WhenResolution::Exclude(event) => {
             report.record_filtered_entry(context.section == "targets", event);
             return Ok(None);
         }
-        WhenResolution::Conditional => {
-            entry.insert("conditional".into(), ManifestValue::Bool(true));
-        }
+        WhenResolution::Conditional => true,
+    };
+    charge_retained_bytes(foreach_item, item_bytes, context)?;
+    let mut entry = clone_expansion_entry(foreach_item.source);
+    if is_conditional {
+        entry.insert("conditional".into(), ManifestValue::Bool(true));
     }
-    inject_iteration_vars(&mut entry, foreach_item.item, foreach_item.index)?;
+    let serialized_bytes =
+        inject_iteration_vars(&mut entry, foreach_item.item, foreach_item.index)?;
+    charge_serialized_growth(context, item_bytes, serialized_bytes)?;
     Ok(Some(ManifestValue::Object(entry)))
+}
+
+/// Charge the source, item, and injected-key bytes retained by one expansion.
+fn charge_retained_bytes(
+    foreach_item: &ForeachItem<'_>,
+    item_bytes: usize,
+    context: &ExpansionContext<'_>,
+) -> Result<()> {
+    let retained_bytes = foreach_item
+        .source_bytes
+        .checked_add(item_bytes)
+        .and_then(|total| total.checked_add(retained_size::iteration_overhead()))
+        .ok_or_else(|| {
+            context
+                .budget
+                .expanded_bytes_exhaustion(ManifestBudgetStage::ExpansionAggregate)
+        })
+        .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
+    context
+        .budget
+        .charge_expanded_bytes(ManifestBudgetStage::ExpansionAggregate, retained_bytes)
+        .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
+    Ok(())
+}
+
+/// Charge modelled serialization growth beyond the item's earlier estimate.
+fn charge_serialized_growth(
+    context: &ExpansionContext<'_>,
+    item_bytes: usize,
+    serialized_bytes: usize,
+) -> Result<()> {
+    if serialized_bytes <= item_bytes {
+        return Ok(());
+    }
+    context
+        .budget
+        .charge_expanded_bytes(
+            ManifestBudgetStage::ExpansionAggregate,
+            serialized_bytes - item_bytes,
+        )
+        .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
+    Ok(())
+}
+
+/// Clone one source entry while dropping keys expansion itself consumes.
+fn clone_expansion_entry(source: &ManifestMap) -> ManifestMap {
+    source
+        .iter()
+        .filter(|(key, _)| !retained_size::is_expansion_local_key(key))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
 }
 
 /// Expand a target without `foreach` after evaluating its optional `when` clause.
@@ -280,12 +360,9 @@ fn expand_static_target(
         .budget
         .charge_expanded_entry(ManifestBudgetStage::ExpansionAggregate)
         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
-    match when_allows(
-        &mut map,
-        context,
-        None,
-        report.has_filtered_entry_capacity(),
-    )? {
+    let resolution = when_allows(&map, context, None, report.has_filtered_entry_capacity())?;
+    drop(map.remove("when"));
+    match resolution {
         WhenResolution::Include => Ok(vec![ManifestValue::Object(map)]),
         WhenResolution::Exclude(event) => {
             report.record_filtered_entry(context.section == "targets", event);

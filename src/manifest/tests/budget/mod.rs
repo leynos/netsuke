@@ -1,6 +1,7 @@
 //! Focused resource-budget regression tests for manifest evaluation.
 
 mod boundary;
+mod foreach_bytes;
 
 use super::super::{
     ManifestBudgetLimits, from_path_for_manifest_query_with_limits, from_str_with_limits,
@@ -26,6 +27,7 @@ fn small_limits() -> ManifestBudgetLimits {
         source_bytes: 1_024,
         foreach_cardinality: 2,
         expanded_entries: 4,
+        expanded_bytes: 4_096,
     }
 }
 

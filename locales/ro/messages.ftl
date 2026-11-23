@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Limitează numărul total de oc
 cli.flag.manifest_source_bytes.help = Limitează octeții sursă ai șablonului și macrocomenzilor consumați per manifest.
 cli.flag.manifest_foreach_cardinality.help = Limitează valorile procesate de o singură extindere foreach.
 cli.flag.manifest_expanded_entries.help = Limitează țintele și acțiunile extinse dintr-un singur manifest.
+cli.flag.manifest_expanded_bytes.help = Limitați octeții păstrați de intrările foreach extinse.
 cli.flag.json.help = Produce ieșire JSON care poate fi prelucrată automat.
 cli.flag.no_input.help = Nu citi niciodată date introduse interactiv.
 cli.flag.color.help = Politica de ieșire colorată (auto, always, never).

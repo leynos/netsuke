@@ -17,6 +17,8 @@ pub(crate) struct ProjectManifestBudgetRequest {
     pub(crate) foreach_cardinality: Option<usize>,
     /// Requested aggregate expansion count.
     pub(crate) expanded_entries: Option<usize>,
+    /// Requested aggregate expansion-byte allowance.
+    pub(crate) expanded_bytes: Option<usize>,
 }
 
 impl ProjectManifestBudgetRequest {
@@ -32,6 +34,7 @@ impl ProjectManifestBudgetRequest {
         narrow_limit(&mut self.source_bytes, other.source_bytes);
         narrow_limit(&mut self.foreach_cardinality, other.foreach_cardinality);
         narrow_limit(&mut self.expanded_entries, other.expanded_entries);
+        narrow_limit(&mut self.expanded_bytes, other.expanded_bytes);
     }
 }
 

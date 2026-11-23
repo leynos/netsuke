@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Batasi total byte yang dirender
 cli.flag.manifest_source_bytes.help = Batasi byte sumber templat dan makro yang digunakan untuk setiap manifes.
 cli.flag.manifest_foreach_cardinality.help = Batasi nilai yang diproses oleh satu ekspansi foreach.
 cli.flag.manifest_expanded_entries.help = Batasi target dan tindakan yang diperluas dari satu manifes.
+cli.flag.manifest_expanded_bytes.help = Batasi byte yang disimpan oleh entri foreach yang diperluas.
 cli.flag.json.help = Hasilkan keluaran JSON yang terbaca mesin.
 cli.flag.no_input.help = Jangan pernah membaca masukan interaktif.
 cli.flag.color.help = Kebijakan keluaran berwarna (auto, always, never).

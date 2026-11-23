@@ -34,6 +34,7 @@ pub(crate) fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
         "manifest_source_bytes" => Some(keys::CLI_FLAG_MANIFEST_SOURCE_BYTES_HELP),
         "manifest_foreach_cardinality" => Some(keys::CLI_FLAG_MANIFEST_FOREACH_CARDINALITY_HELP),
         "manifest_expanded_entries" => Some(keys::CLI_FLAG_MANIFEST_EXPANDED_ENTRIES_HELP),
+        "manifest_expanded_bytes" => Some(keys::CLI_FLAG_MANIFEST_EXPANDED_BYTES_HELP),
         "json" => Some(keys::CLI_FLAG_JSON_HELP),
         "no_input" => Some(keys::CLI_FLAG_NO_INPUT_HELP),
         "color" => Some(keys::CLI_FLAG_COLOR_HELP),

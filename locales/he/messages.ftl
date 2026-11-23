@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = ‏הגבלת מספר הבתי
 cli.flag.manifest_source_bytes.help = ‏הגבלת בתי המקור של תבניות ומאקרו הנצרכים לכל מניפסט.
 cli.flag.manifest_foreach_cardinality.help = ‏הגבלת הערכים שמעובדים בהרחבת foreach אחת.
 cli.flag.manifest_expanded_entries.help = ‏הגבלת היעדים והפעולות שמורחבים ממניפסט אחד.
+cli.flag.manifest_expanded_bytes.help = ‏הגבלת הבתים הנשמרים על ידי רשומות foreach מורחבות.
 cli.flag.json.help = פלט JSON הניתן לקריאה במכונה.
 cli.flag.no_input.help = לעולם לא לקרוא קלט אינטראקטיבי.
 cli.flag.color.help = מדיניות הפלט הצבעוני (auto, always, never).

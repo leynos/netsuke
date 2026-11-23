@@ -28,6 +28,7 @@ impl Cli {
             source_bytes: self.manifest_source_bytes,
             foreach_cardinality: self.manifest_foreach_cardinality,
             expanded_entries: self.manifest_expanded_entries,
+            expanded_bytes: self.manifest_expanded_bytes,
         }
         .validate()
     }

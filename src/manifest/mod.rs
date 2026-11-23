@@ -330,5 +330,7 @@ mod env;
 pub use env::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL};
 pub use schema_version::{SCHEMA_ADMISSION_OUTCOME_VALUES, SCHEMA_ADMISSION_TOTAL};
 #[cfg(test)]
+pub(crate) mod lazy_sequence;
+#[cfg(test)]
 mod tests;
 mod workspace;

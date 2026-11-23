@@ -269,6 +269,55 @@ budget-aware internal buffer deferred in
 [#720](https://github.com/leynos/netsuke/issues/720); it neither discharges nor
 narrows that deferred work.
 
+## Addendum G: Aggregate expansion-byte allowance (2026-11-23)
+
+[#975](https://github.com/leynos/netsuke/issues/975) reported that `foreach`
+expansion deep-cloned each source entry after charging only an entry count. A
+manifest below the source-byte ceiling could therefore multiply a large recipe
+thousands of times and allocate several GiB before rendered-byte limits saw any
+output.
+
+The decision adds an eighth manifest resource ceiling, `expanded_bytes`
+(default 268,435,456 bytes). `ManifestBudget` shares it with the other counters
+for one manifest load, and `expand_foreach_item` charges a structural estimate
+before each clone. The estimate charges one `serde_json::Value` slot per node,
+each string's byte length, and one key header, index slot, control byte, and
+key byte per mapping entry. A `MiniJinja` iterator item is modelled with the
+same node cost: bytes become one numeric node per byte, non-string keys add a
+key estimate plus a string node, undefined and null share one node, and an
+unknown plain object charges one node. Both estimators use checked arithmetic
+and an explicit work stack, and stop as soon as the total would exceed the
+ceiling.
+
+`when` is now evaluated against the borrowed source, so a filtered item is
+never cloned and never charged. The item estimate still runs first, so an item
+larger than the remaining allowance is refused even when `when` would filter
+it. Retained items charge the source estimate, the item estimate, and the
+overhead of the `item`, `index`, `vars`, and `conditional` keys; after
+serialization, any modelled growth of `vars.item` is charged as a difference.
+The allowance is an operator setting that project configuration, including its
+`extends` chain, may narrow but not widen, and both build and manifest-query
+loads enforce it.
+
+Residual constraints are recorded here rather than claimed away:
+
+- The estimate models retained structure. It is not an allocator heap
+  measurement, does not see an order-preserving map's growth capacity, and does
+  not bound memory held inside a custom `MiniJinja` object.
+- The temporary `when` context clones the source `vars` and serializes the
+  item before the retained-entry charge. The item estimate bounds that
+  temporary allocation, but the context itself is not separately charged.
+- `serde_json::to_value` remains recursive; the re-estimate after
+  serialization detects growth but cannot prevent the allocation that produced
+  it.
+- A lazy item iterator is consumed while it is estimated. A custom one-shot
+  iterator may behave differently when `when` or `vars` injection serializes it
+  again; supported JSON-shaped iterables yield a fresh iterator.
+- MiniJinja 2.24.0 and serde_json 1.0.151 serializer internals were not
+  verified against pinned sources for a tighter charge.
+- Adding a public field to `ManifestBudgetLimits` breaks downstream code
+  that constructs it with a complete struct literal.
+
 ## References
 
 - [#651](https://github.com/leynos/netsuke/issues/651) and

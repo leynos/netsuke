@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Limita i byte totali renderizza
 cli.flag.manifest_source_bytes.help = Limita i byte sorgente del template e delle macro consumati per manifest.
 cli.flag.manifest_foreach_cardinality.help = Limita i valori elaborati da una singola espansione foreach.
 cli.flag.manifest_expanded_entries.help = Limita i target e le azioni espansi da un manifest.
+cli.flag.manifest_expanded_bytes.help = Limita i byte trattenuti dalle voci foreach espanse.
 cli.flag.json.help = Produci output JSON leggibile da una macchina.
 cli.flag.no_input.help = Non leggere mai input interattivo.
 cli.flag.color.help = Criterio per l'output a colori (auto, always, never).

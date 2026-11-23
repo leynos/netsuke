@@ -14,6 +14,8 @@ pub const DEFAULT_SOURCE_BYTES: usize = 4_194_304;
 pub const DEFAULT_FOREACH_CARDINALITY: usize = 10_000;
 /// Default maximum targets and actions emitted by expansion.
 pub const DEFAULT_EXPANDED_ENTRIES: usize = 50_000;
+/// Default maximum modelled bytes retained by manifest expansion.
+pub const DEFAULT_EXPANDED_BYTES: usize = 268_435_456;
 /// Default maximum `MiniJinja` instructions reserved across one manifest.
 pub const DEFAULT_MANIFEST_FUEL: u64 = 100_000_000;
 
@@ -32,6 +34,8 @@ pub struct ManifestBudgetLimits {
     pub foreach_cardinality: usize,
     /// Caps target and action entries emitted by expansion.
     pub expanded_entries: usize,
+    /// Caps modelled bytes retained by expanded `foreach` entries.
+    pub expanded_bytes: usize,
     /// Caps fuel reserved across all manifest evaluations.
     pub manifest_fuel: u64,
 }
@@ -46,6 +50,7 @@ impl Default for ManifestBudgetLimits {
             source_bytes: DEFAULT_SOURCE_BYTES,
             foreach_cardinality: DEFAULT_FOREACH_CARDINALITY,
             expanded_entries: DEFAULT_EXPANDED_ENTRIES,
+            expanded_bytes: DEFAULT_EXPANDED_BYTES,
             manifest_fuel: DEFAULT_MANIFEST_FUEL,
         }
     }
@@ -81,6 +86,10 @@ impl ManifestBudgetLimits {
         ensure!(
             self.expanded_entries > 0,
             "manifest expanded entries must be positive"
+        );
+        ensure!(
+            self.expanded_bytes > 0,
+            "manifest expanded bytes must be positive"
         );
         ensure!(self.manifest_fuel > 0, "manifest fuel must be positive");
         Ok(self)
@@ -153,6 +162,8 @@ pub(crate) enum ManifestBudgetKind {
     ForeachCardinality,
     /// Counts target and action entries emitted by expansion.
     ExpandedEntries,
+    /// Counts modelled bytes retained by expanded `foreach` entries.
+    ExpandedBytes,
 }
 
 impl ManifestBudgetKind {
@@ -165,6 +176,7 @@ impl ManifestBudgetKind {
             Self::SourceBytes => "source_bytes",
             Self::ForeachCardinality => "foreach_cardinality",
             Self::ExpandedEntries => "expanded_entries",
+            Self::ExpandedBytes => "expanded_bytes",
         }
     }
 }
@@ -198,6 +210,7 @@ mod tests {
             source_bytes: 1,
             foreach_cardinality: 1,
             expanded_entries: 1,
+            expanded_bytes: 1,
             manifest_fuel: 1,
         }
     }
@@ -214,6 +227,7 @@ mod tests {
             "source_bytes" => limits.source_bytes = 0,
             "foreach_cardinality" => limits.foreach_cardinality = 0,
             "expanded_entries" => limits.expanded_entries = 0,
+            "expanded_bytes" => limits.expanded_bytes = 0,
             "manifest_fuel" => limits.manifest_fuel = 0,
             _ => return None,
         }
@@ -227,6 +241,7 @@ mod tests {
     #[case::source_bytes("source_bytes", "manifest source bytes")]
     #[case::foreach_cardinality("foreach_cardinality", "manifest foreach cardinality")]
     #[case::expanded_entries("expanded_entries", "manifest expanded entries")]
+    #[case::expanded_bytes("expanded_bytes", "manifest expanded bytes")]
     #[case::manifest_fuel("manifest_fuel", "manifest fuel")]
     fn zero_limit_is_rejected(
         one_unit_limits: ManifestBudgetLimits,

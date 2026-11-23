@@ -2,56 +2,11 @@
 
 use super::super::*;
 use crate::manifest::ManifestBudgetLimits;
+use crate::manifest::lazy_sequence::{CountingSequence, add_counting_range};
 use anyhow::{Result, ensure};
-use minijinja::{
-    Environment,
-    value::{Kwargs, Value},
-};
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-};
+use minijinja::Environment;
+use std::sync::atomic::Ordering;
 use test_support::fluent::normalize_fluent_isolates;
-
-/// Records how many values a lazily produced sequence has yielded.
-#[derive(Clone, Debug)]
-struct CountingSequence {
-    /// Counts every value produced by an iterator derived from this sequence.
-    produced: Arc<AtomicUsize>,
-    /// Caps the number of values one iteration can produce.
-    total: usize,
-}
-
-/// Yields at most `total` values while recording each production.
-struct CountingIter {
-    /// Shares the production counter with the sequence.
-    produced: Arc<AtomicUsize>,
-    /// Holds the number of values still to yield.
-    remaining: usize,
-}
-
-impl Iterator for CountingIter {
-    type Item = Value;
-
-    fn next(&mut self) -> Option<Value> {
-        if self.remaining == 0 {
-            return None;
-        }
-        self.remaining -= 1;
-        let ordinal = self.produced.fetch_add(1, Ordering::SeqCst) + 1;
-        Some(Value::from(ordinal))
-    }
-}
-
-/// Convert a counting sequence into a `MiniJinja` iterable value.
-fn counting_value(source: &CountingSequence) -> Value {
-    Value::make_object_iterable(source.clone(), |state| {
-        Box::new(CountingIter {
-            produced: Arc::clone(&state.produced),
-            remaining: state.total,
-        })
-    })
-}
 
 /// A `foreach` must stop at the cardinality check instead of collecting every
 /// value first: the production counter records how far iteration actually ran,
@@ -60,15 +15,10 @@ fn counting_value(source: &CountingSequence) -> Value {
 fn foreach_stops_consuming_before_the_cardinality_limit() -> Result<()> {
     const TOTAL: usize = 100_000;
     const CARDINALITY_LIMIT: usize = 2;
-    let sequence = CountingSequence {
-        produced: Arc::new(AtomicUsize::new(0)),
-        total: TOTAL,
-    };
-    let produced = Arc::clone(&sequence.produced);
+    let sequence = CountingSequence::new(TOTAL);
+    let produced = sequence.produced();
     let mut env = Environment::new();
-    env.add_function("counting_range", move |_kwargs: Kwargs| -> Value {
-        counting_value(&sequence)
-    });
+    add_counting_range(&mut env, &sequence);
 
     let yaml = concat!(
         "targets:\n",

@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Περιορισμός των �
 cli.flag.manifest_source_bytes.help = Περιορισμός των byte προέλευσης προτύπων και μακροεντολών που καταναλώνονται ανά δηλωτικό.
 cli.flag.manifest_foreach_cardinality.help = Περιορισμός των τιμών που επεξεργάζεται μία επέκταση foreach.
 cli.flag.manifest_expanded_entries.help = Περιορισμός των στόχων και των ενεργειών που επεκτείνονται από ένα δηλωτικό.
+cli.flag.manifest_expanded_bytes.help = Περιορισμός των byte που διατηρούνται από διευρυμένες καταχωρήσεις foreach.
 cli.flag.json.help = Παραγωγή εξόδου JSON αναγνώσιμης από μηχανή.
 cli.flag.no_input.help = Να μη γίνεται ποτέ ανάγνωση διαδραστικής εισόδου.
 cli.flag.color.help = Πολιτική έγχρωμης εξόδου (auto, always, never).

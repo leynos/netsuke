@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = ‏حدّ إجمالي وحدا
 cli.flag.manifest_source_bytes.help = ‏حدّ وحدات بايت مصدر القالب ووحدات الماكرو المستهلكة لكل بيان.
 cli.flag.manifest_foreach_cardinality.help = ‏حدّ القيم المعالَجة في توسعة foreach واحدة.
 cli.flag.manifest_expanded_entries.help = ‏حدّ الأهداف والإجراءات الموسَّعة من بيان واحد.
+cli.flag.manifest_expanded_bytes.help = ‏حدّ البايتات المحتفظ بها من إدخالات foreach الموسَّعة.
 cli.flag.json.help = إخراج JSON قابل للقراءة آليًا.
 cli.flag.no_input.help = عدم قراءة أي مدخلات تفاعلية أبدًا.
 cli.flag.color.help = سياسة الإخراج الملوّن (auto أو always أو never).

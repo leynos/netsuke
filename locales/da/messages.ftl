@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Begræns det samlede antal byte
 cli.flag.manifest_source_bytes.help = Begræns bytes fra skabelon- og makrokilde, der forbruges pr. manifest.
 cli.flag.manifest_foreach_cardinality.help = Begræns værdier, der behandles af én foreach-udvidelse.
 cli.flag.manifest_expanded_entries.help = Begræns mål og handlinger, der udvides fra ét manifest.
+cli.flag.manifest_expanded_bytes.help = Begræns bytes, der beholdes af udvidede foreach-poster.
 cli.flag.json.help = Udskriv maskinlæsbart JSON.
 cli.flag.no_input.help = Læs aldrig interaktivt input.
 cli.flag.color.help = Politik for farvet output (auto, always, never).

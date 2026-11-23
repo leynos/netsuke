@@ -51,6 +51,11 @@ pub(in crate::cli) fn reconcile_manifest_budget(
         project_request.expanded_entries,
         "manifest_expanded_entries",
     );
+    clamp_limit(
+        &mut operator_limits.manifest_expanded_bytes,
+        project_request.expanded_bytes,
+        "manifest_expanded_bytes",
+    );
     operator_limits
 }
 

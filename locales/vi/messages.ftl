@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Giới hạn tổng số byte �
 cli.flag.manifest_source_bytes.help = Giới hạn số byte mã nguồn template và macro được sử dụng cho mỗi manifest.
 cli.flag.manifest_foreach_cardinality.help = Giới hạn số giá trị được xử lý bởi một lần mở rộng foreach.
 cli.flag.manifest_expanded_entries.help = Giới hạn số mục tiêu và hành động được mở rộng từ một manifest.
+cli.flag.manifest_expanded_bytes.help = Giới hạn số byte được giữ lại bởi các mục foreach đã mở rộng.
 cli.flag.json.help = Xuất dữ liệu JSON máy đọc được.
 cli.flag.no_input.help = Không bao giờ đọc dữ liệu nhập tương tác.
 cli.flag.color.help = Chính sách xuất màu (auto, always, never).

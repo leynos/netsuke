@@ -142,6 +142,7 @@ fn configure_manifest_budget(world: &TestWorld) {
         source_bytes: 1_024,
         foreach_cardinality: 2,
         expanded_entries: 4,
+        expanded_bytes: 1_500,
     });
 }
 

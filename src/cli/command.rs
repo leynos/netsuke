@@ -134,6 +134,10 @@ pub struct Cli {
     #[arg(long, value_name = "COUNT", default_value_t = 50_000)]
     pub manifest_expanded_entries: usize,
 
+    /// Maximum modelled bytes retained by expanded `foreach` entries.
+    #[arg(long, value_name = "BYTES", default_value_t = 268_435_456)]
+    pub manifest_expanded_bytes: usize,
+
     /// Emit machine-readable JSON output.
     #[arg(long)]
     pub json: bool,
@@ -214,6 +218,7 @@ impl Default for Cli {
             manifest_source_bytes: 4_194_304,
             manifest_foreach_cardinality: 10_000,
             manifest_expanded_entries: 50_000,
+            manifest_expanded_bytes: 268_435_456,
             json: false,
             interaction: InteractionArgs::default(),
             color: ColourPolicy::Auto,

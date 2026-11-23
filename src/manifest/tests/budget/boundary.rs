@@ -103,6 +103,57 @@ fn manifest_source_exactly_at_the_limit_loads_and_one_byte_more_fails() -> Resul
 }
 
 #[test]
+fn query_expansion_byte_failure_does_not_emit_budget_metrics() -> Result<()> {
+    let workspace = tempdir().context("create query expansion workspace")?;
+    let path = workspace.path().join("Netsukefile");
+    test_support::fs::write(
+        &path,
+        format!(
+            concat!(
+                "netsuke_version: 1.0.0\ntargets:\n",
+                "  - name: '{{{{ item }}}}'\n",
+                "    foreach: [one, two]\n",
+                "    command: '{}'\n",
+            ),
+            "x".repeat(5_000)
+        ),
+    )?;
+    let limits = ManifestBudgetLimits {
+        source_bytes: 16_384,
+        expanded_bytes: 4_096,
+        ..ManifestBudgetLimits::default()
+    };
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let error = metrics::with_local_recorder(&recorder, || {
+        from_path_for_manifest_query_with_limits(&path, limits, None)
+            .expect_err("query expansion must exhaust the byte allowance")
+    });
+    let exhaustion = error
+        .chain()
+        .find_map(|source| {
+            source.downcast_ref::<crate::manifest::budget::ManifestBudgetExhaustion>()
+        })
+        .context("query failure must retain the typed exhaustion")?;
+    ensure!(
+        exhaustion.kind == crate::manifest::budget::ManifestBudgetKind::ExpandedBytes,
+        "query failure must report the expanded_bytes budget"
+    );
+    ensure!(format!("{error:#}").contains("resource budget exhausted"));
+    ensure!(
+        snapshotter
+            .snapshot()
+            .into_vec()
+            .iter()
+            .all(|(key, _, _, _)| {
+                key.key().name() != "netsuke_manifest_budget_exhausted_total"
+            }),
+        "query failure must not emit budget telemetry"
+    );
+    Ok(())
+}
+
+#[test]
 fn query_budget_failure_does_not_emit_budget_metrics() -> Result<()> {
     let workspace = tempdir().context("create query budget workspace")?;
     let path = workspace.path().join("Netsukefile");

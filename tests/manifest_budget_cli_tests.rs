@@ -74,3 +74,73 @@ fn generate_enforces_operator_budget_before_writing_output(
     );
     Ok(())
 }
+
+#[rstest]
+#[case::generate(&["generate", "--output", "build.ninja"], Some("build.ninja"))]
+#[case::help_targets(&["help", "targets"], None)]
+fn expansion_byte_budget_is_enforced_before_output(
+    #[case] command_args: &[&str],
+    #[case] generated: Option<&str>,
+) -> Result<()> {
+    let workspace = tempdir().context("create expansion-budget CLI workspace")?;
+    test_fs::write(workspace.path().join("operator.toml"), "")?;
+    test_fs::write(
+        workspace.path().join("Netsukefile"),
+        format!(
+            concat!(
+                "netsuke_version: 1.0.0\n",
+                "targets:\n",
+                "  - name: 'limited-{{{{ item }}}}'\n",
+                "    foreach: [one, two]\n",
+                "    command: 'echo s3cr3t {}'\n",
+            ),
+            "x".repeat(4_096)
+        ),
+    )?;
+    let output = cargo_bin_cmd!("netsuke")
+        .current_dir(workspace.path())
+        .env_clear()
+        .args([
+            "--config",
+            "operator.toml",
+            "--locale",
+            "en-US",
+            "--manifest-expanded-bytes",
+            "1024",
+            "--json",
+        ])
+        .args(command_args)
+        .output()
+        .context("run a command with a small expansion-byte budget")?;
+    let stderr = normalize_fluent_isolates(&String::from_utf8_lossy(&output.stderr));
+    ensure!(
+        !output.status.success(),
+        "over-budget expansion must fail for {command_args:?}"
+    );
+    let document: serde_json::Value =
+        serde_json::from_str(&stderr).context("expansion budget diagnostic must be valid JSON")?;
+    ensure!(
+        document
+            .pointer("/diagnostics/0/code")
+            .and_then(serde_json::Value::as_str)
+            == Some("netsuke::runner::manifest_budget_exceeded"),
+        "expansion budget diagnostic must have a stable code: {stderr}"
+    );
+    ensure!(
+        stderr.contains("Manifest resource budget exhausted")
+            && stderr.contains("expansion_aggregate")
+            && stderr.contains("1024"),
+        "expected the localized expansion diagnostic: {stderr}"
+    );
+    ensure!(
+        !stderr.contains("s3cr3t"),
+        "diagnostic leaked a recipe value"
+    );
+    if let Some(path) = generated {
+        ensure!(
+            !workspace.path().join(path).exists(),
+            "budget failure must precede generated output"
+        );
+    }
+    Ok(())
+}
