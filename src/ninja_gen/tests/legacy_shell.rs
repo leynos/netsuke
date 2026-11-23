@@ -212,13 +212,10 @@ fn power_shell_command_lists_preserve_state_and_stop_on_native_failure() -> Resu
     Ok(())
 }
 
-/// Verify that PowerShell lowering preserves native escaped-quote syntax and path literals.
-#[test]
-fn power_shell_recipes_quote_apostrophe_paths_with_power_shell_literals() -> Result<()> {
+/// Render one manifest source with the PowerShell route into its Ninja text.
+fn render_power_shell_manifest(source: &str) -> Result<String> {
     let manifest = crate::manifest::render_manifest(
-        crate::manifest::from_str(
-            "netsuke_version: '1.0.0'\ntargets:\n  - name: output's-file\n    sources: source's-file\n    command: 'Write-Output \"a`\"b\"; Copy-Item {{ ins }} {{ outs }}'\n",
-        )?,
+        crate::manifest::from_str(source)?,
         &minijinja::Environment::new(),
     )?;
     let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)?;
@@ -228,6 +225,15 @@ fn power_shell_recipes_quote_apostrophe_paths_with_power_shell_literals() -> Res
         &mut rendered,
         RecipeShell::PowerShell,
         &power_shell_interpreter(),
+    )?;
+    Ok(rendered)
+}
+
+/// Verify that PowerShell lowering preserves native escaped-quote syntax and path literals.
+#[test]
+fn power_shell_recipes_quote_apostrophe_paths_with_power_shell_literals() -> Result<()> {
+    let rendered = render_power_shell_manifest(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: output's-file\n    sources: source's-file\n    command: 'Write-Output \"a`\"b\"; Copy-Item {{ ins }} {{ outs }}'\n",
     )?;
     let generated = GeneratedNinja::new(&rendered);
     ensure!(
@@ -239,6 +245,37 @@ fn power_shell_recipes_quote_apostrophe_paths_with_power_shell_literals() -> Res
     ensure!(
         generated.recipe_contains(RecipeNeedle::new("Write-Output \"a`\"b\""))?,
         "PowerShell lowering must preserve native escaped double quotes"
+    );
+    Ok(())
+}
+
+/// Verify a shared list keeps each apostrophe path in one doubled-apostrophe literal.
+///
+/// Entry one ends at a neutral boundary, so entry two's marker is lowered at
+/// its own unquoted site and the generated payload must carry the standalone
+/// PowerShell literal rather than a literal split across the entry wrapper.
+#[test]
+fn power_shell_shared_lists_keep_apostrophe_paths_in_one_literal() -> Result<()> {
+    let rendered = render_power_shell_manifest(concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: output's-file\n",
+        "    sources: source's-file\n",
+        "    command:\n",
+        "      - Write-Output 'first entry'\n",
+        "      - Copy-Item {{ ins }} {{ outs }}\n",
+    ))?;
+    let generated = GeneratedNinja::new(&rendered);
+
+    ensure!(
+        generated.recipe_contains(RecipeNeedle::new(
+            "Copy-Item 'source''s-file' 'output''s-file'"
+        ))?,
+        "the shared list must carry each apostrophe path in one doubled-apostrophe literal"
+    );
+    ensure!(
+        !generated.recipe_contains(RecipeNeedle::new("Copy-Item 'source's-file'"))?,
+        "the shared list must not split an apostrophe path across a literal boundary"
     );
     Ok(())
 }
@@ -285,24 +322,13 @@ fn power_shell_scripts_do_not_use_the_posix_script_wrapper() -> Result<()> {
 /// Verify a semicolon-bearing source path stays one literal in an encoded script.
 #[test]
 fn power_shell_encoded_script_keeps_path_syntax_inside_one_literal() -> Result<()> {
-    let manifest = crate::manifest::render_manifest(
-        crate::manifest::from_str(concat!(
-            "netsuke_version: '1.0.0'\n",
-            "targets:\n",
-            "  - name: output\n",
-            "    sources: \"; New-Item pwned; Write-Output x\"\n",
-            "    script: \"Copy-Item {{ ins }} {{ outs }}\"\n",
-        ))?,
-        &minijinja::Environment::new(),
-    )?;
-    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)?;
-    let mut rendered = String::new();
-    generate_into_with_interpreter(
-        &graph,
-        &mut rendered,
-        RecipeShell::PowerShell,
-        &power_shell_interpreter(),
-    )?;
+    let rendered = render_power_shell_manifest(concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: output\n",
+        "    sources: \"; New-Item pwned; Write-Output x\"\n",
+        "    script: \"Copy-Item {{ ins }} {{ outs }}\"\n",
+    ))?;
     let generated = GeneratedNinja::new(&rendered);
 
     ensure!(

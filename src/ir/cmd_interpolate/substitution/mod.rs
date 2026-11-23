@@ -15,29 +15,18 @@ mod posix;
 
 mod powershell;
 
+mod protection;
+
 mod quotes;
 
+mod shared_list;
+
 use powershell::{PowerShellLexicalState, PowerShellSourceCharacter, PowerShellStopParsingState};
+use protection::MarkerProtection;
+pub(crate) use shared_list::{PowerShellListCarry, interpolate_shared_power_shell_entry};
 
-/// Classify whether the active shell region permits recipe-marker lowering.
-#[derive(Clone, Copy)]
-enum MarkerProtection {
-    /// Reject a marker because the shell region cannot safely encode it.
-    Protected,
-    /// Lower a marker using the current shell quote context.
-    Unprotected,
-}
-
-impl MarkerProtection {
-    /// Classify a shell-context predicate without exposing a Boolean at call sites.
-    const fn from_protected_region(is_protected: bool) -> Self {
-        if is_protected {
-            Self::Protected
-        } else {
-            Self::Unprotected
-        }
-    }
-}
+#[cfg(test)]
+pub(crate) use shared_list::shared_power_shell_entry_is_neutral;
 
 /// Track one-pass substitution with template context and mutable output state.
 ///
@@ -72,13 +61,23 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         chars: &'template [char],
         bindings: &'bindings CommandBindings,
     ) -> Self {
+        Self::with_power_shell_fail_closed(template, chars, bindings, false)
+    }
+
+    /// Initialise a traversal that inherits a shared script's fail-closed state.
+    pub(super) fn with_power_shell_fail_closed(
+        template: &'template str,
+        chars: &'template [char],
+        bindings: &'bindings CommandBindings,
+        is_fail_closed: bool,
+    ) -> Self {
         Self {
             template,
             chars,
             bindings,
             output: String::with_capacity(template.len()),
             in_backticks: false,
-            power_shell_lexical: PowerShellLexicalState::new(),
+            power_shell_lexical: PowerShellLexicalState::with_inherited_fail_closed(is_fail_closed),
             power_shell_stop_parsing: PowerShellStopParsingState::new(),
             quote_context: QuoteContext::Unquoted,
             command_substitutions: Vec::new(),

@@ -9,7 +9,7 @@ impl PowerShellLexicalState {
         &mut self,
         character: PowerShellSourceCharacter<'_>,
     ) {
-        self.has_typographic_quote |= character.is_typographic_quote();
+        self.is_fail_closed |= character.is_typographic_quote();
         match character.value() {
             ';' | '\n' | '\r' | '|' | '\'' | '"' => {
                 self.reset_variable_assignment_context();

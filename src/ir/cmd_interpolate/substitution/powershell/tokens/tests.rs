@@ -114,7 +114,8 @@ fn classify_assignment_expression_hash_from_forward_lexical_state() {
     let source = "$x=1+#";
     let characters = source.chars().collect::<Vec<_>>();
     let hash_position = characters.len() - 1;
-    let mut lexical_state = super::super::lexical::PowerShellLexicalState::new();
+    let mut lexical_state =
+        super::super::lexical::PowerShellLexicalState::with_inherited_fail_closed(false);
     for position in 0..hash_position {
         let character = PowerShellSourceCharacter::new(&characters, position)
             .expect("the source position identifies an existing character");

@@ -1,7 +1,16 @@
 //! Track PowerShell lexical state that can make marker substitution unsafe.
 
 mod assignments;
+
+mod block_comments;
+
+mod boundary;
+
 mod comments;
+
+pub(in crate::ir::cmd_interpolate) use boundary::{
+    InterpolationBoundary, PowerShellUnfinishedRegion,
+};
 
 use super::super::super::{
     INS_TOKEN, IrGenError, OUTS_TOKEN, QuoteContext, RejectionReason, find_substitution,
@@ -25,14 +34,27 @@ enum PowerShellCommentState {
 pub(in crate::ir::cmd_interpolate::substitution) struct PowerShellLexicalState {
     /// Retain the opener quote until its matching closing marker.
     here_string_quote: Option<char>,
-    /// Fail closed after a typographic quote whose pairing is not modelled.
-    has_typographic_quote: bool,
     /// Track comments so scanner-sensitive contents can fail closed.
     comment_state: PowerShellCommentState,
-    /// Fail closed after PowerShell syntax the partial scanner does not model.
-    has_unmodelled_syntax: bool,
+    /// Fail closed after typographic quotes, unmodelled syntax, or an earlier entry.
+    ///
+    /// Every reason to reject markers from here on is sticky for the rest of a
+    /// shared list, so one flag records the classification rather than one flag
+    /// per cause.
+    is_fail_closed: bool,
     /// Cache whether the nearest assignment since a lexical boundary targets a variable.
     has_variable_assignment_since_boundary: bool,
+    /// Track whether a block comment's terminating `#>` has been read.
+    ///
+    /// PowerShell block comments do not nest, so the value is zero or one.
+    block_comment_depth: usize,
+    /// Record a final backtick that would escape the character following the entry.
+    has_trailing_escape: bool,
+    /// Record the source position immediately after a recognised `#>`.
+    ///
+    /// PowerShell treats a completed block comment as whitespace, so that
+    /// position begins a token even though the preceding character is `>`.
+    block_comment_end_position: Option<usize>,
 }
 
 /// Classify the current character while a here-string may be active.
@@ -48,30 +70,9 @@ enum HereStringCharacter {
 }
 
 impl PowerShellLexicalState {
-    /// Initialize PowerShell here-string tracking for one traversal.
-    pub(in crate::ir::cmd_interpolate::substitution) const fn new() -> Self {
-        Self {
-            here_string_quote: None,
-            has_typographic_quote: false,
-            comment_state: PowerShellCommentState::None,
-            has_unmodelled_syntax: false,
-            has_variable_assignment_since_boundary: false,
-        }
-    }
-
-    /// Report whether a typographic quote requires conservative marker rejection.
-    pub(in crate::ir::cmd_interpolate::substitution) const fn has_typographic_quote(&self) -> bool {
-        self.has_typographic_quote
-    }
-
     /// Fail closed after syntax the partial scanner cannot safely parse.
     pub(in crate::ir::cmd_interpolate::substitution) const fn note_unmodelled_syntax(&mut self) {
-        self.has_unmodelled_syntax = true;
-    }
-
-    /// Report whether unmodelled syntax requires conservative marker rejection.
-    pub(in crate::ir::cmd_interpolate::substitution) const fn has_unmodelled_syntax(&self) -> bool {
-        self.has_unmodelled_syntax
+        self.is_fail_closed = true;
     }
 
     /// Classify the current character while tracking an active here-string body.
@@ -159,10 +160,15 @@ impl SubstitutionTraversal<'_, '_> {
         if self.power_shell_lexical.is_in_unquoted_comment() {
             return self.append_unquoted_comment_character(character).map(Some);
         }
+        if self.power_shell_lexical.is_in_block_comment() {
+            return self.append_block_comment_character(character).map(Some);
+        }
         if self.power_shell_lexical.is_in_ambiguous_comment() {
             self.note_ambiguous_comment_character(character);
         }
-        self.note_unparsed_block_comment_opener(character);
+        if let Some(next) = self.open_unquoted_block_comment(character) {
+            return Ok(Some(next));
+        }
         self.note_unmodelled_power_shell_syntax(character);
         Ok(self.open_here_string(character))
     }
@@ -269,8 +275,7 @@ impl SubstitutionTraversal<'_, '_> {
     fn power_shell_marker_protection(&self, pos: usize) -> MarkerProtection {
         MarkerProtection::from_protected_region(
             !matches!(self.active_quote_context(), QuoteContext::Unquoted)
-                || self.power_shell_lexical.has_typographic_quote()
-                || self.power_shell_lexical.has_unmodelled_syntax()
+                || self.power_shell_lexical.is_fail_closed()
                 || self.is_in_command_substitution()
                 || self.marker_has_ambiguous_adjacency(pos),
         )
@@ -322,6 +327,7 @@ impl SubstitutionTraversal<'_, '_> {
             ));
         }
         let Some(next) = self.chars.get(pos + 1) else {
+            self.power_shell_lexical.note_trailing_escape();
             return Ok(None);
         };
         self.output.push(ch);

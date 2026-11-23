@@ -207,6 +207,7 @@ ir.circular_dependency = Zyklische Abhängigkeit erkannt: { $cycle }.
 ir.action_serialisation = Die Aktion konnte nicht serialisiert werden: { $details }.
 ir.invalid_command = Ungültige Befehlsinterpolation: { $reason }.
 ir.ambiguous_substitution_boundary = Mehrdeutige Grenze der Befehlsersetzung bei Zeichen { $position }; trennen Sie die schließende Klammer der Ersetzung vom folgenden '#'.
+ir.unfinished_power_shell_region = Der PowerShell-Befehlslisteneintrag { $entry } endet innerhalb von { $region }; schließen Sie den Bereich oder führen Sie den Eintrag mit dem nächsten zusammen.
 
 # Fehler bei der Ninja-Erzeugung.
 ninja_gen.missing_action = Die von einer Build-Kante referenzierte Aktion „{ $id }“ fehlt.

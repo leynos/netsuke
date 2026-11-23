@@ -207,6 +207,7 @@ ir.circular_dependency = Phát hiện phụ thuộc vòng: { $cycle }.
 ir.action_serialisation = Không tuần tự hoá được hành động: { $details }.
 ir.invalid_command = Nội suy không hợp lệ trong lệnh: { $reason }.
 ir.ambiguous_substitution_boundary = Ranh giới thay thế lệnh không rõ ràng tại ký tự { $position }; hãy tách dấu ngoặc đóng của phần thay thế khỏi '#' theo sau.
+ir.unfinished_power_shell_region = Mục { $entry } trong danh sách lệnh PowerShell kết thúc bên trong { $region }; hãy đóng vùng đó hoặc gộp mục với mục tiếp theo.
 
 # Lỗi khi tạo tệp Ninja.
 ninja_gen.missing_action = Thiếu hành động “{ $id }” mà một cạnh dựng tham chiếu.

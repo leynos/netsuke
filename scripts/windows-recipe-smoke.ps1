@@ -20,6 +20,7 @@ $smokeScriptDirectory = Join-Path $PSScriptRoot 'windows-recipe-smoke'
 . (Join-Path $smokeScriptDirectory 'bash.ps1')
 . (Join-Path $smokeScriptDirectory 'environment.ps1')
 . (Join-Path $smokeScriptDirectory 'powershell-paths.ps1')
+. (Join-Path $smokeScriptDirectory 'shared-list.ps1')
 
 function Assert-Equal {
     param(
@@ -241,14 +242,6 @@ function Test-AutomaticPathQuoting {
         -Expected 'automatic-path-quoting' -Message 'The discovered target did not build'
 }
 
-<#
-.SYNOPSIS
-Runs each Windows recipe smoke scenario in the isolated workspace.
-
-.DESCRIPTION
-Keeps scenario ordering in one place while leaving setup and restoration to
-the outer smoke-test orchestrator.
-#>
 function Invoke-WindowsRecipeScenarios {
     param(
         [Parameter(Mandatory)]
@@ -272,12 +265,17 @@ function Invoke-WindowsRecipeScenarios {
     Test-AutomaticPathQuoting -Netsuke $Netsuke
     Test-ExplicitBashIsolation -Netsuke $Netsuke
     Test-PathPlaceholderScript -Netsuke $Netsuke
+    Test-NeutralSharedListInterpolation -Netsuke $Netsuke -Manifest $Manifest `
+        -FixtureName 'windows-recipe-smoke-neutral-list.yml'
     Test-QuotedScriptPlaceholderRejection -Netsuke $Netsuke -Manifest $Manifest `
         -FixtureName 'windows-recipe-smoke-quoted-script.yml' `
         -TargetName 'quoted-script-single.txt'
     Test-QuotedScriptPlaceholderRejection -Netsuke $Netsuke -Manifest $Manifest `
         -FixtureName 'windows-recipe-smoke-quoted-script-double.yml' `
         -TargetName 'quoted-script-double.txt'
+    Test-CrossEntryListPlaceholderRejection -Netsuke $Netsuke -Manifest $Manifest `
+        -FixtureName 'windows-recipe-smoke-cross-entry-list.yml' `
+        -TargetName 'cross-entry-list.txt'
     Test-MissingBashRuntimeDiagnostic -Netsuke $Netsuke -Workspace $Workspace
 }
 

@@ -31,6 +31,10 @@ use rejection::{
 };
 use script_substitution::ScriptSubstitutionTraversal;
 use substitution::SubstitutionTraversal;
+pub(crate) use substitution::{PowerShellListCarry, interpolate_shared_power_shell_entry};
+
+#[cfg(test)]
+pub(crate) use substitution::shared_power_shell_entry_is_neutral;
 
 /// Contextual path substitutions prepared for one recipe.
 ///

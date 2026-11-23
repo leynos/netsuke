@@ -744,6 +744,26 @@ both modes, an entry remains opaque recipe text, so multiple native commands
 separated by semicolons inside one entry are not checked individually. State
 does not cross action or target boundaries.
 
+A `shared` list is parsed by PowerShell as one script, so every entry must end
+at a neutral lexical boundary. Netsuke rejects an entry that leaves a single-
+or double-quoted string, here-string, block comment, or `$()` substitution
+open, or that ends in a backtick escape that would consume text from the next
+entry. The diagnostic names the entry and the region. Close the region inside
+its entry and keep the marker at an unquoted site: merging the entries alone
+does not help when the merged text still places `{{ ins }}` or `{{ outs }}`
+inside the region. This boundary check does not apply to `isolated` lists,
+whose entries are separate scripts, but isolation does not repair an incomplete
+entry: each isolated entry must be syntactically complete on its own.
+PowerShell starts a block comment only where a token can begin, so a `<#`
+inside an argument is literal text. A backtick-escaped separator does not end
+the argument token either, so a `<#` after one is not a comment opener; an
+entry that contains one is accepted, but a marker that follows it in the list
+is refused rather than guessed at. A `#` after an escaped separator is not a
+line-comment boundary for the same reason, so the text after it stays ordinary
+argument text and an open quote there is reported by the unfinished-region rule
+above. A `<` that a backtick escapes is argument text too. The check is not a
+complete PowerShell parser.
+
 Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
 `$env:NAME` reads an environment variable. PowerShell parses the braced
 variable name in `${VAR:-default}`, but does not perform POSIX default-value
@@ -3233,15 +3253,17 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   PowerShell scripts have no inert comment regions: plain line-comment text
   leaves later markers eligible for interpolation, while scanner-sensitive
   syntax after a comment boundary or any mid-token `#` can make later markers
-  fail closed. This includes a block-comment opener, quotes, backticks, or
-  substitution syntax. In particular, an apostrophe in a comment can make a
-  later marker fail closed. Typographic PowerShell quote characters also make
-  later markers fail closed. A braced variable such as `${env:NAME}` or a
-  here-string opened inside `$()` also makes later markers fail closed.
-  PowerShell path bindings use a single-quoted literal that is unsafe inside an
-  existing string. Markers touching any PowerShell single-quote character,
-  including typographic forms, or another marker are also rejected because the
-  literals could merge with adjacent string or argument text.
+  fail closed. A mid-token hash includes a compact comment after a static
+  member access, such as `[string]::Empty#`. This includes a block-comment
+  opener, quotes, backticks, or substitution syntax. In particular, an
+  apostrophe in a comment can make a later marker fail closed. Typographic
+  PowerShell quote characters also make later markers fail closed. A braced
+  variable such as `${env:NAME}` or a here-string opened inside `$()` also
+  makes later markers fail closed. PowerShell path bindings use a single-quoted
+  literal that is unsafe inside an existing string. Markers touching any
+  PowerShell single-quote character, including typographic forms, or another
+  marker are also rejected because the literals could merge with adjacent
+  string or argument text.
 - Build and default-target paths escape a literal space as a `$` followed by a
   space, Ninja's own path escape. They reject `|` and control characters, which
   Ninja's path grammar cannot represent, and also reject `$` and colon, which

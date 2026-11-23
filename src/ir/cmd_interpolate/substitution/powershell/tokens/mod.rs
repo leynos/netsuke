@@ -107,9 +107,23 @@ impl<'source> PowerShellSourceCharacter<'source> {
         self.value() == '<' && self.next().is_some_and(|next| next.value() == '#')
     }
 
+    /// Report whether a block-comment terminator starts here.
+    pub(super) fn ends_block_comment(self) -> bool {
+        self.value() == '#' && self.next().is_some_and(|next| next.value() == '>')
+    }
+
     /// Report whether this source character begins a PowerShell token.
+    ///
+    /// A backtick escapes the character after it, so a separator written after
+    /// a backtick stays inside the current argument token. PowerShell
+    /// recognises comment, here-string, stop-parsing, and block-comment syntax
+    /// only where a token can begin, so an escaped separator must not be read
+    /// as one.
     pub(super) fn is_token_boundary(self) -> bool {
-        self.previous().is_none_or(Self::is_token_separator)
+        !self.is_escaped_by_backtick()
+            && self.previous().is_none_or(|previous| {
+                previous.is_token_separator() && !previous.is_escaped_by_backtick()
+            })
     }
 
     /// Report whether this position can begin a here-string expression.
@@ -130,8 +144,14 @@ impl<'source> PowerShellSourceCharacter<'source> {
         }
         self.previous()
             .is_some_and(|previous| matches!(previous.value(), '=' | ']'))
-            || self.hash_follows_unbraced_variable()
+            || self.hash_follows_expression_suffix(has_variable_assignment_before_operator)
+    }
+
+    /// Report whether a mid-token hash follows an expression form that can comment.
+    fn hash_follows_expression_suffix(self, has_variable_assignment_before_operator: bool) -> bool {
+        self.hash_follows_unbraced_variable()
             || self.hash_follows_variable_member_access()
+            || self.hash_follows_static_member_access()
             || self.hash_follows_postfix_operator()
             || self.hash_follows_expression_operator(has_variable_assignment_before_operator)
             || numeric_literals::hash_follows_numeric_literal(self)
@@ -179,7 +199,6 @@ impl<'source> PowerShellSourceCharacter<'source> {
             .previous()
             .is_some_and(Self::ends_with_unescaped_variable_expression)
     }
-
     /// Report whether this variable name immediately follows an unescaped `$`.
     fn is_unescaped_variable_name_start(self) -> bool {
         self.variable_name_start()

@@ -18,6 +18,17 @@ const MAX_POWER_SHELL_COMMAND_LINE: usize = 32_766;
 /// Bound the complete PowerShell parent script before UTF-16LE and Base64 encoding.
 const MAX_POWER_SHELL_RECIPE_BYTES: usize = 1024 * 1024;
 
+/// Reset the native exit code before a shared PowerShell list entry runs.
+///
+/// The wrapper is part of the script PowerShell parses, so each fragment must
+/// end at a neutral lexical boundary: it is emitted between two entries, and
+/// any unfinished region it opened would change how the next entry is read.
+pub(crate) const POWER_SHELL_LIST_ENTRY_PREFIX: &str = "$LASTEXITCODE = 0\n";
+
+/// Stop a shared PowerShell list after an entry's native command fails.
+pub(crate) const POWER_SHELL_LIST_ENTRY_SUFFIX: &str =
+    "\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n";
+
 /// Logical executable name used by inspection-only PowerShell rendering.
 const INSPECTION_POWER_SHELL_EXECUTABLE: &str = "powershell.exe";
 
@@ -162,9 +173,9 @@ impl RecipeShell {
         }
         let mut script = String::new();
         for entry in entries {
-            script.push_str("$LASTEXITCODE = 0\n");
+            script.push_str(POWER_SHELL_LIST_ENTRY_PREFIX);
             script.push_str(entry);
-            script.push_str("\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n");
+            script.push_str(POWER_SHELL_LIST_ENTRY_SUFFIX);
         }
         Some(script)
     }
