@@ -19,7 +19,7 @@ Run via ``make test-workflow-contracts``.
 
 import importlib.util
 import sys
-import types
+import typing as typ
 
 import pytest
 from workflow_loading import (
@@ -31,6 +31,9 @@ from workflow_loading import (
     require_mapping,
     workflow_job,
 )
+
+if typ.TYPE_CHECKING:
+    import types
 
 PRODUCER_JOB = "release-admission-evidence"
 ADMISSION_JOB = "release-admission-canaries"
