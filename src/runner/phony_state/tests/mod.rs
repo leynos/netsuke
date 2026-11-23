@@ -8,6 +8,8 @@
 //! computes their expectation from the workspace rather than assuming that a
 //! path climbing above the working directory is safe.
 
+#[cfg(unix)]
+mod manifest_spellings;
 mod properties;
 mod resolution;
 mod support;

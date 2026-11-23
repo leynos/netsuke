@@ -15,6 +15,7 @@ use super::workspace::Workspace;
 use crate::localization::{self, keys};
 use anyhow::{Error, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use std::collections::BTreeSet;
 
 /// Proof that a build's paths were refused against reserved generated state.
 ///
@@ -64,9 +65,17 @@ pub(in crate::runner) fn refuse_reserved_declarations(
     declared: &[Utf8PathBuf],
 ) -> Result<ReservedStateChecked> {
     let canonical = workspace.canonical();
-    let mut checked = Vec::with_capacity(declared.len() + 1);
     let declared_paths = declared.iter().map(Utf8PathBuf::as_path);
+    // A shared input appears once per edge that names it, and each occurrence
+    // costs a canonicalization per ancestor. Judge each spelling once, in the
+    // order the graph first names it, and record only those unique spellings so
+    // the reset's re-check pays the same reduced cost.
+    let mut seen: BTreeSet<&Utf8Path> = BTreeSet::new();
+    let mut checked = Vec::with_capacity(declared.len() + 1);
     for path in std::iter::once(manifest).chain(declared_paths) {
+        if !seen.insert(path) {
+            continue;
+        }
         if resolves_into_reserved_state(canonical, path)? {
             return Err(alias_refusal(path));
         }

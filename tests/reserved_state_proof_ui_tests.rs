@@ -11,6 +11,27 @@ use std::{io, path::PathBuf};
 
 use test_support::ui_fixture::{compile_fixture, stderr};
 
+/// Verify the fixture harness itself is sound.
+///
+/// The control mirrors the same modules and compiles, so a failure in the
+/// rejection fixtures cannot be mistaken for a setup or harness fault.
+#[test]
+fn the_fixture_harness_compiles_the_control() -> io::Result<()> {
+    let output = compile_fixture(
+        &fixture("reserved_state_proof_control_pass.rs"),
+        &tempfile::tempdir()?.path().join("proof-control-ui"),
+        &[],
+    )?;
+
+    if !output.status.success() {
+        return Err(io::Error::other(format!(
+            "the control fixture should compile:\n{}",
+            stderr(&output),
+        )));
+    }
+    Ok(())
+}
+
 /// Verify the proof cannot be constructed outside the refusal.
 #[test]
 fn the_reservation_proof_cannot_be_minted_outside_the_refusal() -> io::Result<()> {

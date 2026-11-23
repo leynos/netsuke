@@ -79,16 +79,64 @@ enum Step {
 /// treating the path as unreserved keeps the guard from weakening silently
 /// when the filesystem cannot answer.
 pub(super) fn resolves_into_reserved_state(workspace: &Utf8Path, path: &Utf8Path) -> Result<bool> {
-    let spelling = cancel_spelling(path);
-    if spelling.as_deref().is_some_and(is_reserved_path) {
+    // Two readers resolve the same spelling differently. Netsuke opens the
+    // selected manifest through the filesystem, which follows a link before it
+    // applies `..`; Ninja cancels `..` lexically before it follows anything.
+    // Both readings must be outside reserved state, or one reader would reach
+    // an entry the other never judged.
+    if reaches_reserved(workspace, path)? {
         return Ok(true);
     }
-    let candidate = spelling.as_deref().unwrap_or(path);
-    let target = resolved_target(workspace, candidate)?;
-    let entry = declared_entry(workspace, candidate)?;
-    Ok(within_namespace(workspace, target.as_deref())
+    let Some(cancelled) = cancel_spelling(path) else {
+        return Ok(false);
+    };
+    if cancelled.as_path() == path {
+        return Ok(false);
+    }
+    reaches_reserved(workspace, &cancelled)
+}
+
+/// Return whether one literal spelling reaches reserved state.
+///
+/// Three views are checked: the path as the filesystem canonicalizes it, the
+/// longest existing ancestor with the absent tail folded onto it, and every
+/// existing ancestor itself. The first follows a link before applying `..`; the
+/// second answers for components that do not exist yet; the third catches a
+/// path that passes through the namespace and leaves it again.
+///
+/// # Errors
+///
+/// Returns an error when a resolution fails for any reason other than an absent
+/// component.
+fn reaches_reserved(workspace: &Utf8Path, path: &Utf8Path) -> Result<bool> {
+    if is_reserved_path(path) {
+        return Ok(true);
+    }
+    let filesystem = filesystem_target(workspace, path)?;
+    let target = resolved_target(workspace, path)?;
+    let entry = declared_entry(workspace, path)?;
+    Ok(within_namespace(workspace, filesystem.as_deref())
+        || within_namespace(workspace, target.as_deref())
         || within_namespace(workspace, entry.as_deref())
-        || reserved_ancestor(workspace, candidate)?)
+        || reserved_ancestor(workspace, path)?)
+}
+
+/// Canonicalize the spelling exactly as opening it would resolve it.
+///
+/// Unlike [`resolved_target`], this follows links before it applies `..`, which
+/// is what the filesystem does when Netsuke opens the selected manifest.
+///
+/// # Errors
+///
+/// Returns an error when canonicalization fails for any reason other than an
+/// absent component.
+fn filesystem_target(workspace: &Utf8Path, path: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
+    let candidate = workspace.join(path);
+    match candidate.canonicalize_utf8() {
+        Ok(canonical) => Ok(Some(canonical)),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).context(inspect_context(path)),
+    }
 }
 
 /// Cancel `.` and `..` components lexically, as Ninja does when it parses.

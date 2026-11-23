@@ -10,7 +10,7 @@
 
 use super::super::reset::{NAMESPACE_LEAF, NAMESPACE_PARENT};
 use super::super::resolve::resolves_into_reserved_state;
-use super::support::{force_node_exists, reset, reset_with_manifest, stray_force_node, workspace};
+use super::support::{force_node_exists, reset, stray_force_node, workspace};
 use crate::ninja_gen::FORCE_PATH;
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -308,55 +308,4 @@ fn a_dangling_alias_into_the_namespace_stops_the_reset() -> Result<()> {
 #[test]
 fn a_cancelled_parent_component_cannot_hide_a_reserved_link() -> Result<()> {
     assert_state_alias_is_refused(Utf8PathBuf::from("missing/../state").join(FORCE_ENTRY))
-}
-
-/// Refuse a manifest reached through a reserved ancestor.
-///
-/// The selected spelling is absolute, so no lexical check can see the reserved
-/// directory it passes through, and canonicalization follows the link out of
-/// the workspace. The reset would still remove `force/` and the link with it,
-/// so the ancestor has to decide the question.
-#[cfg(unix)]
-#[test]
-fn a_manifest_beneath_a_reserved_link_is_refused() -> Result<()> {
-    let workspace = workspace()?;
-    let outside = TempDir::new().context("create the directory outside the workspace")?;
-    let outside_path = Utf8Path::from_path(outside.path())
-        .context("the outside path is UTF-8")?
-        .to_path_buf();
-    let outside_dir = Dir::open_ambient_dir(&outside_path, ambient_authority())
-        .context("open the outside directory")?;
-    outside_dir
-        .write("Netsukefile", b"netsuke_version: '1.0.0'\n")
-        .context("write the manifest outside the workspace")?;
-
-    // The link content is relative because the capability API refuses an
-    // absolute target; climbing out of the workspace and back reaches the
-    // outside directory, so the selected manifest really does live beyond it.
-    let name = outside_path
-        .file_name()
-        .context("the outside directory has a name")?;
-    let force = Utf8Path::new(NAMESPACE_PARENT)
-        .join(NAMESPACE_LEAF)
-        .join(FORCE_ENTRY);
-    workspace
-        .dir
-        .create_dir_all(&force)
-        .context("occupy the force node with a directory")?;
-    workspace
-        .dir
-        .symlink(format!("../../../../{name}"), force.join("link"))
-        .context("link the force directory outside the workspace")?;
-
-    let selected = workspace.root.join(&force).join("link").join("Netsukefile");
-    let outcome = reset_with_manifest(&workspace.root, &selected, &[]);
-    ensure!(
-        outcome.is_err(),
-        "a manifest reached through a reserved ancestor must be refused",
-    );
-    ensure!(
-        outside_dir.exists("Netsukefile"),
-        "the refused build must leave the selected manifest in place",
-    );
-    Ok(())
 }
