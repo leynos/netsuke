@@ -277,6 +277,7 @@ impact
 | Optional           | Release upload               | The publishing lane uploads only the assets this run declared: producer records are bound to the candidate commit and the workflow run, and a stale, missing, doubled, or undeclared release-shaped artefact is refused before any release asset is transferred. The job may already have checked for or created the draft release, which touches the release API; selection and declaration come after that and before the upload. An attached asset with the recorded digest is skipped; one with different bytes stops the run and is never replaced.                                                                                                                                                                                                                                                                                                                                                                                                                                                | [Release uploads](#release-uploads-only-the-assets-this-run-declared)                                                                     |
 | Required if called | POSIX heredoc delimiters     | **Breaking:** a delimiter form whose quote removal Netsuke cannot reproduce now fails closed instead of being copied: a missing delimiter, a leading unquoted `#`, an unclosed quote, a trailing backslash, a line continuation, and an unescaped `$` or backtick outside single quotes. Quote the literal part instead, for example `<<'$DELIM'`; quoting any part of the delimiter also stops expansion in the body, so keep an unquoted literal delimiter such as `<<END` when the body must expand.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Heredoc delimiters](#update-heredoc-delimiters-the-tracker-cannot-model)                                                                 |
 | Required           | Configuration precedence     | **Breaking:** automatic discovery checks every user location before any system location, so on Unix a user file now overrides `/etc/xdg` system configuration when `XDG_CONFIG_HOME` is unset. A user file that exists but cannot load stops discovery instead of falling back to a system file.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | [Review automatic configuration precedence](#review-automatic-configuration-precedence)                                                   |
+| Required if called | POSIX heredoc boundaries     | **Breaking:** a heredoc body starts only at the unquoted newline that ends its declaring command line, and a boundary the tracker cannot place now fails closed instead of starting the body early: a command-line newline in another shell region (a command substitution, backticks, arithmetic, an open `${ }`, or an already-closed region). Separately, an escape-bearing ANSI-C string such as `$'a\'b'` is rejected wherever command text is scanned, whether or not a heredoc is pending. Move the declaration so its body starts on its own line, and remove the escape or use an ordinary quoted string.                                                                                                                                                                                                                                                                                                                                                                                      | [Heredoc boundaries](#update-heredoc-boundaries-the-tracker-cannot-place)                                                                 |
 | Required if called | Project blocklists           | **Breaking:** project `env_block_var` and `fetch_block_host` values must be arrays; a non-array or invalid element stops loading with a field-named validation error instead of clearing the operator's block entries.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | [Write project blocklists as arrays](#write-project-blocklists-as-arrays)                                                                 |
 
 ## Remove order-only dependency cycles
@@ -826,6 +827,42 @@ arithmetic expansion is a left shift, not a heredoc, so arithmetic expressions
 pass through unchanged. A `#` inside a `${ }` parameter expansion is expansion
 syntax rather than a comment — `${name# #}` is one such pattern removal — so a
 heredoc declared later on that line is still tracked.
+
+See the
+[users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
+the full heredoc contract.
+
+## Update heredoc boundaries the tracker cannot place
+
+Netsuke starts a queued heredoc body only at the unquoted newline that ends the
+command line declaring it, and rejects a boundary it cannot place rather than
+guessing. A recipe that relied on one of the rejected forms below now fails at
+IR lowering with an `ir.invalid_command` diagnostic naming the reason, for
+example `unsupported heredoc boundary: command substitution newline`.
+
+- **Newline inside a quoted argument.** A newline that is part of a quoted
+  argument no longer starts the body; the body waits for the line that closes
+  the quote. Supported recipes are unaffected, but check any recipe that
+  expected a marker inside what the shell reads as an argument to be treated as
+  body text.
+- **Newline in a different shell region**: a pending body whose command-line
+  newline lies inside `$()`, backticks, `$(( ))`, an open `${ }`, or a
+  substitution region that has already closed. Write the declaration so its
+  body starts on the declaring line. A heredoc declared and completed inside a
+  single `$()` region remains supported.
+- **Escape-bearing ANSI-C string**, such as `$'a\'b'`, wherever command text
+  is scanned, whether or not a heredoc declaration is pending, and including
+  `$` and the quote split by a backslash-newline continuation. Bash and the
+  POSIX quote rules end the string at different quotes, so Netsuke cannot place
+  a later boundary or encode a later marker. Rewrite it as an ordinary quoted
+  string, for example `'a'\''b'` or `"a'b"`, or drop the escape. An escape-free
+  `$'...'` string is accepted, and heredoc bodies and comments are copied
+  without this check.
+- **End of script.** The end of the input is not a boundary. In a script, a
+  body that never reaches its terminator is copied literally and not reported.
+  A command recipe additionally runs the rendered command through the `shlex`
+  check, so it fails as an invalid command only when that check finds an
+  unmatched quote in the text. Keep the terminator inside the recipe.
 
 See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for

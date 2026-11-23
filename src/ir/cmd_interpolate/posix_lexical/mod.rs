@@ -13,10 +13,31 @@ mod declaration;
 
 mod delimiter;
 
+mod diagnostics;
+
 mod parameter_expansion;
 
 #[cfg(test)]
 mod tests;
+
+pub(super) use diagnostics::{
+    DelimiterRejection, HeredocActivationRejection, HeredocBoundary, NewlineContext,
+};
+
+pub(in crate::ir::cmd_interpolate) use declaration::HeredocDeclaration;
+
+use declaration::{HeredocBody, HeredocDelimiter};
+use diagnostics::FrameId;
+
+/// Describe what copying a character from an inert region did.
+pub(super) enum InertCharacterOutcome {
+    /// No inert region was active; the caller still owns the character.
+    NotInert,
+    /// The character belonged to a comment or heredoc body and was copied.
+    Consumed,
+    /// The character was the newline that ended a shell comment.
+    CommentEnded,
+}
 
 /// Track POSIX regions whose contents are not executable shell syntax.
 pub(super) struct PosixLexicalState {
@@ -32,74 +53,10 @@ pub(super) struct PosixLexicalState {
     enclosing_parameter_expansion_depths: Vec<usize>,
     /// Record the `)` that closed the most recent command substitution.
     closed_command_substitution: Option<usize>,
-}
-
-/// Retain one heredoc delimiter and the rules that select its terminator.
-struct HeredocDelimiter {
-    /// Store the delimiter after POSIX quote removal.
-    text: String,
-    /// Record whether the delimiter suppresses expansion in the body.
-    is_quoted: bool,
-    /// Record whether `<<-` strips leading tabs before delimiter matching.
-    strips_leading_tabs: bool,
-}
-
-/// Retain state needed to recognise a terminating heredoc line.
-struct HeredocBody {
-    /// Retain the declaration that selected this body.
-    delimiter: HeredocDelimiter,
-    /// Accumulate the logical line the shell compares with the delimiter.
-    line: String,
-    /// Record whether the next character begins a logical line.
-    at_line_start: bool,
-}
-
-/// Describe the outcome of examining characters that may open a heredoc.
-pub(super) enum HeredocDeclaration {
-    /// The characters do not begin a heredoc or here-string operator.
-    NotADeclaration,
-    /// The operator was copied; scanning resumes at this source position.
-    Copied(usize),
-    /// The declaration uses delimiter syntax the tracker cannot model.
-    Rejected(DelimiterRejection),
-}
-
-/// Explain why a heredoc delimiter word cannot be tracked safely.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum DelimiterRejection {
-    /// No delimiter word follows `<<` or `<<-`.
-    MissingDelimiter,
-    /// A quote opened in the delimiter word is never closed.
-    UnclosedQuote,
-    /// A backslash at the end of the word has no escaped character.
-    TrailingBackslash,
-    /// An unquoted backslash-newline continues the delimiter word.
-    LineContinuation,
-    /// A dollar sign appears outside single quotes.
-    UnsupportedExpansion,
-    /// A backtick appears outside single quotes.
-    UnsupportedCommandSubstitution,
-    /// Rendered path encoding stopped representing one delimited word.
-    RenderedDelimiterInvalid,
-}
-
-impl DelimiterRejection {
-    /// Describe the rejected syntax for the interpolation diagnostic.
-    pub(super) const fn description(self) -> &'static str {
-        match self {
-            Self::MissingDelimiter => "unsupported heredoc delimiter syntax: missing delimiter",
-            Self::UnclosedQuote => "unsupported heredoc delimiter syntax: unclosed quote",
-            Self::TrailingBackslash => "unsupported heredoc delimiter syntax: trailing backslash",
-            Self::LineContinuation => "unsupported heredoc delimiter syntax: line continuation",
-            Self::UnsupportedExpansion => "unsupported heredoc delimiter syntax: expansion",
-            Self::UnsupportedCommandSubstitution => {
-                "unsupported heredoc delimiter syntax: command substitution"
-            }
-            Self::RenderedDelimiterInvalid => {
-                "unsupported heredoc delimiter syntax: rendered delimiter"
-            }
-        }
-    }
+    /// Allocate the next unique shell-region identifier.
+    next_frame_id: usize,
+    /// Record the shell regions currently open, innermost last.
+    frame_stack: Vec<FrameId>,
 }
 
 /// Report that an escape would modify a marker lowered immediately after it.
@@ -129,6 +86,42 @@ pub(super) fn backslash_escapes_marker(
         return false;
     };
     bound.is_none_or(|end| pos + 1 + skip <= end)
+}
+
+/// Report whether the ANSI-C quote at `pos` is read differently by POSIX rules.
+///
+/// Bash reads `$'…'` as an ANSI-C string, where a backslash escapes the next
+/// character. POSIX single-quote rules instead end the string at the first
+/// `'`, so an escape inside the text leaves the two readings with different
+/// quote state at later newlines. Text with no escape ends at the same quote
+/// under both readings, so only the ambiguous form is reported. An
+/// unterminated string also returns `false`: both readings stay inside it.
+///
+/// Bash removes an unquoted backslash-newline continuation before it reads the
+/// character that follows, so `$`, a continuation, and the opening quote name
+/// the same ANSI-C string. The scan steps over those pairs first; an escaped
+/// backslash stops it, because the newline after an escape pair is a real
+/// newline rather than a continuation.
+pub(super) fn ansic_quote_is_ambiguous(chars: &[char], pos: usize) -> bool {
+    if chars.get(pos) != Some(&'$') {
+        return false;
+    }
+    let mut quote_pos = pos + 1;
+    while chars.get(quote_pos) == Some(&'\\') && chars.get(quote_pos + 1) == Some(&'\n') {
+        quote_pos += 2;
+    }
+    if chars.get(quote_pos) != Some(&'\'') {
+        return false;
+    }
+    let mut saw_escape = false;
+    for &ch in chars.get(quote_pos + 1..).into_iter().flatten() {
+        match ch {
+            '\\' => saw_escape = true,
+            '\'' => return saw_escape,
+            _ => {}
+        }
+    }
+    false
 }
 
 /// Classify what a `$(` delimiter opens.
@@ -214,7 +207,19 @@ impl PosixLexicalState {
             parameter_expansion_depth: 0,
             enclosing_parameter_expansion_depths: Vec::new(),
             closed_command_substitution: None,
+            next_frame_id: 1,
+            frame_stack: Vec::new(),
         }
+    }
+
+    /// Return the innermost open shell region, or the outer script.
+    ///
+    /// A declaration queued while this identifier is current belongs to that
+    /// region's command line. The comparison at activation time is what stops
+    /// an outer declaration from starting at a nested region's newline, or a
+    /// declaration whose frame has already closed from starting outside it.
+    pub(in crate::ir::cmd_interpolate) fn current_frame_id(&self) -> FrameId {
+        self.frame_stack.last().copied().unwrap_or(FrameId::OUTER)
     }
 
     /// Record the `)` at `pos` as the closer of a command substitution.
@@ -227,27 +232,34 @@ impl PosixLexicalState {
     }
 
     /// Preserve one character from a comment or heredoc body when active.
+    ///
+    /// The newline that ends a comment is reported rather than acted on: it is
+    /// a command-line boundary, so both traversals must offer it to the same
+    /// activation decision as an ordinary newline. A body terminator still
+    /// starts the next queued body directly, because chained declarations share
+    /// one command line and their bodies follow one another without another
+    /// boundary.
     pub(super) fn append_inert_character(
         &mut self,
         character: &mut PosixCharacter<'_, '_>,
-    ) -> bool {
+    ) -> InertCharacterOutcome {
         if self.in_comment {
             character.output.push(character.ch);
             if character.ch == '\n' {
                 self.in_comment = false;
-                self.begin_next_heredoc();
+                return InertCharacterOutcome::CommentEnded;
             }
-            return true;
+            return InertCharacterOutcome::Consumed;
         }
         let Some(body) = self.heredoc_body.as_mut() else {
-            return false;
+            return InertCharacterOutcome::NotInert;
         };
         character.output.push(character.ch);
         if body.consume(SourceChar::new(character.ch)) {
             self.heredoc_body = None;
             self.begin_next_heredoc();
         }
-        true
+        InertCharacterOutcome::Consumed
     }
 
     /// Begin a POSIX comment after its opening number sign is copied.
@@ -255,19 +267,48 @@ impl PosixLexicalState {
         self.in_comment = true;
     }
 
-    /// Report whether the traversal is inside a POSIX comment.
+    /// Decide whether a pending heredoc body may start at one newline.
     ///
-    /// Comment text is copied verbatim rather than interpreted, so a caller
-    /// that tracks token state has to report the comment's end itself. Asking
-    /// before copying a character distinguishes the newline that ends a comment
-    /// from any other inert character.
-    pub(super) const fn in_comment(&self) -> bool {
-        self.in_comment
-    }
-
-    /// Begin the first queued heredoc body after its declaration line ends.
-    pub(super) fn begin_pending_heredoc_after_newline(&mut self) {
-        self.begin_next_heredoc();
+    /// POSIX starts the body after the newline that ends the command line
+    /// declaring it. A quoted newline is still part of that command line, so
+    /// the queue waits for the real boundary and the traversal's quote state
+    /// stays accurate. A newline in another region, or in a backtick,
+    /// arithmetic, or parameter-expansion body, cannot be correlated with the
+    /// declaring line; activating there would search for the terminator in
+    /// text the shell still expands, so the traversal fails closed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HeredocActivationRejection`] when a queued declaration cannot
+    /// be placed at the offered boundary.
+    pub(super) fn activate_pending_heredoc(
+        &mut self,
+        boundary: HeredocBoundary,
+    ) -> Result<(), HeredocActivationRejection> {
+        let Some(delimiter) = self.pending_heredocs.front() else {
+            return Ok(());
+        };
+        match (boundary.frame == delimiter.owner, boundary.context) {
+            // A quoted newline never ends a command line, so the body keeps
+            // waiting for the closing quote's newline.
+            (true, NewlineContext::QuotedArgument) => Ok(()),
+            // In another region the tracker cannot correlate that region's
+            // lines with the declaring command line, whether quoted or not.
+            (false, _) => Err(HeredocActivationRejection::ForeignFrame),
+            (true, NewlineContext::CommandLine) => {
+                self.begin_next_heredoc();
+                Ok(())
+            }
+            (true, NewlineContext::BacktickBody) => {
+                Err(HeredocActivationRejection::BacktickNewline)
+            }
+            (true, NewlineContext::ArithmeticExpansion) => {
+                Err(HeredocActivationRejection::ArithmeticNewline)
+            }
+            (true, NewlineContext::ParameterExpansion) => {
+                Err(HeredocActivationRejection::ParameterExpansionNewline)
+            }
+        }
     }
 
     /// Begin the next queued heredoc body, if its declaration has completed.
@@ -280,66 +321,6 @@ impl PosixLexicalState {
             line: String::new(),
             at_line_start: true,
         });
-    }
-}
-
-impl HeredocBody {
-    /// Record one copied body character and report whether it ends the body.
-    ///
-    /// An unquoted delimiter leaves the body subject to shell expansion, and
-    /// the shell removes backslash-newline before it looks for the terminator.
-    /// Comparing physical lines would therefore end the body early and let
-    /// marker lowering resume inside text the shell still expands, so those
-    /// bodies accumulate logical lines and compare only once one is complete.
-    /// A quoted delimiter suppresses expansion and joining alike, so each
-    /// physical line is already the unit the shell compares.
-    fn consume(&mut self, ch: SourceChar) -> bool {
-        if ch.as_char() == '\n' {
-            return self.finish_line();
-        }
-        if self.is_stripped_tab(ch) {
-            return false;
-        }
-        self.at_line_start = false;
-        self.line.push(ch.as_char());
-        false
-    }
-
-    /// Report whether `ch` is a leading tab that `<<-` removes before matching.
-    const fn is_stripped_tab(&self, ch: SourceChar) -> bool {
-        self.at_line_start && self.delimiter.strips_leading_tabs && ch.as_char() == '\t'
-    }
-
-    /// Compare the completed line and report whether the body ends here.
-    fn finish_line(&mut self) -> bool {
-        if !self.delimiter.is_quoted && self.remove_unescaped_trailing_backslash() {
-            // The shell joins this line to the next before comparing, and only
-            // a completed logical line can match the delimiter. A line holding
-            // nothing but the backslash leaves the logical line empty, so the
-            // next physical line still begins it and `<<-` tab stripping still
-            // applies there.
-            self.at_line_start = self.line.is_empty();
-            return false;
-        }
-        let is_terminator = self.line == self.delimiter.text;
-        self.line.clear();
-        self.at_line_start = true;
-        is_terminator
-    }
-
-    /// Remove one trailing backslash that continues the logical line.
-    fn remove_unescaped_trailing_backslash(&mut self) -> bool {
-        let backslashes = self
-            .line
-            .chars()
-            .rev()
-            .take_while(|character| *character == '\\')
-            .count();
-        if backslashes.is_multiple_of(2) {
-            return false;
-        }
-        self.line.pop();
-        true
     }
 }
 
