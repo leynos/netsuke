@@ -1,13 +1,13 @@
 diff --git a/src/ir/from_manifest/support/sort_utils.rs b/src/ir/from_manifest/support/sort_utils.rs
-index 552c5606..80bc65d9 100644
+index 6b0a75179..086d472ae 100644
 --- a/src/ir/from_manifest/support/sort_utils.rs
 +++ b/src/ir/from_manifest/support/sort_utils.rs
-@@ -44,7 +44,7 @@ where
- pub(super) fn sort_strings(values: &mut [String]) {
-     // The closure is not redundant: `string_cmp` takes `&str`, and passing
-     // the fn item would not satisfy the `Fn(&String, &String)` bound.
--    insertion_sort_by(values, |a, b| string_cmp(a, b));
-+    insertion_sort_by(values, |a, b| string_cmp(b, a));
- }
- 
- /// Order two strings for deterministic rule-name sorting.
+@@ -90,7 +90,7 @@ pub(super) fn smallest_names(names: &[String], limit: usize) -> Vec<String> {
+ fn insert_bounded<'a>(kept: &mut Vec<&'a str>, name: &'a str, limit: usize) {
+     let mut position = 0;
+     while let Some(candidate) = kept.get(position) {
+-        if string_cmp(name, candidate) == std::cmp::Ordering::Less {
++        if string_cmp(candidate, name) == std::cmp::Ordering::Less {
+             break;
+         }
+         position += 1;
