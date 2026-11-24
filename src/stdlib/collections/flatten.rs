@@ -87,6 +87,15 @@ struct FlattenAllowance<'limits> {
     leaves: usize,
 }
 
+/// Which counter one traversal charge is applied to.
+#[derive(Clone, Copy, Debug)]
+enum Charge {
+    /// One yielded item, container or leaf.
+    Visit,
+    /// One leaf retained in the result.
+    Leaf,
+}
+
 impl<'limits> FlattenAllowance<'limits> {
     /// Start a fresh allowance for one filter call.
     const fn new(limits: &'limits FlattenLimits) -> Self {
@@ -97,35 +106,28 @@ impl<'limits> FlattenAllowance<'limits> {
         }
     }
 
-    /// Charge one yielded item before it is classified or descended into.
+    /// Charge one visit or retained leaf against its ceiling.
     ///
     /// # Errors
     ///
-    /// Returns an error naming the visit ceiling when it is exhausted.
-    fn record_visit(&mut self) -> Result<(), Error> {
-        if self.visits >= self.limits.max_visits {
-            return Err(limit_error(
-                keys::STDLIB_COLLECTIONS_FLATTEN_VISIT_LIMIT,
+    /// Returns an error naming the exhausted ceiling.
+    fn record(&mut self, charge: Charge) -> Result<(), Error> {
+        let (used, ceiling, limit_key) = match charge {
+            Charge::Visit => (
+                &mut self.visits,
                 self.limits.max_visits,
-            ));
-        }
-        self.visits += 1;
-        Ok(())
-    }
-
-    /// Charge one leaf before it is retained in the result.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error naming the retained-item ceiling when it is exhausted.
-    fn record_leaf(&mut self) -> Result<(), Error> {
-        if self.leaves >= self.limits.max_leaves {
-            return Err(limit_error(
-                keys::STDLIB_COLLECTIONS_FLATTEN_ITEM_LIMIT,
+                keys::STDLIB_COLLECTIONS_FLATTEN_VISIT_LIMIT,
+            ),
+            Charge::Leaf => (
+                &mut self.leaves,
                 self.limits.max_leaves,
-            ));
+                keys::STDLIB_COLLECTIONS_FLATTEN_ITEM_LIMIT,
+            ),
+        };
+        if *used >= ceiling {
+            return Err(limit_error(limit_key, ceiling));
         }
-        self.leaves += 1;
+        *used += 1;
         Ok(())
     }
 
@@ -135,13 +137,13 @@ impl<'limits> FlattenAllowance<'limits> {
     ///
     /// Returns an error naming the depth ceiling when `depth` exceeds it.
     fn check_depth(&self, depth: usize) -> Result<(), Error> {
-        if depth > self.limits.max_depth {
-            return Err(limit_error(
-                keys::STDLIB_COLLECTIONS_FLATTEN_DEPTH_LIMIT,
-                self.limits.max_depth,
-            ));
+        if depth <= self.limits.max_depth {
+            return Ok(());
         }
-        Ok(())
+        Err(limit_error(
+            keys::STDLIB_COLLECTIONS_FLATTEN_DEPTH_LIMIT,
+            self.limits.max_depth,
+        ))
     }
 }
 
@@ -174,7 +176,7 @@ pub(super) fn flatten_filter_with_limits(
     let mut flattened = Vec::new();
 
     for item in values.try_iter()? {
-        allowance.record_visit()?;
+        allowance.record(Charge::Visit)?;
         allowance.check_depth(1)?;
         match item.kind() {
             ValueKind::Seq | ValueKind::Iterable => {
@@ -212,7 +214,7 @@ fn collect_flattened_values(
     output: &mut Vec<Value>,
 ) -> Result<(), Error> {
     for nested in value.try_iter()? {
-        allowance.record_visit()?;
+        allowance.record(Charge::Visit)?;
         let child_depth = depth + 1;
         allowance.check_depth(child_depth)?;
         match nested.kind() {
@@ -220,7 +222,7 @@ fn collect_flattened_values(
                 collect_flattened_values(&nested, child_depth, allowance, output)?;
             }
             _ => {
-                allowance.record_leaf()?;
+                allowance.record(Charge::Leaf)?;
                 output.push(nested);
             }
         }

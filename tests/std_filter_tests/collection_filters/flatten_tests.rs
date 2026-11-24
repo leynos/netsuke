@@ -26,32 +26,34 @@ use test_support::fluent::normalize_fluent_isolates;
 
 use super::fallible;
 
-/// Build a template whose subject is `doublings` copies of a shared list.
+/// One compact graph shape a regression renders.
+#[derive(Clone, Copy, Debug)]
+enum GraphShape {
+    /// Twenty doublings of a seed list, which can be `[]` or `[1]`.
+    Doubled(&'static str),
+    /// Two hundred single-member nestings around an empty list.
+    Chain,
+}
+
+/// Build a template that constructs one [`GraphShape`] and flattens it.
 ///
-/// Each loop iteration stores one value in two positions of a fresh list, so
-/// the graph after `n` iterations describes `2^n` leaves while holding only
-/// `n` lists: exactly the compact expansion the allowance must bound.
-fn doubled_graph_template(seed: &str, doublings: usize) -> String {
+/// A doubling step stores its value in two positions, so the graph after `n`
+/// iterations describes `2^n` leaves while holding only `n` lists: exactly the
+/// compact expansion the allowance must bound.
+fn graph_template(shape: GraphShape) -> String {
+    let (seed, repetitions, step) = match shape {
+        GraphShape::Doubled(seed) => (seed, 20, "{% set ns.v = [ns.v, ns.v] %}"),
+        GraphShape::Chain => ("[]", 200, "{% set ns.v = [ns.v] %}"),
+    };
     format!(
         concat!(
             "{{% set ns = namespace(v={seed}) %}}",
-            "{{% for _ in range({doublings}) %}}{{% set ns.v = [ns.v, ns.v] %}}{{% endfor %}}",
+            "{{% for _ in range({repetitions}) %}}{step}{{% endfor %}}",
             "{{{{ [ns.v] | flatten | length }}}}"
         ),
         seed = seed,
-        doublings = doublings
-    )
-}
-
-/// Build a template whose subject nests `depth` single-member lists.
-fn nested_graph_template(depth: usize) -> String {
-    format!(
-        concat!(
-            "{{% set ns = namespace(v=[]) %}}",
-            "{{% for _ in range({depth}) %}}{{% set ns.v = [ns.v] %}}{{% endfor %}}",
-            "{{{{ [ns.v] | flatten | length }}}}"
-        ),
-        depth = depth
+        repetitions = repetitions,
+        step = step
     )
 }
 
@@ -85,7 +87,8 @@ fn ensure_invalid_operation(err: &Error, fragment: &str) -> Result<()> {
 #[test]
 fn flatten_rejects_a_shared_zero_leaf_graph_at_the_visit_limit() -> Result<()> {
     let env = fallible::stdlib_env()?;
-    let err = render_error(&env, &doubled_graph_template("[]", 20))?;
+    let template = graph_template(GraphShape::Doubled("[]"));
+    let err = render_error(&env, &template)?;
     ensure_invalid_operation(&err, "exceeded the traversal visit limit")
 }
 
@@ -96,7 +99,8 @@ fn flatten_rejects_a_shared_zero_leaf_graph_at_the_visit_limit() -> Result<()> {
 #[test]
 fn flatten_rejects_a_shared_graph_at_the_retained_item_limit() -> Result<()> {
     let env = fallible::stdlib_env()?;
-    let err = render_error(&env, &doubled_graph_template("[1]", 20))?;
+    let template = graph_template(GraphShape::Doubled("[1]"));
+    let err = render_error(&env, &template)?;
     ensure_invalid_operation(&err, "exceeded the retained item limit")
 }
 
@@ -104,7 +108,8 @@ fn flatten_rejects_a_shared_graph_at_the_retained_item_limit() -> Result<()> {
 #[test]
 fn flatten_rejects_a_deeply_nested_graph_at_the_depth_limit() -> Result<()> {
     let env = fallible::stdlib_env()?;
-    let err = render_error(&env, &nested_graph_template(200))?;
+    let template = graph_template(GraphShape::Chain);
+    let err = render_error(&env, &template)?;
     ensure_invalid_operation(&err, "exceeded the nesting depth limit")
 }
 
