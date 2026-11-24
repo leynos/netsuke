@@ -3,9 +3,10 @@
 The release workflow runs the three downstream migration canaries against one
 candidate commit. By default that is the commit the workflow itself runs on:
 the tag commit of a release, the pull request's merge commit on a dry run, or
-the ref chosen in the Actions UI for a manual rehearsal. A manual run may
-instead name another ref, or ``auto``, which selects the newest ``-rcN`` tag
-when it is also the newest version tag and otherwise the ``main`` branch.
+the caller's ref for a reusable-workflow call. A caller may instead name
+another ref through ``candidate-ref``, or ``auto``, which selects the newest
+``-rcN`` tag when it is also the newest version tag and otherwise the ``main``
+branch.
 
 The resolved commit, the package version its ``Cargo.toml`` declares, and the
 rule that selected it are written to ``GITHUB_OUTPUT`` so the canary jobs can

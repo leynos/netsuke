@@ -4,20 +4,6 @@ name: Release Dry Run
 'on':
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  # A manual release rehearsal: pick the ref in the Actions UI. It runs the
-  # whole release, including the downstream canaries and the Windows smoke,
-  # and publishes nothing.
-  workflow_dispatch:
-    inputs:
-      candidate-ref:
-        description: >-
-          Netsuke ref for the downstream canaries to build: a tag, commit, or
-          branch name. The default, `auto`, benchmarks the newest `-rcN` tag,
-          or `main` when a later version tag exists; empty builds the
-          selected ref.
-        required: false
-        type: string
-        default: auto
 
 # A newer push to a pull request cancels the run it supersedes. Other events
 # never cancel: each `main` push, dispatch or schedule falls back to its own
@@ -36,4 +22,3 @@ jobs:
     # only widen what a pull request can reach.
     with:
       dry-run: true
-      candidate-ref: ${{ inputs.candidate-ref || '' }}

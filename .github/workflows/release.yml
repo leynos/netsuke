@@ -31,6 +31,9 @@ name: Release Binary
           otherwise `main`. Any other value is resolved as a Git ref, and a
           branch name also as its `origin/` remote-tracking branch. A
           publishing run admits only canaries that built its own commit.
+          No trigger in this repository sets it yet: the pinned release-mode
+          resolver refuses `workflow_dispatch`, so a manual rehearsal that
+          would offer it waits on that support.
         required: false
         type: string
         default: ''
@@ -362,13 +365,7 @@ jobs:
     # ready after its base moved gets a new merge ref and no CI run, so the
     # smoke runs for that event rather than be skipped with nothing covering
     # it.
-    #
-    # A manual rehearsal (`workflow_dispatch` on the dry-run workflow) has no
-    # CI run either, and exists to exercise the whole release, so it runs too.
-    if: >-
-      needs.metadata.outputs.dry_run != 'true' ||
-      github.event.action == 'ready_for_review' ||
-      github.event_name == 'workflow_dispatch'
+    if: needs.metadata.outputs.dry_run != 'true' || github.event.action == 'ready_for_review'
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:
@@ -613,9 +610,9 @@ jobs:
   release-candidate:
     # Resolves the one Netsuke commit every downstream canary builds, and the
     # version its manifest declares. The downstream canaries below run on the
-    # same events: every release and manual rehearsal, and a pull request's
-    # dry run only when it is marked ready for review, since each canary
-    # compiles a whole downstream workspace.
+    # same events: every release and reusable-workflow call, and a pull
+    # request's dry run only when it is marked ready for review, since each
+    # canary compiles a whole downstream workspace.
     if: >-
       github.event_name != 'pull_request' ||
       github.event.action == 'ready_for_review'

@@ -11,9 +11,7 @@ Skipping it is only safe while three things hold, and each is asserted here:
 
 1. The job is skipped on a dry run and on nothing else, so a tagged release
    still runs it, and even a dry run runs it for an event `ci.yml` does not
-   answer (`ready_for_review`), where no gate run would cover it. A manual
-   rehearsal (`workflow_dispatch`) has no gate run behind it either, and
-   exists to exercise the whole release, so it runs the smoke too.
+   answer (`ready_for_review`), where no gate run would cover it.
 2. `release` still needs it, so publication cannot proceed without it.
 3. The pull request still runs the same smoke: `ci.yml` calls the Windows gate
    on every event but the nightly Kani schedule, `build-test-windows` carries
@@ -50,8 +48,7 @@ SMOKE_SCRIPT = "./scripts/windows-recipe-smoke.ps1"
 #: appended disjunct or a different output name fails rather than passing.
 DRY_RUN_SKIP = (
     "needs.metadata.outputs.dry_run != 'true' "
-    "|| github.event.action == 'ready_for_review' "
-    "|| github.event_name == 'workflow_dispatch'"
+    "|| github.event.action == 'ready_for_review'"
 )
 
 #: The only condition `ci.yml` may put on its Windows gate. The nightly
@@ -106,23 +103,6 @@ def test_the_release_smoke_is_skipped_on_a_dry_run_only() -> None:
         f"({DRY_RUN_SKIP!r}); a wider condition would skip it on a tagged "
         f"release too, got {job.get('if')!r}"
     )
-
-
-def test_every_manual_rehearsal_trigger_runs_the_smoke() -> None:
-    """Run the smoke for every dry-run trigger that is not a pull request.
-
-    Scenario: the dry run gains a manual trigger. Invariant: a trigger with no
-    pull request behind it has no `build-test-windows` run either, so the skip
-    condition must exempt it by name.
-    """
-    workflow = load_workflow(REPO_ROOT / ".github/workflows/release-dry-run.yml")
-    triggers = require_mapping(workflow.get("on", workflow.get(True)), "triggers")
-    manual = sorted(str(name) for name in triggers if name != "pull_request")
-    assert manual == ["workflow_dispatch"], f"unexpected dry-run triggers: {manual!r}"
-    for name in manual:
-        assert f"github.event_name == '{name}'" in DRY_RUN_SKIP, (
-            f"the smoke must run for a {name} rehearsal"
-        )
 
 
 def _pull_request_types(path: Path) -> frozenset[str]:

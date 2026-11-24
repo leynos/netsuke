@@ -1768,12 +1768,12 @@ the release workflow runs against the exact candidate. The
 targets, and the retained Makefile boundaries; this section covers the tooling.
 
 - `.github/scripts/resolve_release_candidate.py` resolves the candidate in the
-  `release-candidate` job. It builds the run's own commit by default. The
-  `candidate-ref` input of `release.yml`, exposed by the dry run's manual
-  trigger with the default `auto`, names another ref, or `auto`: the newest
-  `-rcN` tag while it is also the newest version tag by SemVer precedence, and
-  otherwise `main`. It publishes the commit, the version that commit's
-  `Cargo.toml` declares, and the selecting rule.
+  `release-candidate` job. It builds the run's own commit by default. A
+  reusable-workflow caller may set the `candidate-ref` input of `release.yml`
+  to another ref, or to `auto`: the newest `-rcN` tag while it is also the
+  newest version tag by SemVer precedence, and otherwise `main`. It publishes
+  the commit, the version that commit's `Cargo.toml` declares, and the
+  selecting rule.
 - The [downstream-canary action][downstream-canary-action] is the shared
   bootstrap. The caller checks out only `.github/actions/` and `scripts/` from
   `leynos/netsuke` at `job.workflow_sha`, so a reusable-workflow caller cannot
@@ -1821,11 +1821,14 @@ credential is persisted into the downstream tree.
 pull-request policy, and `tests/workflow_contracts/downstream_canary_test.py`
 holds the composite action's shape.
 
-To rehearse a release without publishing, run the **Release Dry Run** workflow
-from the Actions tab with **Run workflow**. It runs the whole release,
-including the canaries, the evidence producer, and the Windows smoke, and
-publishes nothing. The canary provenance and evidence artefacts are still
-uploaded.
+A pull request's dry run rehearses the whole release, canaries included, when
+the pull request is marked ready for review, and publishes nothing; the canary
+provenance and evidence artefacts are still uploaded. There is no manual
+rehearsal trigger: `release.yml`'s metadata job resolves its modes through the
+pinned `determine-release-modes` action from `leynos/shared-actions`, which
+accepts only `push`, `workflow_call`, and `pull_request` events and refuses
+`workflow_dispatch`. `tests/workflow_release_canaries.rs` holds the dry run to
+the events that resolver accepts.
 
 ## Toolchain and borrow checker
 

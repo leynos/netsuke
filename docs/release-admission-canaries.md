@@ -47,19 +47,22 @@ The candidate is resolved once per run by `release-candidate`, using
 `.github/scripts/resolve_release_candidate.py`:
 
 - A tag release and a pull request's dry run build the commit the run is for.
-- A manual rehearsal benchmarks the release candidate by default: its
-  `candidate-ref` input defaults to `auto`, which selects the newest `-rcN` tag
-  while it is also the newest version tag, and otherwise `main`. It may instead
-  name another ref, or be emptied to build the ref selected in the Actions UI.
-  Admission only ever counts canaries that built the run's own commit, so a
-  rehearsal of another candidate reports them as failures in observation mode.
+- A reusable-workflow caller may set `release.yml`'s `candidate-ref` input to
+  another ref, or to `auto`, which selects the newest `-rcN` tag while it is
+  also the newest version tag, and otherwise `main`. Admission only ever counts
+  canaries that built the run's own commit, so a run of another candidate
+  reports them as failures in observation mode.
+- There is no manual rehearsal trigger yet. The dry run's caller cannot offer
+  `workflow_dispatch` because the pinned `determine-release-modes` resolver from
+  `leynos/shared-actions` refuses that event, so `metadata` would fail before
+  any canary ran.
 
-The canaries run on every tag release and every manual rehearsal. On a pull
-request they run only when the pull request is marked ready for review, since
-each canary compiles a whole downstream workspace, and they never gate a pull
-request: the jobs are `continue-on-error` there, so a downstream failure is
-visible without blocking the merge. A publishing run admits a release only when
-every canary passed on the release commit, as the next section describes.
+The canaries run on every tag release. On a pull request they run only when the
+pull request is marked ready for review, since each canary compiles a whole
+downstream workspace, and they never gate a pull request: the jobs are
+`continue-on-error` there, so a downstream failure is visible without blocking
+the merge. A publishing run admits a release only when every canary passed on
+the release commit, as the next section describes.
 
 ## Pinned v0.1.0 candidate set
 
@@ -172,8 +175,8 @@ retained boundaries in more detail.
    until no release or rehearsal names it.
 3. Update the commit in every matrix row for that repository in
    `.github/workflows/release.yml`, and in the table above.
-4. Run a manual rehearsal: the **Release Dry Run** workflow with **Run
-   workflow**, which runs every canary without publishing.
+4. Open the pin change as a pull request and mark it ready for review: its
+   dry run then runs every canary against it without publishing.
 
 ## Release decision
 
