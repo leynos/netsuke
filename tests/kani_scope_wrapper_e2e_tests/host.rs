@@ -21,10 +21,10 @@ const STRICT_VARIABLE: &str = "NETSUKE_KANI_SCOPE_WRAPPER_STRICT";
 /// asserting anything further; under strict mode the same condition is an
 /// error rather than a skip.
 pub(super) fn prerequisites_met(scenario: &str) -> Result<bool> {
-    match missing_prerequisite()? {
-        Some(reason) => skip(scenario, &reason).map(|()| false),
-        None => Ok(true),
-    }
+    missing_prerequisite()?.map_or_else(
+        || Ok(true),
+        |reason| skip(scenario, &reason).map(|()| false),
+    )
 }
 
 /// Check the host prerequisites and report what is missing.

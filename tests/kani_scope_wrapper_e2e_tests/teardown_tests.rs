@@ -82,6 +82,10 @@ fn guard_tears_down_the_scope_after_a_body_error() -> Result<()> {
 /// must arrive unchanged: replacing it with a cleanup error would hide the
 /// defect that caused the unwind.
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the panic is the scenario: it is injected inside catch_unwind to prove Drop is the teardown path a panic cannot bypass, and it never escapes this function"
+)]
 fn guard_tears_down_the_scope_while_a_panic_unwinds() -> Result<()> {
     let scenario = "panic-teardown";
     if !prerequisites_met(scenario)? {
@@ -124,7 +128,7 @@ fn guard_stops_an_active_scope_and_reaps_the_launcher() -> Result<()> {
         return Ok(());
     }
     let unit = unit_name(scenario);
-    let mut launcher = None;
+    let mut spawned = None;
     with_unit(unit.clone(), |scope| {
         let child = spawn_scoped(
             scope.unit(),
@@ -133,11 +137,11 @@ fn guard_stops_an_active_scope_and_reaps_the_launcher() -> Result<()> {
             &format!("sleep {}", PAYLOAD_LIFETIME.as_secs()),
         )?;
         wait_until_active(scope.unit())?;
-        launcher = Some(child);
+        spawned = Some(child);
         Ok(())
     })?;
 
-    let mut launcher = launcher.context("the body must have spawned the launcher")?;
+    let mut launcher = spawned.context("the body must have spawned the launcher")?;
     let status = launcher.wait().context("reap the stopped launcher")?;
     ensure!(
         !status.success(),
@@ -194,41 +198,51 @@ fn concurrent_scopes_leave_no_failed_units() -> Result<()> {
     if !prerequisites_met(scenario)? {
         return Ok(());
     }
-    let mut failures = Vec::new();
-    thread::scope(|threads| {
-        let handles: Vec<_> = (0..3)
-            .map(|index| {
-                threads.spawn(move || -> Result<()> {
-                    let name = format!("{scenario}-{index}");
-                    with_scope(&name, |scope| {
-                        let output = run_scoped(
-                            scope.unit(),
-                            ROUTINE_RUNTIME_CAP,
-                            Retention::Collect,
-                            "echo concurrent; exit 0",
-                        )?;
-                        ensure!(
-                            output.status.success(),
-                            "concurrent scenario {index} should exit 0, got {:?}",
-                            output.status
-                        );
-                        Ok(())
-                    })
-                })
-            })
-            .collect();
-        for handle in handles {
-            match handle.join() {
-                Ok(Ok(())) => {}
-                Ok(Err(err)) => failures.push(format!("{err:#}")),
-                Err(_) => failures.push("a concurrent scenario panicked".to_owned()),
-            }
-        }
-    });
+    let failures = run_concurrently(scenario, 3);
     ensure!(
         failures.is_empty(),
         "every concurrent scenario should succeed, but {} failed: {failures:#?}",
         failures.len()
     );
     ensure_no_failed_units("concurrent runs must leave no failed unit")
+}
+
+/// Run `count` scenarios at once and return each failure, as a rendered report.
+///
+/// The scenario body is its own function so the thread's closure is a call
+/// rather than a nested block: an outcome collected inline here would put the
+/// spawn, the body and the assertion four levels deep.
+fn run_concurrently(scenario: &str, count: usize) -> Vec<String> {
+    thread::scope(|threads| {
+        let handles: Vec<_> = (0..count)
+            .map(|index| threads.spawn(move || run_one_of(scenario, index)))
+            .collect();
+        handles
+            .into_iter()
+            .filter_map(|handle| match handle.join() {
+                Ok(Ok(())) => None,
+                Ok(Err(err)) => Some(format!("{err:#}")),
+                Err(_) => Some("a concurrent scenario panicked".to_owned()),
+            })
+            .collect()
+    })
+}
+
+/// Run one concurrent scenario under its own name.
+fn run_one_of(scenario: &str, index: usize) -> Result<()> {
+    let name = format!("{scenario}-{index}");
+    with_scope(&name, |scope| {
+        let output = run_scoped(
+            scope.unit(),
+            ROUTINE_RUNTIME_CAP,
+            Retention::Collect,
+            "echo concurrent; exit 0",
+        )?;
+        ensure!(
+            output.status.success(),
+            "concurrent scenario {index} should exit 0, got {:?}",
+            output.status
+        );
+        Ok(())
+    })
 }

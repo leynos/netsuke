@@ -113,7 +113,7 @@ impl Outcome {
             describe_caller(self.caller_code),
             self.capture_path,
             self.capture.len(),
-            describe_snapshot(&self.snapshot),
+            describe_snapshot(self.snapshot.as_ref()),
             indent(&self.journal)
         )
     }
@@ -126,10 +126,10 @@ fn state_is_clean(snapshot: &ScopeSnapshot) -> bool {
 
 /// Render a caller's exit status, naming a signal death rather than omitting it.
 fn describe_caller(code: Option<i32>) -> String {
-    match code {
-        Some(value) => value.to_string(),
-        None => "killed by a signal".to_owned(),
-    }
+    code.map_or_else(
+        || "killed by a signal".to_owned(),
+        |value| value.to_string(),
+    )
 }
 
 /// Render one `ActiveState` and `Result` pair.
@@ -138,16 +138,21 @@ fn describe_state(snapshot: &ScopeSnapshot) -> String {
 }
 
 /// Render the manager's state, saying plainly when there is nothing to render.
-fn describe_snapshot(snapshot: &Option<ScopeSnapshot>) -> String {
-    match snapshot {
-        Some(state) => format!("LoadState=loaded {}", describe_state(state)),
-        None => concat!(
-            "LoadState=not-found (unloaded, so Result is unavailable; systemd ",
-            "answers property queries for an absent unit with defaults, and any ",
-            "Result read from one would be fabricated)"
-        )
-        .to_owned(),
-    }
+///
+/// Takes `Option<&T>` rather than `&Option<T>` so the caller's borrow is what
+/// travels: the snapshot is never cloned for a diagnostic.
+fn describe_snapshot(snapshot: Option<&ScopeSnapshot>) -> String {
+    snapshot.map_or_else(
+        || {
+            concat!(
+                "LoadState=not-found (unloaded, so Result is unavailable; systemd ",
+                "answers property queries for an absent unit with defaults, and any ",
+                "Result read from one would be fabricated)"
+            )
+            .to_owned()
+        },
+        |state| format!("LoadState=loaded {}", describe_state(state)),
+    )
 }
 
 /// Indent a journal extract so it reads as a block inside an assertion message.

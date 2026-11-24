@@ -211,7 +211,7 @@ fn systemctl_verb(verb: &str, unit: &str) -> Result<()> {
 fn wait_until_settled(unit: &str) -> Result<()> {
     let started = Instant::now();
     loop {
-        if let Some(reason) = unsettled_reason(&scope_snapshot(unit)?) {
+        if let Some(reason) = unsettled_reason(scope_snapshot(unit)?.as_ref()) {
             ensure!(
                 started.elapsed() < SETTLE_CEILING,
                 "{unit}.scope did not settle within {SETTLE_CEILING:?} after teardown: {reason}"
@@ -224,13 +224,16 @@ fn wait_until_settled(unit: &str) -> Result<()> {
 }
 
 /// Why a snapshot is not settled, or `None` when there is nothing left to do.
-fn unsettled_reason(snapshot: &Option<ScopeSnapshot>) -> Option<String> {
-    match snapshot {
-        None => None,
-        Some(state) if state.active == "failed" => {
-            Some(format!("it is still failed with Result={}", state.result))
-        }
-        Some(state) if is_busy(&state.active) => Some(format!("it is still {}", state.active)),
-        Some(_) => None,
+///
+/// An unloaded unit and an `inactive` one both report settled, so the arms that
+/// answer `None` are merged rather than left to look like distinct cases.
+fn unsettled_reason(snapshot: Option<&ScopeSnapshot>) -> Option<String> {
+    let state = snapshot?;
+    if state.active == "failed" {
+        Some(format!("it is still failed with Result={}", state.result))
+    } else if is_busy(&state.active) {
+        Some(format!("it is still {}", state.active))
+    } else {
+        None
     }
 }
