@@ -89,7 +89,7 @@ impl BacktickRegion {
             return false;
         };
         match self.body_context {
-            ShellQuoteContext::SingleQuoted => false,
+            ShellQuoteContext::SingleQuoted | ShellQuoteContext::AnsiC => false,
             ShellQuoteContext::DoubleQuoted => matches!(next, '"' | '\n'),
             ShellQuoteContext::Unquoted => true,
         }

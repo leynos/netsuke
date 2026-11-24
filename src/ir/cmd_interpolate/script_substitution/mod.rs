@@ -17,7 +17,6 @@ mod ansi_c;
 
 mod backticks;
 
-
 mod delimiters;
 
 mod escapes;
@@ -274,7 +273,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if toggle_quote_context(quote_context, ch) {
             return Ok(true);
         }
-        Ok(false)
         if ch == '`' && *quote_context != ShellQuoteContext::SingleQuoted {
             self.backtick_region = Some(BacktickRegion::new(*quote_context, owner_depth));
             // The body is its own command region, so its `${ }` nesting is
@@ -282,6 +280,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.posix_lexical.enter_command_substitution_region();
             return Ok(true);
         }
+        Ok(false)
     }
 
     /// Restore a closing backtick's saved quote context into its owning region.
