@@ -23,10 +23,10 @@ pub open spec fn spec_power(base: int, repeat: int) -> int
 
 /// The product of the first `end` operand lengths, one for an empty prefix.
 ///
-/// `recommends` records the prefix boundary rather than leaving it implicit:
-/// every caller already has `end <= lens.len()` in scope, and stating it here
-/// makes a future caller that passes a longer prefix a reported error instead
-/// of a read of an unconstrained sequence element.
+/// `recommends` records the prefix boundary each caller already holds. Verus
+/// treats it as advisory documentation of the intended call-site discipline
+/// rather than a checked precondition, so it states the invariant without
+/// changing what is proved.
 pub open spec fn spec_lens_product(lens: Seq<usize>, end: int) -> int
     recommends end <= lens.len(),
     decreases end,
