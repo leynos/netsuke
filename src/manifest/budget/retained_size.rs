@@ -66,15 +66,10 @@ pub(crate) fn item_value_bytes(root: &Value, ceiling: usize) -> Option<usize> {
             MiniWork::Value(value) => {
                 total = charge_item_node(&value, total, ceiling, &mut stack)?;
             }
-            MiniWork::Items(mut items) => {
-                let next = items.next();
-                stack.push(MiniWork::Items(items));
-                stack.extend(next.map(MiniWork::Value));
-            }
+            MiniWork::Items(items) => advance_item_values(items, &mut stack),
             MiniWork::Pairs(mut pairs) => {
-                let next = pairs.next();
-                stack.push(MiniWork::Pairs(pairs));
-                if let Some((key, value)) = next {
+                if let Some((key, value)) = pairs.next() {
+                    stack.push(MiniWork::Pairs(pairs));
                     total = add(total, mini_key_bytes(&key, ceiling - total)?, ceiling)?;
                     stack.push(MiniWork::Value(value));
                 }
@@ -124,15 +119,10 @@ pub(crate) fn json_value_bytes(root: &ManifestValue, ceiling: usize) -> Option<u
             JsonWork::Value(value) => {
                 total = charge_json_node(value, total, ceiling, &mut stack)?;
             }
-            JsonWork::Items(mut items) => {
-                let next = items.next();
-                stack.push(JsonWork::Items(items));
-                stack.extend(next.map(JsonWork::Value));
-            }
+            JsonWork::Items(items) => advance_json_items(items, &mut stack),
             JsonWork::Entries(mut entries) => {
-                let next = entries.next();
-                stack.push(JsonWork::Entries(entries));
-                if let Some((key, value)) = next {
+                if let Some((key, value)) = entries.next() {
+                    stack.push(JsonWork::Entries(entries));
                     total = add(total, map_entry_bytes(key), ceiling)?;
                     stack.push(JsonWork::Value(value));
                 }
@@ -161,6 +151,25 @@ fn charge_json_node<'a>(
             Some(total)
         }
         _ => Some(total),
+    }
+}
+
+/// Queue the next value-backed sequence item, stopping at exhaustion.
+fn advance_item_values(mut items: ValueIter, stack: &mut Vec<MiniWork>) {
+    if let Some(value) = items.next() {
+        stack.push(MiniWork::Items(items));
+        stack.push(MiniWork::Value(value));
+    }
+}
+
+/// Queue the next JSON array item, stopping at exhaustion.
+fn advance_json_items<'a>(
+    mut items: std::slice::Iter<'a, ManifestValue>,
+    stack: &mut Vec<JsonWork<'a>>,
+) {
+    if let Some(value) = items.next() {
+        stack.push(JsonWork::Items(items));
+        stack.push(JsonWork::Value(value));
     }
 }
 
