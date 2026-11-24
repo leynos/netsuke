@@ -123,6 +123,7 @@ mod tests {
         }
     }
 
+    /// Verify the call ceiling admits its exact width and rejects one more.
     #[test]
     fn call_limit_accepts_the_exact_allowance_and_rejects_one_more() {
         let allowance = CollectionAllowance::Manifest(budget_with(4, 8));
@@ -142,10 +143,18 @@ mod tests {
             ManifestBudgetKind::CollectionCallItems,
             "the call ceiling must report its own counter"
         );
-        assert_eq!(exhaustion.stage, ManifestBudgetStage::Collection);
-        assert_eq!(exhaustion.limit, 4);
+        assert_eq!(
+            exhaustion.stage,
+            ManifestBudgetStage::Collection,
+            "an over-width call must report the per-call collection stage"
+        );
+        assert_eq!(
+            exhaustion.limit, 4,
+            "an over-width call must report the four-member call ceiling"
+        );
     }
 
+    /// Verify two allowances cloned from one budget share its aggregate.
     #[test]
     fn clones_share_the_manifest_aggregate() {
         let budget = budget_with(4, 6);
@@ -158,11 +167,23 @@ mod tests {
             .charge_member(2)
             .expect_err("the seventh aggregate member must exhaust the six-member allowance");
         let exhaustion = exhaustion_of(&error);
-        assert_eq!(exhaustion.kind, ManifestBudgetKind::CollectionItems);
-        assert_eq!(exhaustion.stage, ManifestBudgetStage::CollectionAggregate);
-        assert_eq!(exhaustion.limit, 6);
+        assert_eq!(
+            exhaustion.kind,
+            ManifestBudgetKind::CollectionItems,
+            "an exhausted aggregate must report the manifest-wide counter"
+        );
+        assert_eq!(
+            exhaustion.stage,
+            ManifestBudgetStage::CollectionAggregate,
+            "an exhausted aggregate must report the aggregate stage"
+        );
+        assert_eq!(
+            exhaustion.limit, 6,
+            "an exhausted aggregate must report the six-member limit"
+        );
     }
 
+    /// Verify a new budget starts with a full aggregate allowance.
     #[test]
     fn a_fresh_budget_restores_the_aggregate() {
         let first = budget_with(4, 1).collection_allowance();
@@ -176,6 +197,7 @@ mod tests {
             .expect("a fresh manifest must have its own aggregate");
     }
 
+    /// Verify the adapted diagnostic carries only the stage and the limit.
     #[rstest]
     fn adapted_error_reports_only_the_stage_and_limit(en_localizer: EnLocalizer) {
         let _en = en_localizer;
@@ -203,6 +225,7 @@ mod tests {
         );
     }
 
+    /// Verify a standalone allowance bounds each call but accumulates nothing.
     #[test]
     fn standalone_allowance_enforces_the_call_ceiling_without_an_aggregate() {
         let allowance = CollectionAllowance::Standalone { call_items: 4 };
@@ -215,8 +238,19 @@ mod tests {
             .charge_member(4)
             .expect_err("the fifth member must exceed the standalone call ceiling");
         let exhaustion = exhaustion_of(&error);
-        assert_eq!(exhaustion.kind, ManifestBudgetKind::CollectionCallItems);
-        assert_eq!(exhaustion.stage, ManifestBudgetStage::Collection);
-        assert_eq!(exhaustion.limit, 4);
+        assert_eq!(
+            exhaustion.kind,
+            ManifestBudgetKind::CollectionCallItems,
+            "a standalone over-width call must report the call-width counter"
+        );
+        assert_eq!(
+            exhaustion.stage,
+            ManifestBudgetStage::Collection,
+            "a standalone over-width call must report the per-call collection stage"
+        );
+        assert_eq!(
+            exhaustion.limit, 4,
+            "a standalone over-width call must report the four-member call ceiling"
+        );
     }
 }

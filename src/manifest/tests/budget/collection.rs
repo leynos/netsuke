@@ -15,8 +15,9 @@ use metrics_util::{
     MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
 };
+use rstest::rstest;
 use tempfile::tempdir;
-use test_support::fluent::normalize_fluent_isolates;
+use test_support::{EnLocalizer, en_localizer, fluent::normalize_fluent_isolates};
 
 /// Build manifest accounting with small crate-internal collection ceilings.
 fn budget_with(collection_call_items: usize, collection_items: usize) -> Result<ManifestBudget> {
@@ -55,8 +56,9 @@ fn has_exact_labels(labels: &[(String, String)], expected: [(&str, &str); 2]) ->
     actual == expected
 }
 
-#[test]
-fn call_ceiling_rejects_a_huge_lazy_repetition_quickly() -> Result<()> {
+#[rstest]
+fn call_ceiling_rejects_a_huge_lazy_repetition_quickly(en_localizer: EnLocalizer) -> Result<()> {
+    let _en = en_localizer;
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
@@ -85,8 +87,9 @@ fn call_ceiling_rejects_a_huge_lazy_repetition_quickly() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn aggregate_ceiling_spans_two_compact_calls() -> Result<()> {
+#[rstest]
+fn aggregate_ceiling_spans_two_compact_calls(en_localizer: EnLocalizer) -> Result<()> {
+    let _en = en_localizer;
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
@@ -109,8 +112,9 @@ fn aggregate_ceiling_spans_two_compact_calls() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn a_separate_load_restores_the_collection_aggregate() -> Result<()> {
+#[rstest]
+fn a_separate_load_restores_the_collection_aggregate(en_localizer: EnLocalizer) -> Result<()> {
+    let _en = en_localizer;
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
@@ -133,8 +137,9 @@ fn a_separate_load_restores_the_collection_aggregate() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn full_load_records_collection_exhaustion_telemetry() -> Result<()> {
+#[rstest]
+fn full_load_records_collection_exhaustion_telemetry(en_localizer: EnLocalizer) -> Result<()> {
+    let _en = en_localizer;
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
@@ -181,8 +186,11 @@ fn full_load_records_collection_exhaustion_telemetry() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn query_load_enforces_the_ceiling_without_budget_telemetry() -> Result<()> {
+#[rstest]
+fn query_load_enforces_the_ceiling_without_budget_telemetry(
+    en_localizer: EnLocalizer,
+) -> Result<()> {
+    let _en = en_localizer;
     let workspace = tempdir().context("create collection query workspace")?;
     let path = workspace.path().join("Netsukefile");
     test_support::fs::write(
@@ -220,8 +228,9 @@ fn query_load_enforces_the_ceiling_without_budget_telemetry() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn telemetry_uses_only_the_closed_collection_labels() -> Result<()> {
+#[rstest]
+fn telemetry_uses_only_the_closed_collection_labels(en_localizer: EnLocalizer) -> Result<()> {
+    let _en = en_localizer;
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
