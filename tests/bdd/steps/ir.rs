@@ -241,6 +241,11 @@ fn graph_target_implicit_deps(world: &TestWorld, target: &str, paths: &str) -> R
 
 /// Compile a manifest file to IR, storing result or error in state.
 fn compile_manifest_impl(world: &TestWorld, path: &str) {
+    // Each compilation is the only evidence the later assertions may read, so
+    // a count captured by an earlier compilation must not survive into this
+    // one. Without this, a scenario that first compiled a multi-rule manifest
+    // and then one failing differently would still report the old count.
+    world.generation_rule_count.clear();
     // The manifest path is absolute; manifest parsing injects the manifest
     // directory as the glob base, so relative glob patterns resolve against
     // that directory regardless of the process working directory.

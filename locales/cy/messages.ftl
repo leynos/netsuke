@@ -202,6 +202,7 @@ manifest.console_dependency_only = Ni all cofnodion sy'n cynnwys dibyniaethau yn
 ir.rule_not_found = Ni chafwyd hyd i'r rheol ‘{ $rule }’ y cyfeirir ati gan y targed ‘{ $target }’.
 ir.multiple_rules = Rhaid i'r targed ‘{ $target }’ gyfeirio at un rheol yn unig, ond cafwyd { $rules }.
 ir.multiple_rules_truncated = Rhaid i'r targed ‘{ $target }’ gyfeirio at un rheol yn unig, ond cafwyd { $rules } a { $omitted ->
+    [zero] dim enw arall.
     [one] { $omitted } enw arall.
     [two] { $omitted } enw arall.
     [few] { $omitted } enw arall.
