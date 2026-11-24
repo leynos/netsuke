@@ -387,7 +387,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Hash-algoritmen "{ $algorithm }"
 
 # Diagnostik for samlingshjælpere.
 stdlib.collections.flatten.expected_sequence = flatten forventede elementer fra en følge, men fandt { $kind }.
-stdlib.collections.flatten.depth_limit = flatten overskred grænsen for indlejringsdydde på { $limit }.
+stdlib.collections.flatten.depth_limit = flatten overskred grænsen for indlejringsdybde på { $limit }.
 stdlib.collections.flatten.item_limit = flatten overskred grænsen på { $limit } bevarede elementer.
 stdlib.collections.flatten.visit_limit = flatten overskred gennemløbsgrænsen på { $limit } elementer.
 stdlib.collections.compact.not_sequence = compact forventede en følge, men fik { $kind }.

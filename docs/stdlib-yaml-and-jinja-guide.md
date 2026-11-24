@@ -199,11 +199,14 @@ Collection filters are pure and preserve input order.
 
 - `values | uniq` removes later duplicate values. Example:
   `{{ ['alpha', 'alpha', 'beta'] | uniq | join(',') }}` produces `alpha,beta`.
-- `values | flatten` recursively flattens nested sequences and rejects scalar
-  members. Example: `{{ [[1, 2], [3]] | flatten | join(',') }}` produces
-  `1,2,3`. Leaves are kept depth-first from left to right, a shared value is
-  expanded once per occurrence, and a string or map member is retained as a
-  leaf rather than descended into.
+- `values | flatten` recursively flattens nested sequences. The subject and
+  each immediate member of it must be a sequence or iterable; an immediate
+  member that is a scalar is an error. Scalars reached *inside* a sequence are
+  the values being collected and are retained in the result. Example:
+  `{{ [[1, 2], [3]] | flatten | join(',') }}` produces `1,2,3`, whose leaves
+  are the scalars `1`, `2`, and `3`. Leaves are kept depth-first from left to
+  right, a shared value is expanded once per occurrence, and a string or map
+  member is retained as a leaf rather than descended into.
 - `values | group_by(attribute)` groups objects by an attribute while
   preserving first-seen key order. Missing attributes are errors. Example:
   `{{ ([{'kind': 'tool'}, {'kind': 'tool'}] | group_by('kind')).tool | length }}`
