@@ -326,6 +326,9 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         Ok(false)
         if ch == '`' && *quote_context != ShellQuoteContext::SingleQuoted {
             self.backtick_region = Some(BacktickRegion::new(*quote_context, owner_depth));
+            // The body is its own command region, so its `${ }` nesting is
+            // counted separately and the enclosing count resumes when it ends.
+            self.posix_lexical.enter_command_substitution_region();
             return Ok(true);
         }
     }
@@ -341,6 +344,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if self.command_substitutions.len() == region.owner_depth {
             *self.active_quote_context_mut() = region.outer_context;
             self.backtick_region = None;
+            self.posix_lexical.leave_command_substitution_region();
             return Ok(());
         }
         Err(invalid_command_error(

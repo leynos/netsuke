@@ -705,7 +705,12 @@ command line and must not start a heredoc body queued earlier on it. A literal
 newline in the body's single quotes is body data for the same reason: the shell
 begins a queued heredoc only at the newline token that ends the declaring
 command, so no newline inside a backtick body, nor inside quoted script text,
-starts one.
+starts one. A newline in such a region cannot be correlated with the line that
+declared a queued heredoc, so the traversal fails closed there instead of
+starting a body whose terminator it cannot locate; a newline that ends a
+comment in the body is the same case. `${ }` nesting is counted inside the body
+and scoped to it, so a `#` inside `${name# #}` is expansion syntax rather than
+a comment, and the enclosing count resumes when the body ends.
 
 Nesting that would leave the saved context without its owner fails closed with
 `IrGenError::InvalidCommand`; it is not approximated. Two shapes are rejected:

@@ -27,11 +27,20 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         pos: usize,
         ch: char,
     ) -> Result<Option<usize>, IrGenError> {
-        if !self.is_plain_script_text() || self.is_in_arithmetic_expansion() {
+        if self.is_in_arithmetic_expansion() {
             return Ok(None);
         }
-        self.posix_lexical
-            .note_parameter_expansion(self.chars, pos, SourceChar::new(ch));
+        // `${ }` nesting is tracked wherever the shell reads plain expansion
+        // text, including an open backtick body: a `#` inside the expansion is
+        // syntax there, and reading it as a comment would swallow the rest of
+        // the line, including the nested substitution's closer.
+        if self.active_quote_context() == ShellQuoteContext::Unquoted {
+            self.posix_lexical
+                .note_parameter_expansion(self.chars, pos, SourceChar::new(ch));
+        }
+        if !self.is_plain_script_text() {
+            return Ok(None);
+        }
         let mut character = PosixCharacter {
             chars: self.chars,
             pos,

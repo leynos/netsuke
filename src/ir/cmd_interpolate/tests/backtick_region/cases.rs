@@ -32,6 +32,8 @@ pub(super) enum Case {
     CommentInsideBodyHidesParenthesis,
     /// A body parenthesis must not stand in for the group closer.
     BodyParenthesisInsideGroupedSubstitution,
+    /// A `#` inside `${ }` in a nested frame of the body is not a comment.
+    ParameterExpansionHashInNestedFrame,
     /// A single-quoted `\\` pair before a quoted parenthesis is literal.
     DoubleBackslashInSingleQuotesBeforeParenthesis,
     /// A single-quoted `\\` pair in a `$()` frame in the body is literal.
@@ -108,6 +110,9 @@ impl Case {
             }
             Self::BodyParenthesisInsideGroupedSubstitution => {
                 format!(r#"printf '%s' "$( (printf %s `printf x)`) {INS_TOKEN} )""#)
+            }
+            Self::ParameterExpansionHashInNestedFrame => {
+                format!(r#"printf '%s' `printf '%s' "$(printf '%s' ${{v# #}})"` {INS_TOKEN}"#)
             }
             Self::DoubleBackslashInSingleQuotesBeforeParenthesis => {
                 format!(r"printf '<%s>\n' $(printf %s `printf %s '\\' ')'`) {INS_TOKEN}")
@@ -200,6 +205,9 @@ impl Case {
             Self::BodyParenthesisInsideGroupedSubstitution => {
                 "a body parenthesis inside a grouped substitution"
             }
+            Self::ParameterExpansionHashInNestedFrame => {
+                "a # inside ${ } in a nested frame of the body"
+            }
             Self::DoubleBackslashInSingleQuotesBeforeParenthesis => {
                 "a single-quoted \\\\ pair before a quoted parenthesis"
             }
@@ -223,3 +231,4 @@ impl Case {
         }
     }
 }
+// weave: run 'weave explain src/ir/cmd_interpolate/tests/backtick_region/cases.rs' for per-hunk detail, 'weave check' to verify your resolution
