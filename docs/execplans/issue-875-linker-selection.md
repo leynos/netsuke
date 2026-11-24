@@ -147,8 +147,14 @@ reads.
   before that step, so it is correct whichever branch the nested build takes. A
   contract asserts the install, in a module split out to keep both under the
   file-length rule.
-- [ ] Validate on a real mutation dispatch (run 45406364928); record its
-  evidence and move the pull request to ready.
+- [x] (2026-11-24) The fix passed every affected gate and was committed as
+  `c0414c1f5` and pushed; a fresh release dry run (`45447812222`) and a
+  CodeRabbit pass on that commit are in flight.
+- [x] (2026-11-24) The mutation dispatch reached `Run setup commands` on all
+  six shards and **every one succeeded**, so `make check-build-tools`, the
+  `linker`-key resolution and the wrapper check all hold on the real worker.
+- [ ] Record the shard baselines and the mutant outcomes when the dispatch
+  finishes, then move the pull request to ready.
 
 ## Surprises & discoveries
 
