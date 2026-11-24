@@ -915,7 +915,7 @@ ordinary additions or need individual design passes. See RFC 0006 §§6 and 14.1
     ([ADR-0085](adrs/adr-0085-bound-canonical-admission-resources.md), issue
     #972). That work does not satisfy this task: it bounds one traversal and
     does not provide the shared helper the combinatorial filters need, and it
-    carries no localized diagnostic. The checkbox stays open.
+    carries no localized diagnostic.
 - [ ] 6.1.4. Establish the stdlib domain-error and diagnostic-code scaffolding.
   - See RFC 0006 §6.9 and the stdlib resolver-boundary conventions in
     [developers-guide.md](developers-guide.md).

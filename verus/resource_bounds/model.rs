@@ -22,7 +22,13 @@ pub open spec fn spec_power(base: int, repeat: int) -> int
 }
 
 /// The product of the first `end` operand lengths, one for an empty prefix.
+///
+/// `recommends` records the prefix boundary rather than leaving it implicit:
+/// every caller already has `end <= lens.len()` in scope, and stating it here
+/// makes a future caller that passes a longer prefix a reported error instead
+/// of a read of an unconstrained sequence element.
 pub open spec fn spec_lens_product(lens: Seq<usize>, end: int) -> int
+    recommends end <= lens.len(),
     decreases end,
 {
     if end <= 0 { 1 } else { spec_lens_product(lens, end - 1) * (lens[end - 1] as int) }
@@ -48,6 +54,13 @@ pub open spec fn spec_falling(n: int, r: int) -> int
     else { n * spec_falling(n - 1, r - 1) }
 }
 
+/// The binomial coefficient `n choose r`, zero for a negative argument or
+/// `r > n`.
+///
+/// Zero is the value callers use when they specify an impossible selection, so
+/// it is a total function rather than a partial one: the arithmetic kernels
+/// return `None` for overflow, but "cannot choose more than exist" is a real
+/// answer with a defined count.
 #[verifier::memoize]
 pub open spec fn spec_binom(n: int, r: int) -> int
     decreases n,
@@ -60,6 +73,7 @@ pub open spec fn spec_binom(n: int, r: int) -> int
 
 /// Does any operand before `end` equal zero?
 pub open spec fn spec_has_zero(lens: Seq<usize>, end: int) -> bool
+    recommends end <= lens.len(),
     decreases end,
 {
     if end <= 0 { false } else { lens[end - 1] == 0 || spec_has_zero(lens, end - 1) }
@@ -67,6 +81,7 @@ pub open spec fn spec_has_zero(lens: Seq<usize>, end: int) -> bool
 
 /// Is every operand before `end` at least one?
 pub open spec fn spec_all_positive(lens: Seq<usize>, end: int) -> bool
+    recommends end <= lens.len(),
     decreases end,
 {
     if end <= 0 { true } else { lens[end - 1] >= 1 && spec_all_positive(lens, end - 1) }

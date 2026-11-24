@@ -194,9 +194,11 @@ output and some leaf files so the long-lived structure remains visible.
   filters, with their dialect telemetry. The filter adapter validates arguments
   and resolves the dialect; the encoding itself is `src/shell_word.rs`.
 - `src/stdlib/resource_bounds/`: The RFC 0006 ceilings, checked cardinality and
-  running-total arithmetic, and typed refusals shared by every bounded template
-  helper (see
-  [ADR-0084](adrs/adr-0084-shared-resource-bounds-for-stdlib-helpers.md)). Its
+  running-total arithmetic, and typed refusals that every bounded template
+  helper is expected to adopt (see
+  [ADR-0084](adrs/adr-0084-shared-resource-bounds-for-stdlib-helpers.md)). No
+  template reaches it yet; the consumer tasks own that wiring, and the re-use
+  policy in the developers' guide states who may call the module and how. Its
   Kani harnesses live in `verification.rs` behind `#[cfg(kani)]`.
 - `test_support/`: Shared Rust test-support crate used by integration and
   behavioural tests.

@@ -1293,7 +1293,31 @@ conflict in `Decision log`, and escalate.
     files. Acceptance evidence for the final commit is reported in the
     pull-request comment that announces the rulings rather than in a further
     commit, following the assessment's guidance that reporting the results
-    outside the commit discharges the final-commit requirement.
+  - Formal review at `c9752d4dc` (2026-11-24). Seven inline findings, each
+    verified against the source before repair; all seven were valid and all
+    are fixed here.
+    - Mutation evidence. The Evidence bullet claimed `make test-kani-mutations`
+      shows each patch makes its harness fail. It does not: the gate compiles
+      each patched tree through the Kani frontend with `--no-codegen` and runs
+      no harness. The plan now separates the two measurements and says which
+      one the gate is.
+    - ADR allocation scan. The runnable procedure matched `docs/adr-[0-9]{3}-`,
+      which cannot match `docs/adrs/adr-0084-…`, and scanned only `origin`.
+      It now scans every local tracking ref, matches four-digit serials under
+      `docs/adrs/`, and says the comparison is numeric.
+    - Logged pipelines. Every `| tee` block now runs under `set -o pipefail`,
+      because a failing gate piped into `tee` otherwise reports `tee`'s status
+      and would be recorded as a pass.
+    - Two user-facing documents. `docs/repository-layout.md` said the ceilings
+      are shared by every bounded helper when no template reaches the module
+      yet; it now says future consumers adopt it. `docs/roadmap.md` said the
+      6.1.3 checkbox "stays open" two lines after checking it.
+    - Verus specifications. `spec_lens_product`, `spec_has_zero`, and
+      `spec_all_positive` now carry `recommends end <= lens.len()`, so a future
+      caller that passes a longer prefix is a reported error rather than a read
+      of an unconstrained element, and `spec_binom` gains the `///` summary the
+      other specifications have. The proof still reports
+      `verification results:: 67 verified, 0 errors`.
 
 ## Surprises & discoveries
 
@@ -2639,9 +2663,16 @@ obligations.
 - Evidence: inside the Kani scope wrapper,
   `make kani-full KANI_FLAGS='--harness stdlib::resource_bounds::verification'`
   reports `VERIFICATION:- SUCCESSFUL` for each harness and every cover
-  satisfied; `make test-kani-mutations` shows each patch makes its harness
-  fail; one full `make kani-ir` inside the wrapper passes before the pull
+  satisfied; one full `make kani-ir` inside the wrapper passes before the pull
   request is marked ready.
+- Mutation evidence is two separate measurements, and only the first is a gate:
+  `make test-kani-mutations` compiles each patched tree under `-D warnings`
+  through the Kani frontend with `--no-codegen` and never runs a harness, so it
+  proves the patch applies and compiles — including faults that live inside
+  `#[cfg(kani)]` code, which `cargo check` cannot see. That a mutation *fails
+  its harness* is established only by the focused `cargo kani --harness …` run
+  recorded for it in the Progress section, with the failing check named. Do not
+  read a green `test-kani-mutations` as detection evidence.
 - Witnesses: `checked_binomial(u64::MAX, u64::MAX / 2)` exits at the cap check
   and `checked_falling_factorial(10^18, 10^18)` likewise;
   `checked_binomial(u64::MAX, 33)` and `checked_falling_factorial(10^18, 20)`
@@ -2920,7 +2951,8 @@ to the `cargo-mutants` exclusion list in `docs/developers-guide.md`; the
 remaining seeded faults from EP-V1 and EP-V2 are observed and reverted.
 Acceptance:
 
-```sh
+```bash
+set -o pipefail
 make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs' 2>&1 \
   | tee /tmp/verus-netsuke-6-1-3-shared-bounded-materialization-helper.out
 ```
@@ -2929,7 +2961,8 @@ Then, inside the Kani scope wrapper (the `systemd-run --user --scope` command
 in "Kani scope wrapper" in `docs/developers-guide.md`, with its `bash -c`
 payload replaced as below):
 
-```sh
+```bash
+set -o pipefail
 env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
   make kani-full KANI_FLAGS='--harness stdlib::resource_bounds::verification' 2>&1 \
   | tee /tmp/kani-netsuke-6-1-3-shared-bounded-materialization-helper.out
@@ -2963,12 +2996,19 @@ Assigned: the documentation obligations in AGENTS.md. End state:
 
    ```sh
    git fetch --all --prune -q
-   for ref in $(git for-each-ref --format='%(refname)' refs/remotes/origin); do
-     git ls-tree -r --name-only "$ref" -- docs/ 2>/dev/null \
-       | grep -oE 'docs/adr-[0-9]{3}-' | sed 's|docs/adr-||; s|-$||' \
-       | sort -u | while read -r n; do echo "$n ${ref#refs/remotes/origin/}"; done
-   done | sort -u | awk '$1 >= "050"'
+   for ref in $(git for-each-ref --format='%(refname)' refs/remotes); do
+     git ls-tree -r --name-only "$ref" -- docs/adrs/ 2>/dev/null \
+       | grep -oE 'adr-[0-9]{4}-' | sed 's|adr-||; s|-$||'
+   done | sort -u | sort -n | tail -n 1
    ```
+
+   The serials are four digits under `docs/adrs/`, and the loop reads every
+   local tracking ref rather than `origin` alone, because an allocation can be
+   recorded on a branch this worktree tracks but has not pushed. The final
+   `sort -n` is what makes the highest serial numeric; lexical order would place
+   `0999` after `1000`. Take the next serial above the printed value, and
+   re-run the scan at the moment the ADR is created rather than at the start of
+   the work.
 
    Index the ADR in `docs/contents.md`, then confirm every ADR index label
    matches its filename by set comparison, not by count.
@@ -3018,9 +3058,13 @@ milestones stand on their own. Remaining gaps: the consumer tasks 6.1.4, 6.2.1,
 
 ## Concrete steps
 
-Run every command from the worktree root and capture long output with `tee`:
+Run every command from the worktree root and capture long output with `tee`.
+Enable `pipefail` first in every such block: without it a pipeline reports
+`tee`'s status, so a failing gate that still wrote its log would exit zero and
+the failure would be recorded as a pass.
 
-```sh
+```bash
+set -o pipefail
 make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-6-1-3-shared-bounded-materialization-helper.out
 make lint 2>&1 | tee /tmp/lint-netsuke-6-1-3-shared-bounded-materialization-helper.out
 make test 2>&1 | tee /tmp/test-netsuke-6-1-3-shared-bounded-materialization-helper.out
@@ -3035,7 +3079,8 @@ Run gates sequentially, never in parallel. Delegating full gate runs to the
 optional. A build waiting on `build-limits` admission is queued, not hung. For
 the focused red-green loop, including doctests, which nextest does not run:
 
-```sh
+```bash
+set -o pipefail
 cargo nextest run --lib resource_bounds 2>&1 \
   | tee /tmp/focused-netsuke-6-1-3-shared-bounded-materialization-helper.out
 cargo nextest run --test bdd_tests resource_bounds 2>&1 \
