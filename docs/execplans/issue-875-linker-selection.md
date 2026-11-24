@@ -129,7 +129,17 @@ reads.
   allowlist of host variables. `Cross.toml` now passes
   `NETSUKE_PLATFORM_LINKER` through, so the opt-out reaches the container where
   the wrapper runs; a Rust contract asserts it.
-- [ ] Validate on a real mutation dispatch; open the draft pull request.
+- [x] (2026-11-24) A fourth review round asked for the prescribed ADR
+  amendment structure. ADR-0086 was allocated only after sweeping every remote
+  and local ref (highest minted anywhere was 0085) and records the decision;
+  ADR-0029 carries the `Amended by ADR-0086 (2026-11-24)` Status banner and an
+  `## Amendments` section that preserves its decision text. The index is
+  bijective: every ADR file is in `docs/contents.md` and every entry resolves.
+- [x] (2026-11-24) CodeRabbit reported **0 findings** on the final candidate
+  (25 files). Committed as `6c6d82857`, pushed over SSH, and opened as draft
+  pull request [#1192](https://github.com/leynos/netsuke/pull/1192).
+- [ ] Validate on a real mutation dispatch (run 45406364928); record its
+  evidence and move the pull request to ready.
 
 ## Surprises & discoveries
 
