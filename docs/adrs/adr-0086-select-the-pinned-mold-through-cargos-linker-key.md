@@ -47,6 +47,11 @@ Select the pinned mold through Cargo's target `linker` key, which an exported
   only `CARGO_*`, `CROSS_*`, and a short allowlist of host variables.
   `Cross.toml` passes `NETSUKE_PLATFORM_LINKER` through, so the opt-out reaches
   the container the wrapper runs in.
+- The packaging lane also provisions the pinned standard, because it runs a
+  nested Cargo build in the checkout for `cargo-orthohelp` that the opt-out
+  does not reliably reach. A run without it failed with
+  `collect2: fatal error: cannot find 'ld'`, which is what the wrapper reports
+  when it falls through to `mold` on a runner that installs none.
 - Cargo resolves the relative value as a config-relative path from the
   directory that contains `.cargo` — the repository root — not from the working
   directory. That is what makes the wrapper found from a subdirectory and from

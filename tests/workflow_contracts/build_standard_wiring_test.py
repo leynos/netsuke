@@ -45,13 +45,10 @@ from workflow_loading import (
     CI_WORKFLOW_PATH,
     COVERAGE_MAIN_WORKFLOW_PATH,
     MAKEFILE_PATH,
-    PACKAGE_WORKFLOW_PATH,
-    RELEASE_WORKFLOW_PATH,
     REPO_ROOT,
     job_steps,
     load_workflow,
     require_mapping,
-    workflow_job,
 )
 
 # `Path` is named only by annotations here, and `TC003` requires such an import
@@ -82,19 +79,6 @@ MOLD_LINKED_JOBS = (
 COVERAGE_STEPS = (
     (CI_WORKFLOW_PATH, "build-test"),
     (COVERAGE_MAIN_WORKFLOW_PATH, "coverage-upload"),
-)
-
-#: The variable the linker wrapper reads to select the platform linker. The
-#: configuration's `linker` key is not displaced by an assigned `RUSTFLAGS`, so
-#: every shape that the standard excludes must opt out by name.
-PLATFORM_LINKER_ENV = "NETSUKE_PLATFORM_LINKER"
-
-#: Jobs whose builds ship an artefact and are therefore excluded from the
-#: standard, so they must also opt the linker wrapper out. Coverage is handled
-#: with its steps, where its `RUSTFLAGS` assignment lives.
-PACKAGING_JOBS = (
-    (PACKAGE_WORKFLOW_PATH, "build"),
-    (RELEASE_WORKFLOW_PATH, "package-crate"),
 )
 
 
@@ -343,42 +327,3 @@ def test_coverage_steps_carry_no_excluded_flag(path: Path, job: str) -> None:
                 f"{path.name} job {job} must not hand `{flag}` to a measured "
                 f"build, got {declared!r}"
             )
-
-
-@pytest.mark.parametrize(("path", "job"), COVERAGE_STEPS, ids=str)
-def test_coverage_steps_opt_the_linker_wrapper_out(path: Path, job: str) -> None:
-    """Assert every coverage step keeps the platform linker.
-
-    ``RUSTFLAGS`` no longer carries the whole exclusion: the configuration's
-    ``linker`` key survives an assigned value, so a coverage step that only
-    assigned ``RUSTFLAGS`` would still link through ``mold``. The opt-out is
-    asserted separately from the flag assertions because the two fail to
-    different edits — dropping the opt-out leaves every flag assertion passing.
-    """
-    for step in _coverage_steps(path, job):
-        env = require_mapping(step.get("env"), f"{path.name} coverage step env")
-        assert str(env.get(PLATFORM_LINKER_ENV)) == "1", (
-            f"{path.name} job {job} must set {PLATFORM_LINKER_ENV}=1 on the "
-            f"coverage step, or the measured build still links with mold; got "
-            f"{env.get(PLATFORM_LINKER_ENV)!r}"
-        )
-
-
-@pytest.mark.parametrize(("path", "job"), PACKAGING_JOBS, ids=str)
-def test_packaging_jobs_opt_the_linker_wrapper_out(path: Path, job: str) -> None:
-    """Assert each packaging job keeps the platform linker.
-
-    A shipped artefact is one of the standard's exclusions. Its job already
-    exports ``RUSTFLAGS`` through the toolchain action, which displaces the
-    configuration's ``rustflags`` tables, but not its ``linker`` key; without
-    this variable the artefact would still link with ``mold``.
-    """
-    env = require_mapping(
-        workflow_job(load_workflow(path), job).get("env"),
-        f"{path.name} jobs.{job} env",
-    )
-    assert str(env.get(PLATFORM_LINKER_ENV)) == "1", (
-        f"{path.name} job {job} must set {PLATFORM_LINKER_ENV}=1, or the "
-        f"packaged artefact links with mold; got "
-        f"{env.get(PLATFORM_LINKER_ENV)!r}"
-    )

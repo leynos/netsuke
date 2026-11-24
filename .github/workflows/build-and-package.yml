@@ -389,6 +389,26 @@ jobs:
           $linkerSetting = "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linkerPath"
           Add-Content -Path $env:GITHUB_ENV -Value $linkerSetting -Encoding utf8
 
+      - name: Install the build standard
+        if: inputs.platform == 'linux'
+        # `Generate release help` runs a nested Cargo build in this checkout,
+        # and `.cargo/config.toml` names `.cargo/mold-linker` as the linker for
+        # every Linux build. The job-level `NETSUKE_PLATFORM_LINKER=1` is meant
+        # to send that nested build to the platform linker, but the variable
+        # did not reach it: the run failed with `collect2: fatal error: cannot
+        # find 'ld'`, the signature of a wrapper that fell through to mold with
+        # none installed. Installing the pinned standard and putting it on
+        # `PATH` makes the lane work whichever branch the nested build takes,
+        # which is the same remedy every other Linux lane applies.
+        #
+        # The packaged artefact is unaffected: `Build release binary` already
+        # ran, and `cross` links inside its own container with the linker its
+        # image supplies, which outranks the configuration key.
+        run: |
+          set -euo pipefail
+          make install-build-tools
+          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+
       - name: Generate release help
         shell: bash
         env:

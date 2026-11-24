@@ -7384,6 +7384,16 @@ container, and `cross` forwards only a short allowlist of host variables, so
 `Cross.toml` passes the opt-out through; otherwise the variable would stop at
 the container boundary.
 
+The opt-out is necessary but was not sufficient on the packaging lane. That job
+also runs a nested Cargo build in the checkout, for `cargo-orthohelp`, and a
+run failed with `collect2: fatal error: cannot find 'ld'` — the signature of a
+wrapper that fell through to `mold` on a runner that installs none, because the
+variable did not reach the nested tool. The lane therefore also runs
+`make install-build-tools` and puts the prefix on `PATH` before that step, as
+every other Linux lane does. The shipped artefact is unaffected: it is linked by
+`cross` in its own container, whose target linker outranks the configuration
+key.
+
 **Coverage.** A build whose output is a measurement is a reproducibility claim,
 so it takes neither the parallel frontend nor the linker change. Both coverage
 steps assign `RUSTFLAGS` at the step itself rather than inheriting it from the

@@ -138,6 +138,15 @@ reads.
 - [x] (2026-11-24) CodeRabbit reported **0 findings** on the final candidate
   (25 files). Committed as `6c6d82857`, pushed over SSH, and opened as draft
   pull request [#1192](https://github.com/leynos/netsuke/pull/1192).
+- [x] (2026-11-24) First CI signal found a real defect: both Linux packaging
+  jobs failed at `Generate release help` with
+  `collect2: fatal error: cannot find 'ld'`. The packaged artefact built fine;
+  the nested `cargo-orthohelp` bridge build in the checkout fell through to
+  `mold` on a runner that installs none, because the job-level opt-out did not
+  reach it. The lane now runs `make install-build-tools` and extends `PATH`
+  before that step, so it is correct whichever branch the nested build takes. A
+  contract asserts the install, in a module split out to keep both under the
+  file-length rule.
 - [ ] Validate on a real mutation dispatch (run 45406364928); record its
   evidence and move the pull request to ready.
 
