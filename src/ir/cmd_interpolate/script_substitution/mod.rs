@@ -8,10 +8,12 @@ use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, RejectionReason,
     find_script_substitution, invalid_command_error, invalid_heredoc_boundary_error,
     posix_lexical::{
-        AnsiCCharacter, HeredocBoundary, InertCharacterOutcome, NewlineContext, PosixCharacter,
-        PosixLexicalState, SourceChar, ansic_quote_is_ambiguous, backslash_escapes_marker,
+        HeredocBoundary, InertCharacterOutcome, NewlineContext, PosixCharacter, PosixLexicalState,
+        SourceChar, ansic_quote_is_ambiguous, backslash_escapes_marker,
     },
 };
+
+mod ansi_c;
 
 mod delimiters;
 
@@ -295,25 +297,10 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             return false;
         }
 
-        // A dollar followed by a quote opens a Bash ANSI-C string, so that
-        // transition is decided before the ordinary quote rules run. Its body
-        // still reaches the substitution path, where a marker is rejected.
-        let opens = self.posix_lexical.observe_ansi_c_character(
-            AnsiCCharacter::new(self.chars, pos, ch),
-            self.active_quote_context() == ShellQuoteContext::Unquoted,
-        );
+        if let Some(next) = self.update_ansi_c_context(pos, ch) {
+            return next;
+        }
         let quote_context = self.active_quote_context_mut();
-        if opens {
-            *quote_context = ShellQuoteContext::AnsiC;
-            return false;
-        }
-        if *quote_context == ShellQuoteContext::AnsiC {
-            if ch != '\'' {
-                return false;
-            }
-            *quote_context = ShellQuoteContext::Unquoted;
-            return true;
-        }
         match (*quote_context, ch) {
             (ShellQuoteContext::Unquoted, '\'') => {
                 *quote_context = ShellQuoteContext::SingleQuoted;
@@ -365,10 +352,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Report whether a marker here sits in a region no binding can encode.
-    ///
-    /// Backtick bodies and command substitutions are lowered as their own
-    /// shell text, and an ANSI-C string changes what a backslash means, so all
-    /// three refuse the marker rather than guess an encoding.
     fn is_placeholder_unsafe(&self) -> bool {
         self.backtick_outer_context.is_some()
             || self.is_in_command_substitution()

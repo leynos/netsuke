@@ -7,7 +7,7 @@
 //! two independent readings of the same text.
 
 use super::super::super::super::{INS_TOKEN, OUTS_TOKEN};
-use super::{DollarReading, Region, SourceChar, SourcePosition};
+use super::{AnsiCObservation, Region, SourceChar, SourcePosition};
 
 /// Track the look-behind that decides whether a `$'` opens an ANSI-C string.
 ///
@@ -58,32 +58,29 @@ pub(super) struct OracleState {
     is_escaped: bool,
     /// Record whether the next `#` sits on a POSIX word boundary.
     boundary: WordBoundary,
-    /// Record whether an ANSI-C string has already been opened and closed.
-    closed_ansi_c: bool,
+    /// Record what the scan has seen of ANSI-C strings.
+    ansi_c: AnsiCObservation,
     /// Record whether an unmodelled shell construct was seen.
     pub(super) has_unmodelled_region: bool,
-    /// Record whether an ANSI-C body took a backslash.
-    pub(super) has_escaped_ansi_c: bool,
-    /// Record how this pass reads a `$'` sequence.
-    reading: DollarReading,
 }
 
 impl OracleState {
     /// Initialise the state for a prefix that begins outside every region.
     ///
-    /// The reading decides whether `$'…'` is a Bash ANSI-C string or an
-    /// ordinary quote opened by a literal dollar.
-    pub(super) const fn new(reading: DollarReading) -> Self {
+    /// The model reads `$'…'` as Bash does; the POSIX alternative is refused
+    /// by the lowering's own escape-bearing guard before it is reached.
+    pub(super) const fn new() -> Self {
         Self {
             region: Region::Unquoted,
             substitutions: Vec::new(),
             lookbehind: Lookbehind::Idle,
             is_escaped: false,
             boundary: WordBoundary::AtBoundary,
-            closed_ansi_c: false,
+            ansi_c: AnsiCObservation {
+                is_closed: false,
+                is_escaped: false,
+            },
             has_unmodelled_region: false,
-            has_escaped_ansi_c: false,
-            reading,
         }
     }
 
@@ -101,7 +98,12 @@ impl OracleState {
     /// be the second character of an escape pair, because the traversal reads
     /// an escaped character as literal rather than as a substitution site.
     pub(super) fn is_closed_ansi_c_boundary(&self) -> bool {
-        self.closed_ansi_c && self.is_plain_unquoted()
+        self.ansi_c.has_closed() && self.is_plain_unquoted()
+    }
+
+    /// Report whether an ANSI-C body took a backslash.
+    pub(super) const fn has_escaped_ansi_c(&self) -> bool {
+        self.ansi_c.is_escaped()
     }
 
     /// Report whether this boundary is unquoted, unescaped, and outside every
@@ -194,7 +196,7 @@ impl OracleState {
         if self.is_escaped {
             self.is_escaped = false;
             if self.active_region() == Region::AnsiC {
-                self.has_escaped_ansi_c = true;
+                self.ansi_c.mark_escaped();
             }
             if !character.ch.is_newline() {
                 self.reset_lookbehind();
@@ -275,9 +277,6 @@ impl OracleState {
     /// The literal reading has no ANSI-C region at all: `$` stays a literal
     /// character and the apostrophe opens an ordinary single quote.
     fn opens_ansi_c(&mut self, region: Region, ch: SourceChar) -> bool {
-        if self.reading != DollarReading::AnsiC {
-            return false;
-        }
         if region != Region::Unquoted || !ch.is_ansi_c_opener() {
             return false;
         }
@@ -297,7 +296,7 @@ impl OracleState {
             return;
         }
         self.set_active_region(Region::Unquoted);
-        self.closed_ansi_c |= region == Region::AnsiC;
+        self.ansi_c.mark_closed(region);
         self.boundary = WordBoundary::InWord;
     }
 

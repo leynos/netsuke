@@ -260,19 +260,30 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         Ok(())
     }
 
+    /// Report whether `$(` and `)` are substitution syntax in this context.
+    ///
+    /// Bash expands neither inside ordinary single quotes nor inside an
+    /// ANSI-C string, where both are literal text.
+    fn matches_substitution_context(&self) -> bool {
+        !matches!(
+            self.active_quote_context(),
+            QuoteContext::Single(_) | QuoteContext::AnsiC
+        )
+    }
+
     /// Classify a character that delimits an active command substitution.
     fn classify_command_substitution_delimiter(
         &self,
         pos: usize,
         ch: char,
     ) -> Option<CommandSubstitutionDelimiter> {
-        if !self.matches_single_quote_context() && self.starts_command_substitution(pos, ch) {
+        if self.matches_substitution_context() && self.starts_command_substitution(pos, ch) {
             return Some(CommandSubstitutionDelimiter::Start);
         }
         if self.starts_nested_command_substitution_parenthesis(ch) {
             return Some(CommandSubstitutionDelimiter::NestedOpen);
         }
-        if !self.matches_single_quote_context() && self.ends_command_substitution(ch) {
+        if self.matches_substitution_context() && self.ends_command_substitution(ch) {
             return Some(CommandSubstitutionDelimiter::Close);
         }
         None

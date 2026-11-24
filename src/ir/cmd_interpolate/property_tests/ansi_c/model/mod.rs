@@ -30,17 +30,6 @@ pub(super) enum Region {
     Comment,
 }
 
-/// Name how one model pass reads a `$'` sequence.
-///
-/// The model reads `$'…'` as Bash does. The POSIX alternative is covered by
-/// the lowering's own ambiguity guard, which refuses a string whose extent the
-/// two readings disagree about, so no property needs a second pass here.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum DollarReading {
-    /// Read `$'…'` as Bash's ANSI-C string.
-    AnsiC,
-}
-
 /// One position in the character sequence the model scans.
 ///
 /// Wrapping the index keeps call sites honest about what a bare number means
@@ -112,6 +101,37 @@ impl SourceChar {
     }
 }
 
+/// Record what one scan has seen of ANSI-C strings.
+#[derive(Default)]
+pub(super) struct AnsiCObservation {
+    /// Record whether a string has been opened and closed again.
+    is_closed: bool,
+    /// Record whether a string body took a backslash.
+    is_escaped: bool,
+}
+
+impl AnsiCObservation {
+    /// Record that a string closed in `region`.
+    pub(super) fn mark_closed(&mut self, region: Region) {
+        self.is_closed |= region == Region::AnsiC;
+    }
+
+    /// Record that a string body took a backslash.
+    pub(super) fn mark_escaped(&mut self) {
+        self.is_escaped = true;
+    }
+
+    /// Report whether a string has been opened and closed again.
+    pub(super) const fn has_closed(&self) -> bool {
+        self.is_closed
+    }
+
+    /// Report whether a string body took a backslash.
+    pub(super) const fn is_escaped(&self) -> bool {
+        self.is_escaped
+    }
+}
+
 /// Summarize the ANSI-C regions of one generated prefix.
 #[derive(Default)]
 pub(super) struct AnsiCModel {
@@ -139,7 +159,7 @@ impl AnsiCModel {
     /// where both readings put it outside every quote; where they disagree the
     /// recipe is rejected instead, and no property asserts an encoding there.
     pub(super) fn scan(chars: &[char]) -> Self {
-        let reading = Reading::scan(chars, DollarReading::AnsiC);
+        let reading = Reading::scan(chars);
         Self {
             first_ansi_c: reading.first_ansi_c,
             last_unquoted_after_closed: reading.closed_and_unquoted.last().copied(),
@@ -167,8 +187,8 @@ struct Reading {
 
 impl Reading {
     /// Scan `chars` under one reading of `$'`.
-    fn scan(chars: &[char], reading: DollarReading) -> Self {
-        let mut state = OracleState::new(reading);
+    fn scan(chars: &[char]) -> Self {
+        let mut state = OracleState::new();
         let mut summary = Self::default();
         let mut position = SourcePosition::new(0);
         summary.observe(&state, position);
@@ -177,7 +197,7 @@ impl Reading {
             summary.observe(&state, position);
         }
         summary.has_unmodelled_region = state.has_unmodelled_region;
-        summary.has_escaped_ansi_c = state.has_escaped_ansi_c;
+        summary.has_escaped_ansi_c = state.has_escaped_ansi_c();
         summary
     }
 
@@ -186,7 +206,7 @@ impl Reading {
     /// Positions are pushed in scan order, so each list stays sorted and the
     /// two readings can be intersected by binary search.
     fn observe(&mut self, state: &OracleState, position: SourcePosition) {
-        self.has_escaped_ansi_c |= state.has_escaped_ansi_c;
+        self.has_escaped_ansi_c |= state.has_escaped_ansi_c();
         if state.active_region() == Region::AnsiC {
             self.first_ansi_c.get_or_insert(position);
         }
