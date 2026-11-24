@@ -134,7 +134,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch)? {
             return Ok(next);
         }
-        self.update_quote_context(ch);
+        self.update_quote_context(pos, ch);
         self.append_marker_for_context(pos, ch, marker_protection(self, pos))
     }
     /// Track `$()` nesting and preserve its delimiters before marker handling.
