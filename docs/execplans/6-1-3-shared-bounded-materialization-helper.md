@@ -1323,6 +1323,9 @@ conflict in `Decision log`, and escalate.
       `0 <= i <= end <= lens.len()`, and `lemma_no_zero_all_positive`, which now
       requires `0 <= end <= lens.len()`. Those two enforce the discipline that
       the specifications only document. `spec_binom` gains the `///` summary the
+      other specifications have. The proof still reports
+      `verification results:: 67 verified, 0 errors`.
+
   - Fourth ADR renumber, to 0087 (2026-11-24). The completeness assessment
     suggested rechecking ADR-0084 against the configured reservation remotes,
     and the check found a real collision: branch
