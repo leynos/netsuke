@@ -231,3 +231,17 @@ fn a_reservation_for_one_workspace_cannot_authorise_another() -> Result<()> {
     );
     Ok(())
 }
+
+/// The resolution unit must not depend on the removal unit.
+///
+/// Resolution is a read-only query; removal owns the filesystem mutation. A
+/// source check keeps a later edit from reintroducing the cycle that made the
+/// query import the command it exists to guard.
+#[test]
+fn resolution_does_not_import_the_removal_unit() {
+    let source = include_str!("../resolve.rs");
+    assert!(
+        !source.contains("super::reset"),
+        "resolve.rs must depend on the workspace and namespace constants, not on reset.rs",
+    );
+}

@@ -79,10 +79,10 @@ pub use recipe_shell::telemetry::{
 };
 
 use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
-use generated_state::publish_then_reset;
+use generated_state::{BuildStatePlan, publish_then_reset};
 use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
-use phony_state::{Workspace, refuse_reserved_declarations};
+use phony_state::Workspace;
 use recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 
 /// Runtime dependencies shared by command dispatch handlers.
@@ -222,16 +222,18 @@ fn execute_build(
     let parts = generated.into_build_parts();
     let console_edge_count = parts.bundle.console_edge_count();
     // The workspace is resolved once and the same value judges the refusal and
-    // guards the reset, so no second lookup can answer differently.
+    // guards the reset, so no second lookup can answer differently. The named
+    // step owns the order: refusal, publication, pruning, reset.
     let workspace = Workspace::resolve(cli)?;
-    // Generation cannot judge a spelling that only the working directory can
-    // resolve, so the build refuses a manifest path that lands in generated
-    // state before it publishes a sidecar, prunes an obsolete one, or removes
-    // the force node. The check runs whether or not that state exists, because
-    // a first build must refuse as firmly as a later one. Its proof is what
-    // lets the reset run at all.
-    let reservation = refuse_reserved_declarations(&workspace, &cli.file, &parts.declared_paths)?;
-    let publication = publish_then_reset(cli, &workspace, &parts.bundle, &reservation)?;
+    let publication = publish_then_reset(
+        cli,
+        &BuildStatePlan {
+            workspace: &workspace,
+            bundle: &parts.bundle,
+            manifest: &cli.file,
+            declared: &parts.declared_paths,
+        },
+    )?;
     let ninja = NinjaContent::new(parts.bundle.into_parts().0);
     let command_list_targets = parts.command_list_targets;
     let targets = if args.targets.is_empty() {

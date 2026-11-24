@@ -8675,7 +8675,9 @@ checks that `Cargo.toml` still declares `[package.metadata.kani.flags]`,
 `unexpected_cfgs`, and `check-cfg = ["cfg(kani)"]`, and that the Makefile still
 provides the `kani-ir` alias.
 
-The same test module invokes `rustc` directly for two small UI snippets:
+The same test module compiles its fixtures through
+`test_support::ui_fixture::compile_fixture` with the shared Kani check-cfg
+arguments, rather than invoking `rustc` itself:
 
 - `tests/ui/cfg_kani_compile_pass.rs` must compile with
   `--check-cfg=cfg(kani) -Dunexpected-cfgs`.
@@ -11260,6 +11262,25 @@ and test code only, and it does not parse general Ninja syntax.
 The local `edge_factory` fixture in `src/ninja_gen/tests/console.rs` constructs
 parallel, single-output edges for console generator tests. Keep it within that
 module; other graph shapes use their own fixtures.
+
+### `test_support::ui_fixture`
+
+`test_support::ui_fixture::compile_fixture` (`test_support/src/ui_fixture.rs`)
+compiles one checked-in `tests/ui` fixture with the workspace compiler, and
+`test_support::ui_fixture::stderr` decodes its diagnostics for an assertion
+message. The Rust compiler is the `RUSTC` value read through the injected
+`mockable::Env` seam, defaulting to `rustc` on `PATH`, so the helper follows
+the repository's environment policy rather than reading the process
+environment. Each compilation is bounded by `COMPILE_DEADLINE` from
+`test_support::bounded_process`.
+
+A suite supplies only its fixture, the output path, and any extra compiler
+arguments; it does not construct a `Command`, choose a deadline, or decode
+stderr itself. `tests/kani_cfg_ui_tests.rs`,
+`tests/ninja_gen_escape_ui_tests.rs`, and
+`tests/reserved_state_proof_ui_tests.rs` are the current callers. Fixtures are
+compiled as standalone binaries with no dependencies on this workspace, so a
+compile-time contract can be checked without building the crate it describes.
 
 ### Temporary Ninja build files
 

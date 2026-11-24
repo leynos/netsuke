@@ -7,10 +7,11 @@
 //! three side-effecting operations in order.
 
 use super::dyndep::{DyndepPublication, materialize_dyndep_bundle, prune_dyndep_bundle};
-use super::phony_state::{ReservedStateChecked, ResetOutcome, Workspace, reset_force_node};
+use super::phony_state::{ResetOutcome, Workspace, refuse_reserved_declarations, reset_force_node};
 use crate::cli::Cli;
 use crate::ninja_gen::GeneratedNinja;
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
 
 /// Publish the dyndep bundle, prune it, then clear the force node.
 ///
@@ -25,14 +26,25 @@ use anyhow::Result;
 /// force node cannot be reset.
 pub(super) fn publish_then_reset(
     cli: &Cli,
-    workspace: &Workspace,
-    bundle: &GeneratedNinja,
-    reservation: &ReservedStateChecked,
+    plan: &BuildStatePlan<'_>,
 ) -> Result<DyndepPublication> {
-    let publication = materialize_dyndep_bundle(cli, bundle)?;
-    prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
-    report_reset(reset_force_node(workspace, reservation)?);
+    let reservation = refuse_reserved_declarations(plan.workspace, plan.manifest, plan.declared)?;
+    let publication = materialize_dyndep_bundle(cli, plan.bundle)?;
+    prune_dyndep_bundle(cli, plan.bundle.dyndep_files(), &publication)?;
+    report_reset(reset_force_node(plan.workspace, &reservation)?);
     Ok(publication)
+}
+
+/// The inputs one build's generated-state step judges and publishes.
+pub(super) struct BuildStatePlan<'a> {
+    /// Working directory, resolved once for the refusal and the reset.
+    pub(super) workspace: &'a Workspace,
+    /// Generated bundle whose sidecars are published and pruned.
+    pub(super) bundle: &'a GeneratedNinja,
+    /// Selected manifest, judged with the declared paths.
+    pub(super) manifest: &'a Utf8Path,
+    /// Every path the graph named, in the graph's own spelling.
+    pub(super) declared: &'a [Utf8PathBuf],
 }
 
 /// Report a reset that removed a stray force node.

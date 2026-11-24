@@ -29,7 +29,7 @@
 //! answers whether one spelling reaches reserved state, and [`reset`] owns the
 //! namespace handles and the removal.
 
-pub(in crate::runner) use self::policy::{ReservedStateChecked, refuse_reserved_declarations};
+pub(in crate::runner) use self::policy::refuse_reserved_declarations;
 pub(in crate::runner) use self::reset::{ResetOutcome, reset_force_node};
 pub(in crate::runner) use self::workspace::Workspace;
 

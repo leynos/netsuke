@@ -6,12 +6,12 @@
 //! gives tests a way to inject a directory without building the application
 //! configuration.
 
-use super::super::path_helpers::selected_directory;
+use super::super::path_helpers::{open_directory, selected_directory};
 use crate::cli::Cli;
 use crate::localization::{self, keys};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use cap_std::fs_utf8::Dir;
 
 /// One working directory, resolved to a canonical path and an open handle.
 ///
@@ -33,11 +33,7 @@ impl Workspace {
     /// Returns an error when the directory does not exist, cannot be read,
     /// resolves to a path that is not valid UTF-8, or cannot be opened.
     pub(in crate::runner) fn open(root: &Utf8Path) -> Result<Self> {
-        let canonical = root
-            .canonicalize_utf8()
-            .with_context(|| open_context(root))?;
-        let dir = Dir::open_ambient_dir(&canonical, ambient_authority())
-            .with_context(|| open_context(root))?;
+        let (canonical, dir) = open_directory(root)?;
         Ok(Self { canonical, dir })
     }
 
@@ -61,7 +57,11 @@ impl Workspace {
     }
 }
 
-/// Build the context for a workspace that cannot be resolved or opened.
-fn open_context(path: &Utf8Path) -> localization::LocalizedMessage {
-    localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR).with_arg("path", path.as_str())
+/// Build the context for a namespace entry that cannot be inspected.
+///
+/// The message is shared by resolution and removal, so it lives with the
+/// workspace both of them judge rather than in either unit, and resolution
+/// never has to import the command unit that removes entries.
+pub(super) fn inspect_context(display: &Utf8Path) -> localization::LocalizedMessage {
+    localization::message(keys::RUNNER_IO_PHONY_INSPECT).with_arg("path", display.as_str())
 }

@@ -14,7 +14,7 @@
 //! reports what it removed and leaves the logging to its caller.
 
 use super::policy::{ReservedStateChecked, verify_reservation};
-use super::workspace::Workspace;
+use super::workspace::{Workspace, inspect_context};
 use crate::localization::{self, keys};
 use anyhow::{Context, Error, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -134,11 +134,6 @@ pub(super) fn open_verified_dir(
     let opened =
         open_dir_nofollow(&handle, Path::new(leaf)).with_context(|| inspect_context(display))?;
     Ok(Some(Dir::from_std_file(opened)))
-}
-
-/// Build the localized context for a namespace inspection failure.
-pub(super) fn inspect_context(display: &Utf8Path) -> localization::LocalizedMessage {
-    localization::message(keys::RUNNER_IO_PHONY_INSPECT).with_arg("path", display.as_str())
 }
 
 /// Build the refusal for a namespace entry that is not a real directory.

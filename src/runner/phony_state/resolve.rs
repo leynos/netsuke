@@ -17,7 +17,7 @@
 //! that cannot be read must stop the reset, because a guard that fails open
 //! would delete the very output it exists to protect.
 
-use super::reset::inspect_context;
+use super::workspace::inspect_context;
 use crate::ninja_gen::reserved_paths::is_reserved_path;
 use anyhow::{Context, Error, Result};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
