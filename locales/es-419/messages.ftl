@@ -388,6 +388,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritmo de hash no admitido '{
 
 # Diagnósticos de los asistentes de colecciones.
 stdlib.collections.flatten.expected_sequence = flatten esperaba elementos de una secuencia, pero encontró { $kind }.
+stdlib.collections.flatten.depth_limit = flatten superó el límite de profundidad de anidamiento de { $limit }.
+stdlib.collections.flatten.item_limit = flatten superó el límite de { $limit } elementos retenidos.
+stdlib.collections.flatten.visit_limit = flatten superó el límite de recorrido de { $limit } elementos.
 stdlib.collections.compact.not_sequence = compact esperaba una secuencia, pero encontró { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by requiere un atributo no vacío.
 stdlib.collections.group_by.unresolved = group_by no pudo resolver '{ $attr }' en un elemento de tipo { $kind }.

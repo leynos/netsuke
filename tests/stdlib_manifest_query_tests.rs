@@ -31,6 +31,21 @@ use test_support::fs as test_fs;
 /// The marker `src/stdlib/register.rs` attaches to every disabled helper.
 const DISABLED_MARKER: &str = "is disabled while rendering";
 
+/// A shared zero-leaf graph built by twenty doublings of an empty list.
+///
+/// Each loop iteration stores one compact list in two positions, so the
+/// template describes `2^21 - 1` traversal visits while retaining no leaf at
+/// all. Only the visit allowance can reject it, which makes it the discovery
+/// and render regression for the traversal bound.
+const SHARED_ZERO_LEAF_GRAPH: &str = concat!(
+    "{% set ns = namespace(v=[]) %}",
+    "{% for _ in range(20) %}{% set ns.v = [ns.v, ns.v] %}{% endfor %}",
+    "{{ [ns.v] | flatten | length }}",
+);
+
+/// The localized visit-allowance diagnostic both loaders must report.
+const VISIT_LIMIT_MARKER: &str = "exceeded the traversal visit limit";
+
 /// Captured output of one query against `template` as a target description.
 struct QueryRun {
     /// Whether the command succeeded.
@@ -217,6 +232,10 @@ fn query_surface_renders_its_permitted_helpers() -> Result<()> {
         // so it reaches this surface without a second registration; this case
         // is what holds that claim to account.
         ("{{ ['a', '', none, 0] | compact | join(',') }}", "a,0"),
+        // `flatten` now carries the traversal allowance on the same shared
+        // registration; this row proves the bound leaves supported inputs
+        // rendering identically on the query and full-render surfaces.
+        ("{{ [[1, 2], [3]] | flatten | join(',') }}", "1,2,3"),
     ] {
         let run = run_query(template)?;
         ensure!(
@@ -241,5 +260,51 @@ fn query_surface_renders_its_permitted_helpers() -> Result<()> {
         );
         assert_full_stdlib_renders(template)?;
     }
+    Ok(())
+}
+
+/// The query surface applies the flatten allowance while loading metadata.
+#[test]
+fn query_surface_rejects_an_unbounded_flatten_graph() -> Result<()> {
+    let causes = query_manifest_causes(SHARED_ZERO_LEAF_GRAPH)?;
+    ensure!(
+        causes.join("\n").contains(VISIT_LIMIT_MARKER),
+        "the query surface should report the visit allowance: {causes:?}"
+    );
+    Ok(())
+}
+
+/// The full render applies the same allowance and leaves no output behind.
+#[test]
+fn full_render_rejects_the_same_unbounded_flatten_graph() -> Result<()> {
+    let (temp, manifest_path) = write_description_manifest(SHARED_ZERO_LEAF_GRAPH)?;
+    let run = test_support::netsuke::run_netsuke_in(
+        temp.path(),
+        &[
+            "--file",
+            manifest_path
+                .to_str()
+                .context("manifest path should be UTF-8")?,
+            "generate",
+            "--output",
+            "out.ninja",
+        ],
+    )?;
+    ensure!(
+        !run.success,
+        "the full render should reject the shared graph: {}",
+        run.stdout
+    );
+    ensure!(
+        run.stderr.contains(VISIT_LIMIT_MARKER),
+        "the render should report the visit allowance: {}",
+        run.stderr
+    );
+    let output = temp.path().join("out.ninja");
+    ensure!(
+        !output.exists(),
+        "a rejected render must not leave {} behind",
+        output.display()
+    );
     Ok(())
 }

@@ -389,6 +389,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nepodporovaný hashovací algori
 
 # Diagnostika pomocníků pro kolekce.
 stdlib.collections.flatten.expected_sequence = flatten očekával prvky posloupnosti, ale nalezl { $kind }.
+stdlib.collections.flatten.depth_limit = flatten překročil limit hloubky vnoření { $limit }.
+stdlib.collections.flatten.item_limit = flatten překročil limit { $limit } zachovaných položek.
+stdlib.collections.flatten.visit_limit = flatten překročil limit { $limit } navštívených položek.
 stdlib.collections.compact.not_sequence = compact očekává posloupnost; typ obdržené hodnoty: { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vyžaduje neprázdný atribut.
 stdlib.collections.group_by.unresolved = group_by nedokázal najít „{ $attr }“ u prvku typu { $kind }.

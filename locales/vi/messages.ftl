@@ -386,6 +386,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Thuật toán băm không đư�
 
 # Chẩn đoán của các hàm trợ giúp tập hợp.
 stdlib.collections.flatten.expected_sequence = flatten mong đợi các phần tử của một dãy nhưng lại gặp { $kind }.
+stdlib.collections.flatten.depth_limit = flatten đã vượt quá giới hạn độ sâu lồng nhau { $limit }.
+stdlib.collections.flatten.item_limit = flatten đã vượt quá giới hạn { $limit } mục được giữ lại.
+stdlib.collections.flatten.visit_limit = flatten đã vượt quá giới hạn duyệt { $limit } mục.
 stdlib.collections.compact.not_sequence = compact mong đợi một dãy nhưng lại gặp { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by cần một thuộc tính không rỗng.
 stdlib.collections.group_by.unresolved = group_by không tìm được “{ $attr }” trên phần tử kiểu { $kind }.

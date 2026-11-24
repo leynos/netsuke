@@ -389,6 +389,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = אלגוריתם גיבוב שא
 
 # אבחון עוזרי האוספים.
 stdlib.collections.flatten.expected_sequence = ‏flatten ציפה לפריטים של סדרה אך מצא { $kind }.
+stdlib.collections.flatten.depth_limit = ‏flatten חרג ממגבלת עומק הקינון של { $limit }.
+stdlib.collections.flatten.item_limit = ‏flatten חרג ממגבלת { $limit } הפריטים הנשמרים.
+stdlib.collections.flatten.visit_limit = ‏flatten חרג ממגבלת המעבר של { $limit } פריטים.
 stdlib.collections.compact.not_sequence = ‏compact ציפה לסדרה אך מצא { $kind }.
 stdlib.collections.group_by.empty_attribute = ‏group_by מחייב תכונה שאינה ריקה.
 stdlib.collections.group_by.unresolved = ‏group_by לא הצליח לאתר את „{ $attr }” בפריט מסוג { $kind }.

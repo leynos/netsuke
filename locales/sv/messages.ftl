@@ -387,6 +387,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Hashalgoritmen ”{ $algorithm }
 
 # Diagnostik för samlingshjälpare.
 stdlib.collections.flatten.expected_sequence = flatten väntade poster från en sekvens men fann { $kind }.
+stdlib.collections.flatten.depth_limit = flatten överskred gränsen för kapslingsdjup på { $limit }.
+stdlib.collections.flatten.item_limit = flatten överskred gränsen på { $limit } bevarade objekt.
+stdlib.collections.flatten.visit_limit = flatten överskred genomgångsgränsen på { $limit } objekt.
 stdlib.collections.compact.not_sequence = compact väntade en sekvens men fann { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by kräver ett attribut som inte är tomt.
 stdlib.collections.group_by.unresolved = group_by kunde inte slå upp ”{ $attr }” på en post av typen { $kind }.

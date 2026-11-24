@@ -388,6 +388,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritm de dispersie neacceptat
 
 # Diagnostice ale ajutoarelor pentru colecții.
 stdlib.collections.flatten.expected_sequence = flatten aștepta elemente dintr-o secvență, dar a găsit { $kind }.
+stdlib.collections.flatten.depth_limit = flatten a depășit limita de adâncime a imbricării de { $limit }.
+stdlib.collections.flatten.item_limit = flatten a depășit limita de { $limit } elemente păstrate.
+stdlib.collections.flatten.visit_limit = flatten a depășit limita de parcurgere de { $limit } elemente.
 stdlib.collections.compact.not_sequence = compact aștepta o secvență, dar a găsit { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by necesită un atribut care nu este gol.
 stdlib.collections.group_by.unresolved = group_by nu a putut găsi „{ $attr }” pe un element de tipul { $kind }.

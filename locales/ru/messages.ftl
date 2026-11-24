@@ -389,6 +389,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Неподдерживаемый
 
 # Диагностика помощников для коллекций.
 stdlib.collections.flatten.expected_sequence = flatten ожидал элементы последовательности, но обнаружил { $kind }.
+stdlib.collections.flatten.depth_limit = flatten превысил предел глубины вложенности { $limit }.
+stdlib.collections.flatten.item_limit = flatten превысил предел сохранённых элементов { $limit }.
+stdlib.collections.flatten.visit_limit = flatten превысил предел обхода { $limit } элементов.
 stdlib.collections.compact.not_sequence = compact ожидал последовательность, но обнаружил { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by требует непустой атрибут.
 stdlib.collections.group_by.unresolved = group_by не смог найти «{ $attr }» у элемента типа { $kind }.

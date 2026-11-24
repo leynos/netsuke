@@ -2286,6 +2286,30 @@ Implementation notes for collection filters:
 - `flatten` recurses through nested sequences and iterables; scalars raise an
   `InvalidOperation` error to avoid silently iterating over strings or other
   unintended inputs.
+- `flatten` carries one per-call traversal allowance, owned by
+  `src/stdlib/collections/flatten.rs` as `FlattenLimits`. The allowance charges
+  every yielded item (containers included) as a visit, every retained leaf, and
+  the depth of each item, and it checks each ceiling before the traversal
+  descends or appends. The defaults are 1,000,000 visits, 100,000 retained
+  leaves, and a nesting depth of 128. A breach is a localized
+  `InvalidOperation` error naming the ceiling.
+- The allowance sits outside `ManifestBudgetLimits` deliberately.
+  [ADR-0050](adrs/adr-0050-bound-manifest-template-evaluation.md) bounds
+  engine-observable work: fuel, rendered output, accounted source, and
+  expansion entries. MiniJinja fuel counts engine instructions and does not
+  meter the native loop inside a filter, while the budget types contain only
+  accounting data with adapter-owned diagnostics. `FlattenLimits` is a fixed
+  traversal-safety bound with no operator surface, so it belongs to the filter
+  that owns the traversal. The visit ceiling equals `DEFAULT_EVALUATION_FUEL`,
+  so one native filter call cannot outvisit the engine's default instruction
+  allowance for the whole evaluation.
+- The allowance detects a shared or self-nesting graph by counting visits and
+  depth rather than by recognizing a cycle. The public MiniJinja API exposes no
+  stable identity for a host object, so there is no descendant identity to
+  compare.
+- Full manifest rendering, discovery, and the manifest-query surface all
+  register collection filters through `collections::register_filters`, so they
+  apply the same allowance; no second registration path exists.
 - `group_by` returns an insertion-order-preserving mapping keyed by the
   original value so lookups via attribute names and bracket syntax remain in
   sync. Empty attribute names and items without the attribute surface an

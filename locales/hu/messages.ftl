@@ -387,6 +387,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nem támogatott kivonatoló algo
 
 # A gyűjteményeket kezelő segédfüggvények diagnosztikája.
 stdlib.collections.flatten.expected_sequence = A flatten sorozatelemeket várt, de ezt találta: { $kind }.
+stdlib.collections.flatten.depth_limit = A flatten túllépte a(z) { $limit } beágyazási mélységi korlátot.
+stdlib.collections.flatten.item_limit = A flatten túllépte a(z) { $limit } megtartott elem korlátját.
+stdlib.collections.flatten.visit_limit = A flatten túllépte a(z) { $limit } bejárási korlátot.
 stdlib.collections.compact.not_sequence = A compact sorozatot várt, de ezt találta: { $kind }.
 stdlib.collections.group_by.empty_attribute = A group_by nem üres attribútumot igényel.
 stdlib.collections.group_by.unresolved = A group_by nem találta a(z) „{ $attr }” attribútumot a(z) { $kind } típusú elemen.

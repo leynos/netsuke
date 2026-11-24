@@ -1772,9 +1772,16 @@ only to query rendering.
 `compact` accepts a `Seq` or `Iterable` subject and removes `none`, undefined,
 and empty-string members while preserving order. It removes nothing else: `0`,
 `false`, whitespace-only strings, empty lists, and empty maps are retained.
-Example: `{{ ['a', none, '', 'b'] | compact | join(',') }}` produces `a,b`. The
-[template standard-library guide](stdlib-yaml-and-jinja-guide.md)
-gives the full filter reference.
+Example: `{{ ['a', none, '', 'b'] | compact | join(',') }}` produces `a,b`.
+
+`flatten` expands every occurrence of a nested sequence. Each call is bounded:
+it visits at most 1,000,000 items including containers, retains at most 100,000
+leaves, and rejects an item nested deeper than 128 levels. A breach raises an
+error naming the limit. The bounds are fixed and apply per call, and they are
+the same during discovery and normal build rendering, so a compact template
+cannot force an unbounded expansion in either path. The
+[template standard-library guide](stdlib-yaml-and-jinja-guide.md) gives the
+full filter reference.
 
 In human-readable output, a conditional entry carries `[◇ conditional]` when
 emoji output is allowed, or `[? conditional]` in the ASCII theme. JSON output

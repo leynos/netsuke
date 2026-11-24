@@ -385,6 +385,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = 不支援的雜湊演算法「{ 
 
 # 集合輔助函式的診斷。
 stdlib.collections.flatten.expected_sequence = flatten 預期序列元素，卻發現 { $kind }。
+stdlib.collections.flatten.depth_limit = flatten 超過了 { $limit } 的巢狀深度限制。
+stdlib.collections.flatten.item_limit = flatten 超過了 { $limit } 個保留項目的限制。
+stdlib.collections.flatten.visit_limit = flatten 超過了 { $limit } 個巡覽造訪的限制。
 stdlib.collections.compact.not_sequence = compact 預期序列，卻發現 { $kind }。
 stdlib.collections.group_by.empty_attribute = group_by 需要非空的屬性。
 stdlib.collections.group_by.unresolved = group_by 無法在型別為 { $kind } 的元素上解析「{ $attr }」。

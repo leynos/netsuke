@@ -388,6 +388,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algorithme de hachage non pris e
 
 # Diagnostics des assistants de collections.
 stdlib.collections.flatten.expected_sequence = flatten attendait des éléments de séquence mais a trouvé { $kind }.
+stdlib.collections.flatten.depth_limit = flatten a dépassé la profondeur d'imbrication maximale de { $limit }.
+stdlib.collections.flatten.item_limit = flatten a dépassé la limite de { $limit } éléments retenus.
+stdlib.collections.flatten.visit_limit = flatten a dépassé la limite de parcours de { $limit } éléments.
 stdlib.collections.compact.not_sequence = compact attendait une séquence mais a trouvé { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by exige un attribut non vide.
 stdlib.collections.group_by.unresolved = group_by n'a pas pu résoudre « { $attr } » sur un élément de type { $kind }.

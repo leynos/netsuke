@@ -387,6 +387,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Tiivistealgoritmia ”{ $algorit
 
 # Kokoelma-apurien diagnostiikka.
 stdlib.collections.flatten.expected_sequence = flatten odotti jonon alkioita, mutta löysi { $kind }.
+stdlib.collections.flatten.depth_limit = flatten ylitti sisäkkäisyyden syvyysrajan { $limit }.
+stdlib.collections.flatten.item_limit = flatten ylitti { $limit } säilytettävän kohteen rajan.
+stdlib.collections.flatten.visit_limit = flatten ylitti läpikäyntirajan { $limit } kohdetta.
 stdlib.collections.compact.not_sequence = compact odotti jonoa, mutta löysi { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vaatii määritteen, joka ei ole tyhjä.
 stdlib.collections.group_by.unresolved = group_by ei löytänyt määritettä ”{ $attr }” tyypin { $kind } alkiosta.

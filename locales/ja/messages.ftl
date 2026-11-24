@@ -386,6 +386,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = 対応していないハッシ�
 
 # コレクションヘルパーの診断。
 stdlib.collections.flatten.expected_sequence = flatten は列の要素を期待しましたが、{ $kind } が見つかりました。
+stdlib.collections.flatten.depth_limit = flatten は { $limit } のネスト深さ上限を超えました。
+stdlib.collections.flatten.item_limit = flatten は保持項目数上限 { $limit } を超えました。
+stdlib.collections.flatten.visit_limit = flatten は走査訪問数上限 { $limit } を超えました。
 stdlib.collections.compact.not_sequence = compact は列を期待しましたが、{ $kind } が見つかりました。
 stdlib.collections.group_by.empty_attribute = group_by には空でない属性が必要です。
 stdlib.collections.group_by.unresolved = group_by は種別 { $kind } の要素で「{ $attr }」を解決できませんでした。
