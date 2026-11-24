@@ -104,5 +104,7 @@ changed input can still run.
 
 Because the generated Ninja text changes shape for these edges, a manifest that
 compares `netsuke generate` output against a stored copy must update that copy.
+A plan saved before the upgrade and still executed must be regenerated: the
+saved file keeps the old edge statements and does not gain these behaviours.
 See the [users' guide](users-guide.md#rely-on-phony-and-always-work-running) and
 [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).

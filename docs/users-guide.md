@@ -1033,14 +1033,17 @@ differs: Ninja records the depfile's inputs against the hidden output in its
 dependency log, so they order later builds, though a build cannot use inputs it
 records itself.
 
-A target with `always: true` keeps its declared output, so it may produce a
-real file. Netsuke makes its edge permanently dirty, so the recipe runs every
-time the target is reached, even when its inputs and output are unchanged.
-Afterwards the edge compares the output's modification time. When the recipe
-leaves that time unchanged, `restat` stops the unchanged output from forcing
-its dependant; a dependant with another changed input can still run. Rewriting
-the file normally updates its time and rebuilds the dependants; a recipe that
-restores the original modification time still lets `restat` skip them.
+A target with `always: true` and no `phony` flag keeps its declared output, so
+it may produce a real file. Netsuke makes its edge permanently dirty, so the
+recipe runs every time the target is reached, even when its inputs and output
+are unchanged. Afterwards the edge compares the output's modification time.
+When the recipe leaves that time unchanged, `restat` stops the unchanged output
+from forcing its dependant; a dependant with another changed input can still
+run. Rewriting the file normally updates its time and rebuilds the dependants;
+a recipe that restores the original modification time still lets `restat` skip
+them. A target that sets both `always: true` and `phony: true` takes the phony
+lowering instead: its recipe runs under a hidden output, `restat` is not
+rendered, and no downstream pruning follows from an unchanged same-named file.
 
 Both lowerings depend on a shared force node, `.netsuke/phony/force`, whose
 dirtiness is its absence from disk. `netsuke build` removes any file,
@@ -1052,12 +1055,15 @@ it. The build also refuses the removal when a declared path resolves to that
 node or its namespace — an absolute path, a `..` path that returns to the
 working directory, or a symbolic-link alias — because removing the entry would
 destroy the output the manifest named. `netsuke generate` leaves
-`.netsuke/phony/force` alone, because generation is a pure translation of the
-graph, so running the generated file by hand requires that path to be absent.
-Before removing it manually, apply the same check the build applies: an
-absolute spelling, a `..` path that returns to the working directory, and a
-symbolic-link alias all resolve to the same node, and a declared output behind
-any of them is destroyed by the removal rather than generated state.
+`.netsuke/phony/force` alone: writing the plan never removes the node, so
+running the generated file by hand requires that path to be absent. Before
+removing it manually, check the selected `--file` manifest and every declared
+path the manifest names — outputs, inputs, implicit dependencies, and
+order-only dependencies — against the node the way the build does. An absolute
+spelling, a `..` path that returns to the working directory, and a
+symbolic-link alias all resolve to the same node; if any of them names the
+force path or a directory above it, do not remove it, because the removal
+destroys that file or manifest rather than generated state.
 
 The flags are independent. An entry in `actions` is implicitly phony and not
 always; it may also set `always: true`, though the phony lowering already runs
