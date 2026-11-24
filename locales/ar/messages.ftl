@@ -202,11 +202,11 @@ manifest.console_dependency_only = لا يمكن للإدخالات التي ت�
 ir.rule_not_found = تعذّر العثور على القاعدة «{ $rule }» التي يشير إليها الهدف «{ $target }».
 ir.multiple_rules = يجب أن يشير الهدف «{ $target }» إلى قاعدة واحدة فقط، لكن ورد { $rules }.
 ir.multiple_rules_truncated = ‏يجب أن يشير الهدف «{ $target }» إلى قاعدة واحدة فقط، لكن ورد { $rules } و{ $omitted ->
-    [one] اسم إضافي واحد.
-    [two] اسمان إضافيان.
-    [few] { $omitted } أسماء إضافية.
-    [many] { $omitted } اسمًا إضافيًا.
-   *[other] { $omitted } اسم إضافي.
+    [one] ‏اسم إضافي واحد.
+    [two] ‏اسمان إضافيان.
+    [few] ‏{ $omitted } أسماء إضافية.
+    [many] ‏{ $omitted } اسمًا إضافيًا.
+   *[other] ‏{ $omitted } اسم إضافي.
 }
 ir.empty_rule = يجب أن يشير الهدف «{ $target }» إلى قاعدة.
 ir.duplicate_outputs = رُصدت مخرجات مكرّرة: { $outputs }.

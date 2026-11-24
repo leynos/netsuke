@@ -202,8 +202,8 @@ manifest.console_dependency_only = ورودی‌هایی که فقط وابست�
 ir.rule_not_found = قاعدهٔ «{ $rule }» که هدف «{ $target }» به آن ارجاع می‌دهد یافت نشد.
 ir.multiple_rules = هدف «{ $target }» باید تنها به یک قاعده ارجاع دهد، اما { $rules } به دست آمد.
 ir.multiple_rules_truncated = ‏هدف «{ $target }» باید تنها به یک قاعده ارجاع دهد؛ { $rules } دریافت شد و { $omitted ->
-    [one] { $omitted } نام دیگر.
-   *[other] { $omitted } نام دیگر.
+    [one] ‏{ $omitted } نام دیگر.
+   *[other] ‏{ $omitted } نام دیگر.
 }
 ir.empty_rule = هدف «{ $target }» باید به یک قاعده ارجاع دهد.
 ir.duplicate_outputs = خروجی‌های تکراری یافت شد: { $outputs }.
