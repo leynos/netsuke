@@ -152,13 +152,13 @@ impl SubstitutionTraversal<'_, '_> {
         pos: usize,
         ch: char,
     ) -> Option<CommandSubstitutionDelimiter> {
-        if !self.matches_single_quote_context() && self.starts_command_substitution(pos, ch) {
+        if self.matches_substitution_context() && self.starts_command_substitution(pos, ch) {
             return Some(CommandSubstitutionDelimiter::Start);
         }
         if self.starts_nested_command_substitution_parenthesis(ch) {
             return Some(CommandSubstitutionDelimiter::NestedOpen);
         }
-        if !self.matches_single_quote_context() && self.ends_command_substitution(ch) {
+        if self.matches_substitution_context() && self.ends_command_substitution(ch) {
             return Some(CommandSubstitutionDelimiter::Close);
         }
         None
