@@ -153,10 +153,15 @@ mod tests {
 
     use super::{RunnerError, promote_manifest_budget};
     use crate::manifest::{ManifestBudgetLimits, from_str_with_limits};
-    use test_support::fluent::normalize_fluent_isolates;
+    use rstest::rstest;
+    use test_support::{EnLocalizer, en_localizer, fluent::normalize_fluent_isolates};
 
-    #[test]
-    fn promoted_collection_exhaustion_keeps_its_stage_and_redacts_the_template() {
+    /// Verify collection exhaustion promotes with its stage and no template text.
+    #[rstest]
+    fn promoted_collection_exhaustion_keeps_its_stage_and_redacts_the_template(
+        en_localizer: EnLocalizer,
+    ) {
+        let _en = en_localizer;
         let yaml = concat!(
             "netsuke_version: 1.0.0\n",
             "targets:\n",

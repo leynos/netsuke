@@ -209,25 +209,29 @@ fn compact_examines_and_charges_every_member_of_a_mixed_source() -> Result<()> {
     const RETAINED: usize = 500;
     let env = fallible::stdlib_env()?;
     let consumed = Arc::new(AtomicUsize::new(0));
-    let counter = Arc::clone(&consumed);
-    // An explicit alternating flag rather than index arithmetic: the crate
-    // denies `%` and `/` on integers, and the intent is "blank, kept, blank,
-    // kept" rather than anything about divisibility.
+    // The counter increments as each member is *yielded*, not while building
+    // the fixture: an eager `collect` inside the factory would count every
+    // member before `compact` pulled one, and the assertion below could not
+    // then distinguish a filter that read the source from one that did not.
+    let shared = Arc::clone(&consumed);
     let source = Value::make_iterable(move || {
+        // A fresh handle per call: the factory is an `Fn`, so the shared count
+        // cannot be moved into the iterator it returns.
+        let counter = Arc::clone(&shared);
+        // An explicit alternating flag rather than index arithmetic: the crate
+        // denies `%` and `/` on integers, and the intent is "blank, kept,
+        // blank, kept" rather than anything about divisibility.
         let mut is_blank = true;
-        (0..TOTAL)
-            .map(|_| {
-                counter.fetch_add(1, Ordering::SeqCst);
-                let member = if is_blank {
-                    Value::from("")
-                } else {
-                    Value::from("kept")
-                };
-                is_blank = !is_blank;
-                member
-            })
-            .collect::<Vec<_>>()
-            .into_iter()
+        (0..TOTAL).map(move |_| {
+            counter.fetch_add(1, Ordering::SeqCst);
+            let member = if is_blank {
+                Value::from("")
+            } else {
+                Value::from("kept")
+            };
+            is_blank = !is_blank;
+            member
+        })
     });
 
     let length = compacted_length(&env, &source).context("a mixed source below the ceiling")?;

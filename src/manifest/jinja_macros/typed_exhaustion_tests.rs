@@ -59,6 +59,7 @@ fn exhaustion_of(error: &Error) -> &ManifestBudgetExhaustion {
     panic!("the error must carry typed budget exhaustion: {error}");
 }
 
+/// Verify expression evaluation keeps the callback's typed exhaustion.
 #[rstest]
 fn expression_evaluation_keeps_typed_collection_exhaustion(
     exploding_environment: Environment<'static>,
@@ -88,6 +89,7 @@ fn expression_evaluation_keeps_typed_collection_exhaustion(
     );
 }
 
+/// Verify template rendering keeps the callback's typed exhaustion.
 #[rstest]
 fn template_render_keeps_typed_collection_exhaustion(
     exploding_environment: Environment<'static>,
@@ -103,9 +105,13 @@ fn template_render_keeps_typed_collection_exhaustion(
         ManifestBudgetStage::Collection,
         "the render branch must keep the callback's stage"
     );
-    assert_eq!(exhaustion.limit, 4);
+    assert_eq!(
+        exhaustion.limit, 4,
+        "template rendering must preserve the callback's four-member collection limit"
+    );
 }
 
+/// Verify the macro fallback keeps the callback's typed exhaustion.
 #[rstest]
 fn macro_fallback_keeps_typed_collection_exhaustion(
     mut exploding_environment: Environment<'static>,
@@ -143,6 +149,7 @@ fn macro_fallback_keeps_typed_collection_exhaustion(
     );
 }
 
+/// Verify a bare engine failure still maps to the evaluation stage.
 #[rstest]
 fn bare_engine_fuel_exhaustion_still_maps_to_the_evaluation_stage(budget: ManifestBudget) {
     let mut env = Environment::new();
