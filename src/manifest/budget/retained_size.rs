@@ -86,24 +86,24 @@ fn charge_item_node(
     ceiling: usize,
     stack: &mut Vec<MiniWork>,
 ) -> Option<usize> {
-    let total = add(total, NODE_BYTES, ceiling)?;
+    let charged = add(total, NODE_BYTES, ceiling)?;
     match value.kind() {
-        ValueKind::String => add(total, value.as_str().map_or(0, str::len), ceiling),
+        ValueKind::String => add(charged, value.as_str().map_or(0, str::len), ceiling),
         ValueKind::Bytes => {
             let bytes = value.as_bytes().map_or(0, <[u8]>::len);
-            add(total, bytes.checked_mul(NODE_BYTES)?, ceiling)
+            add(charged, bytes.checked_mul(NODE_BYTES)?, ceiling)
         }
         ValueKind::Seq | ValueKind::Iterable => {
             stack.push(MiniWork::Items(value.try_iter().ok()?));
-            Some(total)
+            Some(charged)
         }
         ValueKind::Map => {
             stack.push(MiniWork::Pairs(value.as_object()?.try_iter_pairs()?));
-            Some(total)
+            Some(charged)
         }
         // Scalars, undefined, plain objects, invalid values, and any engine
         // kind this version does not model charge their node alone.
-        _ => Some(total),
+        _ => Some(charged),
     }
 }
 
@@ -139,18 +139,18 @@ fn charge_json_node<'a>(
     ceiling: usize,
     stack: &mut Vec<JsonWork<'a>>,
 ) -> Option<usize> {
-    let total = add(total, NODE_BYTES, ceiling)?;
+    let charged = add(total, NODE_BYTES, ceiling)?;
     match value {
-        ManifestValue::String(text) => add(total, text.len(), ceiling),
+        ManifestValue::String(text) => add(charged, text.len(), ceiling),
         ManifestValue::Array(items) => {
             stack.push(JsonWork::Items(items.iter()));
-            Some(total)
+            Some(charged)
         }
         ManifestValue::Object(map) => {
             stack.push(JsonWork::Entries(map.iter()));
-            Some(total)
+            Some(charged)
         }
-        _ => Some(total),
+        _ => Some(charged),
     }
 }
 
