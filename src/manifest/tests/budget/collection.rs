@@ -46,14 +46,22 @@ fn owned_labels(key: &metrics::Key) -> Vec<(String, String)> {
 /// still satisfy a membership test, but it would widen the counter's
 /// cardinality and violate the closed-label contract.
 fn has_exact_labels(labels: &[(String, String)], wanted: [(&str, &str); 2]) -> bool {
-    let mut actual: Vec<(&str, &str)> = labels
-        .iter()
-        .map(|(key, value)| (key.as_str(), value.as_str()))
-        .collect();
-    actual.sort_unstable();
-    let mut wanted = wanted.to_vec();
-    wanted.sort_unstable();
-    actual == wanted
+    // Sort both sides through one helper so neither the parameter nor a copy
+    // is rebound to a mutable name.
+    let observed = sorted_pairs(
+        labels
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str())),
+    );
+    let expected = sorted_pairs(wanted.into_iter());
+    observed == expected
+}
+
+/// Collect pairs into a vector sorted by key, then by value.
+fn sorted_pairs<'a>(pairs: impl Iterator<Item = (&'a str, &'a str)>) -> Vec<(&'a str, &'a str)> {
+    let mut collected: Vec<(&str, &str)> = pairs.collect();
+    collected.sort_unstable();
+    collected
 }
 
 #[rstest]
