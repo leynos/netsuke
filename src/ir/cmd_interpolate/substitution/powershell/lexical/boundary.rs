@@ -136,7 +136,9 @@ impl SubstitutionTraversal<'_, '_> {
         match self.active_quote_context() {
             QuoteContext::Single(_) => Some(PowerShellUnfinishedRegion::SingleQuotedString),
             QuoteContext::Double(_) => Some(PowerShellUnfinishedRegion::DoubleQuotedString),
-            QuoteContext::Unquoted => None,
+            // PowerShell does not define ANSI-C quoting, so the traversal
+            // never enters this region on that route.
+            QuoteContext::AnsiC | QuoteContext::Unquoted => None,
         }
     }
 

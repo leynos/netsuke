@@ -8,11 +8,31 @@
 //! comment or a marker as protected.
 
 use super::{QuoteContext, SubstitutionTraversal};
+use crate::ir::cmd_interpolate::posix_lexical::AnsiCCharacter;
+use crate::recipe_shell::RecipeShell;
 
 impl SubstitutionTraversal<'_, '_> {
     /// Change POSIX quote state after retaining a delimiter in the output.
-    pub(super) fn update_quote_context(&mut self, ch: char) {
+    pub(super) fn update_quote_context(&mut self, pos: usize, ch: char) {
+        // ANSI-C quoting is a POSIX and Bash rule. PowerShell shares this
+        // traversal but reads `$'` differently, so its model is left alone.
+        let opens = self.bindings.shell != RecipeShell::PowerShell
+            && self.posix_lexical.observe_ansi_c_character(
+                AnsiCCharacter::new(self.chars, pos, ch),
+                self.matches_unquoted_quote_context(),
+            );
         let quote_context = self.active_quote_context_mut();
+        if opens {
+            *quote_context = QuoteContext::AnsiC;
+            return;
+        }
+        // Inside ANSI-C only an unescaped apostrophe closes the string; a
+        // backslash-escaped one was already consumed as a pair, so anything
+        // reaching here is unescaped.
+        if matches!(*quote_context, QuoteContext::AnsiC) && ch == '\'' {
+            *quote_context = QuoteContext::Unquoted;
+            return;
+        }
         Self::update_quote_context_for_region(quote_context, ch);
     }
 

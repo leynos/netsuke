@@ -412,6 +412,10 @@ mod heredoc;
 #[path = "ninja_dollar_escaping_tests/scripts/mod.rs"]
 mod scripts;
 
+/// Markers inside Bash ANSI-C strings, rejected before Ninja runs.
+#[path = "ninja_dollar_escaping_tests/ansi_c.rs"]
+mod ansi_c;
+
 /// Backslashes immediately before a path marker, executed through Ninja.
 #[path = "ninja_dollar_escaping_tests/backslash.rs"]
 mod backslash;
