@@ -6,10 +6,10 @@
 
 use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, RejectionReason,
-    find_script_substitution, invalid_command_error, invalid_heredoc_boundary_error,
+    find_script_substitution, invalid_command_error,
     posix_lexical::{
-        HeredocBoundary, InertCharacterOutcome, NewlineContext, PosixCharacter, PosixLexicalState,
-        SourceChar, ansic_quote_is_ambiguous, backslash_escapes_marker,
+        InertCharacterOutcome, PosixCharacter, PosixLexicalState, SourceChar,
+        ansic_quote_is_ambiguous,
     },
 };
 
@@ -103,40 +103,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.start_pending_heredoc_after(self.newline_context())?;
         }
         Ok(next)
-    }
-
-    /// Describe what the newline at the current position is part of.
-    ///
-    /// Only an unquoted newline in the region that declared the heredoc is a
-    /// body boundary. A quoted newline is argument text the shell keeps
-    /// reading through; the nested-region answers let activation fail closed.
-    fn newline_context(&self) -> NewlineContext {
-        if self.backtick_region.is_some() {
-            return NewlineContext::BacktickBody;
-        }
-        if self.is_in_arithmetic_expansion() {
-            return NewlineContext::ArithmeticExpansion;
-        }
-        if self.posix_lexical.is_in_parameter_expansion() {
-            return NewlineContext::ParameterExpansion;
-        }
-        if !self.is_plain_script_text() {
-            return NewlineContext::QuotedArgument;
-        }
-        NewlineContext::CommandLine
-    }
-
-    /// Start the queued heredoc body if this newline is its command-line end.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when a queued declaration cannot be
-    /// placed at the newline's region or context.
-    fn start_pending_heredoc_after(&mut self, context: NewlineContext) -> Result<(), IrGenError> {
-        let boundary = HeredocBoundary::new(self.posix_lexical.current_frame_id(), context);
-        self.posix_lexical
-            .activate_pending_heredoc(boundary)
-            .map_err(|reason| invalid_heredoc_boundary_error(self.template.to_owned(), reason))
     }
 
     /// Reject an ANSI-C quote whose extent the POSIX quote rules misread.

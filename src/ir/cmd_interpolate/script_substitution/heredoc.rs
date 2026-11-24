@@ -7,8 +7,12 @@
 //! module keeps one responsibility.
 
 use super::super::{
-    IrGenError, RejectionReason, invalid_command_error, invalid_heredoc_delimiter_error,
-    posix_lexical::{EscapeBeforeMarker, HeredocDeclaration, PosixCharacter, SourceChar},
+    IrGenError, RejectionReason, invalid_command_error, invalid_heredoc_boundary_error,
+    invalid_heredoc_delimiter_error,
+    posix_lexical::{
+        EscapeBeforeMarker, HeredocBoundary, HeredocDeclaration, NewlineContext, PosixCharacter,
+        SourceChar,
+    },
 };
 use super::{ScriptSubstitutionTraversal, ShellQuoteContext};
 
@@ -64,6 +68,43 @@ impl ScriptSubstitutionTraversal<'_, '_> {
                 reason,
             )),
         }
+    }
+
+    /// Describe what the newline at the current position is part of.
+    ///
+    /// Only an unquoted newline in the region that declared the heredoc is a
+    /// body boundary. A quoted newline is argument text the shell keeps
+    /// reading through; the nested-region answers let activation fail closed.
+    pub(super) fn newline_context(&self) -> NewlineContext {
+        if self.backtick_region.is_some() {
+            return NewlineContext::BacktickBody;
+        }
+        if self.is_in_arithmetic_expansion() {
+            return NewlineContext::ArithmeticExpansion;
+        }
+        if self.posix_lexical.is_in_parameter_expansion() {
+            return NewlineContext::ParameterExpansion;
+        }
+        if !self.is_plain_script_text() {
+            return NewlineContext::QuotedArgument;
+        }
+        NewlineContext::CommandLine
+    }
+
+    /// Start the queued heredoc body if this newline is its command-line end.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a queued declaration cannot be
+    /// placed at the newline's region or context.
+    pub(super) fn start_pending_heredoc_after(
+        &mut self,
+        context: NewlineContext,
+    ) -> Result<(), IrGenError> {
+        let boundary = HeredocBoundary::new(self.posix_lexical.current_frame_id(), context);
+        self.posix_lexical
+            .activate_pending_heredoc(boundary)
+            .map_err(|reason| invalid_heredoc_boundary_error(self.template.to_owned(), reason))
     }
 
     /// Return whether the cursor sits in plain, executable script text.
