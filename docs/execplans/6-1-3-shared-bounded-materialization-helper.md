@@ -1316,10 +1316,14 @@ conflict in `Decision log`, and escalate.
       6.1.3 checkbox "stays open" two lines after checking it.
     - Verus specifications. `spec_lens_product`, `spec_has_zero`, and
       `spec_all_positive` now carry `recommends end <= lens.len()`. The clause
-      is advisory: it records the call-site discipline without changing what
-      Verus proves, so it is documentation of an invariant every caller already
-      holds, not a checked precondition. `spec_binom` gains the `///` summary
-      the other specifications have. The proof still reports
+      is advisory — Verus does not check a spec-function call from an ordinary
+      proof function by default — so it documents the call-site discipline
+      rather than enforcing it. Two lemmas reached those specifications
+      without the bound: `lemma_all_positive_prefix`, whose requirement is now
+      `0 <= i <= end <= lens.len()`, and `lemma_no_zero_all_positive`, which now
+      requires `0 <= end <= lens.len()`. Those two enforce the discipline that
+      the specifications only document. `spec_binom` gains the `///` summary the
+      other specifications have. The proof still reports
       `verification results:: 67 verified, 0 errors`.
 
 ## Surprises & discoveries

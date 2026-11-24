@@ -97,7 +97,7 @@ pub proof fn lemma_lens_total_zero(lens: Seq<usize>)
 
 /// A positive-operand prefix of a positive-operand range is positive.
 pub proof fn lemma_all_positive_prefix(lens: Seq<usize>, end: int, i: int)
-    requires 0 <= i <= end, spec_all_positive(lens, end),
+    requires 0 <= i <= end <= lens.len(), spec_all_positive(lens, end),
     ensures spec_all_positive(lens, i),
     decreases end,
 {
@@ -135,7 +135,7 @@ pub proof fn lemma_lens_product_positive(lens: Seq<usize>, end: int)
 
 /// No zero operand is the same as every operand being at least one.
 pub proof fn lemma_no_zero_all_positive(lens: Seq<usize>, end: int)
-    requires !spec_has_zero(lens, end),
+    requires 0 <= end <= lens.len(), !spec_has_zero(lens, end),
     ensures spec_all_positive(lens, end),
     decreases end,
 {
