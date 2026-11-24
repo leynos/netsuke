@@ -119,6 +119,34 @@ fn marker_free_ansi_c_strings_are_preserved(
     }
 }
 
+/// Treat a backtick inside an ANSI-C string as literal text.
+///
+/// Bash expands neither a backtick nor its body inside `$'…'`, so the
+/// delimiter is ordinary string content and the string still closes at the
+/// apostrophe that follows. A traversal that toggled a backtick region here
+/// would read the text after the closed string as protected and refuse a
+/// marker the shell expands normally. Proptest found this shape as
+/// `echo $'`''`\n'`.
+#[rstest]
+#[case::posix_command(RecipeShell::Posix, Lowering::Command)]
+#[case::posix_script(RecipeShell::Posix, Lowering::Script)]
+#[case::bash_command(RecipeShell::Bash, Lowering::Command)]
+#[case::bash_script(RecipeShell::Bash, Lowering::Script)]
+fn backtick_inside_ansi_c_does_not_open_a_region(
+    #[case] shell: RecipeShell,
+    #[case] lowering: Lowering,
+) {
+    let bindings = context_bindings(shell, "in put$x");
+    let template = format!("echo $'`''`\\n' {INS_TOKEN}");
+    assert_eq!(
+        lowering
+            .lower(&template, &bindings)
+            .expect("a backtick inside ANSI-C is literal, so the marker is unquoted"),
+        "echo $'`''`\\n' in' put$x'",
+        "a literal backtick must not protect the marker via {lowering:?}: {template:?}"
+    );
+}
+
 /// Lower a marker after an ANSI-C string using the unquoted encoding.
 #[rstest]
 #[case::command(Lowering::Command)]

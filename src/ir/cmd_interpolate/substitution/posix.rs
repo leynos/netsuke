@@ -270,3 +270,4 @@ impl SubstitutionTraversal<'_, '_> {
         Ok(Some(pos + 2))
     }
 }
+// weave: run 'weave explain src/ir/cmd_interpolate/substitution/posix.rs' for per-hunk detail, 'weave check' to verify your resolution
