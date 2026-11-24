@@ -48,7 +48,7 @@ pub(super) enum Case {
     ContinuationInUnquotedBody,
     /// A continued newline in double-quoted body text keeps the line open.
     ContinuationInDoubleQuotedBody,
-    /// A literal newline in a single-quoted body does not end the command line.
+    /// A literal newline in a body is a region the queue cannot correlate.
     LiteralNewlineInSingleQuotedBody,
     /// A top-level backtick outside quotes restores script-level unquoted text.
     TopLevelBacktickUnquoted,
@@ -177,6 +177,7 @@ impl Case {
     pub(super) const fn outcome(self) -> Outcome {
         match self {
             Self::EscapedMarkerInUnquotedBody
+            | Self::LiteralNewlineInSingleQuotedBody
             | Self::BackslashBeforeBodyQuote
             | Self::FrameClosesBeforeBacktick
             | Self::BacktickClosesBeforeSubstitution
@@ -219,7 +220,7 @@ impl Case {
             Self::QuotedParenthesisInDoubleQuotedBody => "a quoted ) in a double-quoted body",
             Self::ContinuationInUnquotedBody => "a line continuation in an unquoted body",
             Self::ContinuationInDoubleQuotedBody => "a line continuation in a quoted body",
-            Self::LiteralNewlineInSingleQuotedBody => "a literal newline in a single-quoted body",
+            Self::LiteralNewlineInSingleQuotedBody => "a newline in a body beside a queued heredoc",
             Self::TopLevelBacktickUnquoted => "a top-level backtick outside quotes",
             Self::TopLevelBacktickAfterDoubleQuoted => "a quoted top-level backtick",
             Self::TopLevelBacktickInsideDoubleQuotes => "a top-level backtick inside quotes",

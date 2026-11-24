@@ -7,20 +7,10 @@
 use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, RejectionReason,
     find_script_substitution, invalid_command_error, invalid_heredoc_boundary_error,
-    posix_lexical::{,
-    HeredocBoundary, InertCharacterOutcome, NewlineContext, PosixCharacter, PosixLexicalState,
-    SourceChar, ansic_quote_is_ambiguous, backslash_escapes_marker,
-    posix_lexical::{PosixCharacter, PosixLexicalState, SourceChar},
-    },
-};
-
-
-//! Interpolate POSIX and Bash script placeholders with script-specific context.
-//!
-//! Keeps multi-line script syntax, comments, and heredoc bodies intact while
-//! lowering Netsuke-owned placeholders where shell quoting can preserve their
-//! path semantics. PowerShell scripts use `SubstitutionTraversal` instead.
     posix_lexical::{
+        HeredocBoundary, InertCharacterOutcome, NewlineContext, PosixCharacter, PosixLexicalState,
+        SourceChar, ansic_quote_is_ambiguous, backslash_escapes_marker,
+    },
 };
 
 mod ansi_c;
@@ -109,13 +99,8 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
 
         let substitution = find_script_substitution(self.chars, pos);
         let next = self.append_substitution_or_character(pos, ch, substitution)?;
-        // Only a newline that ends the command line starts a queued heredoc.
-        // Quoted text and a backtick body do not end it: the shell starts the
-        // body at the newline token after the declaring command, and a newline
-        // inside those regions belongs to their own text, so starting the body
-        // there would copy the rest of the command line as inert heredoc data.
-        if ch == '\n' && self.is_plain_script_text() {
-            self.posix_lexical.begin_pending_heredoc_after_newline();
+        if ch == '\n' {
+            self.start_pending_heredoc_after(self.newline_context())?;
         }
         Ok(next)
     }
@@ -126,7 +111,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     /// body boundary. A quoted newline is argument text the shell keeps
     /// reading through; the nested-region answers let activation fail closed.
     fn newline_context(&self) -> NewlineContext {
-        if self.backtick_outer_context.is_some() {
+        if self.backtick_region.is_some() {
             return NewlineContext::BacktickBody;
         }
         if self.is_in_arithmetic_expansion() {
