@@ -36,6 +36,17 @@ impl SubstitutionTraversal<'_, '_> {
         Self::update_quote_context_for_region(quote_context, ch);
     }
 
+    /// Report whether `$(` and `)` are substitution syntax in this context.
+    ///
+    /// Bash expands neither inside ordinary single quotes nor inside an
+    /// ANSI-C string, where both are literal text.
+    pub(super) fn matches_substitution_context(&self) -> bool {
+        !matches!(
+            self.active_quote_context(),
+            QuoteContext::Single(_) | QuoteContext::AnsiC
+        )
+    }
+
     /// Report whether the traversal is currently enclosed by single quotes.
     pub(super) fn matches_single_quote_context(&self) -> bool {
         matches!(self.active_quote_context(), QuoteContext::Single(_))
