@@ -141,7 +141,6 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         self.append_marker_for_context(pos, ch, marker_protection(self, pos))
     }
 
-
     /// Lower a marker when its current shell context permits substitution.
     fn append_marker_for_context(
         &mut self,
