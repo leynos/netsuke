@@ -119,7 +119,7 @@ mod tests {
         for index in 0..limit {
             allowance
                 .charge_member(index)
-                .unwrap_or_else(|error| panic!("member {index} must fit the allowance: {error}"));
+                .expect("every index below the call ceiling must fit the allowance");
         }
     }
 

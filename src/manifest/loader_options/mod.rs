@@ -14,15 +14,13 @@
 use std::sync::OnceLock;
 
 use camino::Utf8PathBuf;
-use minijinja::Environment;
 
 use super::{
-    CollectionAllowance, EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment,
-    ManifestLoadStage, ManifestName, ManifestParse, NetsukeManifest, TemplateOverlays, TestSurface,
+    EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment, ManifestLoadStage,
+    ManifestName, ManifestParse, NetsukeManifest, TemplateOverlays, TestSurface,
     budget::adapter::from_str_named,
-    registration::{register_env_function, register_glob_function},
 };
-use crate::stdlib::{RestrictedSurface, StdlibConfig, StdlibState};
+use crate::stdlib::{RestrictedSurface, StdlibConfig};
 
 /// State whether the loader installs a real host-reading helper or a refusal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -343,64 +341,8 @@ pub fn from_str_with_options<'a>(
     from_str_named(yaml, options.into_parse(name, None))
 }
 
-/// Register `env()` and `glob()` from the load's registration decision.
-///
-/// The loader owns these two helpers rather than the stdlib registrations,
-/// because whether a load may read the host is a property of the load, not of
-/// the library surface (C5). The refusal shapes still come from the restricted
-/// surface's inventory, so query refusal text is unchanged (C2).
-pub(super) fn register_host_helpers(
-    env: &mut Environment<'_>,
-    registration: &StdlibRegistration,
-    environment: &ManifestEnvironment<'_>,
-    manifest_root: Option<Utf8PathBuf>,
-) {
-    match registration.env_disposition() {
-        HostHelperDisposition::Real => {
-            let reader = registration.env_reader(environment.reader());
-            register_env_function(env, reader, environment.access_policy());
-        }
-        HostHelperDisposition::Refused(_) => crate::stdlib::register_env_refusal(env),
-    }
-    match registration.glob_disposition() {
-        HostHelperDisposition::Real => register_glob_function(env, manifest_root),
-        HostHelperDisposition::Refused(surface) => {
-            crate::stdlib::register_glob_refusal(env, surface);
-        }
-    }
-}
-
-/// Register the stdlib surface the registration selects.
-///
-/// The collection allowance comes from the load's manifest budget, so every
-/// surface that can evaluate a template charges the same shared counters.
-pub(super) fn register_stdlib(
-    env: &mut Environment<'_>,
-    registration: StdlibRegistration,
-    collection_allowance: &CollectionAllowance,
-) -> anyhow::Result<StdlibState> {
-    match registration {
-        StdlibRegistration::AmbientFull => {
-            crate::stdlib::register_with_collection_allowance(env, collection_allowance)
-        }
-        StdlibRegistration::Full(config) => Ok(
-            crate::stdlib::register_with_config_and_collection_allowance(
-                env,
-                *config,
-                collection_allowance,
-            ),
-        ),
-        StdlibRegistration::ManifestQuery => Ok(crate::stdlib::register_manifest_query(
-            env,
-            collection_allowance,
-        )),
-        StdlibRegistration::Test(surface) => Ok(crate::stdlib::register_for_test(
-            env,
-            surface.config(),
-            collection_allowance,
-        )),
-    }
-}
+mod registration;
+pub(super) use registration::{register_host_helpers, register_stdlib};
 
 /// Return a `'static` environment whose reader refuses every lookup.
 ///
