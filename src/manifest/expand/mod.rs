@@ -208,15 +208,10 @@ fn expand_foreach_target(
         return Ok(Vec::new());
     };
     // Every admitted item retains one clone of this source, so its structural
-    // size is charged per item. Estimate it once, before lazy iteration can
-    // allocate anything.
-    let source_bytes = retained_size::source_map_bytes(map, context.budget.expanded_bytes_limit())
-        .ok_or_else(|| {
-            context
-                .budget
-                .expanded_bytes_exhaustion(ManifestBudgetStage::ExpansionAggregate)
-        })
-        .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
+    // size is charged per item. Estimate it once, bounded by the configured
+    // limit. The refusal itself waits for the first item: an empty iterator
+    // clones nothing, so a large source is harmless there.
+    let source_bytes = retained_size::source_map_bytes(map, context.budget.expanded_bytes_limit());
     let values = parse_foreach_values(expression, context)?;
     let iter = values.try_iter().context(crate::localization::message(
         crate::localization::keys::MANIFEST_FOREACH_NOT_ITERABLE,
@@ -240,8 +235,9 @@ fn expand_foreach_target(
 struct ForeachItem<'a> {
     /// Holds the target or action mapping to clone after its budget charge.
     source: &'a ManifestMap,
-    /// Holds the modelled bytes retained by one source clone.
-    source_bytes: usize,
+    /// Holds the modelled bytes retained by one source clone, or `None` when
+    /// the source alone cannot fit any admitted item.
+    source_bytes: Option<usize>,
     /// Holds the current lazily consumed iterator item.
     item: &'a minijinja::value::Value,
     /// Identifies the zero-based iterator position.
@@ -261,6 +257,16 @@ fn expand_foreach_item(
     context
         .budget
         .charge_expanded_entry(ManifestBudgetStage::ExpansionAggregate)
+        .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
+    // A source that cannot fit any admitted clone is refused here, once an
+    // item exists; an empty iterator never reaches this point.
+    let source_bytes = foreach_item
+        .source_bytes
+        .ok_or_else(|| {
+            context
+                .budget
+                .expanded_bytes_exhaustion(ManifestBudgetStage::ExpansionAggregate)
+        })
         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
     // Refuse an item that cannot fit the remaining allowance before `when`
     // copies it into a temporary condition context.
@@ -288,7 +294,7 @@ fn expand_foreach_item(
         }
         WhenResolution::Conditional => true,
     };
-    charge_retained_bytes(foreach_item, item_bytes, context)?;
+    charge_retained_bytes(source_bytes, item_bytes, context)?;
     let mut entry = clone_expansion_entry(foreach_item.source);
     if is_conditional {
         entry.insert("conditional".into(), ManifestValue::Bool(true));
@@ -301,12 +307,11 @@ fn expand_foreach_item(
 
 /// Charge the source, item, and injected-key bytes retained by one expansion.
 fn charge_retained_bytes(
-    foreach_item: &ForeachItem<'_>,
+    source_bytes: usize,
     item_bytes: usize,
     context: &ExpansionContext<'_>,
 ) -> Result<()> {
-    let retained_bytes = foreach_item
-        .source_bytes
+    let retained_bytes = source_bytes
         .checked_add(item_bytes)
         .and_then(|total| total.checked_add(retained_size::iteration_overhead()))
         .ok_or_else(|| {

@@ -13978,22 +13978,26 @@ each order-preserving map entry as a key `String`, an index slot, a control
 byte, and the key bytes. A `MiniJinja` item uses the same node cost: bytes
 become one numeric node per byte, a non-string map key adds its own estimate
 plus a string node, undefined and null share one node, and an unknown plain
-object charges one node. Both traversals use an explicit work stack and checked
-arithmetic, and stop as soon as the running total would pass the ceiling, so
-the estimator cannot recurse without bound or allocate while it walks. The
-result is a structural model: it is neither an allocator heap measurement nor a
-serialized size.
+object charges one node. Both value families drive one `Work` stack with
+checked arithmetic, and stop as soon as the running total would pass the
+ceiling. The traversal does allocate: the work stack itself and one boxed child
+iterator per visited sequence or map. Because those allocations are tied to
+charged nodes, the running total caps them, so the estimator cannot recurse
+without bound and its own memory stays proportional to the allowance rather
+than to arbitrary input nesting. The result is a structural model: it is
+neither an allocator heap measurement nor a serialized size.
 
 The charge order in `expand_foreach_item` is: per-`foreach` cardinality;
-aggregate expanded-entry count; item estimate against the remaining allowance;
-`when` evaluated against the borrowed source; aggregate byte charge of the
-source estimate, the item estimate, and the injected-key overhead; clone the
-source while skipping `foreach` and `when`; inject `vars.item` and
-`vars.index`. Filtered items therefore retain nothing, but an item larger than
-the remaining allowance is refused before its condition is evaluated. After
-serialization, any modelled growth of `vars.item` beyond the item estimate is
-charged separately. The source estimate is computed once per `foreach` entry,
-outside the item loop.
+aggregate expanded-entry count; the source estimate's availability (refused
+only once an item exists, so an empty `foreach` succeeds); item estimate
+against the remaining allowance; `when` evaluated against the borrowed source;
+aggregate byte charge of the source estimate, the item estimate, and the
+injected-key overhead; clone the source while skipping `foreach` and `when`;
+inject `vars.item` and `vars.index`. Filtered items therefore retain nothing,
+but an item larger than the remaining allowance is refused before its condition
+is evaluated. After serialization, any modelled growth of `vars.item` beyond
+the item estimate is charged separately. The source estimate is computed once
+per `foreach` entry, outside the item loop.
 
 Adding a manifest-budget setting grows all eight inventories together:
 `ManifestBudgetLimits` and its default, the runtime `ManifestBudgetState`

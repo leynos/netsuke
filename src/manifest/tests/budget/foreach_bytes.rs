@@ -6,15 +6,17 @@
 //! iteration instead of materializing the whole sequence.
 
 use crate::manifest::{
-    ManifestBudgetLimits, ManifestValue, budget::ManifestBudget, expand_foreach_with_budget,
-    from_str_with_limits, lazy_sequence::CountingSequence,
+    ManifestBudgetLimits, ManifestMap, ManifestValue,
+    budget::{ManifestBudget, retained_size},
+    expand_foreach_with_budget, from_str_with_limits,
+    lazy_sequence::CountingSequence,
 };
 use anyhow::{Context, Result, ensure};
 use metrics_util::{
     MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
 };
-use minijinja::Environment;
+use minijinja::{Environment, value::Value};
 use rstest::rstest;
 
 /// Largest limit the boundary search may try before declaring the fixture
@@ -169,9 +171,32 @@ fn filtered_foreach_items_do_not_consume_expansion_bytes() -> Result<()> {
     );
     let filtered_minimum = minimal_admitted_bytes(filtered, &env)?;
     let retained_minimum = minimal_admitted_bytes(retained, &env)?;
+
+    // Establish the two charges independently: a filtered expansion needs the
+    // source and item estimates but no retained-clone charge, while every
+    // retained item pays all three. A non-zero charge for a filtered clone
+    // would move the filtered minimum off this exact value.
+    let source_bytes = retained_size::source_map_bytes(&target_map(filtered)?, usize::MAX)
+        .context("the filtered source must fit an unbounded ceiling")?;
+    let item_bytes = retained_size::item_value_bytes(
+        &Value::from_serialize(ManifestValue::String("a".into())),
+        usize::MAX,
+    )
+    .context("a short filtered item must fit an unbounded ceiling")?;
     ensure!(
-        filtered_minimum < retained_minimum,
-        "filtered items must retain no cloned entry: filtered={filtered_minimum}, retained={retained_minimum}"
+        filtered_minimum == source_bytes.max(item_bytes),
+        "filtered expansion must charge only the source and item estimates: minimum={filtered_minimum}, source={source_bytes}, item={item_bytes}"
+    );
+    let retained_charge = source_bytes
+        .checked_add(item_bytes)
+        .and_then(|total| total.checked_add(retained_size::iteration_overhead()))
+        .context("the retained-entry charge must not overflow")?;
+    let expected_retained = retained_charge
+        .checked_mul(3)
+        .context("three retained-entry charges must not overflow")?;
+    ensure!(
+        retained_minimum == expected_retained,
+        "each retained item must charge the source, item, and injected keys: minimum={retained_minimum}, expected={expected_retained}"
     );
 
     expand_fixture(filtered, &env, filtered_minimum)
@@ -183,6 +208,17 @@ fn filtered_foreach_items_do_not_consume_expansion_bytes() -> Result<()> {
         "unexpected failure kind for retained entries below their charge: {error:#}"
     );
     Ok(())
+}
+
+/// Return the first target mapping in a fixture, for estimator comparisons.
+fn target_map(yaml: &str) -> Result<ManifestMap> {
+    let doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+    doc.get("targets")
+        .and_then(ManifestValue::as_array)
+        .and_then(|targets| targets.first())
+        .and_then(ManifestValue::as_object)
+        .cloned()
+        .context("fixture must contain one target mapping")
 }
 
 #[test]
@@ -204,18 +240,70 @@ fn expansion_bytes_are_shared_across_targets_and_actions() -> Result<()> {
         "    foreach: [one, two, three]\n",
         "    command: echo ok\n",
     );
+    let action_only = concat!(
+        "actions:\n",
+        "  - name: 'act-{{ item }}'\n",
+        "    foreach: [one, two, three]\n",
+        "    command: echo ok\n",
+    );
     let target_minimum = minimal_admitted_bytes(target_only, &env)?;
+    let action_minimum = minimal_admitted_bytes(action_only, &env)?;
     let combined_minimum = minimal_admitted_bytes(combined, &env)?;
+    let expected_combined = target_minimum
+        .checked_add(action_minimum)
+        .context("the two section charges must not overflow")?;
     ensure!(
-        combined_minimum > target_minimum,
-        "the actions section must draw from the same allowance: target={target_minimum}, combined={combined_minimum}"
+        combined_minimum == expected_combined,
+        "one shared allowance must sum both sections: combined={combined_minimum}, target={target_minimum}, action={action_minimum}"
     );
 
-    let error = expand_fixture(combined, &env, target_minimum)
-        .expect_err("both sections must not fit one section's allowance");
+    // A ceiling that admits either section alone must still refuse their
+    // aggregate. An implementation that resets the allowance between sections
+    // would succeed here.
+    let joint = target_minimum.max(action_minimum);
+    expand_fixture(target_only, &env, joint)
+        .context("the target section must fit the joint allowance")?;
+    expand_fixture(action_only, &env, joint)
+        .context("the action section must fit the joint allowance")?;
+    let error = expand_fixture(combined, &env, joint)
+        .expect_err("the aggregate must exceed the joint allowance");
     ensure!(
         exhaustion_kind(&error) == Some(crate::manifest::budget::ManifestBudgetKind::ExpandedBytes),
         "unexpected failure kind for the shared allowance: {error:#}"
+    );
+    Ok(())
+}
+
+#[test]
+fn empty_foreach_succeeds_when_the_source_alone_exceeds_the_allowance() -> Result<()> {
+    let env = Environment::new();
+    let yaml = format!(
+        concat!(
+            "targets:\n",
+            "  - name: never\n",
+            "    foreach: []\n",
+            "    command: 'echo {}'\n",
+        ),
+        "x".repeat(5_000)
+    );
+    let limits = ManifestBudgetLimits {
+        source_bytes: 16_384,
+        expanded_bytes: 512,
+        ..ManifestBudgetLimits::default()
+    };
+    let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+    let budget = ManifestBudget::new(limits)?;
+
+    expand_foreach_with_budget(&mut doc, &env, &budget, true)
+        .context("an empty iterator must clone nothing and therefore fit")?;
+    let targets = doc
+        .get("targets")
+        .and_then(ManifestValue::as_array)
+        .context("the fixture must retain its targets array")?;
+    ensure!(
+        targets.is_empty(),
+        "an empty foreach must expand to no entries, got {}",
+        targets.len()
     );
     Ok(())
 }

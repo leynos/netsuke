@@ -2147,9 +2147,11 @@ size. `when` is evaluated against the borrowed source, so a filtered item
 retains and charges no expansion bytes. The item itself is still estimated
 first, so an item larger than the remaining allowance is rejected even when
 `when` would filter it out. If serializing the item into `vars.item` produces a
-larger structure than the item estimate, only the growth is charged. This
-allowance is shared by every `foreach` in the manifest, so one small recipe
-repeated many times cannot multiply a large entry past the ceiling.
+larger structure than the item estimate, only the growth is charged. An empty
+`foreach` retains nothing, so it is not refused even when its source mapping
+alone exceeds the allowance. This allowance is shared by every `foreach` in the
+manifest, so one small recipe repeated many times cannot multiply a large entry
+past the ceiling.
 
 `shell_join` additionally enforces a fixed 1 MiB ceiling on the encoded command
 line it builds. Unlike the budgets here, that ceiling is not configurable: it

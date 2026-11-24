@@ -292,12 +292,13 @@ ceiling.
 `when` is now evaluated against the borrowed source, so a filtered item is
 never cloned and never charged. The item estimate still runs first, so an item
 larger than the remaining allowance is refused even when `when` would filter
-it. Retained items charge the source estimate, the item estimate, and the
-overhead of the `item`, `index`, `vars`, and `conditional` keys; after
-serialization, any modelled growth of `vars.item` is charged as a difference.
-The allowance is an operator setting that project configuration, including its
-`extends` chain, may narrow but not widen, and both build and manifest-query
-loads enforce it.
+it. A source estimate that exceeds the ceiling is refused only once an item
+exists, so an empty `foreach` retains nothing and succeeds. Retained items
+charge the source estimate, the item estimate, and the overhead of the `item`,
+`index`, `vars`, and `conditional` keys; after serialization, any modelled
+growth of `vars.item` is charged as a difference. The allowance is an operator
+setting that project configuration, including its `extends` chain, may narrow
+but not widen, and both build and manifest-query loads enforce it.
 
 Residual constraints are recorded here rather than claimed away:
 
@@ -305,8 +306,10 @@ Residual constraints are recorded here rather than claimed away:
   measurement, does not see an order-preserving map's growth capacity, and does
   not bound memory held inside a custom `MiniJinja` object.
 - The temporary `when` context clones the source `vars` and serializes the
-  item before the retained-entry charge. The item estimate bounds that
-  temporary allocation, but the context itself is not separately charged.
+  item before the retained-entry charge. The item estimate bounds only the
+  serialized item; it does not bound the cloned `vars` map, which is not
+  separately charged. A small item can therefore still copy a large source
+  `vars` once per iteration before the retained-entry charge fires.
 - `serde_json::to_value` remains recursive; the re-estimate after
   serialization detects growth but cannot prevent the allocation that produced
   it.
