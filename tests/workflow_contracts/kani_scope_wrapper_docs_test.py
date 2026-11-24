@@ -37,7 +37,15 @@ PLAN_4_2_3 = (
     / "execplans"
     / "4-2-3-kani-harnesses-for-command-interpolation.md"
 )
-DOCUMENTS = (DEVELOPERS_GUIDE, PLAN_4_2_2, PLAN_4_2_3)
+#: Every document that publishes the wrapper, paired with its case id.
+#:
+#: The ids are stated rather than derived from each stem, so a case reported as
+#: ``...[developers-guide]`` keeps that name if a file is renamed.
+DOCUMENTS = (
+    pytest.param(DEVELOPERS_GUIDE, id="developers-guide"),
+    pytest.param(PLAN_4_2_2, id="plan-4-2-2"),
+    pytest.param(PLAN_4_2_3, id="plan-4-2-3"),
+)
 
 #: One fenced block, capturing its language tag and body.
 #:
@@ -86,11 +94,6 @@ REQUIRED_SECTIONS = (
 )
 
 
-def _document_id(path: Path) -> str:
-    """Name one document in a parametrized test identifier."""
-    return path.stem
-
-
 def _relative(path: Path) -> str:
     """Return ``path`` relative to the repository root, POSIX-style."""
     return path.relative_to(REPO_ROOT).as_posix()
@@ -123,7 +126,7 @@ def _placeholder_blocks(path: Path) -> list[str]:
     return [block for block in _wrapper_blocks(path) if "<kani-command>" in block]
 
 
-@pytest.mark.parametrize("path", DOCUMENTS, ids=_document_id)
+@pytest.mark.parametrize("path", DOCUMENTS)
 def test_every_document_publishes_a_routine_example(path: Path) -> None:
     """Require at least one routine example per document.
 
@@ -136,7 +139,7 @@ def test_every_document_publishes_a_routine_example(path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("path", DOCUMENTS, ids=_document_id)
+@pytest.mark.parametrize("path", DOCUMENTS)
 def test_routine_examples_keep_every_flag_property_and_niceness(path: Path) -> None:
     """Require the documented flags, caps and niceness in every routine example."""
     for block in _routine_blocks(path):
@@ -148,7 +151,7 @@ def test_routine_examples_keep_every_flag_property_and_niceness(path: Path) -> N
         )
 
 
-@pytest.mark.parametrize("path", DOCUMENTS, ids=_document_id)
+@pytest.mark.parametrize("path", DOCUMENTS)
 def test_routine_examples_keep_pipefail_and_tee_inside_the_payload(path: Path) -> None:
     """Require `set -o pipefail` and `tee` inside the `bash -c` payload.
 
