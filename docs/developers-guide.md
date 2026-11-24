@@ -5440,45 +5440,6 @@ already supersedes the older run. The `pull_request_target` Dependabot merge
 workflow is out of scope: cancelling a merge mid-flight is a hazard with no
 minutes to win.
 
-`tests/workflow_contracts/pr_concurrency_test.py` holds the rule. It reads
-every workflow at test setup through `workflow_loading.py`, which refuses a
-repeated key, and takes as in scope each workflow that `declares_trigger` reads
-as starting on `pull_request`, with a floor of the three above so discovery
-cannot empty into a vacuous pass. Rather than search each group's text, it
-renders the group with `pr_concurrency_groups.py` for a set of run contexts:
-two pushes to one pull request must render one group, and that pull request, a
-fork's pull request from a branch of the same name, two trunk pushes, two
-dispatches and two scheduled runs must all render different groups. Groups are
-compared casefolded, because GitHub treats group names case-insensitively. The
-run identifier may appear only as the fallback behind the pull-request number;
-no two workflows may render one group for a pull request; each group must also
-differ under two synthetic workflow names; and `cancel-in-progress` must be
-exactly the event-conditioned expression. `pr_concurrency_groups_test.py`
-drives the renderer with the shapes the rules refuse, and an expression it does
-not model is refused rather than guessed at.
-
-A group must also be a string, which GitHub requires: a workflow that writes a
-mapping or a list there has no group to key a run on, and reading that value's
-Python text in its place would render the same sharing, separation, fallback
-and workflow-keying properties as the real one. `_group` reads any other type
-as no group.
-
-Each clause was proved by mutation, and every mutation fails the suite: the
-cancel line removed, a literal `true`, a group from `run_id` alone, a constant
-group, a `head_ref` group, a `format()` group, a `ref` fallback, `run_number`
-as the fallback, the run identifier ahead of the number, the block removed, the
-trigger renamed to `pull_request_target`, a duplicated block, a quoted `on`
-beside the unquoted key, the `github.workflow` prefix dropped, the casefold
-removed from the comparison, and a group written as a mapping.
-`pr_concurrency_group_type_test.py` calls the declaration contract with
-isolated documents to prove the last of these: the estate group's own string
-passes it, and a mapping, a list, an integer, `None` and `False` each fail it.
-`cancel-in-progress: true` restored on `release.yml` fails
-`test_no_other_workflow_cancels_a_run`. That clause reads a missing
-`cancel-in-progress` as not cancelling, so
-`test_the_release_lane_queues_rather_than_cancels` also pins `release.yml`'s
-block exactly; deleting the block fails it.
-
 ## Quality gates
 
 Run these commands before finalizing any change:
