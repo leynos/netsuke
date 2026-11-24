@@ -469,7 +469,7 @@ conflict in `Decision log`, and escalate.
 - [x] EP-M5: documentation, ADR, roadmap, and final gates.
   - ADR (2026-11-09, renumbered 2026-11-13, again 2026-11-16, again
     2026-11-20, again 2026-11-20).
-    `docs/adrs/adr-0084-shared-resource-bounds-for-stdlib-helpers.md` is
+    `docs/adrs/adr-0087-shared-resource-bounds-for-stdlib-helpers.md` is
     `Accepted`, dated 2026-11-09, and carries the context, the four options
     with a captioned comparison table, the outcome, the consequences, and the
     known risks (the `serde_json` off-by-one, the output-content row, and the
@@ -482,7 +482,7 @@ conflict in `Decision log`, and escalate.
     moved to 0075. The first sweep under-reported because it compared the
     zero-padded numbers as strings, so `0069 >= "060"` was false and the whole
     range was filtered out; the corrected sweep compares numerically. The ADR
-    is indexed in `docs/contents.md` as ADR-0084. It was ADR-0075 from
+    is indexed in `docs/contents.md` as ADR-0087. It was ADR-0075 from
     2026-11-13 until 2026-11-16, when `main` took 0075 for the manifest
     schema-version ADR [#808](https://github.com/leynos/netsuke/pull/808)
     merged; it was ADR-0082 from then until 2026-11-20, when `main` took
@@ -578,7 +578,7 @@ conflict in `Decision log`, and escalate.
     `E0603` the private module would give — each paired with a passing example
     as the vacuity control, following `src/manifest/glob/mod.rs`. Two
     documentation counts said "six" Kani harnesses where seven exist;
-    `docs/netsuke-design.md` §4.7 and ADR-0084 now say seven, and the
+    `docs/netsuke-design.md` §4.7 and ADR-0087 now say seven, and the
     retrospective no longer calls the module wholly private.
   - Gate repair (2026-11-15). The batch against the first repair head (since
     amended into `607e5bdf5`) stopped in `make lint` at `lint-clippy` with
@@ -1323,8 +1323,25 @@ conflict in `Decision log`, and escalate.
       `0 <= i <= end <= lens.len()`, and `lemma_no_zero_all_positive`, which now
       requires `0 <= end <= lens.len()`. Those two enforce the discipline that
       the specifications only document. `spec_binom` gains the `///` summary the
-      other specifications have. The proof still reports
-      `verification results:: 67 verified, 0 errors`.
+  - Fourth ADR renumber, to 0087 (2026-11-24). The completeness assessment
+    suggested rechecking ADR-0084 against the configured reservation remotes,
+    and the check found a real collision: branch
+    `issue-1144-declare-actions-and-phony-targets-phony-to-ninja-and-make-always-re-run`
+    ([#1166](https://github.com/leynos/netsuke/pull/1166), open and ready)
+    minted `docs/adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md`
+    in `45660a3c6` on 2026-11-24, three days after this branch took 0084 in
+    `57f02277f`. Its 0085 is mainline's canonical-admission ADR, so it claimed
+    0084 and left 0085 alone; the collision is on 0084 alone. A sweep of every
+    local and tracking ref shows 0086 held by `issue-875-linker-selection`
+    ([#1192](https://github.com/leynos/netsuke/pull/1192), draft) and no
+    allocation at 0087, so this branch moves to **0087**. The file, its
+    heading, the `docs/contents.md` entry, and the four cross-references in the
+    design record, the developers' guide, the repository layout, and RFC 0006
+    are renumbered; historical statements in this plan keep the serial they
+    describe. D-28's entry gains the fourth renumber. The lesson D-26 recorded
+    is now measured four times in eight days: a serial is only free until
+    another branch takes it, and the check belongs immediately before
+    publication rather than at the start of the work.
 
 ## Surprises & discoveries
 
@@ -1990,7 +2007,20 @@ conflict in `Decision log`, and escalate.
   observation, and it sharpens: on a long-lived branch the serial must be
   re-checked after every base advance, and the check belongs to the last step
   before publication rather than to the last step of authoring. Date/Author:
-  2026-11-20.
+  2026-11-20. Second amendment of 2026-11-24: renumbered a fourth time, from
+  0084 to 0087. Branch
+  `issue-1144-declare-actions-and-phony-targets-phony-to-ninja-and-make-always-re-run`
+  ([#1166](https://github.com/leynos/netsuke/pull/1166)) minted 0084 in
+  `45660a3c6` on 2026-11-24, three days after this branch took it, and
+  `issue-875-linker-selection`
+  ([#1192](https://github.com/leynos/netsuke/pull/1192)) holds 0086, so the
+  sweep of every local and tracking ref puts the next free serial at 0087. The
+  collision was invisible to a sweep of `origin` alone only in the sense that
+  both branches are on `origin`; what hid it was that nothing re-ran the sweep,
+  which is the part D-26 named. Renumbering rather than contesting is the
+  branch's only available move: #1166 was ready and had minted its serial first
+  in wall-clock terms for the current round, and a published ADR is never
+  renumbered, so the later claimant yields.
 
 - D-29. Decision: add `verus/configured_shells/main.rs` to
   `.github/workflows/proofs.yml` as a third proof step, and correct every count
@@ -2043,7 +2073,7 @@ What was delivered:
   before being reverted, plus registration in the mutation workflow's
   `exclude-globs`, `KANI_EXCLUDES`, the `cargo-mutants` exclusion paragraph,
   and the Kani proof scope.
-- ADR-0084, the design §4.7 subsection, the developers'-guide re-use policy,
+- ADR-0087, the design §4.7 subsection, the developers'-guide re-use policy,
   the formal-verification record, the repository layout, the regenerated Kani
   harness table, the roadmap checkbox, and the RFC 0006 table 3 output-content
   row.
@@ -2056,7 +2086,7 @@ the surface that renders these refusals belongs to 6.1.4, 6.2.1, 6.4.2, and
 
 Discoveries and how they landed. The `serde_json` off-by-one (127 admitted
 containers for a nominal 128) is recorded in D-06, in the developers' guide,
-and in ADR-0084 rather than being silently matched. The missing table 3
+and in ADR-0087 rather than being silently matched. The missing table 3
 output-content row became D-12, the RFC amendment, and the ADR. Fluent's `f64`
 number storage is recorded as a hazard for counts above `2^53`, which matters
 because 100000 and 10000 are both far below it today but a future ceiling need

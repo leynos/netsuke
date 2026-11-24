@@ -196,7 +196,7 @@ output and some leaf files so the long-lived structure remains visible.
 - `src/stdlib/resource_bounds/`: The RFC 0006 ceilings, checked cardinality and
   running-total arithmetic, and typed refusals that every bounded template
   helper is expected to adopt (see
-  [ADR-0084](adrs/adr-0084-shared-resource-bounds-for-stdlib-helpers.md)). No
+  [ADR-0087](adrs/adr-0087-shared-resource-bounds-for-stdlib-helpers.md)). No
   template reaches it yet; the consumer tasks own that wiring, and the re-use
   policy in the developers' guide states who may call the module and how. Its
   Kani harnesses live in `verification.rs` behind `#[cfg(kani)]`.
