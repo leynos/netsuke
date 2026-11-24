@@ -1705,9 +1705,10 @@ build, because a guard that failed open would delete the output it exists to
 protect. Resolution only reads; the removal always goes through the verified
 namespace handles. A refused build reports the same reservation diagnostic
 generation uses, because it is the same rule. Publication, pruning, and the
-reset are sequenced by `publish_then_reset` in `src/runner/mod.rs`, so the
-order is a named function rather than a set of comments; the publication lease
-it returns stays alive until Ninja exits.
+reset are sequenced by `publish_then_reset` in `src/runner/generated_state.rs`,
+which `execute_build` in `src/runner/mod.rs` calls once, so the order is a
+named function rather than a set of comments; the publication lease it returns
+stays alive until Ninja exits.
 
 Preparing the declared outputs' directories is generated work, not
 command-layer work. Ninja creates the parent directories of the outputs on an
@@ -11281,6 +11282,29 @@ stderr itself. `tests/kani_cfg_ui_tests.rs`,
 `tests/reserved_state_proof_ui_tests.rs` are the current callers. Fixtures are
 compiled as standalone binaries with no dependencies on this workspace, so a
 compile-time contract can be checked without building the crate it describes.
+
+### `runner::path_helpers`
+
+`src/runner/path_helpers.rs` owns how a command turns the selected working
+directory into a path or a handle. `selected_directory` is the single reading of
+`-C`/`--directory`: it returns the configured directory or `.`, and no other
+module re-derives it.
+
+`open_directory` canonicalizes one directory and opens it through a capability
+handle, returning both. It is the opener every step that judges or writes
+generated state uses — `Workspace::open` in `src/runner/phony_state/` wraps it,
+and dyndep publication reaches the same directory through `open_effective_dir`,
+which is this function applied to the selected directory. Keeping one opener is
+what makes the reservation refusal, sidecar publication, and the force-node
+reset act on the same canonical directory rather than on their own readings of
+the selected path.
+
+`open_effective_dir` is therefore the shared handle for publication and for the
+phony workspace's own verified walk; a new caller that only needs a handle to
+the effective working directory should use it rather than opening the directory
+again. Keep manifest resolution (`resolve_manifest_path`), output-path
+resolution (`resolve_output_path`), and the manifest-existence check in this
+module too, so the runner's path arithmetic has one home.
 
 ### Temporary Ninja build files
 

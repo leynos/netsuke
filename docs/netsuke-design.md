@@ -3216,6 +3216,21 @@ by bare entry name through the resulting handle. The lease remains advisory and
 coordinates only cooperating Netsuke processes. See
 [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md) for this policy.
 
+Before it publishes a sidecar, prunes an obsolete one, or clears the force
+node, a build refuses any path that resolves into reserved generated state.
+Generation rejects the spellings it can judge lexically; the build resolves
+every declared path and the selected `--file` manifest against the canonical
+working directory, so an absolute path, a `..` spellings, a symbolic-link
+alias, and a dangling alias are judged too. The refusal returns a proof value
+that the force-node reset requires, so the destructive step cannot run without
+the check. The reset itself runs before Ninja for `build` and not for
+`generate`: writing the plan never removes the node. Both steps, with dyndep
+publication and pruning between them, are sequenced by `publish_then_reset` in
+`src/runner/generated_state.rs`, which `execute_build` in `src/runner/mod.rs`
+calls once. See
+[ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md)
+and its 2026-11-19 amendment for the rationale.
+
 4\. **Write Defaults:** Finally, write the `default` statement, listing all
 paths from `graph.default_targets`.
 
