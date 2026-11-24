@@ -2357,9 +2357,12 @@ host: a payload that exits 7 leaves a scope the manager collects as a success,
 because a scope has no main process and nothing maps an exit status onto
 `Result=`; and a payload that exits zero can leave a `Result=timeout` scope,
 because the runtime deadline covers the whole control group and can fire during
-teardown. The second is the explanation for the failed
-`netsuke-kani-wrapper-*-ok` units observed on 2026-11-01 — the `-ok` is the
-scenario name, not a claim about the scope.
+teardown. The second is the reachable cause documented for the failed
+`netsuke-kani-wrapper-*-ok` units observed on 2026-11-01. It is not claimed as
+*their* cause: the `-ok` is the scenario name rather than a claim about the
+scope, those units had been reset before the investigation began, and the
+journal no longer covers that date, so their individual `Result=` values are
+unrecoverable.
 
 The full contract — routine versus deferred collection, the `LoadState=loaded`
 prerequisite, the `Result`-versus-exit-status distinction, unit-specific

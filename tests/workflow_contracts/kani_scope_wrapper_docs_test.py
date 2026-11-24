@@ -126,6 +126,33 @@ def _placeholder_blocks(path: Path) -> list[str]:
     return [block for block in _wrapper_blocks(path) if "<kani-command>" in block]
 
 
+def _payload_argument(block: str) -> str | None:
+    """Return the text between `bash -c` and the closing quote of its argument.
+
+    Only the quoted argument is the payload. Searching the rest of the block
+    would also see the outer pipeline and any trailing comment, which is how a
+    wrapper can carry `tee` and `pipefail` outside the scope and still look
+    conforming.
+
+    Returns
+    -------
+    str | None
+        The quoted argument's text, or ``None`` when the block has no
+        `bash -c` or no quote opens its argument.
+    """
+    marker = "bash -c"
+    if marker not in block:
+        return None
+    remainder = block.split(marker, 1)[1].lstrip()
+    quote = remainder[:1]
+    if quote not in {"'", '"'}:
+        return None
+    end = remainder.find(quote, 1)
+    if end < 0:
+        return None
+    return remainder[1:end]
+
+
 @pytest.mark.parametrize("path", DOCUMENTS)
 def test_every_document_publishes_a_routine_example(path: Path) -> None:
     """Require at least one routine example per document.
@@ -153,15 +180,26 @@ def test_routine_examples_keep_every_flag_property_and_niceness(path: Path) -> N
 
 @pytest.mark.parametrize("path", DOCUMENTS)
 def test_routine_examples_keep_pipefail_and_tee_inside_the_payload(path: Path) -> None:
-    """Require `set -o pipefail` and `tee` inside the `bash -c` payload.
+    """Require `set -o pipefail` and `tee` inside the `bash -c` argument.
 
     A pipeline written outside the scope cannot carry `pipefail` into it, so
     the status the caller sees would be `tee`'s — zero whenever the capture
     succeeded — and a failing verifier would be masked. The capture must also
     travel as the scope's payload, so it ends where the cap ends.
+
+    The check is made against the quoted argument, not the rest of the block.
+    Everything after `bash -c` includes the outer pipeline and any trailing
+    comment, so a wrapper ending `bash -c 'make kani-ir' | tee capture # set -o
+    pipefail` would satisfy a suffix check while masking the verifier exactly
+    as the contract forbids. `test_the_payload_check_rejects_an_outer_pipeline`
+    is that negative control.
     """
     for block in _routine_blocks(path):
-        payload = block.split("bash -c", 1)[1]
+        payload = _payload_argument(block)
+        assert payload is not None, (
+            f"{_relative(path)}: a routine example must pass `bash -c` a quoted "
+            f"argument, so the payload can be identified:\n{block}"
+        )
         assert "set -o pipefail" in payload, (
             f"{_relative(path)}: `set -o pipefail` must be set inside the "
             f"`bash -c` payload, not in the shell that launches the scope:\n{block}"
@@ -170,6 +208,33 @@ def test_routine_examples_keep_pipefail_and_tee_inside_the_payload(path: Path) -
             f"{_relative(path)}: `tee` must write the capture from inside the "
             f"scope's payload:\n{block}"
         )
+
+
+def test_the_payload_check_rejects_an_outer_pipeline() -> None:
+    """Prove the payload check fires on the shape it exists to reject.
+
+    The control keeps `set -o pipefail` and `tee` in the block but moves the
+    pipeline outside the quoted argument, which is precisely the wrapper the
+    contract forbids. A check that only searched the block's suffix would pass
+    it, so this case is what makes the check above meaningful rather than
+    merely present.
+    """
+    masked = (
+        "systemd-run --user --scope --collect --unit example "
+        "bash -c 'make kani-ir' | tee capture # set -o pipefail"
+    )
+    payload = _payload_argument(masked)
+    assert payload == "make kani-ir", (
+        "the payload must be the quoted argument alone, so the outer pipeline "
+        f"and the comment are outside it; got {payload!r}"
+    )
+    assert "set -o pipefail" not in payload, (
+        "a `pipefail` written after the closing quote must not count as being "
+        "inside the payload"
+    )
+    assert "tee " not in payload, (
+        "a `tee` outside the scope must not count as the scope's capture"
+    )
 
 
 def test_the_placeholder_template_collects_and_names_its_unit() -> None:

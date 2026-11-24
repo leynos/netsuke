@@ -21,7 +21,7 @@ use anyhow::{Result, ensure};
 
 use super::{
     harness::capture_path,
-    manager::{ScopeSnapshot, captured, is_busy, journal_extract, scope_snapshot},
+    manager::{Journal, ScopeSnapshot, captured, is_busy, journal_extract, scope_snapshot},
 };
 
 /// Everything one finished invocation left behind.
@@ -36,8 +36,8 @@ pub(super) struct Outcome {
     pub(super) capture_path: String,
     /// The captured output, read after the caller returned.
     pub(super) capture: String,
-    /// A bounded extract of the unit's journal.
-    pub(super) journal: String,
+    /// A bounded extract of the unit's journal, or why it was unavailable.
+    pub(super) journal: Journal,
     /// The manager's state, or `None` when the unit is already unloaded.
     snapshot: Option<ScopeSnapshot>,
 }
@@ -56,7 +56,7 @@ impl Outcome {
             caller_code: caller.status.code(),
             capture_path: capture_path(unit),
             capture: captured(unit)?,
-            journal: journal_extract(unit)?,
+            journal: journal_extract(unit),
             snapshot: scope_snapshot(unit)?,
         })
     }
@@ -114,7 +114,19 @@ impl Outcome {
             self.capture_path,
             self.capture.len(),
             describe_snapshot(self.snapshot.as_ref()),
-            indent(&self.journal)
+            self.describe_journal()
+        )
+    }
+
+    /// Render the journal read, saying so when it could not be read at all.
+    ///
+    /// An unreadable journal is reported as unavailable rather than as an empty
+    /// one, so a reader is never told the unit logged nothing when in fact the
+    /// log could not be consulted.
+    fn describe_journal(&self) -> String {
+        self.journal.unavailable_reason().map_or_else(
+            || indent(self.journal.text()),
+            |reason| format!("    <the journal is unavailable: {reason}>"),
         )
     }
 }

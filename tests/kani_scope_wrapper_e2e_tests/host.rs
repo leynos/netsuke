@@ -6,7 +6,7 @@
 //! a failure: a lane that skipped every scenario would otherwise read as green
 //! coverage while proving nothing.
 
-use std::process::Command;
+use std::process::{Command, Output};
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -30,13 +30,17 @@ pub(super) fn prerequisites_met(scenario: &str) -> Result<bool> {
 /// Check the host prerequisites and report what is missing.
 ///
 /// Returns `Ok(None)` when the host can run the wrapper, or `Ok(Some(reason))`
-/// naming the first unmet prerequisite.
+/// naming the first unmet prerequisite. An absent `systemctl` and an absent
+/// cgroup file are reported the same way: both are "this host cannot run the
+/// wrapper", which the caller turns into a visible skip, and into a failure
+/// only under strict mode. Returning them as errors instead would fail every
+/// scenario on such a host, so a lane that merely lacks systemd would read as
+/// a broken wrapper.
 fn missing_prerequisite() -> Result<Option<String>> {
     // The user manager is the prerequisite `--user --scope` actually needs.
-    let manager = Command::new("systemctl")
-        .args(["--user", "is-system-running"])
-        .output()
-        .context("probe for a per-user systemd manager")?;
+    let Some(manager) = run_probe(["systemctl", "--user", "is-system-running"])? else {
+        return Ok(Some("`systemctl` is not available on this host".to_owned()));
+    };
     let state = String::from_utf8_lossy(&manager.stdout).trim().to_owned();
     // `degraded` and `running` both mean the manager is up and can accept a
     // scope; only `offline` (or a missing binary) means it is not. `degraded`
@@ -48,10 +52,11 @@ fn missing_prerequisite() -> Result<Option<String>> {
         )));
     }
 
-    let version = Command::new("systemctl")
-        .arg("--version")
-        .output()
-        .context("read the systemd version")?;
+    let Some(version) = run_probe(["systemctl", "--version"])? else {
+        return Ok(Some(
+            "`systemctl` disappeared between two probes".to_owned(),
+        ));
+    };
     let text = String::from_utf8_lossy(&version.stdout);
     let major = text
         .lines()
@@ -77,17 +82,41 @@ fn missing_prerequisite() -> Result<Option<String>> {
     }
 
     // Delegation: the user manager may only create a scope if the controllers
-    // it needs are delegated down the tree. A cgroup v1 host fails here.
-    let cgroup = Dir::open_ambient_dir("/sys/fs/cgroup", ambient_authority())
-        .context("open /sys/fs/cgroup")?;
-    let delegated = cgroup
-        .read_to_string("cgroup.controllers")
-        .context("read /sys/fs/cgroup/cgroup.controllers")?;
+    // it needs are delegated down the tree. A cgroup v1 host fails here, and so
+    // does one whose cgroup tree is not mounted where the unified hierarchy
+    // puts it: both are "cannot run the wrapper", not "the suite is broken".
+    let Ok(cgroup) = Dir::open_ambient_dir("/sys/fs/cgroup", ambient_authority()) else {
+        return Ok(Some(
+            "/sys/fs/cgroup is not available, so cgroup delegation cannot be confirmed".to_owned(),
+        ));
+    };
+    let Ok(delegated) = cgroup.read_to_string("cgroup.controllers") else {
+        return Ok(Some(
+            "/sys/fs/cgroup/cgroup.controllers is missing, which a cgroup v1 host reports"
+                .to_owned(),
+        ));
+    };
     ensure!(
         !delegated.trim().is_empty(),
         "/sys/fs/cgroup/cgroup.controllers should list delegated controllers"
     );
     Ok(None)
+}
+
+/// Run one probe, mapping "the program is not installed" to `None`.
+///
+/// A probe that exists but fails is still an error: that is a host whose
+/// systemd is present and misbehaving, which the caller should see rather than
+/// have folded into a skip.
+fn run_probe<const N: usize>(argv: [&str; N]) -> Result<Option<Output>> {
+    let (program, arguments) = argv
+        .split_first()
+        .context("a probe needs a program to run")?;
+    match Command::new(program).args(arguments).output() {
+        Ok(output) => Ok(Some(output)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err).with_context(|| format!("probe the host with `{program}`")),
+    }
 }
 
 /// Whether an unprovable scenario should fail the run instead of skipping.

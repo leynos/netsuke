@@ -18,17 +18,37 @@ use std::{
 use anyhow::{Context, Result, ensure};
 
 use super::{
-    guard::{with_scope, with_unit},
+    guard::with_unit,
     harness::{
-        PAYLOAD_LIFETIME, ROUTINE_RUNTIME_CAP, Retention, capture_path, run_scoped, spawn_scoped,
-        unit_name,
+        PAYLOAD_LIFETIME, ROUTINE_RUNTIME_CAP, RUNTIME_CAP, Retention, capture_path, run_scoped,
+        spawn_scoped, unit_name,
     },
     host::prerequisites_met,
     manager::{
-        capture_exists, ensure_no_failed_units, remove_capture, wait_until_active,
-        wait_until_unloaded,
+        capture_exists, ensure_own_unit_settled, remove_capture, wait_for_terminal,
+        wait_until_active, wait_until_unloaded,
     },
 };
+
+/// Leave `unit` failed and loaded, so only the guard can clear it.
+///
+/// The exceptional-path scenarios need this rather than a payload that exits
+/// successfully. A scope that finishes cleanly is collected by the manager on
+/// its own, so such a scenario would pass even if the guard did nothing at all.
+/// A scope stopped at the runtime cap under `Retention::Retain` is left
+/// `failed` with its `Result` intact, which is exactly the state only the
+/// guard's teardown clears. Waiting for the terminal state makes the premise
+/// true before the error is injected rather than racing it.
+fn leave_scope_failed(unit: &str) -> Result<()> {
+    let _ = run_scoped(
+        unit,
+        RUNTIME_CAP,
+        Retention::Retain,
+        &format!("trap '' TERM; sleep {}", PAYLOAD_LIFETIME.as_secs()),
+    )?;
+    let _ = wait_for_terminal(unit)?;
+    Ok(())
+}
 
 /// An injected body error is returned intact and still tears the unit down.
 ///
@@ -36,6 +56,11 @@ use super::{
 /// cover: an early `?` return skipped them. The original error must reach the
 /// caller — a cleanup failure is not allowed to replace it — and the capture
 /// must survive so the failure can be explained.
+///
+/// The scope is left failed and retained before the error is injected, so the
+/// assertion that it settles can only pass if the guard really acted. A
+/// successful scope would be collected by the manager either way, and the test
+/// would then prove nothing about the guard.
 #[test]
 fn guard_tears_down_the_scope_after_a_body_error() -> Result<()> {
     let scenario = "error-teardown";
@@ -44,17 +69,7 @@ fn guard_tears_down_the_scope_after_a_body_error() -> Result<()> {
     }
     let unit = unit_name(scenario);
     let error = with_unit(unit.clone(), |scope| {
-        let output = run_scoped(
-            scope.unit(),
-            ROUTINE_RUNTIME_CAP,
-            Retention::Collect,
-            "echo before-error; exit 0",
-        )?;
-        ensure!(
-            output.status.success(),
-            "the payload should exit 0 before the injected error, got {:?}",
-            output.status
-        );
+        leave_scope_failed(scope.unit())?;
         anyhow::bail!("injected body error for teardown coverage")
     })
     .expect_err("the injected body error must reach the caller");
@@ -73,7 +88,7 @@ fn guard_tears_down_the_scope_after_a_body_error() -> Result<()> {
         "the capture must be retained when the body fails"
     );
     remove_capture(&unit)?;
-    ensure_no_failed_units("a body error must not leave a failed scope")
+    ensure_own_unit_settled(&unit, "a body error must not leave its scope failed")
 }
 
 /// A panic unwinds through the guard, which tears the unit down from `Drop`.
@@ -81,6 +96,10 @@ fn guard_tears_down_the_scope_after_a_body_error() -> Result<()> {
 /// `Drop` is the only teardown path a panic cannot bypass. The panic payload
 /// must arrive unchanged: replacing it with a cleanup error would hide the
 /// defect that caused the unwind.
+///
+/// As in the injected-error case, the scope is left failed and retained before
+/// the panic, so the assertion that it settles distinguishes a guard that ran
+/// from one that did not.
 #[test]
 #[expect(
     clippy::panic_in_result_fn,
@@ -94,12 +113,7 @@ fn guard_tears_down_the_scope_while_a_panic_unwinds() -> Result<()> {
     let unit = unit_name(scenario);
     let unwound = catch_unwind(AssertUnwindSafe(|| {
         with_unit(unit.clone(), |scope| {
-            let _ = run_scoped(
-                scope.unit(),
-                ROUTINE_RUNTIME_CAP,
-                Retention::Collect,
-                "echo before-panic; exit 0",
-            )?;
+            leave_scope_failed(scope.unit())?;
             panic!("injected panic for teardown coverage");
         })
     }));
@@ -112,7 +126,7 @@ fn guard_tears_down_the_scope_while_a_panic_unwinds() -> Result<()> {
         message.contains("injected panic"),
         "the panic payload must arrive unchanged, got {message:?}"
     );
-    ensure_no_failed_units("a panic must not leave a failed scope")
+    ensure_own_unit_settled(&unit, "a panic must not leave its scope failed")
 }
 
 /// The guard stops a scope that is still running and reaps its launcher.
@@ -147,7 +161,7 @@ fn guard_stops_an_active_scope_and_reaps_the_launcher() -> Result<()> {
         !status.success(),
         "a scope stopped by teardown should not report success to its launcher, got {status:?}"
     );
-    ensure_no_failed_units("stopping an active scope must leave no failed unit")
+    ensure_own_unit_settled(&unit, "stopping an active scope must leave no failed unit")
 }
 
 /// A unit name can be reused once its scope has been torn down.
@@ -183,39 +197,52 @@ fn a_unit_name_can_be_reused_after_teardown() -> Result<()> {
         // would fail here rather than being mistaken for a passing run.
         wait_until_unloaded(&unit)?;
     }
-    ensure_no_failed_units("reusing a name must leave no failed unit")
+    ensure_own_unit_settled(&unit, "reusing a name must leave no failed unit")
 }
 
 /// Concurrent scenarios must not collide or accumulate failures.
 ///
 /// Each thread derives its own name from the same counter, so a collision
 /// would surface as a `systemd-run` failure rather than as silent interference.
-/// The read-only glob afterwards covers every unit this process created, so a
-/// leak from any one thread fails the scenario.
+/// Each unit is then checked by name, so a leak from any one thread fails the
+/// scenario and names the unit that leaked.
 #[test]
 fn concurrent_scopes_leave_no_failed_units() -> Result<()> {
     let scenario = "concurrent";
     if !prerequisites_met(scenario)? {
         return Ok(());
     }
-    let failures = run_concurrently(scenario, 3);
+    let (units, failures) = run_concurrently(scenario, 3);
     ensure!(
         failures.is_empty(),
         "every concurrent scenario should succeed, but {} failed: {failures:#?}",
         failures.len()
     );
-    ensure_no_failed_units("concurrent runs must leave no failed unit")
+    for unit in &units {
+        ensure_own_unit_settled(
+            unit,
+            &format!("concurrent run {unit} must leave no failed unit"),
+        )?;
+    }
+    Ok(())
 }
 
-/// Run `count` scenarios at once and return each failure, as a rendered report.
+/// Run `count` scenarios at once, returning each unit's name and each failure.
 ///
-/// The scenario body is its own function so the thread's closure is a call
-/// rather than a nested block: an outcome collected inline here would put the
-/// spawn, the body and the assertion four levels deep.
-fn run_concurrently(scenario: &str, count: usize) -> Vec<String> {
-    thread::scope(|threads| {
-        let handles: Vec<_> = (0..count)
-            .map(|index| threads.spawn(move || run_one_of(scenario, index)))
+/// The names are allocated before the threads start, so the caller checks the
+/// units that were really created rather than re-deriving names from a counter
+/// that has since moved on. The scenario body is its own function so the
+/// thread's closure is a call rather than a nested block.
+fn run_concurrently(scenario: &str, count: usize) -> (Vec<String>, Vec<String>) {
+    let names: Vec<String> = (0..count)
+        .map(|index| unit_name(&format!("{scenario}-{index}")))
+        .collect();
+    let failures = thread::scope(|threads| {
+        // The borrow is scoped to this `thread::scope`, so each thread can read
+        // its name from `names` rather than owning a clone of it.
+        let handles: Vec<_> = names
+            .iter()
+            .map(|unit| threads.spawn(move || run_one_of(unit)))
             .collect();
         handles
             .into_iter()
@@ -225,13 +252,13 @@ fn run_concurrently(scenario: &str, count: usize) -> Vec<String> {
                 Err(_) => Some("a concurrent scenario panicked".to_owned()),
             })
             .collect()
-    })
+    });
+    (names, failures)
 }
 
-/// Run one concurrent scenario under its own name.
-fn run_one_of(scenario: &str, index: usize) -> Result<()> {
-    let name = format!("{scenario}-{index}");
-    with_scope(&name, |scope| {
+/// Run one concurrent scenario under the unit name it was given.
+fn run_one_of(unit: &str) -> Result<()> {
+    with_unit(unit.to_owned(), |scope| {
         let output = run_scoped(
             scope.unit(),
             ROUTINE_RUNTIME_CAP,
@@ -240,7 +267,7 @@ fn run_one_of(scenario: &str, index: usize) -> Result<()> {
         )?;
         ensure!(
             output.status.success(),
-            "concurrent scenario {index} should exit 0, got {:?}",
+            "{unit} should exit 0, got {:?}",
             output.status
         );
         Ok(())

@@ -8325,13 +8325,24 @@ collected unit is therefore fabricated, and reporting it as evidence turns "the
 unit is gone" into a false success. `Result` is only meaningful on a unit whose
 `LoadState` is `loaded`.
 
-The same rule explains an observation from 2026-11-01, when several
-`netsuke-kani-wrapper-<pid>-ok.scope` units were found failed even though their
-payloads echoed and exited zero. The `-ok` in the name is the test scenario,
-not a claim about the scope: those units were stopped by a runtime deadline
-that fired during teardown, which is the second disagreement above. No wrapper
-flag was at fault, and the suite now uses a wide runtime cap for scenarios that
-expect their payload to finish, so the deadline cannot fire underneath them.
+The same rule bounds what can be concluded from an observation on 2026-11-01,
+when two `netsuke-kani-wrapper-<pid>-ok.scope` units were among seven retained
+wrapper scopes reported failed even though their payload scripts echoed and
+exited zero. The `-ok` in the name is the test scenario, not a claim about the
+scope, so the name establishes nothing about the manager's `Result=`.
+
+What was *reproduced* is a reachable cause rather than that cause: a zero-exit
+payload leaves the manager free to record `Result=timeout`, and a short runtime
+cap makes that reachable while the pipeline tears down. The units themselves
+had been reset before this investigation began and the user journal no longer
+covers that date, so their individual `Result=` values cannot now be recovered,
+and no root cause is claimed for them. No wrapper flag was at fault.
+
+Two changes make a recurrence diagnosable rather than inferred. The routine
+scenarios use a wide runtime cap and assert no timing bound, so the deadline
+cannot fire underneath a payload that is expected to finish; and a scenario
+that does retain a failed unit reports its observed `Result=`, caller status
+and journal instead of vanishing at collection.
 
 #### Cleaning up a failed scope
 
@@ -8348,16 +8359,36 @@ it is reset, and the stop is bounded by the scope's own `TimeoutStopSec`.
 One case cannot be cleaned up in-process. Nextest terminates a test that
 overruns its allowance by signalling the test's process group, which kills the
 test before any teardown can run, and a unit that is active at that moment is
-left behind. The residual units are recognizable by their shared prefix, so
-recovery after a killed run is prefix-scoped and uses a read-only query first:
+left behind. Such a unit is *not* failed, so a failed-only query does not list
+it and `reset-failed` does not stop it: resetting a running scope returns
+success and leaves its payload running. Recovery has to stop the active units
+first, wait for them, and only then reset whatever is left failed.
+
+The residual units are recognizable by their shared prefix, which includes the
+pid of the test process that created them. That is what keeps the recovery from
+touching a concurrent run. List both states first, without changing anything:
 
 ```bash
-systemctl --user list-units --all --state=failed --no-legend 'netsuke-kani-wrapper-*'
-systemctl --user reset-failed 'netsuke-kani-wrapper-<pid>-*'
+prefix=netsuke-kani-wrapper-<pid>
+systemctl --user list-units --all --no-legend --plain \
+    --state=active,failed "$prefix-*"
 ```
 
-The prefix includes the pid of the test process that created the unit, which is
-what keeps that reset from touching a concurrent run.
+Then stop each active unit by its exact name, wait for it to leave the active
+states, and reset the units that are left failed:
+
+```bash
+systemctl --user stop "$prefix-<scenario>.scope"
+until [ "$(systemctl --user show -P ActiveState "$prefix-<scenario>.scope")" \
+        = inactive ]; do
+    sleep 1
+done
+systemctl --user reset-failed "$prefix-<scenario>.scope"
+```
+
+The stop is bounded by the scope's own `TimeoutStopSec`, and a unit that has
+already unloaded answers `not loaded` rather than failing the sequence: the
+state the recovery wanted is the state the manager reached by itself.
 
 The wrapper's own end-to-end suite is `tests/kani_scope_wrapper_e2e_tests.rs`,
 run by `make test-kani-scope-wrapper`; it exercises the documented shape at
