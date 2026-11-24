@@ -252,35 +252,56 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     /// has no owning region left to restore, and guessing one would describe the
     /// script-level quotes from state that came from another region.
     fn update_quote_context(&mut self, pos: usize, ch: char) -> Result<bool, IrGenError> {
-        if let Some(region) = self.backtick_region
-            && ch == '`'
-        {
-            self.close_backtick_region(region)?;
-            return Ok(true);
+        if let Some(handled) = self.update_backtick_context(ch)? {
+            return Ok(handled);
         }
-        if let Some(region) = self.backtick_region.as_mut()
-            && self.command_substitutions.len() == region.owner_depth
-        {
-            return Ok(region.toggle_body_quote(ch));
-        }
-
         if let Some(next) = self.update_ansi_c_context(pos, ch) {
             return Ok(next);
         }
+        Ok(self.update_region_quote(ch))
+    }
 
+    /// Apply quote delimiters that belong to an open backtick region.
+    ///
+    /// Returns `None` when no backtick region decides the character and the
+    /// innermost region's own quoting must.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when the closing backtick's recorded
+    /// depth no longer matches the active `$()` depth.
+    fn update_backtick_context(&mut self, ch: char) -> Result<Option<bool>, IrGenError> {
+        let Some(region) = self.backtick_region else {
+            return Ok(None);
+        };
+        if ch == '`' {
+            self.close_backtick_region(region)?;
+            return Ok(Some(true));
+        }
+        if self.command_substitutions.len() != region.owner_depth {
+            return Ok(None);
+        }
+        let Some(open) = self.backtick_region.as_mut() else {
+            return Ok(Some(false));
+        };
+        Ok(Some(open.toggle_body_quote(ch)))
+    }
+
+    /// Apply a quote delimiter to the innermost region and report whether it was one.
+    fn update_region_quote(&mut self, ch: char) -> bool {
         let owner_depth = self.command_substitutions.len();
         let quote_context = self.active_quote_context_mut();
         if toggle_quote_context(quote_context, ch) {
-            return Ok(true);
+            return true;
         }
-        if ch == '`' && *quote_context != ShellQuoteContext::SingleQuoted {
-            self.backtick_region = Some(BacktickRegion::new(*quote_context, owner_depth));
-            // The body is its own command region, so its `${ }` nesting is
-            // counted separately and the enclosing count resumes when it ends.
-            self.posix_lexical.enter_command_substitution_region();
-            return Ok(true);
+        if ch != '`' || *quote_context == ShellQuoteContext::SingleQuoted {
+            return false;
         }
-        Ok(false)
+        self.backtick_region = Some(BacktickRegion::new(*quote_context, owner_depth));
+        // The body is its own command region, so its `${ }` nesting is counted
+        // separately and the enclosing count resumes when it ends.
+        self.posix_lexical.enter_command_substitution_region();
+        true
     }
 
     /// Restore a closing backtick's saved quote context into its owning region.
