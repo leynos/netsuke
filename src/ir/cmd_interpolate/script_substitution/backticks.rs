@@ -6,7 +6,7 @@
 //! traversal within the repository's module-size cap.
 
 use super::super::{IrGenError, RejectionReason, invalid_command_error};
-use super::{ScriptSubstitutionTraversal, ShellQuoteContext};
+use super::ShellQuoteContext;
 
 /// Record the shell region that opened a backtick command substitution.
 ///

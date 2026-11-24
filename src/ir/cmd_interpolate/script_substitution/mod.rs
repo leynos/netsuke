@@ -23,7 +23,7 @@ mod escapes;
 
 mod heredoc;
 
-use backticks::{BacktickRegion, toggle_quote_context};
+use backticks::BacktickRegion;
 use delimiters::ScriptCommandSubstitution;
 
 /// Track quote context while interpolating one POSIX or Bash script.
