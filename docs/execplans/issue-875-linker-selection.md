@@ -153,8 +153,23 @@ reads.
 - [x] (2026-11-24) The mutation dispatch reached `Run setup commands` on all
   six shards and **every one succeeded**, so `make check-build-tools`, the
   `linker`-key resolution and the wrapper check all hold on the real worker.
-- [ ] Record the shard baselines and the mutant outcomes when the dispatch
-  finishes, then move the pull request to ready.
+- [x] (2026-11-24) **The worker evidence is complete for this change.** Shard 0
+  of dispatch 45406364928 recorded, verbatim:
+  `build-tools: mold 2.41.0 at /opt/hostedtoolcache/mold/2.41.0-…/bin/mold`,
+  `target.'cfg(target_os = "linux")'.linker = ".cargo/mold-linker"`,
+  `RUSTFLAGS=-D warnings`, `NETSUKE_PLATFORM_LINKER=<unset>`,
+  `Found 1079 mutants to test`, and
+  `ok Unmutated baseline in 132s build + 72s test`. At least ten mutants were
+  then evaluated and reported (`MISSED`) before GitHub shut the runner down.
+- **Recording (2026-11-24): the shard's `failure` conclusion is an
+  infrastructure event, not a verdict.** The step table shows
+  `Run mutation testing` as `cancelled` and the log ends with
+  `##[error]The runner has received a shutdown signal`.
+  `Upload mutation report` is `skipped`, so no artefact exists for that shard —
+  the run log is the only evidence, and reading the conclusion alone would
+  misreport it.
+- [ ] Confirm the packaging fix on a release dry run at the current head, then
+  move the pull request to ready.
 
 ## Surprises & discoveries
 
