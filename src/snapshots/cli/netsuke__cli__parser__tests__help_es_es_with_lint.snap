@@ -1,5 +1,5 @@
 ---
-source: src/cli/parser_tests.rs
+source: src/cli/parser/tests.rs
 expression: rendered_help
 ---
 Netsuke transforma manifiestos YAML + Jinja en grafos Ninja reproducibles y ejecuta Ninja con valores seguros.
@@ -98,6 +98,11 @@ Options:
           Limitar los objetivos y las acciones expandidos desde un manifiesto.
 
           [default: 50000]
+
+      --manifest-expanded-bytes <BYTES>
+          Limitar los bytes retenidos por las entradas foreach expandidas.
+
+          [default: 268435456]
 
       --json
           Emitir salida JSON legible por máquinas.

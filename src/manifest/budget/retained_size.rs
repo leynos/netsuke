@@ -341,7 +341,7 @@ mod tests {
     #[test]
     fn traversal_stops_at_the_ceiling_for_an_endless_iterable() {
         let endless = || std::iter::repeat_with(|| Value::from(1));
-        let value = Value::make_object_iterable((), move |_| Box::new(endless()));
+        let value = Value::make_object_iterable((), move |()| Box::new(endless()));
 
         assert_eq!(
             item_value_bytes(&value, 1_000),

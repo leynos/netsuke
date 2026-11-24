@@ -1,5 +1,5 @@
 ---
-source: src/cli/parser_tests.rs
+source: src/cli/parser/tests.rs
 expression: rendered_help
 ---
 Netsuke transforms YAML + Jinja manifests into reproducible Ninja graphs and runs Ninja with safe defaults.
@@ -98,6 +98,11 @@ Options:
           Limit targets and actions expanded from one manifest.
 
           [default: 50000]
+
+      --manifest-expanded-bytes <BYTES>
+          Limit bytes retained by expanded foreach entries.
+
+          [default: 268435456]
 
       --json
           Emit machine-readable JSON output.

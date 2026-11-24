@@ -70,8 +70,8 @@ pub(crate) fn add_counting_range(
     env: &mut minijinja::Environment<'static>,
     sequence: &CountingSequence,
 ) {
-    let sequence = sequence.clone();
+    let shared = sequence.clone();
     env.add_function("counting_range", move |_kwargs: Kwargs| -> Value {
-        counting_value(&sequence)
+        counting_value(&shared)
     });
 }
