@@ -914,6 +914,7 @@ example `unsupported heredoc boundary: command substitution newline`.
 See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
 the full heredoc contract.
+
 ## Backtick substitutions restore their owning region
 
 A closing backtick now restores the quote state of the shell region that opened
