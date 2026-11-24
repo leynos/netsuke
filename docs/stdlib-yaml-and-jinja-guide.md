@@ -218,14 +218,19 @@ Collection filters are pure and preserve input order.
   sequences. Example: `{{ ['a', none, '', 'b'] | compact | join(',') }}`
   produces `a,b`.
 
-Each `flatten` call is bounded by fixed ceilings: at most 1,000,000 traversal
-visits (containers included), at most 100,000 retained leaves, and a nesting
-depth of at most 128. A breach raises an `InvalidOperation` error naming the
-ceiling through `stdlib.collections.flatten.visit_limit`,
+`flatten` is bounded by fixed ceilings: at most 1,000,000 traversal visits
+(containers included), at most 100,000 retained leaves, and a nesting depth of
+at most 128. A breach raises an `InvalidOperation` error naming the ceiling
+through `stdlib.collections.flatten.visit_limit`,
 `stdlib.collections.flatten.item_limit`, or
-`stdlib.collections.flatten.depth_limit`. The ceilings are per call and are
-identical during manifest discovery, including `netsuke help targets`, and
-during full build rendering; they are not configurable.
+`stdlib.collections.flatten.depth_limit`.
+
+The visit and leaf ceilings are shared by every `flatten` call in one manifest
+load, so a template loop that calls the filter repeatedly draws from the same
+allowance rather than multiplying its work by the iteration count. The depth
+ceiling applies to each traversal. The ceilings are identical during manifest
+discovery, including `netsuke help targets`, and during full build rendering,
+and they are not configurable.
 
 The ceilings exist because MiniJinja sequences share their descendants, so a
 compact template can describe an expansion far larger than the template that

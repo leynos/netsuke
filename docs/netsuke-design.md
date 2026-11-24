@@ -2286,24 +2286,32 @@ Implementation notes for collection filters:
 - `flatten` recurses through nested sequences and iterables; scalars raise an
   `InvalidOperation` error to avoid silently iterating over strings or other
   unintended inputs.
-- `flatten` carries one per-call traversal allowance, owned by
-  `src/stdlib/collections/flatten.rs` as `FlattenLimits`. The allowance charges
-  every yielded item (containers included) as a visit, every retained leaf, and
-  the depth of each item, and it checks each ceiling before the traversal
-  descends or appends. The defaults are 1,000,000 visits, 100,000 retained
-  leaves, and a nesting depth of 128. A breach is a localized
+- `flatten` carries one traversal allowance, owned by
+  `src/stdlib/collections/flatten.rs` as `FlattenLimits` and `FlattenBudget`.
+  The traversal charges every yielded item (containers included) as a visit,
+  every retained leaf, and the depth of each item, and it checks each ceiling
+  before descending or appending. The defaults are 1,000,000 visits, 100,000
+  retained leaves, and a nesting depth of 128. A breach is a localized
   `InvalidOperation` error naming the ceiling.
+- `collections::register_filters` creates one `FlattenBudget` and the registered
+  filter captures it, so the visit and leaf ceilings are **shared by every call
+  on that environment**, not per call. An environment is built once per
+  manifest load, which matches the scope `ManifestBudget` uses, so a template
+  loop cannot multiply the native work by its iteration count. Depth is checked
+  per traversal. The budget is a value captured by the filter closure: it is
+  neither global process state nor object-identity tracking, and a fresh
+  environment starts a fresh budget.
 - The allowance sits outside `ManifestBudgetLimits` deliberately.
   [ADR-0050](adrs/adr-0050-bound-manifest-template-evaluation.md) bounds
   engine-observable work: fuel, rendered output, accounted source, and
   expansion entries. MiniJinja fuel counts engine instructions and does not
   meter the native loop inside a filter, while the budget types contain only
-  accounting data with adapter-owned diagnostics. `FlattenLimits` is a fixed
+  accounting data with adapter-owned diagnostics. `FlattenBudget` is a fixed
   traversal-safety bound with no operator surface, so it belongs to the filter
   that owns the traversal. The visit ceiling equals `DEFAULT_EVALUATION_FUEL`,
-  so one native filter call cannot outvisit the engine's default instruction
-  allowance for the whole evaluation.
-- The allowance detects a shared or self-nesting graph by counting visits and
+  so all native filter calls on one environment cannot outvisit the engine's
+  default instruction allowance for a whole evaluation.
+- The budget detects a shared or self-nesting graph by counting visits and
   depth rather than by recognizing a cycle. The public MiniJinja API exposes no
   stable identity for a host object, so there is no descendant identity to
   compare.

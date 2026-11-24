@@ -5,9 +5,9 @@
 //! graph would only show that *some* limit fires; these prove which limit fires
 //! and where.
 
-use super::flatten::{FlattenLimits, flatten_filter_with_limits};
+use super::flatten::{FlattenBudget, FlattenLimits, flatten_filter};
 use super::*;
-use anyhow::{Result, anyhow, bail, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use minijinja::context;
 use rstest::rstest;
 use std::sync::{Arc, OnceLock};
@@ -139,7 +139,8 @@ fn flatten_threshold_cases(
     #[case] subject: Value,
     #[case] expectation: Expectation,
 ) -> Result<()> {
-    match (flatten_filter_with_limits(&subject, &limits), expectation) {
+    let budget = FlattenBudget::new(limits);
+    match (flatten_filter(&subject, &budget), expectation) {
         (Ok(flattened), Expectation::Retains(expected)) => {
             let retained = flattened.try_iter()?.count();
             ensure!(
@@ -229,9 +230,47 @@ fn flatten_bounds_unbounded_graphs(
     #[case] fragment: &str,
 ) -> Result<()> {
     let subject = unbounded_graph(graph);
-    let Err(err) = flatten_filter_with_limits(&subject, &limits) else {
+    let budget = FlattenBudget::new(limits);
+    let Err(err) = flatten_filter(&subject, &budget) else {
         bail!("{graph:?} must be rejected with {fragment:?}");
     };
+    ensure_limit_error(&err, fragment)
+}
+
+/// Every call on one budget draws from the same allowance.
+///
+/// This is the property the per-call design lacked: a template loop calling
+/// the filter repeatedly must not multiply the native work. The first row
+/// charges visits only (two empty containers, no leaf), the second charges
+/// leaves, so a design that reset either counter per call fails here.
+#[rstest]
+#[case::visits(
+    FlattenLimits::for_test(8, 4, 10),
+    Value::from(vec![Value::from(Vec::<Value>::new())]),
+    4,
+    "exceeded the traversal visit limit"
+)]
+// Two leaves per call against a ceiling of three: the first call fits, the
+// second would retain four.
+#[case::leaves(
+    FlattenLimits::for_test(8, 100, 3),
+    Value::from(vec![Value::from(vec![Value::from(1), Value::from(2)])]),
+    1,
+    "exceeded the retained item limit"
+)]
+fn flatten_charges_every_call_against_one_budget(
+    #[case] limits: FlattenLimits,
+    #[case] subject: Value,
+    #[case] calls_before_breach: usize,
+    #[case] fragment: &str,
+) -> Result<()> {
+    let budget = FlattenBudget::new(limits);
+    for call in 0..calls_before_breach {
+        flatten_filter(&subject, &budget)
+            .with_context(|| format!("call {call} should fit the shared allowance"))?;
+    }
+    let err = flatten_filter(&subject, &budget)
+        .expect_err("the call after the last fitting one must exceed the shared allowance");
     ensure_limit_error(&err, fragment)
 }
 

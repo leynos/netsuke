@@ -23,9 +23,17 @@ mod tests;
 
 /// Register the collection filters (`uniq`, `flatten`, `compact`, `group_by`)
 /// on an environment.
+///
+/// One [`flatten::FlattenBudget`] is created here and captured by the
+/// `flatten` filter, so every call on this environment draws from the same
+/// allowance. An environment is built once per manifest load, which is the
+/// scope the manifest budget uses.
 pub(crate) fn register_filters(env: &mut Environment<'_>) {
+    let flatten_budget = Arc::new(flatten::FlattenBudget::new(flatten::FlattenLimits::DEFAULT));
     env.add_filter("uniq", |values: Value| uniq_filter(&values));
-    env.add_filter("flatten", |values: Value| flatten::flatten_filter(&values));
+    env.add_filter("flatten", move |values: Value| {
+        flatten::flatten_filter(&values, &flatten_budget)
+    });
     env.add_filter("compact", |values: Value| compact_filter(&values));
     env.add_filter("group_by", |values: Value, attr: String| {
         group_by_filter(&values, &attr)

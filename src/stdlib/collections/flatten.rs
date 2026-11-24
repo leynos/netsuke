@@ -2,18 +2,24 @@
 //!
 //! `MiniJinja` sequences share their descendants, so a compact template graph
 //! can describe an expansion far larger than the template that built it. The
-//! traversal therefore charges one allowance for every yielded item, every
+//! traversal therefore charges one budget for every yielded item, every
 //! retained leaf, and every level of nesting. Charging happens before the
-//! traversal descends or appends, so the allowance rejects a graph rather than
+//! traversal descends or appends, so the budget rejects a graph rather than
 //! completing an expansion it cannot afford.
 //!
-//! The allowance is per filter call, is not shared across calls, and tracks no
-//! object identity. The public `MiniJinja` API exposes no stable identity for
-//! a host object, so a cycle is detected by counting visits and depth rather
-//! than by recognizing a repeated descendant.
+//! One [`FlattenBudget`] is created by [`super::register_filters`] and captured
+//! by the registered filter, so every `flatten` call on one environment draws
+//! from the same allowance. That scope is one manifest load, which is the same
+//! scope [`crate::manifest::budget::ManifestBudget`] uses; a template loop
+//! cannot multiply the work by calling the filter repeatedly. The budget is not
+//! global process state and tracks no object identity: the public `MiniJinja`
+//! API exposes no stable identity for a host object, so a cycle is detected by
+//! counting visits and depth rather than by recognizing a repeated descendant.
 //!
 //! Only [`super::register_filters`] may register this filter; it is the single
 //! registration path for full rendering, discovery, and manifest queries.
+
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use minijinja::{
     Error, ErrorKind,
@@ -22,7 +28,7 @@ use minijinja::{
 
 use crate::localization::{self, keys};
 
-/// Fixed resource ceilings applied to one `flatten` call.
+/// Fixed resource ceilings applied to one registered environment.
 #[expect(
     clippy::struct_field_names,
     reason = "Each field is a ceiling, and the `max_` prefix keeps a limit \
@@ -30,26 +36,26 @@ use crate::localization::{self, keys};
 )]
 #[derive(Clone, Copy, Debug)]
 pub(super) struct FlattenLimits {
-    /// Maximum depth of any item in the traversal.
+    /// Maximum depth of any item in one traversal.
     ///
     /// Immediate members of the filter subject are depth one, and each
     /// container beneath them adds one. The ceiling also bounds the native
     /// recursion: a depth of 128 keeps the recursive frames far inside every
-    /// supported platform's stack, so the allowance rejects a deep graph
-    /// before the process can exhaust its stack.
+    /// supported platform's stack, so the budget rejects a deep graph before
+    /// the process can exhaust its stack.
     max_depth: usize,
-    /// Maximum items yielded by the traversal, containers included.
+    /// Maximum items yielded by all calls in the environment.
     ///
     /// This equals the default manifest evaluation fuel. `MiniJinja` fuel
     /// counts engine instructions and does not meter work inside a native
-    /// filter, so the visit ceiling gives one filter call the same order of
-    /// native item visits as the engine's default instruction allowance for a
-    /// whole evaluation.
+    /// filter, so the visit ceiling gives the whole environment the same order
+    /// of native item visits as the engine's default instruction allowance for
+    /// one evaluation.
     max_visits: usize,
-    /// Maximum leaves retained in the flattened result.
+    /// Maximum leaves retained by all calls in the environment.
     ///
-    /// One tenth of the visit ceiling: a graph may inspect ten items for each
-    /// leaf it keeps, which still holds the result allocation to a fixed
+    /// One tenth of the visit ceiling: the traversal may inspect ten items for
+    /// each leaf it keeps, which still holds the result allocation to a fixed
     /// fraction of the traversal work.
     max_leaves: usize,
 }
@@ -77,16 +83,6 @@ impl FlattenLimits {
     }
 }
 
-/// Mutable counters shared by one flatten traversal.
-struct FlattenAllowance<'limits> {
-    /// Ceilings this traversal charges against.
-    limits: &'limits FlattenLimits,
-    /// Items yielded so far, containers and leaves alike.
-    visits: usize,
-    /// Leaves retained so far.
-    leaves: usize,
-}
-
 /// Which counter one traversal charge is applied to.
 #[derive(Clone, Copy, Debug)]
 enum Charge {
@@ -96,38 +92,63 @@ enum Charge {
     Leaf,
 }
 
-impl<'limits> FlattenAllowance<'limits> {
-    /// Start a fresh allowance for one filter call.
-    const fn new(limits: &'limits FlattenLimits) -> Self {
+/// Counters shared by every `flatten` call on one registered environment.
+#[derive(Debug, Default)]
+struct FlattenCounters {
+    /// Items yielded by every call so far.
+    visits: AtomicUsize,
+    /// Leaves retained by every call so far.
+    leaves: AtomicUsize,
+}
+
+/// The allowance one registered `flatten` filter draws from.
+#[derive(Debug)]
+pub(super) struct FlattenBudget {
+    /// Ceilings this budget charges against.
+    limits: FlattenLimits,
+    /// Counters shared by every call.
+    counters: FlattenCounters,
+}
+
+impl FlattenBudget {
+    /// Create the budget for one registered environment.
+    pub(super) const fn new(limits: FlattenLimits) -> Self {
         Self {
             limits,
-            visits: 0,
-            leaves: 0,
+            counters: FlattenCounters {
+                visits: AtomicUsize::new(0),
+                leaves: AtomicUsize::new(0),
+            },
         }
     }
 
     /// Charge one visit or retained leaf against its ceiling.
     ///
+    /// The counter is advanced before the comparison so no read-modify-write
+    /// race can admit two charges for the last unit. A rejected charge leaves
+    /// the counter one past its ceiling, which is visible only in accounting;
+    /// the traversal aborts on the first breach.
+    ///
     /// # Errors
     ///
     /// Returns an error naming the exhausted ceiling.
-    fn record(&mut self, charge: Charge) -> Result<(), Error> {
-        let (used, ceiling, limit_key) = match charge {
+    fn record(&self, charge: Charge) -> Result<(), Error> {
+        let (counter, ceiling, limit_key) = match charge {
             Charge::Visit => (
-                &mut self.visits,
+                &self.counters.visits,
                 self.limits.max_visits,
                 keys::STDLIB_COLLECTIONS_FLATTEN_VISIT_LIMIT,
             ),
             Charge::Leaf => (
-                &mut self.leaves,
+                &self.counters.leaves,
                 self.limits.max_leaves,
                 keys::STDLIB_COLLECTIONS_FLATTEN_ITEM_LIMIT,
             ),
         };
-        if *used >= ceiling {
+        let charged = counter.fetch_add(1, Ordering::Relaxed) + 1;
+        if charged > ceiling {
             return Err(limit_error(limit_key, ceiling));
         }
-        *used += 1;
         Ok(())
     }
 
@@ -149,38 +170,23 @@ impl<'limits> FlattenAllowance<'limits> {
 
 /// Flatten nested sequences within `values` into a single flat sequence.
 ///
-/// # Errors
-///
-/// Returns an error when the subject cannot be iterated, when a top-level item
-/// is not a sequence or iterable, when a nested iterable cannot be iterated, or
-/// when the traversal exceeds one of the [`FlattenLimits::DEFAULT`] ceilings.
-pub(super) fn flatten_filter(values: &Value) -> Result<Value, Error> {
-    flatten_filter_with_limits(values, &FlattenLimits::DEFAULT)
-}
-
-/// Flatten `values` under an explicit allowance.
-///
-/// The result is built directly from the retained leaves; it is not
-/// serialized a second time, so the traversal sees each leaf exactly once.
+/// The result is built directly from the retained leaves; it is not serialized
+/// a second time, so the traversal sees each leaf exactly once.
 ///
 /// # Errors
 ///
 /// Returns an error when the subject cannot be iterated, when a top-level item
 /// is not a sequence or iterable, when a nested iterable cannot be iterated, or
-/// when any of `limits` is exhausted.
-pub(super) fn flatten_filter_with_limits(
-    values: &Value,
-    limits: &FlattenLimits,
-) -> Result<Value, Error> {
-    let mut allowance = FlattenAllowance::new(limits);
+/// when `budget` is exhausted.
+pub(super) fn flatten_filter(values: &Value, budget: &FlattenBudget) -> Result<Value, Error> {
     let mut flattened = Vec::new();
 
     for item in values.try_iter()? {
-        allowance.record(Charge::Visit)?;
-        allowance.check_depth(1)?;
+        budget.record(Charge::Visit)?;
+        budget.check_depth(1)?;
         match item.kind() {
             ValueKind::Seq | ValueKind::Iterable => {
-                collect_flattened_values(&item, 1, &mut allowance, &mut flattened)?;
+                collect_flattened_values(&item, 1, budget, &mut flattened)?;
             }
             kind => {
                 return Err(Error::new(
@@ -210,19 +216,19 @@ pub(super) fn flatten_filter_with_limits(
 fn collect_flattened_values(
     value: &Value,
     depth: usize,
-    allowance: &mut FlattenAllowance<'_>,
+    budget: &FlattenBudget,
     output: &mut Vec<Value>,
 ) -> Result<(), Error> {
     for nested in value.try_iter()? {
-        allowance.record(Charge::Visit)?;
+        budget.record(Charge::Visit)?;
         let child_depth = depth + 1;
-        allowance.check_depth(child_depth)?;
+        budget.check_depth(child_depth)?;
         match nested.kind() {
             ValueKind::Seq | ValueKind::Iterable => {
-                collect_flattened_values(&nested, child_depth, allowance, output)?;
+                collect_flattened_values(&nested, child_depth, budget, output)?;
             }
             _ => {
-                allowance.record(Charge::Leaf)?;
+                budget.record(Charge::Leaf)?;
                 output.push(nested);
             }
         }

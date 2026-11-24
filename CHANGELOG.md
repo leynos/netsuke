@@ -168,12 +168,13 @@
 <!-- markdownlint-disable-next-line MD024 -->
 ### Fixed
 
-- Bound `flatten`'s recursive expansion: each call visits at most 1,000,000
-  items including containers, retains at most 100,000 leaves, and rejects
-  nesting deeper than 128 levels, reporting a localized error that names the
-  ceiling. The fixed limits apply per call to manifest discovery and full
-  rendering alike, so a compact template graph with shared descendants cannot
-  force an exponential expansion
+- Bound `flatten`'s recursive expansion: one manifest load shares a budget of
+  1,000,000 item visits including containers and 100,000 retained leaves, and
+  rejects nesting deeper than 128 levels, reporting a localized error that
+  names the ceiling. The visit and leaf ceilings are shared by every call, so a
+  template loop cannot multiply the work, and they apply to manifest discovery
+  and full rendering alike, so a compact template graph with shared descendants
+  cannot force an exponential expansion
   ([#973](https://github.com/leynos/netsuke/issues/973))
 - Bound `shell_join`'s intermediate allocation: the filter appends into one
   buffer under a fixed 1 MiB ceiling and rejects an over-limit join with

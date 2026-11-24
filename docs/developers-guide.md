@@ -245,23 +245,28 @@ rendering still registers the full standard library; this restriction applies
 only to query rendering.
 
 The `flatten` filter owns a fixed traversal allowance in
-`src/stdlib/collections/flatten.rs`. `flatten_filter` is a thin wrapper that
-passes `FlattenLimits::DEFAULT` to `flatten_filter_with_limits`; that inner
-function is the `pub(super)` seam the sibling `src/stdlib/collections/tests.rs`
-uses with the test-only `FlattenLimits::for_test` constructor to prove each
-ceiling at its exact threshold and one past it. Keep the seam private to the
-collections module: a template cannot choose its own ceiling, and production
-code has no reason to pass anything but the default. The ceilings — 1,000,000
-visits, 100,000 retained leaves, and depth 128 — are fixed. Changing one is a
-behavioural change to discovery and build rendering alike, so the regression
-coverage in `tests/std_filter_tests/collection_filters/flatten_tests.rs` and
-the exact-threshold unit cases must change with it.
+`src/stdlib/collections/flatten.rs`. `collections::register_filters` builds one
+`FlattenBudget` from `FlattenLimits::DEFAULT` and the filter closure captures
+it, so the visit and leaf ceilings are shared by every call on that
+environment; an environment is built once per manifest load, which matches the
+scope `ManifestBudget` uses. `flatten_filter` takes that budget as a
+`pub(super)` parameter, which is the seam the sibling
+`src/stdlib/collections/tests.rs` uses with the test-only
+`FlattenLimits::for_test` constructor to prove each ceiling at its exact
+threshold and one past it, and to prove two calls draw from one allowance. Keep
+the seam private to the collections module: a template cannot choose its own
+ceiling, and production code has no reason to pass anything but the default.
+The ceilings — 1,000,000 visits, 100,000 retained leaves, and depth 128 — are
+fixed. Changing one is a behavioural change to discovery and build rendering
+alike, so the regression coverage in
+`tests/std_filter_tests/collection_filters/flatten_tests.rs` and the
+exact-threshold unit cases must change with it.
 
 Three constraints remain. A single `next()` call on a custom host object can
 still block or allocate without bound, because the allowance bounds the number
-of items requested, not the cost of one item. Repeated `flatten` calls are each
-bounded, but their combined engine work and rendered output remain governed by
-the MiniJinja fuel and manifest output budgets. MiniJinja 2.24.0's
+of items requested, not the cost of one item. The budget bounds the filter's
+native traversal only; the surrounding engine work and rendered output remain
+governed by the MiniJinja fuel and manifest output budgets. MiniJinja 2.24.0's
 serialization of a retained map leaf is not covered by an upstream guarantee;
 `flatten_does_not_enumerate_a_map_leaf` pins the behaviour this code depends on
 by asserting that flatten treats a map as a leaf and does not enumerate it
