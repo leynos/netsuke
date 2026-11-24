@@ -114,6 +114,11 @@
   value is ignored rather than resolved against the working directory, as is a
   Windows drive-relative rooted value such as `\config`
   ([#986](https://github.com/leynos/netsuke/issues/986))
+- Select the pinned `mold` through a repository-owned Cargo `linker` wrapper,
+  so development builds keep the linker even when a caller exports its own
+  `RUSTFLAGS`, as the mutation worker does. Release, packaging, coverage, and
+  Kani opt out with `NETSUKE_PLATFORM_LINKER=1` and keep the platform linker
+  ([#875](https://github.com/leynos/netsuke/issues/875))
 
 ### Security
 

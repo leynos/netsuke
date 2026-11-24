@@ -68,6 +68,10 @@ output and some leaf files so the long-lived structure remains visible.
   coding rules.
 - `Cargo.toml` and `Cargo.lock`: Workspace package metadata and locked
   dependency graph.
+- `Cross.toml`: `cross` configuration for the packaged Linux builds. It passes
+  `NETSUKE_PLATFORM_LINKER` into the build container, because `cross` forwards
+  only a short allowlist of host variables and the build standard excludes
+  packaging from mold through that variable.
 - `Makefile`: Canonical quality-gate and workflow commands. Prefer these
   targets over direct tool invocations.
 - `README.md`: Public project overview and first contact documentation.
@@ -83,11 +87,13 @@ output and some leaf files so the long-lived structure remains visible.
   script is a manual reviewer aid and is not wired into continuous integration.
 - `.cargo/`: Cargo configuration that Cargo auto-discovers. It holds the
   repository's build standard: the `rustflags` every build takes — the parallel
-  `rustc` frontend, plus the `mold` linker under a Linux-only `cfg` table. It
-  names no codegen backend, and a contract refuses one. Because it reaches
-  release and coverage builds too, those two shapes are excluded by assigning
-  `RUSTFLAGS` at the point they run; a setting that is only safe for the
-  development loop does not belong here. See
+  `rustc` frontend, plus the `mold` linker under a Linux-only `cfg` table — and
+  the `mold-linker` wrapper named by that table's `linker` key, which keeps
+  mold selected when a caller exports its own `RUSTFLAGS`. It names no codegen
+  backend, and a contract refuses one. Because it reaches release and coverage
+  builds too, those shapes are excluded by assigning `RUSTFLAGS` at the point
+  they run and setting `NETSUKE_PLATFORM_LINKER=1`, which the wrapper reads; a
+  setting that is only safe for the development loop does not belong here. See
   [developers' guide](developers-guide.md).
 - `.github/actions/`: Reusable GitHub Actions used by workflow definitions.
 - `.github/workflows/`: Continuous Integration (CI), release, packaging, and

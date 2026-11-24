@@ -64,6 +64,7 @@ fn the_configuration_repeats_every_shared_flag_in_both_rustflags_sources() -> Re
 #[rstest]
 #[case::build_rustflags("build.rustflags", "-Zthreads=8")]
 #[case::linux_rustflags("target", "-Clink-arg=-fuse-ld=mold")]
+#[case::linux_linker("target", ".cargo/mold-linker")]
 fn cargo_resolves_the_committed_configuration_to_the_intended_settings(
     #[case] query: &str,
     #[case] expected: &str,

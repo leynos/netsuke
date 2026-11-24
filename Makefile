@@ -93,13 +93,16 @@ DEBUG_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)"
 # Release builds take neither the parallel frontend nor `mold`: assigning
 # `RUSTFLAGS` at all, even to an empty inherited value, displaces the
 # configuration file's `rustflags` tables, which is the whole mechanism. The
-# configuration names no codegen backend at all, so nothing else is needed.
-RELEASE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS-}"
+# configuration's `linker` key is not displaced, so the wrapper is opted out
+# explicitly; without that, the shipped artefact would still link with `mold`.
+# The configuration names no codegen backend at all, so nothing else is needed.
+RELEASE_RUSTFLAGS = NETSUKE_PLATFORM_LINKER=1 RUSTFLAGS="$${RUSTFLAGS-}"
 # Kani denies warnings like the gates, but takes none of the standard: it drives
 # `rustc` through `kani-compiler` on its own bundled toolchain, so the parallel
 # frontend and `mold` would neither apply nor be honoured there. Inherited flags
-# still survive, since `cargo kani` appends this value to its own.
-KANI_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"
+# still survive, since `cargo kani` appends this value to its own. The linker
+# wrapper is opted out for the same reason.
+KANI_RUSTFLAGS = NETSUKE_PLATFORM_LINKER=1 RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"
 # Command name, resolved by the recipe shell from the curated PATH, which
 # carries `$HOME/.bun/bin` where the global markdownlint install lands.
 MDLINT ?= markdownlint-cli2

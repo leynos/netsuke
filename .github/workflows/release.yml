@@ -591,6 +591,12 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    # `cargo package` runs a verification build, and packaging is excluded from
+    # the build standard. The configuration's `linker` key survives the
+    # `RUSTFLAGS` that `setup-rust` exports, so the wrapper is opted out
+    # explicitly; this job installs no `mold`.
+    env:
+      NETSUKE_PLATFORM_LINKER: '1'
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

@@ -692,9 +692,12 @@ internally facing conventions or practices in `docs/developers-guide.md`.
 The `mold` linker and the parallel `rustc` frontend (`-Zthreads=8`) are the
 **defaults** for development, test, lint, and typecheck builds. They are
 committed to `.cargo/config.toml`, which Cargo auto-discovers, so a bare
-`cargo build` gets them too. The Cranelift codegen backend is deliberately not
-part of the standard and a contract refuses one; the developers' guide records
-why.
+`cargo build` gets them too. The Linux table also names the repository-owned
+`.cargo/mold-linker` wrapper in its `linker` key: an exported `RUSTFLAGS`
+displaces the `rustflags` tables but not that key, so the wrapper is what keeps
+mold selected on a worker that exports its own flags. The Cranelift codegen
+backend is deliberately not part of the standard and a contract refuses one;
+the developers' guide records why.
 
 Run `make install-build-tools` to install the pinned nightly and, on Linux, the
 pinned `mold` release. `make check-build-tools` preflights those prerequisites,
@@ -706,18 +709,23 @@ which the `cfg(target_os = "linux")` gate in the configuration expresses.
 Two build shapes are excluded and must stay excluded:
 
 - **Release and packaging.** The release recipe assigns `RUSTFLAGS` so the
-  configuration's `rustflags` tables do not apply. A shipped artefact is built
-  on the platform linker and a single-threaded frontend.
+  configuration's `rustflags` tables do not apply, and sets
+  `NETSUKE_PLATFORM_LINKER=1` so the `linker` wrapper does not select mold. A
+  shipped artefact is built on the platform linker and a single-threaded
+  frontend.
 - **Coverage.** A build whose output is a measurement is a reproducibility
-  claim. The coverage steps assign `RUSTFLAGS` at the step itself and carry
-  neither `-Zthreads` nor the linker flag.
+  claim. The coverage steps assign `RUSTFLAGS` at the step itself, carry neither
+  `-Zthreads` nor the linker flag, and set `NETSUKE_PLATFORM_LINKER=1` for the
+  same reason.
 
 Cargo picks a single `rustflags` source rather than merging them: a matching
 `[target.*]` table replaces `[build] rustflags`, and an externally set
 `RUSTFLAGS` replaces both. Every gate recipe assigns `RUSTFLAGS` to deny
 warnings, so the standard's flags are restated in the Makefile and composed
 into that value. Changing one source without the other fails a contract test;
-do not "simplify" by deleting a restatement.
+do not "simplify" by deleting a restatement. The `linker` key is not displaced
+by an exported `RUSTFLAGS`, so the exclusions for it are the explicit
+`NETSUKE_PLATFORM_LINKER=1` opt-out, also held by contract tests.
 
 There is no separate accelerated target. `make build`, `make test`,
 `make lint`, and `make typecheck` are the build targets, and they all run on

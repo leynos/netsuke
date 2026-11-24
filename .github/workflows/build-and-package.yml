@@ -145,6 +145,12 @@ jobs:
       # it succeeds. It stays empty on every other platform.
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: >-
         ${{ inputs.platform == 'windows' && 'true' || '' }}
+      # Release and packaging are excluded from the build standard, so the
+      # shipped artefact links with the platform linker. Assigning `RUSTFLAGS`
+      # displaces the configuration's `rustflags` tables but not its `linker`
+      # key, so the exclusion also has to opt the linker wrapper out by name.
+      # The nested `rust-build-release` action exports the assigned value.
+      NETSUKE_PLATFORM_LINKER: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
