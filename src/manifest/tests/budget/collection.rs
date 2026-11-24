@@ -45,15 +45,15 @@ fn owned_labels(key: &metrics::Key) -> Vec<(String, String)> {
 /// An equality check rather than a membership check: an extra label would
 /// still satisfy a membership test, but it would widen the counter's
 /// cardinality and violate the closed-label contract.
-fn has_exact_labels(labels: &[(String, String)], expected: [(&str, &str); 2]) -> bool {
+fn has_exact_labels(labels: &[(String, String)], wanted: [(&str, &str); 2]) -> bool {
     let mut actual: Vec<(&str, &str)> = labels
         .iter()
         .map(|(key, value)| (key.as_str(), value.as_str()))
         .collect();
     actual.sort_unstable();
-    let mut expected = expected.to_vec();
-    expected.sort_unstable();
-    actual == expected
+    let mut wanted = wanted.to_vec();
+    wanted.sort_unstable();
+    actual == wanted
 }
 
 #[rstest]
