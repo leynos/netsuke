@@ -261,69 +261,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         Ok(self.update_region_quote(ch))
     }
 
-    /// Apply quote delimiters that belong to an open backtick region.
-    ///
-    /// Returns `None` when no backtick region decides the character and the
-    /// innermost region's own quoting must.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when the closing backtick's recorded
-    /// depth no longer matches the active `$()` depth.
-    fn update_backtick_context(&mut self, ch: char) -> Result<Option<bool>, IrGenError> {
-        let Some(region) = self.backtick_region else {
-            return Ok(None);
-        };
-        if ch == '`' {
-            self.close_backtick_region(region)?;
-            return Ok(Some(true));
-        }
-        if self.command_substitutions.len() != region.owner_depth {
-            return Ok(None);
-        }
-        let Some(open) = self.backtick_region.as_mut() else {
-            return Ok(Some(false));
-        };
-        Ok(Some(open.toggle_body_quote(ch)))
-    }
-
-    /// Apply a quote delimiter to the innermost region and report whether it was one.
-    fn update_region_quote(&mut self, ch: char) -> bool {
-        let owner_depth = self.command_substitutions.len();
-        let quote_context = self.active_quote_context_mut();
-        if toggle_quote_context(quote_context, ch) {
-            return true;
-        }
-        if ch != '`' || *quote_context == ShellQuoteContext::SingleQuoted {
-            return false;
-        }
-        self.backtick_region = Some(BacktickRegion::new(*quote_context, owner_depth));
-        // The body is its own command region, so its `${ }` nesting is counted
-        // separately and the enclosing count resumes when it ends.
-        self.posix_lexical.enter_command_substitution_region();
-        true
-    }
-
-    /// Restore a closing backtick's saved quote context into its owning region.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when the active `$()` depth no longer
-    /// matches the depth recorded at the opening backtick, which means a frame
-    /// opened or closed on the wrong side of the backtick.
-    fn close_backtick_region(&mut self, region: BacktickRegion) -> Result<(), IrGenError> {
-        if self.command_substitutions.len() == region.owner_depth {
-            *self.active_quote_context_mut() = region.outer_context;
-            self.backtick_region = None;
-            self.posix_lexical.leave_command_substitution_region();
-            return Ok(());
-        }
-        Err(invalid_command_error(
-            self.template.to_owned(),
-            RejectionReason::UnmatchedBacktick,
-        ))
-    }
-
     /// Append a safe replacement or reject a placeholder in a protected region.
     fn append_substitution_or_character(
         &mut self,
