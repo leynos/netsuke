@@ -8374,21 +8374,35 @@ systemctl --user list-units --all --no-legend --plain \
     --state=active,failed "$prefix-*"
 ```
 
-Then stop each active unit by its exact name, wait for it to leave the active
-states, and reset the units that are left failed:
+Then stop each active unit by its exact name, wait for it to reach a terminal
+state, and reset only what is still loaded and failed:
 
 ```bash
-systemctl --user stop "$prefix-<scenario>.scope"
-until [ "$(systemctl --user show -P ActiveState "$prefix-<scenario>.scope")" \
-        = inactive ]; do
+unit="$prefix-<scenario>.scope"
+systemctl --user stop "$unit" || true
+for _ in $(seq 1 30); do
+    state=$(systemctl --user show -P ActiveState "$unit")
+    case "$state" in
+        inactive|failed) break ;;
+    esac
     sleep 1
 done
-systemctl --user reset-failed "$prefix-<scenario>.scope"
+if [ "$(systemctl --user show -P LoadState "$unit")" = loaded ] \
+        && [ "$(systemctl --user show -P ActiveState "$unit")" = failed ]; then
+    systemctl --user reset-failed "$unit"
+fi
 ```
 
-The stop is bounded by the scope's own `TimeoutStopSec`, and a unit that has
-already unloaded answers `not loaded` rather than failing the sequence: the
-state the recovery wanted is the state the manager reached by itself.
+Two details in that sequence are load-bearing. The wait ends on `failed` as
+well as `inactive`: a stop that exhausts the scope's own `TimeoutStopSec`
+leaves the unit `failed`, which is a terminal state, and waiting only for
+`inactive` would loop until the bound above expired. And the reset is
+conditional on the unit still being both loaded and failed: a stop under
+`--collect` unloads the unit itself, and `reset-failed` against a unit that is
+not loaded fails with "Unit … not loaded".
+
+A unit that is already unloaded needs neither step: the state the recovery
+wanted is the state the manager reached by itself.
 
 The wrapper's own end-to-end suite is `tests/kani_scope_wrapper_e2e_tests.rs`,
 run by `make test-kani-scope-wrapper`; it exercises the documented shape at

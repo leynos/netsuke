@@ -107,10 +107,14 @@
 //! that is active at that moment is left behind, and this suite cannot prevent
 //! it: the process that would have cleaned up is gone. The consequence is
 //! bounded — nextest's allowance for this suite is far above the sum of its
-//! caps — but a run that was killed outright may still need
-//! `systemctl --user reset-failed netsuke-kani-wrapper-<pid>-*.scope` by hand.
-//! `docs/developers-guide.md` records that recovery, together with the reason
-//! the prefix is the pid.
+//! caps — but a run that was killed outright may still need manual recovery.
+//!
+//! Such a unit is *active*, not failed, so a `reset-failed` alone does not
+//! clean it up: it returns success and leaves the payload running. The
+//! recovery is to stop each active unit by its exact name first, wait for a
+//! terminal state, and then reset what is left failed.
+//! `docs/developers-guide.md` records the full sequence, together with the
+//! reason the unit prefix carries the pid.
 
 #![cfg(all(unix, target_os = "linux"))]
 
@@ -168,13 +172,14 @@ fn successful_payload_exits_zero_and_capture_is_complete() -> Result<()> {
             String::from_utf8_lossy(&output.stderr),
             outcome.describe()
         );
+        outcome.capture_available()?;
         ensure!(
-            outcome.capture.contains(&marker),
+            outcome.capture_text().contains(&marker),
             "the capture should hold the payload's stdout: {}",
             outcome.describe()
         );
         ensure!(
-            outcome.capture.contains("second-line"),
+            outcome.capture_text().contains("second-line"),
             "the capture should hold every line the payload wrote: {}",
             outcome.describe()
         );
@@ -208,8 +213,9 @@ fn failing_payload_propagates_through_tee_with_pipefail() -> Result<()> {
             outcome.caller_description(),
             outcome.describe()
         );
+        outcome.capture_available()?;
         ensure!(
-            outcome.capture.contains("verifier-failed"),
+            outcome.capture_text().contains("verifier-failed"),
             "a failing payload's output should still be captured: {}",
             outcome.describe()
         );
@@ -240,8 +246,9 @@ fn failing_payload_is_masked_without_pipefail() -> Result<()> {
             outcome.caller_description(),
             outcome.describe()
         );
+        outcome.capture_available()?;
         ensure!(
-            outcome.capture.contains("masked-failure"),
+            outcome.capture_text().contains("masked-failure"),
             "the masked failure should still reach the capture: {}",
             outcome.describe()
         );
@@ -339,8 +346,9 @@ fn collected_scope_propagates_a_failing_status_without_accumulating() -> Result<
             outcome.caller_description(),
             outcome.describe()
         );
+        outcome.capture_available()?;
         ensure!(
-            outcome.capture.contains("verifier-failed"),
+            outcome.capture_text().contains("verifier-failed"),
             "the complete capture must survive collection: {}",
             outcome.describe()
         );

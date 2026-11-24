@@ -96,10 +96,16 @@ fn missing_prerequisite() -> Result<Option<String>> {
                 .to_owned(),
         ));
     };
-    ensure!(
-        !delegated.trim().is_empty(),
-        "/sys/fs/cgroup/cgroup.controllers should list delegated controllers"
-    );
+    // An empty list is the same kind of answer as a missing file: the host
+    // delegates nothing, so the manager cannot create a scope. Reporting it as
+    // a prerequisite keeps it on the skip path outside strict mode; raising it
+    // would fail every scenario on such a host, which is the outcome the
+    // prerequisite check exists to avoid.
+    if delegated.trim().is_empty() {
+        return Ok(Some(
+            "/sys/fs/cgroup/cgroup.controllers lists no delegated controllers".to_owned(),
+        ));
+    }
     Ok(None)
 }
 

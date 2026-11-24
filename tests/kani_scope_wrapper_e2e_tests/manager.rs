@@ -171,7 +171,7 @@ pub(super) fn wait_for_terminal(unit: &str) -> Result<Duration> {
             );
         };
         if matches!(snapshot.active.as_str(), "failed" | "inactive") {
-            return Ok(started.elapsed());
+            return scope_lifetime(unit);
         }
         ensure!(
             started.elapsed() < TERMINAL_CEILING,
@@ -180,6 +180,47 @@ pub(super) fn wait_for_terminal(unit: &str) -> Result<Duration> {
         );
         thread::sleep(POLL_INTERVAL);
     }
+}
+
+/// The scope's own lifetime, from the manager's activation timestamps.
+///
+/// This is not the time spent waiting. `systemd-run --scope` blocks until the
+/// *launcher* dies, which for the piped payload happens at the runtime
+/// deadline; the grace period then runs with the caller already returned. A
+/// clock started after the caller returns would therefore measure the grace
+/// alone — about 3s of a 5s life — and could not tell an additive grace from a
+/// nested one, which is the property the timeout scenarios exist to prove.
+///
+/// The manager records both instants itself, so the interval is the scope's
+/// real lifetime. `InactiveEnterTimestampMonotonic` is only set once the unit
+/// reaches a terminal state, which is why the caller waits for one first.
+fn scope_lifetime(unit: &str) -> Result<Duration> {
+    let properties = scope_properties(
+        unit,
+        &[
+            "ActiveEnterTimestampMonotonic",
+            "InactiveEnterTimestampMonotonic",
+        ],
+    )?;
+    let activated = monotonic_micros(&properties, unit, "ActiveEnterTimestampMonotonic")?;
+    let deactivated = monotonic_micros(&properties, unit, "InactiveEnterTimestampMonotonic")?;
+    Ok(Duration::from_micros(deactivated.saturating_sub(activated)))
+}
+
+/// Read one monotonic timestamp property, in microseconds since boot.
+///
+/// systemd reports these in microseconds and writes `0` (or an empty value)
+/// when the instant has not happened, which for the inactivation stamp means
+/// the unit has not stopped. Both cases fail here rather than yielding a
+/// lifetime of zero.
+fn monotonic_micros(properties: &HashMap<String, String>, unit: &str, name: &str) -> Result<u64> {
+    let raw = required_property(properties, unit, name)?;
+    ensure!(
+        !raw.is_empty() && raw != "0",
+        "{unit}.scope reports {name}={raw:?}, so its lifetime is not yet known"
+    );
+    raw.parse::<u64>()
+        .with_context(|| format!("{unit}.scope reports a non-numeric {name}: {raw:?}"))
 }
 
 /// Poll until the unit is no longer loaded.

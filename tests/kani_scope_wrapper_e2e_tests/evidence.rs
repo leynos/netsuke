@@ -34,12 +34,29 @@ pub(super) struct Outcome {
     pub(super) caller_code: Option<i32>,
     /// Where the payload's output was captured, whether or not it was written.
     pub(super) capture_path: String,
-    /// The captured output, read after the caller returned.
-    pub(super) capture: String,
+    /// The captured output, or why it could not be read.
+    capture: Read<String>,
+    /// The caller's own standard error, which is where `systemd-run` explains a
+    /// refusal before any payload starts.
+    pub(super) caller_stderr: String,
     /// A bounded extract of the unit's journal, or why it was unavailable.
     pub(super) journal: Journal,
     /// The manager's state, or `None` when the unit is already unloaded.
     snapshot: Option<ScopeSnapshot>,
+}
+
+/// Something the harvest tried to read, with the reason when it could not be.
+///
+/// A read that fails must not abort the harvest. The reason a scope never
+/// started is usually in the caller's standard error, and the unit it never
+/// created tells the rest; returning early on the first missing file would
+/// discard both and leave the reader with only the last link in the chain.
+#[derive(Debug)]
+enum Read<T> {
+    /// The read succeeded.
+    Ok(T),
+    /// The read failed, for the stated reason.
+    Failed(String),
 }
 
 impl Outcome {
@@ -48,17 +65,48 @@ impl Outcome {
     /// The snapshot is taken last so it reflects the state after the capture
     /// and journal reads. Every one of those reads is independent of the unit
     /// staying loaded, which is what makes the record usable for a collected
-    /// scope as well as a retained one.
+    /// scope as well as a retained one. No individual read aborts the harvest:
+    /// a scope that never started leaves no capture, and the useful evidence
+    /// then is the caller's own diagnostic.
     pub(super) fn harvest(unit: &str, caller: &Output) -> Result<Self> {
         Ok(Self {
             unit: unit.to_owned(),
             caller_success: caller.status.success(),
             caller_code: caller.status.code(),
             capture_path: capture_path(unit),
-            capture: captured(unit)?,
+            capture: read_capture(unit),
+            caller_stderr: String::from_utf8_lossy(&caller.stderr).trim().to_owned(),
             journal: journal_extract(unit),
             snapshot: scope_snapshot(unit)?,
         })
+    }
+
+    /// The captured output, or an empty string when it could not be read.
+    pub(super) fn capture_text(&self) -> &str {
+        match &self.capture {
+            Read::Ok(text) => text,
+            Read::Failed(_) => "",
+        }
+    }
+
+    /// Whether the capture was read rather than merely expected.
+    ///
+    /// A scenario that asserts on capture *content* needs this first: an
+    /// unreadable capture would otherwise satisfy a `contains` check with an
+    /// empty string and report a confusing mismatch instead of the real cause.
+    pub(super) fn capture_available(&self) -> Result<()> {
+        match &self.capture {
+            Read::Ok(_) => Ok(()),
+            Read::Failed(reason) => anyhow::bail!(
+                "the capture at {} could not be read: {reason}; caller stderr: {}",
+                self.capture_path,
+                if self.caller_stderr.is_empty() {
+                    "<empty>"
+                } else {
+                    &self.caller_stderr
+                }
+            ),
+        }
     }
 
     /// The caller's exit status, naming a signal death rather than omitting it.
@@ -107,13 +155,19 @@ impl Outcome {
     /// capture, the manager state, and the journal — the four things a reader
     /// needs to tell a deadline from an OOM kill from an external stop.
     pub(super) fn describe(&self) -> String {
+        let caller_stderr = if self.caller_stderr.is_empty() {
+            "<empty>".to_owned()
+        } else {
+            indent(&self.caller_stderr)
+        };
         format!(
-            "unit={}.scope caller={} capture={} ({} bytes) manager={} journal:\n{}",
+            "unit={}.scope caller={} capture={} ({}) manager={} caller stderr:\n{}\njournal:\n{}",
             self.unit,
             describe_caller(self.caller_code),
             self.capture_path,
-            self.capture.len(),
+            describe_capture(&self.capture),
             describe_snapshot(self.snapshot.as_ref()),
+            caller_stderr,
             self.describe_journal()
         )
     }
@@ -128,6 +182,22 @@ impl Outcome {
             || indent(self.journal.text()),
             |reason| format!("    <the journal is unavailable: {reason}>"),
         )
+    }
+}
+
+/// Read the capture, keeping the reason when it cannot be read.
+fn read_capture(unit: &str) -> Read<String> {
+    match captured(unit) {
+        Ok(text) => Read::Ok(text),
+        Err(err) => Read::Failed(format!("{err:#}")),
+    }
+}
+
+/// Render a capture read as its size, or as the reason it was unavailable.
+fn describe_capture(capture: &Read<String>) -> String {
+    match capture {
+        Read::Ok(text) => format!("{} bytes", text.len()),
+        Read::Failed(reason) => format!("unavailable: {reason}"),
     }
 }
 
