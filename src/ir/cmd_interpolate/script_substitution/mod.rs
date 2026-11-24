@@ -13,6 +13,8 @@ use super::{
     },
 };
 
+mod ansi_c;
+
 mod delimiters;
 
 mod heredoc;
@@ -50,6 +52,8 @@ enum ShellQuoteContext {
     SingleQuoted,
     /// Temporarily close and reopen double quotes around a word-quoted path.
     DoubleQuoted,
+    /// Reject markers because Bash reads the region as an ANSI-C string.
+    AnsiC,
 }
 
 impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
@@ -181,6 +185,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             Some(InertCharacterOutcome::NotInert) | None => {}
         }
         if self.is_escaped {
+            self.posix_lexical.observe_ansi_c_escaped_character(ch);
             self.output.push(ch);
             self.is_escaped = false;
             return Ok(Some(pos + 1));
@@ -240,7 +245,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch)? {
             return Ok(Some(next));
         }
-        if self.update_quote_context(ch) {
+        if self.update_quote_context(pos, ch) {
             self.output.push(ch);
             return Ok(Some(pos + 1));
         }
@@ -282,7 +287,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.
-    fn update_quote_context(&mut self, ch: char) -> bool {
+    fn update_quote_context(&mut self, pos: usize, ch: char) -> bool {
         if let Some(outer_context) = self.backtick_outer_context {
             if ch == '`' {
                 self.quote_context = outer_context;
@@ -292,6 +297,9 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             return false;
         }
 
+        if let Some(next) = self.update_ansi_c_context(pos, ch) {
+            return next;
+        }
         let quote_context = self.active_quote_context_mut();
         match (*quote_context, ch) {
             (ShellQuoteContext::Unquoted, '\'') => {
@@ -325,7 +333,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.output.push(ch);
             return Ok(pos + 1);
         };
-        if self.backtick_outer_context.is_some() || self.is_in_command_substitution() {
+        if self.is_placeholder_unsafe() {
             return Err(invalid_command_error(
                 self.template.to_owned(),
                 RejectionReason::MarkerInProtectedRegion,
@@ -335,10 +343,19 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             ShellQuoteContext::Unquoted => QuoteContext::Unquoted,
             ShellQuoteContext::SingleQuoted => QuoteContext::Single('\''),
             ShellQuoteContext::DoubleQuoted => QuoteContext::Double('"'),
+            // An ANSI-C site is rejected above, so this arm is unreachable.
+            ShellQuoteContext::AnsiC => QuoteContext::AnsiC,
         };
         self.output
             .push_str(self.bindings.substitution(placeholder, context));
         Ok(pos + skip)
+    }
+
+    /// Report whether a marker here sits in a region no binding can encode.
+    fn is_placeholder_unsafe(&self) -> bool {
+        self.backtick_outer_context.is_some()
+            || self.is_in_command_substitution()
+            || self.active_quote_context() == ShellQuoteContext::AnsiC
     }
 
     /// Return whether the innermost active substitution is arithmetic.

@@ -109,6 +109,7 @@ impl PosixLexicalState {
         self.parameter_expansion_depth = 0;
         let frame = FrameId::allocate(&mut self.next_frame_id);
         self.frame_stack.push(frame);
+        self.reset_ansi_c_lookbehind();
     }
 
     /// Resume the enclosing region's `${ }` count as one region closes.
@@ -121,6 +122,7 @@ impl PosixLexicalState {
             self.parameter_expansion_depth = enclosing;
         }
         self.frame_stack.pop();
+        self.reset_ansi_c_lookbehind();
     }
 
     /// Close one open `${ }` expansion when an unescaped brace ends it.

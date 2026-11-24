@@ -393,40 +393,46 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   command text is scanned in a POSIX or Bash recipe, because Bash and the POSIX
   quote rules disagree about where it ends and every later decision would use
   the wrong quote state; heredoc bodies and comments are copied without that
-  check. Comment and heredoc recognition ends a POSIX word only at a space,
-  tab, newline, or one of `;`, `&`, `|`, `(`, `)`, `<`, and `>`; non-ASCII
-  whitespace before `#` is word data and does not start a comment. A `)` that
-  closes a command or arithmetic expansion also stays in the surrounding word,
-  so `#` immediately after it does not start a comment. A `)` that terminates a
-  `case` pattern is an operator instead, and the two are lexically identical
-  without the `case` grammar, so a substitution whose source contains `case` is
-  rejected when a `)` is immediately followed by `#`. PowerShell permits
-  markers only at unquoted sites and rejects other shell-sensitive contexts.
-  Longer identifiers such as `$input` and `$output`, and non-placeholder text
-  inside backticks, remain unchanged. A scalar command is emitted unchanged,
-  but still undergoes marker lowering and backend conversion such as escaping
-  and validation. On Unix and the explicit Windows Bash compatibility route, a
-  list is lowered to brace groups that evaluate each entry through a
-  shell-quoted `eval` payload and are joined by `&&`. The literal
-  `command_isolation` field selects `shared` or `isolated` and defaults to
-  `shared`. Only `isolated` is serialized; omitting `shared` preserves legacy
-  action hashes, while `isolated` contributes to action identity. The mode is
-  preserved during rendering, rule resolution, and interpolation, and is not
-  templated. Shared groups run in the current shell, so working directory,
-  environment, and shell variables carry forward. Isolated groups run in
-  subshells from the action baseline. The `eval` boundary keeps an entry's
-  inline comments or trailing control operators from consuming the generated
-  group terminator. Entries remain ordered and fail fast. On POSIX and Bash, a
-  successful `exit` or direct `exec` ends only an isolated entry; in shared
-  mode it ends the remaining chain. A successful PowerShell `exit` ends its
-  process, while `exec` has no POSIX meaning on that route. A failed POSIX/Bash
-  entry emits a bounded action/entry marker for the runner to include in the
-  failure diagnostic. The resulting POSIX command must be parsable by
-  [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On Windows with
-  the default PowerShell route, shared lists use one encoded script, while
-  isolated lists launch one new encoded `powershell.exe` process per entry.
-  Both modes check `$LASTEXITCODE` and stop on a non-zero status. An entry
-  remains opaque recipe text, so multiple native commands separated by
+  check. An escape-free ANSI-C string is tracked as its own quote region, and a
+  marker inside one is rejected for both the `Posix` and `Bash` recipe shells,
+  because the ordinary single-quoted encoding cannot preserve a path where a
+  backslash controls the next character. Marker-free ANSI-C text is preserved,
+  and a marker after the closing quote takes the encoding of its surrounding
+  site. PowerShell is unchanged: it has no ANSI-C quoting, so `$'` there is
+  ordinary text. Comment and heredoc recognition ends a POSIX word only at a
+  space, tab, newline, or one of `;`, `&`, `|`, `(`, `)`, `<`, and `>`;
+  non-ASCII whitespace before `#` is word data and does not start a comment. A
+  `)` that closes a command or arithmetic expansion also stays in the
+  surrounding word, so `#` immediately after it does not start a comment. A `)`
+  that terminates a `case` pattern is an operator instead, and the two are
+  lexically identical without the `case` grammar, so a substitution whose
+  source contains `case` is rejected when a `)` is immediately followed by `#`.
+  PowerShell permits markers only at unquoted sites and rejects other
+  shell-sensitive contexts. Longer identifiers such as `$input` and `$output`,
+  and non-placeholder text inside backticks, remain unchanged. A scalar command
+  is emitted unchanged, but still undergoes marker lowering and backend
+  conversion such as escaping and validation. On Unix and the explicit Windows
+  Bash compatibility route, a list is lowered to brace groups that evaluate
+  each entry through a shell-quoted `eval` payload and are joined by `&&`. The
+  literal `command_isolation` field selects `shared` or `isolated` and defaults
+  to `shared`. Only `isolated` is serialized; omitting `shared` preserves
+  legacy action hashes, while `isolated` contributes to action identity. The
+  mode is preserved during rendering, rule resolution, and interpolation, and
+  is not templated. Shared groups run in the current shell, so working
+  directory, environment, and shell variables carry forward. Isolated groups
+  run in subshells from the action baseline. The `eval` boundary keeps an
+  entry's inline comments or trailing control operators from consuming the
+  generated group terminator. Entries remain ordered and fail fast. On POSIX
+  and Bash, a successful `exit` or direct `exec` ends only an isolated entry;
+  in shared mode it ends the remaining chain. A successful PowerShell `exit`
+  ends its process, while `exec` has no POSIX meaning on that route. A failed
+  POSIX/Bash entry emits a bounded action/entry marker for the runner to
+  include in the failure diagnostic. The resulting POSIX command must be
+  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On
+  Windows with the default PowerShell route, shared lists use one encoded
+  script, while isolated lists launch one new encoded `powershell.exe` process
+  per entry. Both modes check `$LASTEXITCODE` and stop on a non-zero status. An
+  entry remains opaque recipe text, so multiple native commands separated by
   semicolons inside one entry are not checked individually. An empty command
   list is rejected during manifest deserialization. Plain command strings
   remain shell text; authors should use structured recipes or explicit quoting

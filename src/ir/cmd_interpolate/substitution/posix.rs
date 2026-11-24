@@ -12,7 +12,8 @@ use super::super::posix_lexical::{
     PosixCharacter, SourceChar, ansic_quote_is_ambiguous, backslash_escapes_marker,
 };
 use super::{
-    IrGenError, MarkerProtection, RejectionReason, SubstitutionTraversal, invalid_command_error,
+    IrGenError, MarkerProtection, QuoteContext, RejectionReason, SubstitutionTraversal,
+    invalid_command_error,
 };
 
 impl SubstitutionTraversal<'_, '_> {
@@ -223,9 +224,10 @@ impl SubstitutionTraversal<'_, '_> {
     }
 
     /// Classify POSIX backticks and command substitutions as protected regions.
-    pub(super) const fn posix_marker_protection(&self, _pos: usize) -> MarkerProtection {
+    pub(super) fn posix_marker_protection(&self, _pos: usize) -> MarkerProtection {
+        let in_ansi_c = matches!(self.active_quote_context(), QuoteContext::AnsiC);
         MarkerProtection::from_protected_region(
-            self.in_backticks || self.is_in_command_substitution(),
+            self.in_backticks || self.is_in_command_substitution() || in_ansi_c,
         )
     }
 
@@ -252,6 +254,7 @@ impl SubstitutionTraversal<'_, '_> {
         let Some(next) = self.chars.get(pos + 1).copied() else {
             return Ok(None);
         };
+        self.posix_lexical.observe_ansi_c_escaped_character(next);
         self.output.push(ch);
         self.output.push(next);
         Ok(Some(pos + 2))

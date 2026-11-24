@@ -367,6 +367,7 @@ proptest! {
 
 }
 
+mod ansi_c;
 mod boundary;
 mod shared_list;
 mod support;

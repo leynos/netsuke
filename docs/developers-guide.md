@@ -1196,12 +1196,23 @@ The lowering stages have deliberately separate responsibilities:
   confused with the group's own closer. Heredoc delimiters the tracker cannot
   model are rejected rather than approximated. Literal `$in`, `$out`, `$ins`,
   and `$outs` remain shell variables and are escaped for Ninja pass-through.
-  POSIX lowering tracks unquoted, single-quoted, and double-quoted text, and
-  rejects markers within command substitutions because it cannot lower them
-  safely. Script recipes therefore retain heredocs and comments without
+  POSIX lowering tracks unquoted, single-quoted, double-quoted, and Bash ANSI-C
+  (`$'…'`) text, and rejects markers within command substitutions or an open
+  ANSI-C string because it cannot lower them safely; the ANSI-C rejection
+  applies to both `Posix` and `Bash` recipe shells and leaves PowerShell
+  unchanged. Script recipes therefore retain heredocs and comments without
   accepting an unsafe marker context. The resulting action contains lowered
   command text and no Ninja rule variables; an inert region may still retain an
-  internal Netsuke marker token.
+  internal Netsuke marker token. The shared opener look-behind lives in
+  `posix_lexical/ansi_c.rs`: an unquoted dollar whose next significant
+  character is an apostrophe opens the region, continuations are transparent,
+  and `$$` run parity decides which dollar can open it. Both traversals map the
+  region to their own quote variant (`QuoteContext::AnsiC`,
+  `ShellQuoteContext::AnsiC`), reject a marker inside it, and treat `$(` and
+  backticks there as literal text. An escape-free string such as `$'a b'` is
+  accepted with its surrounding text unchanged; a backslash-bearing one is
+  already refused by the escape-bearing guard. PowerShell never enters the
+  region.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen/recipe_shell/`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each

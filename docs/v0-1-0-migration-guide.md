@@ -29,6 +29,7 @@ sections that match the features they use.
 | Required                                   | Reusable release callers     | Pass `publish: true` to publish from a reusable call.                   |
 | Review if automation parses Netsuke errors | Ninja failure diagnostics    | Match the two diagnostic codes instead of the old summary text.         |
 | Required                                   | `RunnerError` matches        | Add arms for `NinjaSpawnFailed` and `NinjaFailed`, or a wildcard arm.   |
+| Required                                   | Shell ANSI-C recipes         | Move `{{ ins }}` and `{{ outs }}` outside `$'…'` for POSIX and Bash.    |
 
 _Table 1: migration obligations for the beta series and console-pool option._
 
@@ -912,6 +913,80 @@ example `unsupported heredoc boundary: command substitution newline`.
 See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
 the full heredoc contract.
+
+## Remove markers from Bash ANSI-C strings
+
+Bash reads `$'…'` as an ANSI-C string, where a backslash escapes the character
+after it. A POSIX or Bash `command:` or `script:` recipe that places
+`{{ ins }}` or `{{ outs }}` inside one is now rejected. The rule applies to
+both the `Posix` and `Bash` recipe shells, because a host's `/bin/sh` may or
+may not implement ANSI-C quoting and Netsuke cannot see which interpreter runs
+last.
+
+Each apostrophe in the substituted path is rewritten as `'"'"'`, which assumes
+those five characters only close and reopen ordinary single quotes. A path that
+places a backslash immediately before an apostrophe then escapes the first
+rewritten apostrophe, and a later apostrophe closes the ANSI-C string. The rest
+of the path is parsed in a different quote state, so the emitted word can
+change, the line can fail to parse, or path characters can become executable
+shell syntax (CWE-78).
+
+### Before: a marker inside the ANSI-C string
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    script: |
+      echo $'input: {{ ins }}' > {{ outs }}
+defaults: [output.txt]
+```
+
+### After: the marker outside the string
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    script: |
+      echo $'input: '{{ ins }} > {{ outs }}
+defaults: [output.txt]
+```
+
+`echo` joins the quoted prefix and the substituted path into one word, so the
+rewritten line produces the word the rejected recipe meant to produce. Any
+other site outside the open string works equally well: an unquoted position, an
+ordinary single-quoted site, or a double-quoted site is encoded for its own
+context in the usual way.
+
+Marker-free `$'…'` text is copied unchanged, and a marker after the closing
+quote keeps its site's encoding, so a recipe that never places a marker in an
+open string needs no change. A string whose body contains a backslash is
+refused outright, because its extent differs between the ANSI-C and POSIX
+readings, so such a recipe must be rewritten rather than merely moved.
+
+PowerShell is unchanged, because `$'` is ordinary text there rather than an
+ANSI-C opener. The rejection is reported as
+
+```text
+Invalid command interpolation: recipe marker inside a protected shell region.
+```
+
+and a `Posix` marker whose quote state depends on whether the interpreter
+honours `$'…'` is reported as
+
+```text
+Invalid command interpolation: recipe marker inside a region that reads `$'` differently across shells.
+```
+
+Both use the existing localized `ir.invalid_command` diagnostic, so no new
+error channel appears.
+
+The [users' guide safety boundary](users-guide.md#review-the-safety-boundary)
+documents the full marker contract, and
+[ADR-0027](adrs/adr-0027-command-placeholder-contract.md) records the decision.
 
 ## Resolve build-graph outputs through the accessors
 

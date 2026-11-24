@@ -699,6 +699,112 @@ the residual migration obligation. Native execution coverage runs in the
 Windows recipe smoke suite; the regression and property suites run on every
 platform.
 
+## Addendum — 2026-11-19: Reject markers inside Bash ANSI-C strings (#992)
+
+Bash reads `$'…'` as an ANSI-C string. Inside it, a backslash escapes the next
+character, so `\'` is a literal apostrophe rather than a closing delimiter, and
+only an unescaped apostrophe ends the string. The ordinary single-quoted path
+encoding rewrites every apostrophe as `'"'"'`, which assumes those five
+characters only close and reopen ordinary single quotes. A path that places a
+backslash immediately before an apostrophe therefore escapes the first
+rewritten apostrophe, closes the ANSI-C string on a later one, and leaves the
+rest of the path to be parsed in a different quote state. The resulting line
+can change the generated word, raise a syntax error, or expose path characters
+as executable shell syntax (CWE-78), reported as finding
+`b247e1c0-c546-4ac4-a8e1-ddb892fc9cee`.
+
+Lowering cannot always know whether the child interpreter reads `$'…'` as
+ANSI-C quoting. Both traversals reject a marker reached while the region is
+open, for both `RecipeShell::Posix` and `RecipeShell::Bash`, rather than emit
+the ordinary single-quoted binding. PowerShell is unchanged: it does not define
+ANSI-C quoting, so its `$'` sequence is ordinary text. The rejection reuses
+`IrGenError::InvalidCommand` and the localized `IR_INVALID_COMMAND` message, so
+it travels through the existing diagnostic channel and reports the bounded
+`MarkerInProtectedRegion` description. The rejected `command` is still retained
+for callers and tests, but the rendering never quotes it.
+
+### Opener and closing rules
+
+Both traversals share the opener state machine in
+`src/ir/cmd_interpolate/posix_lexical/ansi_c.rs`:
+
+- Only an unquoted dollar can open the string, and the next significant
+  character must be an apostrophe. A backslash-newline continuation between
+  them is removed before Bash tokenizes, so it is skipped when looking ahead.
+- An escaped dollar cannot open the string. In `$$`, the first dollar starts
+  the PID expansion and the second is consumed by it, so neither opens a
+  string; a third dollar may. Run parity, rather than a reverse scan, decides
+  which dollar in a run is available.
+- A `$'` sequence inside ordinary single or double quotes is literal text and
+  does not open ANSI-C.
+- Inside the string, the traversal consumes each backslash and the character
+  after it as a pair, so an escaped apostrophe cannot close it. An unescaped
+  apostrophe closes it and returns the traversal to the surrounding quote
+  context. Command substitution and backtick syntax are literal inside the
+  string.
+- A comment, a heredoc declaration or body, and a command-substitution region
+  all reset the look-behind, because a dollar before the boundary cannot pair
+  with one after it.
+
+Marker-free ANSI-C text is copied unchanged. A marker after the closing quote
+is outside the region and is encoded for its own site, so supported recipes
+keep working. The safe alternatives for a marker that must appear alongside
+ANSI-C text are an unquoted site, an ordinary single- or double-quoted site, or
+a site outside the `$'…'` region.
+
+A string whose body holds a backslash is refused before any marker is
+considered, by the escape-bearing ANSI-C guard above. Its extent therefore
+never depends on which reading an interpreter takes, and the rejection names
+that shape rather than the marker.
+
+### Why the existing guards do not cover this
+
+The post-substitution `shlex` guard admits the broken legacy encoding: `shlex`
+models ordinary POSIX quotes and accepts the rewritten line as one word. Real
+Bash then closes the ANSI-C string early. The regression suite pins both
+observations, and the executable case passes the same path as a literal
+argument to show that the failure belongs to the encoding rather than to Bash.
+The `shlex` guard remains a command-shape check, not a proof that the chosen
+path encoding is safe in every shell context.
+
+This rejection is distinct from the active-escape rejection for #629. That rule
+covers a marker directly after a backslash anywhere in unquoted text; this rule
+covers a marker inside a region whose end the backslash changes.
+
+### Look-behind resets and what the tests separate
+
+A reset clears both the pending opener and the unpaired dollar. Removing a
+reset was measured against the regression suite rather than assumed, and most
+of the resets are boundary guards that no single case can separate. The
+measurements below record what each removal does.
+
+**Command-substitution boundaries.** `echo $$()$'{marker}'` leaves an unpaired
+dollar at the first `$`, because the second `$` starts the region and never
+reaches quote tracking, and the closer returns through the delimiter path.
+Removing both the entry and the exit reset makes the case fail. Removing either
+one alone leaves it green, because each clears what the other would. A case
+whose marker sits *inside* the region cannot separate them at all: a marker in
+a substitution is already rejected as a protected region, whatever the
+look-behind says.
+
+The remaining resets are guards rather than separately observable rules. Each
+one was removed in turn and the suite stayed green:
+
+- The reset taken when a heredoc declaration is copied. Two spellings were
+  tried: `cat $<<EOF` and a variant that carries the dollar to the next line
+  through a backslash-newline continuation. Neither separated it, so no case
+  here claims to. The body case that follows is likewise unobservable, because
+  the declaration reset has already run and nothing between the two reaches
+  quote tracking.
+- The resets at a comment boundary. For `#` to start a comment it must sit on
+  a word boundary, and every word-boundary character that could separate a `$`
+  from that `#` is ordinary text that already clears the dollar. The reset
+  taken when a comment begins is in addition redundant with the one on its
+  first copied character.
+- The reset after lowering a placeholder cannot be observed while the internal
+  tokens begin with `_`. That ordinary unquoted character clears both fields
+  first, so the reset only keeps the invariant independent of token spelling.
+
 ## Amendment — 2026-11-19: Interpolation rejections name the failed syntax (#1145)
 
 `is_valid_command_for_shell` is now `command_rejection`, which returns the

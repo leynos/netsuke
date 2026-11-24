@@ -87,7 +87,11 @@ impl CommandBindings {
         };
         match context {
             QuoteContext::Unquoted => &paths.unquoted,
-            QuoteContext::Single(_) => &paths.single_quoted,
+            // Every caller rejects an ANSI-C site before asking for a binding,
+            // because no existing encoding is safe there. Sharing the ordinary
+            // single-quoted value keeps the match total without claiming it is
+            // safe.
+            QuoteContext::Single(_) | QuoteContext::AnsiC => &paths.single_quoted,
             QuoteContext::Double(_) => &paths.double_quoted,
         }
     }
@@ -247,7 +251,7 @@ pub(super) enum Placeholder {
 }
 
 /// Records the active shell quote context surrounding a recipe marker.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum QuoteContext {
     /// The marker is outside shell quotes.
     Unquoted,
@@ -255,6 +259,11 @@ pub(super) enum QuoteContext {
     Single(char),
     /// The marker is inside double quotes.
     Double(char),
+    /// The marker is inside a Bash ANSI-C string, where backslashes escape.
+    ///
+    /// The region is tracked only so markers there can be rejected: the
+    /// ordinary encodings assume quote rules the string does not follow.
+    AnsiC,
 }
 
 /// Find an internal recipe token at `pos`.
@@ -375,6 +384,9 @@ mod lexical_boundary_tests;
 
 #[cfg(test)]
 mod backslash_marker_tests;
+
+#[cfg(test)]
+mod ansi_c_marker_tests;
 
 #[cfg(test)]
 mod call_sites;

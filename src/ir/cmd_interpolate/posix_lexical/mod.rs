@@ -9,6 +9,10 @@ use std::collections::VecDeque;
 
 use super::find_substitution;
 
+mod ansi_c;
+
+pub(super) use ansi_c::AnsiCCharacter;
+
 mod declaration;
 
 mod delimiter;
@@ -57,6 +61,11 @@ pub(super) struct PosixLexicalState {
     next_frame_id: usize,
     /// Record the shell regions currently open, innermost last.
     frame_stack: Vec<FrameId>,
+    /// Record whether a live `$` may open an ANSI-C string at the next quote.
+    pending_ansi_c_opener: bool,
+    /// Record whether the previous significant unquoted character was a `$`
+    /// awaiting the second half of a `$$` pair.
+    unpaired_dollar: bool,
 }
 
 /// Report that an escape would modify a marker lowered immediately after it.
@@ -209,6 +218,8 @@ impl PosixLexicalState {
             closed_command_substitution: None,
             next_frame_id: 1,
             frame_stack: Vec::new(),
+            pending_ansi_c_opener: false,
+            unpaired_dollar: false,
         }
     }
 
@@ -251,6 +262,10 @@ impl PosixLexicalState {
             }
             return InertCharacterOutcome::Consumed;
         }
+        if self.heredoc_body.is_none() {
+            return InertCharacterOutcome::NotInert;
+        }
+        self.reset_ansi_c_lookbehind();
         let Some(body) = self.heredoc_body.as_mut() else {
             return InertCharacterOutcome::NotInert;
         };
@@ -265,6 +280,7 @@ impl PosixLexicalState {
     /// Begin a POSIX comment after its opening number sign is copied.
     pub(super) const fn begin_comment(&mut self) {
         self.in_comment = true;
+        self.reset_ansi_c_lookbehind();
     }
 
     /// Decide whether a pending heredoc body may start at one newline.
