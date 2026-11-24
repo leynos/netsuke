@@ -259,7 +259,7 @@ fn flatten_does_not_enumerate_a_map_leaf() -> Result<()> {
         "rendering the retained map should enumerate it, but the count stayed zero"
     );
     ensure!(
-        rendered.contains("k"),
+        rendered.contains('k'),
         "the retained map should render its key, but rendered {rendered:?}"
     );
     Ok(())

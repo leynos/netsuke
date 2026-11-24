@@ -23,6 +23,11 @@ use minijinja::{
 use crate::localization::{self, keys};
 
 /// Fixed resource ceilings applied to one `flatten` call.
+#[expect(
+    clippy::struct_field_names,
+    reason = "Each field is a ceiling, and the `max_` prefix keeps a limit \
+              distinct from the count it bounds at every use site."
+)]
 #[derive(Clone, Copy, Debug)]
 pub(super) struct FlattenLimits {
     /// Maximum depth of any item in the traversal.
@@ -173,7 +178,7 @@ pub(super) fn flatten_filter_with_limits(
         allowance.check_depth(1)?;
         match item.kind() {
             ValueKind::Seq | ValueKind::Iterable => {
-                collect_flattened_values(item, 1, &mut allowance, &mut flattened)?;
+                collect_flattened_values(&item, 1, &mut allowance, &mut flattened)?;
             }
             kind => {
                 return Err(Error::new(
@@ -201,7 +206,7 @@ pub(super) fn flatten_filter_with_limits(
 /// Returns an error when `value` cannot be iterated or when a child exceeds the
 /// visit, depth, or retained-item ceiling.
 fn collect_flattened_values(
-    value: Value,
+    value: &Value,
     depth: usize,
     allowance: &mut FlattenAllowance<'_>,
     output: &mut Vec<Value>,
@@ -212,7 +217,7 @@ fn collect_flattened_values(
         allowance.check_depth(child_depth)?;
         match nested.kind() {
             ValueKind::Seq | ValueKind::Iterable => {
-                collect_flattened_values(nested, child_depth, allowance, output)?;
+                collect_flattened_values(&nested, child_depth, allowance, output)?;
             }
             _ => {
                 allowance.record_leaf()?;

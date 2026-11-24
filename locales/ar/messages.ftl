@@ -391,9 +391,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = خوارزمية تلبيد غي
 
 # تشخيصات مساعدات المجموعات.
 stdlib.collections.flatten.expected_sequence = توقّع flatten عناصر متتالية لكنه وجد { $kind }.
-stdlib.collections.flatten.depth_limit = flatten تجاوز حد عمق التداخل { $limit }.
-stdlib.collections.flatten.item_limit = flatten تجاوز حد العناصر المحتفظ بها { $limit }.
-stdlib.collections.flatten.visit_limit = flatten تجاوز حد زيارات الاجتياز { $limit }.
+stdlib.collections.flatten.depth_limit = ‏flatten تجاوز حد عمق التداخل { $limit }.
+stdlib.collections.flatten.item_limit = ‏flatten تجاوز حد العناصر المحتفظ بها { $limit }.
+stdlib.collections.flatten.visit_limit = ‏flatten تجاوز حد زيارات الاجتياز { $limit }.
 stdlib.collections.compact.not_sequence = يتطلّب compact تسلسلاً لكنه وجد { $kind }.
 stdlib.collections.group_by.empty_attribute = يتطلّب group_by سمة غير فارغة.
 stdlib.collections.group_by.unresolved = تعذّر على group_by إيجاد «{ $attr }» في عنصر من النوع { $kind }.

@@ -179,8 +179,12 @@ fn flatten_bounds_a_shared_empty_list_graph() -> Result<()> {
 }
 
 /// An endless iterable stops at the visit ceiling, before reading much past it.
+///
+/// The sentinel must panic rather than return an error, so this case reports
+/// through `expect` instead of a `Result`; `panic_in_result_fn` exists to keep
+/// a `Result`-returning test from crashing where an error is available.
 #[test]
-fn flatten_bounds_an_endless_iterable() -> Result<()> {
+fn flatten_bounds_an_endless_iterable() {
     let endless = Value::make_iterable(|| {
         (0_u32..).map(|index| {
             assert!(
@@ -195,14 +199,15 @@ fn flatten_bounds_an_endless_iterable() -> Result<()> {
     let err = flatten_filter_with_limits(&subject, &limits)
         .expect_err("an endless iterable must stop at the visit ceiling");
     ensure_limit_error(&err, "exceeded the traversal visit limit")
+        .expect("the visit ceiling error should carry the expected fragment");
 }
 
 /// A lazily self-nesting object stops at the depth ceiling.
 #[test]
 fn flatten_bounds_a_self_nesting_lazy_object() -> Result<()> {
     let cell: Arc<OnceLock<Value>> = Arc::new(OnceLock::new());
-    let nesting = Value::make_object_iterable(Arc::clone(&cell), |cell| {
-        let reference = cell
+    let nesting = Value::make_object_iterable(Arc::clone(&cell), |stored| {
+        let reference = stored
             .get()
             .expect("the self reference is stored before traversal")
             .clone();
