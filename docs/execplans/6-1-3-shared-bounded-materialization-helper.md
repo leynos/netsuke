@@ -2598,23 +2598,35 @@ obligations.
   mutation controls are what make the inspection falsifiable: a seeded wrapping
   add, an off-by-one in the cap, and a `>=` for `>` each fail their owning
   harness or proof.
-- Harnesses and bounds (names are provisional; each gets a mutation patch):
-  1. `product_kernel_respects_zero_and_repeat`: up to three symbolic `usize`
-     lengths and a symbolic `u64` `repeat`; asserts `repeat == 0` gives
-     `Some(1)` and a zero length otherwise gives `Some(0)`.
-  2. `binomial_kernel_matches_closed_form_for_r_up_to_two`: symbolic `u64` `n`,
-     `r <= 2`, unwind 3; asserts agreement with `n * (n - 1) / 2` computed in
-     `u128` and classified against `MAX`.
+- Harnesses and bounds (each gets a mutation patch). The seven harnesses state
+  the domain that makes each decidable, so the list below names every bound
+  rather than implying symbolic coverage it does not have:
+  1. `product_kernel_respects_zero_and_repeat`: three symbolic `usize` lengths
+     and a symbolic `u64` `repeat`, each assumed at most 2, unwind 4; asserts
+     `repeat == 0` gives `Some(1)` and a zero length otherwise gives `Some(0)`.
+     A concrete `[2^40, 2^40, 0]` witness carries the overflow-prefix case the
+     small domain cannot reach.
+  2. `binomial_kernel_matches_closed_form_for_r_up_to_two`: symbolic `u64` `n`
+     with `n <= 16` and `r <= 2`, unwind 3; asserts agreement with
+     `n * (n - 1) / 2` computed in `u128` and classified against `MAX`, plus
+     concrete witnesses at the `u64` boundary.
   3. `binomial_kernel_never_panics_for_small_r`: `n <= 3` with `r = 4` for
-     the `r > n` shortcut, then `8 <= n <= 64` with `r` of 1 and 2 for the
-     loop, unwind 6.
-  4. `falling_factorial_kernel_matches_checked_product`: symbolic `u64` `n`,
-     `r <= 4`, unwind 5; asserts agreement with a checked `u128` product.
-  5. `admission_never_exceeds_ceiling`: symbolic `Option<u64>` and each
-     ceiling through `classify`; `Ok(v)` implies `v <= ceiling`, and `Exceeded`
-     implies `cardinality > ceiling`.
-  6. `running_total_never_admits_past_its_limit`: three symbolic amounts
-     against a small limit through the `#[cfg(any(test, kani))]` constructor.
+     the `r > n` shortcut, then `8 <= n <= 64` with the reduced index fixed at
+     1, then at 2, unwind 6.
+  4. `falling_factorial_kernel_matches_checked_product`: symbolic `u64` `n`
+     with `n <= 16` and `r <= 4`, unwind 5; asserts agreement with a checked
+     `u128` product.
+  5. `falling_factorial_boundary_is_pinned`: no symbolic input; three concrete
+     witnesses — `20!` admitted, the 21-step product refused, and a
+     `u64::MAX` operand refused on its second step — unwind 21.
+  6. `admission_never_exceeds_ceiling`: symbolic `Option<u64>` and symbolic
+     `u64` ceiling through `classify`, no `#[kani::unwind]` attribute because
+     the driven code is loop-free; `Ok(v)` implies `v <= ceiling`, and
+     `Exceeded` implies `cardinality > ceiling`.
+  7. `running_total_never_admits_past_its_limit`: three symbolic amounts and a
+     symbolic limit, each assumed at most 8, unwind 4, through the
+     `#[cfg(any(test, kani))]` constructor; concrete `u64::MAX` amounts pin the
+     checked-add boundary.
 - Covers: `kani::cover!` must reach `r > n` giving 0; an admitted case such as
   `(100000, 1)`; an exceeded case such as `(100001, 1)`; overflow with
   `n >= 2^33` and `r = 2`; and an intermediate above `u64::MAX` whose result
