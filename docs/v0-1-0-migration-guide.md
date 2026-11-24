@@ -31,7 +31,6 @@ sections that match the features they use.
 | Required                                   | `RunnerError` matches        | Add arms for `NinjaSpawnFailed` and `NinjaFailed`, or a wildcard arm.                                                         |
 | Required                                   | Shell ANSI-C recipes         | Move `{{ ins }}` and `{{ outs }}` outside `$'…'` for POSIX and Bash.                                                          |
 | Required for plans still executed          | Stored `generate` output     | Regenerate it; an old plan keeps the old edge shapes.                                                                         |
-| Optional                                   | Stored `generate` output     | Refresh it; phony and always edges change shape.                                                                              |
 | Required                                   | Backtick substitutions       | Move markers out of the newly rejected nesting; see [the section below](#backtick-substitutions-restore-their-owning-region). |
 
 _Table 1: migration obligations for the beta series and console-pool option._
