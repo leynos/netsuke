@@ -201,7 +201,7 @@ manifest.console_dependency_only = لا يمكن للإدخالات التي ت�
 # أخطاء التمثيل الوسيط.
 ir.rule_not_found = تعذّر العثور على القاعدة «{ $rule }» التي يشير إليها الهدف «{ $target }».
 ir.multiple_rules = يجب أن يشير الهدف «{ $target }» إلى قاعدة واحدة فقط، لكن ورد { $rules }.
-ir.multiple_rules_truncated = يجب أن يشير الهدف «{ $target }» إلى قاعدة واحدة فقط، لكن ورد { $rules } و{ $omitted ->
+ir.multiple_rules_truncated = ‏يجب أن يشير الهدف «{ $target }» إلى قاعدة واحدة فقط، لكن ورد { $rules } و{ $omitted ->
     [one] اسم إضافي واحد.
     [two] اسمان إضافيان.
     [few] { $omitted } أسماء إضافية.

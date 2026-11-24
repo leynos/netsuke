@@ -20,6 +20,9 @@ use test_support::{localizer_test_lock, set_en_localizer};
 /// the published contract rather than agreeing with whatever the cap becomes.
 const REPORTED_PREFIX_LEN: usize = 8;
 
+/// Names the generated long-selector case supplies.
+const LONG_SELECTOR_LEN: usize = 4096;
+
 /// Build a manifest whose single target selects `rules` in the given order.
 fn manifest_selecting(rules: &[&str]) -> String {
     let mut source = String::from(
@@ -81,10 +84,10 @@ fn reportable_selector_names_are_sorted_and_keep_duplicates(
         target_name == "out.txt",
         "expected target out.txt, got {target_name}"
     );
-    let expected: Vec<String> = expected.iter().map(|name| (*name).to_owned()).collect();
+    let expected_names: Vec<String> = expected.iter().map(|name| (*name).to_owned()).collect();
     ensure!(
-        rules == expected,
-        "expected sorted names {expected:?}, got {rules:?}"
+        rules == expected_names,
+        "expected sorted names {expected_names:?}, got {rules:?}"
     );
     ensure!(
         !message.contains("more names"),
@@ -132,8 +135,7 @@ fn a_single_element_list_reports_an_unknown_rule() -> Result<()> {
 fn a_generated_long_selector_reports_only_the_smallest_names() -> Result<()> {
     let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
     let _localizer = set_en_localizer();
-    const SUPPLIED: usize = 4096;
-    let supplied: Vec<String> = (0..SUPPLIED)
+    let supplied: Vec<String> = (0..LONG_SELECTOR_LEN)
         .rev()
         .map(|index| format!("name_{index:04}"))
         .collect();
@@ -148,7 +150,7 @@ fn a_generated_long_selector_reports_only_the_smallest_names() -> Result<()> {
         rules == expected,
         "expected the eight lexically smallest names {expected:?}, got {rules:?}"
     );
-    let omitted = SUPPLIED - REPORTED_PREFIX_LEN;
+    let omitted = LONG_SELECTOR_LEN - REPORTED_PREFIX_LEN;
     ensure!(
         message.contains(&format!("{omitted} more names")),
         "the message must report {omitted} omitted names: {message}"

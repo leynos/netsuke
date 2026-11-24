@@ -132,7 +132,10 @@ fn record_string_comparison() {
 }
 
 /// Skip rule-name comparison counting outside test builds.
-#[cfg(not(all(test, not(kani))))]
+///
+/// No Kani twin: the Kani `string_cmp` compares only first bytes and never
+/// records, so nothing in that build would call this.
+#[cfg(all(not(test), not(kani)))]
 const fn record_string_comparison() {}
 
 /// Reset the test-only rule-name comparison count on this thread.

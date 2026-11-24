@@ -201,7 +201,7 @@ manifest.console_dependency_only = ورودی‌هایی که فقط وابست�
 # خطاهای بازنمایی میانی.
 ir.rule_not_found = قاعدهٔ «{ $rule }» که هدف «{ $target }» به آن ارجاع می‌دهد یافت نشد.
 ir.multiple_rules = هدف «{ $target }» باید تنها به یک قاعده ارجاع دهد، اما { $rules } به دست آمد.
-ir.multiple_rules_truncated = هدف «{ $target }» باید تنها به یک قاعده ارجاع دهد؛ { $rules } دریافت شد و { $omitted ->
+ir.multiple_rules_truncated = ‏هدف «{ $target }» باید تنها به یک قاعده ارجاع دهد؛ { $rules } دریافت شد و { $omitted ->
     [one] { $omitted } نام دیگر.
    *[other] { $omitted } نام دیگر.
 }
