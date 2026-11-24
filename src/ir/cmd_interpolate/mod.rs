@@ -178,6 +178,12 @@ thread_local! {
     static BINDING_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
 }
 
+
+#[cfg(test)]
+thread_local! {
+    static BINDING_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
 /// Count one binding preparation in test builds.
 #[cfg(test)]
 fn record_binding_preparation() {
@@ -191,9 +197,11 @@ fn record_binding_preparation() {
 
 
 
+
 /// Skip binding-preparation counting outside test builds.
 #[cfg(not(test))]
 const fn record_binding_preparation() {}
+
 
 
 
