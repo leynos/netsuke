@@ -106,7 +106,9 @@ fn marker_free_ansi_c_strings_are_preserved(
     #[case] lowering: Lowering,
 ) {
     let bindings = context_bindings(shell, "input");
-    for template in ["echo $'a\\tb'", "printf '%s' $'line\\n'"] {
+    // Escape-free bodies only: a backslash-bearing string is refused by the
+    // escape-bearing guard before lowering reaches it.
+    for template in ["echo $'a b'", "printf '%s' $'line'"] {
         assert_eq!(
             lowering
                 .lower(template, &bindings)
@@ -126,12 +128,12 @@ fn marker_after_ansi_c_region_uses_unquoted_encoding(#[case] lowering: Lowering)
     // text below fails if the traversal selects any encoding but the
     // unquoted one.
     let bindings = context_bindings(RecipeShell::Bash, "in put$x");
-    let template = format!("echo $'a\\tb' {INS_TOKEN}");
+    let template = format!("echo $'a b' {INS_TOKEN}");
     assert_eq!(
         lowering
             .lower(&template, &bindings)
             .expect("a marker after the closing quote is outside ANSI-C"),
-        "echo $'a\\tb' in' put$x'",
+        "echo $'a b' in' put$x'",
         "post-region marker used the wrong encoding via {lowering:?}: {template:?}"
     );
 }

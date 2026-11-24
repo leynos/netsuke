@@ -386,4 +386,7 @@ mod lexical_boundary_tests;
 mod backslash_marker_tests;
 
 #[cfg(test)]
+mod ansi_c_marker_tests;
+
+#[cfg(test)]
 mod call_sites;
