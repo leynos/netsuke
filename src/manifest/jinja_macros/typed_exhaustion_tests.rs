@@ -14,6 +14,7 @@ use crate::manifest::budget::{
     ManifestBudgetStage, adapter::BudgetErrorExt,
 };
 use minijinja::{Environment, Error, ErrorKind, value::Value};
+use rstest::{fixture, rstest};
 
 /// Typed exhaustion describing an exhausted collection call allowance.
 fn collection_exhaustion() -> ManifestBudgetExhaustion {
@@ -31,6 +32,21 @@ fn add_exploding_function(env: &mut Environment<'static>) {
     });
 }
 
+/// An environment whose `explode` function reports typed collection
+/// exhaustion.
+#[fixture]
+fn exploding_environment() -> Environment<'static> {
+    let mut env = Environment::new();
+    add_exploding_function(&mut env);
+    env
+}
+
+/// Fresh manifest accounting for one evaluation.
+#[fixture]
+fn budget() -> ManifestBudget {
+    ManifestBudget::default()
+}
+
 /// Find the typed exhaustion beneath a `MiniJinja` error chain.
 fn exhaustion_of(error: &Error) -> &ManifestBudgetExhaustion {
     let mut source = std::error::Error::source(error);
@@ -43,14 +59,13 @@ fn exhaustion_of(error: &Error) -> &ManifestBudgetExhaustion {
     panic!("the error must carry typed budget exhaustion: {error}");
 }
 
-#[test]
-fn expression_evaluation_keeps_typed_collection_exhaustion() {
-    let mut env = Environment::new();
-    add_exploding_function(&mut env);
-    let budget = ManifestBudget::default();
-
+#[rstest]
+fn expression_evaluation_keeps_typed_collection_exhaustion(
+    exploding_environment: Environment<'static>,
+    budget: ManifestBudget,
+) {
     let error = evaluate_with_state(
-        &env,
+        &exploding_environment,
         &budget,
         &ExpressionEvaluation {
             expression: "explode()",
@@ -73,14 +88,14 @@ fn expression_evaluation_keeps_typed_collection_exhaustion() {
     );
 }
 
-#[test]
-fn template_render_keeps_typed_collection_exhaustion() {
-    let mut env = Environment::new();
-    add_exploding_function(&mut env);
-    let budget = ManifestBudget::default();
-
-    let error = render_template_with_budget(&env, "{{ explode() }}", &(), &budget)
-        .expect_err("the callback must fail the render");
+#[rstest]
+fn template_render_keeps_typed_collection_exhaustion(
+    exploding_environment: Environment<'static>,
+    budget: ManifestBudget,
+) {
+    let error =
+        render_template_with_budget(&exploding_environment, "{{ explode() }}", &(), &budget)
+            .expect_err("the callback must fail the render");
 
     let exhaustion = exhaustion_of(&error);
     assert_eq!(
@@ -91,22 +106,21 @@ fn template_render_keeps_typed_collection_exhaustion() {
     assert_eq!(exhaustion.limit, 4);
 }
 
-#[test]
-fn macro_fallback_keeps_typed_collection_exhaustion() {
-    let mut env = Environment::new();
+#[rstest]
+fn macro_fallback_keeps_typed_collection_exhaustion(
+    mut exploding_environment: Environment<'static>,
+    budget: ManifestBudget,
+) {
+    let env = &mut exploding_environment;
     env.add_template(
         "macro-template",
         "{% macro boom() %}{{ explode() }}{% endmacro %}",
     )
     .expect("the macro fixture template must compile");
-    add_exploding_function(&mut env);
+    add_exploding_function(env);
     env.add_function(
         "boom",
-        make_macro_fn(
-            "macro-template".to_owned(),
-            "boom".to_owned(),
-            ManifestBudget::default(),
-        ),
+        make_macro_fn("macro-template".to_owned(), "boom".to_owned(), budget),
     );
 
     let expression = env
@@ -129,13 +143,12 @@ fn macro_fallback_keeps_typed_collection_exhaustion() {
     );
 }
 
-#[test]
-fn bare_engine_fuel_exhaustion_still_maps_to_the_evaluation_stage() {
+#[rstest]
+fn bare_engine_fuel_exhaustion_still_maps_to_the_evaluation_stage(budget: ManifestBudget) {
     let mut env = Environment::new();
     env.add_function("burn", || -> Result<Value, Error> {
         Err(Error::new(ErrorKind::OutOfFuel, "no fuel"))
     });
-    let budget = ManifestBudget::default();
 
     let error = evaluate_with_state(
         &env,

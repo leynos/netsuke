@@ -24,6 +24,7 @@ use minijinja::{
     ErrorKind, context,
     value::{Value, ValueKind},
 };
+use rstest::rstest;
 use test_support::fluent::normalize_fluent_isolates;
 
 use super::fallible;
@@ -154,52 +155,41 @@ fn compact_accepts_a_repetition_exactly_at_the_per_call_limit() -> Result<()> {
     Ok(())
 }
 
-/// An oversized all-blank source stops at the ceiling, not at its end.
+/// An oversized source stops at the ceiling, whatever its members are.
 ///
-/// This is the discriminator for charging before the blank check: a filter that
-/// charged only retained members would pull this source to exhaustion without
-/// ever charging.
-#[test]
-fn compact_charges_blank_members_before_dropping_them() -> Result<()> {
+/// The blank case is the discriminator for charging before the blank check: a
+/// filter that charged only retained members would pull that source to
+/// exhaustion without ever charging. The retained case is the discriminator for
+/// charging before the append: a filter that appended first would retain one
+/// member past the ceiling, which the counted fixture's guard turns into a
+/// failure.
+///
+/// The stage assertion belongs to the blank case because only that case proves
+/// the charge happened before the member was classified; the retained case
+/// shares the remaining expectations.
+#[rstest]
+#[case::blank(Value::from(""), true)]
+#[case::retained(Value::from("kept"), false)]
+fn compact_charges_every_member_before_it_acts(
+    #[case] member: Value,
+    #[case] checks_stage: bool,
+) -> Result<()> {
     let env = fallible::stdlib_env()?;
-    let (source, consumed) = counted_source(OVERSIZED_SOURCE, Value::from(""));
+    let (source, consumed) = counted_source(OVERSIZED_SOURCE, member);
 
     let error = compacted_length(&env, &source)
-        .expect_err("an oversized all-blank iterable must exhaust the per-call ceiling");
+        .expect_err("an oversized source must exhaust the per-call ceiling");
     ensure!(
         error.kind() == ErrorKind::OutOfFuel,
         "compact should report OutOfFuel, but was {:?}",
         error.kind()
     );
-    ensure!(
-        normalize_fluent_isolates(&error.to_string()).contains("during collection"),
-        "the error must name the collection stage: {error}"
-    );
-    ensure!(
-        consumed.load(Ordering::SeqCst) == PER_CALL_LIMIT + 1,
-        "the filter must stop after the pull that discovers exhaustion, but pulled {} members",
-        consumed.load(Ordering::SeqCst)
-    );
-    Ok(())
-}
-
-/// An oversized retained-member source stops at the ceiling too.
-///
-/// A filter that appends before charging would retain one member past the
-/// ceiling; the guard makes that defect fail rather than merely change the
-/// reported count.
-#[test]
-fn compact_charges_retained_members_before_appending_them() -> Result<()> {
-    let env = fallible::stdlib_env()?;
-    let (source, consumed) = counted_source(OVERSIZED_SOURCE, Value::from("kept"));
-
-    let error = compacted_length(&env, &source)
-        .expect_err("an oversized retained iterable must exhaust the per-call ceiling");
-    ensure!(
-        error.kind() == ErrorKind::OutOfFuel,
-        "compact should report OutOfFuel, but was {:?}",
-        error.kind()
-    );
+    if checks_stage {
+        ensure!(
+            normalize_fluent_isolates(&error.to_string()).contains("during collection"),
+            "the error must name the collection stage: {error}"
+        );
+    }
     ensure!(
         consumed.load(Ordering::SeqCst) == PER_CALL_LIMIT + 1,
         "the filter must stop after the pull that discovers exhaustion, but pulled {} members",

@@ -39,11 +39,20 @@ fn owned_labels(key: &metrics::Key) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Report whether a copied label set contains the named pair.
-fn has_label(labels: &[(String, String)], key: &str, value: &str) -> bool {
-    labels
+/// Report whether the labels are exactly the expected pairs, in any order.
+///
+/// An equality check rather than a membership check: an extra label would
+/// still satisfy a membership test, but it would widen the counter's
+/// cardinality and violate the closed-label contract.
+fn has_exact_labels(labels: &[(String, String)], expected: [(&str, &str); 2]) -> bool {
+    let mut actual: Vec<(&str, &str)> = labels
         .iter()
-        .any(|(label_key, label_value)| label_key == key && label_value == value)
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    actual.sort_unstable();
+    let mut expected = expected.to_vec();
+    expected.sort_unstable();
+    actual == expected
 }
 
 #[test]
@@ -159,12 +168,11 @@ fn full_load_records_collection_exhaustion_telemetry() -> Result<()> {
         .first()
         .expect("the asserted counter must carry labels and a value");
     ensure!(
-        has_label(labels, "stage", "collection"),
-        "the counter must carry the collection stage: {labels:?}"
-    );
-    ensure!(
-        has_label(labels, "budget", "collection_call_items"),
-        "the counter must carry the call-width budget label: {labels:?}"
+        has_exact_labels(
+            labels,
+            [("stage", "collection"), ("budget", "collection_call_items")]
+        ),
+        "the counter must carry exactly the stage and budget labels: {labels:?}"
     );
     ensure!(
         matches!(value, DebugValue::Counter(1)),
@@ -245,12 +253,14 @@ fn telemetry_uses_only_the_closed_collection_labels() -> Result<()> {
     );
     let counter_labels = labels.first().expect("the counter must carry labels");
     ensure!(
-        has_label(counter_labels, "stage", "collection_aggregate"),
-        "the counter must carry the aggregate stage: {counter_labels:?}"
-    );
-    ensure!(
-        has_label(counter_labels, "budget", "collection_items"),
-        "the counter must carry the aggregate budget label: {counter_labels:?}"
+        has_exact_labels(
+            counter_labels,
+            [
+                ("stage", "collection_aggregate"),
+                ("budget", "collection_items"),
+            ]
+        ),
+        "the counter must carry exactly the stage and budget labels: {counter_labels:?}"
     );
     Ok(())
 }
