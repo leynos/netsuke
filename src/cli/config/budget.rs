@@ -30,15 +30,20 @@ pub(super) const DEFAULT_MANIFEST_EXPANDED_BYTES: usize = 268_435_456;
 ///
 /// Returns a validation error when any resource ceiling is zero.
 pub(super) fn validate_manifest_budget(config: &CliConfig) -> OrthoResult<()> {
-    let valid = config.manifest_evaluation_fuel > 0
-        && config.manifest_fuel > 0
-        && config.manifest_rendered_value_bytes > 0
-        && config.manifest_rendered_manifest_bytes > 0
-        && config.manifest_source_bytes > 0
-        && config.manifest_foreach_cardinality > 0
-        && config.manifest_expanded_entries > 0
-        && config.manifest_expanded_bytes > 0;
-    if valid {
+    // Grouping the ceilings by type keeps the predicate readable as one
+    // all-positive check per family instead of a long short-circuit chain.
+    let fuel_limits = [config.manifest_evaluation_fuel, config.manifest_fuel];
+    let byte_and_count_limits = [
+        config.manifest_rendered_value_bytes,
+        config.manifest_rendered_manifest_bytes,
+        config.manifest_source_bytes,
+        config.manifest_foreach_cardinality,
+        config.manifest_expanded_entries,
+        config.manifest_expanded_bytes,
+    ];
+    let all_positive = fuel_limits.iter().all(|limit| *limit > 0)
+        && byte_and_count_limits.iter().all(|limit| *limit > 0);
+    if all_positive {
         Ok(())
     } else {
         Err(validation_error(

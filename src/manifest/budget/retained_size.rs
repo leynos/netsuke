@@ -17,7 +17,7 @@
 //! is outside what this model can promise.
 
 use crate::manifest::{ManifestMap, ManifestValue};
-use minijinja::value::{Value, ValueIter, ValueKind};
+use minijinja::value::{Value, ValueKind};
 use std::mem::size_of;
 
 /// Model each retained node as one JSON value slot.
@@ -59,32 +59,44 @@ pub(crate) fn source_map_bytes(map: &ManifestMap, ceiling: usize) -> Option<usiz
 /// error is treated like an exceeded ceiling. Returns `None` when the running
 /// total would exceed `ceiling` or overflow `usize`.
 pub(crate) fn item_value_bytes(root: &Value, ceiling: usize) -> Option<usize> {
+    walk(Work::Item(root.clone()), ceiling)
+}
+
+/// Return the modelled bytes retained by one serialized JSON value.
+///
+/// Returns `None` when the running total would exceed `ceiling` or overflow
+/// `usize`.
+pub(crate) fn json_value_bytes(root: &ManifestValue, ceiling: usize) -> Option<usize> {
+    walk(Work::Json(root), ceiling)
+}
+
+/// Walk one retained value graph with an explicit work stack.
+///
+/// Both value families share this traversal so the ceiling and arithmetic
+/// policy cannot drift between them.
+fn walk(root: Work<'_>, ceiling: usize) -> Option<usize> {
     let mut total = 0usize;
-    let mut stack = vec![MiniWork::Value(root.clone())];
+    let mut stack = vec![root];
     while let Some(work) = stack.pop() {
-        match work {
-            MiniWork::Value(value) => {
-                total = charge_item_node(&value, total, ceiling, &mut stack)?;
+        total = match work {
+            Work::Item(value) => charge_item_node(&value, total, ceiling, &mut stack)?,
+            Work::Json(value) => charge_json_node(value, total, ceiling, &mut stack)?,
+            Work::Items(items) => {
+                push_next(items, Work::Items, &mut stack);
+                total
             }
-            MiniWork::Items(items) => advance_item_values(items, &mut stack),
-            MiniWork::Pairs(mut pairs) => {
-                if let Some((key, value)) = pairs.next() {
-                    stack.push(MiniWork::Pairs(pairs));
-                    total = add(total, mini_key_bytes(&key, ceiling - total)?, ceiling)?;
-                    stack.push(MiniWork::Value(value));
-                }
-            }
-        }
+            Work::Pairs(pairs) => advance_pairs(pairs, total, ceiling, &mut stack)?,
+        };
     }
     Some(total)
 }
 
 /// Charge one item node and queue its children for the same traversal.
-fn charge_item_node(
+fn charge_item_node<'a>(
     value: &Value,
     total: usize,
     ceiling: usize,
-    stack: &mut Vec<MiniWork>,
+    stack: &mut Vec<Work<'a>>,
 ) -> Option<usize> {
     let charged = add(total, NODE_BYTES, ceiling)?;
     match value.kind() {
@@ -94,11 +106,16 @@ fn charge_item_node(
             add(charged, bytes.checked_mul(NODE_BYTES)?, ceiling)
         }
         ValueKind::Seq | ValueKind::Iterable => {
-            stack.push(MiniWork::Items(value.try_iter().ok()?));
+            let items: BoxedWork<'a> = Box::new(value.try_iter().ok()?.map(Work::Item));
+            stack.push(Work::Items(items));
             Some(charged)
         }
         ValueKind::Map => {
-            stack.push(MiniWork::Pairs(value.as_object()?.try_iter_pairs()?));
+            let pairs = value.as_object()?.try_iter_pairs()?;
+            let entries: BoxedPairs<'a> = Box::new(
+                pairs.map(move |(key, item)| (mini_key_bytes(&key, ceiling), Work::Item(item))),
+            );
+            stack.push(Work::Pairs(entries));
             Some(charged)
         }
         // Scalars, undefined, plain objects, invalid values, and any engine
@@ -107,70 +124,58 @@ fn charge_item_node(
     }
 }
 
-/// Return the modelled bytes retained by one serialized JSON value.
-///
-/// Returns `None` when the running total would exceed `ceiling` or overflow
-/// `usize`.
-pub(crate) fn json_value_bytes(root: &ManifestValue, ceiling: usize) -> Option<usize> {
-    let mut total = 0usize;
-    let mut stack = vec![JsonWork::Value(root)];
-    while let Some(work) = stack.pop() {
-        match work {
-            JsonWork::Value(value) => {
-                total = charge_json_node(value, total, ceiling, &mut stack)?;
-            }
-            JsonWork::Items(items) => advance_json_items(items, &mut stack),
-            JsonWork::Entries(mut entries) => {
-                if let Some((key, value)) = entries.next() {
-                    stack.push(JsonWork::Entries(entries));
-                    total = add(total, map_entry_bytes(key), ceiling)?;
-                    stack.push(JsonWork::Value(value));
-                }
-            }
-        }
-    }
-    Some(total)
-}
-
 /// Charge one JSON node and queue its children for the same traversal.
 fn charge_json_node<'a>(
     value: &'a ManifestValue,
     total: usize,
     ceiling: usize,
-    stack: &mut Vec<JsonWork<'a>>,
+    stack: &mut Vec<Work<'a>>,
 ) -> Option<usize> {
     let charged = add(total, NODE_BYTES, ceiling)?;
     match value {
         ManifestValue::String(text) => add(charged, text.len(), ceiling),
         ManifestValue::Array(items) => {
-            stack.push(JsonWork::Items(items.iter()));
+            let work: BoxedWork<'a> = Box::new(items.iter().map(Work::Json));
+            stack.push(Work::Items(work));
             Some(charged)
         }
         ManifestValue::Object(map) => {
-            stack.push(JsonWork::Entries(map.iter()));
+            let entries: BoxedPairs<'a> = Box::new(
+                map.iter()
+                    .map(|(key, entry)| (map_entry_bytes(key), Work::Json(entry))),
+            );
+            stack.push(Work::Pairs(entries));
             Some(charged)
         }
         _ => Some(charged),
     }
 }
 
-/// Queue the next value-backed sequence item, stopping at exhaustion.
-fn advance_item_values(mut items: ValueIter, stack: &mut Vec<MiniWork>) {
-    if let Some(value) = items.next() {
-        stack.push(MiniWork::Items(items));
-        stack.push(MiniWork::Value(value));
+/// Queue the next sequence item, stopping at exhaustion.
+fn push_next<'a>(
+    mut items: BoxedWork<'a>,
+    resume: fn(BoxedWork<'a>) -> Work<'a>,
+    stack: &mut Vec<Work<'a>>,
+) {
+    if let Some(work) = items.next() {
+        stack.push(resume(items));
+        stack.push(work);
     }
 }
 
-/// Queue the next JSON array item, stopping at exhaustion.
-fn advance_json_items<'a>(
-    mut items: std::slice::Iter<'a, ManifestValue>,
-    stack: &mut Vec<JsonWork<'a>>,
-) {
-    if let Some(value) = items.next() {
-        stack.push(JsonWork::Items(items));
-        stack.push(JsonWork::Value(value));
-    }
+/// Charge one map key and queue its value, stopping at exhaustion.
+fn advance_pairs<'a>(
+    mut pairs: BoxedPairs<'a>,
+    total: usize,
+    ceiling: usize,
+    stack: &mut Vec<Work<'a>>,
+) -> Option<usize> {
+    pairs.next().map_or(Some(total), |(key_bytes, work)| {
+        stack.push(Work::Pairs(pairs));
+        let charged = add(total, key_bytes, ceiling)?;
+        stack.push(work);
+        Some(charged)
+    })
 }
 
 /// Return the modelled overhead of the keys `foreach` injects into an entry.
@@ -186,24 +191,22 @@ pub(crate) const fn iteration_overhead() -> usize {
         + 4 * NODE_BYTES
 }
 
-/// Work item for the non-recursive JSON traversal.
-enum JsonWork<'a> {
-    /// Visit one retained JSON value.
-    Value(&'a ManifestValue),
-    /// Continue a retained JSON array.
-    Items(std::slice::Iter<'a, ManifestValue>),
-    /// Continue a retained JSON object.
-    Entries(serde_json::map::Iter<'a>),
-}
+/// A sequence of pending child nodes.
+type BoxedWork<'a> = Box<dyn Iterator<Item = Work<'a>> + 'a>;
 
-/// Work item for the non-recursive `MiniJinja` traversal.
-enum MiniWork {
-    /// Visit one owned iterator value.
-    Value(Value),
-    /// Continue a value-backed sequence.
-    Items(ValueIter),
-    /// Continue a map's owned key/value pairs.
-    Pairs(Box<dyn Iterator<Item = (Value, Value)> + Send + Sync>),
+/// A sequence of pending map pairs, each with its modelled key charge.
+type BoxedPairs<'a> = Box<dyn Iterator<Item = (usize, Work<'a>)> + 'a>;
+
+/// One pending node in a retained-value traversal.
+enum Work<'a> {
+    /// Visit one owned `MiniJinja` item value.
+    Item(Value),
+    /// Visit one borrowed JSON value.
+    Json(&'a ManifestValue),
+    /// Continue a sequence of child nodes.
+    Items(BoxedWork<'a>),
+    /// Continue a map of charged keys and child nodes.
+    Pairs(BoxedPairs<'a>),
 }
 
 /// Add one modelled amount, refusing values beyond the ceiling.
@@ -227,15 +230,16 @@ const fn map_entry_bytes(key: &str) -> usize {
 /// Return the modelled retained bytes of one `MiniJinja` map key.
 ///
 /// A non-string key also needs a string node because JSON object keys are
-/// strings; the key's own structure is charged as well.
-fn mini_key_bytes(key: &Value, ceiling: usize) -> Option<usize> {
+/// strings; the key's own structure is charged as well. Exceeding `ceiling`
+/// saturates to `usize::MAX`, which the traversal's next charge refuses.
+fn mini_key_bytes(key: &Value, ceiling: usize) -> usize {
     let base = size_of::<String>() + INDEX_ENTRY_OVERHEAD;
     key.as_str().map_or_else(
         || {
-            let nested = item_value_bytes(key, ceiling.checked_sub(base)?)?;
-            add(add(base, nested, ceiling)?, NODE_BYTES, ceiling)
+            let nested = item_value_bytes(key, ceiling.saturating_sub(base)).unwrap_or(usize::MAX);
+            base.saturating_add(nested).saturating_add(NODE_BYTES)
         },
-        |text| add(base, text.len(), ceiling),
+        |text| base.saturating_add(text.len()),
     )
 }
 
