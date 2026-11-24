@@ -194,7 +194,7 @@ struct TemplateRequest<'name, 'a> {
     budget_limits: ManifestBudgetLimits,
     /// Test-only accounting that replaces the limits-derived budget.
     #[cfg(test)]
-    budget: Option<budget::ManifestBudget>,
+    supplied_budget: Option<budget::ManifestBudget>,
 }
 
 /// Everything needed to expand and render an evaluated manifest.
@@ -236,13 +236,13 @@ fn evaluate_manifest(yaml: &str, parse: ManifestParse<'_, '_>) -> Result<Netsuke
         environment: &environment,
         budget_limits,
         #[cfg(test)]
-        budget,
+        supplied_budget: budget,
     };
-    let (doc, jinja, budget) = build_template_environment(yaml, request, &mut on_stage)?;
+    let (doc, jinja, built_budget) = build_template_environment(yaml, request, &mut on_stage)?;
     expand_and_render(ExpansionRequest {
         doc,
         jinja,
-        budget: &budget,
+        budget: &built_budget,
         decisions,
         name,
         on_stage: &mut on_stage,
@@ -266,12 +266,12 @@ fn build_template_environment(
         environment,
         budget_limits,
         #[cfg(test)]
-        budget,
+        supplied_budget,
     } = request;
     notify_stage(on_stage, ManifestLoadStage::InitialYamlParsing);
     #[cfg(test)]
-    let budget = match budget {
-        Some(budget) => budget,
+    let budget = match supplied_budget {
+        Some(supplied) => supplied,
         None => budget::ManifestBudget::new(budget_limits)?,
     };
     #[cfg(not(test))]

@@ -77,11 +77,11 @@ pub(crate) fn register_with_collection_allowance(
                 .with_arg("path", path.display().to_string())
         )
     })?;
-    register_with_config_and_collection_allowance(
+    Ok(register_with_config_and_collection_allowance(
         env,
         StdlibConfig::new(root)?.with_workspace_root_path(path)?,
         collection_allowance,
-    )
+    ))
 }
 
 /// Register stdlib helpers using an explicit configuration.
@@ -115,18 +115,24 @@ pub fn register_with_config(
     env: &mut Environment<'_>,
     config: StdlibConfig,
 ) -> anyhow::Result<StdlibState> {
-    register_with_config_and_collection_allowance(env, config, &CollectionAllowance::standalone())
+    Ok(register_with_config_and_collection_allowance(
+        env,
+        config,
+        &CollectionAllowance::standalone(),
+    ))
 }
 
 /// Register an explicit stdlib configuration with a collection allowance.
 ///
 /// The loader calls this for fully configured manifest loads so `compact`
-/// charges the load's shared collection counters.
+/// charges the load's shared collection counters. Registration itself cannot
+/// fail once the configuration exists, which the public wrappers express as a
+/// `Result` for the callers that also build that configuration.
 pub(crate) fn register_with_config_and_collection_allowance(
     env: &mut Environment<'_>,
     config: StdlibConfig,
     collection_allowance: &CollectionAllowance,
-) -> anyhow::Result<StdlibState> {
+) -> StdlibState {
     register_legacy_boolean_formatter(env);
     let state = StdlibState::default();
     register_read_only_helpers(env, &config, collection_allowance);
@@ -144,7 +150,7 @@ pub(crate) fn register_with_config_and_collection_allowance(
         "registered stdlib file-reading filters"
     );
     command::register(env, impure, command_config);
-    Ok(state)
+    state
 }
 
 /// Preserve lowercase Boolean interpolation for existing manifests.

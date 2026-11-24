@@ -243,14 +243,14 @@ fn telemetry_uses_only_the_closed_collection_labels() -> Result<()> {
         labels.len() == 1,
         "the aggregate exhaustion must be recorded exactly once"
     );
-    let labels = labels.first().expect("the counter must carry labels");
+    let counter_labels = labels.first().expect("the counter must carry labels");
     ensure!(
-        has_label(labels, "stage", "collection_aggregate"),
-        "the counter must carry the aggregate stage: {labels:?}"
+        has_label(counter_labels, "stage", "collection_aggregate"),
+        "the counter must carry the aggregate stage: {counter_labels:?}"
     );
     ensure!(
-        has_label(labels, "budget", "collection_items"),
-        "the counter must carry the aggregate budget label: {labels:?}"
+        has_label(counter_labels, "budget", "collection_items"),
+        "the counter must carry the aggregate budget label: {counter_labels:?}"
     );
     Ok(())
 }

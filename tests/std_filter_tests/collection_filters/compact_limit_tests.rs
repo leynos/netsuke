@@ -1,6 +1,6 @@
 //! Consumption limits for the `compact` filter.
 //!
-//! `compact` used to collect every member of its subject. MiniJinja's lazy
+//! `compact` used to collect every member of its subject. `MiniJinja`'s lazy
 //! sequence repetition (`[none] * n`) makes a short expression name an
 //! arbitrarily large logical input, so collecting first let a manifest request
 //! unbounded CPU and memory before template evaluation resumed. These tests pin
@@ -93,7 +93,7 @@ fn counted_source(total: usize, member: Value) -> (Value, Arc<AtomicUsize>) {
 /// Render one compact expression under the standalone stdlib environment.
 fn compacted_length(
     env: &minijinja::Environment<'_>,
-    source: Value,
+    source: &Value,
 ) -> Result<usize, minijinja::Error> {
     let expression = env.compile_expression("source | compact | length")?;
     let rendered = expression.eval(context!(source => source))?;
@@ -113,12 +113,10 @@ fn compacted_length(
 #[test]
 fn compact_rejects_a_repetition_one_member_over_the_per_call_limit() -> Result<()> {
     let env = fallible::stdlib_env()?;
-    let template = format!(
-        "{{{{ ([none] * {count}) | compact | length }}}}",
-        count = PER_CALL_LIMIT + 1
-    );
+    let count = PER_CALL_LIMIT + 1;
+    let template = format!("{{{{ ([none] * {count}) | compact | length }}}}");
     let Err(error) = env.render_str(&template, context! {}) else {
-        bail!("compact must reject a repetition of {PER_CALL_LIMIT} + 1 members");
+        bail!("compact must reject a repetition of {count} members");
     };
 
     ensure!(
@@ -142,10 +140,8 @@ fn compact_rejects_a_repetition_one_member_over_the_per_call_limit() -> Result<(
 #[test]
 fn compact_accepts_a_repetition_exactly_at_the_per_call_limit() -> Result<()> {
     let env = fallible::stdlib_env()?;
-    let template = format!(
-        "{{{{ ([none] * {count}) | compact | length }}}}",
-        count = PER_CALL_LIMIT
-    );
+    let count = PER_CALL_LIMIT;
+    let template = format!("{{{{ ([none] * {count}) | compact | length }}}}");
     let output = env
         .render_str(&template, context! {})
         .context("a repetition at the per-call ceiling must render")?;
@@ -168,7 +164,7 @@ fn compact_charges_blank_members_before_dropping_them() -> Result<()> {
     let env = fallible::stdlib_env()?;
     let (source, consumed) = counted_source(OVERSIZED_SOURCE, Value::from(""));
 
-    let error = compacted_length(&env, source)
+    let error = compacted_length(&env, &source)
         .expect_err("an oversized all-blank iterable must exhaust the per-call ceiling");
     ensure!(
         error.kind() == ErrorKind::OutOfFuel,
@@ -197,7 +193,7 @@ fn compact_charges_retained_members_before_appending_them() -> Result<()> {
     let env = fallible::stdlib_env()?;
     let (source, consumed) = counted_source(OVERSIZED_SOURCE, Value::from("kept"));
 
-    let error = compacted_length(&env, source)
+    let error = compacted_length(&env, &source)
         .expect_err("an oversized retained iterable must exhaust the per-call ceiling");
     ensure!(
         error.kind() == ErrorKind::OutOfFuel,
@@ -219,27 +215,35 @@ fn compact_charges_retained_members_before_appending_them() -> Result<()> {
 #[test]
 fn compact_examines_and_charges_every_member_of_a_mixed_source() -> Result<()> {
     const TOTAL: usize = 1_000;
+    /// Half of [`TOTAL`], written out so the expectation needs no arithmetic.
+    const RETAINED: usize = 500;
     let env = fallible::stdlib_env()?;
     let consumed = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&consumed);
+    // An explicit alternating flag rather than index arithmetic: the crate
+    // denies `%` and `/` on integers, and the intent is "blank, kept, blank,
+    // kept" rather than anything about divisibility.
     let source = Value::make_iterable(move || {
+        let mut is_blank = true;
         (0..TOTAL)
-            .map(|index| {
+            .map(|_| {
                 counter.fetch_add(1, Ordering::SeqCst);
-                if index % 2 == 0 {
+                let member = if is_blank {
                     Value::from("")
                 } else {
                     Value::from("kept")
-                }
+                };
+                is_blank = !is_blank;
+                member
             })
             .collect::<Vec<_>>()
             .into_iter()
     });
 
-    let length = compacted_length(&env, source).context("a mixed source below the ceiling")?;
+    let length = compacted_length(&env, &source).context("a mixed source below the ceiling")?;
 
     ensure!(
-        length == TOTAL / 2,
+        length == RETAINED,
         "compact must retain the non-blank half of a mixed source, but retained {length}"
     );
     ensure!(

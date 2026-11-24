@@ -383,13 +383,13 @@ pub(super) fn register_stdlib(
         StdlibRegistration::AmbientFull => {
             crate::stdlib::register_with_collection_allowance(env, collection_allowance)
         }
-        StdlibRegistration::Full(config) => {
+        StdlibRegistration::Full(config) => Ok(
             crate::stdlib::register_with_config_and_collection_allowance(
                 env,
                 *config,
                 collection_allowance,
-            )
-        }
+            ),
+        ),
         StdlibRegistration::ManifestQuery => Ok(crate::stdlib::register_manifest_query(
             env,
             collection_allowance,
