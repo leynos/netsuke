@@ -16,6 +16,10 @@ pub const DEFAULT_FOREACH_CARDINALITY: usize = 10_000;
 pub const DEFAULT_EXPANDED_ENTRIES: usize = 50_000;
 /// Default maximum `MiniJinja` instructions reserved across one manifest.
 pub const DEFAULT_MANIFEST_FUEL: u64 = 100_000_000;
+/// Default maximum members consumed by one native collection filter call.
+pub(crate) const DEFAULT_COLLECTION_CALL_ITEMS: usize = 100_000;
+/// Default maximum members consumed by native collection filters per manifest.
+pub(crate) const DEFAULT_COLLECTION_ITEMS: usize = 1_000_000;
 
 /// Configure the resource ceilings applied to a single manifest evaluation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -106,11 +110,15 @@ pub(crate) enum ManifestBudgetStage {
     Source,
     /// Execute `MiniJinja` instructions.
     Fuel,
+    /// Consume one native collection filter's input.
+    Collection,
+    /// Account native collection consumption across the manifest.
+    CollectionAggregate,
 }
 
 impl ManifestBudgetStage {
     /// Return every permitted telemetry stage in its stable vocabulary.
-    pub(crate) const fn all() -> [Self; 8] {
+    pub(crate) const fn all() -> [Self; 10] {
         [
             Self::Render,
             Self::Foreach,
@@ -120,6 +128,8 @@ impl ManifestBudgetStage {
             Self::ByteAggregate,
             Self::Source,
             Self::Fuel,
+            Self::Collection,
+            Self::CollectionAggregate,
         ]
     }
 
@@ -134,6 +144,8 @@ impl ManifestBudgetStage {
             Self::ByteAggregate => "byte_aggregate",
             Self::Source => "source",
             Self::Fuel => "fuel",
+            Self::Collection => "collection",
+            Self::CollectionAggregate => "collection_aggregate",
         }
     }
 }
@@ -153,6 +165,10 @@ pub(crate) enum ManifestBudgetKind {
     ForeachCardinality,
     /// Counts target and action entries emitted by expansion.
     ExpandedEntries,
+    /// Counts members consumed by one native collection filter call.
+    CollectionCallItems,
+    /// Counts members consumed by collection filters across one manifest.
+    CollectionItems,
 }
 
 impl ManifestBudgetKind {
@@ -165,6 +181,8 @@ impl ManifestBudgetKind {
             Self::SourceBytes => "source_bytes",
             Self::ForeachCardinality => "foreach_cardinality",
             Self::ExpandedEntries => "expanded_entries",
+            Self::CollectionCallItems => "collection_call_items",
+            Self::CollectionItems => "collection_items",
         }
     }
 }

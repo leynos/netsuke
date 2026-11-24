@@ -30,6 +30,33 @@ pub(crate) fn from_path_for_manifest_query(
     from_path_for_manifest_query_with_limits(path, ManifestBudgetLimits::default(), on_stage)
 }
 
+/// Load a manifest query under a pre-built budget for focused tests.
+///
+/// The collection ceilings are fixed contract values rather than operator
+/// settings, so a test that needs small ones constructs the budget directly.
+///
+/// # Errors
+///
+/// Returns an error if the manifest cannot be read, rendered, or parsed, or if
+/// the supplied budget is exhausted.
+#[cfg(test)]
+pub(crate) fn from_path_for_manifest_query_with_budget(
+    path: impl AsRef<Path>,
+    budget: super::budget::ManifestBudget,
+    on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
+) -> Result<NetsukeManifest> {
+    let mut options = ManifestLoadOptions::manifest_query().with_budget(budget);
+    if let Some(observer) = on_stage {
+        options = options.with_stage_observer(observer);
+    }
+    from_path_with_options(
+        path,
+        |_workspace| Ok(StdlibRegistration::ManifestQuery),
+        options,
+    )
+    .map(|loaded| loaded.manifest)
+}
+
 /// Load a manifest query with caller-controlled resource ceilings.
 pub(crate) fn from_path_for_manifest_query_with_limits(
     path: impl AsRef<Path>,

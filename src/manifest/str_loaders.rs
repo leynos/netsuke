@@ -88,3 +88,26 @@ pub(crate) fn from_str_with_limits(
         ManifestLoadOptions::ambient(environment).with_budget_limits(budget_limits),
     )
 }
+
+/// Parse a manifest string under a pre-built budget for focused tests.
+///
+/// The collection ceilings are fixed contract values rather than operator
+/// settings, so a test that needs small ones constructs the budget directly.
+///
+/// # Errors
+///
+/// Returns an error if parsing, expansion, or rendering fails, including when
+/// the supplied budget is exhausted.
+#[cfg(test)]
+pub(crate) fn from_str_with_budget(
+    yaml: &str,
+    budget: super::budget::ManifestBudget,
+) -> Result<NetsukeManifest> {
+    let reader = process_env_reader();
+    let environment = ManifestEnvironment::new(&reader, EnvAccessPolicy::default());
+    from_str_with_options(
+        yaml,
+        &ManifestName::new("Netsukefile"),
+        ManifestLoadOptions::ambient(environment).with_budget(budget),
+    )
+}

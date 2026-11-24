@@ -17,8 +17,8 @@ use camino::Utf8PathBuf;
 use minijinja::Environment;
 
 use super::{
-    EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment, ManifestLoadStage,
-    ManifestName, ManifestParse, NetsukeManifest, TemplateOverlays, TestSurface,
+    CollectionAllowance, EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment,
+    ManifestLoadStage, ManifestName, ManifestParse, NetsukeManifest, TemplateOverlays, TestSurface,
     budget::adapter::from_str_named,
     registration::{register_env_function, register_glob_function},
 };
@@ -133,6 +133,9 @@ pub struct ManifestLoadOptions<'a> {
     environment: ManifestEnvironment<'a>,
     /// Resource ceilings resolved before loading.
     budget_limits: ManifestBudgetLimits,
+    /// Test-only accounting that replaces the limits-derived budget.
+    #[cfg(test)]
+    budget: Option<super::budget::ManifestBudget>,
     /// Observes load stages without changing parsing behaviour.
     on_stage: Option<&'a mut dyn FnMut(ManifestLoadStage)>,
 }
@@ -162,6 +165,8 @@ impl<'a> ManifestLoadOptions<'a> {
             registration: StdlibRegistration::Full(Box::new(config)),
             environment,
             budget_limits: ManifestBudgetLimits::default(),
+            #[cfg(test)]
+            budget: None,
             on_stage: None,
         }
     }
@@ -176,6 +181,8 @@ impl<'a> ManifestLoadOptions<'a> {
             registration: StdlibRegistration::AmbientFull,
             environment,
             budget_limits: ManifestBudgetLimits::default(),
+            #[cfg(test)]
+            budget: None,
             on_stage: None,
         }
     }
@@ -198,6 +205,8 @@ impl<'a> ManifestLoadOptions<'a> {
             registration: StdlibRegistration::Test(Box::new(surface)),
             environment: query_environment(),
             budget_limits: ManifestBudgetLimits::default(),
+            #[cfg(test)]
+            budget: None,
             on_stage: None,
         }
     }
@@ -213,6 +222,8 @@ impl<'a> ManifestLoadOptions<'a> {
             registration: StdlibRegistration::ManifestQuery,
             environment: query_environment(),
             budget_limits: ManifestBudgetLimits::default(),
+            #[cfg(test)]
+            budget: None,
             on_stage: None,
         }
     }
@@ -229,6 +240,8 @@ impl<'a> ManifestLoadOptions<'a> {
             registration: StdlibRegistration::AmbientFull,
             environment,
             budget_limits: ManifestBudgetLimits::default(),
+            #[cfg(test)]
+            budget: None,
             on_stage: None,
         }
     }
@@ -237,6 +250,18 @@ impl<'a> ManifestLoadOptions<'a> {
     #[must_use]
     pub const fn with_budget_limits(mut self, limits: ManifestBudgetLimits) -> Self {
         self.budget_limits = limits;
+        self
+    }
+
+    /// Replace the limits-derived accounting with a constructed budget.
+    ///
+    /// The collection ceilings are fixed contract values rather than operator
+    /// settings, so focused tests need this seam to exercise them at small
+    /// sizes. Production callers always use the limits-derived budget.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_budget(mut self, budget: super::budget::ManifestBudget) -> Self {
+        self.budget = Some(budget);
         self
     }
 
@@ -271,6 +296,8 @@ impl<'a> ManifestLoadOptions<'a> {
             registration: self.registration,
             environment: self.environment,
             budget_limits: self.budget_limits,
+            #[cfg(test)]
+            budget: self.budget,
             on_stage: self.on_stage,
         }
     }
@@ -344,17 +371,34 @@ pub(super) fn register_host_helpers(
 }
 
 /// Register the stdlib surface the registration selects.
+///
+/// The collection allowance comes from the load's manifest budget, so every
+/// surface that can evaluate a template charges the same shared counters.
 pub(super) fn register_stdlib(
     env: &mut Environment<'_>,
     registration: StdlibRegistration,
+    collection_allowance: &CollectionAllowance,
 ) -> anyhow::Result<StdlibState> {
     match registration {
-        StdlibRegistration::AmbientFull => crate::stdlib::register(env),
-        StdlibRegistration::Full(config) => crate::stdlib::register_with_config(env, *config),
-        StdlibRegistration::ManifestQuery => Ok(crate::stdlib::register_manifest_query(env)),
-        StdlibRegistration::Test(surface) => {
-            Ok(crate::stdlib::register_for_test(env, surface.config()))
+        StdlibRegistration::AmbientFull => {
+            crate::stdlib::register_with_collection_allowance(env, collection_allowance)
         }
+        StdlibRegistration::Full(config) => {
+            crate::stdlib::register_with_config_and_collection_allowance(
+                env,
+                *config,
+                collection_allowance,
+            )
+        }
+        StdlibRegistration::ManifestQuery => Ok(crate::stdlib::register_manifest_query(
+            env,
+            collection_allowance,
+        )),
+        StdlibRegistration::Test(surface) => Ok(crate::stdlib::register_for_test(
+            env,
+            surface.config(),
+            collection_allowance,
+        )),
     }
 }
 

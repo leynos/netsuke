@@ -1,7 +1,7 @@
 //! Preserve expression values and engine state for shared fuel accounting.
 
 use crate::manifest::{
-    budget::adapter::BudgetErrorExt,
+    budget::adapter::{BudgetErrorExt, preserves_budget_exhaustion},
     budget::{ManifestBudget, ManifestBudgetStage},
 };
 use minijinja::{Environment, Error, ErrorKind, Value};
@@ -49,9 +49,13 @@ pub(crate) fn evaluate_with_state(
                 .lookup("__netsuke_expression_result")
                 .unwrap_or(Value::UNDEFINED))
         }
-        Err(error) if error.kind() == ErrorKind::OutOfFuel => Err(budget
-            .fuel_exhaustion(request.stage)
-            .into_error(ErrorKind::OutOfFuel)),
+        Err(error)
+            if error.kind() == ErrorKind::OutOfFuel && !preserves_budget_exhaustion(&error) =>
+        {
+            Err(budget
+                .fuel_exhaustion(request.stage)
+                .into_error(ErrorKind::OutOfFuel))
+        }
         Err(error) => Err(error),
     }
 }

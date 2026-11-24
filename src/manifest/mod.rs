@@ -18,6 +18,7 @@ use serde::de::Error as _;
 
 mod access_policy;
 mod budget;
+pub(crate) use budget::CollectionAllowance;
 use budget::adapter::BudgetErrorExt;
 pub(crate) use budget::adapter::budget_exhaustion_message;
 mod diagnostics;
@@ -64,18 +65,18 @@ pub use path_loaders::{
     from_path_with_policy_and_env_and_limits, from_path_with_policy_and_environment,
     from_path_with_policy_and_environment_and_limits, from_path_with_policy_and_limits,
 };
-#[cfg(test)]
-pub(crate) use query::from_path_for_manifest_query;
 pub(crate) use query::from_path_for_manifest_query_with_limits;
 #[cfg(feature = "lint")]
 pub(crate) use query::{LoadedManifest, from_path_for_manifest_query_with_source};
 #[cfg(test)]
+pub(crate) use query::{from_path_for_manifest_query, from_path_for_manifest_query_with_budget};
+#[cfg(test)]
 use registration::RESERVED_VAR_NAMES;
 use registration::{localize_recipe_error, register_manifest_vars};
 pub use render::render_manifest;
-#[cfg(test)]
-pub(crate) use str_loaders::from_str_with_limits;
 pub use str_loaders::{from_str, from_str_with_env};
+#[cfg(test)]
+pub(crate) use str_loaders::{from_str_with_budget, from_str_with_limits};
 pub use test_surface::{
     OverlayCall, OverlayCallable, OverlayNameKind, TemplateOverlayError, TemplateOverlays,
     TestSurface,
@@ -97,6 +98,9 @@ struct ManifestParse<'a, 'name> {
     environment: ManifestEnvironment<'a>,
     /// Resource ceilings resolved from trusted configuration before loading.
     budget_limits: ManifestBudgetLimits,
+    /// Test-only accounting that replaces the limits-derived budget.
+    #[cfg(test)]
+    budget: Option<budget::ManifestBudget>,
     /// Observes load phases without changing parsing behaviour.
     on_stage: Option<&'a mut dyn FnMut(ManifestLoadStage)>,
 }
@@ -188,6 +192,9 @@ struct TemplateRequest<'name, 'a> {
     environment: &'a ManifestEnvironment<'a>,
     /// Resource ceilings resolved before loading.
     budget_limits: ManifestBudgetLimits,
+    /// Test-only accounting that replaces the limits-derived budget.
+    #[cfg(test)]
+    budget: Option<budget::ManifestBudget>,
 }
 
 /// Everything needed to expand and render an evaluated manifest.
@@ -217,6 +224,8 @@ fn evaluate_manifest(yaml: &str, parse: ManifestParse<'_, '_>) -> Result<Netsuke
         registration,
         environment,
         budget_limits,
+        #[cfg(test)]
+        budget,
         mut on_stage,
     } = parse;
     let decisions = RenderDecisions::from_registration(&registration);
@@ -226,6 +235,8 @@ fn evaluate_manifest(yaml: &str, parse: ManifestParse<'_, '_>) -> Result<Netsuke
         registration,
         environment: &environment,
         budget_limits,
+        #[cfg(test)]
+        budget,
     };
     let (doc, jinja, budget) = build_template_environment(yaml, request, &mut on_stage)?;
     expand_and_render(ExpansionRequest {
@@ -254,8 +265,16 @@ fn build_template_environment(
         registration,
         environment,
         budget_limits,
+        #[cfg(test)]
+        budget,
     } = request;
     notify_stage(on_stage, ManifestLoadStage::InitialYamlParsing);
+    #[cfg(test)]
+    let budget = match budget {
+        Some(budget) => budget,
+        None => budget::ManifestBudget::new(budget_limits)?,
+    };
+    #[cfg(not(test))]
     let budget = budget::ManifestBudget::new(budget_limits)?;
     budget
         .charge_source(yaml.len(), budget::ManifestBudgetStage::Source)
@@ -270,7 +289,9 @@ fn build_template_environment(
     // are taken first. Cloning them copies only the `Arc` handles and the name
     // map; the dispatch closures stay shared.
     let overlays = registration.overlays().cloned();
-    let _stdlib_state = loader_options::register_stdlib(&mut jinja, registration)?;
+    let collection_allowance = budget.collection_allowance();
+    let _stdlib_state =
+        loader_options::register_stdlib(&mut jinja, registration, &collection_allowance)?;
     // Computed before the vars are registered: the manifest's own keys are part
     // of the namespace an overlay must not take, and the same value answers the
     // reserved-name check inside `register_manifest_vars`.

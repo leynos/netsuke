@@ -8,7 +8,7 @@
 use super::ManifestValue;
 use crate::ast::MacroDefinition;
 use crate::localization::{self, keys};
-use crate::manifest::budget::adapter::BudgetErrorExt;
+use crate::manifest::budget::adapter::{BudgetErrorExt, preserves_budget_exhaustion};
 use crate::manifest::budget::{ManifestBudget, ManifestBudgetStage};
 use anyhow::{Context, Result};
 use minijinja::{Environment, Error, ErrorKind, value::Value};
@@ -28,6 +28,9 @@ pub(crate) mod telemetry;
 #[cfg(test)]
 pub(crate) use call::call_macro_value;
 use invocation::{make_macro_fn, validate_macro};
+
+#[cfg(test)]
+mod typed_exhaustion_tests;
 
 /// Global name holding accumulated import statements for manifest macros.
 const MACRO_IMPORTS_GLOBAL: &str = "__netsuke_manifest_macro_imports";
@@ -343,7 +346,11 @@ fn render_template_at<T: Serialize + ?Sized>(
             }
             Err(error) => writer.exhaustion().map_or_else(
                 || {
-                    if error.kind() == ErrorKind::OutOfFuel {
+                    // A native callback may report its own exhausted counter
+                    // as `OutOfFuel`. Keep that typed exhaustion; only a bare
+                    // engine failure describes the fuel stage.
+                    if error.kind() == ErrorKind::OutOfFuel && !preserves_budget_exhaustion(&error)
+                    {
                         Err(budget
                             .fuel_exhaustion(request.stage)
                             .into_error(ErrorKind::OutOfFuel))

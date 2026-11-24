@@ -274,7 +274,10 @@ fn refusal_from(template: &str) -> Result<minijinja::Error> {
     let mut env = Environment::new();
     // `env()` and `glob()` are installed by the manifest loader from the load's
     // own disposition, so a query load registers them alongside the surface.
-    register_manifest_query(&mut env);
+    register_manifest_query(
+        &mut env,
+        &crate::manifest::CollectionAllowance::standalone(),
+    );
     register_env_refusal(&mut env);
     register_glob_refusal(&mut env, RestrictedSurface::ManifestQuery);
     match env.render_str(template, ()) {
