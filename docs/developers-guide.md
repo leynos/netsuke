@@ -8191,12 +8191,19 @@ CAPTURE="$capture" UNIT="$unit" systemd-run \
       | tee "$CAPTURE"'
 caller_status=$?
 printf 'unit=%s.scope caller_exit=%s\n' "$unit" "$caller_status" > "$capture.status"
+(exit "$caller_status")
 ```
 
 `--expand-environment=no` stops `systemd-run` expanding `$CAPTURE` and `$UNIT`
 itself; the payload's own shell expands them from the environment the
 invocation inherits, which is what keeps the unit name in the command and in
 the sidecar identical without writing it twice.
+
+The final `(exit "$caller_status")` is not decoration. The last command in a
+script sets its exit status, so a snippet that ends at the `printf` reports 0
+whenever the sidecar was written — a verifier that exited 7 would still look
+like success to a CI step or an `&&` chain. The subshell propagates the saved
+status without closing an interactive shell.
 
 `RuntimeMaxSec=8m` is the runtime cap and `TimeoutStopSec=20s` the stop grace
 that follows it; `CPUQuota`, `MemoryMax`, `MemorySwapMax`, `TasksMax` and
@@ -8374,32 +8381,38 @@ systemctl --user list-units --all --no-legend --plain \
     --state=active,failed "$prefix-*"
 ```
 
-Then stop each active unit by its exact name, wait for it to reach a terminal
-state, and reset only what is still loaded and failed:
+Take each **listed name verbatim** into the sequence below. Do not rebuild it
+from the prefix and the scenario: a unit name is
+`netsuke-kani-wrapper-<pid>-<stamp>-<sequence>-<scenario>`, so a reconstructed
+name addresses a different unit, and the stop silently does nothing while the
+real scope keeps running.
+
+Stop each active unit by its exact name, wait for it to reach a terminal state,
+and reset only what is still loaded and failed:
 
 ```bash
-unit="$prefix-<scenario>.scope"
+unit='netsuke-kani-wrapper-<pid>-<stamp>-<sequence>-<scenario>.scope'
 systemctl --user stop "$unit" || true
 for _ in $(seq 1 30); do
     state=$(systemctl --user show -P ActiveState "$unit")
     case "$state" in
-        inactive|failed) break ;;
+        inactive | failed) break ;;
     esac
     sleep 1
 done
-if [ "$(systemctl --user show -P LoadState "$unit")" = loaded ] \
-        && [ "$(systemctl --user show -P ActiveState "$unit")" = failed ]; then
+if [ "$(systemctl --user show -P LoadState "$unit")" = loaded ] &&
+    [ "$(systemctl --user show -P ActiveState "$unit")" = failed ]; then
     systemctl --user reset-failed "$unit"
 fi
 ```
 
-Two details in that sequence are load-bearing. The wait ends on `failed` as
-well as `inactive`: a stop that exhausts the scope's own `TimeoutStopSec`
-leaves the unit `failed`, which is a terminal state, and waiting only for
-`inactive` would loop until the bound above expired. And the reset is
-conditional on the unit still being both loaded and failed: a stop under
-`--collect` unloads the unit itself, and `reset-failed` against a unit that is
-not loaded fails with "Unit … not loaded".
+Three details in that sequence are load-bearing. The unit is named in full, for
+the reason above. The wait ends on `failed` as well as `inactive`: a stop that
+exhausts the scope's own `TimeoutStopSec` leaves the unit `failed`, which is a
+terminal state, and waiting only for `inactive` would loop until the bound
+above expired. And the reset is conditional on the unit still being both loaded
+and failed: a stop under `--collect` unloads the unit itself, and
+`reset-failed` against a unit that is not loaded fails with "Unit … not loaded".
 
 A unit that is already unloaded needs neither step: the state the recovery
 wanted is the state the manager reached by itself.

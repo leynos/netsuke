@@ -1249,6 +1249,7 @@ CAPTURE="$capture" UNIT="$unit" systemd-run \
       | tee "$CAPTURE"'
 caller_status=$?
 printf 'unit=%s.scope caller_exit=%s\n' "$unit" "$caller_status" > "$capture.status"
+(exit "$caller_status")
 ```
 
 `tee` is inside the scope, so the captured file is exactly the output the cap

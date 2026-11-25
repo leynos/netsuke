@@ -125,6 +125,33 @@ pub(super) fn capture_path(unit: &str) -> String {
     format!("{CAPTURE_DIR}/{unit}.out")
 }
 
+/// Build a `systemd-run` command with a controlled environment.
+///
+/// The caller's environment is cleared, because inheriting it would let an
+/// ambient variable change what these scenarios measure. `SHELLOPTS=pipefail`
+/// is the concrete case: bash imports `SHELLOPTS` at startup, so an exported
+/// value would enable `pipefail` in the control that exists to show what
+/// happens *without* it, and that control would then report 7 instead of 0 —
+/// measured on the reference host.
+///
+/// Only what reaching the user manager requires is restored. `XDG_RUNTIME_DIR`
+/// is how `--user` finds the bus, and `DBUS_SESSION_BUS_ADDRESS` is honoured
+/// when the host sets it.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "this is the seam itself: it reads the ambient environment once to build a child's controlled one, and nothing else in the suite reads an ambient variable"
+)]
+fn managed_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    command.env_clear();
+    for name in ["XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "PATH"] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
+    command
+}
+
 /// Build the wrapper exactly as the plans document it, with test-sized limits.
 ///
 /// `payload` is the shell body placed inside the scope. The resource
@@ -138,7 +165,7 @@ fn scope_command(unit: &str, cap: Duration, retention: Retention, payload: &str)
     // end the shell before `tee` ever ran, leaving an empty capture and a
     // pipeline status that says nothing about the payload.
     let body = format!("set -o pipefail; {{ {payload}; }} 2>&1 | tee {log}");
-    let mut command = Command::new("systemd-run");
+    let mut command = managed_command("systemd-run");
     command.args([
         "--user",
         "--scope",
@@ -204,10 +231,14 @@ pub(super) fn spawn_scoped(
 /// the wrapper's `pipefail` is protecting against, so it must differ from the
 /// documented shape in exactly that property — it also omits the resource
 /// properties and `nice`, which is the shape the wrapper replaced.
+///
+/// The environment is controlled here too, and for this scenario it is
+/// load-bearing: an inherited `SHELLOPTS=pipefail` would turn the control into
+/// the thing it is meant to contrast with.
 pub(super) fn run_without_pipefail(unit: &str, cap: Duration) -> Result<Output> {
     let log = capture_path(unit);
     let body = format!("{{ echo masked-failure; exit 7; }} 2>&1 | tee {log}");
-    Command::new("systemd-run")
+    managed_command("systemd-run")
         .args([
             "--user",
             "--scope",

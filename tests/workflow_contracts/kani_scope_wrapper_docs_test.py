@@ -65,18 +65,35 @@ REQUIRED_FLAGS = (
     "--unit",
 )
 
-#: The properties every routine example must pin.
+#: The bounded value each property must carry, as `Name=value`.
 #:
-#: `RuntimeMaxSec` and `TimeoutStopSec` bound the run; the rest cap CPU,
-#: memory, swap, task count and I/O weight. None is optional.
+#: Checking only that a property is *named* accepts `MemoryMax=infinity`,
+#: which removes the cap the example exists to show. These are the documented
+#: figures, so an example that weakens one fails here rather than at the point
+#: where an uncapped verifier OOM-kills a machine.
 REQUIRED_PROPERTIES = (
-    "RuntimeMaxSec=",
-    "TimeoutStopSec=",
-    "CPUQuota=",
-    "MemoryMax=",
-    "MemorySwapMax=",
-    "TasksMax=",
-    "IOWeight=",
+    "RuntimeMaxSec=8m",
+    "TimeoutStopSec=20s",
+    "CPUQuota=200%",
+    "MemoryMax=8G",
+    "MemorySwapMax=0",
+    "TasksMax=96",
+    "IOWeight=20",
+)
+
+#: The values that would silently remove a cap, one per property that has one.
+#:
+#: The negative control in
+#: `test_the_property_check_rejects_an_unbounded_value` uses one of these to
+#: prove the value check fires.
+UNBOUNDED_VALUES = (
+    "MemoryMax=infinity",
+    "RuntimeMaxSec=infinity",
+    "TimeoutStopSec=infinity",
+    "CPUQuota=100%",
+    "MemorySwapMax=infinity",
+    "TasksMax=infinity",
+    "IOWeight=0",
 )
 
 #: How the wrapper applies niceness, because `Nice=` is not accepted here.
@@ -168,7 +185,14 @@ def test_every_document_publishes_a_routine_example(path: Path) -> None:
 
 @pytest.mark.parametrize("path", DOCUMENTS)
 def test_routine_examples_keep_every_flag_property_and_niceness(path: Path) -> None:
-    """Require the documented flags, caps and niceness in every routine example."""
+    """Require the documented flags, bounded caps and niceness in every example.
+
+    The properties are matched with their documented *values*, so an example
+    that keeps the name and drops the bound — `MemoryMax=infinity` — fails
+    here. Neither check subsumes the other: the value check would also pass on
+    a property that had been deleted and re-added elsewhere, and the flag check
+    is what notices a missing `--collect`.
+    """
     for block in _routine_blocks(path):
         missing = [token for token in REQUIRED_TOKENS if token not in block]
         assert not missing, (
@@ -176,6 +200,33 @@ def test_routine_examples_keep_every_flag_property_and_niceness(path: Path) -> N
             f"what keep an uncapped verifier from OOM-killing the machine, and "
             f"`--collect` is what stops a failed scope accumulating:\n{block}"
         )
+        unbounded = [value for value in UNBOUNDED_VALUES if value in block]
+        assert not unbounded, (
+            f"{_relative(path)}: a routine example weakens a documented bound with "
+            f"{unbounded}:\n{block}"
+        )
+
+
+def test_the_property_check_rejects_an_unbounded_value() -> None:
+    """Prove the value check fires on the weakening it exists to catch.
+
+    The control keeps every property *name* and drops one bound, which is the
+    shape a name-only check accepts.
+    """
+    weakened = (
+        "systemd-run --user --scope --collect -p MemoryMax=infinity bash -c 'true'"
+    )
+    assert "MemoryMax=" in weakened, (
+        "the control must still name the property, or it would test the other check"
+    )
+    assert "MemoryMax=8G" not in weakened, (
+        "the control must have dropped the documented bound, so the value check "
+        "is the one that has to notice"
+    )
+    assert any(value in weakened for value in UNBOUNDED_VALUES), (
+        "the unbounded table must name the value the control uses, or the check "
+        "cannot fire on it"
+    )
 
 
 @pytest.mark.parametrize("path", DOCUMENTS)
@@ -293,6 +344,92 @@ def test_makefile_defaults_strict_mode_and_exports_it() -> None:
     assert re.search(r"^KANI_SCOPE_WRAPPER_STRICT\s*\?=\s*1$", text, re.MULTILINE), (
         "`KANI_SCOPE_WRAPPER_STRICT` must default to 1"
     )
-    assert "NETSUKE_KANI_SCOPE_WRAPPER_STRICT=$(KANI_SCOPE_WRAPPER_STRICT)" in text, (
-        "the target must export the variable the suite reads as strict mode"
+
+
+EXPORT_VARIABLE = "NETSUKE_KANI_SCOPE_WRAPPER_STRICT=$(KANI_SCOPE_WRAPPER_STRICT)"
+
+
+def test_the_strict_export_is_an_executable_line_in_the_recipe() -> None:
+    """Require the export to be a live recipe line, not merely present.
+
+    A commented-out assignment still satisfies a substring search, so a reader
+    that only searched the file would accept its removal. This reads the
+    target's recipe and ignores comments, which is the same distinction the
+    shell makes.
+    """
+    recipe = _recipe_of(
+        MAKEFILE_PATH.read_text(encoding="utf-8"), "test-kani-scope-wrapper"
     )
+    assert recipe, "the `test-kani-scope-wrapper` target must have a recipe"
+    executed = _executable_lines(recipe)
+    assert any(EXPORT_VARIABLE in line for line in executed), (
+        "the target's recipe must export the strict-mode variable on an "
+        f"executable line; the recipe lines are {executed}"
+    )
+
+
+def test_the_strict_export_check_rejects_a_commented_assignment() -> None:
+    """Prove the recipe check fires on a commented-out export.
+
+    Without this, a check that happened to pass on the live file would say
+    nothing about whether it can detect the removal it exists to catch.
+    """
+    commented = (
+        "test-kani-scope-wrapper:\n"
+        f"\t# {EXPORT_VARIABLE}\n"
+        "\tcargo nextest run\n"
+        "\n"
+        "other:\n"
+        "\ttrue\n"
+    )
+    recipe = _recipe_of(commented, "test-kani-scope-wrapper")
+    assert recipe, "the control must yield a recipe"
+    assert len(recipe) == 3, f"the recipe must stop at the next rule, got {recipe}"
+    executed = _executable_lines(recipe)
+    assert not any(EXPORT_VARIABLE in line for line in executed), (
+        "a commented-out export must not count as an executed one"
+    )
+    assert any(EXPORT_VARIABLE in line for line in recipe), (
+        "the control must still *contain* the text, or it would not exercise the "
+        "comment filter at all"
+    )
+
+
+def _recipe_of(text: str, target: str) -> list[str]:
+    """Return the recipe lines of one Makefile target, stopping at the next rule.
+
+    A line at column zero ends the recipe, whether it is another rule or a
+    comment; Make reads it the same way.
+
+    Returns
+    -------
+    list[str]
+        The lines following ``target``'s header, up to the first line at column
+        zero. Empty when the target is absent.
+    """
+    lines = text.splitlines()
+    header = f"{target}:"
+    starts = [index for index, line in enumerate(lines) if line.startswith(header)]
+    if not starts:
+        return []
+    body: list[str] = []
+    for line in lines[starts[0] + 1 :]:
+        if line and not line.startswith(("\t", " ")):
+            break
+        body.append(line)
+    return body
+
+
+def _executable_lines(recipe: list[str]) -> list[str]:
+    """Return the recipe lines a shell would run.
+
+    Returns
+    -------
+    list[str]
+        The indented lines whose first non-blank character is not `#`.
+    """
+    return [
+        line
+        for line in recipe
+        if line.startswith(("\t", " ")) and not line.lstrip().startswith("#")
+    ]

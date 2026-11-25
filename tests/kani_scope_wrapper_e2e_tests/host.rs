@@ -82,31 +82,99 @@ fn missing_prerequisite() -> Result<Option<String>> {
     }
 
     // Delegation: the user manager may only create a scope if the controllers
-    // it needs are delegated down the tree. A cgroup v1 host fails here, and so
-    // does one whose cgroup tree is not mounted where the unified hierarchy
-    // puts it: both are "cannot run the wrapper", not "the suite is broken".
+    // it needs are enabled in *its own* cgroup. A cgroup v1 host fails here,
+    // and so does one whose cgroup tree is not mounted where the unified
+    // hierarchy puts it: both are "cannot run the wrapper", not "the suite is
+    // broken".
+    Ok(check_delegation())
+}
+
+/// The controllers the wrapper's resource properties need in the user manager.
+///
+/// `CPUQuota` needs `cpu`, `MemoryMax`/`MemorySwapMax` need `memory`, and
+/// `TasksMax` needs `pids`. `IOWeight` is not listed because `io` is not
+/// delegated to user managers on every supported host, and a scope that cannot
+/// apply it still runs.
+const REQUIRED_CONTROLLERS: [&str; 3] = ["cpu", "memory", "pids"];
+
+/// Confirm the user manager's cgroup has the controllers the wrapper needs.
+///
+/// The hierarchy root's `cgroup.controllers` is *not* the question. That file
+/// lists what the root offers; a controller reaches a subtree only when each
+/// cgroup on the path enables it in `cgroup.subtree_control`. A host can list
+/// every controller at the root while the user slice enables none — measured on
+/// the reference host, where `user.slice` enables `cpu memory pids` — and a
+/// check against the root would then pass while every scope launch failed.
+fn check_delegation() -> Option<String> {
+    let manager_cgroup = format!(
+        "/sys/fs/cgroup/user.slice/user-{}.slice/user@{}.service",
+        rustix_uid(),
+        rustix_uid()
+    );
     let Ok(cgroup) = Dir::open_ambient_dir("/sys/fs/cgroup", ambient_authority()) else {
-        return Ok(Some(
+        return Some(
             "/sys/fs/cgroup is not available, so cgroup delegation cannot be confirmed".to_owned(),
+        );
+    };
+    let relative = manager_cgroup.trim_start_matches("/sys/fs/cgroup/");
+    let Ok(available) = cgroup.read_to_string(format!("{relative}/cgroup.controllers")) else {
+        return Some(format!(
+            "{manager_cgroup}/cgroup.controllers is missing, so the user manager's own \
+             cgroup cannot be inspected; a cgroup v1 host reports the same"
         ));
     };
-    let Ok(delegated) = cgroup.read_to_string("cgroup.controllers") else {
-        return Ok(Some(
-            "/sys/fs/cgroup/cgroup.controllers is missing, which a cgroup v1 host reports"
-                .to_owned(),
-        ));
-    };
-    // An empty list is the same kind of answer as a missing file: the host
-    // delegates nothing, so the manager cannot create a scope. Reporting it as
-    // a prerequisite keeps it on the skip path outside strict mode; raising it
-    // would fail every scenario on such a host, which is the outcome the
-    // prerequisite check exists to avoid.
-    if delegated.trim().is_empty() {
-        return Ok(Some(
-            "/sys/fs/cgroup/cgroup.controllers lists no delegated controllers".to_owned(),
+    let missing = missing_controllers(&available, &REQUIRED_CONTROLLERS);
+    if !missing.is_empty() {
+        return Some(format!(
+            "the user manager's cgroup at {manager_cgroup} does not list {missing:?} in \
+             cgroup.controllers"
         ));
     }
-    Ok(None)
+    // The manager's cgroup must also *enable* what it lists, or the scope it
+    // creates gets nothing.
+    let Ok(enabled) = cgroup.read_to_string(format!("{relative}/cgroup.subtree_control")) else {
+        return Some(format!(
+            "{manager_cgroup}/cgroup.subtree_control is missing, so the controllers the \
+             user manager enables for its children cannot be confirmed"
+        ));
+    };
+    let not_enabled = missing_controllers(&enabled, &REQUIRED_CONTROLLERS);
+    if not_enabled.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "the user manager's cgroup at {manager_cgroup} does not enable {not_enabled:?} in \
+         cgroup.subtree_control"
+    ))
+}
+
+/// The subset of `required` that `listing` does not name.
+///
+/// `cgroup.controllers` holds bare names and `cgroup.subtree_control` holds
+/// names prefixed with `+` or `-`, so the comparison is on words rather than
+/// on raw substrings.
+fn missing_controllers(listing: &str, required: &[&str]) -> Vec<String> {
+    let present: Vec<&str> = listing
+        .split_whitespace()
+        .map(|word| word.trim_start_matches(['+', '-']))
+        .collect();
+    required
+        .iter()
+        .filter(|name| !present.contains(name))
+        .map(|name| (*name).to_owned())
+        .collect()
+}
+
+/// The caller's numeric user id, without a `libc` dependency in this crate.
+fn rustix_uid() -> u32 {
+    // `id -u` is the one value every host running this suite can answer, and
+    // the suite already shells out to `systemctl` for everything else.
+    std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8_lossy(&output.stdout).trim().parse().ok())
+        .unwrap_or(u32::MAX)
 }
 
 /// Run one probe, mapping "the program is not installed" to `None`.

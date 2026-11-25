@@ -109,15 +109,25 @@ fn stop_grace_is_additive_to_the_runtime_cap() -> Result<()> {
         let lifetime = wait_for_terminal(scope.unit())?;
         let outcome = Outcome::harvest(scope.unit(), &output)?;
 
-        // A nested grace would stop the payload at the cap. An additive one
-        // carries the stop past it, so the scope must outlive `RUNTIME_CAP` on
-        // its own — no assumption about the caller, and no dependence on the
-        // slack.
+        // The bound is the *sum*. A nested grace stops the payload at the cap;
+        // an additive one carries it to cap plus grace. Requiring only
+        // `lifetime > RUNTIME_CAP` would let a grace shortened to 1s pass at
+        // about 3s, so the lower bound is the sum less a tolerance that stays
+        // well under any reduction this test has to catch: half the grace, or
+        // 1.5s against a 3s grace. The scope stops a little *after* the sum,
+        // never before it, so the tolerance only absorbs timer granularity.
+        let expected_floor = RUNTIME_CAP + STOP_GRACE;
+        let tolerance = STOP_GRACE / 2;
+        // The tolerance is half the grace, so this cannot underflow for any
+        // grace short enough to be meaningful; `saturating_sub` states that
+        // rather than panicking on a configuration the constants exclude.
+        let minimum = expected_floor.saturating_sub(tolerance);
         ensure!(
-            lifetime > RUNTIME_CAP,
-            "an additive stop grace should carry the stop past the {RUNTIME_CAP:?} cap, \
-             but the scope lived only {lifetime:?} — which is what a nested grace, or a \
-             `TimeoutStopSec` that never took effect, would look like: {}",
+            lifetime > minimum,
+            "the stop grace should be additive: the payload should live about \
+             {expected_floor:?} (cap {RUNTIME_CAP:?} plus grace {STOP_GRACE:?}), but the \
+             scope lived only {lifetime:?} — which is what a nested or shortened grace \
+             would look like: {}",
             outcome.describe()
         );
 

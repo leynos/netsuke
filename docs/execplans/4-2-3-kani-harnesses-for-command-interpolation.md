@@ -1261,6 +1261,7 @@ CAPTURE="$capture" UNIT="$unit" systemd-run \
       | tee "$CAPTURE"'
 caller_status=$?
 printf 'unit=%s.scope caller_exit=%s\n' "$unit" "$caller_status" > "$capture.status"
+(exit "$caller_status")
 ```
 
 The unit is named so a failure can be addressed individually, and `--collect`
