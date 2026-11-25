@@ -245,7 +245,7 @@ fn each_proof_only_name_is_skipped_exactly_once() -> Result<()> {
     let by_name = implementations_by_name(&graph_source()?)?;
     let mut unskipped: Vec<&str> = Vec::new();
     for name in PROOF_ONLY_NAMES {
-        if !by_name.get(name).is_some_and(|found| found.skipped > 0) {
+        if by_name.get(name).is_none_or(|found| found.skipped == 0) {
             unskipped.push(name);
         }
     }
@@ -307,9 +307,8 @@ fn the_fixture_distinguishes_which_half_of_a_pair_is_skipped() -> Result<()> {
     let skipped_kani = by_name
         .get("skipped_kani_half")
         .context("the fixture must declare `skipped_kani_half`")?;
-    assert_eq!(
-        (skipped_kani.selected, skipped_kani.skipped),
-        (1, 1),
+    ensure!(
+        (skipped_kani.selected, skipped_kani.skipped) == (1, 1),
         "the fixture's Kani-skipped pair must resolve to one selected and one \
          skipped implementation, so the reader proves it keeps the production \
          half; got {skipped_kani:?}"
@@ -318,13 +317,12 @@ fn the_fixture_distinguishes_which_half_of_a_pair_is_skipped() -> Result<()> {
     let skipped_production = by_name
         .get("skipped_production_half")
         .context("the fixture must declare `skipped_production_half`")?;
-    assert_eq!(
+    ensure!(
         (
             skipped_production.selected,
             skipped_production.skipped,
             skipped_production.skipped_outside_kani,
-        ),
-        (1, 1, 1),
+        ) == (1, 1, 1),
         "the fixture's production-skipped pair must report its skip as falling \
          outside Kani, which is the shape \
          `every_skipped_graph_implementation_is_kani_only` rejects; got \
@@ -352,9 +350,8 @@ impl Demo {
     let dropped = by_name
         .get("parenthesised_condition")
         .context("the probe must declare `parenthesised_condition`")?;
-    assert_eq!(
-        (dropped.selected, dropped.skipped),
-        (1, 0),
+    ensure!(
+        (dropped.selected, dropped.skipped) == (1, 0),
         "a skip under a parenthesised cfg_attr condition must read as selected, \
          because cargo-mutants discards it; got {dropped:?}"
     );
@@ -362,9 +359,8 @@ impl Demo {
     let honoured = by_name
         .get("bare_path_condition")
         .context("the probe must declare `bare_path_condition`")?;
-    assert_eq!(
-        (honoured.selected, honoured.skipped),
-        (0, 1),
+    ensure!(
+        (honoured.selected, honoured.skipped) == (0, 1),
         "a skip under a bare-path cfg_attr condition must read as skipped, \
          because cargo-mutants honours it; got {honoured:?}"
     );
