@@ -8309,8 +8309,24 @@ extract:
 until [ "$(systemctl --user show -P LoadState "$unit.scope")" != loaded ]; do
     sleep 1
 done
-journalctl --user -u "$unit.scope" --no-pager -o cat -n 40 > "$capture.journal"
+journalctl --user --sync
+journalctl --user -q -u "$unit.scope" --no-pager -o cat -n 40 > "$capture.journal"
 ```
+
+The `--sync` is a separate requirement from the poll. Waiting for collection
+proves the *unit* is gone; it says nothing about whether journald has flushed
+that unit's last messages to disk. `journalctl --sync` is what establishes
+that, and only messages written before a sync are guaranteed to be in the
+extract.
+
+Its failure has to be handled rather than ignored. A host may refuse the sync —
+the reference host does for the user journal, reporting
+`Failed to connect to Varlink socket: Permission denied` — and the guarantee is
+then simply absent, so a single read can return the earlier entries before the
+final stop lines become readable. When the sync fails, re-read to a bounded
+deadline until the entries you need are present. A bounded wait is what
+distinguishes "journald is still flushing" from "the entry was never written":
+the latter must still fail, not silently pass on a partial extract.
 
 #### Reading a scope's `Result`
 

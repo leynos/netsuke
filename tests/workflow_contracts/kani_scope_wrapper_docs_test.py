@@ -7,16 +7,17 @@ the suite exercises, and the resource caps are the difference between a bounded
 verifier and an OOM-killed machine, so these contracts read every routine
 example and require the documented shape.
 
-They also require the sections that explain what survives collection, and pin
-the Makefile's strict-mode default: a lane that stopped exporting it would
-still report green while skipping every scenario it exists to prove.
+The examples are located and split into arguments and payload by
+``kani_scope_wrapper_blocks``; this module states what each part must contain.
+The Makefile half lives in ``kani_scope_wrapper_makefile_test.py``, split out
+to keep every module inside the repository's 400-line limit.
 
 Run via ``make test-workflow-contracts``.
 """
 
-import re
 import typing as typ
 
+import kani_scope_wrapper_blocks as blocks
 import pytest
 from workflow_loading import REPO_ROOT
 
@@ -47,15 +48,6 @@ DOCUMENTS = (
     pytest.param(PLAN_4_2_3, id="plan-4-2-3"),
 )
 
-#: One fenced block, capturing its language tag and body.
-#:
-#: The fence may be indented: the 4.2.2 plan carries its template inside a list
-#: item, so requiring a fence at column zero would silently skip it.
-FENCE = re.compile(
-    r"^[ \t]*```(?P<language>[\w+-]*)\n(?P<body>.*?)^[ \t]*```",
-    re.MULTILINE | re.DOTALL,
-)
-
 #: The flags every routine example must carry.
 REQUIRED_FLAGS = (
     "--user",
@@ -71,15 +63,19 @@ REQUIRED_FLAGS = (
 #: which removes the cap the example exists to show. These are the documented
 #: figures, so an example that weakens one fails here rather than at the point
 #: where an uncapped verifier OOM-kills a machine.
-REQUIRED_PROPERTIES = (
-    "RuntimeMaxSec=8m",
-    "TimeoutStopSec=20s",
-    "CPUQuota=200%",
-    "MemoryMax=8G",
-    "MemorySwapMax=0",
-    "TasksMax=96",
-    "IOWeight=20",
-)
+#:
+#: The values are checked against the *parsed* `-p` arguments, not the block
+#: text: a block that runs `-p MemoryMax=16G` while a comment quotes
+#: `MemoryMax=8G` would satisfy a text search and exceed the ceiling.
+REQUIRED_PROPERTIES = {
+    "RuntimeMaxSec": "8m",
+    "TimeoutStopSec": "20s",
+    "CPUQuota": "200%",
+    "MemoryMax": "8G",
+    "MemorySwapMax": "0",
+    "TasksMax": "96",
+    "IOWeight": "20",
+}
 
 #: The values that would silently remove a cap, one per property that has one.
 #:
@@ -99,8 +95,8 @@ UNBOUNDED_VALUES = (
 #: How the wrapper applies niceness, because `Nice=` is not accepted here.
 REQUIRED_NICE = "nice -n 15"
 
-#: Everything a routine example must contain, in one tuple for the diff.
-REQUIRED_TOKENS = (*REQUIRED_FLAGS, *REQUIRED_PROPERTIES, REQUIRED_NICE)
+#: The wrapper flags and niceness a routine example must contain.
+REQUIRED_TOKENS = (*REQUIRED_FLAGS, REQUIRED_NICE)
 
 #: The developer-guide headings the evidence contract lives under.
 REQUIRED_SECTIONS = (
@@ -116,60 +112,6 @@ def _relative(path: Path) -> str:
     return path.relative_to(REPO_ROOT).as_posix()
 
 
-def _fenced_blocks(path: Path) -> list[str]:
-    """Return the body of every fenced code block in ``path``."""
-    return [
-        match.group("body")
-        for match in FENCE.finditer(path.read_text(encoding="utf-8"))
-    ]
-
-
-def _wrapper_blocks(path: Path) -> list[str]:
-    """Return the fenced blocks of ``path`` that invoke ``systemd-run``."""
-    return [block for block in _fenced_blocks(path) if "systemd-run" in block]
-
-
-def _routine_blocks(path: Path) -> list[str]:
-    """Return the routine examples: a named scope running a piped `make`."""
-    return [
-        block
-        for block in _wrapper_blocks(path)
-        if "bash -c" in block and ("make kani-ir" in block or "make kani-full" in block)
-    ]
-
-
-def _placeholder_blocks(path: Path) -> list[str]:
-    """Return the template examples, which leave the command as a placeholder."""
-    return [block for block in _wrapper_blocks(path) if "<kani-command>" in block]
-
-
-def _payload_argument(block: str) -> str | None:
-    """Return the text between `bash -c` and the closing quote of its argument.
-
-    Only the quoted argument is the payload. Searching the rest of the block
-    would also see the outer pipeline and any trailing comment, which is how a
-    wrapper can carry `tee` and `pipefail` outside the scope and still look
-    conforming.
-
-    Returns
-    -------
-    str | None
-        The quoted argument's text, or ``None`` when the block has no
-        `bash -c` or no quote opens its argument.
-    """
-    marker = "bash -c"
-    if marker not in block:
-        return None
-    remainder = block.split(marker, 1)[1].lstrip()
-    quote = remainder[:1]
-    if quote not in {"'", '"'}:
-        return None
-    end = remainder.find(quote, 1)
-    if end < 0:
-        return None
-    return remainder[1:end]
-
-
 @pytest.mark.parametrize("path", DOCUMENTS)
 def test_every_document_publishes_a_routine_example(path: Path) -> None:
     """Require at least one routine example per document.
@@ -177,7 +119,7 @@ def test_every_document_publishes_a_routine_example(path: Path) -> None:
     Without this the flag and property checks below would pass vacuously on a
     document whose example had been deleted or reshaped out of recognition.
     """
-    assert _routine_blocks(path), (
+    assert blocks.routine_blocks(path), (
         f"{_relative(path)} must publish a routine `systemd-run` example running "
         "`make kani-ir` or `make kani-full` through `bash -c`"
     )
@@ -193,17 +135,24 @@ def test_routine_examples_keep_every_flag_property_and_niceness(path: Path) -> N
     a property that had been deleted and re-added elsewhere, and the flag check
     is what notices a missing `--collect`.
     """
-    for block in _routine_blocks(path):
+    for block in blocks.routine_blocks(path):
         missing = [token for token in REQUIRED_TOKENS if token not in block]
         assert not missing, (
             f"{_relative(path)}: a routine example omits {missing}. The caps are "
             f"what keep an uncapped verifier from OOM-killing the machine, and "
             f"`--collect` is what stops a failed scope accumulating:\n{block}"
         )
-        unbounded = [value for value in UNBOUNDED_VALUES if value in block]
-        assert not unbounded, (
-            f"{_relative(path)}: a routine example weakens a documented bound with "
-            f"{unbounded}:\n{block}"
+        properties = blocks.property_arguments(block)
+        wrong = [
+            f"{name}={properties.get(name)!r} (want {value!r})"
+            for name, value in REQUIRED_PROPERTIES.items()
+            if properties.get(name) != value
+        ]
+        assert not wrong, (
+            f"{_relative(path)}: a routine example does not set the documented "
+            f"bounds {wrong}. These are the caps that keep an uncapped verifier "
+            f"from OOM-killing the machine; reading them from the parsed "
+            f"arguments is what stops a comment standing in for the setting:\n{block}"
         )
 
 
@@ -216,16 +165,43 @@ def test_the_property_check_rejects_an_unbounded_value() -> None:
     weakened = (
         "systemd-run --user --scope --collect -p MemoryMax=infinity bash -c 'true'"
     )
-    assert "MemoryMax=" in weakened, (
-        "the control must still name the property, or it would test the other check"
+    properties = blocks.property_arguments(weakened)
+    assert properties.get("MemoryMax") == "infinity", (
+        "the control must set the unbounded value on the argument, or it would "
+        f"test something else; parsed {properties}"
     )
-    assert "MemoryMax=8G" not in weakened, (
+    assert properties.get("MemoryMax") != REQUIRED_PROPERTIES["MemoryMax"], (
         "the control must have dropped the documented bound, so the value check "
         "is the one that has to notice"
     )
     assert any(value in weakened for value in UNBOUNDED_VALUES), (
         "the unbounded table must name the value the control uses, or the check "
         "cannot fire on it"
+    )
+
+
+def test_the_property_check_reads_arguments_not_comments() -> None:
+    """Prove a comment cannot satisfy the property check.
+
+    The command here sets a 16G ceiling while a comment quotes the documented
+    8G, which is the shape a block-text search accepts.
+    """
+    misleading = (
+        "systemd-run --user --scope \\\n"
+        "    -p MemoryMax=16G \\\n"
+        "    bash -c 'true'  # documented as MemoryMax=8G"
+    )
+    assert "MemoryMax=8G" in misleading, (
+        "the control must quote the documented value somewhere, or it would not "
+        "exercise the comment trap"
+    )
+    properties = blocks.property_arguments(misleading)
+    assert properties.get("MemoryMax") == "16G", (
+        "the parser must read the argument and ignore the payload and any "
+        f"comment beyond it; parsed {properties}"
+    )
+    assert properties.get("MemoryMax") != REQUIRED_PROPERTIES["MemoryMax"], (
+        "the parsed value must be the one the check has to reject"
     )
 
 
@@ -245,8 +221,8 @@ def test_routine_examples_keep_pipefail_and_tee_inside_the_payload(path: Path) -
     as the contract forbids. `test_the_payload_check_rejects_an_outer_pipeline`
     is that negative control.
     """
-    for block in _routine_blocks(path):
-        payload = _payload_argument(block)
+    for block in blocks.routine_blocks(path):
+        payload = blocks.payload_argument(block)
         assert payload is not None, (
             f"{_relative(path)}: a routine example must pass `bash -c` a quoted "
             f"argument, so the payload can be identified:\n{block}"
@@ -274,7 +250,7 @@ def test_the_payload_check_rejects_an_outer_pipeline() -> None:
         "systemd-run --user --scope --collect --unit example "
         "bash -c 'make kani-ir' | tee capture # set -o pipefail"
     )
-    payload = _payload_argument(masked)
+    payload = blocks.payload_argument(masked)
     assert payload == "make kani-ir", (
         "the payload must be the quoted argument alone, so the outer pipeline "
         f"and the comment are outside it; got {payload!r}"
@@ -295,9 +271,9 @@ def test_the_placeholder_template_collects_and_names_its_unit() -> None:
     `<kani-command>`, so it cannot carry the payload assertions above. It can,
     and must, carry the same invocation options.
     """
-    blocks = _placeholder_blocks(PLAN_4_2_2)
-    assert blocks, "the 4.2.2 plan must keep its `<kani-command>` wrapper template"
-    for block in blocks:
+    templates = blocks.placeholder_blocks(PLAN_4_2_2)
+    assert templates, "the 4.2.2 plan must keep its `<kani-command>` wrapper template"
+    for block in templates:
         missing = [token for token in REQUIRED_TOKENS if token not in block]
         assert not missing, (
             f"{_relative(PLAN_4_2_2)}: the placeholder template "
@@ -322,9 +298,14 @@ def test_developer_guide_keeps_the_evidence_contract_sections() -> None:
 def test_developer_guide_documents_the_durable_evidence() -> None:
     """Require the guide to name the sidecar, the journal extract and `LoadState`."""
     text = DEVELOPERS_GUIDE.read_text(encoding="utf-8")
-    for token in (".status", "journalctl --user -u", "LoadState"):
+    for token in (
+        ".status",
+        "journalctl --user --sync",
+        "journalctl --user -q -u",
+        "LoadState",
+    ):
         assert token in text, (
             f"docs/developers-guide.md must document `{token}`: the status sidecar, "
-            "the bounded journal extract and the loaded-unit prerequisite are what "
-            "make a collected run's evidence durable"
+            "the journal sync, the bounded journal extract and the loaded-unit "
+            "prerequisite are what make a collected run's evidence durable"
         )

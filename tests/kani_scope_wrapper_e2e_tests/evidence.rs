@@ -21,7 +21,9 @@ use anyhow::{Result, ensure};
 
 use super::{
     harness::capture_path,
-    manager::{Journal, captured, is_busy, journal_extract, scope_snapshot},
+    manager::{
+        Journal, captured, is_busy, journal_extract, journal_extract_settled, scope_snapshot,
+    },
     properties::ScopeSnapshot,
 };
 
@@ -108,6 +110,15 @@ impl Outcome {
                 }
             ),
         }
+    }
+
+    /// Re-read the journal until `required` is present, or a bounded wait ends.
+    ///
+    /// A scenario that asserts on specific entries calls this first: the
+    /// harvest's single read is enough to report a journal, but it is not
+    /// enough to *wait* for one whose final entries may still be arriving.
+    pub(super) fn settle_journal(&mut self, required: &[&str]) {
+        self.journal = journal_extract_settled(&self.unit, required);
     }
 
     /// The caller's exit status, naming a signal death rather than omitting it.

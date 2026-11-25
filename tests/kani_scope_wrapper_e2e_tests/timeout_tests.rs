@@ -169,7 +169,15 @@ fn journal_records_the_runtime_limit_and_the_kill() -> Result<()> {
             &format!("trap '' TERM; sleep {}", PAYLOAD_LIFETIME.as_secs()),
         )?;
         let _ = wait_for_terminal(scope.unit())?;
-        let outcome = Outcome::harvest(scope.unit(), &output)?;
+        let mut outcome = Outcome::harvest(scope.unit(), &output)?;
+        // Wait for the entries this test asserts on. A successful `--sync`
+        // makes the first read final; a refused one does not, and the final
+        // stop entries may still be arriving.
+        outcome.settle_journal(&[
+            "Scope reached runtime time limit",
+            "Stopping timed out. Killing.",
+            "with signal SIGKILL",
+        ]);
 
         // The journal is the only record that survives collection, so an
         // unreadable one is a skip rather than a failure: a host may run

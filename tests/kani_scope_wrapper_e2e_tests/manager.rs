@@ -168,8 +168,14 @@ pub(super) fn remove_capture(unit: &str) -> Result<()> {
 /// silently passing assertion.
 #[derive(Debug)]
 pub(super) enum Journal {
-    /// The journal was read; the text is whatever it held, possibly empty.
+    /// The journal was read after a successful sync; the text is final.
     Read(String),
+    /// The journal was read, but `--sync` was refused.
+    ///
+    /// The text is real, but journald has not promised it is *complete*: a
+    /// final entry may still be in flight. A scenario that needs a specific
+    /// line therefore re-reads rather than trusting the first answer.
+    Unsynced(String),
     /// The journal could not be read, for the stated reason.
     Unavailable(String),
 }
@@ -180,51 +186,100 @@ impl Journal {
     /// Covers both an unreadable journal and an empty one, which is what a
     /// scenario means when it allows the journal to be absent.
     pub(super) fn is_empty(&self) -> bool {
-        match self {
-            Self::Read(text) => text.trim().is_empty(),
-            Self::Unavailable(_) => true,
-        }
+        self.text().trim().is_empty()
     }
 
     /// The journal text, or an empty string when it could not be read.
     pub(super) fn text(&self) -> &str {
         match self {
-            Self::Read(text) => text,
+            Self::Read(text) | Self::Unsynced(text) => text,
             Self::Unavailable(_) => "",
         }
+    }
+
+    /// Whether journald has promised the extract is complete.
+    ///
+    /// False when the sync was refused, which is when the text may still grow.
+    fn is_synced(&self) -> bool {
+        matches!(self, Self::Read(_))
     }
 
     /// The reason the journal was unavailable, if it was.
     pub(super) fn unavailable_reason(&self) -> Option<&str> {
         match self {
-            Self::Read(_) => None,
+            Self::Read(_) | Self::Unsynced(_) => None,
             Self::Unavailable(reason) => Some(reason),
         }
     }
 }
+
+/// How long to keep re-reading the journal for expected text after a failed sync.
+///
+/// Only used when `--sync` was refused, which removes journald's storage
+/// guarantee: the final entries may then arrive after this process has already
+/// asked for them. Bounded so a genuinely missing entry still fails.
+const JOURNAL_SETTLE_CEILING: Duration = Duration::from_secs(5);
+
+/// How long to wait between journal re-reads.
+const JOURNAL_SETTLE_INTERVAL: Duration = Duration::from_millis(200);
 
 /// Read a bounded extract of the unit's journal.
 ///
 /// The journal is the only record that survives collection, which is why the
 /// evidence harvest reads it even when the unit is gone.
 ///
-/// A read is preceded by `journalctl --sync` so the unit's last messages are
-/// on disk before the single query. Without that barrier the extract can miss
-/// the stop entries the assertions look for: `journalctl` only guarantees that
-/// messages written before a sync are stored. The sync is best-effort — a host
-/// may refuse it, as the reference host does for the user journal under
-/// Varlink — so its failure is not the query's failure.
+/// A read is preceded by `journalctl --sync`, because `journalctl` only
+/// guarantees that messages written before a sync are stored. Without that
+/// barrier the extract can miss the stop entries the assertions look for.
 ///
 /// A query that exits non-zero is reported as [`Journal::Unavailable`] rather
 /// than raised: a host may run without a readable user journal while the scope
 /// itself worked, and the scenarios decide what an absent journal means for
 /// the claim they are making.
 pub(super) fn journal_extract(unit: &str) -> Journal {
-    drop(
-        Command::new("journalctl")
-            .args(["--user", "--sync"])
-            .output(),
-    );
+    let synced = Command::new("journalctl")
+        .args(["--user", "--sync"])
+        .output()
+        .is_ok_and(|output| output.status.success());
+    match read_journal(unit) {
+        Ok(text) if synced => Journal::Read(text),
+        Ok(text) => Journal::Unsynced(text),
+        Err(reason) => Journal::Unavailable(reason),
+    }
+}
+
+/// Read the unit's bounded journal extract until `required` is present.
+///
+/// This is what a scenario uses when it asserts on specific entries. A
+/// successful `--sync` already guarantees the extract is complete, so the
+/// first read is final. When the sync was refused — as the reference host
+/// refuses it, under Varlink — the guarantee is gone and a final entry may
+/// still be in flight, so the read is repeated to a bounded deadline.
+///
+/// The deadline bounds *waiting*, not the claim: an entry that never appears
+/// is still a failure, reported by the caller's assertion against the text
+/// this returns.
+pub(super) fn journal_extract_settled(unit: &str, required: &[&str]) -> Journal {
+    let first = journal_extract(unit);
+    if first.is_synced() {
+        return first;
+    }
+    let started = Instant::now();
+    let mut latest = first;
+    while started.elapsed() < JOURNAL_SETTLE_CEILING {
+        if required.iter().all(|needle| latest.text().contains(needle)) {
+            return latest;
+        }
+        thread::sleep(JOURNAL_SETTLE_INTERVAL);
+        latest = journal_extract(unit);
+    }
+    latest
+}
+
+/// Read the unit's bounded journal extract once.
+///
+/// Returns the text, or the reason it could not be read.
+fn read_journal(unit: &str) -> std::result::Result<String, String> {
     let output = Command::new("journalctl")
         .args([
             "--user",
@@ -240,14 +295,14 @@ pub(super) fn journal_extract(unit: &str) -> Journal {
         .output();
     match output {
         Ok(result) if result.status.success() => {
-            Journal::Read(String::from_utf8_lossy(&result.stdout).into_owned())
+            Ok(String::from_utf8_lossy(&result.stdout).into_owned())
         }
-        Ok(result) => Journal::Unavailable(format!(
+        Ok(result) => Err(format!(
             "journalctl exited {:?}: {}",
             result.status.code(),
             String::from_utf8_lossy(&result.stderr).trim()
         )),
-        Err(err) => Journal::Unavailable(format!("journalctl could not be run: {err}")),
+        Err(err) => Err(format!("journalctl could not be run: {err}")),
     }
 }
 
