@@ -9723,6 +9723,70 @@ quote-context queries and updates, each of which has to name the innermost
 active shell region rather than the traversal's own state, because a
 substitution carries its own quote context.
 
+`script_substitution/backticks.rs` owns the backtick region as a private record
+of the saved quote context, the `$()` frame depth that opened it, and the
+body's own quote context, together with the escape rule the body obeys. The
+closing backtick restores the saved context through the region the recorded
+depth selects, so a script-level backtick writes the script field while a
+backtick inside `$( … )` writes that substitution's field, and the body context
+is discarded. Because the body is its own shell region, its quoting decides
+delimiter classification while the backtick is open, so a quoted `)` inside the
+body stays literal and only an unquoted one closes a frame. The body context
+applies only while no `$()` frame is open inside it: once one is, the frame's
+own quoting governs, and the body context resumes when that frame closes.
+Inside the body a backslash protects a following dollar sign, backtick, or
+backslash before the body's quote state is consulted, because the shell finds
+the closing backtick before it parses the body's quotes. The same rule applies
+inside a `$()` frame opened in the body: the traversal consults
+`escapes_backtick_body_character` before the frame's own context, so a backtick
+escaped in that frame's single quotes is data rather than the closer. That
+removal is only the first parse: the body is read again, where a `\\` pair
+leaves one literal backslash that is still an escape.
+`append_backtick_body_escape` records the survivor only where the active
+quoting gives a backslash meaning, and `append_residual_escape_character` keeps
+the next character from opening a quote, closing a frame, or starting a
+substitution, so `\\)` in unquoted body text is a literal `)`. In the body's
+single quotes the survivor is literal, so the pair marks nothing and the quote
+after it still closes the quote. Removing a backslash also exposes structure:
+for `\$`, `append_backtick_body_escape` copies only the backslash and lets the
+dollar sign go through substitution detection, so `\$( )` in a body opens a
+frame. A `#` in unquoted body text starts a comment in that parse, and
+`close_backtick_comment` ends it at the closing backtick when the newline has
+not already done so. `is_backtick_body_text` keeps the body's own parentheses
+out of the owning frame's depth accounting, so a body `)` groups commands of
+the body rather than closing the substitution that owns the backtick. Every
+other escape follows the body's own quoting: in unquoted body text a backslash
+makes the next character literal, so an escaped `)` never reaches the delimiter
+check, and in the body's double quotes it also protects the closing quote. A
+backslash before a newline continues the line in both of those contexts, so the
+newline is consumed before the pending-heredoc check runs. In the body's single
+quotes a backslash has no effect, so it cannot swallow the quote that closes
+them. A newline anywhere inside the body, quoted or not, cannot be correlated
+with the line that declared a queued heredoc: `append_substitution_at_position`
+classifies it with `newline_context`, and `activate_pending_heredoc` fails
+closed rather than start a body whose terminator it cannot locate. A newline
+that ends a comment in the body takes the same path through
+`copy_inert_character`. `append_unquoted_posix_lexical_character` tracks `${ }`
+nesting wherever the active context is unquoted, including a backtick body, and
+gates only heredoc declarations on plain script text; a backtick region opens
+and closes a lexical region so its expansion depth is local to the body.
+`script_substitution/delimiters.rs` rejects an unquoted `)` that would pop the
+region owning an open backtick, and the closing backtick itself rejects a depth
+that no longer matches its owner; both produce `IrGenError::InvalidCommand`.
+The command traversal in `substitution/posix.rs` keeps its boolean
+`in_backticks` toggle instead and does not share this record, so command
+lowering is unchanged.
+
+`script_substitution/escapes.rs` owns backslash classification for script text
+and for backtick bodies. It holds `append_backtick_body_escape`, which consumes
+a body's escape pair and records the backslash a `\\` leaves for the second
+parse, and `append_residual_escape_character`, which lets that survivor protect
+the character reaching it. It also owns `starts_escape`, the marker rejection
+an escape before a marker requires, and `close_backtick_comment`, which ends a
+body comment at the closing backtick. The split exists for the 400-line limit
+and because the two-parse body model is one subject: every rule in the file
+answers what a backslash means in the parse that is currently running.
+
 Heredoc declaration handling is also shared rather than duplicated: the helper
 decides what a declaration is, and each traversal supplies only the context
 around it. `substitution/posix.rs` performs that step for
@@ -9730,13 +9794,17 @@ around it. `substitution/posix.rs` performs that step for
 the same for the `script:` traversal, which differs only in which quote context
 counts as plain text and in how it reports "not a declaration" to its caller.
 `script_substitution.rs` is now `script_substitution/mod.rs`; that split, like
-the sibling `delimiters.rs`, keeps each file inside the 400-line limit without
-introducing a second shell parser. The tests follow the same shape:
-`src/ir/cmd_interpolate/tests/heredoc/` is a directory module holding the
-shared assertions in `support.rs` and the boundary, delimiter, expansion, and
-property test groups, and `tests/ninja_dollar_escaping_tests/heredoc.rs` checks
-the same contract end to end by running the generated Ninja build through a
-real child shell.
+the siblings `delimiters.rs`, `backticks.rs`, and `escapes.rs`, keeps each file
+inside the 400-line limit without introducing a second shell parser. The tests
+follow the same shape: `src/ir/cmd_interpolate/tests/heredoc/` is a directory
+module holding the shared assertions in `support.rs` and the boundary,
+delimiter, expansion, and property test groups, and
+`tests/ninja_dollar_escaping_tests/heredoc.rs` checks the same contract end to
+end by running the generated Ninja build through a real child shell. The
+backtick regressions use the same layout: `backtick_region/mod.rs` holds the two
+`rstest` tables, `backtick_region/cases.rs` holds the typed case data they
+drive, and `tests/ninja_dollar_escaping_tests/scripts/` keeps its execution
+helpers in `runner.rs` and its typed table data in `cases.rs`.
 
 The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. Its

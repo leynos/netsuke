@@ -7,8 +7,12 @@
 //! module keeps one responsibility.
 
 use super::super::{
-    IrGenError, RejectionReason, invalid_command_error, invalid_heredoc_delimiter_error,
-    posix_lexical::{EscapeBeforeMarker, HeredocDeclaration, PosixCharacter, SourceChar},
+    IrGenError, RejectionReason, invalid_command_error, invalid_heredoc_boundary_error,
+    invalid_heredoc_delimiter_error,
+    posix_lexical::{
+        EscapeBeforeMarker, HeredocBoundary, HeredocDeclaration, NewlineContext, PosixCharacter,
+        SourceChar,
+    },
 };
 use super::{ScriptSubstitutionTraversal, ShellQuoteContext};
 
@@ -27,11 +31,20 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         pos: usize,
         ch: char,
     ) -> Result<Option<usize>, IrGenError> {
-        if !self.is_plain_script_text() || self.is_in_arithmetic_expansion() {
+        if self.is_in_arithmetic_expansion() {
             return Ok(None);
         }
-        self.posix_lexical
-            .note_parameter_expansion(self.chars, pos, SourceChar::new(ch));
+        // `${ }` nesting is tracked wherever the shell reads plain expansion
+        // text, including an open backtick body: a `#` inside the expansion is
+        // syntax there, and reading it as a comment would swallow the rest of
+        // the line, including the nested substitution's closer.
+        if self.active_quote_context() == ShellQuoteContext::Unquoted {
+            self.posix_lexical
+                .note_parameter_expansion(self.chars, pos, SourceChar::new(ch));
+        }
+        if !self.is_plain_script_text() {
+            return Ok(None);
+        }
         let mut character = PosixCharacter {
             chars: self.chars,
             pos,
@@ -57,12 +70,50 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         }
     }
 
+    /// Describe what the newline at the current position is part of.
+    ///
+    /// Only an unquoted newline in the region that declared the heredoc is a
+    /// body boundary. A quoted newline is argument text the shell keeps
+    /// reading through; the nested-region answers let activation fail closed.
+    pub(super) fn newline_context(&self) -> NewlineContext {
+        if self.backtick_region.is_some() {
+            return NewlineContext::BacktickBody;
+        }
+        if self.is_in_arithmetic_expansion() {
+            return NewlineContext::ArithmeticExpansion;
+        }
+        if self.posix_lexical.is_in_parameter_expansion() {
+            return NewlineContext::ParameterExpansion;
+        }
+        if !self.is_plain_script_text() {
+            return NewlineContext::QuotedArgument;
+        }
+        NewlineContext::CommandLine
+    }
+
+    /// Start the queued heredoc body if this newline is its command-line end.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a queued declaration cannot be
+    /// placed at the newline's region or context.
+    pub(super) fn start_pending_heredoc_after(
+        &mut self,
+        context: NewlineContext,
+    ) -> Result<(), IrGenError> {
+        let boundary = HeredocBoundary::new(self.posix_lexical.current_frame_id(), context);
+        self.posix_lexical
+            .activate_pending_heredoc(boundary)
+            .map_err(|reason| invalid_heredoc_boundary_error(self.template.to_owned(), reason))
+    }
+
     /// Return whether the cursor sits in plain, executable script text.
     ///
-    /// Comments and heredoc declarations are recognized only here: quoted text
-    /// and backtick bodies belong to the surrounding shell region.
+    /// Heredoc declarations are recognized only here: quoted text and backtick
+    /// bodies belong to the surrounding shell region, so a `<<` there is not
+    /// modelled. Comment detection is wider: an open backtick body is its own
+    /// command region, so `starts_comment` also accepts unquoted body text.
     pub(super) fn is_plain_script_text(&self) -> bool {
-        self.active_quote_context() == ShellQuoteContext::Unquoted
-            && self.backtick_outer_context.is_none()
+        self.active_quote_context() == ShellQuoteContext::Unquoted && self.backtick_region.is_none()
     }
 }

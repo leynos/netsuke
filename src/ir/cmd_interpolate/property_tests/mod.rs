@@ -16,9 +16,10 @@ use super::{
 use boundary::{HashBoundary, hash_boundary_strategy};
 use support::{
     POSIX_SEPARATORS, adversarial_template_strategy, assert_matches_specification,
-    context_sentinel_bindings, eight_placeholder_template_strategy, has_odd_backticks,
-    interpolation_template_strategy, is_valid_posix_command, non_separator_character_strategy,
-    posix_bindings, power_shell_path_strategy, power_shell_template_strategy, raw_binding_strategy,
+    backtick_region_template_strategy, context_sentinel_bindings,
+    eight_placeholder_template_strategy, has_odd_backticks, interpolation_template_strategy,
+    is_valid_posix_command, non_separator_character_strategy, posix_bindings,
+    power_shell_path_strategy, power_shell_template_strategy, raw_binding_strategy,
     safe_text_strategy,
 };
 
@@ -198,6 +199,28 @@ proptest! {
 
         let is_invalid_command = matches!(err, IrGenError::InvalidCommand { .. });
         prop_assert!(is_invalid_command);
+    }
+
+    /// Restore a backtick's saved quote state into the region that owns it.
+    ///
+    /// A closing backtick must write the `$()` or script region that opened
+    /// it, not the script-level field. The latter makes a later outer marker
+    /// take the encoding of the backtick body's quotes, so an unquoted path
+    /// separator could reach the shell executable.
+    #[test]
+    fn backtick_inside_command_substitution_restores_its_owning_region(
+        generated in backtick_region_template_strategy(),
+    ) {
+        let (template, expected) = generated;
+        let output = interpolate_script_with_bindings(&template, &context_sentinel_bindings())
+            .expect("a backtick that closes in its owning $() must lower");
+
+        prop_assert_eq!(
+            output,
+            expected,
+            "a marker after {:?} must use its own region's encoding",
+            template
+        );
     }
 
     #[test]

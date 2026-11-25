@@ -27,6 +27,45 @@ pub(super) fn adversarial_template_strategy() -> impl Strategy<Value = String> {
         .prop_map(|chars| chars.into_iter().collect())
 }
 
+/// Generate a `$()` frame containing a backtick, then an outer-level marker.
+///
+/// The outer quote state and the backtick body's own quoting vary
+/// independently. The returned expectation names the encoding the marker must
+/// take from the region that owns it, so a restore into the script-level field
+/// instead of the `$()` frame shows up as the other encoding rather than as an
+/// equally valid script.
+pub(super) fn backtick_region_template_strategy() -> impl Strategy<Value = (String, String)> {
+    (
+        any::<bool>(),
+        any::<bool>(),
+        prop::sample::select(vec![INS_TOKEN, OUTS_TOKEN]),
+        safe_text_strategy(),
+    )
+        .prop_map(
+            |(outer_double_quoted, inner_double_quoted, marker, filler)| {
+                let inner = if inner_double_quoted {
+                    "\"`printf x`\""
+                } else {
+                    "`printf x`"
+                };
+                let substitution = format!("$(printf %s {inner})");
+                let template = if outer_double_quoted {
+                    format!("printf '%s' \"{substitution} {filler}{marker}\"")
+                } else {
+                    format!("printf '%s' {substitution} {filler}{marker}")
+                };
+                let encoding = if outer_double_quoted {
+                    if marker == INS_TOKEN { "DBL" } else { "ODBL" }
+                } else if marker == INS_TOKEN {
+                    "UNQ"
+                } else {
+                    "OUNQ"
+                };
+                (template.clone(), template.replace(marker, encoding))
+            },
+        )
+}
+
 /// Generate one-line PowerShell templates with markers and lexical delimiters.
 pub(super) fn power_shell_template_strategy() -> impl Strategy<Value = String> {
     prop::collection::vec(power_shell_fragment_strategy(), 0..=24)
@@ -202,7 +241,8 @@ pub(super) fn non_separator_character_strategy() -> impl Strategy<Value = char> 
 ///
 /// A property can then read the context the scanner selected straight out of
 /// the interpolated text, instead of re-deriving the production path quoting
-/// or restating the scanner.
+/// or restating the scanner. Input and output encodings differ so a property
+/// that lowers both markers can tell which of them took which context.
 pub(super) fn context_sentinel_bindings() -> CommandBindings {
     CommandBindings {
         shell: RecipeShell::Posix,
@@ -212,9 +252,9 @@ pub(super) fn context_sentinel_bindings() -> CommandBindings {
             unquoted: "UNQ".to_owned(),
         },
         outs: PathSubstitutions {
-            single_quoted: "OUT".to_owned(),
-            double_quoted: "OUT".to_owned(),
-            unquoted: "OUT".to_owned(),
+            single_quoted: "OSGL".to_owned(),
+            double_quoted: "ODBL".to_owned(),
+            unquoted: "OUNQ".to_owned(),
         },
     }
 }
