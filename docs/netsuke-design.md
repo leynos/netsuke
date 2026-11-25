@@ -2566,11 +2566,18 @@ this stage; later helpers decide their own bounds, diagnostics, and integration.
 #### Resource bounds
 
 Every standard-library helper that parses untrusted input, enumerates a
-combinatorial space, scans text for matches, or materializes output refuses
-unreasonable expansion **before** allocating. `src/stdlib/resource_bounds/`
-owns that decision for the whole standard library, so a ceiling is written once
-and every consumer inherits the same value, the same arithmetic, and the same
-refusal vocabulary.
+combinatorial space, scans text for matches, or materializes output **must**
+refuse unreasonable expansion **before** allocating.
+`src/stdlib/resource_bounds/` is the module that decision is written in, so a
+ceiling is stated once and each consumer inherits the same value, the same
+arithmetic, and the same refusal vocabulary.
+
+This is a requirement on integration, not a description of current behaviour:
+no standard-library helper calls the module yet. This change supplies the
+shared API, its kernels, and its evidence. The helpers adopt it as their own
+tasks land (6.1.4 for the domain-error scaffolding, then the combinatorial and
+collecting filters), and until a helper does, that helper's expansion is
+bounded exactly as it was before.
 
 The ceilings are the RFC 0006 table 3 defaults, plus the output-content bound
 that six accepted child RFCs require, recorded in

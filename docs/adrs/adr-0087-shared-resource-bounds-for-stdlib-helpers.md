@@ -4,9 +4,11 @@
 
 Accepted. One standard-library module, `src/stdlib/resource_bounds/`, owns the
 RFC 0006 table 3 ceilings, the checked cardinality and running-total
-arithmetic, and the typed refusals that every bounded template helper uses. No
-helper re-implements the arithmetic or invents a ceiling, and the module
-produces no localized diagnostic.
+arithmetic, and the typed refusals that every bounded template helper is
+required to use. No helper re-implements the arithmetic or invents a ceiling,
+and the module produces no localized diagnostic. The decision binds future
+consumers; no helper calls the module at the date of acceptance, so nothing in
+this record claims that existing helpers are already bounded by it.
 
 ## Date
 

@@ -14139,9 +14139,9 @@ yardstick for production cache keys.
 
 `src/stdlib/resource_bounds/` owns the RFC 0006 table 3 ceilings, the checked
 arithmetic that decides whether a request fits inside them, and the typed
-refusals every bounded helper reports. It is the single source for all three,
-so a ceiling changes in one place and two helpers cannot disagree about what
-"the same" cardinality is.
+refusals a bounded helper reports. It is the single source for all three, so a
+ceiling changes in one place and two helpers cannot disagree about what "the
+same" cardinality is.
 [ADR-0087](adrs/adr-0087-shared-resource-bounds-for-stdlib-helpers.md) records
 the decision and its alternatives.
 
@@ -14166,8 +14166,10 @@ above it; and `product`'s identity (`repeat == 0` yields one empty tuple) and
 zero (any zero-length operand yields zero tuples) results are answered before
 any comparison.
 
-**Re-use policy.** Every bounded template helper in `src/stdlib/` calls this
-module, and the policy below is what a review checks:
+**Re-use policy.** Every bounded template helper in `src/stdlib/` is required
+to call this module, and the policy below is what a review checks. No helper
+calls it yet: the module is in place and the consumer tasks adopt it, so a
+helper that predates those tasks is still bounded exactly as it was before.
 
 - No helper re-implements the arithmetic or invents a ceiling. A helper that
   needs a value this module does not provide adds it here, with its ceiling,
