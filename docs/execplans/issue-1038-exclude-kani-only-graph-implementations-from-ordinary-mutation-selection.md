@@ -220,6 +220,25 @@ selection and proof-specific verification.
       probes moved to `tests/mutation_selection/tests.rs`, a child module of the
       reader, so each file is comfortably inside the limit and the probes sit
       beside the rules they check.
+- [x] (2026-11-25) The fourth review pass returned three findings about reader
+      fidelity, all verified against the pinned source and measured against the
+      tool before being acted on. Rather than patch each one, the reader now
+      models the walker's exclusion rules as a set:
+  - **Inline modules were not traversed.** `visit_item_mod` returns early on
+    `attrs_excluded`, so a skipped inline module suppresses everything inside
+    it. The reader visited only top-level `impl` items, so it did not even
+    record those methods. It now recurses through inline modules and inherits
+    the exclusion.
+  - **Eligibility was not modelled.** The walker also skips an `unsafe fn`, a
+    constructor named `new`, and a method with an empty body. Measured: all
+    three produce no mutants, while an ordinary neighbour does.
+  - **A selected `cfg(kani)` implementation counted as a production twin.**
+    `Selection` gains `selected_production`, and the counterpart check uses it,
+    so moving a production counterpart behind the Kani gate now fails.
+- [x] (2026-11-25) Three probes were added for these, and each was checked
+      against a seeded reader: dropping module recursion and eligibility fails
+      their two probes, and counting every selection as production fails the
+      third alongside them. With the reader restored, all 14 tests pass.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:

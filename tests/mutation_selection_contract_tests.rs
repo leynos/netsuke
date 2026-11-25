@@ -160,7 +160,10 @@ fn each_paired_proof_only_name_keeps_a_selected_production_twin() -> Result<()> 
     let mut unselected: Vec<(&str, Option<&Selection>)> = Vec::new();
     for name in PROOF_ONLY_WITH_PRODUCTION_TWIN {
         let selection = by_name.get(name);
-        let keeps_twin = selection.is_some_and(|found| found.selected > 0);
+        // `selected_production` rather than `selected`: a selected `cfg(kani)`
+        // implementation is not a production counterpart, so counting it would
+        // pass a name whose remaining implementation moved behind the Kani gate.
+        let keeps_twin = selection.is_some_and(|found| found.selected_production > 0);
         if !keeps_twin {
             unselected.push((name, selection));
         }
