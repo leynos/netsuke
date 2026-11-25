@@ -1175,6 +1175,54 @@ Record here, as work proceeds: the EP-M0 answers with transcripts; the EP-M1
 red and green transcripts; each mutation's failure set and shrunk
 counter-example; the coverage-class counts; the suite's measured wall time.
 
+### EP-M0 transcripts
+
+Command:
+
+```sh
+cargo nextest run --all-features --lib \
+  -E 'test(/manifest::expand::tests::m0_probe/)' --no-capture
+```
+
+Eight probe tests ran, all passing; the probes were then deleted and none was
+committed.
+
+```plaintext
+PROBE-1 targets keys after `when` removal: ["name", "after", "command"]
+PROBE-1 actions keys after `when` removal: ["name", "after", "command"]
+PROBE-2 target error: Manifest parse failed.: Manifest structure error in
+  Netsukefile: unknown field `zz_last`: unknown field `zz_last`
+PROBE-2 action error: Manifest parse failed.: Manifest structure error in
+  Netsukefile: unknown field `zz_last`: unknown field `zz_last`
+PROBE-3 static shapes done: mismatches=0 errors=600
+PROBE-3 foreach shapes done: mismatches=0 errors=0
+PROBE-4 generated done: failures=0 errors=0
+PROBE-4 extreme i64::MIN path=false: ok    (path=true: ok)
+PROBE-4 extreme i64::MAX path=false: ok    (path=true: ok)
+PROBE-4 extreme u64::MAX path=false: ok    (path=true: ok)
+PROBE-4 extreme -0.0 path=false: ok        (path=true: ok)
+PROBE-4 extreme f64::MIN_POSITIVE path=false: ok (path=true: ok)
+PROBE-4 extreme 5e-324 path=false: ok      (path=true: ok)
+PROBE-4 extreme f64::MAX path=false: ok    (path=true: ok)
+PROBE-4 yaml i64::MIN: {"value":-9223372036854775808}
+PROBE-4 yaml i64::MAX: {"value":9223372036854775807}
+PROBE-4 yaml u64::MAX: {"value":18446744073709551615}
+PROBE-4 yaml -0.0: {"value":-0.0}
+PROBE-4 yaml 5e-324: {"value":5e-324}
+PROBE-4 yaml f64::MAX: {"value":1.7976931348623157e+308}
+PROBE-5 128 expansions took 469.292987ms (mean 3.666351ms)
+PROBE-5 single expansion took 3.287951ms
+PROBE-6 production environment builder is private to `manifest`.
+```
+
+The 600 static "errors" are exactly the `IndexCmp` (137+137) and `ItemCmp`
+(163+163) cases that the static probe also ran: a static entry binds neither
+`item` nor `index`, so a strict-undefined environment rejects them, which is
+the intended behaviour rather than a mismatch. Every shape a static entry may
+legally reference matched the oracle on every draw. No template form compiled
+as an expression (0 hits for the "template compiled as expression" probe), so
+all template forms take the fallback path.
+
 ## Interfaces and dependencies
 
 No production interface changes. The test-only interfaces are:
@@ -1248,7 +1296,8 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   testing, codebase accuracy, process, pre-mortem); revised the plan (see the
   revision note).
 - [x] (2026-11-25) User approval.
-- [ ] EP-M0 feasibility probes.
+- [x] (2026-11-25 19:23Z) EP-M0 feasibility probes. All six questions answered;
+  every probe deleted, none committed.
 - [ ] EP-M1 key-order fix.
 - [ ] EP-M2 shared test support and relocation.
 - [ ] EP-M3 generators, oracles, coverage, and properties.
@@ -1283,6 +1332,46 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
 - Observation: `conditional` is a real `Target` field, not only a synthetic
   query-mode key. Evidence: `src/ast/target.rs`. Impact: it is generated as an
   ordinary non-control field.
+- Observation (EP-M0 Q1, confirmed): `expand_foreach` removes `when` by
+  `swap_remove`, so `{"name", "when", "command", "after"}` expands to
+  `["name", "after", "command"]` in both sections. Evidence: probe transcript
+  in *Artefacts and notes*. Impact: EP-M1 is a real red-then-green fix.
+- Observation (EP-M0 Q2, confirmed): before the fix, both a target and an
+  action written `name, when, zz_first, command, zz_last` fail with
+  ``unknown field `zz_last` ``. The failure is reported by serde's flattened
+  `deny_unknown_fields` path, so the message is the concrete user-visible
+  symptom. Impact: the behavioural scenario has a real red stage.
+- Observation (EP-M0 Q3, confirmed): every closed-set condition shape agrees
+  with the Rust oracle across 1,000 generated bindings, in both forms, with
+  zero mismatches and zero errors. Shapes referencing `item`/`index` on a
+  *static* entry error under strict undefined, as intended. No template form
+  compiles as an expression, so each takes the fallback path. Impact: no
+  generator restriction is needed beyond keeping `item`/`index` off static
+  entries.
+- Observation (EP-M0 Q4, confirmed): 1,000 generated JSON values and the
+  extremes `i64::MIN`, `i64::MAX`, `u64::MAX`, `-0.0`, `f64::MIN_POSITIVE`,
+  `5e-324`, and `f64::MAX` all survive both the inline-array path and the
+  list-literal string path deep-equal, with floats matching by `to_bits()`.
+  `serde_saphyr` produces all of them from YAML text. Impact: the fidelity
+  tolerance is not breached; the string-form printer must spell `null` as
+  `none`.
+- Observation (EP-M0 Q5): a representative two-section document (four foreach
+  targets over eight items, two foreach actions) expands in 3.3 ms, so 128
+  cases cost about 0.47 s per property. Impact: the 5 s advisory budget holds
+  with room to spare.
+- Observation (EP-M0 Q6): there is no reachable production constructor for the
+  expansion environment. `build_template_environment` is private to `manifest`,
+  and the registration helpers are `pub(super)` inside it. Impact: properties
+  build `Environment::new()` with `UndefinedBehavior::Strict`; the behavioural
+  scenarios are the check on the production environment.
+- Observation: `main` moved under the drafted plan. The expansion entry point
+  is now
+  `expand_foreach_with_budget(doc, env, budget, classifies_query_refusals)`,
+  `when_allows` takes a `retain_filtered_entry` flag and returns
+  `WhenResolution`, and the removal sites are `src/manifest/expand/mod.rs`
+  (`entry.remove("foreach")`) and `src/manifest/expand/evaluation.rs`
+  (`map.remove("when")`). Impact: the substance of the plan is unchanged; line
+  numbers in the plan text are advisory.
 
 ## Decision log
 
