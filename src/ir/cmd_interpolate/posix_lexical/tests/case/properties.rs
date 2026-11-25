@@ -365,11 +365,13 @@ fn generated_case_skeletons_parse_as_bash() {
             rejected.push(script);
         }
     }
+    let sample: Vec<&String> = rejected.iter().take(5).collect();
     assert!(
         rejected.is_empty(),
-        "the generated grammar must be valid shell; {} of {} scripts were rejected: {:?}",
+        "the generated grammar must be valid shell; {} of {} scripts were rejected, \
+         first {}: {sample:?}",
         rejected.len(),
         SUBJECTS.len() * PATTERNS.len() * ARMS.len() * SEPARATORS.len(),
-        &rejected[..rejected.len().min(5)]
+        sample.len()
     );
 }
