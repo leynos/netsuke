@@ -50,11 +50,6 @@ DIRECT_RUNNER_SOURCES = (
         "default-features",
     ),
     ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
-    (
-        "delayed-pr-comment.delay_and_comment",
-        "delayed-pr-comment.yml",
-        "delay_and_comment",
-    ),
     ("netsukefile-test.netsukefile", "netsukefile-test.yml", "netsukefile"),
     ("release.metadata", "release.yml", "metadata"),
     (
@@ -76,7 +71,6 @@ DIRECT_RUNNER_SOURCES = (
         ("ci-windows.yml", "build-test-windows", "windows-latest"),
         ("ci.yml", "kani-smoke", UBICLOUD_DEFAULT_LABEL),
         ("coverage-main.yml", "coverage-upload", UBICLOUD_LARGE_LABEL),
-        ("delayed-pr-comment.yml", "delay_and_comment", "ubuntu-latest"),
         ("netsukefile-test.yml", "netsukefile", UBICLOUD_COMPAT_LABEL),
         ("release.yml", "metadata", "ubuntu-latest"),
         ("release.yml", "windows-native-recipe-smoke", "windows-latest"),
@@ -368,6 +362,9 @@ def _checked_in_runner_assignments() -> dict[str, str]:
     )
     assignments["mutation-testing.mutation"] = _external_runner_ownership(
         "mutation-testing.yml", "mutation"
+    )
+    assignments["delayed-pr-comment.delayed-comment"] = _external_runner_ownership(
+        "delayed-pr-comment.yml", "delayed-comment"
     )
     assignments["dependabot-automerge.automerge"] = _external_runner_ownership(
         "dependabot-automerge.yml", "automerge"
