@@ -19,8 +19,9 @@ on:
 jobs:
   delayed-comment:
     permissions:
-      pull-requests: write # needed to post comments
-    uses: leynos/shared-actions/.github/workflows/delayed-pr-comment.yml@8091b7cb5f9bab2d4a76ced2e749fd4c1bccdb02 # shared-actions PR 706 merge, 2026-11-24
+      pull-requests: write  # needed to post comments
+    # shared-actions PR 706 merge, 2026-11-24
+    uses: leynos/shared-actions/.github/workflows/delayed-pr-comment.yml@8091b7cb5f9bab2d4a76ced2e749fd4c1bccdb02
     with:
       pr_number: ${{ inputs.pr_number }}
       delay_minutes: ${{ inputs.delay_minutes }}
