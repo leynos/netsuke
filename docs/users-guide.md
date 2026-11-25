@@ -1057,12 +1057,14 @@ working directory, or a symbolic-link alias — because removing the entry would
 destroy the output the manifest named. `netsuke generate` leaves
 `.netsuke/phony/force` alone: writing the plan never removes the node, so
 running the generated file by hand requires that path to be absent. Before
-removing it manually, check the selected `--file` manifest and every declared
-path the manifest names — outputs, inputs, implicit dependencies, and
-order-only dependencies — against the node the way the build does. An absolute
-spelling, a `..` path that returns to the working directory, and a
-symbolic-link alias all resolve to the same node; if any of them names the
-force path or a directory above it, do not remove it, because the removal
+removing it manually, confirm that `.netsuke` and `.netsuke/phony` are real
+directories: a symbolic link there would send the removal somewhere else, and
+the build refuses rather than following one. Then check the selected `--file`
+manifest and every declared path the manifest names — outputs, inputs, implicit
+dependencies, and order-only dependencies — against the node the way the build
+does. An absolute spelling, a `..` path that returns to the working directory,
+and a symbolic-link alias all resolve to the same node; if any of them names
+the force path or a directory above it, do not remove it, because the removal
 destroys that file or manifest rather than generated state.
 
 The flags are independent. An entry in `actions` is implicitly phony and not

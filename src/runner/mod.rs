@@ -78,7 +78,7 @@ pub use recipe_shell::telemetry::{
     RECIPE_SHELL_RESOLUTIONS_TOTAL,
 };
 
-use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
+use dyndep::{materialize_dyndep_bundle_in, prune_dyndep_bundle_in};
 use generated_state::{BuildStatePlan, publish_then_reset};
 use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
@@ -225,15 +225,12 @@ fn execute_build(
     // guards the reset, so no second lookup can answer differently. The named
     // step owns the order: refusal, publication, pruning, reset.
     let workspace = Workspace::resolve(cli)?;
-    let publication = publish_then_reset(
-        cli,
-        &BuildStatePlan {
-            workspace: &workspace,
-            bundle: &parts.bundle,
-            manifest: &cli.file,
-            declared: &parts.declared_paths,
-        },
-    )?;
+    let publication = publish_then_reset(&BuildStatePlan {
+        workspace: &workspace,
+        bundle: &parts.bundle,
+        manifest: &cli.file,
+        declared: &parts.declared_paths,
+    })?;
     let ninja = NinjaContent::new(parts.bundle.into_parts().0);
     let command_list_targets = parts.command_list_targets;
     let targets = if args.targets.is_empty() {
@@ -329,7 +326,10 @@ fn execute_ninja_tool(
     let bundle =
         generate_ninja_with_shell(cli, context.reporter, Some(tool.key), graph_generation)?
             .into_bundle();
-    let publication = materialize_dyndep_bundle(cli, &bundle)?;
+    // Ninja tools open their own verified directory for the invocation, so
+    // publication and pruning use that same handle.
+    let tool_dir = path_helpers::open_effective_dir(cli)?;
+    let publication = materialize_dyndep_bundle_in(&tool_dir, &bundle)?;
     let (ninja_file, dyndep_files) = bundle.into_parts();
     let ninja = NinjaContent::new(ninja_file);
 
@@ -361,7 +361,7 @@ fn execute_ninja_tool(
     };
     tool_result.map_err(|error| ninja_failure(error, ctx))?;
     if tool.prune_after_success {
-        prune_dyndep_bundle(cli, &dyndep_files, &publication)?;
+        prune_dyndep_bundle_in(&tool_dir, &dyndep_files, &publication)?;
     }
     context.reporter.report_complete(tool.key);
     drop(publication);

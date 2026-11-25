@@ -1654,8 +1654,9 @@ Clearing the force node belongs to the command layer, not to generation.
 `src/runner/phony_state/reset.rs` opens the working directory, verifies that
 `.netsuke` and `.netsuke/phony` are real directories without following a link,
 and removes whatever occupies `force`, returning a `ResetOutcome` rather than
-logging; the caller reports a removal. `netsuke generate` leaves the path alone
-because generation is a pure translation of the graph. The reservation check in
+logging; the caller reports a removal. `netsuke generate` leaves the path
+alone: writing the plan never removes the node, though the command does
+materialize dyndep sidecars. The reservation check in
 `src/ninja_gen/reserved_paths/mod.rs` is pure for the same reason: it folds the
 graph's own spelling and reads nothing from disk. It also folds ASCII case,
 because a case-insensitive volume treats `.NETSUKE/PHONY` as the reserved tree;

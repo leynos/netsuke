@@ -52,7 +52,7 @@ impl Workspace {
     }
 
     /// Return the capability handle rooted at this workspace.
-    pub(super) const fn dir(&self) -> &Dir {
+    pub(in crate::runner) const fn dir(&self) -> &Dir {
         &self.dir
     }
 }

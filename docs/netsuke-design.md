@@ -621,10 +621,13 @@ The cleaner model is:
   [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).
 
 - `always`: When set to `true`, the target runs on every invocation regardless
-  of timestamps or dependencies. The default value is `false`. The backend
-  makes the edge permanently dirty through the shared `.netsuke/phony/force`
-  node, while retaining the edge-level `restat` that lets an unchanged output
-  prune downstream work.
+  of timestamps or dependencies. The default value is `false`. For a non-phony
+  edge the backend makes it permanently dirty through the shared
+  `.netsuke/phony/force` node, while retaining the edge-level `restat` that
+  lets an unchanged output prune downstream work. An edge that also sets
+  `phony` takes the hidden-output lowering instead, where `restat` is
+  suppressed and no downstream pruning follows from an unchanged same-named
+  file.
 
 - `console`: When set to `true`, Netsuke assigns this action or target's build
   edge to Ninja's special `console` pool so command output can be forwarded as

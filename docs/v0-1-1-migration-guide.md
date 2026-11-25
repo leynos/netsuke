@@ -95,12 +95,14 @@ every build. Remove that file on every run only when it is no longer wanted. Do
 not delete unrelated files that merely share a target's name.
 
 A target declaring `always: true` re-runs on every invocation that reaches it,
-even when its inputs and output are unchanged. Ninja records the output's
-modification time after the run: an otherwise up-to-date dependant rebuilds
-when that recorded time changes and is skipped when it does not. A recipe that
-rewrites identical bytes and restores the original modification time therefore
-still lets `restat` skip such a dependant, while a dependant with another
-changed input can still run.
+even when its inputs and output are unchanged. For a non-phony target, Ninja
+records the output's modification time after the run: an otherwise up-to-date
+dependant rebuilds when that recorded time changes and is skipped when it does
+not. A recipe that rewrites identical bytes and restores the original
+modification time therefore still lets `restat` skip such a dependant, while a
+dependant with another changed input can still run. A target that also declares
+`phony: true` takes the hidden-output lowering instead, where `restat` is
+suppressed and an unchanged same-named file prunes nothing.
 
 Because the generated Ninja text changes shape for these edges, a manifest that
 compares `netsuke generate` output against a stored copy must update that copy.

@@ -8,7 +8,6 @@
 
 use super::dyndep::{DyndepPublication, materialize_dyndep_bundle, prune_dyndep_bundle};
 use super::phony_state::{ResetOutcome, Workspace, refuse_reserved_declarations, reset_force_node};
-use crate::cli::Cli;
 use crate::ninja_gen::GeneratedNinja;
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -24,13 +23,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 ///
 /// Returns an error when the bundle cannot be published or pruned, or when the
 /// force node cannot be reset.
-pub(super) fn publish_then_reset(
-    cli: &Cli,
-    plan: &BuildStatePlan<'_>,
-) -> Result<DyndepPublication> {
+pub(super) fn publish_then_reset(plan: &BuildStatePlan<'_>) -> Result<DyndepPublication> {
     let reservation = refuse_reserved_declarations(plan.workspace, plan.manifest, plan.declared)?;
-    let publication = materialize_dyndep_bundle(cli, plan.bundle)?;
-    prune_dyndep_bundle(cli, plan.bundle.dyndep_files(), &publication)?;
+    let publication = materialize_dyndep_bundle(plan.workspace, plan.bundle)?;
+    prune_dyndep_bundle(plan.workspace, plan.bundle.dyndep_files(), &publication)?;
     report_reset(reset_force_node(plan.workspace, &reservation)?);
     Ok(publication)
 }
