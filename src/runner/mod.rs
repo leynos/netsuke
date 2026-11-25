@@ -79,7 +79,7 @@ pub use recipe_shell::telemetry::{
 };
 
 use dyndep::{materialize_dyndep_bundle_in, prune_dyndep_bundle_in};
-use generated_state::{BuildStatePlan, publish_then_reset};
+use generated_state::{BuildStatePlan, refuse_publish_prune_and_reset};
 use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
 use phony_state::Workspace;
@@ -225,7 +225,7 @@ fn execute_build(
     // guards the reset, so no second lookup can answer differently. The named
     // step owns the order: refusal, publication, pruning, reset.
     let workspace = Workspace::resolve(cli)?;
-    let publication = publish_then_reset(&BuildStatePlan {
+    let publication = refuse_publish_prune_and_reset(&BuildStatePlan {
         workspace: &workspace,
         bundle: &parts.bundle,
         manifest: &cli.file,

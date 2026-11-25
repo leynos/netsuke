@@ -107,3 +107,71 @@ fn a_manifest_dot_dot_after_a_link_is_refused() -> Result<()> {
     );
     Ok(())
 }
+
+/// Keep publication on the workspace the refusal judged.
+///
+/// A `-C` path can be a symbolic link. If publication reopened the selected
+/// path after the refusal, retargeting that link in between would publish
+/// sidecars into a directory whose reserved namespace was never judged. The
+/// workspace is resolved once, and every later step uses that value's handle,
+/// so retargeting the link afterwards must not move publication.
+#[cfg(unix)]
+#[test]
+fn retargeting_the_selected_directory_does_not_move_publication() -> Result<()> {
+    let chosen = TempDir::new().context("create the first directory")?;
+    let other = TempDir::new().context("create the second directory")?;
+    let link_root = TempDir::new().context("create the link directory")?;
+    let chosen_path = Utf8Path::from_path(chosen.path())
+        .context("the first path is UTF-8")?
+        .to_path_buf();
+    let other_path = Utf8Path::from_path(other.path())
+        .context("the second path is UTF-8")?
+        .to_path_buf();
+    let link_path = Utf8Path::from_path(link_root.path())
+        .context("the link path is UTF-8")?
+        .to_path_buf();
+    let selected = link_path.join("selected");
+    let link_dir = Dir::open_ambient_dir(&link_path, ambient_authority())
+        .context("open the link directory")?;
+    // The capability API refuses an absolute link target, so the link climbs
+    // one level and names the sibling temporary directory.
+    let chosen_name = chosen_path
+        .file_name()
+        .context("the first directory has a name")?;
+    let other_name = other_path
+        .file_name()
+        .context("the second directory has a name")?;
+    link_dir
+        .symlink(Utf8Path::new("..").join(chosen_name), "selected")
+        .context("link the selected directory to the first workspace")?;
+
+    // Resolve once, as a build does before it judges any path.
+    let workspace = super::super::Workspace::open(&selected)?;
+
+    // Retarget the link afterwards, as a concurrent change could.
+    link_dir
+        .remove_file("selected")
+        .context("remove the original link")?;
+    link_dir
+        .symlink(Utf8Path::new("..").join(other_name), "selected")
+        .context("retarget the link to the second workspace")?;
+
+    let sidecar = crate::ninja_gen::GeneratedDyndep::fixture(
+        Utf8PathBuf::from(".netsuke/dyndep/fixture.dd"),
+        "ninja_dyndep_version = 1\n".to_owned(),
+    );
+    let _publication = super::super::super::dyndep::materialize_sidecars_for_test(
+        &workspace,
+        std::slice::from_ref(&sidecar),
+    )?;
+
+    ensure!(
+        chosen_path.join(".netsuke/dyndep/fixture.dd").exists(),
+        "publication must write into the workspace the refusal judged",
+    );
+    ensure!(
+        !other_path.join(".netsuke").exists(),
+        "publication must not follow the retargeted link",
+    );
+    Ok(())
+}

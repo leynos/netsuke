@@ -11292,18 +11292,19 @@ directory into a path or a handle. `selected_directory` is the single reading of
 module re-derives it.
 
 `open_directory` canonicalizes one directory and opens it through a capability
-handle, returning both. It is the opener every step that judges or writes
-generated state uses — `Workspace::open` in `src/runner/phony_state/` wraps it,
-and dyndep publication reaches the same directory through `open_effective_dir`,
-which is this function applied to the selected directory. Keeping one opener is
-what makes the reservation refusal, sidecar publication, and the force-node
-reset act on the same canonical directory rather than on their own readings of
-the selected path.
+handle, returning both. `Workspace::open` in `src/runner/phony_state/` wraps
+it, and `open_effective_dir` is this function applied to the selected directory.
 
-`open_effective_dir` is therefore the shared handle for publication and for the
-phony workspace's own verified walk; a new caller that only needs a handle to
-the effective working directory should use it rather than opening the directory
-again. Keep manifest resolution (`resolve_manifest_path`), output-path
+A build resolves one `Workspace` and hands it to every step that touches
+generated state: the reservation refusal, dyndep publication and pruning, and
+the force-node reset all use that value's handle, so a `-C` symlink retargeted
+mid-command cannot move one step to a directory another never judged. The Ninja
+tool path has no workspace in scope, so it opens one directory for the
+invocation and publishes, prunes, and runs Ninja through that same handle.
+
+`open_effective_dir` is therefore for callers that need their own handle to the
+effective working directory; prefer passing a resolved `Workspace` where one
+already exists. Keep manifest resolution (`resolve_manifest_path`), output-path
 resolution (`resolve_output_path`), and the manifest-existence check in this
 module too, so the runner's path arithmetic has one home.
 

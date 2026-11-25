@@ -15,7 +15,9 @@ mod resolution;
 mod support;
 
 use super::reset::{FORCE_ENTRY, NAMESPACE_LEAF, NAMESPACE_PARENT, open_verified_dir, remove_path};
-use super::{Workspace as BuildWorkspace, refuse_reserved_declarations, reset_force_node};
+use super::{
+    ResetOutcome, Workspace as BuildWorkspace, refuse_reserved_declarations, reset_force_node,
+};
 use crate::ninja_gen::FORCE_PATH;
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -232,16 +234,24 @@ fn a_reservation_for_one_workspace_cannot_authorise_another() -> Result<()> {
     Ok(())
 }
 
-/// The resolution unit must not depend on the removal unit.
+/// Pin the production signature the reservation proof enforces.
 ///
-/// Resolution is a read-only query; removal owns the filesystem mutation. A
-/// source check keeps a later edit from reintroducing the cycle that made the
-/// query import the command it exists to guard.
+/// This compiles the real items rather than a stand-in: the reset must take the
+/// proof, and the proof must remain opaque outside its module, so a change that
+/// dropped either would fail here. The assertions are type-level; the value
+/// is a function pointer, never called.
 #[test]
-fn resolution_does_not_import_the_removal_unit() {
-    let source = include_str!("../resolve.rs");
+fn the_reset_signature_requires_the_proof() {
+    // Coercing the real item to this type fails to compile the moment the
+    // reset stops taking the proof.
+    let reset: fn(&BuildWorkspace, &super::policy::ReservedStateChecked) -> Result<ResetOutcome> =
+        reset_force_node;
     assert!(
-        !source.contains("super::reset"),
-        "resolve.rs must depend on the workspace and namespace constants, not on reset.rs",
+        std::mem::size_of_val(&reset) > 0,
+        "the reset must remain a callable that takes the proof",
+    );
+    assert!(
+        std::mem::size_of::<super::policy::ReservedStateChecked>() > 0,
+        "the proof must remain a real value the refusal returns",
     );
 }

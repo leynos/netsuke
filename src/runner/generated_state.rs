@@ -12,7 +12,8 @@ use crate::ninja_gen::GeneratedNinja;
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 
-/// Publish the dyndep bundle, prune it, then clear the force node.
+/// Refuse reserved declarations, publish the dyndep bundle, prune it, then
+/// clear the force node.
 ///
 /// Publication comes first because Ninja reads the sidecars, pruning because
 /// obsolete ones are bounded, and the reset last because it removes state the
@@ -23,7 +24,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 ///
 /// Returns an error when the bundle cannot be published or pruned, or when the
 /// force node cannot be reset.
-pub(super) fn publish_then_reset(plan: &BuildStatePlan<'_>) -> Result<DyndepPublication> {
+pub(super) fn refuse_publish_prune_and_reset(
+    plan: &BuildStatePlan<'_>,
+) -> Result<DyndepPublication> {
     let reservation = refuse_reserved_declarations(plan.workspace, plan.manifest, plan.declared)?;
     let publication = materialize_dyndep_bundle(plan.workspace, plan.bundle)?;
     prune_dyndep_bundle(plan.workspace, plan.bundle.dyndep_files(), &publication)?;
