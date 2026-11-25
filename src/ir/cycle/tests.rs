@@ -188,4 +188,3 @@ fn bounded_cycles_through_inputs_or_implicit_deps_are_detected() {
         assert_bounded_cycle_detected(cycle_len, implicit_index);
     }
 }
-
