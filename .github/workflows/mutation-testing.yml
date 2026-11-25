@@ -41,6 +41,15 @@ jobs:
       # Kani-only verification modules gated behind #[cfg(kani)] mod
       # declarations; cargo-mutants does not evaluate that cfg, so
       # mutants there would compile to nothing and survive as noise.
+      #
+      # Whole files only, deliberately. This glob is path-scoped, so it
+      # cannot exclude a proof-only item from a file that also holds the
+      # production counterpart the ordinary lane must keep judging.
+      # src/ir/graph/mod.rs is exactly that case: its four #[cfg(kani)]
+      # implementations carry per-item `#[mutants::skip]` attributes
+      # instead, and `tests/mutation_selection_contract_tests.rs` holds
+      # both halves of that arrangement. Do not add the file here — it
+      # would take the cfg(not(kani)) counterparts out of the lane too.
       exclude-globs: "src/ir/cycle/verification.rs,src/ir/cmd_interpolate/verification.rs,\
         src/ir/from_manifest/verification.rs,src/ir/graph/kani_map.rs"
       # Match the CI baseline (`make test` runs --all-features) so

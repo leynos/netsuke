@@ -8,6 +8,14 @@ the shared workflow loader and pin the contract it must uphold, so drift
 Kani-module excludes, the feature args, or the mold provisioning) fails CI
 on the pull request rather than surfacing in a scheduled or manual run.
 
+The excludes are pinned as a *whole-file* set, and a separate assertion
+refuses the mixed production/Kani file ``src/ir/graph/mod.rs``. That file's
+proof-only implementations are excluded one at a time by a source attribute
+instead, because ``exclude-globs`` is path-scoped and would take the
+``cfg(not(kani))`` counterparts with it. See issue #1038 and the
+"Ordinary selection and proof-specific verification" section of
+``docs/developers-guide.md``.
+
 The caller must reference the correct reusable workflow at a commit SHA;
 Dependabot owns the SHA value, so this test asserts the shape of the pin
 (a 40-character lowercase hex commit SHA) rather than a specific SHA.
@@ -47,12 +55,25 @@ EXPECTED_USES_PATH = "leynos/shared-actions/.github/workflows/mutation-cargo.yml
 #: Kani-only verification modules gated behind ``#[cfg(kani)]`` mod
 #: declarations; cargo-mutants does not evaluate that cfg, so their
 #: survivors would be noise.
+#:
+#: This list is deliberately *whole files only*. ``exclude-globs`` is
+#: path-scoped, so it cannot remove a proof-only item from a file that also
+#: holds the production counterpart the ordinary lane must keep judging.
+#: That mixed-file case is covered by the per-item ``#[mutants::skip]``
+#: attributes in ``src/ir/graph/mod.rs`` instead; see issue #1038 and
+#: ``docs/developers-guide.md``. Adding a mixed file here would take its
+#: production counterparts out of the lane as well, which
+#: ``test_mixed_kani_file_is_not_excluded_wholesale`` refuses.
 KANI_EXCLUDES = (
     "src/ir/cycle/verification.rs",
     "src/ir/cmd_interpolate/verification.rs",
     "src/ir/from_manifest/verification.rs",
     "src/ir/graph/kani_map.rs",
 )
+
+#: The mixed production/Kani file whose proof-only items are excluded one at a
+#: time rather than by path.
+MIXED_KANI_FILE = "src/ir/graph/mod.rs"
 
 #: The shared workflow input that installs the pinned linker.
 INSTALL_MOLD_INPUT = "install-mold"
