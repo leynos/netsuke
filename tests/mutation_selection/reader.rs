@@ -168,25 +168,79 @@ fn is_cfg_test(attr: &Attribute) -> bool {
 /// Kani gate: the ordinary lane does not evaluate it, so such an item would be
 /// present in the test binaries and must keep its mutants.
 fn is_kani_only(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(is_direct_kani_cfg)
+    attrs.iter().any(is_kani_gate)
 }
 
-/// True when `attr` is a `cfg` attribute naming `kani` as one of its conditions.
-fn is_direct_kani_cfg(attr: &Attribute) -> bool {
+/// True when `attr` is a `cfg` whose predicate cannot hold without `kani`.
+///
+/// The whole predicate is evaluated rather than scanned for a `kani` token, so
+/// compound forms classify by what they actually permit:
+///
+/// - `cfg(kani)`, `cfg(all(kani))` and `cfg(all(kani, unix))` are Kani gates,
+///   because every conjunct must hold;
+/// - `cfg(any(kani, unix))` is **not**, because `unix` alone can satisfy it and
+///   the item then compiles in the ordinary lane;
+/// - `cfg(not(kani))` is not, which is what makes it the production
+///   counterpart.
+///
+/// Treating every predicate that merely mentions `kani` as a gate would
+/// misclassify `cfg(any(kani, unix))` as proof-only and, worse, hide a genuine
+/// production counterpart from the counterpart check.
+fn is_kani_gate(attr: &Attribute) -> bool {
     let Meta::List(list) = &attr.meta else {
         return false;
     };
     if !list.path.is_ident("cfg") {
         return false;
     }
-    let mut found = false;
-    let parsed = attr.parse_nested_meta(|meta| {
-        if meta.path.is_ident("kani") {
-            found = true;
+    let Ok(predicate) = syn::parse2::<Meta>(list.tokens.clone()) else {
+        // An unparsable predicate is not something this model can classify, so
+        // it is treated as no gate rather than being guessed at.
+        return false;
+    };
+    predicate_requires_kani(&predicate)
+}
+
+/// True when the cfg `predicate` cannot hold unless `kani` holds.
+///
+/// The recursion implements the two combinators that decide the question:
+///
+/// - `all(..)` requires Kani when **any** conjunct does, because every conjunct
+///   must hold.
+/// - `any(..)` requires Kani only when **every** disjunct does, because one
+///   satisfiable disjunct is enough.
+///
+/// A negation is never a gate: `not(kani)` holds precisely when Kani is absent.
+/// No argument list arrives here, so `parse` is infallible in practice.
+fn predicate_requires_kani(predicate: &Meta) -> bool {
+    match predicate {
+        Meta::Path(path) => path.is_ident("kani"),
+        Meta::List(list) => {
+            let operands = nested_metas(list);
+            if list.path.is_ident("all") {
+                operands.iter().any(predicate_requires_kani)
+            } else if list.path.is_ident("any") {
+                !operands.is_empty() && operands.iter().all(predicate_requires_kani)
+            } else {
+                false
+            }
         }
-        Ok(())
-    });
-    parsed.is_ok() && found
+        Meta::NameValue(_) => false,
+    }
+}
+
+/// Parse a cfg combinator's operands.
+///
+/// Returns an empty list rather than failing: a caller that cannot read the
+/// operands treats the combinator as not requiring Kani, which is the
+/// conservative answer for a gate whose contents are unknown.
+fn nested_metas(list: &syn::MetaList) -> Vec<Meta> {
+    syn::parse::Parser::parse2(
+        syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated,
+        list.tokens.clone(),
+    )
+    .map(|parsed| parsed.into_iter().collect())
+    .unwrap_or_default()
 }
 
 /// True when the walker would skip this method for a reason other than an
@@ -205,6 +259,31 @@ fn is_ineligible_signature(sig: &Signature) -> bool {
     sig.unsafety.is_some() || sig.ident == "new"
 }
 
+/// The decisions inherited by everything declared inside a scope.
+///
+/// Both are properties of the *enclosing* declarations rather than of the
+/// method, and each is the OR of every enclosing scope's own answer: an item is
+/// excluded if anything around it is, and is Kani-only if anything around it
+/// requires Kani. Carrying them as one value keeps the recursion from growing a
+/// parameter per rule.
+#[derive(Debug, Clone, Copy, Default)]
+struct Scope {
+    /// Some enclosing scope excludes its contents from mutation.
+    excluded: bool,
+    /// Some enclosing scope compiles only under `cfg(kani)`.
+    kani_only: bool,
+}
+
+impl Scope {
+    /// Return the scope inside `attrs`, inheriting `self`.
+    fn nested(self, attrs: &[Attribute]) -> Self {
+        Self {
+            excluded: self.excluded || is_excluded(attrs),
+            kani_only: self.kani_only || is_kani_only(attrs),
+        }
+    }
+}
+
 /// Collect every implementation in `source`, grouped by method name.
 ///
 /// # Errors
@@ -212,67 +291,51 @@ fn is_ineligible_signature(sig: &Signature) -> bool {
 /// Returns an error when `source` does not parse as a Rust file.
 pub fn implementations_by_name(source: &str) -> Result<BTreeMap<String, Selection>> {
     let parsed: File = syn::parse_str(source).context("parse Rust source as a file")?;
-    // A file-level inner attribute such as `#![mutants::skip]` is on the file
-    // itself, and cargo-mutants returns from `visit_file` before walking any
-    // item — as it does for a crate-level `#![cfg(test)]`.
+    // A file-level inner attribute such as `#![mutants::skip]` — or a
+    // crate-wide `#![cfg(kani)]` — is on the file itself, and cargo-mutants
+    // returns from `visit_file` before walking any item.
+    let file_scope = Scope::default().nested(&parsed.attrs);
     let mut by_name: BTreeMap<String, Selection> = BTreeMap::new();
-    collect_items(&parsed.items, is_excluded(&parsed.attrs), &mut by_name);
+    collect_items(&parsed.items, file_scope, &mut by_name);
     Ok(by_name)
 }
 
 /// Fold a list of items into `by_name`, recursing through inline modules.
-///
-/// `enclosing_excluded` carries the decision made by every enclosing scope; an
-/// inline module adds its own, so a method inside a skipped module is skipped
-/// even though it carries no attribute.
-fn collect_items(
-    items: &[Item],
-    enclosing_excluded: bool,
-    by_name: &mut BTreeMap<String, Selection>,
-) {
+fn collect_items(items: &[Item], scope: Scope, by_name: &mut BTreeMap<String, Selection>) {
     for item in items {
         match item {
-            Item::Impl(block) => accumulate_impl(block, enclosing_excluded, by_name),
-            Item::Mod(module) => accumulate_module(module, enclosing_excluded, by_name),
+            Item::Impl(block) => accumulate_impl(block, scope, by_name),
+            Item::Mod(module) => accumulate_module(module, scope, by_name),
             _ => {}
         }
     }
 }
 
-/// Fold one inline module's items into `by_name`, inheriting its exclusion.
-fn accumulate_module(
-    module: &ItemMod,
-    enclosing_excluded: bool,
-    by_name: &mut BTreeMap<String, Selection>,
-) {
+/// Fold one inline module's items into `by_name`, inheriting its decisions.
+fn accumulate_module(module: &ItemMod, scope: Scope, by_name: &mut BTreeMap<String, Selection>) {
     // `mod foo;` has no inline content: its items live in another file, which
     // this reader does not follow. `cargo-mutants` does, so a source with such
     // a declaration is outside what this model can say anything about.
     let Some((_, items)) = &module.content else {
         return;
     };
-    let excluded = enclosing_excluded || is_excluded(&module.attrs);
-    collect_items(items, excluded, by_name);
+    collect_items(items, scope.nested(&module.attrs), by_name);
 }
 
 /// Fold one `impl` block's methods into `by_name`.
 ///
-/// `enclosing_excluded` carries the file and module decisions; an exclusion on
-/// this block is added to it, so a method inherits all of them.
-fn accumulate_impl(
-    block: &ItemImpl,
-    enclosing_excluded: bool,
-    by_name: &mut BTreeMap<String, Selection>,
-) {
-    let block_excluded = enclosing_excluded || is_excluded(&block.attrs);
+/// An exclusion or a Kani gate on this block joins whatever the file and
+/// modules already decided, so a method inherits them all.
+fn accumulate_impl(block: &ItemImpl, scope: Scope, by_name: &mut BTreeMap<String, Selection>) {
+    let scope = scope.nested(&block.attrs);
     for item in &block.items {
         let ImplItem::Fn(method) = item else {
             continue;
         };
         let implementation = Implementation {
             name: method.sig.ident.to_string(),
-            skipped: block_excluded || is_excluded(&method.attrs) || is_ineligible(method),
-            kani_only: is_kani_only(&method.attrs),
+            skipped: scope.excluded || is_excluded(&method.attrs) || is_ineligible(method),
+            kani_only: scope.kani_only || is_kani_only(&method.attrs),
         };
         let entry = by_name.entry(implementation.name).or_default();
         if implementation.skipped {
@@ -289,5 +352,7 @@ fn accumulate_impl(
     }
 }
 
+#[cfg(test)]
+mod scope_tests;
 #[cfg(test)]
 mod tests;

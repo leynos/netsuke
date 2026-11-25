@@ -185,9 +185,12 @@ fn shared_graph_logic_stays_in_the_ordinary_lane() -> Result<()> {
         .iter()
         .copied()
         .filter(|name| {
+            // `selected_production`, not `selected`: a `cfg(kani)`-only
+            // implementation would otherwise satisfy a check whose whole point
+            // is that the ordinary lane judges the code.
             by_name
                 .get(*name)
-                .is_none_or(|selection| selection.selected == 0)
+                .is_none_or(|selection| selection.selected_production == 0)
         })
         .collect();
 

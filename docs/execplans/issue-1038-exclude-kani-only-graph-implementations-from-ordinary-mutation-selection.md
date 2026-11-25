@@ -239,6 +239,29 @@ selection and proof-specific verification.
       against a seeded reader: dropping module recursion and eligibility fails
       their two probes, and counting every selection as production fails the
       third alongside them. With the reader restored, all 14 tests pass.
+- [x] (2026-11-25) The fifth review pass returned three findings on the same
+      theme — a `kani_only` classification that was too shallow — and all three
+      were valid:
+  - **Enclosing Kani gates were not inherited.** `#[cfg(kani)] impl Demo { .. }`
+    puts every method behind the gate, but the reader read only the method's own
+    attributes, so those methods counted as production.
+  - **Compound gates were misclassified.** A bare `kani` token scan treats
+    `cfg(any(kani, unix))` as proof-only, though `unix` alone satisfies it and
+    the item does compile in the ordinary lane. The reader now evaluates the
+    predicate: `all(kani)` and `all(kani, unix)` require Kani, `any(kani, unix)`
+    and `not(kani)` do not.
+  - **The shared-logic check accepted a Kani-only implementation.** It now
+    requires `selected_production`.
+- [x] (2026-11-25) Scope decisions are carried as one `Scope` value rather than
+      a second boolean parameter. Two probes cover the compound forms and the
+      enclosing gate, and both were checked against a seeded reader: the naive
+      token scan and the non-inheriting scope each fail their probe. The
+      shared-logic fix was checked separately by moving `output_count` behind
+      `cfg(kani)` — the pre-fix check passed, the fixed one fails it — before
+      the graph module was restored.
+- [x] (2026-11-25) The probes were split into `tests.rs` (attribute-level rules)
+      and `scope_tests.rs` (inheritance and eligibility), because the combined
+      file reached exactly 400 lines.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:
