@@ -158,7 +158,40 @@ selection and proof-specific verification.
 - [x] (2026-11-25) Milestone 3: the developers' guide boundary section, the
       workflow's explanatory comment, and two new assertions in
       `tests/workflow_contracts/mutation_testing_test.py`.
-- [ ] Milestone 4: the full gate set, the CodeRabbit review, and the draft PR.
+- [x] (2026-11-25) `make check-fmt`, `make lint` (Clippy, Whitaker, Ruff,
+      Pylint, Interrogate, df12 lints, ambrleaks, yamllint, actionlint),
+      `make doc-coverage` (98.37%), `make test` (6620 nextest tests plus every
+      doctest), and `make test-workflow-contracts` all pass.
+- [ ] Milestone 4: push, the CodeRabbit review, and the draft PR.
+
+Two gate findings were real and are fixed, not suppressed:
+
+- Clippy's `panic-in-result-fn` refused `assert_eq!` inside the two
+  `Result`-returning fixture tests; they now return the failure through
+  `ensure!`. `nonminimal_bool` was folded into an `is_none_or` predicate.
+- Whitaker's capability-based filesystem policy refused
+  `std::fs::read_to_string` in the new test. All three source reads now go
+  through one helper that opens the crate root with `cap_std` and resolves each
+  path beneath it, matching `tests/resolver_telemetry_boundary_tests.rs`.
+
+A third finding was mine to correct rather than the code's: the first draft of
+`each_proof_only_name_keeps_a_selected_implementation` demanded a production
+twin for all four names, but `output_index` has no `cfg(not(kani))` twin — the
+production duplicate-output scan reads the target map directly. The test was
+split so the twin property covers only the three paired names, and adding a
+production method purely to satisfy a test was rejected.
+
+The fixtures were also checked against the repository's own file sweeps: a
+`.rs` file under `tests/data/` is not a Cargo target, does not enter the
+Nextest discovery corpus as a test, and does not trip the Kani proof-scope
+scan, which looks only for `#[kani::proof]`. `tests/ui/` is the established
+precedent for non-compiled Rust fixtures.
+
+One edit was needed to stay inside the Python 400-line limit: the two new
+workflow assertions moved to their own colocated module,
+`tests/workflow_contracts/mutation_exclusion_scope_test.py`, which imports the
+`with:`-block parsing helpers from `mutation_testing_test` rather than
+duplicating them.
 
 ## Surprises & discoveries
 
