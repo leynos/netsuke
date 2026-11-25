@@ -47,3 +47,26 @@ impl Demo {
         4
     }
 }
+
+/// A block whose skip is on the `impl` rather than on any method.
+///
+/// cargo-mutants returns from `visit_item_impl` before it reaches the methods,
+/// so both methods below are skipped although neither carries an attribute. A
+/// reader that inspected only the method's own attributes would report them as
+/// selected, which is the discrepancy `the_reader_honours_an_enclosing_impl_skip`
+/// exists to catch.
+#[mutants::skip]
+impl SkippedImpl {
+    /// Selected on its own attributes, skipped by the enclosing block.
+    fn under_skipped_impl(&self) -> u32 {
+        5
+    }
+
+    /// Also selected on its own attributes, also skipped by the block.
+    fn also_under_skipped_impl(&self) -> u32 {
+        6
+    }
+}
+
+/// A type whose `impl` block carries the skip.
+struct SkippedImpl;

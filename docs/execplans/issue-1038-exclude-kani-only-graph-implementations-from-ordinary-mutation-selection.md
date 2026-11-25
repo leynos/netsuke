@@ -162,7 +162,27 @@ selection and proof-specific verification.
       Pylint, Interrogate, df12 lints, ambrleaks, yamllint, actionlint),
       `make doc-coverage` (98.37%), `make test` (6620 nextest tests plus every
       doctest), and `make test-workflow-contracts` all pass.
-- [ ] Milestone 4: push, the CodeRabbit review, and the draft PR.
+- [x] (2026-11-25) CodeRabbit review returned three findings; all three were
+      verified against the pinned cargo-mutants source and the filesystem, and
+      all three were valid:
+  - **Enclosing-scope skips were not modelled.** `visit_item_impl` and
+    `visit_file` in cargo-mutants 27.1.0 both return early on
+    `attrs_excluded`, so a skip on an `impl` block — or a file-level
+    `#![mutants::skip]` — suppresses every method inside it. The reader had
+    inspected only each method's own attributes, so it would have reported a
+    method as selected while the tool skipped it. The reader now carries the
+    enclosing decision down, and three new controls cover it: an inline `impl`
+    probe, an inline file-level probe, and a committed fixture block. All three
+    were checked to fail against the pre-fix reader and pass after it.
+  - **ADR links resolved from the wrong directory.** Both now use `../adrs/`,
+    and every relative link in the plan was re-checked to resolve.
+  - **The contract test exceeded 400 lines.** The parser and selection logic
+    moved to `tests/mutation_selection/reader.rs`, so parser maintenance is
+    separate from the selection requirements. The duplicated workflow
+    assertion was also removed: `mutation_exclusion_scope_test.py` already
+    holds it against the parsed `with:` block, and asserting one contract in
+    two languages buys nothing.
+- [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:
 
@@ -269,10 +289,10 @@ source attribute is the only mechanism that can distinguish the two.
   that a change needing a new abstraction records its ownership boundary.
 - `AGENTS.md` — docs maintenance: update the developers' guide for internally
   facing practice, and index any new document from `docs/contents.md`.
-- [ADR-0073](docs/adrs/adr-0073-split-the-kani-mutation-compile-gate.md) — the
+- [ADR-0073](../adrs/adr-0073-split-the-kani-mutation-compile-gate.md) — the
   Kani mutation compile gate's shape and its negative control, which this
   change must not weaken.
-- [ADR-0039](docs/adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)
+- [ADR-0039](../adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)
   — the proof lane's trigger policy, preserved unchanged.
 - `docs/developers-guide.md`, "Mutation-testing workflow contract tests" — the
   section this change amends.
