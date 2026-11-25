@@ -51,7 +51,8 @@ impl SubstitutionTraversal<'_, '_> {
         if let Some(next) = self.append_unquoted_posix_lexical_character(pos, ch)? {
             return Ok(next);
         }
-        if ch == '`' && !self.matches_single_quote_context() {
+        let opens_backtick = !self.matches_single_quote_context() && !self.matches_ansi_c_context();
+        if ch == '`' && opens_backtick {
             self.toggle_backtick_region();
             self.output.push(ch);
             return Ok(pos + 1);

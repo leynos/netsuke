@@ -52,6 +52,14 @@ impl SubstitutionTraversal<'_, '_> {
         matches!(self.active_quote_context(), QuoteContext::Single(_))
     }
 
+    /// Report whether the traversal is currently inside a Bash ANSI-C string.
+    ///
+    /// Backticks are literal there, so a backtick must not open or close a
+    /// legacy command region while this is true.
+    pub(super) fn matches_ansi_c_context(&self) -> bool {
+        matches!(self.active_quote_context(), QuoteContext::AnsiC)
+    }
+
     /// Report whether the active shell region is outside both kinds of quotes.
     pub(super) fn matches_unquoted_quote_context(&self) -> bool {
         matches!(self.active_quote_context(), QuoteContext::Unquoted)
