@@ -9,6 +9,8 @@ use std::borrow::Borrow;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
+use super::EdgeId;
+
 const KANI_IR_HASHMAP_CAPACITY: usize = 4;
 const KANI_IR_EDGE_ARENA_CAPACITY: usize = 4;
 
@@ -82,6 +84,12 @@ pub trait IrMapKeyEq {
 }
 
 impl IrMapKeyEq for String {
+    fn ir_map_key_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+impl IrMapKeyEq for EdgeId {
     fn ir_map_key_eq(&self, other: &Self) -> bool {
         self == other
     }

@@ -28,7 +28,7 @@ fn assert_missing_deps(case: &MissingDepsCase<'_>) -> Result<()> {
         .map(|(dependent, missing)| (path(dependent), path(missing)))
         .collect();
     let mut detector = CycleDetector::new(&graph);
-    let (target, _) = target_entry_for_path(&graph, path("a").as_path())
+    let (target, _, _) = target_entry_for_path(&graph, path("a").as_path())
         .context("primary target should exist")?;
     let visit = detector.visit(target, CycleSearch::Path);
     ensure!(

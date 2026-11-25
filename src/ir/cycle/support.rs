@@ -8,15 +8,16 @@ use std::cmp::Ordering;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use super::super::graph::{BuildEdge, BuildGraph, IrHashMap};
+use super::super::graph::{BuildEdge, BuildGraph, EdgeId, IrHashMap};
 use super::VisitState;
 
-/// Look up the target entry for `path`, returning its path and edge.
+/// Look up the target entry for `path`, returning its stored alias, canonical
+/// identity, and edge.
 pub(super) fn target_entry_for_path<'targets>(
     graph: &'targets BuildGraph,
     path: &Utf8Path,
-) -> Option<(&'targets Utf8Path, &'targets BuildEdge)> {
-    graph.target_for_output(path)
+) -> Option<(&'targets Utf8Path, EdgeId, &'targets BuildEdge)> {
+    graph.edge_entry_for_output(path)
 }
 
 /// Return the index of the smallest node in `cycle[0..len]`.
@@ -101,30 +102,12 @@ pub(super) const fn rotate_index(start: usize, offset: usize, len: usize) -> usi
     if index >= len { index - len } else { index }
 }
 
-/// Look up the visit state recorded for `path`.
-#[cfg(not(kani))]
-pub(super) fn state_for_path(
-    states: &IrHashMap<&Utf8Path, VisitState>,
-    path: &Utf8Path,
+/// Look up the visit state recorded for `edge_id`.
+pub(super) fn state_for_edge(
+    states: &IrHashMap<EdgeId, VisitState>,
+    edge_id: EdgeId,
 ) -> Option<VisitState> {
-    states.get(path).copied()
-}
-
-#[cfg(kani)]
-pub(super) fn state_for_path(
-    states: &IrHashMap<&Utf8Path, VisitState>,
-    path: &Utf8Path,
-) -> Option<VisitState> {
-    let mut index = 0;
-    while index < states.len() {
-        if let Some((candidate, state)) = states.entry_at(index) {
-            if path_eq(candidate, path) {
-                return Some(*state);
-            }
-        }
-        index += 1;
-    }
-    None
+    states.get(&edge_id).copied()
 }
 
 /// Compare two paths for equality.
