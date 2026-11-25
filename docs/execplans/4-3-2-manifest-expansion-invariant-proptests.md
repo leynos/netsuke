@@ -6,11 +6,10 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: APPROVED
 
-The plan has been through one expert design review and awaits explicit user
-approval. No implementation step may begin until the user approves it; silence
-is not approval.
+The plan has been through one expert design review and was approved by the user
+on 2026-11-25. Implementation proceeds through EP-M0 to EP-M4.
 
 ## Purpose / big picture
 
@@ -1248,7 +1247,7 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
 - [x] (2026-10-31 02:10Z) Expert design review by four reviewers (property
   testing, codebase accuracy, process, pre-mortem); revised the plan (see the
   revision note).
-- [ ] User approval.
+- [x] (2026-11-25) User approval.
 - [ ] EP-M0 feasibility probes.
 - [ ] EP-M1 key-order fix.
 - [ ] EP-M2 shared test support and relocation.
