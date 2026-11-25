@@ -13,15 +13,6 @@ use super::super::posix_lexical::SubstitutionKind;
 use super::super::{RejectionReason, invalid_command_error};
 use super::{IrGenError, ScriptSubstitutionTraversal, ShellQuoteContext};
 
-
-//! Recognise and track `$()` delimiters inside one POSIX or Bash script.
-//!
-//! The `)` that closes a command substitution stays part of the surrounding
-//! word, so its position must survive into the next comment check. These
-//! helpers own that nesting state, keeping the parent traversal within the
-//! repository's module-size cap.
-};
-
 /// Track one nested POSIX command substitution while traversing a script.
 pub(super) struct ScriptCommandSubstitution {
     /// Record the quote context local to this command substitution.
