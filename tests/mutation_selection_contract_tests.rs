@@ -264,6 +264,33 @@ impl Demo {
 }
 
 #[test]
+fn the_reader_honours_the_parenthesised_skip_spelling() -> Result<()> {
+    // cargo-mutants matches the attribute *path*, so `#[mutants::skip()]` and
+    // any argument list are honoured; the `mutants` crate's attribute ignores
+    // its arguments. A reader that only recognised the bare `Meta::Path` form
+    // would miss this spelling and report a skipped item as selected.
+    let source = "\
+#[mutants::skip()]
+impl Demo {
+    fn under_parenthesised_skip(&self) -> u32 { 1 }
+    fn also_under_parenthesised_skip(&self) -> u32 { 2 }
+}
+";
+    let by_name = implementations_by_name(source)?;
+    for name in ["under_parenthesised_skip", "also_under_parenthesised_skip"] {
+        let selection = by_name
+            .get(name)
+            .with_context(|| format!("the probe must declare `{name}`"))?;
+        ensure!(
+            (selection.selected, selection.skipped) == (0, 1),
+            "`{name}` sits in a block marked `#[mutants::skip()]`, which \
+             cargo-mutants honours, so it must read as skipped; got {selection:?}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn the_reader_honours_an_enclosing_impl_skip() -> Result<()> {
     // cargo-mutants returns from `visit_item_impl` before it reaches the
     // methods, so a skip on the block suppresses every method in it even though

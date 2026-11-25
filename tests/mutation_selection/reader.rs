@@ -8,12 +8,16 @@
 //! the repository's 400-line limit.
 //!
 //! The rule modelled here is the one cargo-mutants 27.1.0 applies, not a
-//! plausible simplification of it. Two details matter and both were measured:
+//! plausible simplification of it. Three details matter, and all were measured
+//! against the pinned tool:
 //!
-//! - `#[mutants::skip]` is honoured on an item, and inside a `cfg_attr` only
-//!   when the condition is a **bare path**. Its reader parses `cfg_attr`
-//!   arguments as nested metadata, so `cfg_attr(any(), mutants::skip)` is
-//!   rejected outright and the skip is silently dropped.
+//! - `#[mutants::skip]` is matched on its attribute **path**, so the
+//!   parenthesised spellings `#[mutants::skip()]` and `#[mutants::skip(..)]`
+//!   are honoured too; the `mutants` crate's attribute ignores its arguments.
+//! - Inside a `cfg_attr` the skip is honoured only when the condition is a
+//!   **bare path**. The tool parses `cfg_attr` arguments as nested metadata, so
+//!   `cfg_attr(any(), mutants::skip)` is rejected outright and the skip is
+//!   silently dropped.
 //! - A skip on an *enclosing* scope removes everything inside it. Its walker
 //!   returns early from `visit_file` and from `visit_item_impl` before it
 //!   reaches the methods, so a skip on the `impl` block — or on the file, as an
@@ -56,31 +60,37 @@ pub struct Selection {
 
 /// True when `attr` is, or contains as a bare-path condition, `mutants::skip`.
 ///
-/// Mirrors the rule cargo-mutants applies. Its reader accepts an attribute path
-/// of exactly `mutants::skip`, or a `cfg_attr` whose first argument is a bare
-/// path and whose remaining arguments include `mutants::skip`. A `cfg_attr`
-/// condition written with parentheses — `any()`, `all(kani, test)` — is not a
-/// path, so the whole attribute is rejected and a skip written inside it is
-/// silently dropped. Recognising only the accepted forms here is what stops
+/// Mirrors the rule cargo-mutants applies. Its reader tests the attribute
+/// *path*, which `syn` exposes for every metadata form, so
+/// `#[mutants::skip]`, `#[mutants::skip()]` and `#[mutants::skip(anything)]`
+/// are all honoured — the `mutants` crate's attribute ignores its arguments.
+/// The path check therefore comes first and does not require the `Meta::Path`
+/// form. Measured against the pinned tool: an `impl` marked
+/// `#[mutants::skip()]` produces no mutants for any of its methods.
+///
+/// The `cfg_attr` arm is narrower. A `cfg_attr` condition written with
+/// parentheses — `any()`, `all(kani, test)` — is not a path, and the tool's
+/// `parse_nested_meta` rejects the whole attribute, so a skip written inside it
+/// is silently dropped. Recognising only the accepted forms here is what stops
 /// this contract from certifying a skip cargo-mutants would ignore.
 fn is_mutants_skip(attr: &Attribute) -> bool {
-    match &attr.meta {
-        Meta::Path(path) => path_is_mutants_skip(path),
-        Meta::List(list) => {
-            if !path_is_cfg_attr(&list.path) {
-                return false;
-            }
-            let mut skip = false;
-            let parsed = attr.parse_nested_meta(|meta| {
-                if path_is_mutants_skip(&meta.path) {
-                    skip = true;
-                }
-                Ok(())
-            });
-            parsed.is_ok() && skip
-        }
-        Meta::NameValue(_) => false,
+    if path_is_mutants_skip(attr.path()) {
+        return true;
     }
+    let Meta::List(list) = &attr.meta else {
+        return false;
+    };
+    if !path_is_cfg_attr(&list.path) {
+        return false;
+    }
+    let mut skip = false;
+    let parsed = attr.parse_nested_meta(|meta| {
+        if path_is_mutants_skip(&meta.path) {
+            skip = true;
+        }
+        Ok(())
+    });
+    parsed.is_ok() && skip
 }
 
 /// True when `path` is exactly `mutants::skip`.
