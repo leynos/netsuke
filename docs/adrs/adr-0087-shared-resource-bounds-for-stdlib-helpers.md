@@ -4,11 +4,14 @@
 
 Accepted. One standard-library module, `src/stdlib/resource_bounds/`, owns the
 RFC 0006 table 3 ceilings, the checked cardinality and running-total
-arithmetic, and the typed refusals that every bounded template helper is
-required to use. No helper re-implements the arithmetic or invents a ceiling,
-and the module produces no localized diagnostic. The decision binds future
-consumers; no helper calls the module at the date of acceptance, so nothing in
-this record claims that existing helpers are already bounded by it.
+arithmetic, and the typed refusals that every helper parsing untrusted input,
+enumerating a combinatorial space, scanning text for matches, or materializing
+output is required to use. No helper re-implements the arithmetic or invents a
+ceiling, and the module produces no localized diagnostic. The decision binds
+future consumers; no helper calls the module at the date of acceptance, so
+nothing in this record claims that existing helpers are already bounded by it.
+A helper bounded only by an I/O limit, such as the file-reading filters, has
+its own policy and is outside this requirement.
 
 ## Date
 
@@ -72,7 +75,9 @@ evidence attached.
 
 - No dependency on `minijinja` in the module, so the arithmetic is testable
   without a template environment and usable by any consumer.
-- Refusals are `Copy` and carry the observed value and the ceiling.
+- Refusals are `Copy`, name the ceiling they enforced, and carry the observed
+  value where one exists: `CardinalityError::Overflow` has no representable
+  count, and `StreamLimitExceeded` names the `StreamKind` rather than a total.
 - `RunningTotal` is neither `Copy` nor `Clone`, so a stream-wide total cannot
   be silently duplicated.
 - The combinatorial kernels are small, pure functions that a formal model and
@@ -178,11 +183,13 @@ request.
 
 ## Consequences
 
-- Every bounded helper in `src/stdlib/` must call this module; a review of a
-  new helper checks that it does, and that it passes its own input length and
-  depth through the state machines rather than testing them inline. No helper
-  calls it at the date of acceptance, so this binds the consumers the roadmap
-  adds rather than describing existing ones.
+- Every helper in `src/stdlib/` that parses untrusted input, enumerates a
+  combinatorial space, scans text for matches, or materializes output must call
+  this module; a review of a new helper checks that it does, and that it passes
+  its own input length and depth through the state machines rather than testing
+  them inline. A helper bounded only by an I/O limit follows its own policy
+  instead. No helper calls it at the date of acceptance, so this binds the
+  consumers the roadmap adds rather than describing existing ones.
 - A ceiling change is a one-line change with one test update, not eight.
 - The module carries two verification artefacts that must move with it: the
   Verus model under `verus/resource_bounds/` and the seven Kani harnesses in
