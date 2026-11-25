@@ -23,6 +23,7 @@ emit_event candidate_revision_validation success
 candidate_root="$(mktemp -d "${RUNNER_TEMP}/netsuke-candidate-XXXXXX")"
 candidate_bin_dir="${candidate_root}/bin"
 candidate_source_dir="${candidate_root}/source"
+candidate_target_dir="${candidate_root}/target"
 candidate_binary_name=netsuke
 if [[ "${RUNNER_OS}" == "Windows" ]]; then
   candidate_binary_name=netsuke.exe
@@ -67,14 +68,20 @@ if ! (
   # to an empty inherited value, displaces the checkout's development
   # `.cargo/config.toml` rustflags, including the Linux-only `mold` linker a
   # hosted runner does not provide.
-  RUSTFLAGS="${RUSTFLAGS-}" cargo build --locked --release --bin netsuke
+  #
+  # Pin the output location too. A caller's `CARGO_TARGET_DIR` or
+  # `CARGO_BUILD_TARGET` would otherwise move the binary away from where it is
+  # copied below; the flag outranks the first, and the second is cleared.
+  unset CARGO_BUILD_TARGET
+  RUSTFLAGS="${RUSTFLAGS-}" cargo build --locked --release --bin netsuke \
+    --target-dir "${candidate_target_dir}"
 ); then
   emit_failure_event locked_cargo_build cargo_build_failed
   echo 'candidate Cargo build failed' >&2
   exit 1
 fi
 emit_event locked_cargo_build success
-cp "${candidate_source_dir}/target/release/${candidate_binary_name}" "${candidate_binary}"
+cp "${candidate_target_dir}/release/${candidate_binary_name}" "${candidate_binary}"
 
 emit_event candidate_version_check started
 if ! version_output="$("${candidate_binary}" --version)"; then

@@ -617,11 +617,13 @@ jobs:
     # Resolves the one Netsuke commit every downstream canary builds, and the
     # version its manifest declares. The downstream canaries below run on the
     # same events: every release and reusable-workflow call, and a pull
-    # request's dry run only when it is marked ready for review, since each
-    # canary compiles a whole downstream workspace.
+    # request's dry run only when it is marked ready for review or reopened,
+    # since each canary compiles a whole downstream workspace. Reopening is how
+    # a ready pull request asks for them again after a fix.
     if: >-
       github.event_name != 'pull_request' ||
-      github.event.action == 'ready_for_review'
+      github.event.action == 'ready_for_review' ||
+      github.event.action == 'reopened'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

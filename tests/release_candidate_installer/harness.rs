@@ -15,6 +15,10 @@ use tempfile::TempDir;
 use test_support::{fs as test_fs, write_exec_with_content};
 
 pub(crate) const CANDIDATE_REVISION: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+/// Stand in for Git, recording each invocation.
+const FAKE_GIT_SCRIPT: &str = include_str!("../data/release_candidate_installer/fake_git.sh");
+/// Stand in for Cargo, resolving its output directory as Cargo does.
+const FAKE_CARGO_SCRIPT: &str = include_str!("../data/release_candidate_installer/fake_cargo.sh");
 pub(crate) const CANDIDATE_VERSION: &str = "0.1.0-beta2";
 const TEST_PATH: &str = "/usr/bin:/bin";
 const TEST_TOKEN: &str = "installer-test-token";
@@ -57,8 +61,8 @@ impl InstallerHarness {
         let bash_env_path = root.path().join("bash-env");
         test_fs::write(&bash_env_path, "").context("write empty Bash environment")?;
 
-        write_exec_with_content(&fake_bin_dir, "git", fake_git_script())?;
-        write_exec_with_content(&fake_bin_dir, "cargo", fake_cargo_script())?;
+        write_exec_with_content(&fake_bin_dir, "git", FAKE_GIT_SCRIPT)?;
+        write_exec_with_content(&fake_bin_dir, "cargo", FAKE_CARGO_SCRIPT)?;
 
         Ok(Self {
             root,
@@ -93,24 +97,23 @@ impl InstallerHarness {
             .context("run release-candidate installer")
     }
 
-    /// Run a valid Linux installation that inherits `rustflags`, when given.
-    pub(crate) fn run_with_inherited_rustflags(&self, rustflags: Option<&str>) -> Result<Output> {
+    /// Run a valid Linux installation that inherits the given environment.
+    pub(crate) fn run_inheriting(&self, inherited: &[(&str, &str)]) -> Result<Output> {
         let mut command = self.command(&InstallerRun {
             runner_os: "Linux",
             candidate_revision: CANDIDATE_REVISION,
             resolved_revision: CANDIDATE_REVISION,
             version: CANDIDATE_VERSION,
         });
-        if let Some(value) = rustflags {
-            command.env("RUSTFLAGS", value);
-        }
+        command.envs(inherited.iter().copied());
         command.output().context("run release-candidate installer")
     }
 
-    /// Build the installer command with no inherited `RUSTFLAGS`.
+    /// Build the installer command with no inherited Cargo build settings.
     ///
-    /// The gate targets export `RUSTFLAGS` to the test process, so it is
-    /// cleared here to keep the installer's own assignment observable.
+    /// The gate targets export `RUSTFLAGS`, and a developer may export an
+    /// output directory, so each is cleared to keep the installer's own
+    /// handling observable.
     fn command(&self, inputs: &InstallerRun<'_>) -> Command {
         let mut command = Command::new("bash");
         command
@@ -132,7 +135,9 @@ impl InstallerHarness {
             )
             .env("RUNNER_OS", inputs.runner_os)
             .env("RUNNER_TEMP", self.root.path())
-            .env_remove("RUSTFLAGS");
+            .env_remove("RUSTFLAGS")
+            .env_remove("CARGO_TARGET_DIR")
+            .env_remove("CARGO_BUILD_TARGET");
         command
     }
 
@@ -218,43 +223,4 @@ pub(crate) fn require_failure_event(
     );
 
     Ok(())
-}
-
-/// Return the fake Git adapter script.
-const fn fake_git_script() -> &'static str {
-    r#"#!/usr/bin/env bash
-set -euo pipefail
-
-if [[ "$1" == "-C" ]]; then
-  shift 2
-fi
-
-printf '%q ' "$@" >> "${NETSUKE_GIT_ARGS}"
-printf '\n' >> "${NETSUKE_GIT_ARGS}"
-
-case "$1" in
-  init|remote|fetch|checkout) exit 0 ;;
-  rev-parse) printf '%s\n' "${NETSUKE_FAKE_RESOLVED_REVISION}" ;;
-  *) echo "unexpected git invocation: $*" >&2; exit 1 ;;
-esac
-"#
-}
-
-/// Return the fake Cargo adapter script.
-const fn fake_cargo_script() -> &'static str {
-    r#"#!/usr/bin/env bash
-set -euo pipefail
-
-if [[ "$*" != "build --locked --release --bin netsuke" ]]; then
-  echo "unexpected cargo invocation: $*" >&2
-  exit 1
-fi
-
-printf '%s\n' "$*" > "${NETSUKE_CARGO_ARGS}"
-printf '%s\n' "${RUSTFLAGS-<unset>}" > "${NETSUKE_CARGO_RUSTFLAGS}"
-mkdir -p target/release
-printf '#!/usr/bin/env bash\nprintf "netsuke %%s\\n" "${NETSUKE_FAKE_VERSION}"\n' \
-  > "target/release/${NETSUKE_FAKE_BINARY_NAME}"
-chmod +x "target/release/${NETSUKE_FAKE_BINARY_NAME}"
-"#
 }

@@ -58,8 +58,8 @@ The candidate is resolved once per run by `release-candidate`, using
   any canary ran.
 
 The canaries run on every tag release. On a pull request they run only when the
-pull request is marked ready for review, since each canary compiles a whole
-downstream workspace, and they never gate a pull request: the jobs are
+pull request is marked ready for review or reopened, since each canary compiles
+a whole downstream workspace, and they never gate a pull request: the jobs are
 `continue-on-error` there, so a downstream failure is visible without blocking
 the merge. A publishing run admits a release only when every canary passed on
 the release commit, as the next section describes.

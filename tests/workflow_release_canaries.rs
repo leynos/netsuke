@@ -112,12 +112,12 @@ fn is_full_commit(value: &str) -> bool {
             .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-/// Verify that admission reads evidence produced after both canary jobs.
-///
-/// Every write-authority job requires an enforcing, successful admission of
-/// this commit. Admission needs the evidence producer, and the producer needs
-/// both canary jobs, so no publisher can run before the canaries concluded and
-/// their results were declared in the manifest the gate verifies.
+// Verify that admission reads evidence produced after both canary jobs.
+//
+// Every write-authority job requires an enforcing, successful admission of
+// this commit. Admission needs the evidence producer, and the producer needs
+// both canary jobs, so no publisher can run before the canaries concluded and
+// their results were declared in the manifest the gate verifies.
 #[test]
 fn admission_reads_evidence_produced_after_every_canary() -> Result<()> {
     let release_workflow = workflow("release.yml")?;
@@ -141,10 +141,10 @@ fn admission_reads_evidence_produced_after_every_canary() -> Result<()> {
     Ok(())
 }
 
-/// Verify that each downstream repository has one full-commit pin, as documented.
-///
-/// A tag or branch could move under a release, and a pin that drifts from the
-/// documented table leaves release review reading the wrong revision.
+// Verify that each downstream repository has one full-commit pin, as documented.
+//
+// A tag or branch could move under a release, and a pin that drifts from the
+// documented table leaves release review reading the wrong revision.
 #[test]
 fn every_canary_is_pinned_to_a_documented_full_commit() -> Result<()> {
     let pins = workflow_pins(&workflow("release.yml")?)?;
@@ -179,10 +179,10 @@ fn every_canary_is_pinned_to_a_documented_full_commit() -> Result<()> {
     Ok(())
 }
 
-/// Verify that MXD runs one isolated row per feature lane.
-///
-/// The lanes are mutually exclusive, so each row must select exactly one,
-/// forbid the others' features, and start PostgreSQL only for its own lane.
+// Verify that MXD runs one isolated row per feature lane.
+//
+// The lanes are mutually exclusive, so each row must select exactly one,
+// forbid the others' features, and start PostgreSQL only for its own lane.
 #[test]
 fn mxd_lanes_are_distinct_and_isolated() -> Result<()> {
     let release_workflow = workflow("release.yml")?;
@@ -216,10 +216,10 @@ fn mxd_lanes_are_distinct_and_isolated() -> Result<()> {
     Ok(())
 }
 
-/// Verify the canaries' placement and their pull-request policy.
-///
-/// They run on GitHub-hosted runners, build the resolved candidate, and on a
-/// pull request run only when it is ready for review, without gating it.
+// Verify the canaries' placement and their pull-request policy.
+//
+// They run on GitHub-hosted runners, build the resolved candidate, and on a
+// pull request run only when it is ready for review, without gating it.
 #[test]
 fn canaries_run_on_github_hosted_runners_and_never_gate_pull_requests() -> Result<()> {
     let release_workflow = workflow("release.yml")?;
@@ -227,7 +227,11 @@ fn canaries_run_on_github_hosted_runners_and_never_gate_pull_requests() -> Resul
 
     ensure!(
         text(candidate, "if")
-            == "github.event_name != 'pull_request' || github.event.action == 'ready_for_review'",
+            == concat!(
+                "github.event_name != 'pull_request' || ",
+                "github.event.action == 'ready_for_review' || ",
+                "github.event.action == 'reopened'"
+            ),
         "a pull request should run the canaries only when marked ready for review"
     );
     for (name, runner) in [
@@ -251,10 +255,10 @@ fn canaries_run_on_github_hosted_runners_and_never_gate_pull_requests() -> Resul
     Ok(())
 }
 
-/// Verify that the release build jobs request only `contents: read`.
-///
-/// None of them publishes or exchanges an OIDC token, so any wider scope is
-/// unused privilege.
+// Verify that the release build jobs request only `contents: read`.
+//
+// None of them publishes or exchanges an OIDC token, so any wider scope is
+// unused privilege.
 #[test]
 fn release_build_jobs_request_only_the_checkout_read_scope() -> Result<()> {
     let release_workflow = workflow("release.yml")?;
@@ -270,11 +274,11 @@ fn release_build_jobs_request_only_the_checkout_read_scope() -> Result<()> {
     Ok(())
 }
 
-/// Verify that the dry run declares only events the release resolver accepts.
-///
-/// The pinned `determine-release-modes` action refuses `workflow_dispatch`, so
-/// a manual rehearsal trigger would fail in `metadata` before any canary ran.
-/// It may return once the resolver supports the event.
+// Verify that the dry run declares only events the release resolver accepts.
+//
+// The pinned `determine-release-modes` action refuses `workflow_dispatch`, so
+// a manual rehearsal trigger would fail in `metadata` before any canary ran.
+// It may return once the resolver supports the event.
 #[test]
 fn dry_run_declares_only_events_the_release_resolver_accepts() -> Result<()> {
     let dry_run = workflow("release-dry-run.yml")?;

@@ -111,9 +111,10 @@ runs:
     - name: Install Whitaker
       if: contains(format(' {0} ', inputs.tools), ' whitaker ')
       uses: >-
-        leynos/shared-actions/.github/actions/install-whitaker@a5765019912a8ab6882b12db049c7cde635f3a85
+        leynos/shared-actions/.github/actions/install-whitaker@0eabb6bc07148981de5da395e30cd78d83f5c7c2
       with:
-        installer-version: '0.2.7'
+        # The release `ci.yml` lints with; a contract holds the two equal.
+        installer-version: '0.2.12'
     - name: Install markdownlint-cli2
       if: >-
         inputs.platform == 'linux' &&

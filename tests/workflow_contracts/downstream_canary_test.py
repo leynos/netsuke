@@ -262,3 +262,34 @@ def test_tool_installs_match_the_documented_vocabulary() -> None:
     assert installed == documented == set(TOOLS), (
         f"installed {installed!r}, documented {documented!r}, expected {TOOLS!r}"
     )
+
+
+def test_whitaker_is_the_release_the_lint_gate_uses() -> None:
+    """The canary installs the same Whitaker as this repository's own gate.
+
+    Scenario: the gate moves to a newer Whitaker and the canary does not.
+    Invariant: both name one action commit and one installer release, so a
+    canary cannot fail on a toolchain the gate has already left behind.
+    """
+    ci = require_mapping(
+        read_workflow_document(REPO_ROOT / ".github/workflows/ci.yml"), "ci.yml"
+    )
+    steps = [
+        candidate
+        for job in require_mapping(ci.get("jobs"), "ci.yml jobs").values()
+        for entry in require_list(
+            require_mapping(job, "a ci.yml job").get("steps", []), "ci.yml steps"
+        )
+        if "/install-whitaker@"
+        in str((candidate := require_mapping(entry, "a ci.yml step")).get("uses", ""))
+    ]
+    assert len(steps) == 1, f"ci.yml must install Whitaker once: {steps!r}"
+    gate = steps[0]
+    canary = step("Install Whitaker")
+    assert canary.get("uses") == gate.get("uses"), (
+        "the canary must pin the Whitaker action commit the lint gate pins"
+    )
+    version = require_mapping(canary.get("with"), "canary inputs")["installer-version"]
+    assert (
+        version == require_mapping(gate.get("with"), "gate inputs")["installer-version"]
+    ), "the canary must install the Whitaker release the lint gate installs"

@@ -1807,7 +1807,7 @@ targets, and the retained Makefile boundaries; this section covers the tooling.
   `release_candidate` have no producer yet.
 
 The canary jobs run on GitHub-hosted runners. On a pull request they run only
-when it is marked ready for review, and never gate it: they are
+when it is marked ready for review or reopened, and never gate it: they are
 `continue-on-error` there. The `release-admission-evidence` job needs every
 canary job and runs whatever they concluded, so a failed or skipped canary
 reaches admission as a declared failure. The publication jobs never read the
