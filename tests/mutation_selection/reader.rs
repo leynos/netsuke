@@ -217,13 +217,10 @@ fn predicate_requires_kani(predicate: &Meta) -> bool {
         Meta::Path(path) => path.is_ident("kani"),
         Meta::List(list) => {
             let operands = nested_metas(list);
-            if list.path.is_ident("all") {
-                operands.iter().any(predicate_requires_kani)
-            } else if list.path.is_ident("any") {
-                !operands.is_empty() && operands.iter().all(predicate_requires_kani)
-            } else {
-                false
-            }
+            let is_all = list.path.is_ident("all");
+            let is_any = list.path.is_ident("any");
+            (is_all && operands.iter().any(predicate_requires_kani))
+                || (is_any && !operands.is_empty() && operands.iter().all(predicate_requires_kani))
         }
         Meta::NameValue(_) => false,
     }
@@ -239,8 +236,7 @@ fn nested_metas(list: &syn::MetaList) -> Vec<Meta> {
         syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated,
         list.tokens.clone(),
     )
-    .map(|parsed| parsed.into_iter().collect())
-    .unwrap_or_default()
+    .map_or_else(|_| Vec::new(), |parsed| parsed.into_iter().collect())
 }
 
 /// True when the walker would skip this method for a reason other than an
@@ -327,15 +323,15 @@ fn accumulate_module(module: &ItemMod, scope: Scope, by_name: &mut BTreeMap<Stri
 /// An exclusion or a Kani gate on this block joins whatever the file and
 /// modules already decided, so a method inherits them all.
 fn accumulate_impl(block: &ItemImpl, scope: Scope, by_name: &mut BTreeMap<String, Selection>) {
-    let scope = scope.nested(&block.attrs);
+    let block_scope = scope.nested(&block.attrs);
     for item in &block.items {
         let ImplItem::Fn(method) = item else {
             continue;
         };
         let implementation = Implementation {
             name: method.sig.ident.to_string(),
-            skipped: scope.excluded || is_excluded(&method.attrs) || is_ineligible(method),
-            kani_only: scope.kani_only || is_kani_only(&method.attrs),
+            skipped: block_scope.excluded || is_excluded(&method.attrs) || is_ineligible(method),
+            kani_only: block_scope.kani_only || is_kani_only(&method.attrs),
         };
         let entry = by_name.entry(implementation.name).or_default();
         if implementation.skipped {
