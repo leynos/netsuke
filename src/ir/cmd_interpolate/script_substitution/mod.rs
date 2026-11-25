@@ -243,7 +243,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.
-    /// Update quoting state and return whether `ch` was a quote delimiter.
     ///
     /// # Errors
     ///

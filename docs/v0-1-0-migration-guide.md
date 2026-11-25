@@ -923,7 +923,7 @@ encoded for that region, so a recipe that used to lower a marker with the wrong
 quoting now produces a correctly quoted argument. Most recipes see no
 difference: a top-level backtick still restores the script level.
 
-Three shapes that could not be lowered safely now fail closed at IR lowering
+Four shapes that could not be lowered safely now fail closed at IR lowering
 with an `ir.invalid_command` diagnostic instead of producing a command whose
 quoting disagrees with the shell:
 

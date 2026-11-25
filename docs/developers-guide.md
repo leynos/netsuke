@@ -9777,6 +9777,16 @@ The command traversal in `substitution/posix.rs` keeps its boolean
 `in_backticks` toggle instead and does not share this record, so command
 lowering is unchanged.
 
+`script_substitution/escapes.rs` owns backslash classification for script text
+and for backtick bodies. It holds `append_backtick_body_escape`, which consumes
+a body's escape pair and records the backslash a `\\` leaves for the second
+parse, and `append_residual_escape_character`, which lets that survivor protect
+the character reaching it. It also owns `starts_escape`, the marker rejection
+an escape before a marker requires, and `close_backtick_comment`, which ends a
+body comment at the closing backtick. The split exists for the 400-line limit
+and because the two-parse body model is one subject: every rule in the file
+answers what a backslash means in the parse that is currently running.
+
 Heredoc declaration handling is also shared rather than duplicated: the helper
 decides what a declaration is, and each traversal supplies only the context
 around it. `substitution/posix.rs` performs that step for
@@ -9784,13 +9794,17 @@ around it. `substitution/posix.rs` performs that step for
 the same for the `script:` traversal, which differs only in which quote context
 counts as plain text and in how it reports "not a declaration" to its caller.
 `script_substitution.rs` is now `script_substitution/mod.rs`; that split, like
-the sibling `delimiters.rs` and `backticks.rs`, keeps each file inside the
-400-line limit without introducing a second shell parser. The tests follow the
-same shape: `src/ir/cmd_interpolate/tests/heredoc/` is a directory module
-holding the shared assertions in `support.rs` and the boundary, delimiter,
-expansion, and property test groups, and
+the siblings `delimiters.rs`, `backticks.rs`, and `escapes.rs`, keeps each file
+inside the 400-line limit without introducing a second shell parser. The tests
+follow the same shape: `src/ir/cmd_interpolate/tests/heredoc/` is a directory
+module holding the shared assertions in `support.rs` and the boundary,
+delimiter, expansion, and property test groups, and
 `tests/ninja_dollar_escaping_tests/heredoc.rs` checks the same contract end to
-end by running the generated Ninja build through a real child shell.
+end by running the generated Ninja build through a real child shell. The
+backtick regressions use the same layout: `backtick_region/mod.rs` holds the two
+`rstest` tables, `backtick_region/cases.rs` holds the typed case data they
+drive, and `tests/ninja_dollar_escaping_tests/scripts/` keeps its execution
+helpers in `runner.rs` and its typed table data in `cases.rs`.
 
 The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. Its

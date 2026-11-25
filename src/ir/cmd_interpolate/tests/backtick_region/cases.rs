@@ -232,4 +232,3 @@ impl Case {
         }
     }
 }
-// weave: run 'weave explain src/ir/cmd_interpolate/tests/backtick_region/cases.rs' for per-hunk detail, 'weave check' to verify your resolution
