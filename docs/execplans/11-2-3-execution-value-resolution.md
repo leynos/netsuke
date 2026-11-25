@@ -79,13 +79,15 @@ settled before `EP-M2` starts.
   macOS.[^dotnet-path] A stray `;` yields an empty component on Windows; Go met
   that as a field defect and now skips empty Windows entries "consistent with
   what PowerShell does".[^go-empty] A malformed `PATHEXT` entry has the same
-  effect. On such a host `bash`, `pwsh`, and, on Windows, `shell: true` all
-  fail until the operator repairs the variable. Default: implement ADR-0019
-  exactly, with a diagnostic that locates the entry and says how to list
-  entries. Alternative: amend ADR-0019 so that an inadmissible component is
-  skipped, never converted or searched. That keeps confinement and gives up the
-  fail-closed signal. The alternative replaces `L-ADMIT-OK`, two scenarios, and
-  the index contract.
+  effect. On such a host `bash`, `pwsh`, every configured bare name, and, on
+  Windows, `shell: true` all fail until the operator repairs the variable.
+  Default: implement ADR-0019 exactly, with a diagnostic that locates the entry
+  and says how to list entries. Alternative: amend ADR-0019 so that an
+  inadmissible component is skipped, never converted or searched. That keeps
+  confinement and gives up the fail-closed signal. It replaces the "never skip
+  it" constraint, `L-ADMIT-OK`, `L-ADMIT-LEAST`, `L-FAULT-EXISTS`, part of
+  `L-CLOSED`, two scenarios, and the index contract. `PATHEXT` would stay
+  strict unless the amendment says otherwise.
 - **OD-2. How `shell: true` finds Windows PowerShell.** ADR-0019 Table 1
   resolves `powershell.exe` through trusted `PATH`. ADR-0071, accepted later
   for legacy recipes, rejected exactly that route (its Option B) because the
@@ -237,6 +239,11 @@ Budgets, justified by the survey in `Context and orientation`:
   per directory and extension on Windows, and no deadline bounds a blocking
   inspection. Severity: low. Likelihood: low. Mitigation: recorded as an
   accepted residual; 11.3.1 must resolve each distinct selection once per run.
+- Risk: an unreachable Windows share is reported as absent, so a later
+  directory wins silently, while a drive that is not ready or a name the file
+  system rejects stops the search; `\\host\pipe\` paths also satisfy admission
+  as UNC paths. Severity: low. Likelihood: low. Mitigation: accepted residuals,
+  recorded in the addendum.
 - Risk: Windows semantics pass on Linux and fail on Windows. Severity: medium.
   Likelihood: medium. Mitigation: all rules are text functions of an explicit
   `HostFamily`; the filesystem adapter has Windows-gated tests; snapshots
@@ -261,6 +268,7 @@ Budgets, justified by the survey in `Context and orientation`:
 - [x] (2026-11-25) Four-panel community-of-experts review applied; see the
       revision note.
 - [x] (2026-11-25) Planning experiment on D3; see `Artefacts and notes`.
+- [x] (2026-11-25) Second review round applied; see the revision note.
 - [ ] Plan approved by the user, with OD-1 and OD-2 answered or defaulted.
 - [ ] `EP-M0` Feasibility probes recorded and discarded.
 - [ ] `EP-M1` Shared lexical and inspection seams extracted.
@@ -324,18 +332,20 @@ Entries marked "review" were changed by the expert panel.
   the code into the build script's compiled slice, and `src/shell_selection/`
   would gain an environment dependency.
 - D2 (review). Decision: separate a pure domain from adapters. The domain
-  modules are `search_path`, `registry`, `resolver`, `resolved`, and `error`.
-  The adapters, which connect the domain to the outside world, are `config`,
-  `environment`, `filesystem`, and `diagnostic`. Permitted outward imports are
-  exact: `config` imports `crate::cli::config` types; `environment` imports
-  `mockable`; `filesystem` imports `crate::stdlib`; `diagnostic` imports
-  `miette`, `crate::localization`, and the bounded renderer
+  modules are `search_path`, which declares the `TrustedEnvironment` value,
+  `registry`, `resolver`, `resolved`, and `error`. The adapters, which connect
+  the domain to the outside world, are `config`, `environment`, `filesystem`,
+  and `diagnostic`. Permitted outward imports are exact: `config` imports
+  `crate::cli::config` types; `environment` imports `mockable`; `filesystem`
+  imports `crate::stdlib`; `diagnostic` imports `miette`,
+  `crate::localization`, and the bounded renderer
   `crate::cli::config::shells::preview`. Domain modules import only `std`,
-  `camino`, `indexmap`, `thiserror`, and `crate::shell_selection`. Check with
-  the command in `Concrete steps`. Rationale: the dependency rule of hexagonal
-  architecture. Roadmap text asks for a registry "from `CliConfig`" while the
-  developers' guide says the resolver accepts definitions; an adapter that
-  translates one into the other satisfies both.
+  `camino`, `indexmap`, `thiserror`, and `crate::shell_selection`, and never
+  import an adapter module. Check with the commands in `Concrete steps`.
+  Rationale: the dependency rule of hexagonal architecture. Roadmap text asks
+  for a registry "from `CliConfig`" while the developers' guide says the
+  resolver accepts definitions; an adapter that translates one into the other
+  satisfies both.
 - D3. Decision: keep every item `pub(crate)` or narrower and attach
   `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, naming roadmap
   11.3.1, to the smallest set of items that nothing uses yet. Rationale:
@@ -391,9 +401,10 @@ Entries marked "review" were changed by the expert panel.
   points that the operating system reports as regular files, and the result is
   the path that was inspected, never its canonical form. Rationale: `/bin/sh`
   is usually a link; several shells change behaviour with the name they are
-  invoked by; and the standard library deliberately reports an App Execution
-  Alias without following it. Adopting ADR-0071's reparse rejection here would
-  break the normal PowerShell 7 installation.
+  invoked by; and the pinned standard library currently reports an App
+  Execution Alias without following it, through a fallback added for socket
+  files. Adopting ADR-0071's reparse rejection here would break the normal
+  PowerShell 7 installation.
 - D8 (review). Decision: an inspection yields `Executable`, `Missing`
   (`NotFound` or `NotADirectory`), or `Unusable` (not a regular file, no
   execute bit, or `PermissionDenied`). A bare-name search continues past
@@ -476,21 +487,30 @@ Entries marked "review" were changed by the expert panel.
   convert into the one diagnostic type. Rationale: the first draft placed
   misconfiguration inside a precedence that the constructor made unreachable. A
   domain-owned check means that no caller can build a registry with a reserved,
-  repeated, or badly spelled entry; agreement with `validate_composition` is
-  tested.
+  repeated, or badly spelled entry; agreement with `validate_composition` and
+  with `ShellExecutable::parse` is tested.
 - D21 (review). Decision: define "already extended" textually, independent of
   the build host: a Windows bare name is extended when its last `.` is neither
   its first nor its last character. `python3.12` is therefore extended and gets
-  no suffix; `.dash` is not extended; a trailing `.` is rejected by D22.
+  no suffix; `.dash` is not extended; a trailing `.` is refused by D22.
   Rationale: ADR-0019 says "final component already has an extension" without
   defining it, and `Utf8Path::extension` would apply the build host's rules.
-- D22 (review). Decision: in the resolver, a Windows bare name is misconfigured
-  when it contains a control character or any of `<>:"|?*`, ends in a dot or
-  space, or has a reserved device name as its stem. Rationale:
-  `check_windows_spelling` accepts `dash:evil`, `nul`, and `bash.` as bare
-  names; the first opens an alternate data stream and the last is not the file
-  that Windows opens, which would falsify D7. Configuration loading keeps its
-  accepted grammar; the users' guide documents the stricter resolution rule.
+- D22 (review). Decision: on Windows, resolving an executable whose final
+  component is unsafe is an unavailable outcome with the cause `UnsafeName`,
+  after environment admission where a search is needed and without any
+  inspection. A component is unsafe when it contains a control character or any
+  of `<>:"|?*`, ends in a dot or space, or has a reserved stem: the text before
+  its first `.`, with trailing spaces removed, equals, ignoring ASCII case,
+  `CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, or `COM` or `LPT` followed
+  by one of `0` to `9`, `¹`, `²`, or `³`. The rule applies to bare names and to
+  the final component of an absolute executable, whose prefix must also satisfy
+  D11's namespace rule. Rationale: `check_windows_spelling` accepts `dash:evil`,
+  `nul`, and `bash.`; the first opens an alternate data stream and the last is
+  not the file that Windows opens, which would falsify D7. ADR-0019 makes
+  "cannot be resolved safely" an unavailable outcome. Refusing at construction
+  instead would let one unused entry disable `shell: true`, which configuration
+  must never affect. Configuration loading keeps its accepted grammar; the
+  users' guide documents the stricter resolution rule.
 - D23. Decision: record settled details as an addendum to ADR-0019 instead of a
   new ADR. Rationale: they refine an accepted decision and reverse none of it.
 - D24 (review). Decision: keep Verus although the panel showed that exhaustive
@@ -681,7 +701,8 @@ not a violated precondition.
 _Table 1: How the proof model corresponds to production values._
 
 An empty directory sequence exists only in the model, because a split always
-yields at least one component.
+yields at least one component. An unset `PATH` is outside the model;
+`INV-CLASS` rows cover it with valid and malformed `PATHEXT` (D9).
 
 ### Invariants and lemmas
 
@@ -703,9 +724,9 @@ Selected for proof:
   `PATH` fault at the least index, whatever `E` is; otherwise, if `E` is
   malformed, the outcome is the `PATHEXT` fault.
 - `INV-CONFINE` (`L-CONFINE`): every `Inspect(d, k)` satisfies `0 <= d < |C|`
-  and `ok(C[d])`. The claim is lexical: every inspected path lies directly
-  inside a directory that the operator's `PATH` lists as absolute. It says
-  nothing about where such a directory is.
+  and `ok(C[d])`. The claim is lexical and concerns searched names: every path
+  inspected for a bare name lies directly inside a directory that the operator's
+  `PATH` lists as absolute. It says nothing about where such a directory is.
 
 Established by test:
 
@@ -716,6 +737,8 @@ Established by test:
   `\.[a-z0-9]+`, has no duplicates, and keeps first-occurrence order; every
   violation of the raw grammar is rejected at its least index.
 - `INV-EXTENDED`: D21 decides whether a suffix is appended.
+- `INV-SPELLING`: D22 decides which names are unsafe, and a registry holding
+  such an entry leaves every other selection unchanged.
 - `INV-CLASS`: construction fails only as misconfigured. Resolution is total,
   with the precedence unknown, unsupported, trusted environment, unavailable.
   An earlier outcome prevents every later step.
@@ -769,8 +792,8 @@ them.
   `search_property_tests.rs`, and `exhaustive.rs`.
 - Evidence: the kernel command reports zero errors. The enumeration runs every
   probe assignment on every grid up to three by three, which is 19,683 cases at
-  the largest, and every admission sequence up to length five over one
-  admissible and each inadmissible form.
+  the largest, and every admission sequence up to length five over two distinct
+  admissible forms and each inadmissible form.
 - Oracles: admission takes the minimum failing index from a scan that evaluates
   every component. Search selects the least decisive cell with
   `min_by_key((directory, column))` over an unordered table, and builds
@@ -782,16 +805,19 @@ them.
   the oracle disagrees at a hit.
 - Non-vacuity: a proof function exhibits accepted input, a hit at cell (1, 1)
   of a two-by-two grid after three misses, a fault before a hit, exhaustion,
-  and failures at the first and last index. Property tests classify cases and
-  fail if a class is absent from 1,000 deterministic samples.
+  failures at the first and last index, a full resolution trace that contains
+  an inspection, and simultaneous `PATH` and `PATHEXT` faults. Property tests
+  classify cases and fail if a class is absent from 1,000 deterministic samples.
 - Negative controls, each applied to the model and to production separately, so
   that a named lemma and a named test both fail:
   - exchange the loops so that extension dominates directory (`L-SEARCH-EXACT`);
-  - skip an invalid component (`L-ADMIT-OK`);
+  - skip an invalid component, and reverse the admitted directories
+    (`L-ADMIT-OK`);
   - report the last invalid index (`L-ADMIT-LEAST`);
   - treat a fault as a miss (`L-SEARCH-EXACT`);
   - inspect every cell before choosing (`L-SEARCH-TRACE`);
   - inspect one cell before admission completes (`L-CLOSED`);
+  - emit an inspection at directory index `|C|` (`L-CONFINE`);
   - drop the column clause from the cell order (`L-SEARCH-UNIQUE`, model only).
 
 **`INV-JOIN`.** Method: property test and table for both families, including
@@ -811,8 +837,17 @@ character as an entry's only character.
   variants, duplicates with and without dots, and the eleven-entry default. For
   `INV-EXTENDED`: `x`, `x.exe`, `.x`, `python3.11`, `pwsh-7.4`, and
   `powershell.exe`.
+- Expected red: a stub that returns the default list for every value fails the
+  empty-value case.
 - Controls: trim Unicode whitespace, keep the last duplicate, default on empty,
   skip blank, and append to an extended name. Each fails a named case.
+
+**`INV-SPELLING`.** Method: a Windows table, an exhaustive check of every ASCII
+character in an interior position, and an isolation case in which an unsafe
+configured entry leaves the platform default and every other name unchanged.
+Artefact: `src/trusted_shell/registry/tests.rs`. Expected red: a stub that
+accepts every name fails the colon row. Controls: drop the colon, trailing-dot,
+and device-stem rules in turn; refuse at construction.
 
 **`INV-CLASS`, `INV-BUILTIN`, and `INV-DIRECT`.** Method: an exhaustive
 `rstest` table over selection kind, host family, and the finite registry,
@@ -829,6 +864,8 @@ environment, and inspection states. Artefact:
   a strict `MockEnv`, then resolves repeatedly. Resistance to a command's
   `PATH` is structural here, because no parameter can carry one; 11.3.1 owes
   the behavioural proof.
+- Expected red: a stub that admits the environment first reports a trusted
+  environment fault for an unknown name.
 - Controls: configured-first lookup; checking support after the environment;
   parsing before the `Direct` return.
 
@@ -842,15 +879,19 @@ explicit skip message otherwise.
 
 - Artefact: `src/trusted_shell/filesystem/tests.rs`.
 - Fixed arguments are compared with literals, never with `fixed_args()`.
+- Expected red: a stub that reports every path as missing fails the
+  regular-executable case.
 - Controls: canonicalize the result; drop an argument; reject a link.
 
 **`INV-BOUND`.** Method: `insta` snapshots of each class in the human and JSON
 renderings, with semantic assertions that sentinel directory names never
 appear, that a 10,000-character name or path is truncated at 64 characters, and
-that `Debug` output of every type holding host values contains no sentinel.
-Artefact: `src/trusted_shell/diagnostic/tests.rs` and its snapshots, which
-contain no host-supplied path, error text, or separator. Controls: interpolate
-the component; truncate at 65; derive `Debug`.
+that `Debug` output of every environment, admission, and error type contains no
+sentinel. `ResolvedShell` is exempt, because its path is the result. Artefact:
+`src/trusted_shell/diagnostic/tests.rs` and its snapshots, which contain no
+host-supplied path, error text, or separator. Expected red: a stub that renders
+every class as unknown fails four code assertions. Controls: interpolate the
+component; truncate at 65; derive `Debug`.
 
 ### Formal verification decision
 
@@ -905,10 +946,13 @@ spec fn least_decisive(n: nat, m: nat, p: spec_fn(int, int) -> Probe, at: (int, 
 spec fn admit(c: Seq<C>, ok: spec_fn(C) -> bool) -> Admission decreases c.len();
 spec fn walk(n: nat, m: nat, p: spec_fn(int, int) -> Probe, d: int, k: int) -> Walk
     decreases n - d, m - k;
-spec fn resolve(c: Seq<C>, e: Ext, p: spec_fn(int, int) -> Probe) -> (Outcome, Seq<Event>);
+spec fn resolve(c: Seq<C>, e: Ext, extended: bool, ok: spec_fn(C) -> bool,
+    p: spec_fn(int, int) -> Probe) -> (Outcome, Seq<Event>);
 
 // Principal lemmas.
-proof fn admit_ok(c, ok)         ensures admit(c, ok) == Admission::Dirs(c) <==> admitted(c, ok);
+proof fn admit_ok(c, ok)         ensures
+    (admit(c, ok) is Dirs) <==> admitted(c, ok),
+    admitted(c, ok) ==> admit(c, ok) == Admission::Dirs(c);
 proof fn admit_least(c, ok, k)   ensures admit(c, ok) == Admission::Fault(k) <==> least_fault(c, ok, k);
 proof fn fault_exists(c, ok)     requires !admitted(c, ok), ensures exists|k| least_fault(c, ok, k);
 proof fn decisive_unique(n, m, p, a, b)
@@ -920,12 +964,18 @@ proof fn walk_exact(n, m, p, c)  ensures
 proof fn walk_trace(n, m, p, x)  ensures strictly_ascending(walk(n, m, p, 0, 0).cells),
     walk(n, m, p, 0, 0).cells.contains(x) <==>
         in_grid(n, m, x) && forall|c| least_decisive(n, m, p, c) ==> !before(c, x);
-proof fn resolve_closed(c, e, p, i)
-    requires 0 <= i < resolve(c, e, p).1.len(), resolve(c, e, p).1[i] is Inspect,
+// Below, `r` abbreviates `resolve(c, e, extended, ok, p)`.
+proof fn resolve_outcome(c, e, extended, ok, p, k) ensures
+    least_fault(c, ok, k) ==> r.0 == Outcome::PathFault(k),
+    admitted(c, ok) && !ext_ok(e) ==> r.0 == Outcome::ExtFault,
+    admitted(c, ok) && ext_ok(e) ==>
+        outcome_and_cells(r) == walk(c.len(), columns(e, extended).len(), p, 0, 0);
+proof fn resolve_closed(c, e, extended, ok, p, i)
+    requires 0 <= i < r.1.len(), r.1[i] is Inspect,
     ensures admitted(c, ok) && ext_ok(e);
-proof fn resolve_confined(c, e, p, i)
-    requires 0 <= i < resolve(c, e, p).1.len(), resolve(c, e, p).1[i] is Inspect,
-    ensures 0 <= resolve(c, e, p).1[i].dir() < c.len() && ok(c[resolve(c, e, p).1[i].dir()]);
+proof fn resolve_confined(c, e, extended, ok, p, i)
+    requires 0 <= i < r.1.len(), r.1[i] is Inspect,
+    ensures 0 <= r.1[i].dir() < c.len() && ok(c[r.1[i].dir()]);
 ```
 
 Using the sketch to test the design produced these consequences. Admission must
@@ -1023,6 +1073,15 @@ Feature: Resolve a shell selection into an execution value
     When the shell "powershell" is resolved
     Then resolution fails as unsupported
 
+  Scenario: An unsafe configured name disables only itself
+    Given a Windows host whose PATH is "C:\a" and PATHEXT is ".EXE"
+    And "C:\a\powershell.exe" is an executable file
+    And a configured shell "dash" running "dash:evil" with arguments "-c"
+    When the platform default is resolved
+    Then the resolved executable is "C:\a\powershell.exe"
+    When the shell "dash" is resolved
+    Then resolution fails as unavailable
+
   Scenario: A definition spelled for the other host prevents construction
     Given a Windows host whose PATH is "C:\a" and PATHEXT is ".EXE"
     And a configured shell "dash" running "/usr/bin/dash" with arguments "-c"
@@ -1046,7 +1105,8 @@ is reverted before `EP-M1`, and record the transcript in `Artefacts and notes`.
 1. In this crate, does the D3 recipe satisfy `make lint-clippy`,
    `make lint-default-features`, and `make test-default-features`? Record the
    minimal marked set for each plateau, and repeat the two controls: removing
-   one mark, and making the module public.
+   one mark, and making the module public. Include enumerations whose variants
+   only tests construct or whose fields only tests read.
 2. Do a `#[scenario]` and typed steps compile and run inside the library test
    target with `strict-compile-time-validation`, and does a renamed step fail
    to compile?
@@ -1054,7 +1114,8 @@ is reverted before `EP-M1`, and record the transcript in `Artefacts and notes`.
 4. Does `make verus` accept the specification skeleton with the pinned release?
 5. Survey the `PATH` values of the hosted Linux, macOS, and Windows runners,
    counting inadmissible components without recording their text, as evidence
-   for OD-1.
+   for OD-1. Record whether the Windows runner has an App Execution Alias; if
+   it has none, state that the D7 guard is unexercised in CI.
 
 Go: every question answered, with any fallback recorded as a decision. No-go:
 no compliant answer to question 1; stop and escalate.
@@ -1082,12 +1143,13 @@ fail the build.
 
 ### `EP-M2` trusted search path admission
 
-Create `src/trusted_shell/` with `search_path/mod.rs` (admitted directories,
-columns, and candidate joining), `search_path/path/mod.rs`,
+Create `src/trusted_shell/` with `search_path/mod.rs` (the `TrustedEnvironment`
+value and admitted directories), `search_path/path/mod.rs`,
 `search_path/pathext/mod.rs`, `environment/mod.rs`, and the environment part of
-`error/mod.rs`. D3 marks at this plateau: `TrustedEnvironment::capture`, the
-admission entry point, and any error enumeration whose fields only tests read.
-Proposed types:
+`error/mod.rs`. Column derivation and candidate joining wait for `EP-M3a`,
+which is their first caller. D3 marks at this plateau: `environment::capture`,
+the admission entry point, and any error enumeration whose fields only tests
+read. Proposed types:
 
 ```rust,ignore
 /// Locate one rejected component without quoting it.
@@ -1113,19 +1175,21 @@ pub(crate) struct TrustedEnvironment { /* host, path, pathext: private */ }
 pub(in crate::trusted_shell) struct AdmittedDirectory(String);
 ```
 
-`TrustedEnvironment::capture(HostFamily, &impl Env)` reads `PATH`, and reads
-`PATHEXT` on Windows only. It is the single owner of the host family. Rules
-apply in this order: for each `PATH` component, left to right, not Unicode,
-NUL, empty, quoted, device namespace, not absolute; for `PATHEXT`, not Unicode,
-NUL, and empty for the whole value, then for each entry blank and malformed. An
-index is zero-based, matching `shells[0]` and the existing `which` message.
+`environment::capture(HostFamily, &impl Env) -> TrustedEnvironment` is a free
+function in the adapter. It reads `PATH`, and reads `PATHEXT` on Windows only.
+The value it builds, through a constructor visible only inside `trusted_shell`,
+is the single owner of the host family. Rules apply in this order: for each
+`PATH` component, left to right, not Unicode, NUL, empty, quoted, device
+namespace, not absolute; for `PATHEXT`, not Unicode, NUL, and empty for the
+whole value, then for each entry blank and malformed. An index is zero-based,
+matching `shells[0]` and the existing `which` message.
 
 The extension rules: an unset value is the fixed eleven-entry default; trim
 only ASCII space and tab; require one or more ASCII alphanumerics after at most
 one leading dot; lower-case; add the dot; keep first occurrences. Do not reuse
-the test-gated `DEFAULT_PATHEXT` in `which`: state the list here, because
-ADR-0019 fixes it for shells. One test asserts that the two agree today, so
-that a divergence is deliberate.
+the test-gated `DEFAULT_PATHEXT` in `which`: it is private to that module and
+serves a lenient contract. State the list here, and compare it in a test with
+the literal ADR-0019 sequence.
 
 Write `verus/trusted_shell/main.rs` with the admission lemmas, their witnesses,
 and the admission controls. Acceptance includes:
@@ -1140,9 +1204,10 @@ It must print `N verified, 0 errors`; record `N`.
 
 Add `registry`, `resolver`, and `resolved`, and complete `error`. All of it is
 pure: inspection is a closure. D3 marks move to `ShellResolver::new`,
-`ShellResolver::resolve`, and the `ResolvedShell` accessors; remove the
-admission mark, and keep one mark on each error enumeration whose fields are
-still unread. Proposed shape:
+`ShellResolver::resolve`, and the `ResolvedShell` accessors, with one mark each
+on `ResolvedSelection`, `Inspection`, `UnusableReason`, and each error
+enumeration whose fields are still unread; remove the admission mark. Proposed
+shape:
 
 ```rust,ignore
 pub(crate) enum Inspection { Executable, Missing, Unusable(UnusableReason) }
@@ -1151,7 +1216,8 @@ pub(crate) enum UnusableReason { NotRegularOrExecutable, PermissionDenied }
 /// One operator entry, translated from configuration without a CLI type.
 pub(crate) struct ConfiguredShell { name: ShellName, executable: String, args: Vec<String> }
 
-/// Private fields; `parse` applies the host's spelling rules and D22.
+/// Private fields; `parse` applies the host's spelling rules, and
+/// `from_built_in` is infallible.
 pub(in crate::trusted_shell) struct ExecutableReference { /* ... */ }
 
 /// Key, definition name, and a closed fault; no CLI type.
@@ -1187,6 +1253,7 @@ pub(crate) enum UnavailableCause {
     NotOnSearchPath { executable: String, first_unusable: Option<(EntryIndex, UnusableReason)> },
     Missing { executable: Utf8PathBuf },
     Unusable { executable: Utf8PathBuf, reason: UnusableReason },
+    UnsafeName { executable: String },
     Inspection { entry: Option<EntryIndex>, source: io::Error },
 }
 ```
@@ -1194,14 +1261,16 @@ pub(crate) enum UnavailableCause {
 `new` checks reserved names, repeated names, and spelling for the environment's
 host, and never yields a partial registry. In production the configuration
 loader has already rejected most such input, so this is a fail-closed check on
-values constructed another way; a property asserts that its collision verdict
-equals `validate_composition`'s.
+values constructed another way. Properties over both families assert that its
+collision verdict equals `validate_composition`'s and that
+`ExecutableReference::parse` accepts exactly what `ShellExecutable::parse`
+accepts.
 
 Resolution proceeds as follows. `Direct` returns at once. `PlatformDefault`
 becomes the host-default built-in. A name is looked up among built-ins, then in
-the registry. An unsupported built-in fails. An absolute executable is
-inspected exactly as spelled. A bare name admits the search path, generates
-candidates, and inspects them in order.
+the registry. An unsupported built-in fails. An absolute executable passes D22
+and is inspected exactly as spelled. A bare name admits the search path, passes
+D22, generates candidates, and inspects them in order.
 
 Complete the kernel with the search lemmas and their controls, and add the
 classification table, the enumeration, and the search properties. Include the
@@ -1217,7 +1286,9 @@ into `Vec<ConfiguredShell>`. `filesystem::inspect` calls `probe_executable`,
 which now gains `pub(crate)` visibility with re-exports through
 `src/stdlib/which/mod.rs` and `src/stdlib/mod.rs`, because `which` is a private
 module; it alone translates `NotFound` and `NotADirectory` to `Missing` and
-`PermissionDenied` to `Unusable`. D3 marks added: the two adapter functions.
+`PermissionDenied` to `Unusable`. D3 marks added: the two adapter functions;
+removed: those on `Inspection` and `UnusableReason`, which the filesystem
+adapter now constructs.
 
 Add the real-filesystem tests and the `rstest-bdd` scenarios, whose steps build
 the domain values directly. One test drives `CliConfig::merge_from_layers`
@@ -1360,6 +1431,15 @@ git grep -nE 'miette|crate::localization' -- src/trusted_shell \
   ':!src/trusted_shell/diagnostic' ':!src/trusted_shell/tests'
 ```
 
+```bash
+git grep -nE '(super|trusted_shell)::(config|environment|filesystem|diagnostic)' \
+  -- src/trusted_shell/search_path src/trusted_shell/registry \
+  src/trusted_shell/resolver src/trusted_shell/resolved src/trusted_shell/error
+```
+
+The first block exempts `src/trusted_shell/tests/`, where every test that
+imports `crate::cli` lives. The second must print nothing.
+
 Search for stale forward references before closing `EP-M5`:
 
 ```bash
@@ -1411,7 +1491,7 @@ Accept the work when all of the following hold.
 - `true` resolves to `/bin/sh` on Unix-like hosts and, unless OD-2 changes it,
   to the first `powershell.exe` in `PATH` order on Windows, for every admitted
   registry.
-- The five classes have distinct variants, codes, and snapshots, and no
+- The five classes have distinct variants, codes, and snapshots, and no failure
   rendering, including `Debug`, contains a `PATH` or `PATHEXT` value.
 - Verus reports zero errors for all three kernels, and each negative control
   fails for the recorded lemma and the recorded test.
@@ -1514,3 +1594,10 @@ Retrieved on 2026-11-25.
   per-obligation controls, and corrected the BDD scenarios. Split `EP-M3`,
   fixed the gate commands, and removed all new public API except key constants.
   The remaining work is unchanged in purpose.
+- 2026-11-25: applied the conditions from a second review by three of the
+  panels, all of which returned "proceed with conditions". An unsafe Windows
+  name now fails only its own resolution (D22) and extends to absolute
+  executables. The environment value moved into the domain. The proof gained an
+  outcome lemma and stronger controls, `INV-SPELLING` was added, the dead-code
+  marks per plateau were completed, and residuals and expected red results were
+  filled in.
