@@ -357,9 +357,51 @@ make test-workflow-contracts
 make markdownlint
 ```
 
-The Kani lane is exercised by `make test-kani-mutations`, which compiles every
-committed proof mutation patch through the Kani frontend. It is run to show the
-proof lane is unchanged; it is not modified.
+The proof lane and the mutation compile gate are two different things, and an
+earlier draft of this section conflated them. It claimed
+`make test-kani-mutations` showed the proof lane was unchanged. It does not:
+that target runs the mutation prewarm, a compile-rejection negative control,
+and the patched-tree compile guard. It compiles proof-adjacent code; it never
+runs a proof harness, so a pass there says nothing about whether any property
+still holds.
+
+Both are run, and their results are recorded separately:
+
+- `make kani-full` runs the proof harnesses themselves, which is the only
+  evidence that the proofs still pass after the `mutants` dependency and the
+  four `#[mutants::skip]` attributes joined the crate. This is the command the
+  definition of done's "the Kani proof lane … still run[s] and pass[es]" clause
+  refers to.
+- `make test-kani-mutations` remains the mutation compile gate that ADR-0073
+  describes: every committed patch under `docs/verification/mutations/` is
+  applied, compiled through the Kani frontend, and reverted. It is unchanged by
+  this work and is not evidence about the harnesses.
+
+Measured on 2026-11-25: `make kani-full` reports
+`Complete - 17 successfully verified harnesses, 0 failures, 17 total`. That is
+the whole proof inventory the developers' guide lists, so adding the `mutants`
+dependency and the four attributes left every property intact — including the
+`cfg(kani)` graph code the attributes now annotate.
+
+Neither command is modified by this change.
+
+The proof-lane result is the one that matters here, and it is green. The
+mutation compile gate is reported honestly rather than assumed. It timed out
+twice at the prewarm's 900 s allowance: 326 admission waits with a queue depth
+peaking at 216 and **zero crates compiled** in the second run. That is host
+saturation, not a verdict about the code, and the same host was carrying
+several other agents' builds throughout.
+
+The one way this change could genuinely have broken that gate is by shifting
+line numbers in `src/ir/graph/mod.rs` far enough to displace the committed
+patches, so that was checked directly rather than inferred: all 30 files under
+`docs/verification/mutations/` still pass `git apply --check`. Two of them
+touch the graph module, and both apply.
+
+Combined with `make kani-full` verifying all 17 harnesses against the same tree
+— which is what exercises the `mutants` dependency and the four attributes
+through the real Kani frontend — the proof lane is established as intact. The
+compile gate's timeout is recorded as an environment limitation, not as a pass.
 
 ## Outcomes & retrospective
 
