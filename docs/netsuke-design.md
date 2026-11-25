@@ -2607,9 +2607,11 @@ Three rules decide which refusal a request receives, and their order matters:
    exceptions are `CardinalityError::Overflow`, whose count does not fit in
    `u64`, and `StreamLimitExceeded`, which names the `StreamKind` that passed
    its ceiling.
-3. **Zero and identity are exact.** `product` with `repeat == 0` yields one
-   empty tuple, and `product` with a zero-length operand yields zero tuples.
-   Both are answered before any ceiling comparison, because neither can grow.
+3. **Zero and identity are exact, in that order.** `product` with
+   `repeat == 0` yields one empty tuple, whatever the operands are. Otherwise a
+   zero-length operand yields zero tuples. Both are answered before any ceiling
+   comparison, because neither can grow; `repeat == 0` is checked first, so it
+   wins when both conditions hold at once.
 
 The ownership boundary follows from the module's purpose. It owns the
 constants, the checked arithmetic, the depth and running-total state machines,

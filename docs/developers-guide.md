@@ -14162,9 +14162,9 @@ The public surface is re-exported from `src/stdlib`:
 Three rules decide a refusal, and their order is part of the contract: overflow
 is reported before excess, so a cardinality outside `u64` never pretends to
 have a value; a ceiling is inclusive, so the first refusal is the first value
-above it; and `product`'s identity (`repeat == 0` yields one empty tuple) and
-zero (any zero-length operand yields zero tuples) results are answered before
-any comparison.
+above it; and `product`'s identity (`repeat == 0` yields one empty tuple,
+whatever the operands) is answered before its zero rule (a zero-length operand
+yields zero tuples when `repeat` is positive), and both before any comparison.
 
 **Re-use policy.** Every helper in `src/stdlib/` that parses untrusted input,
 enumerates a combinatorial space, scans text for matches, or materializes
