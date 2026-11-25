@@ -10081,8 +10081,20 @@ expression parser. They share a shell-specific boundary but keep distinct state
 responsibilities. `PowerShellSourceCharacter` binds a Unicode-scalar index to
 the borrowed source buffer and provides checked lookaround only within the
 PowerShell scanner; it is not a shared shell abstraction. The sibling
-`src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
-parenthesis state needed to keep protected `$()` bodies isolated.
+`src/ir/cmd_interpolate/command_substitution.rs` holds the boundary values the
+fail-closed checks exchange — `SubstitutionStart` for the opening `$(`,
+`SubstitutionBoundary` for the closing `)`, and `SourceText`/`CharSpan` for the
+source ranges they scan — and nothing else; the traversal state itself lives in
+the modules below.
+
+The `$()` nesting state for the POSIX `command:` traversal lives in
+`src/ir/cmd_interpolate/substitution/delimiters.rs`: it owns the open
+substitutions, the `case` observations that qualify them, and the fail-closed
+checks applied when one closes. `substitution/mod.rs` declares that module and
+keeps the traversal state, character dispatch, and marker lowering. The split
+exists only to hold each file under the module-size cap. The `script:`
+traversal mirrors it with `script_substitution/delimiters.rs`, so each
+traversal owns its own nesting rather than sharing one.
 
 `src/manifest/render/mod.rs` may emit the internal tokens while rendering the
 only accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell
