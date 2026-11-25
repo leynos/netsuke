@@ -41,7 +41,7 @@ pub(super) fn when_allows(
     iteration: Option<(&Value, usize)>,
     retain_filtered_entry: bool,
 ) -> Result<WhenResolution> {
-    let Some(when_val) = map.remove("when") else {
+    let Some(when_val) = map.shift_remove("when") else {
         return Ok(WhenResolution::Include);
     };
     let expr = as_str(&when_val, "when")?;

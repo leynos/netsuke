@@ -1254,6 +1254,10 @@ runtime branch. Runtime decisions belong in a command or script.
 
 Top-level actions support the same `foreach` and `when` keys.
 
+Expansion keeps each entry's fields in the order they were written, so a
+manifest that also contains an unknown field reports the first unknown field in
+authoring order.
+
 ### Diagnose manifest expansion
 
 Pass `--verbose` to a normal manifest-loading command to inspect manifest-time

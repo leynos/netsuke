@@ -190,6 +190,12 @@ Feature: Manifest Parsing
     And the action 2 command is "echo 'test'"
     And the action 2 index is 2
 
+  Scenario: Parsing names the first unknown field in authoring order
+    Given the manifest file "tests/data/when_middle_unknown_field.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "unknown field `zz_first`"
+
   Scenario: Selecting a fallback action when a command is unavailable
     Given the manifest file "tests/data/actions_command_available_absent.yml" is parsed
     When the manifest is checked

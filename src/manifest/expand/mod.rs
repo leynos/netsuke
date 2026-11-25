@@ -250,7 +250,7 @@ fn expand_foreach_item(
         .charge_expanded_entry(ManifestBudgetStage::ExpansionAggregate)
         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
     let mut entry = foreach_item.source.clone();
-    entry.remove("foreach");
+    entry.shift_remove("foreach");
     match when_allows(
         &mut entry,
         context,

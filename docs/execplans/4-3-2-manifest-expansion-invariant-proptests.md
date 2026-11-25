@@ -1223,6 +1223,38 @@ legally reference matched the oracle on every draw. No template form compiled
 as an expression (0 hits for the "template compiled as expression" probe), so
 all template forms take the fallback path.
 
+### EP-M1 red and green transcripts
+
+Red, before `shift_remove`:
+
+```plaintext
+cargo nextest run --all-features --lib -E 'test(/manifest::expand::tests::key_order_cases/)'
+Summary: 21 tests run: 9 passed, 12 failed
+FAIL ... static_when_removal_keeps_authoring_key_order::case_01_targets_first
+  Value of: keys
+  Expected: has elements: "name", "vars", "command", "description"
+  Actual: ["description", "name", "vars", "command"]
+
+cargo nextest run --all-features --test bdd_tests \
+  -E 'test(/manifest_parsing_names_the_first_unknown_field_in_authoring_order/)'
+Summary: 1 test run: 0 passed, 1 failed
+  expected parse error to contain 'unknown field `zz_first`',
+  but was '... unknown field `zz_last`: unknown field `zz_last`'
+```
+
+The twelve red cases are exactly the shapes with two or more keys after the
+control key; the eight boundary cases with zero or one following key passed
+before the fix, as predicted, and `map_equality_ignores_key_order` pins why
+value equality never saw the defect.
+
+Green, after the two edits:
+
+```plaintext
+key_order_cases: 21 tests run: 21 passed
+manifest_parsing_names_the_first_unknown_field_in_authoring_order: 1 passed
+all manifest unit tests: 386 tests run: 386 passed
+```
+
 ## Interfaces and dependencies
 
 No production interface changes. The test-only interfaces are:
@@ -1298,7 +1330,12 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
 - [x] (2026-11-25) User approval.
 - [x] (2026-11-25 19:23Z) EP-M0 feasibility probes. All six questions answered;
   every probe deleted, none committed.
-- [ ] EP-M1 key-order fix.
+- [x] (2026-11-25 19:46Z) EP-M1 key-order fix. `key_order_cases.rs` (21 cases)
+  and the authoring-order scenario committed red-then-green; both removal sites
+  now use `shift_remove`; the other `serde_json::Map::remove` sites
+  inventoried; design clause `C-2`, the changelog entry, and the users' guide
+  sentence written.
+- [ ] EP-M1 plateau gates.
 - [ ] EP-M2 shared test support and relocation.
 - [ ] EP-M3 generators, oracles, coverage, and properties.
 - [ ] EP-M4 unhappy paths, scenarios, documentation, and closure.
@@ -1458,7 +1495,21 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   commit. Rationale: `make spelling` regenerated it from the pinned builder;
   the change is unrelated to this item, and `AGENTS.md` asks for it to be
   offered as a separate base pull request. Date/Author: 2026-10-31, planning
-  agent.
+  agent. Superseded: by the time implementation began, that regeneration had
+  merged to `main` as #1054, so the branch is rebased on it and carries no
+  `typos.toml` commit of its own.
+- Decision: leave the other `serde_json::Map::remove` sites unchanged.
+  Rationale: the EP-M1 inventory found six. Four are in
+  `src/cli/discovery/project_policy.rs` (lines 188, 253, and 273–276) and
+  remove known project-policy keys from a `serde_json::Map`. No downstream
+  consumer reads the remaining key order: the CLI configuration structs carry no
+  `deny_unknown_fields`, so no diagnostic names a remaining field, and the
+  value is consulted by key lookup only. `src/graph_view/mod.rs` line 118
+  removes from a `BTreeMap`, and `src/lint/rules/caching/mod.rs` line 213 from a
+  `BTreeSet`; neither container's removal reorders anything. Changing the
+  first four would exceed the production-change tolerance, so they stay, and a
+  follow-up issue may propose a `disallowed-methods` guard. Date/Author:
+  2026-11-25, implementation agent.
 
 ## Outcomes & retrospective
 

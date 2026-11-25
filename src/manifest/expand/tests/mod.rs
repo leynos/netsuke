@@ -14,6 +14,7 @@ mod description_cases;
 
 mod foreach;
 
+mod key_order_cases;
 mod structure_cases;
 
 mod property_cases;
