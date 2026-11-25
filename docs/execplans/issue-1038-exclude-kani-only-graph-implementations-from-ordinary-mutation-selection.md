@@ -63,10 +63,15 @@ selection and proof-specific verification.
   cargo-mutants version honours, each with a comment saying why.
 - `cargo mutants --list --all-features --file src/ir/graph/mod.rs` shows none of
   the six false survivors.
-- The `#[cfg(not(kani))]` counterparts of all four names remain listed, and
-  `replace_edge_for_output`, `insert_canonical_edge`, `index_output_aliases`,
-  `index_output`, `duplicate_output`, `edge_count`, `output_count`, `edges`, and
-  `output_paths` remain listed.
+- The `#[cfg(not(kani))]` counterparts of `insert_edge`, `edge_id_for_output`,
+  and `target_for_output` remain listed, and `replace_edge_for_output`,
+  `insert_canonical_edge`, `index_output_aliases`, `index_output`,
+  `duplicate_output`, `edge_count`, `output_count`, `edges`, and `output_paths`
+  remain listed.
+- `output_index` leaves the ordinary lane entirely. It is a Kani-only accessor
+  with no `cfg(not(kani))` twin — the production duplicate-output scan reads
+  the target map directly — so unlike the other three there is no counterpart
+  to keep.
 - A focused selection regression test uses same-named Kani and production
   variants, so a broad name-based exclusion cannot pass unnoticed.
 - The Kani proof lane, the proof inventory, and the mutation-evidence checks
@@ -186,11 +191,11 @@ selection and proof-specific verification.
       against both the cargo-mutants source and the pinned tool: it matches
       `mutants::skip` on the attribute *path*, which `syn` exposes for every
       metadata form, so `#[mutants::skip()]` and `#[mutants::skip(..)]` are
-      honoured too. The reader recognised only `Meta::Path`. Measured against
+      honoured too. The reader recognized only `Meta::Path`. Measured against
       cargo-mutants 27.1.0: an `impl` marked `#[mutants::skip()]` yields no
       mutants, beside one with the bare spelling, while an unmarked `impl`
       still does. The path check now runs first, and a probe covers the
-      parenthesised spelling on an enclosing block. Seeding the exact pre-fix
+      parenthesized spelling on an enclosing block. Seeding the exact pre-fix
       reader failed that probe alone — nine of ten passed — so the control is
       specific rather than incidental.
 - [ ] Milestone 4: push, re-review, and the draft PR.

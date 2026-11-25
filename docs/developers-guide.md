@@ -6619,8 +6619,15 @@ holds both:
 
 - every skip in the graph module is on a `cfg(kani)` item, so a skip cannot land
   on code the ordinary lane genuinely judges;
-- every proof-only name still has a selected, non-skipped implementation, so a
-  future edit cannot widen a skip into a whole-name exclusion.
+- every name with a production counterpart — `insert_edge`, `edge_id_for_output`
+  and `target_for_output` — still has a selected, non-skipped implementation,
+  so a future edit cannot widen a skip into a whole-name exclusion.
+
+`output_index` is the fourth skipped name and is the exception: it has no
+`cfg(not(kani))` twin, because the production duplicate-output scan reads the
+target map directly. Its skip therefore removes the name from the ordinary lane
+entirely rather than removing one half of a pair, and there is no counterpart
+to keep selected.
 
 The contract's reader mirrors cargo-mutants' own rule rather than a looser one.
 It accepts `#[mutants::skip]` and a `cfg_attr` whose condition is a *bare
