@@ -14166,10 +14166,14 @@ above it; and `product`'s identity (`repeat == 0` yields one empty tuple) and
 zero (any zero-length operand yields zero tuples) results are answered before
 any comparison.
 
-**Re-use policy.** Every bounded template helper in `src/stdlib/` is required
-to call this module, and the policy below is what a review checks. No helper
-calls it yet: the module is in place and the consumer tasks adopt it, so a
-helper that predates those tasks is still bounded exactly as it was before.
+**Re-use policy.** Every helper in `src/stdlib/` that parses untrusted input,
+enumerates a combinatorial space, scans text for matches, or materializes
+output is required to call this module, and the policy below is what a review
+checks. The scope is deliberately the operations ADR-0087 lists: a helper
+bounded only by an I/O limit, such as the file-reading filters above, follows
+the file-reading filter boundary instead and does not adopt these ceilings. No
+helper calls this module yet: it is in place and the consumer tasks adopt it,
+so a helper that predates those tasks is still bounded exactly as it was before.
 
 - No helper re-implements the arithmetic or invents a ceiling. A helper that
   needs a value this module does not provide adds it here, with its ceiling,

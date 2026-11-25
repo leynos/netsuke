@@ -2602,8 +2602,11 @@ Three rules decide which refusal a request receives, and their order matters:
    can see what the request was measured against; no computed cardinality is
    invented.
 2. **A ceiling is inclusive.** A request exactly at its ceiling is admitted; the
-   first refusal is the first value above it. Refusals report the observed
-   value and the ceiling it exceeded.
+   first refusal is the first value above it. Every refusal names the ceiling
+   it enforced, and reports the observed value wherever one is available — the
+   exceptions are `CardinalityError::Overflow`, whose count does not fit in
+   `u64`, and `StreamLimitExceeded`, which names the `StreamKind` that passed
+   its ceiling.
 3. **Zero and identity are exact.** `product` with `repeat == 0` yields one
    empty tuple, and `product` with a zero-length operand yields zero tuples.
    Both are answered before any ceiling comparison, because neither can grow.
