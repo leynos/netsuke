@@ -104,12 +104,17 @@ raised these budgets.
 - [x] (2026-11-25 21:30Z) Reconnaissance of the detector, Kani harnesses,
   mutation patches, and documentation completed.
 - [x] (2026-11-25 21:35Z) Branch and Lody session renamed; ExecPlan drafted.
-- [ ] `EP-M1`: Red regression tests and scan accounting fail on the current
-  detector.
-- [ ] `EP-M2`: Edge-keyed traversal and bounded missing records make the focused
-  tests green; Kani harnesses unchanged.
-- [ ] `EP-M3`: Property and manifest-lowering integration tests, documentation,
-  mutation evidence, and all gates complete.
+- [x] (2026-11-25 22:55Z) `EP-M1`: Red regression tests and scan accounting
+  fail on the previous detector. Measured 16 records instead of 4, 6 scans
+  instead of 2, and the duplicate entry-alias record.
+- [x] (2026-11-25 23:20Z) `EP-M2`: Edge-keyed traversal and bounded missing
+  records make all 55 focused cycle tests green. The library check passes under
+  `-D warnings`.
+- [x] (2026-11-25 23:45Z) Property and manifest-lowering integration tests are
+  green. The property fails on the pre-fix detector with "5 missing records
+  exceed 3 declared entries" and "7 dependency scans exceed 3 declared
+  entries", proving the bound is non-vacuous.
+- [ ] `EP-M3`: Documentation, mutation evidence, and all gates complete.
 - [ ] `EP-M4`: Branch pushed and draft pull request opened.
 
 ## Surprises & discoveries
@@ -141,6 +146,16 @@ raised these budgets.
   accounting. Rationale: ADR-0068 and a live Kani proof require it; the plan
   clause excluding it is contradictory and therefore not actioned. Date/Author:
   2026-11-25, implementing agent.
+- D4. Decision: stack frames carry `(EdgeId, entry_alias)` and are pushed only
+  in path mode. Rationale: the entry alias is needed for witnesses and missing
+  records; presence mode needs only the edge-keyed state map, so it stays
+  allocation free. Tests and Kani's insertion-order walk resolve an alias
+  through `is_visited`, compiled under `cfg(any(test, kani))` to avoid dead
+  code. Date/Author: 2026-11-25, implementing agent.
+- D5. Decision: regenerate five mutation patches whose hunk context moved.
+  Rationale: `rotate_index`, `visit_dependency`, `visit_known_edge`, and
+  `visit` changed shape; the seeded faults are semantically unchanged.
+  Date/Author: 2026-11-25, implementing agent.
 
 ## Outcomes & retrospective
 

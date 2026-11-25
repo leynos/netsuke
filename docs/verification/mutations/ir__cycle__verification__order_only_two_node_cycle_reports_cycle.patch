@@ -1,10 +1,13 @@
 diff --git a/src/ir/cycle/detector.rs b/src/ir/cycle/detector.rs
+index 36a8d24cf..4df91cce1 100644
 --- a/src/ir/cycle/detector.rs
 +++ b/src/ir/cycle/detector.rs
-@@ -221,5 +221,5 @@
+@@ -255,7 +255,7 @@ impl<'targets> CycleDetector<'targets> {
          if implicit_cycle.is_cycle() {
              return implicit_cycle;
          }
--        self.visit_dependencies(node, &edge.order_only_deps, search)
+-        self.visit_dependencies(entry_alias, &edge.order_only_deps, search)
 +        CycleVisitResult::None
      }
+ 
+     /// Visit `node` depth-first.
