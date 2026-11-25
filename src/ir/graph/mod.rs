@@ -142,9 +142,12 @@ impl BuildGraph {
 
     /// Return the bounded output index for Kani lowering harnesses.
     ///
-    /// Skipped by `cargo-mutants` for the same reason as
-    /// [`Self::insert_edge`]: this accessor is compiled only under `cfg(kani)`,
-    /// so the ordinary test lane never links it and cannot observe a mutation.
+    /// Skipped by `cargo-mutants` because it is compiled only under
+    /// `cfg(kani)`, so the ordinary test lane never links it and cannot observe
+    /// a mutation. Unlike [`Self::edge_id_for_output`] this accessor has no
+    /// production twin — the production duplicate-output scan reads the target
+    /// map directly — so the skip removes the name entirely rather than only
+    /// one half of a pair.
     #[cfg(kani)]
     #[mutants::skip]
     pub(super) fn output_index(&self) -> &IrHashMap<Utf8PathBuf, EdgeId> {
