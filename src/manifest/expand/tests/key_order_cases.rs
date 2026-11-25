@@ -104,7 +104,10 @@ fn static_when_removal_keeps_authoring_key_order(
         "a true condition must keep exactly one {section} entry, got {}",
         entries.len()
     );
-    assert_entry_order(&entries[0], &["alpha", "beta"])
+    let kept = entries
+        .first()
+        .context("a true condition must keep its entry")?;
+    assert_entry_order(kept, &["alpha", "beta"])
 }
 
 #[rstest::rstest]
@@ -131,8 +134,8 @@ fn foreach_removal_keeps_authoring_key_order(
         "two iteration values must produce two {section} entries, got {}",
         entries.len()
     );
-    for entry in &entries {
-        assert_entry_order(entry, &["alpha", "beta", "item", "index"])?;
+    for candidate in &entries {
+        assert_entry_order(candidate, &["alpha", "beta", "item", "index"])?;
     }
     Ok(())
 }
