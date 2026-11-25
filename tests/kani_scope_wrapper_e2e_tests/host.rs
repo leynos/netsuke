@@ -97,14 +97,21 @@ fn missing_prerequisite() -> Result<Option<String>> {
 /// apply it still runs.
 const REQUIRED_CONTROLLERS: [&str; 3] = ["cpu", "memory", "pids"];
 
-/// Confirm the user manager's cgroup has the controllers the wrapper needs.
+/// Confirm the user manager's cgroup *offers* the controllers the wrapper needs.
 ///
-/// The hierarchy root's `cgroup.controllers` is *not* the question. That file
-/// lists what the root offers; a controller reaches a subtree only when each
-/// cgroup on the path enables it in `cgroup.subtree_control`. A host can list
-/// every controller at the root while the user slice enables none — measured on
-/// the reference host, where `user.slice` enables `cpu memory pids` — and a
-/// check against the root would then pass while every scope launch failed.
+/// The hierarchy root's `cgroup.controllers` is not the question: that file
+/// lists what the root offers, not what reached the user manager. This reads
+/// the manager's own cgroup, which is where the delegation actually landed.
+///
+/// What is deliberately *not* required is that `cgroup.subtree_control`
+/// already enables them. Per systemd.resource-control(5): "There is no need to
+/// explicitly enable a cgroup controller for a unit. systemd will instruct the
+/// kernel to enable a controller for a given unit when this unit has
+/// configuration for a given controller." The user manager repeats that logic
+/// for its children, so `CPUQuota=` and `MemoryMax=` on the scope are what
+/// enable `cpu` and `memory`. Requiring them pre-enabled would reject a
+/// perfectly capable host — the failure mode this prerequisite check exists to
+/// avoid.
 fn check_delegation() -> Option<String> {
     let manager_cgroup = format!(
         "/sys/fs/cgroup/user.slice/user-{}.slice/user@{}.service",
@@ -124,35 +131,19 @@ fn check_delegation() -> Option<String> {
         ));
     };
     let missing = missing_controllers(&available, &REQUIRED_CONTROLLERS);
-    if !missing.is_empty() {
-        return Some(format!(
-            "the user manager's cgroup at {manager_cgroup} does not list {missing:?} in \
-             cgroup.controllers"
-        ));
-    }
-    // The manager's cgroup must also *enable* what it lists, or the scope it
-    // creates gets nothing.
-    let Ok(enabled) = cgroup.read_to_string(format!("{relative}/cgroup.subtree_control")) else {
-        return Some(format!(
-            "{manager_cgroup}/cgroup.subtree_control is missing, so the controllers the \
-             user manager enables for its children cannot be confirmed"
-        ));
-    };
-    let not_enabled = missing_controllers(&enabled, &REQUIRED_CONTROLLERS);
-    if not_enabled.is_empty() {
+    if missing.is_empty() {
         return None;
     }
     Some(format!(
-        "the user manager's cgroup at {manager_cgroup} does not enable {not_enabled:?} in \
-         cgroup.subtree_control"
+        "the user manager's cgroup at {manager_cgroup} does not offer {missing:?} in \
+         cgroup.controllers"
     ))
 }
 
 /// The subset of `required` that `listing` does not name.
 ///
-/// `cgroup.controllers` holds bare names and `cgroup.subtree_control` holds
-/// names prefixed with `+` or `-`, so the comparison is on words rather than
-/// on raw substrings.
+/// The comparison is on whitespace-separated words rather than on raw
+/// substrings, so `cpuset` does not answer for `cpu`.
 fn missing_controllers(listing: &str, required: &[&str]) -> Vec<String> {
     let present: Vec<&str> = listing
         .split_whitespace()

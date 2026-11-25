@@ -1240,6 +1240,7 @@ group it inherited, so the signal still reaches it.
 ```bash
 capture=/tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out
 unit=netsuke-kani-$(date +%Y%m%dT%H%M%S)-$$
+caller_status=0
 
 CAPTURE="$capture" UNIT="$unit" systemd-run \
     --user \
@@ -1258,8 +1259,7 @@ CAPTURE="$capture" UNIT="$unit" systemd-run \
     bash -c 'set -o pipefail; \
       env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
       make kani-ir 2>&1 \
-      | tee "$CAPTURE"'
-caller_status=$?
+      | tee "$CAPTURE"' || caller_status=$?
 printf 'unit=%s.scope caller_exit=%s\n' "$unit" "$caller_status" > "$capture.status"
 (exit "$caller_status")
 ```

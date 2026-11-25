@@ -190,11 +190,26 @@ fn journal_records_the_runtime_limit_and_the_kill() -> Result<()> {
             "the journal should record the scope reaching its runtime limit: {}",
             outcome.describe()
         );
+        // The escalation sentence, not two independent substrings. systemd also
+        // emits "Stopping timed out. Skipping SIGKILL." when `SendSIGKILL` is
+        // disabled, which contains both "Stopping timed out" and "SIGKILL" and
+        // would satisfy a two-substring check while proving the opposite — that
+        // no kill happened. The positive message measured on the reference host
+        // is "Stopping timed out. Killing.", followed by the per-process
+        // "Killing process <pid> (<name>) with signal SIGKILL." line.
         ensure!(
-            outcome.journal.text().contains("Stopping timed out")
-                && outcome.journal.text().contains("SIGKILL"),
-            "the journal should record the stop timing out and escalating to SIGKILL \
-             (the grace period's job): {}",
+            outcome
+                .journal
+                .text()
+                .contains("Stopping timed out. Killing."),
+            "the journal should record the stop timing out and escalating, which systemd \
+             writes as `Stopping timed out. Killing.`; a `Skipping SIGKILL` variant would \
+             mean the grace period did not escalate at all: {}",
+            outcome.describe()
+        );
+        ensure!(
+            outcome.journal.text().contains("with signal SIGKILL"),
+            "the journal should name the signal actually sent to the process: {}",
             outcome.describe()
         );
         Ok(())

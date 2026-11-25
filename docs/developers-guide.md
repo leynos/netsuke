@@ -8170,6 +8170,7 @@ full, the wrapper around `make kani-ir` is:
 ```bash
 capture=/tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out
 unit=netsuke-kani-$(date +%Y%m%dT%H%M%S)-$$
+caller_status=0
 
 CAPTURE="$capture" UNIT="$unit" systemd-run \
     --user \
@@ -8188,8 +8189,7 @@ CAPTURE="$capture" UNIT="$unit" systemd-run \
     bash -c 'set -o pipefail; \
       env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
       make kani-ir 2>&1 \
-      | tee "$CAPTURE"'
-caller_status=$?
+      | tee "$CAPTURE"' || caller_status=$?
 printf 'unit=%s.scope caller_exit=%s\n' "$unit" "$caller_status" > "$capture.status"
 (exit "$caller_status")
 ```
@@ -8199,11 +8199,15 @@ itself; the payload's own shell expands them from the environment the
 invocation inherits, which is what keeps the unit name in the command and in
 the sidecar identical without writing it twice.
 
-The final `(exit "$caller_status")` is not decoration. The last command in a
-script sets its exit status, so a snippet that ends at the `printf` reports 0
-whenever the sidecar was written — a verifier that exited 7 would still look
-like success to a CI step or an `&&` chain. The subshell propagates the saved
-status without closing an interactive shell.
+Two details keep the sidecar honest at a non-zero status. The
+`|| caller_status=$?` is what makes the snippet survive `set -e`: a bare
+failing command would terminate the invoking shell before the sidecar was
+written, leaving either no record or a stale one from an earlier run. And the
+final `(exit "$caller_status")` is what makes the command's own status the
+verifier's: the last command in a script sets its exit status, so a snippet
+that ended at the `printf` would report 0 whenever the sidecar was written, and
+a verifier that exited 7 would look like success to a CI step or an `&&` chain.
+The subshell propagates the saved status without closing an interactive shell.
 
 `RuntimeMaxSec=8m` is the runtime cap and `TimeoutStopSec=20s` the stop grace
 that follows it; `CPUQuota`, `MemoryMax`, `MemorySwapMax`, `TasksMax` and

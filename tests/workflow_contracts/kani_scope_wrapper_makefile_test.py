@@ -41,43 +41,92 @@ def test_makefile_defaults_strict_mode_and_exports_it() -> None:
     )
 
 
-def test_the_strict_export_is_an_executable_line_in_the_recipe() -> None:
-    """Require the export to be a live recipe line, not merely present.
+def test_the_strict_export_reaches_the_test_command() -> None:
+    """Require the export and the command to be one shell invocation.
 
-    A commented-out assignment still satisfies a substring search, so a reader
-    that only searched the file would accept its removal. This reads the
-    target's recipe and ignores comments, which is the same distinction the
-    shell makes.
+    Two things have to hold, and neither implies the other. The assignment must
+    be an executable recipe line rather than a comment, and it must be joined to
+    the command by a trailing backslash: Make runs each recipe line in its own
+    shell, so an assignment whose continuation was dropped exports nothing to
+    the `cargo nextest` line that follows. A check for the assignment alone
+    accepts exactly that defect.
     """
     recipe = _recipe_of(MAKEFILE_PATH.read_text(encoding="utf-8"), TARGET)
     assert recipe, f"the `{TARGET}` target must have a recipe"
-    executed = _executable_lines(recipe)
-    assert any(EXPORT_VARIABLE in line for line in executed), (
-        "the target's recipe must export the strict-mode variable on an "
-        f"executable line; the recipe lines are {executed}"
+    statement = _single_statement_with(recipe, EXPORT_VARIABLE)
+    lines = _executable_lines(recipe)
+    assert statement is not None, (
+        "the target's recipe must carry the strict-mode export on an "
+        f"executable line continued into the command; the recipe lines are {lines}"
+    )
+    assert "nextest" in statement or "cargo" in statement, (
+        "the export must be joined to the test command by a line continuation, "
+        f"or Make runs it in a separate shell; the joined statement was {statement!r}"
     )
 
 
 def test_the_strict_export_check_rejects_a_commented_assignment() -> None:
-    """Prove the recipe check fires on a commented-out export.
-
-    Without this, a check that happened to pass on the live file would say
-    nothing about whether it can detect the removal it exists to catch.
-    """
+    """Prove the check fires on a commented-out export."""
     commented = (
         f"{TARGET}:\n\t# {EXPORT_VARIABLE}\n\tcargo nextest run\n\nother:\n\ttrue\n"
     )
     recipe = _recipe_of(commented, TARGET)
     assert recipe, "the control must yield a recipe"
     assert len(recipe) == 3, f"the recipe must stop at the next rule, got {recipe}"
-    executed = _executable_lines(recipe)
-    assert not any(EXPORT_VARIABLE in line for line in executed), (
+    assert _single_statement_with(recipe, EXPORT_VARIABLE) is None, (
         "a commented-out export must not count as an executed one"
     )
     assert any(EXPORT_VARIABLE in line for line in recipe), (
         "the control must still *contain* the text, or it would not exercise the "
         "comment filter at all"
     )
+
+
+def test_the_strict_export_check_rejects_a_dropped_continuation() -> None:
+    """Prove the check fires when only the backslash is removed.
+
+    This is the defect a presence check cannot see: the text is unchanged and
+    still on an executable line, but Make now runs it in a shell of its own.
+    """
+    broken = f"{TARGET}:\n\t{EXPORT_VARIABLE}\n\tcargo nextest run\n"
+    recipe = _recipe_of(broken, TARGET)
+    statement = _single_statement_with(recipe, EXPORT_VARIABLE)
+    assert statement is not None, "the control must still yield a statement"
+    assert "cargo" not in statement, (
+        "without the continuation the export must not be joined to the command, "
+        f"so the check above can reject it; the joined statement was {statement!r}"
+    )
+    assert "nextest" not in statement, (
+        "without the continuation the export must not be joined to the test "
+        f"command; the joined statement was {statement!r}"
+    )
+
+
+def _single_statement_with(recipe: list[str], needle: str) -> str | None:
+    r"""Return the shell statement containing ``needle``, continuations joined.
+
+    Make hands each recipe line to its own shell, and a trailing backslash is
+    what joins two lines into one invocation. This models that: consecutive
+    executable lines are concatenated while the previous one ends in `\\`.
+
+    Returns
+    -------
+    str | None
+        The joined statement containing ``needle``, or ``None`` when no
+        executable statement contains it.
+    """
+    statements: list[str] = []
+    current = ""
+    for line in _executable_lines(recipe):
+        stripped = line.rstrip()
+        continued = stripped.endswith("\\")
+        current += stripped.removesuffix("\\")
+        if not continued:
+            statements.append(current)
+            current = ""
+    if current:
+        statements.append(current)
+    return next((statement for statement in statements if needle in statement), None)
 
 
 def _recipe_of(text: str, target: str) -> list[str]:
