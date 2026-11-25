@@ -198,6 +198,28 @@ selection and proof-specific verification.
       parenthesized spelling on an enclosing block. Seeding the exact pre-fix
       reader failed that probe alone — nine of ten passed — so the control is
       specific rather than incidental.
+- [x] (2026-11-25) The third review pass returned two findings, both valid.
+      One was a modelling gap: `#[mutants::skip]` is not the only exclusion
+      cargo-mutants applies — its `attrs_excluded` also matches a bare
+      `#[cfg(test)]` at `impl` and method scope — so counting such a node as
+      selected overstated what the ordinary lane judges. The reader now models
+      it, and a probe covers it. The rule's edges were measured, and the first
+      assertion got them wrong: only a *top-level* `test` in a `cfg` excludes a
+      node, so `#[cfg(all(test, unix))]` and
+      `#[cfg(any(test, feature = "x"))]` are still mutated. The assertion was
+      corrected to the measured behaviour rather than the code being widened.
+      Seeding a reader without the gate fails that probe alone.
+- [x] (2026-11-25) The other third-pass finding was a real documentation
+      inaccuracy: the guide and this plan's definition of done both claimed
+      every proof-only name keeps a selected counterpart, which is false for
+      `output_index`. Both now name the three paired methods and state
+      separately that `output_index` leaves the ordinary lane entirely.
+- [x] (2026-11-25) Whitaker enforces a 400-line module limit on Rust, contrary
+      to an earlier assumption recorded here; that was measured, not guessed,
+      when the gate rejected `mutation_selection` at 410 lines. The parser
+      probes moved to `tests/mutation_selection/tests.rs`, a child module of the
+      reader, so each file is comfortably inside the limit and the probes sit
+      beside the rules they check.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:
