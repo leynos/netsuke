@@ -301,10 +301,15 @@ impl super::CaseNesting {
     /// opens a construct wherever it is a command word, and a literal `esac`
     /// closes the one open at this depth. Everything else is a
     /// compound-command prefix or ordinary data.
+    ///
+    /// Both keywords require bare spelling. A quoted or escaped `case` is an
+    /// ordinary argument, so treating its buffered text as the keyword would
+    /// let a later `#` reject a recipe the shell reads without any `case` at
+    /// all.
     pub(super) fn classify_command_word(&self, parenthesis_depth: usize) -> WordRole {
         let is_command_position = self.expects_command;
         let word = self.word.as_str();
-        if word == "case" {
+        if word == "case" && self.spelling.is_literal() {
             return Self::classify_case_word(is_command_position);
         }
         if self.is_bare_esac_closing(parenthesis_depth) {

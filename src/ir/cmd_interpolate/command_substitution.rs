@@ -301,7 +301,9 @@ fn contains_case_in_prefix(source: SourceText<'_>, span: CharSpan) -> bool {
 /// The scan is deliberately lexical: it does not skip quotes, comments, or
 /// nested substitutions, so it can report a `case` that is not a keyword. That
 /// over-approximation is safe because the caller fails closed on any match
-/// rather than guessing which `)` closes the substitution.
+/// rather than guessing which `)` closes the substitution, and narrowing it
+/// would mean re-lexing the substitution — the ambiguity the guard exists to
+/// avoid.
 fn contains_case_keyword(source: SourceText<'_>, span: CharSpan) -> bool {
     contains_keyword(source, span, &CASE_KEYWORD)
 }

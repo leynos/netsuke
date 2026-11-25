@@ -83,21 +83,60 @@ fn coproc_simple_command_keeps_the_case_terminator_a_keyword() {
     }
 }
 
-// Verify only the first word after `coproc` fills the name slot.
+// Verify a word `coproc` cannot read keeps command position inside the case.
 //
-// `coproc NAME command ARGS` names the coprocess once; the arguments of the
-// command that follows are ordinary data. A tracker that re-armed the slot on
-// every argument kept command position open, so the argument `esac` closed the
-// case early and the following pattern terminator closed the substitution,
-// lowering the next arm's marker for the enclosing double quotes.
+// Two spellings hide the command word from the tracker. Only the first word
+// after `coproc` fills the name slot, so the arguments of the command that
+// follows are ordinary data: a tracker that re-armed the slot on every argument
+// let the argument `esac` close the case early, and the following pattern
+// terminator then closed the substitution. Separately, Bash recognizes a
+// reserved word only when it is genuinely unquoted and unescaped, and only
+// where a pattern would start, so the pattern-text spellings below must not
+// close the construct either.
+//
+// In both groups a misread closer would lower the next arm's marker for the
+// enclosing double quotes, so every row must fail closed. A backslash-newline
+// pair is spliced before tokenizing, so only a quote or an escape of a real
+// character makes the word pattern text; that continued spelling is pinned by
+// the closer test below.
 #[rstest]
-#[case::argument_spells_esac(
-    "case y in x) coproc printf x esac ;; y) printf %s {INS_TOKEN} ;; esac)"
+#[case::coproc_argument_spells_esac(
+    "case y in x) coproc printf x esac ;; y) printf %s {INS_TOKEN} ;; esac)",
+    "the arguments after a coproc's command word are ordinary data"
 )]
-#[case::group_after_coproc(
-    "case y in x) coproc (echo case) esac ;; y) printf %s {INS_TOKEN} ;; esac)"
+#[case::coproc_group_after_keyword(
+    "case y in x) coproc (echo case) esac ;; y) printf %s {INS_TOKEN} ;; esac)",
+    "a group after the coproc keyword leaves the name slot empty"
 )]
-fn coproc_arguments_do_not_keep_command_position_open(#[case] substitution: &str) {
+#[case::quoted_suffix(
+    "case x in esac\"\") printf %s {INS_TOKEN} ;; esac)",
+    "a quoted suffix makes `esac` pattern text"
+)]
+#[case::leading_quote(
+    "case x in \"\"esac) printf %s {INS_TOKEN} ;; esac)",
+    "a leading quote makes `esac` pattern text"
+)]
+#[case::escaped_letter(
+    "case x in e\\sac) printf %s {INS_TOKEN} ;; esac)",
+    "an escaped letter makes `esac` pattern text"
+)]
+#[case::alternative(
+    "case x in x|esac) printf %s {INS_TOKEN} ;; esac)",
+    "`esac` after an alternative separator is pattern text"
+)]
+#[case::esac_subject_alternative(
+    "case esac in x|esac) printf %s {INS_TOKEN} ;; esac)",
+    "a subject spelled `esac` stays data when followed by an alternative"
+)]
+#[case::extglob_group(
+    "case x in @(case)) printf %s {INS_TOKEN} ;; esac)",
+    "an extglob group is pattern text"
+)]
+#[case::quoted_esac_in_arm(
+    "case x in x) esac\"\" foo ;; y) printf %s {INS_TOKEN} ;; esac)",
+    "a quoted `esac` in an arm is an ordinary command word"
+)]
+fn unreadable_words_keep_the_substitution_open(#[case] substitution: &str, #[case] context: &str) {
     let template = format!("echo \"$({substitution})\"").replace("{INS_TOKEN}", INS_TOKEN);
     let bindings = hostile_bash_bindings();
 
@@ -106,49 +145,11 @@ fn coproc_arguments_do_not_keep_command_position_open(#[case] substitution: &str
             .expect_err("a marker in the arm must stay encoded for the substitution");
         assert!(
             matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {error:?}"
+            "{context}: the marker must not be lowered for the outer quote context: {error:?}"
         );
         assert!(
             interpolate(&template, &bash_bindings()).is_err(),
-            "a marker inside the substitution must stay inside it"
-        );
-    }
-}
-
-// Verify pattern-text spellings of `esac` keep the substitution open.
-//
-// Bash recognizes a reserved word only when it is genuinely unquoted and
-// unescaped, and only where a pattern would start. These cases put `esac` where
-// the shell reads it as pattern text: as a quoted or escaped pattern, an
-// alternative after `|`, an extglob group, and a quoted command word in an
-// arm's list. A tracker that closed the construct at any of them would read the
-// next pattern terminator as the substitution closer and lower the arm's
-// marker for the enclosing double quotes. A backslash-newline pair is spliced
-// before tokenizing, so only a quote or an escape of a real character makes the
-// word pattern text; that continued spelling is pinned by the closer test
-// below.
-#[rstest]
-#[case::quoted_suffix("case x in esac\"\") printf %s {INS_TOKEN} ;; esac)")]
-#[case::leading_quote("case x in \"\"esac) printf %s {INS_TOKEN} ;; esac)")]
-#[case::escaped_letter("case x in e\\sac) printf %s {INS_TOKEN} ;; esac)")]
-#[case::alternative("case x in x|esac) printf %s {INS_TOKEN} ;; esac)")]
-#[case::esac_subject_alternative("case esac in x|esac) printf %s {INS_TOKEN} ;; esac)")]
-#[case::extglob_group("case x in @(case)) printf %s {INS_TOKEN} ;; esac)")]
-#[case::quoted_esac_in_arm("case x in x) esac\"\" foo ;; y) printf %s {INS_TOKEN} ;; esac)")]
-fn esac_as_pattern_text_keeps_the_substitution_open(#[case] substitution: &str) {
-    let template = format!("echo \"$({substitution})\"").replace("{INS_TOKEN}", INS_TOKEN);
-    let bindings = hostile_bash_bindings();
-
-    for interpolate in both_interpolators() {
-        let error = interpolate(&template, &bindings)
-            .expect_err("a marker in the arm must stay encoded for the substitution");
-        assert!(
-            matches!(error, IrGenError::InvalidCommand { .. }),
-            "the marker must not be lowered for the outer quote context: {error:?}"
-        );
-        assert!(
-            interpolate(&template, &bash_bindings()).is_err(),
-            "a marker inside the substitution must stay inside it"
+            "{context}: a marker inside the substitution must stay inside it"
         );
     }
 }

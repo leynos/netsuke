@@ -45,17 +45,22 @@ fn keyword_after_a_long_continuation_run_is_recognised() {
     }
 }
 
-// Verify a keyword spelled with backslash escapes is recognised.
+// Verify an escaped spelling of `case` is not treated as the keyword.
 //
-// An unquoted backslash removes the special meaning of the escaped character
-// and contributes it literally, so `ca\se` is the `case` reserved word. The
-// same fail-closed rule applies as for the plainly spelled keyword.
+// An unquoted backslash quotes the character it escapes, and Bash recognises a
+// reserved word only when every character of it is unquoted. `ca\se` is
+// therefore an ordinary command word: the shell runs a command named `case`,
+// and the `)` after the word is the substitution's closer. The plain raw-source
+// scan cannot match it either, because the backslash interrupts the letters, so
+// the `)#` boundary is unambiguous and this supported recipe must interpolate.
 #[test]
-fn case_keyword_spelled_with_escape_fails_closed() {
-    let template = format!("echo $(ca\\se x in x) :;; esac)#{INS_TOKEN}");
-    assert_both_reject(
+fn escaped_spelling_of_case_before_hash_interpolates_normally() {
+    let (template, expected) = executable_quote_case("echo $(ca\\se x in x) :;; esac");
+    assert_output(
         &template,
-        "an escaped spelling of the keyword must still fail closed",
+        &expected,
+        "an escaped spelling of 'case' must not trigger the ambiguity guard",
+        Interpolators::Both,
     );
 }
 
@@ -108,6 +113,24 @@ fn word_starting_with_case_before_hash_interpolates_normally() {
         &template,
         &expected,
         "a word starting with 'case' must not trigger the ambiguity guard",
+        Interpolators::Both,
+    );
+}
+
+// Verify a quoted spelling of `case` is not treated as the keyword.
+//
+// A reserved word is recognised only in its bare spelling, so `ca""se` passes
+// an ordinary argument. The tracker still buffers `case` for that word, and the
+// raw-source scan cannot match it because the quotes interrupt the letters, so
+// the `)#` boundary is unambiguous. Treating the buffered text as the keyword
+// would reject this supported recipe.
+#[test]
+fn quoted_spelling_of_case_before_hash_interpolates_normally() {
+    let (template, expected) = executable_quote_case("echo $(printf %s ca\"\"se)");
+    assert_output(
+        &template,
+        &expected,
+        "a quoted spelling of 'case' must not trigger the ambiguity guard",
         Interpolators::Both,
     );
 }
