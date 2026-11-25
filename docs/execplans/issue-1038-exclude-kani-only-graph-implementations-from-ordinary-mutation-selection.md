@@ -182,6 +182,17 @@ selection and proof-specific verification.
     assertion was also removed: `mutation_exclusion_scope_test.py` already
     holds it against the parsed `with:` block, and asserting one contract in
     two languages buys nothing.
+- [x] (2026-11-25) The second CodeRabbit pass returned one finding, verified
+      against both the cargo-mutants source and the pinned tool: it matches
+      `mutants::skip` on the attribute *path*, which `syn` exposes for every
+      metadata form, so `#[mutants::skip()]` and `#[mutants::skip(..)]` are
+      honoured too. The reader recognised only `Meta::Path`. Measured against
+      cargo-mutants 27.1.0: an `impl` marked `#[mutants::skip()]` yields no
+      mutants, beside one with the bare spelling, while an unmarked `impl`
+      still does. The path check now runs first, and a probe covers the
+      parenthesised spelling on an enclosing block. Seeding the exact pre-fix
+      reader failed that probe alone — nine of ten passed — so the control is
+      specific rather than incidental.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:
