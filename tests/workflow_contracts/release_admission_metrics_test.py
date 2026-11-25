@@ -50,6 +50,9 @@ ADMISSION_ENVIRONMENT = {
     "NETSUKE_RELEASE_ADMISSION_ENFORCE": (
         "${{ needs.metadata.outputs.should_publish == 'true' }}"
     ),
+    # The interim publication block, pinned as the exact literal the workflow
+    # ships: #598's live demonstrations must precede any change to it.
+    "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED": "false",
     # Producer attribution, pinned as the producer job's own output: the gate
     # admits only a document whose bytes hash to the digest that job published,
     # and only this workflow file can name it. A declared literal here would

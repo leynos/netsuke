@@ -9,7 +9,7 @@ keep the three links of that chain in place:
 - the producer job runs this repository's own script whatever the canaries
   concluded, and publishes the digest of the manifest it uploads;
 - the admission job needs the producer, tolerates no missing artefact, and
-  hands the gate that digest rather than a declared trust literal.
+  hands the gate that digest beside the interim block's ``false`` literal.
 
 The canary names are spelled out here, so a matrix row added without a
 required result, or a required result without a row, fails the comparison.
@@ -203,9 +203,9 @@ def test_producer_runs_this_repositorys_script_and_publishes_its_digest() -> Non
 def test_admission_waits_for_the_producer_and_trusts_only_its_digest() -> None:
     """Admission needs the producer, and attribution is derived, not declared.
 
-    Scenario: the producer is removed, its artefact is missing, or a trust
-    literal returns. Invariant: the job graph breaks, the download fails, and
-    the gate receives the producer's digest and no other attribution input.
+    Scenario: the producer is removed, its artefact is missing, or the interim
+    block is lifted early. Invariant: the job graph breaks, the download fails,
+    and the gate receives the producer's digest beside the block's literal.
     """
     job = workflow_job(_release(), ADMISSION_JOB)
     assert job.get("needs") == ["metadata", PRODUCER_JOB], (
@@ -224,6 +224,6 @@ def test_admission_waits_for_the_producer_and_trusts_only_its_digest() -> None:
     assert environment.get("NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256") == (
         DIGEST_OUTPUT
     ), "the gate must receive the producer job's own digest output"
-    assert "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED" not in environment, (
-        "attribution must not return to a declared literal"
+    assert environment.get("NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED") == ("false"), (
+        "the interim block must stay until both live runs are demonstrated"
     )

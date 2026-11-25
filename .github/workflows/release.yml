@@ -542,6 +542,12 @@ jobs:
           # keep observing so the read-only lane stays reachable.
           NETSUKE_RELEASE_ADMISSION_ENFORCE: >-
             ${{ needs.metadata.outputs.should_publish == 'true' }}
+          # The interim publication block. While this literal is not `true`, an
+          # enforcing run refuses every manifest with `untrusted_evidence`,
+          # attributed or not. #598 requires a live admitted and a live refused
+          # publishing run to be demonstrated before it changes, and only this
+          # file can change it, never the caller.
+          NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED: 'false'
           # Producer attribution, derived rather than declared: the SHA-256
           # the producer job published for the manifest it wrote. Only this
           # workflow file can name that job's output, never the caller, so an

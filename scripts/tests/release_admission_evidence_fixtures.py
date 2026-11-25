@@ -52,6 +52,8 @@ REQUIRED_RESULT_NAMES = (
 )
 #: The evidence-digest variable the producer job's output reaches the gate in.
 EVIDENCE_DIGEST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256"
+#: The interim publication block, which the workflow ships as ``false``.
+PRODUCER_TRUST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED"
 #: A placeholder a case sets as the evidence digest to mean "the digest of the
 #: document this harness wrote". The document carries timestamps taken just
 #: before the child runs, so its digest only exists once it has been written;

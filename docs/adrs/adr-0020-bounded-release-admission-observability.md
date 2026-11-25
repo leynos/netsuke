@@ -569,16 +569,19 @@ manifest, and publishes the SHA-256 of the exact bytes it wrote as its
 `evidence_sha256` output. The admission job waits for that job and passes the
 digest to the gate in `NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256`.
 
-Attribution is derived from that digest, and the declared literal is removed.
-The gate admits a document only when the digest is 64 lowercase hexadecimal
-characters equal to the SHA-256 of the bytes the gate read, compared in
-constant time. `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`, which stood in for
-attribution and shipped as `false`, is no longer read. Only this repository's
-workflow can name the producer job's output, so a document that a caller
-uploads under the artefact name does not match the digest and is refused as
-`untrusted_evidence`. A caller that pre-empts the artefact name makes the
-producer's own upload fail, which fails the producer job and so prevents
-admission. Observation mode still ignores attribution.
+Attribution is derived from that digest, and the interim block stays in force
+beside it. An enforcing run admits a document only when
+`NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` is exactly `true` and the digest
+is 64 lowercase hexadecimal characters equal to the SHA-256 of the bytes the
+gate read, compared in constant time. The workflow still ships the literal as
+`false`, so publication stays refused with `untrusted_evidence` whatever the
+digest says. Issue #598 requires one admitted and one refused live publishing
+run before the literal changes, and neither has been demonstrated. Only this
+repository's workflow can name the producer job's output, so a document that a
+caller uploads under the artefact name does not match the digest. A caller that
+pre-empts the artefact name makes the producer's own upload fail, which fails
+the producer job and so prevents admission. Observation mode ignores both
+conditions.
 
 The binding ties the document to a job output of this workflow file. It does
 not authenticate a producer against a caller that replaces the whole workflow,

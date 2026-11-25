@@ -15,6 +15,7 @@ do not hash to it. These cases run the production gate against a manifest that
 would otherwise be admitted, so the refusal is attributable to the attribution
 and nothing else:
 
+- the interim block refuses even an attributed document until it is ``true``;
 - an unset, empty, malformed, or foreign digest refuses, and so does ``true``,
   the literal that once stood in for attribution;
 - the digest of the document read admits it, which is the positive control
@@ -40,6 +41,7 @@ from release_admission_test_support import (
     CANARY_BY_OPERATION,
     EVIDENCE_DIGEST_VARIABLE,
     METRICS_VALIDATOR,
+    PRODUCER_TRUST_VARIABLE,
     RELEASE_TAG,
     GateRun,
     expected_gate_labels,
@@ -69,12 +71,25 @@ TAG_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TAG"
 ADMITTABLE_EVIDENCE = "fresh"
 
 
+class Attribution(typ.NamedTuple):
+    """Name the two inputs an enforcing run requires before it admits.
+
+    ``digest`` is the producer's published digest, :data:`ATTRIBUTED` for the
+    digest of the document written, or ``None`` to leave the variable unset.
+    ``block`` is the interim block's value, or ``None`` to leave it to the
+    harness, which lifts it only for an attributed run.
+    """
+
+    digest: str | None
+    block: str | None = None
+
+
 def _run(
     cmd_mox: CmdMox,
     tmp_path: pathlib.Path,
     *,
     mode: str,
-    producer_digest: str | None,
+    attribution: Attribution,
 ) -> GateRun:
     """Run the gate with an admittable manifest and the named producer digest.
 
@@ -87,9 +102,8 @@ def _run(
     mode
         The enforcement mode the child runs under, spelled as the workflow
         spells it.
-    producer_digest
-        The digest to hand the gate, :data:`ATTRIBUTED` for the digest of the
-        document written, or ``None`` to leave the variable unset.
+    attribution
+        The producer's digest and the interim block's value.
 
     Returns
     -------
@@ -102,8 +116,10 @@ def _run(
         ENFORCEMENT_VARIABLE: mode,
         TAG_VARIABLE: RELEASE_TAG,
     }
-    if producer_digest is not None:
-        environment[EVIDENCE_DIGEST_VARIABLE] = producer_digest
+    if attribution.digest is not None:
+        environment[EVIDENCE_DIGEST_VARIABLE] = attribution.digest
+    if attribution.block is not None:
+        environment[PRODUCER_TRUST_VARIABLE] = attribution.block
     return run_gate(
         cmd_mox,
         tmp_path,
@@ -166,7 +182,27 @@ def test_matching_evidence_without_attribution_is_refused(
     content check passes. Only the attribution fails, which is exactly the
     same-run supplier the download cannot distinguish from a producer.
     """
-    run = _run(cmd_mox, tmp_path, mode="true", producer_digest=producer_digest)
+    run = _run(
+        cmd_mox, tmp_path, mode="true", attribution=Attribution(producer_digest, "true")
+    )
+
+    _assert_untrusted_refusal(run)
+
+
+@pytest.mark.parametrize("block", ["", "false", "True", "yes"])
+def test_the_interim_block_refuses_attributed_evidence(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+    block: str,
+) -> None:
+    """Refuse even the producer's own document while the block stands.
+
+    The digest matches, so only the workflow's literal withholds admission.
+    Issue #598 requires both live demonstrations before that literal changes.
+    """
+    run = _run(
+        cmd_mox, tmp_path, mode="true", attribution=Attribution(ATTRIBUTED, block)
+    )
 
     _assert_untrusted_refusal(run)
 
@@ -181,7 +217,7 @@ def test_attributed_evidence_is_admitted(
     and the tag are identical, so only the attribution separates them. Without
     it, a gate that refused everything would satisfy the negative cases.
     """
-    run = _run(cmd_mox, tmp_path, mode="true", producer_digest=ATTRIBUTED)
+    run = _run(cmd_mox, tmp_path, mode="true", attribution=Attribution(ATTRIBUTED))
 
     assert run.result.returncode == 0, (
         f"an attributed manifest must be admitted; {run.result.stderr}"
@@ -206,7 +242,7 @@ def test_observation_mode_still_reports_the_manifest(
     still reach a verdict on the document. Failing the rehearsal here would
     make the read-only lane report an admission problem it does not have.
     """
-    run = _run(cmd_mox, tmp_path, mode="false", producer_digest=None)
+    run = _run(cmd_mox, tmp_path, mode="false", attribution=Attribution(None))
 
     assert run.result.returncode == 0, (
         f"a rehearsal must observe rather than fail; {run.result.stderr}"

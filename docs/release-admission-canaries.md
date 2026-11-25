@@ -133,7 +133,9 @@ The job publishes the SHA-256 of the manifest bytes it wrote as its
 the gate admits the uploaded document only when its bytes hash to it. The
 digest is the attribution: only this repository's workflow can name the
 producer's output, so a document that a caller uploads under the same artefact
-name is refused as `untrusted_evidence`.
+name is refused as `untrusted_evidence`. An interim block stays beside that
+check: the workflow refuses every manifest, attributed or not, until #598's
+live admitted and refused publishing runs are demonstrated.
 
 The producer declares the downstream results only. The `history_scan` and
 `release_candidate` results have no producer yet, so an enforcing run still

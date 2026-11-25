@@ -179,8 +179,10 @@ hashes to the digest the producer job published. The identity fields are
 compared with the run, which shows the manifest agrees with the candidate. The
 digest shows the producer wrote the document: a manifest that another job
 uploaded in the same run does not hash to it, so an enforcing run refuses it
-with `untrusted_evidence`. Observation mode is unaffected: a pull-request dry
-run still reports the manifest it read.
+with `untrusted_evidence`. Until #598's live publishing runs are demonstrated,
+the workflow also keeps an interim block that refuses every manifest with that
+category, the producer's own included. Observation mode is unaffected: a
+pull-request dry run still reports the manifest it read.
 
 When a publication is interrupted, rerun the crates.io publisher job. It
 re-probes the registry before any mutation: an absent version is published from

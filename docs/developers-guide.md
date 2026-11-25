@@ -3331,12 +3331,19 @@ SHA-256 of the bytes the gate read, compared in constant time. Only this
 repository's workflow can name the producer's job output, so a caller cannot
 supply a digest for a document it uploaded: an enforcing run refuses such a
 document with `untrusted_evidence`, and so it refuses an unset, empty, or
-malformed digest. The old producer-trust literal is gone. Observation mode
-ignores attribution, so a rehearsal still reports the manifest it read and the
-read-only lane stays reachable.
+malformed digest.
+
+The digest does not lift the interim publication block. The workflow still ships
+`NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` as `false`, and an enforcing run
+requires it to be exactly `true` as well as the digest to match, so it refuses
+even the producer's own document with `untrusted_evidence`. Issue #598 requires
+one admitted and one refused live publishing run to be demonstrated before that
+literal changes. Observation mode ignores both conditions, so a rehearsal still
+reports the manifest it read and the read-only lane stays reachable.
 `scripts/tests/test_release_admission_producer_trust.py` pins the refusal for
-unset, empty, malformed, foreign, and `true` digests, the admitting case for
-the producer's own digest, and the observation-mode control.
+unset, empty, malformed, foreign, and `true` digests, the block's refusal of an
+attributed document, the admitting case for the producer's own digest once the
+block is lifted, and the observation-mode control.
 `scripts/tests/test_write_release_admission_evidence.py` checks the producer's
 output against the verifier's own parser.
 

@@ -103,6 +103,7 @@ def _configuration(max_age: int, document: bytes) -> configuration.Configuration
         # producer job publishes for this document. Attribution itself is
         # pinned separately, by the gate's own producer-trust cases and by the
         # workflow contract.
+        "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED": "true",
         "NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256": hashlib.sha256(
             document
         ).hexdigest(),

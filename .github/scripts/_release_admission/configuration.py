@@ -76,7 +76,8 @@ class Configuration:
     max_evidence_age_seconds: str
     timeout_seconds: str
     enforcement: str
-    #: The manifest digest the producer job published; empty when none was.
+    #: Whether the interim block is lifted, and the producer's digest.
+    producer_trusted: bool
     evidence_digest: str
     programs: commands.Programs
     sinks: telemetry.Sinks
@@ -132,8 +133,8 @@ def resolve_configuration(
     *enforcing* run must also name a tag and an evidence file; a rehearsal may
     leave both unset, which keeps the read-only lane reachable with no override.
 
-    ``evidence_digest`` is read verbatim; only a well-formed digest matching the
-    bytes read attributes the evidence, so the gate refuses everything else.
+    ``producer_trusted`` is true only for the exact text ``true``, and
+    ``evidence_digest`` is read verbatim; enforcement needs both to hold.
 
     Returns
     -------
@@ -150,8 +151,7 @@ def resolve_configuration(
 
     Notes
     -----
-    The artefact spellings reach the sinks here and are never read from the
-    environment again. *destination* is passed in so one step answers once.
+    The artefact spellings reach the sinks here and are never read again.
     """
     # Required variables are resolved first, and the artefacts are created
     # after them, because that is the order the shell refused them in and the
@@ -164,8 +164,7 @@ def resolve_configuration(
     )
     tag = environment.optional(variables, evidence.TAG_VARIABLE, "")
     evidence_file = environment.optional(variables, evidence.EVIDENCE_FILE_VARIABLE, "")
-    # Publication trusts an enforcing run, so it must name the tag it is
-    # admitting and the document that admits it. A rehearsal names neither.
+    # An enforcing run must name its tag and evidence; a rehearsal, neither.
     refusing = enforcement == policy.ADMISSION_ENFORCEMENT_MODE
     if refusing and not tag:
         raise ConfigurationError(evidence.TAG_DIAGNOSTIC)
@@ -187,6 +186,10 @@ def resolve_configuration(
             variables, TIMEOUT_VARIABLE, str(policy.DEFAULT_OPERATION_TIMEOUT_SECONDS)
         ),
         enforcement=enforcement,
+        producer_trusted=environment.optional(
+            variables, evidence.PRODUCER_TRUST_VARIABLE, "false"
+        )
+        == "true",
         evidence_digest=environment.optional(
             variables, evidence.EVIDENCE_DIGEST_VARIABLE, ""
         ),

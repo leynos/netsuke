@@ -45,6 +45,9 @@ EVIDENCE_FILE_DIAGNOSTIC = (
 TAG_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TAG"
 TAG_DIAGNOSTIC = "NETSUKE_RELEASE_ADMISSION_TAG must name the release tag"
 MAX_AGE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_MAX_EVIDENCE_AGE_SECONDS"
+#: The interim publication block (#598): only the exact text ``true`` lifts it,
+#: and only after a live admitted and a live refused run are demonstrated.
+PRODUCER_TRUST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED"
 #: The SHA-256 of the manifest the producer job wrote, as that job published it
 #: in its own output. Only this repository's workflow can name a job's output,
 #: so a document whose bytes hash to it is the producer's; an unset, empty, or
@@ -259,6 +262,7 @@ __all__ = (
     "MAX_EVIDENCE_BYTES",
     "MAX_EVIDENCE_MAX_AGE_SECONDS",
     "MAX_EVIDENCE_SKEW_SECONDS",
+    "PRODUCER_TRUST_VARIABLE",
     "TAG_DIAGNOSTIC",
     "TAG_VARIABLE",
     "Candidate",

@@ -31,6 +31,9 @@ import json
 import typing as typ
 
 from release_admission_evidence_fixtures import (
+    PRODUCER_TRUST_VARIABLE,
+)
+from release_admission_evidence_fixtures import (
     REQUIRED_RESULT_NAMES as REQUIRED_RESULTS,
 )
 from release_admission_test_support import (
@@ -259,6 +262,7 @@ def _run(
     if is_enforced:
         environment[TAG_VARIABLE] = RELEASE_TAG
         environment[EVIDENCE_DIGEST_VARIABLE] = hashlib.sha256(document).hexdigest()
+        environment[PRODUCER_TRUST_VARIABLE] = "true"
     return (
         run_gate(
             cmd_mox,

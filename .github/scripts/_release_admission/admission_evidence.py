@@ -28,7 +28,8 @@ evidence can be attributed to a trusted producer, and refuses with
 producer job publishes the SHA-256 of the manifest it wrote as its own job
 output, which only this repository's workflow can name, and the bytes the gate
 read must hash to it. A same-run upload under the artefact name therefore
-cannot be admitted, whatever it says.
+cannot be admitted, whatever it says. The interim block stays in force beside
+the digest until #598's live demonstrations lift it, so both must hold.
 
 Nothing here decides policy. Categories come from :mod:`policy`, the schema and
 its classification from :mod:`evidence`, and both effects -- the byte read and
@@ -188,11 +189,12 @@ class AdmissionEvidence:
         )
         if verdict.outcome != policy.Outcome.SUCCESS:
             return verdict
+        attributed = configuration.producer_trusted and evidence.is_attributed(
+            observation.document, configuration.evidence_digest
+        )
         if (
             configuration.enforcement == policy.ADMISSION_ENFORCEMENT_MODE
-            and not evidence.is_attributed(
-                observation.document, configuration.evidence_digest
-            )
+            and not attributed
         ):
             return _refusal(policy.ErrorCategory.UNTRUSTED_EVIDENCE)
         return self._classify_freshness(manifest)

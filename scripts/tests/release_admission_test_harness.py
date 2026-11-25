@@ -45,6 +45,7 @@ from release_admission_evidence_fixtures import (
     ATTRIBUTED,
     EVIDENCE_DIGEST_VARIABLE,
     MISSING,
+    PRODUCER_TRUST_VARIABLE,
     candidate_for,
     write_evidence,
 )
@@ -166,6 +167,9 @@ def run_gate_request(cmd_mox: CmdMox, request: GateRunRequest) -> GateRun:
     )
     if environment.get(EVIDENCE_DIGEST_VARIABLE) == ATTRIBUTED:
         environment[EVIDENCE_DIGEST_VARIABLE] = hashlib.sha256(document).hexdigest()
+        # An attributed run is one the block no longer withholds; a case about
+        # the block itself states the variable, which this leaves alone.
+        environment.setdefault(PRODUCER_TRUST_VARIABLE, "true")
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed test target.
         [str(PYTHON_PATH), str(SCRIPT_PATH)],
         capture_output=True,
