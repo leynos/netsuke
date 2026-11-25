@@ -1,7 +1,7 @@
 //! Expands manifest foreach directives into concrete targets and actions.
 use super::{
     ManifestMap, ManifestValue,
-    budget::{ManifestBudget, ManifestBudgetStage},
+    budget::{CardinalityLimit, ManifestBudget, ManifestBudgetStage},
 };
 use crate::manifest::budget::adapter::BudgetErrorExt;
 use anyhow::{Context, Result};
@@ -243,7 +243,7 @@ fn expand_foreach_item(
 ) -> Result<Option<ManifestValue>> {
     context
         .budget
-        .check_foreach_cardinality(foreach_item.index)
+        .check_cardinality(foreach_item.index, CardinalityLimit::Foreach)
         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
     context
         .budget

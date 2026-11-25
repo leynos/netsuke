@@ -21,6 +21,15 @@ pub(crate) use types::{
 };
 pub(crate) use writer::CappedWriter;
 
+/// Select which per-call cardinality ceiling a check applies.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CardinalityLimit {
+    /// The per-`foreach` value ceiling.
+    Foreach,
+    /// The per-collection-call member ceiling.
+    Collection,
+}
+
 /// Hold mutable resource counters behind a shared manifest-local handle.
 #[derive(Clone, Debug)]
 pub(crate) struct ManifestBudget {
@@ -107,17 +116,29 @@ impl ManifestBudget {
         CollectionAllowance::Manifest(self.clone())
     }
 
-    /// Check one collection-filter member against the per-call ceiling.
-    pub(crate) const fn check_collection_cardinality(
+    /// Check one zero-based iterator position against a per-call ceiling.
+    pub(crate) const fn check_cardinality(
         &self,
         index: usize,
+        limit: CardinalityLimit,
     ) -> std::result::Result<(), ManifestBudgetExhaustion> {
-        Self::check_cardinality(
-            index,
-            self.collection_call_items,
-            ManifestBudgetKind::CollectionCallItems,
-            ManifestBudgetStage::Collection,
-        )
+        let (ceiling, kind, stage) = match limit {
+            CardinalityLimit::Foreach => (
+                self.limits.foreach_cardinality,
+                ManifestBudgetKind::ForeachCardinality,
+                ManifestBudgetStage::Foreach,
+            ),
+            CardinalityLimit::Collection => (
+                self.collection_call_items,
+                ManifestBudgetKind::CollectionCallItems,
+                ManifestBudgetStage::Collection,
+            ),
+        };
+        if index < ceiling {
+            Ok(())
+        } else {
+            Err(Self::exhaustion(kind, stage, ceiling as u64))
+        }
     }
 
     /// Charge one collection-filter member against the manifest aggregate.
@@ -199,36 +220,6 @@ impl ManifestBudget {
                 self.limits.expanded_entries as u64,
             ),
         )
-    }
-
-    /// Check one iterator position against the per-`foreach` ceiling.
-    pub(crate) const fn check_foreach_cardinality(
-        &self,
-        index: usize,
-    ) -> std::result::Result<(), ManifestBudgetExhaustion> {
-        Self::check_cardinality(
-            index,
-            self.limits.foreach_cardinality,
-            ManifestBudgetKind::ForeachCardinality,
-            ManifestBudgetStage::Foreach,
-        )
-    }
-
-    /// Reject an iterator position at or past a per-call ceiling.
-    ///
-    /// Both cardinality checks compare a zero-based index with a ceiling and
-    /// report the same exhaustion shape, so the comparison is stated once.
-    const fn check_cardinality(
-        index: usize,
-        limit: usize,
-        kind: ManifestBudgetKind,
-        stage: ManifestBudgetStage,
-    ) -> std::result::Result<(), ManifestBudgetExhaustion> {
-        if index < limit {
-            Ok(())
-        } else {
-            Err(Self::exhaustion(kind, stage, limit as u64))
-        }
     }
 
     /// Construct a writer that bounds one rendered string and shared output.

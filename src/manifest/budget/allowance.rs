@@ -12,8 +12,8 @@
 //! no manifest evaluation exists to charge.
 
 use super::{
-    DEFAULT_COLLECTION_CALL_ITEMS, ManifestBudget, ManifestBudgetExhaustion, ManifestBudgetKind,
-    ManifestBudgetStage, adapter::BudgetErrorExt,
+    CardinalityLimit, DEFAULT_COLLECTION_CALL_ITEMS, ManifestBudget, ManifestBudgetExhaustion,
+    ManifestBudgetKind, ManifestBudgetStage, adapter::BudgetErrorExt,
 };
 use minijinja::{Error, ErrorKind};
 
@@ -58,7 +58,7 @@ impl CollectionAllowance {
     fn check_member(&self, index: usize) -> Result<(), ManifestBudgetExhaustion> {
         match self {
             Self::Manifest(budget) => {
-                budget.check_collection_cardinality(index)?;
+                budget.check_cardinality(index, CardinalityLimit::Collection)?;
                 budget.charge_collection_item()
             }
             Self::Standalone { call_items } => check_call_index(index, *call_items),
