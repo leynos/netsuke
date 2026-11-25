@@ -1,30 +1,11 @@
 //! Unit tests for cycle detection and canonicalization.
 use anyhow::{Context, Result, ensure};
-use camino::Utf8PathBuf;
 
-use super::super::graph::{BuildEdge, BuildGraph};
+use super::super::graph::BuildGraph;
 use super::detector::{CycleDetector, CycleSearch, CycleVisitResult};
 use super::support::target_entry_for_path;
+use super::test_fixtures::{build_edge, path};
 use rstest::rstest;
-
-fn path(name: &str) -> Utf8PathBuf {
-    Utf8PathBuf::from(name)
-}
-fn build_edge(inputs: &[&str], implicit_deps: &[&str], output: &str) -> BuildEdge {
-    BuildEdge {
-        action_id: "id".into(),
-        inputs: inputs.iter().map(|name| path(name)).collect(),
-        implicit_deps: implicit_deps.iter().map(|name| path(name)).collect(),
-        dependency_order: crate::ir::DependencyOrder::Parallel,
-        explicit_outputs: vec![path(output)],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        progress_label: None,
-        phony: false,
-        always: false,
-        output_visibility: crate::ir::EdgeOutputVisibility::default(),
-    }
-}
 struct MissingDepsCase<'a> {
     primary_inputs: &'a [&'a str],
     primary_implicit_deps: &'a [&'a str],
@@ -207,3 +188,4 @@ fn bounded_cycles_through_inputs_or_implicit_deps_are_detected() {
         assert_bounded_cycle_detected(cycle_len, implicit_index);
     }
 }
+

@@ -127,6 +127,8 @@ impl<'targets> CycleDetector<'targets> {
         self.states.clear();
         self.stack.clear();
         self.missing_dependencies.clear();
+        #[cfg(test)]
+        super::scan_counter::reset_dependency_scans();
 
         self.detect_targets(search)
     }
@@ -299,6 +301,7 @@ impl<'targets> CycleDetector<'targets> {
     ) -> CycleVisitResult {
         let mut index = 0;
         while index < dependencies.len() {
+            super::scan_counter::record_dependency_scan();
             let Some(dependency) = dependencies.get(index) else {
                 index += 1;
                 continue;
