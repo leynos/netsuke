@@ -42,6 +42,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, ensure};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use syn::{Attribute, File, ImplItem, Item, ItemImpl, Meta};
 
 /// The module that mixes proof-only and production graph implementations.
@@ -178,16 +179,28 @@ fn accumulate_impl(block: &ItemImpl, by_name: &mut BTreeMap<String, Selection>) 
     }
 }
 
+/// Return a repository-relative source file's text.
+///
+/// Reads through a capability opened on the crate root rather than through
+/// `std::fs`, so the test names the directory it is allowed to read from and
+/// nothing outside it. The repository forbids the ambient `std::fs` entry
+/// points for the same reason production code does: a path built by
+/// concatenation can reach anywhere, while a capability cannot.
+fn repository_source(relative: &str) -> Result<String> {
+    let root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .context("open the crate root")?;
+    root.read_to_string(relative)
+        .with_context(|| format!("read {relative}"))
+}
+
 /// Return the graph module's source, read from the crate root.
 fn graph_source() -> Result<String> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(GRAPH_MODULE);
-    std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))
+    repository_source(GRAPH_MODULE)
 }
 
 /// Return the fixture's source, read from the crate root.
 fn fixture_source() -> Result<String> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(FIXTURE);
-    std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))
+    repository_source(FIXTURE)
 }
 
 /// The four proof-only implementations issue #1038 reported as false survivors.
@@ -410,10 +423,7 @@ fn the_four_skips_cover_the_mixed_file_the_workflow_cannot_exclude() -> Result<(
 /// block scalar that follows is indented, so the first non-indented line ends
 /// the value.
 fn declared_exclude_globs() -> Result<String> {
-    let workflow = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".github/workflows/mutation-testing.yml");
-    let text = std::fs::read_to_string(&workflow)
-        .with_context(|| format!("read {}", workflow.display()))?;
+    let text = repository_source(".github/workflows/mutation-testing.yml")?;
 
     let mut value = String::new();
     let mut in_value = false;
