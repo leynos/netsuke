@@ -10049,8 +10049,20 @@ patterns and keeps its unquoted-only rule. The regressions live in
 `)#` ambiguity, the operator-versus-word distinction, and the brace-group and
 nested-group command positions; `prefix.rs` covers the `time`-option,
 `coproc`-name, pattern-alternative, pattern-group, and quoted- or
-escaped-`esac` forms; and `tracker.rs` covers `CaseNesting` command position,
-depth, and comment hand-off. The property
+escaped-`esac` forms; `tracker.rs` covers `CaseNesting` command position,
+depth, and comment hand-off; and `properties.rs` states the invariant those
+fixed regressions are instances of. Its generated grammar varies the subject,
+the optional pattern opener, the pattern, the arm, and the arm separator, and
+asserts for both interpolators that a marker inside an open substitution is
+never lowered for the enclosing quote context. Because an accept-or-refuse
+property is satisfied by a tracker that refuses everything, an exhaustive sweep
+over the same finite table also counts preserved marker-free recipes, so a
+vacuous pass fails. Two further properties pin the rules the grammar cannot
+reach: an unquoted backslash-newline pair inside a keyword leaves the outcome
+unchanged, and only a bare `esac` closes a construct. That last one is observed
+through a marker placed after the substitution's closer, because a marker-free
+probe cannot distinguish a closed construct from one whose pattern shorthand
+already contains the closing `)`. The property
 `hash_boundary_follows_the_posix_comment_rule` in
 `src/ir/cmd_interpolate/property_tests/mod.rs` takes its prefixes from
 `property_tests/boundary.rs`, which builds them from an independent label for

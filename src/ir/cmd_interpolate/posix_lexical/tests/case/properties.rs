@@ -60,6 +60,15 @@ const SEPARATORS: [&str; 2] = [";;", ";;&"];
 /// Placeholder the tables leave for the text under test.
 const MARKER: &str = "@MARK@";
 
+/// Spellings of `esac` the shell reads as pattern text rather than a closer.
+///
+/// A quote or an escape of a real character makes the word non-literal, so the
+/// shell keeps it as data and the construct survives it. A backslash-newline
+/// pair is deliberately absent: that pair is spliced before tokenizing, so the
+/// continued spelling still closes the construct, and the closer test below
+/// pins it.
+const QUOTED_ESAC_SPELLINGS: [&str; 4] = ["esac\"\"", "\"\"esac", "'esac'", "e\\sac"];
+
 /// One point in the generated `case` grammar.
 #[derive(Clone, Debug)]
 struct CaseShape {
@@ -201,6 +210,36 @@ fn check_pair(pair: &TemplatePair) -> Result<bool, String> {
     })
 }
 
+/// Report whether the word closes the `case` construct.
+///
+/// The observation is a marker placed after the substitution's `)`, still
+/// inside the enclosing double quotes. When the word closed the construct, that
+/// `)` is the substitution's closer, so the marker is ordinary outer text and
+/// must lower to its path. When the word was pattern text, the construct was
+/// still open, so the `)` was read as a pattern terminator and the substitution
+/// never closed: the marker is substitution source and the tracker refuses it.
+///
+/// A marker-free probe cannot tell the two apart, because the shorthand arm
+/// `) : ;;` already contains the `)` that ends the pattern list.
+fn closes_construct(spelling: &str) -> Result<bool, String> {
+    let template = format!("echo \"$(case x in x) : ;; {spelling}){{MARK}}\"");
+    let with_marker = template.replace("{MARK}", INS_TOKEN);
+    let expected = template.replace("{MARK}", "input");
+    for interpolate in both_interpolators() {
+        match interpolate(&with_marker, &bindings()) {
+            Ok(output) if output == expected => return Ok(true),
+            Ok(output) => {
+                return Err(format!(
+                    "a marker after the closer must lower to its path ({with_marker:?}): \
+                     {output:?}"
+                ));
+            }
+            Err(_) => {}
+        }
+    }
+    Ok(false)
+}
+
 proptest! {
     /// Never lower a marker that the shell reads inside a `$()` body.
     ///
@@ -241,6 +280,27 @@ proptest! {
                 continued
             );
         }
+    }
+}
+
+/// Close a `case` construct only when `esac` is spelled bare.
+///
+/// This is the rule the tracker's `esac` classification turns on, asserted
+/// directly rather than through a marker: the bare word ends the construct, so
+/// the `)` that follows closes the substitution and the construct is no longer
+/// open; every quoted or escaped spelling is pattern text, so the construct
+/// survives the terminator that follows it.
+#[test]
+fn only_a_bare_esac_closes_a_case_construct() {
+    assert!(
+        closes_construct("esac").expect("the bare spelling must be classifiable"),
+        "a bare `esac` must close the construct"
+    );
+    for spelling in QUOTED_ESAC_SPELLINGS {
+        assert!(
+            !closes_construct(spelling).expect("a quoted spelling must be classifiable"),
+            "`{spelling}` is pattern text and must not close the construct"
+        );
     }
 }
 
