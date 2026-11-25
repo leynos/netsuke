@@ -1887,7 +1887,19 @@ conflict in `Decision log`, and escalate.
   `680fee33f`, the figure is unchanged at 3,387 added and 1 deleted, a net
   3,386 — 1,386 over the bar — and the file counts remain 54 changed, 39 with
   the Verus crate and mutation patches excluded, and 33 with the snapshots
-  excluded too.
+  excluded too. Ninth amendment of 2026-11-25: the branch now also carries a
+  fix for a defect `main` merged in #1173, so the tally rises. Against
+  `e9010db84`, `git diff --numstat` over `.rs` paths outside `verus/` sums to
+  3,429 added and 2 deleted, a net 3,427 — 1,427 over the bar. The fix and its
+  regression test contribute 42 added and 1 deleted in
+  `src/ir/cmd_interpolate/`, and the file counts are 56 changed, 41 with the
+  Verus crate and mutation patches excluded, and 35 with the snapshots excluded
+  too. The production surface rises from 1,017 to 1,031 lines: the fix adds 14
+  lines to `substitution/posix.rs`, and the remaining 28 of its 42 added lines
+  are the regression test. The 389-line Kani harness file is counted
+  separately, as it always was. The owner accepted the overage at 3,386; this
+  amendment reports the increase rather than assuming that acceptance covers
+  work the acceptance did not describe.
 - D-23. Decision: correct the Kani stopping condition rather than leave a cap
   the runs did not obey, and state the two measurements it conflated. The
   correction is recorded here; whether the whole-suite exception is acceptable
