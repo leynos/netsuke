@@ -139,6 +139,25 @@ pub struct ManifestLoadOptions<'a> {
 }
 
 impl<'a> ManifestLoadOptions<'a> {
+    /// Build options from a registration decision and an environment.
+    ///
+    /// The four entry points below differ only in those two inputs, so the
+    /// default ceilings and the absent observer are stated once here rather
+    /// than repeated per entry point.
+    fn with_registration_and_environment(
+        registration: StdlibRegistration,
+        environment: ManifestEnvironment<'a>,
+    ) -> Self {
+        Self {
+            registration,
+            environment,
+            budget_limits: ManifestBudgetLimits::default(),
+            #[cfg(test)]
+            budget: None,
+            on_stage: None,
+        }
+    }
+
     /// Load with the complete build stdlib and explicit environment inputs.
     ///
     /// # Examples
@@ -159,14 +178,10 @@ impl<'a> ManifestLoadOptions<'a> {
     /// ```
     #[must_use]
     pub fn full(config: StdlibConfig, environment: ManifestEnvironment<'a>) -> Self {
-        Self {
-            registration: StdlibRegistration::Full(Box::new(config)),
+        Self::with_registration_and_environment(
+            StdlibRegistration::Full(Box::new(config)),
             environment,
-            budget_limits: ManifestBudgetLimits::default(),
-            #[cfg(test)]
-            budget: None,
-            on_stage: None,
-        }
+        )
     }
 
     /// Load with the ambient build stdlib and explicit environment inputs.
@@ -175,14 +190,7 @@ impl<'a> ManifestLoadOptions<'a> {
     /// process working directory, exactly as before options existed.
     #[must_use]
     pub(crate) fn ambient(environment: ManifestEnvironment<'a>) -> Self {
-        Self {
-            registration: StdlibRegistration::AmbientFull,
-            environment,
-            budget_limits: ManifestBudgetLimits::default(),
-            #[cfg(test)]
-            budget: None,
-            on_stage: None,
-        }
+        Self::with_registration_and_environment(StdlibRegistration::AmbientFull, environment)
     }
 
     /// Load with the deny-by-default test surface.
@@ -199,14 +207,10 @@ impl<'a> ManifestLoadOptions<'a> {
     /// ```
     #[must_use]
     pub fn test(surface: TestSurface) -> Self {
-        Self {
-            registration: StdlibRegistration::Test(Box::new(surface)),
-            environment: query_environment(),
-            budget_limits: ManifestBudgetLimits::default(),
-            #[cfg(test)]
-            budget: None,
-            on_stage: None,
-        }
+        Self::with_registration_and_environment(
+            StdlibRegistration::Test(Box::new(surface)),
+            query_environment(),
+        )
     }
 
     /// Load for a side-effect-free discovery query.
@@ -216,14 +220,10 @@ impl<'a> ManifestLoadOptions<'a> {
     /// refusal stubs the registration installs.
     #[must_use]
     pub(crate) fn manifest_query<'options>() -> ManifestLoadOptions<'options> {
-        ManifestLoadOptions {
-            registration: StdlibRegistration::ManifestQuery,
-            environment: query_environment(),
-            budget_limits: ManifestBudgetLimits::default(),
-            #[cfg(test)]
-            budget: None,
-            on_stage: None,
-        }
+        ManifestLoadOptions::with_registration_and_environment(
+            StdlibRegistration::ManifestQuery,
+            query_environment(),
+        )
     }
 
     /// Placeholder for a path load whose registration the workspace decides.
@@ -234,14 +234,7 @@ impl<'a> ManifestLoadOptions<'a> {
     /// builder chain serve string and path loads.
     #[must_use]
     pub(crate) fn deferred(environment: ManifestEnvironment<'a>) -> Self {
-        Self {
-            registration: StdlibRegistration::AmbientFull,
-            environment,
-            budget_limits: ManifestBudgetLimits::default(),
-            #[cfg(test)]
-            budget: None,
-            on_stage: None,
-        }
+        Self::with_registration_and_environment(StdlibRegistration::AmbientFull, environment)
     }
 
     /// Supply resource ceilings.

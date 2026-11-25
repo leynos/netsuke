@@ -56,19 +56,27 @@ impl ManifestBudget {
     ///
     /// Returns an error when any configured limit is zero.
     pub(crate) fn new(limits: ManifestBudgetLimits) -> Result<Self> {
-        let validated_limits = limits.validate()?;
-        Ok(Self {
+        Ok(Self::from_validated_limits(limits.validate()?))
+    }
+
+    /// Build the counters and fixed collection ceilings from validated limits.
+    ///
+    /// One constructor serves `new` and `Default`, so the mapping from a limit
+    /// to its remaining counter is stated once rather than repeated per
+    /// entry point.
+    fn from_validated_limits(limits: ManifestBudgetLimits) -> Self {
+        Self {
             state: Arc::new(Mutex::new(ManifestBudgetState {
-                rendered_bytes: validated_limits.rendered_manifest_bytes,
-                source_bytes: validated_limits.source_bytes,
-                expanded_entries: validated_limits.expanded_entries,
-                fuel: validated_limits.manifest_fuel,
+                rendered_bytes: limits.rendered_manifest_bytes,
+                source_bytes: limits.source_bytes,
+                expanded_entries: limits.expanded_entries,
+                fuel: limits.manifest_fuel,
                 collection_items: DEFAULT_COLLECTION_ITEMS,
             })),
             collection_call_items: DEFAULT_COLLECTION_CALL_ITEMS,
             collection_items_limit: DEFAULT_COLLECTION_ITEMS,
-            limits: validated_limits,
-        })
+            limits,
+        }
     }
 
     /// Construct accounting with crate-internal collection ceilings for tests.
@@ -104,15 +112,12 @@ impl ManifestBudget {
         &self,
         index: usize,
     ) -> std::result::Result<(), ManifestBudgetExhaustion> {
-        if index < self.collection_call_items {
-            Ok(())
-        } else {
-            Err(Self::exhaustion(
-                ManifestBudgetKind::CollectionCallItems,
-                ManifestBudgetStage::Collection,
-                self.collection_call_items as u64,
-            ))
-        }
+        Self::check_cardinality(
+            index,
+            self.collection_call_items,
+            ManifestBudgetKind::CollectionCallItems,
+            ManifestBudgetStage::Collection,
+        )
     }
 
     /// Charge one collection-filter member against the manifest aggregate.
@@ -201,14 +206,28 @@ impl ManifestBudget {
         &self,
         index: usize,
     ) -> std::result::Result<(), ManifestBudgetExhaustion> {
-        if index < self.limits.foreach_cardinality {
+        Self::check_cardinality(
+            index,
+            self.limits.foreach_cardinality,
+            ManifestBudgetKind::ForeachCardinality,
+            ManifestBudgetStage::Foreach,
+        )
+    }
+
+    /// Reject an iterator position at or past a per-call ceiling.
+    ///
+    /// Both cardinality checks compare a zero-based index with a ceiling and
+    /// report the same exhaustion shape, so the comparison is stated once.
+    const fn check_cardinality(
+        index: usize,
+        limit: usize,
+        kind: ManifestBudgetKind,
+        stage: ManifestBudgetStage,
+    ) -> std::result::Result<(), ManifestBudgetExhaustion> {
+        if index < limit {
             Ok(())
         } else {
-            Err(Self::exhaustion(
-                ManifestBudgetKind::ForeachCardinality,
-                ManifestBudgetStage::Foreach,
-                self.limits.foreach_cardinality as u64,
-            ))
+            Err(Self::exhaustion(kind, stage, limit as u64))
         }
     }
 
@@ -282,19 +301,7 @@ impl ManifestBudget {
 impl Default for ManifestBudget {
     /// Construct fresh accounting from the safe production defaults.
     fn default() -> Self {
-        let limits = ManifestBudgetLimits::default();
-        Self {
-            state: Arc::new(Mutex::new(ManifestBudgetState {
-                rendered_bytes: limits.rendered_manifest_bytes,
-                source_bytes: limits.source_bytes,
-                expanded_entries: limits.expanded_entries,
-                fuel: limits.manifest_fuel,
-                collection_items: DEFAULT_COLLECTION_ITEMS,
-            })),
-            collection_call_items: DEFAULT_COLLECTION_CALL_ITEMS,
-            collection_items_limit: DEFAULT_COLLECTION_ITEMS,
-            limits,
-        }
+        Self::from_validated_limits(ManifestBudgetLimits::default())
     }
 }
 
