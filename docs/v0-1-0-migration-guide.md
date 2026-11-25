@@ -751,6 +751,13 @@ it starts a comment. The scanner cannot tell the two apart without the `case`
 grammar, so it fails closed rather than encode a later path for the wrong shell
 context.
 
+The check reads the substitution's raw source, so it also fires when `case`
+appears only inside a quoted string or a comment, where the shell never reads
+it as a reserved word. That over-approximation is deliberate: narrowing it
+would mean parsing the substitution a second time, which is the ambiguity the
+check exists to avoid. A recipe of that shape takes the same remedy as any
+other rejected one.
+
 The remedy depends on what the `#` means in your recipe.
 
 - When `#` starts a comment, separate it from the closer with a space, a tab,

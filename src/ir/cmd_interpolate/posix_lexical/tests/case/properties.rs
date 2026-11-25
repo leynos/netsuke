@@ -329,3 +329,47 @@ fn every_generated_case_skeleton_refuses_a_marker_inside_the_substitution() {
         shapes.len()
     );
 }
+
+/// Validate every generated skeleton with the shell before trusting the oracle.
+///
+/// The property above only means something if its inputs are shell grammar the
+/// tracker claims to support. `bash` is the authority on that, so this checks
+/// the whole generated table with `bash -n` and reports every offending script.
+/// It is not part of the default run because the suite must not depend on a
+/// `bash` on `PATH`; run it explicitly with
+/// `cargo nextest run -p netsuke-build --run-ignored -E 'test(~generated_)'`.
+#[test]
+#[ignore = "requires bash on PATH; run explicitly to validate the generated grammar"]
+fn generated_case_skeletons_parse_as_bash() {
+    let shells: [&str; 2] = ["bash", "/bin/bash"];
+    let Some(shell) = shells.iter().find(|shell| {
+        std::process::Command::new(shell)
+            .arg("-c")
+            .arg("exit 0")
+            .status()
+            .is_ok_and(|status| status.success())
+    }) else {
+        panic!("no bash found on PATH or at /bin/bash, so the grammar cannot be validated");
+    };
+
+    let mut rejected = Vec::new();
+    for shape in generated_shapes() {
+        let script = format!("echo \"$({})\"", shape.body());
+        let status = std::process::Command::new(shell)
+            .arg("-n")
+            .arg("-c")
+            .arg(&script)
+            .status()
+            .expect("bash must be runnable once it has answered the probe");
+        if !status.success() {
+            rejected.push(script);
+        }
+    }
+    assert!(
+        rejected.is_empty(),
+        "the generated grammar must be valid shell; {} of {} scripts were rejected: {:?}",
+        rejected.len(),
+        SUBJECTS.len() * PATTERNS.len() * ARMS.len() * SEPARATORS.len(),
+        &rejected[..rejected.len().min(5)]
+    );
+}
