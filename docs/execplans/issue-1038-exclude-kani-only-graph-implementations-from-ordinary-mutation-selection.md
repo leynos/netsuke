@@ -262,6 +262,22 @@ selection and proof-specific verification.
 - [x] (2026-11-25) The probes were split into `tests.rs` (attribute-level rules)
       and `scope_tests.rs` (inheritance and eligibility), because the combined
       file reached exactly 400 lines.
+- [x] (2026-11-25) The sixth review pass returned two findings, both valid:
+  - **Nested negation inverted the wrong thing.** `cfg(not(not(kani)))` is
+    `kani`, but a flat "a negation is never a gate" rule called it production.
+    The evaluator now carries a polarity: negation flips the comparator, and De
+    Morgan flips the combinator, so `not(all(..))` becomes a disjunction of
+    negated conjuncts and `not(any(..))` a conjunction. A probe covers both
+    `not(not(kani))` and `not(any(kani, unix))`, and seeding the pre-fix
+    evaluator fails that probe alone.
+  - **"Exactly once" did not check for more than one.** The assertion rejected
+    only `skipped == 0`, so a name with two skips passed a test whose name
+    claims exactness. It now requires exactly one, and the message says why
+    both directions matter.
+- [x] (2026-11-25) The cfg-predicate evaluator moved to
+      `tests/mutation_selection/cfg_predicate.rs`; with the negation handling
+      and its probes the reader had reached 387 lines, close enough to the
+      400-line limit to leave no room for the next change.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:

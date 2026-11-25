@@ -161,6 +161,12 @@ impl Demo {
 
     #[cfg(not(kani))]
     fn not_kani(&self) -> u32 { 5 }
+
+    #[cfg(not(not(kani)))]
+    fn double_negation(&self) -> u32 { 6 }
+
+    #[cfg(not(any(kani, unix)))]
+    fn not_any_kani_or_unix(&self) -> u32 { 7 }
 }
 ";
     let by_name = implementations_by_name(source)?;
@@ -172,6 +178,20 @@ impl Demo {
             (selection.selected, selection.selected_production) == (1, 0),
             "`{name}` cannot compile without `kani`, so it must not count as a \
              production implementation; got {selection:?}"
+        );
+    }
+
+    // Negation inverts the combinator rather than erasing the gate:
+    // `not(not(kani))` is `kani`, and `not(any(kani, unix))` is
+    // `all(not(kani), not(unix))`, which is unsatisfiable without Kani.
+    for name in ["double_negation", "not_any_kani_or_unix"] {
+        let selection = by_name
+            .get(name)
+            .with_context(|| format!("the probe must declare `{name}`"))?;
+        ensure!(
+            (selection.selected, selection.selected_production) == (1, 0),
+            "`{name}` cannot compile without `kani` once its negations are \
+             resolved, so it must not count as production; got {selection:?}"
         );
     }
 

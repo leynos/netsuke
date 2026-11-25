@@ -168,75 +168,7 @@ fn is_cfg_test(attr: &Attribute) -> bool {
 /// Kani gate: the ordinary lane does not evaluate it, so such an item would be
 /// present in the test binaries and must keep its mutants.
 fn is_kani_only(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(is_kani_gate)
-}
-
-/// True when `attr` is a `cfg` whose predicate cannot hold without `kani`.
-///
-/// The whole predicate is evaluated rather than scanned for a `kani` token, so
-/// compound forms classify by what they actually permit:
-///
-/// - `cfg(kani)`, `cfg(all(kani))` and `cfg(all(kani, unix))` are Kani gates,
-///   because every conjunct must hold;
-/// - `cfg(any(kani, unix))` is **not**, because `unix` alone can satisfy it and
-///   the item then compiles in the ordinary lane;
-/// - `cfg(not(kani))` is not, which is what makes it the production
-///   counterpart.
-///
-/// Treating every predicate that merely mentions `kani` as a gate would
-/// misclassify `cfg(any(kani, unix))` as proof-only and, worse, hide a genuine
-/// production counterpart from the counterpart check.
-fn is_kani_gate(attr: &Attribute) -> bool {
-    let Meta::List(list) = &attr.meta else {
-        return false;
-    };
-    if !list.path.is_ident("cfg") {
-        return false;
-    }
-    let Ok(predicate) = syn::parse2::<Meta>(list.tokens.clone()) else {
-        // An unparsable predicate is not something this model can classify, so
-        // it is treated as no gate rather than being guessed at.
-        return false;
-    };
-    predicate_requires_kani(&predicate)
-}
-
-/// True when the cfg `predicate` cannot hold unless `kani` holds.
-///
-/// The recursion implements the two combinators that decide the question:
-///
-/// - `all(..)` requires Kani when **any** conjunct does, because every conjunct
-///   must hold.
-/// - `any(..)` requires Kani only when **every** disjunct does, because one
-///   satisfiable disjunct is enough.
-///
-/// A negation is never a gate: `not(kani)` holds precisely when Kani is absent.
-/// No argument list arrives here, so `parse` is infallible in practice.
-fn predicate_requires_kani(predicate: &Meta) -> bool {
-    match predicate {
-        Meta::Path(path) => path.is_ident("kani"),
-        Meta::List(list) => {
-            let operands = nested_metas(list);
-            let is_all = list.path.is_ident("all");
-            let is_any = list.path.is_ident("any");
-            (is_all && operands.iter().any(predicate_requires_kani))
-                || (is_any && !operands.is_empty() && operands.iter().all(predicate_requires_kani))
-        }
-        Meta::NameValue(_) => false,
-    }
-}
-
-/// Parse a cfg combinator's operands.
-///
-/// Returns an empty list rather than failing: a caller that cannot read the
-/// operands treats the combinator as not requiring Kani, which is the
-/// conservative answer for a gate whose contents are unknown.
-fn nested_metas(list: &syn::MetaList) -> Vec<Meta> {
-    syn::parse::Parser::parse2(
-        syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated,
-        list.tokens.clone(),
-    )
-    .map_or_else(|_| Vec::new(), |parsed| parsed.into_iter().collect())
+    attrs.iter().any(cfg_predicate::is_kani_gate)
 }
 
 /// True when the walker would skip this method for a reason other than an
@@ -347,6 +279,8 @@ fn accumulate_impl(block: &ItemImpl, scope: Scope, by_name: &mut BTreeMap<String
         }
     }
 }
+
+mod cfg_predicate;
 
 #[cfg(test)]
 mod scope_tests;

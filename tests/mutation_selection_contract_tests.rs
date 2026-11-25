@@ -138,18 +138,24 @@ fn every_skipped_graph_implementation_is_kani_only() -> Result<()> {
 
 #[test]
 fn each_proof_only_name_is_skipped_exactly_once() -> Result<()> {
+    // Exactly one, not "at least one". A name with two skipped implementations
+    // has lost one the contract meant to keep selected — the four skips in
+    // issue #1038 shadow four proof-only items, and a second skip on a name
+    // would be an exclusion nobody reviewed.
     let by_name = implementations_by_name(&graph_source()?)?;
-    let mut unskipped: Vec<&str> = Vec::new();
+    let mut wrong: Vec<(&str, Option<usize>)> = Vec::new();
     for name in PROOF_ONLY_NAMES {
-        if by_name.get(name).is_none_or(|found| found.skipped == 0) {
-            unskipped.push(name);
+        let skipped = by_name.get(name).map(|found| found.skipped);
+        if skipped != Some(1) {
+            wrong.push((name, skipped));
         }
     }
 
     ensure!(
-        unskipped.is_empty(),
-        "these proof-only implementations must carry their own skip, or the \
-         ordinary lane reports them as survivors it cannot judge: {unskipped:?}"
+        wrong.is_empty(),
+        "each proof-only name must carry exactly one skip — no more, so the \
+         exclusion stays item-scoped, and no fewer, or the ordinary lane reports \
+         survivors it cannot judge; found (name, skip count): {wrong:?}"
     );
     Ok(())
 }
