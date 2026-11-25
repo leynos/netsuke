@@ -42,7 +42,8 @@ use anyhow::{Context, Result, ensure};
 
 use super::{
     harness::{STOP_GRACE, capture_path, unit_name},
-    manager::{ScopeSnapshot, is_busy, remove_capture, scope_snapshot},
+    manager::{is_busy, remove_capture, scope_snapshot},
+    properties::ScopeSnapshot,
 };
 
 /// How long teardown waits for a stopped unit to reach a settled state.

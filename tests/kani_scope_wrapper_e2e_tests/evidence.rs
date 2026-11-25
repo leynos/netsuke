@@ -21,7 +21,8 @@ use anyhow::{Result, ensure};
 
 use super::{
     harness::capture_path,
-    manager::{Journal, ScopeSnapshot, captured, is_busy, journal_extract, scope_snapshot},
+    manager::{Journal, captured, is_busy, journal_extract, scope_snapshot},
+    properties::ScopeSnapshot,
 };
 
 /// Everything one finished invocation left behind.

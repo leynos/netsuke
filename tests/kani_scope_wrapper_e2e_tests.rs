@@ -128,6 +128,8 @@ mod harness;
 mod host;
 #[path = "kani_scope_wrapper_e2e_tests/manager.rs"]
 mod manager;
+#[path = "kani_scope_wrapper_e2e_tests/properties.rs"]
+mod properties;
 #[path = "kani_scope_wrapper_e2e_tests/teardown_tests.rs"]
 mod teardown_tests;
 #[path = "kani_scope_wrapper_e2e_tests/timeout_tests.rs"]
