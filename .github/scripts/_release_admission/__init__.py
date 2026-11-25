@@ -12,7 +12,8 @@ owns exactly one of them:
 - ``statuses`` translates an exit status, an elapsed bound, or a refused launch
   into the gate's own command result. It is the only place a shell's status
   numbering is interpreted, and both ``commands`` and ``delivery`` call it.
-- ``environment`` reads a variable in one of Bash's two default forms.
+- ``environment`` reads a variable in one of Bash's two default forms, or as a
+  switch that only the exact text ``true`` turns on.
 - ``downstream`` names the #598 downstream migration canaries, the one list
   the evidence producer, the verifier's required results, and the workflow
   contract all read.

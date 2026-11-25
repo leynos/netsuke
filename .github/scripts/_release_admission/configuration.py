@@ -186,10 +186,9 @@ def resolve_configuration(
             variables, TIMEOUT_VARIABLE, str(policy.DEFAULT_OPERATION_TIMEOUT_SECONDS)
         ),
         enforcement=enforcement,
-        producer_trusted=environment.optional(
-            variables, evidence.PRODUCER_TRUST_VARIABLE, "false"
-        )
-        == "true",
+        producer_trusted=environment.is_exactly_true(
+            variables, evidence.PRODUCER_TRUST_VARIABLE
+        ),
         evidence_digest=environment.optional(
             variables, evidence.EVIDENCE_DIGEST_VARIABLE, ""
         ),
