@@ -137,7 +137,13 @@ Option C. `src/stdlib/resource_bounds/` holds:
 - `AdmittedCount`, an approved tuple count that is explicitly not a memory
   budget;
 - `CardinalityError`, `InputLengthExceeded`, `DepthExceeded`, and
-  `StreamLimitExceeded`, each carrying the observed value and the ceiling;
+  `StreamLimitExceeded`. Each names the ceiling it enforced. Three also carry
+  the observed value; the exceptions are `CardinalityError::Overflow`, which
+  carries only the ceiling because the exact count is not representable in
+  `u64`, and `StreamLimitExceeded`, which carries the `StreamKind` that passed
+  its ceiling rather than an observed total, because `kernel::admit_total`
+  answers `Option<u64>` and discards a refused sum rather than saturating or
+  wrapping it;
 - `NestingDepth` and `RunningTotal`, the two state machines;
 - `admit_input`, `collect_matches`, and `try_collect_matches`.
 
@@ -172,9 +178,11 @@ request.
 
 ## Consequences
 
-- Every bounded helper in `src/stdlib/` calls this module; a review of a new
-  helper checks that it does, and that it passes its own input length and depth
-  through the state machines rather than testing them inline.
+- Every bounded helper in `src/stdlib/` must call this module; a review of a
+  new helper checks that it does, and that it passes its own input length and
+  depth through the state machines rather than testing them inline. No helper
+  calls it at the date of acceptance, so this binds the consumers the roadmap
+  adds rather than describing existing ones.
 - A ceiling change is a one-line change with one test update, not eight.
 - The module carries two verification artefacts that must move with it: the
   Verus model under `verus/resource_bounds/` and the seven Kani harnesses in
