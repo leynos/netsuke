@@ -1899,7 +1899,15 @@ conflict in `Decision log`, and escalate.
   are the regression test. The 389-line Kani harness file is counted
   separately, as it always was. The owner accepted the overage at 3,386; this
   amendment reports the increase rather than assuming that acceptance covers
-  work the acceptance did not describe.
+  work the acceptance did not describe. Tenth amendment of 2026-11-25: the plan
+  owner accepted the overage at 3,427, including the 41 net lines the #1173 fix
+  adds, under the standing instruction to accept the recorded recommendations.
+  The reasons the fix stays here rather than moving to a prerequisite branch:
+  it repairs a defect the final-commit batch surfaced in this candidate's own
+  green run, its regression test is what keeps that batch reproducible, and
+  leaving it out would leave `make test` failing on roughly one run in three
+  until a separate branch merged. The acceptance is for these 3,427 lines and
+  no further growth; a later change that raises the figure owes a fresh report.
 - D-23. Decision: correct the Kani stopping condition rather than leave a cap
   the runs did not obey, and state the two measurements it conflated. The
   correction is recorded here; whether the whole-suite exception is acceptable
