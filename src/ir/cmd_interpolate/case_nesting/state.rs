@@ -206,8 +206,10 @@ pub(super) enum WordRole {
     CloseCase,
     /// A `time` keyword or one of its options.
     TimePrefix,
-    /// A `coproc` keyword or the name that follows it.
-    CoprocPrefix,
+    /// The `coproc` keyword: a name or the command word may follow.
+    CoprocKeyword,
+    /// The name that filled the `coproc` slot: the command word follows.
+    CoprocName,
     /// Any other word, carrying whether it leaves a command position open.
     Other {
         /// Whether the next word is again a command word.
@@ -258,8 +260,14 @@ impl super::CaseNesting {
                 self.prefix_slot = PrefixSlot::TimeOption;
                 self.expects_command = true;
             }
-            WordRole::CoprocPrefix => {
+            WordRole::CoprocKeyword => {
                 self.prefix_slot = PrefixSlot::CoprocName;
+                self.expects_command = true;
+            }
+            WordRole::CoprocName => {
+                // The slot holds one name; the word after it is the command,
+                // and later arguments are not command words.
+                self.prefix_slot = PrefixSlot::None;
                 self.expects_command = true;
             }
             WordRole::Other {
@@ -343,13 +351,13 @@ impl super::CaseNesting {
             return WordRole::TimePrefix;
         }
         if word == "coproc" && is_command_position {
-            return WordRole::CoprocPrefix;
+            return WordRole::CoprocKeyword;
         }
         if self.prefix_slot == PrefixSlot::TimeOption && is_option_word(word) {
             return WordRole::TimePrefix;
         }
         if self.prefix_slot == PrefixSlot::CoprocName && !starts_command_list(word) {
-            return WordRole::CoprocPrefix;
+            return WordRole::CoprocName;
         }
         WordRole::Other {
             continues_command_list: is_command_position && starts_command_list(word),

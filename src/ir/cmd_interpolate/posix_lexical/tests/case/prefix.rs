@@ -83,6 +83,38 @@ fn coproc_simple_command_keeps_the_case_terminator_a_keyword() {
     }
 }
 
+// Verify only the first word after `coproc` fills the name slot.
+//
+// `coproc NAME command ARGS` names the coprocess once; the arguments of the
+// command that follows are ordinary data. A tracker that re-armed the slot on
+// every argument kept command position open, so the argument `esac` closed the
+// case early and the following pattern terminator closed the substitution,
+// lowering the next arm's marker for the enclosing double quotes.
+#[rstest]
+#[case::argument_spells_esac(
+    "case y in x) coproc printf x esac ;; y) printf %s {INS_TOKEN} ;; esac)"
+)]
+#[case::group_after_coproc(
+    "case y in x) coproc (echo case) esac ;; y) printf %s {INS_TOKEN} ;; esac)"
+)]
+fn coproc_arguments_do_not_keep_command_position_open(#[case] substitution: &str) {
+    let template = format!("echo \"$({substitution})\"").replace("{INS_TOKEN}", INS_TOKEN);
+    let bindings = hostile_bash_bindings();
+
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &bindings)
+            .expect_err("a marker in the arm must stay encoded for the substitution");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+        assert!(
+            interpolate(&template, &bash_bindings()).is_err(),
+            "a marker inside the substitution must stay inside it"
+        );
+    }
+}
+
 // Verify pattern-text spellings of `esac` keep the substitution open.
 //
 // Bash recognizes a reserved word only when it is genuinely unquoted and

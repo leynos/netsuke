@@ -137,6 +137,31 @@ fn unquoted_power_shell_case_boundary_fails_closed() {
     }
 }
 
+// Verify a PowerShell backslash-newline is not folded into a keyword.
+//
+// PowerShell preserves a backslash and the newline after it, so `c` written
+// before the pair and `ase` after it are separate words there. Folding the
+// pair, as POSIX and Bash do when they splice, would report a `case` keyword
+// the PowerShell route never sees and reject a recipe it accepts today.
+#[test]
+fn power_shell_boundary_scan_does_not_fold_continuations() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("input")],
+        &[Utf8PathBuf::from("output")],
+        RecipeShell::PowerShell,
+    );
+    let template = "Write-Output $(Write-Output ' c\\\nase ')#value";
+
+    for interpolate in both_interpolators() {
+        let output = interpolate(template, &bindings)
+            .expect("PowerShell preserves the backslash and newline");
+        assert_eq!(
+            output, template,
+            "a contiguous scan must not join the fragments into a keyword"
+        );
+    }
+}
+
 // Verify a comment newline does not hide the `case` that follows it.
 //
 // The traversal copies a comment's text and its terminating newline as inert

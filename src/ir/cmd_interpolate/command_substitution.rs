@@ -106,12 +106,30 @@ pub(super) struct CharSpan {
 pub(super) struct SourceText<'a> {
     /// The recipe characters being scanned.
     chars: &'a [char],
+    /// Whether a backslash-newline pair is deleted before parsing.
+    ///
+    /// POSIX and Bash splice the pair away, so a keyword written across one is
+    /// still that keyword. PowerShell preserves both characters, so the same
+    /// pair separates the keyword from its neighbours and the contiguous
+    /// spelling is what it reads.
+    folds_continuations: bool,
 }
 
 impl<'a> SourceText<'a> {
-    /// View `chars` as the recipe source the boundary checks scan.
+    /// View `chars` as POSIX or Bash source, where continuations splice away.
     pub(super) const fn new(chars: &'a [char]) -> Self {
-        Self { chars }
+        Self {
+            chars,
+            folds_continuations: true,
+        }
+    }
+
+    /// View `chars` as PowerShell source, where nothing is spliced away.
+    pub(super) const fn contiguous(chars: &'a [char]) -> Self {
+        Self {
+            chars,
+            folds_continuations: false,
+        }
     }
 
     /// Return the character at `index`, when the source has one there.
@@ -356,6 +374,9 @@ fn skip_line_continuations(source: SourceText<'_>, mut pos: usize) -> usize {
 /// a single branch, and each of its own conditions stays within the branch
 /// limit.
 fn is_line_continuation_at(source: SourceText<'_>, pos: usize) -> bool {
+    if !source.folds_continuations {
+        return false;
+    }
     let is_pair = source.get(pos) == Some('\\') && source.get(pos + 1) == Some('\n');
     is_pair && is_unescaped_character(source.as_slice(), pos)
 }

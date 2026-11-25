@@ -7,12 +7,15 @@
 
 use super::super::posix_lexical::SourceChar;
 
-/// Report whether `ch` ends the unquoted word being accumulated.
+/// Report whether `ch` ends the word fragment being accumulated.
 ///
-/// A quote character ends the word as surely as a separator does: the quoted
-/// text that follows is not word data, so a reserved word cannot continue into
-/// it. Both categories are kept in one predicate because the caller treats them
-/// identically.
+/// Both a quote and a separator end the fragment, but they end different
+/// things. A quote is part of the token: it ends the fragment so the quoted
+/// text is not read as a bare reserved word, yet the token continues, and its
+/// classification waits for a separator. A blank or operator ends the token,
+/// so that is where the word is classified and the token state reset. Callers
+/// must therefore branch on the character rather than flush the token here,
+/// which `finish_word_at_boundary` does.
 pub(super) const fn ends_word(ch: char) -> bool {
     SourceChar::new(ch).is_word_terminator() || is_quote(ch)
 }

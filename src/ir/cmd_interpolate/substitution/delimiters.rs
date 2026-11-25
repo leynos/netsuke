@@ -90,14 +90,19 @@ impl SubstitutionTraversal<'_, '_> {
     /// Reject a `)#` boundary that the active shell cannot disambiguate.
     ///
     /// PowerShell has no `case` patterns, so its ambiguity only arises in an
-    /// unquoted region; POSIX and Bash always check.
+    /// unquoted region, and it preserves a backslash-newline pair rather than
+    /// splicing it, so the scan reads the source contiguously. POSIX and Bash
+    /// always check, with continuations spliced away.
     fn reject_ambiguous_boundary(&self, boundary: &SubstitutionBoundary) -> Result<(), IrGenError> {
-        let is_checked =
-            self.bindings.shell != RecipeShell::PowerShell || self.matches_unquoted_quote_context();
-        if is_checked {
-            reject_ambiguous_case_comment(SourceText::new(self.chars), boundary)?;
-        }
-        Ok(())
+        let source = if self.bindings.shell == RecipeShell::PowerShell {
+            if !self.matches_unquoted_quote_context() {
+                return Ok(());
+            }
+            SourceText::contiguous(self.chars)
+        } else {
+            SourceText::new(self.chars)
+        };
+        reject_ambiguous_case_comment(source, boundary)
     }
 
     /// Record one source character for `case` nesting inside a substitution.

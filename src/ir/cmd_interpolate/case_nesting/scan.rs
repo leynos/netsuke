@@ -90,6 +90,10 @@ impl CaseNesting {
             self.apply_operator(observation.ch, observation.parenthesis_depth);
             if !is_blank(observation.ch) {
                 self.expects_command = starts_command_after(observation.ch);
+                // An operator ends the word before it, so a `coproc` name the
+                // next word would otherwise fill no longer exists: the group
+                // in `coproc (echo ...)` begins a command list instead.
+                self.clear_prefix_slot();
             }
             return;
         }
@@ -133,6 +137,15 @@ impl CaseNesting {
         }
         // A blank or operator ends the token, so the next word starts bare.
         self.spelling = TokenSpelling::Bare;
+    }
+
+    /// Forget any compound-command prefix the next word could have filled.
+    ///
+    /// An operator ends the preceding word, so the `coproc` name slot only
+    /// survives a blank: the next token starts a command list rather than
+    /// naming the coprocess.
+    const fn clear_prefix_slot(&mut self) {
+        self.prefix_slot = PrefixSlot::None;
     }
 
     /// Move the construct that contains this position across an operator.
