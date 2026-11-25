@@ -24,28 +24,65 @@ import typing as typ
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
-#: One fenced block, capturing its language tag and body.
+#: An opening fence: up to three spaces of indent, three or more of one
+#: character, then an optional info string.
 #:
-#: The fence may be indented: the 4.2.2 plan carries its template inside a list
-#: item, so requiring a fence at column zero would silently skip it.
-FENCE = re.compile(
-    r"^[ \t]*```(?P<language>[\w+-]*)\n(?P<body>.*?)^[ \t]*```",
-    re.MULTILINE | re.DOTALL,
-)
+#: The fence may be indented because the 4.2.2 plan carries its template inside
+#: a list item, so requiring column zero would silently skip it. Both fence
+#: characters are accepted because CommonMark allows either, and a block the
+#: scanner cannot see is a block no contract checks.
+OPENING_FENCE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 
 
 def fenced_blocks(path: Path) -> list[str]:
     """Return the body of every fenced code block in ``path``.
+
+    Implements the CommonMark rules that decide where a block ends: a closing
+    fence uses the same character as its opener, is at least as long, and is
+    followed only by whitespace. That is stricter than "the next line starting
+    with three backticks", which would end a block early on a shorter fence and
+    pair the wrong opener with the wrong closer.
 
     Returns
     -------
     list[str]
         The text between each pair of fences, in document order.
     """
-    return [
-        match.group("body")
-        for match in FENCE.finditer(path.read_text(encoding="utf-8"))
-    ]
+    blocks: list[str] = []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    index = 0
+    while index < len(lines):
+        opening = OPENING_FENCE.match(lines[index])
+        if opening is None:
+            index += 1
+            continue
+        fence = opening.group("fence")
+        body: list[str] = []
+        index += 1
+        while index < len(lines):
+            if closes_block(lines[index], fence):
+                break
+            body.append(lines[index])
+            index += 1
+        blocks.append("\n".join(body))
+        index += 1
+    return blocks
+
+
+def closes_block(line: str, fence: str) -> bool:
+    """Whether ``line`` closes a block opened by ``fence``.
+
+    Returns
+    -------
+    bool
+        True when the line is the same character, at least as long, and has
+        nothing but whitespace after it.
+    """
+    stripped = line.strip()
+    if not stripped or stripped[0] != fence[0]:
+        return False
+    run = len(stripped) - len(stripped.lstrip(fence[0]))
+    return run >= len(fence) and not stripped[run:].strip()
 
 
 def wrapper_blocks(path: Path) -> list[str]:
@@ -113,6 +150,27 @@ def payload_argument(block: str) -> str | None:
     return remainder[1:end]
 
 
+def argument_tokens(block: str) -> list[str]:
+    """Return the whitespace-separated tokens of the wrapper's own arguments.
+
+    Everything from `bash -c` onward is the payload, and the payload is where
+    an echoed string could otherwise be mistaken for a wrapper option: a block
+    whose payload runs `echo "--collect"` would satisfy an option check that
+    searched the whole text while the wrapper never collected anything.
+
+    Line continuations are removed first, so a flag split across two source
+    lines is still one token.
+
+    Returns
+    -------
+    list[str]
+        The argument tokens before the payload, with backslash-newline joins
+        collapsed. Empty when the block is empty.
+    """
+    arguments = block.split("bash -c", 1)[0]
+    return arguments.replace("\\\n", " ").split()
+
+
 def property_arguments(block: str) -> dict[str, str]:
     """Return the `-p Name=value` properties a wrapper block actually sets.
 
@@ -129,9 +187,8 @@ def property_arguments(block: str) -> dict[str, str]:
         Property name to its raw value, as the last occurrence in argument
         order. Empty when the block sets none.
     """
-    arguments = block.split("bash -c", 1)[0]
     properties: dict[str, str] = {}
-    words = arguments.split()
+    words = argument_tokens(block)
     for index, word in enumerate(words):
         value = None
         if word == "-p" and index + 1 < len(words):

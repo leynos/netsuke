@@ -8309,8 +8309,14 @@ extract:
 until [ "$(systemctl --user show -P LoadState "$unit.scope")" != loaded ]; do
     sleep 1
 done
-journalctl --user --sync
-journalctl --user -q -u "$unit.scope" --no-pager -o cat -n 40 > "$capture.journal"
+# A refused sync must not end the snippet under `set -e`.
+journalctl --user --sync || true
+for _ in $(seq 1 25); do
+    journalctl --user -q -u "$unit.scope" --no-pager -o cat -n 40 \
+        > "$capture.journal"
+    grep -q 'Stopping timed out\. Killing\.' "$capture.journal" && break
+    sleep 0.2
+done
 ```
 
 The `--sync` is a separate requirement from the poll. Waiting for collection
@@ -8323,10 +8329,19 @@ Its failure has to be handled rather than ignored. A host may refuse the sync �
 the reference host does for the user journal, reporting
 `Failed to connect to Varlink socket: Permission denied` — and the guarantee is
 then simply absent, so a single read can return the earlier entries before the
-final stop lines become readable. When the sync fails, re-read to a bounded
-deadline until the entries you need are present. A bounded wait is what
+final stop lines become readable. That is why the sync is followed by a bounded
+re-read for the entry the run actually needs, and why it carries `|| true`: a
+refused sync is a loss of guarantee, not a reason to abandon the harvest, and
+under `set -e` a bare failing command would end the snippet before it wrote
+anything.
+
+Read for the entry your claim depends on, which differs by scenario: a run
+stopped at its deadline needs the escalation line, while a routine run may need
+only confirmation that no failure line was written. A bounded wait is what
 distinguishes "journald is still flushing" from "the entry was never written":
-the latter must still fail, not silently pass on a partial extract.
+the latter must still fail, not silently pass on a partial extract. When the
+entry is expected to be *absent*, wait for a known terminal line first — an
+absence is only meaningful once the journal has stopped growing.
 
 #### Reading a scope's `Result`
 
@@ -8396,10 +8411,15 @@ pid of the test process that created them. That is what keeps the recovery from
 touching a concurrent run. List both states first, without changing anything:
 
 ```bash
-prefix=netsuke-kani-wrapper-<pid>
+# Replace 12345 with the pid of the test process that was terminated.
+prefix='netsuke-kani-wrapper-12345'
 systemctl --user list-units --all --no-legend --plain \
     --state=active,failed "$prefix-*"
 ```
+
+The pid is quoted on purpose: an unquoted `netsuke-kani-wrapper-<pid>` is a
+Bash syntax error, because `<` starts a redirection. The number is a
+placeholder to replace, not something the shell can expand.
 
 Take each **listed name verbatim** into the sequence below. Do not rebuild it
 from the prefix and the scenario: a unit name is

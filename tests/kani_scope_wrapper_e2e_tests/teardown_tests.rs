@@ -126,7 +126,12 @@ fn guard_tears_down_the_scope_while_a_panic_unwinds() -> Result<()> {
         message.contains("injected panic"),
         "the panic payload must arrive unchanged, got {message:?}"
     );
-    ensure_own_unit_settled(&unit, "a panic must not leave its scope failed")
+    // `Drop` stops and resets the unit but never deletes the capture: during an
+    // unwind it cannot raise, and the file is the evidence a failing run needs.
+    // A passing run therefore has to remove it, which the body-error test does
+    // explicitly on its success path too.
+    ensure_own_unit_settled(&unit, "a panic must not leave its scope failed")?;
+    remove_capture(&unit)
 }
 
 /// The guard stops a scope that is still running and reaps its launcher.

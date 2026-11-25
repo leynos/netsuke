@@ -44,12 +44,13 @@ def test_makefile_defaults_strict_mode_and_exports_it() -> None:
 def test_the_strict_export_reaches_the_test_command() -> None:
     """Require the export and the command to be one shell invocation.
 
-    Two things have to hold, and neither implies the other. The assignment must
-    be an executable recipe line rather than a comment, and it must be joined to
-    the command by a trailing backslash: Make runs each recipe line in its own
-    shell, so an assignment whose continuation was dropped exports nothing to
-    the `cargo nextest` line that follows. A check for the assignment alone
-    accepts exactly that defect.
+    Three things have to hold and none implies another. The assignment must be
+    an executable recipe line rather than a comment; it must be joined to the
+    command by a trailing backslash, because Make runs each recipe line in its
+    own shell; and it must *export*, which means prefixing the command or using
+    an explicit `export`. `VAR=x; cargo ...` satisfies the first two and still
+    leaves the variable unexported, so strict mode would stay off while every
+    check passed.
     """
     recipe = _recipe_of(MAKEFILE_PATH.read_text(encoding="utf-8"), TARGET)
     assert recipe, f"the `{TARGET}` target must have a recipe"
@@ -62,6 +63,12 @@ def test_the_strict_export_reaches_the_test_command() -> None:
     assert "nextest" in statement or "cargo" in statement, (
         "the export must be joined to the test command by a line continuation, "
         f"or Make runs it in a separate shell; the joined statement was {statement!r}"
+    )
+    assert _exports_to_command(statement), (
+        "the assignment must reach the command's environment: put it before the "
+        "command as a prefix, or use an explicit `export`. A `NAME=value; "
+        "command` sequence sets a shell variable and exports nothing; got "
+        f"{statement!r}"
     )
 
 
@@ -100,6 +107,48 @@ def test_the_strict_export_check_rejects_a_dropped_continuation() -> None:
         "without the continuation the export must not be joined to the test "
         f"command; the joined statement was {statement!r}"
     )
+
+
+def test_the_strict_export_check_rejects_an_unexported_assignment() -> None:
+    """Prove the check fires when the assignment merely precedes the command.
+
+    Measured: `VAR=x; env | grep ^VAR=` finds nothing, while `VAR=x env |
+    grep ^VAR=` finds it. The control below is the first shape, which the
+    continuation and comment checks both accept.
+    """
+    unexported = f"{TARGET}:\n\t{EXPORT_VARIABLE}; cargo nextest run\n"
+    recipe = _recipe_of(unexported, TARGET)
+    statement = _single_statement_with(recipe, EXPORT_VARIABLE)
+    assert statement is not None, "the control must still yield a statement"
+    assert "cargo" in statement, (
+        "the control must join the assignment to the command, or it would test "
+        f"the continuation check instead; got {statement!r}"
+    )
+    assert not _exports_to_command(statement), (
+        "a `NAME=value; command` sequence exports nothing and the check must "
+        f"say so; got {statement!r}"
+    )
+
+
+def _exports_to_command(statement: str) -> bool:
+    """Whether the strict-mode variable reaches the command's environment.
+
+    Two forms work: `export NAME=value` on its own, and a prefix assignment
+    `NAME=value command`. A bare `NAME=value; command` sets a shell variable
+    and exports nothing.
+
+    Returns
+    -------
+    bool
+        True when the variable is exported rather than merely assigned.
+    """
+    if f"export {EXPORT_VARIABLE}" in statement:
+        return True
+    if EXPORT_VARIABLE not in statement:
+        return False
+    # A prefix assignment leaves the command immediately after the value.
+    remainder = statement.split(EXPORT_VARIABLE, 1)[1].lstrip()
+    return not remainder.startswith(";")
 
 
 def _single_statement_with(recipe: list[str], needle: str) -> str | None:

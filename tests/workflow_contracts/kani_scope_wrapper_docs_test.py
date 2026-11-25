@@ -93,10 +93,15 @@ UNBOUNDED_VALUES = (
 )
 
 #: How the wrapper applies niceness, because `Nice=` is not accepted here.
-REQUIRED_NICE = "nice -n 15"
+#:
+#: Three consecutive argument tokens rather than one string: the niceness is
+#: an argument *sequence*, and searching for the phrase as text would neither
+#: respect token boundaries nor exclude the payload. The first token is matched
+#: on its basename because the documented form is `/usr/bin/nice`.
+REQUIRED_NICE = ("nice", "-n", "15")
 
-#: The wrapper flags and niceness a routine example must contain.
-REQUIRED_TOKENS = (*REQUIRED_FLAGS, REQUIRED_NICE)
+#: The single-token wrapper flags a routine example must contain.
+REQUIRED_TOKENS = REQUIRED_FLAGS
 
 #: The developer-guide headings the evidence contract lives under.
 REQUIRED_SECTIONS = (
@@ -129,18 +134,24 @@ def test_every_document_publishes_a_routine_example(path: Path) -> None:
 def test_routine_examples_keep_every_flag_property_and_niceness(path: Path) -> None:
     """Require the documented flags, bounded caps and niceness in every example.
 
-    The properties are matched with their documented *values*, so an example
-    that keeps the name and drops the bound — `MemoryMax=infinity` — fails
-    here. Neither check subsumes the other: the value check would also pass on
-    a property that had been deleted and re-added elsewhere, and the flag check
-    is what notices a missing `--collect`.
+    Options are looked for among the wrapper's own argument tokens, and
+    properties by their documented values, so neither a comment nor an echoed
+    string inside the payload can stand in for the real setting. An example
+    that omits `--collect` while its payload prints it would satisfy a
+    whole-text search; this does not.
     """
     for block in blocks.routine_blocks(path):
-        missing = [token for token in REQUIRED_TOKENS if token not in block]
+        arguments = blocks.argument_tokens(block)
+        missing = [token for token in REQUIRED_TOKENS if token not in arguments]
         assert not missing, (
             f"{_relative(path)}: a routine example omits {missing}. The caps are "
             f"what keep an uncapped verifier from OOM-killing the machine, and "
             f"`--collect` is what stops a failed scope accumulating:\n{block}"
+        )
+        assert _has_sequence(arguments, REQUIRED_NICE), (
+            f"{_relative(path)}: a routine example must run the verifier through "
+            f"{' '.join(REQUIRED_NICE)}, so it cannot crowd the machine; the "
+            f"arguments were {arguments}"
         )
         properties = blocks.property_arguments(block)
         wrong = [
@@ -202,6 +213,24 @@ def test_the_property_check_reads_arguments_not_comments() -> None:
     )
     assert properties.get("MemoryMax") != REQUIRED_PROPERTIES["MemoryMax"], (
         "the parsed value must be the one the check has to reject"
+    )
+
+
+def test_the_flag_check_ignores_options_inside_the_payload() -> None:
+    """Prove a payload cannot supply an option the wrapper omits.
+
+    The control prints `--collect` from inside the payload while the wrapper
+    itself never passes it, which is the shape a whole-text search accepts.
+    """
+    misleading = "systemd-run --user --scope bash -c 'echo --collect'"
+    arguments = blocks.argument_tokens(misleading)
+    assert "--collect" in misleading, (
+        "the control must contain the option text somewhere, or it would not "
+        "exercise the payload trap"
+    )
+    assert "--collect" not in arguments, (
+        "the option must be looked for among the wrapper's arguments only; "
+        f"parsed {arguments}"
     )
 
 
@@ -274,10 +303,16 @@ def test_the_placeholder_template_collects_and_names_its_unit() -> None:
     templates = blocks.placeholder_blocks(PLAN_4_2_2)
     assert templates, "the 4.2.2 plan must keep its `<kani-command>` wrapper template"
     for block in templates:
-        missing = [token for token in REQUIRED_TOKENS if token not in block]
+        arguments = blocks.argument_tokens(block)
+        missing = [token for token in REQUIRED_TOKENS if token not in arguments]
         assert not missing, (
             f"{_relative(PLAN_4_2_2)}: the placeholder template "
             f"omits {missing}:\n{block}"
+        )
+        assert _has_sequence(arguments, REQUIRED_NICE), (
+            f"{_relative(PLAN_4_2_2)}: the placeholder template must run the "
+            f"verifier through {' '.join(REQUIRED_NICE)}; the arguments were "
+            f"{arguments}"
         )
         assert block.index("set -o pipefail") < block.index("systemd-run"), (
             "the placeholder template sets `pipefail` in the invoking shell; the "
@@ -309,3 +344,24 @@ def test_developer_guide_documents_the_durable_evidence() -> None:
             "the journal sync, the bounded journal extract and the loaded-unit "
             "prerequisite are what make a collected run's evidence durable"
         )
+
+
+def _has_sequence(arguments: list[str], sequence: tuple[str, ...]) -> bool:
+    """Whether ``sequence`` appears as consecutive tokens in ``arguments``.
+
+    The first token is compared on its basename, so `nice` and `/usr/bin/nice`
+    both match `nice`. The rest must match exactly: `-n 15` is what sets the
+    level, and a different level would be a different claim.
+
+    Returns
+    -------
+    bool
+        True when the tokens appear in order without interruption.
+    """
+    head, *rest = sequence
+    width = len(sequence)
+    return any(
+        arguments[start].rsplit("/", 1)[-1] == head
+        and arguments[start + 1 : start + width] == rest
+        for start in range(len(arguments) - width + 1)
+    )

@@ -283,7 +283,14 @@ fn collected_scope_unloads_after_a_stopped_payload() -> Result<()> {
         // The journal's escalation entry is written when the grace lapses, so
         // the unit has to be gone before the extract is complete.
         wait_until_unloaded(scope.unit())?;
-        let outcome = Outcome::harvest(scope.unit(), &output)?;
+        let mut outcome = Outcome::harvest(scope.unit(), &output)?;
+        // Collection proves the unit is gone, not that journald has flushed it:
+        // when `--sync` is refused the final entries may still be in flight.
+        outcome.settle_journal(&[
+            "Scope reached runtime time limit",
+            "Stopping timed out. Killing.",
+            "with signal SIGKILL",
+        ]);
 
         ensure!(
             !outcome.caller_success,
@@ -340,7 +347,12 @@ fn collected_scope_propagates_a_failing_status_without_accumulating() -> Result<
             "echo verifier-failed; exit 7",
         )?;
         wait_until_unloaded(scope.unit())?;
-        let outcome = Outcome::harvest(scope.unit(), &output)?;
+        let mut outcome = Outcome::harvest(scope.unit(), &output)?;
+        // The claim here is an *absence* — that no failure was recorded — and
+        // an absence only means something once the journal has stopped growing.
+        // A scope that exits logs only its opening entry, so there is no
+        // terminal line to wait for; stability is the honest barrier.
+        outcome.settle_journal_stable();
 
         ensure!(
             outcome.caller_code == Some(7),

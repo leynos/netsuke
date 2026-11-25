@@ -218,10 +218,10 @@ impl Journal {
 /// Only used when `--sync` was refused, which removes journald's storage
 /// guarantee: the final entries may then arrive after this process has already
 /// asked for them. Bounded so a genuinely missing entry still fails.
-const JOURNAL_SETTLE_CEILING: Duration = Duration::from_secs(5);
+pub(super) const JOURNAL_SETTLE_CEILING: Duration = Duration::from_secs(5);
 
 /// How long to wait between journal re-reads.
-const JOURNAL_SETTLE_INTERVAL: Duration = Duration::from_millis(200);
+pub(super) const JOURNAL_SETTLE_INTERVAL: Duration = Duration::from_millis(200);
 
 /// Read a bounded extract of the unit's journal.
 ///
