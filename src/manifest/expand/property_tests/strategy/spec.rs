@@ -62,6 +62,16 @@ impl BodySpec {
 
     /// The authored key sequence with the control keys in place.
     fn authored_entries(&self) -> Vec<(String, ManifestValue)> {
+        let mut entries = self.fields_with_vars();
+        let position = self.control_layout.position(entries.len());
+        for (offset, control) in self.control_entries().into_iter().enumerate() {
+            entries.insert(position + offset, control);
+        }
+        entries
+    }
+
+    /// The authored fields with the `vars` object spliced in at its position.
+    fn fields_with_vars(&self) -> Vec<(String, ManifestValue)> {
         let mut entries: Vec<(String, ManifestValue)> = Vec::new();
         let vars_at = self.vars_position.index(self.fields.len() + 1);
         for (offset, (key, value)) in self.fields.iter().enumerate() {
@@ -77,7 +87,11 @@ impl BodySpec {
         {
             entries.push(("vars".to_owned(), vars_object(vars)));
         }
+        entries
+    }
 
+    /// The control keys this entry carries, in authoring order.
+    fn control_entries(&self) -> Vec<(String, ManifestValue)> {
         let mut controls: Vec<(String, ManifestValue)> = Vec::new();
         if let Some((form, items)) = &self.foreach {
             let value = match form {
@@ -86,21 +100,10 @@ impl BodySpec {
             };
             controls.push(("foreach".to_owned(), value));
         }
-        if let Some((condition, template)) = self.when {
-            let rendered = condition.render();
-            let value = if template {
-                format!("{{{{ {rendered} }}}}")
-            } else {
-                rendered
-            };
-            controls.push(("when".to_owned(), ManifestValue::String(value)));
+        if let Some((form, template)) = self.when {
+            controls.push(("when".to_owned(), rendered_condition(form, template)));
         }
-
-        let position = self.control_layout.position(entries.len());
-        for (offset, control) in controls.into_iter().enumerate() {
-            entries.insert(position + offset, control);
-        }
-        entries
+        controls
     }
 
     /// The entry-level key sequence an expanded entry must carry.
@@ -252,6 +255,16 @@ impl BodySpec {
         self.vars.as_ref().map_or_else(Vec::new, |vars| {
             vars.iter().map(|(key, _)| key.as_str()).collect()
         })
+    }
+}
+
+/// Render one condition as the entry's `when` value.
+fn rendered_condition(condition: Condition, template: bool) -> ManifestValue {
+    let rendered = condition.render();
+    if template {
+        ManifestValue::String(format!("{{{{ {rendered} }}}}"))
+    } else {
+        ManifestValue::String(rendered)
     }
 }
 

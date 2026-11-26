@@ -256,46 +256,70 @@ fn item_classes(body: &super::strategy::BodySpec, items: &Items, tally: &mut Tal
     }
 }
 
+/// Classify one foreach entry for the injection obligations.
+fn injection_classes(spec: &super::strategy::EntrySpec, tally: &mut Tally) {
+    let body = &spec.body;
+    if let Some(form) = body.foreach_form() {
+        count(tally, foreach_form_class(form));
+    }
+    user_collisions(body, tally);
+    let Some(items) = body.items() else {
+        return;
+    };
+    let included: Vec<usize> = (0..items.len())
+        .filter(|index| body.condition_holds(items.value_at(*index).as_i64(), *index))
+        .collect();
+    count(tally, inclusion_class(items.len(), &included));
+    if has_gap(items.len(), &included) {
+        count(tally, "inject-gap");
+    }
+    item_classes(body, items, tally);
+}
+
+/// Name the class of one `foreach` spelling.
+fn foreach_form_class(form: super::strategy::ForeachForm) -> &'static str {
+    match form {
+        super::strategy::ForeachForm::InlineArray => "foreach-array",
+        super::strategy::ForeachForm::ListLiteral => "foreach-string",
+    }
+}
+
+/// Count a user `vars` key that collides with an injected name.
+fn user_collisions(body: &super::strategy::BodySpec, tally: &mut Tally) {
+    let keys = body.vars_keys();
+    if keys.contains(&"item") {
+        count(tally, "user-item-collision");
+    }
+    if keys.contains(&"index") {
+        count(tally, "user-index-collision");
+    }
+}
+
+/// Name the selection class of one iteration sequence.
+fn inclusion_class(item_count: usize, included: &[usize]) -> &'static str {
+    if item_count == 0 {
+        "inject-empty"
+    } else if included.len() == item_count {
+        "inject-all-included"
+    } else if included.is_empty() {
+        "inject-all-excluded"
+    } else {
+        "inject-partial"
+    }
+}
+
+/// Report whether an excluded item precedes an included one.
+///
+/// This is the only selection shape on which renumbering an injected index is
+/// visible: a prefix-shaped selection keeps true and renumbered indexes equal.
+fn has_gap(item_count: usize, included: &[usize]) -> bool {
+    (0..item_count)
+        .any(|index| !included.contains(&index) && included.iter().any(|kept| *kept > index))
+}
+
 #[test]
 fn foreach_generator_reaches_every_injection_class() -> Result<(), String> {
-    let tally = tally(&foreach_entry_spec_strategy(), |spec, tally| {
-        let body = &spec.body;
-        if let Some(form) = body.foreach_form() {
-            count(
-                tally,
-                match form {
-                    super::strategy::ForeachForm::InlineArray => "foreach-array",
-                    super::strategy::ForeachForm::ListLiteral => "foreach-string",
-                },
-            );
-        }
-        let keys = body.vars_keys();
-        if keys.contains(&"item") {
-            count(tally, "user-item-collision");
-        }
-        if keys.contains(&"index") {
-            count(tally, "user-index-collision");
-        }
-        let Some(items) = body.items() else {
-            return;
-        };
-        let included: Vec<usize> = (0..items.len())
-            .filter(|index| body.condition_holds(items.value_at(*index).as_i64(), *index))
-            .collect();
-        if items.len() == 0 {
-            count(tally, "inject-empty");
-        } else if included.len() == items.len() {
-            count(tally, "inject-all-included");
-        } else if included.is_empty() {
-            count(tally, "inject-all-excluded");
-        }
-        if (0..items.len())
-            .any(|index| !included.contains(&index) && included.iter().any(|kept| *kept > index))
-        {
-            count(tally, "inject-gap");
-        }
-        item_classes(body, items, tally);
-    })?;
+    let tally = tally(&foreach_entry_spec_strategy(), injection_classes)?;
     report("inject", &tally);
     check_floors(&tally, INJECT_CLASSES, COVERAGE_CASES as usize)
 }

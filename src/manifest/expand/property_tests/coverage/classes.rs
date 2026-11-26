@@ -43,6 +43,7 @@ pub(super) const INJECT_CLASSES: &[&str] = &[
     "inject-empty",
     "inject-all-included",
     "inject-all-excluded",
+    "inject-partial",
     "inject-gap",
     "item-null",
     "item-bool",

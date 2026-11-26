@@ -5,11 +5,200 @@
 //! a shape's spelling is then visible without reading a shrunk
 //! counter-example, and the integer-truthiness shape gets an explicit zero
 //! case rather than relying on a draw.
+//!
+//! The cases share one `ConditionCase` table rather than repeating the same
+//! four-line body per group: the interesting content is the table, and a copy
+//! per group would drift when the expected rendering rules change. Each row
+//! also states which spellings are meaningful, because an integer-valued
+//! condition has no template form: the fallback reads a rendered integer as
+//! false, so testing one in template form would assert the wrong contract.
 
 use super::*;
 use minijinja::Environment;
 use rstest::rstest;
 use serde_json::json;
+
+/// One fixed condition, the bindings it reads, and its expected verdict.
+struct ConditionCase {
+    /// The condition source, written in expression form.
+    expression: &'static str,
+    /// Which spellings the condition has a meaningful form in.
+    forms: Forms,
+    /// The `vars` value the entry carries, if any.
+    vars: Option<ManifestValue>,
+    /// The `foreach` value the entry carries, if any.
+    foreach: Option<ManifestValue>,
+    /// Whether the condition should keep the entry, or the indexes it keeps.
+    verdict: Verdict,
+}
+
+/// Which spellings of a condition are meaningful.
+///
+/// A template renders to a string, and the fallback accepts only `true` or
+/// `1`. An integer-valued condition therefore has no template form: `{{ w0 }}`
+/// rendering `-1` would read as false, so testing it in that form would assert
+/// the wrong contract.
+#[derive(Clone, Copy)]
+enum Forms {
+    /// Expression and template spellings both mean the same thing.
+    Both,
+    /// Only the expression spelling is meaningful.
+    ExpressionOnly,
+}
+
+/// The expected outcome of one witness case.
+enum Verdict {
+    /// A static entry: the condition keeps or drops it.
+    Keeps(bool),
+    /// A foreach entry: the surviving indexes.
+    Indexes(&'static [u64]),
+}
+
+impl ConditionCase {
+    /// Run the case in every spelling that is meaningful for its shape.
+    fn check(&self) -> Result<()> {
+        self.check_form(self.expression.to_owned())?;
+        if matches!(self.forms, Forms::Both) {
+            self.check_form(format!("{{{{ {} }}}}", self.expression))?;
+        }
+        Ok(())
+    }
+
+    /// Run the case with one spelling of the condition.
+    fn check_form(&self, when: String) -> Result<()> {
+        match self.verdict {
+            Verdict::Keeps(expected) => {
+                anyhow::ensure!(
+                    survives(&when, self.vars.clone(), self.foreach.clone())? == expected,
+                    "`{when}` should {} the entry",
+                    if expected { "keep" } else { "drop" }
+                );
+            }
+            Verdict::Indexes(expected) => {
+                let items = self
+                    .foreach
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("`{when}` needs a foreach value"))?;
+                anyhow::ensure!(
+                    kept_indexes(&when, items)? == expected,
+                    "`{when}` should keep {expected:?}"
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Build a static case whose condition reads a boolean `w0`.
+fn with_bool(value: bool) -> Option<ManifestValue> {
+    Some(ManifestValue::Object(ManifestMap::from_iter([(
+        "w0".to_owned(),
+        ManifestValue::Bool(value),
+    )])))
+}
+
+/// Build a static case whose condition reads an integer `w0`.
+fn with_integer(value: i64) -> Option<ManifestValue> {
+    Some(ManifestValue::Object(ManifestMap::from_iter([(
+        "w0".to_owned(),
+        ManifestValue::Number(value.into()),
+    )])))
+}
+
+/// Run one table row.
+fn run(case: ConditionCase) -> Result<()> {
+    case.check()
+}
+
+#[rstest]
+#[case(ConditionCase { expression: "true", forms: Forms::Both, vars: None, foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "false", forms: Forms::Both, vars: None, foreach: None, verdict: Verdict::Keeps(false) })]
+fn literal_conditions(#[case] case: ConditionCase) -> Result<()> {
+    run(case)
+}
+
+#[rstest]
+#[case(ConditionCase { expression: "w0", forms: Forms::Both, vars: with_bool(true), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0", forms: Forms::Both, vars: with_bool(false), foreach: None, verdict: Verdict::Keeps(false) })]
+fn boolean_variable_conditions(#[case] case: ConditionCase) -> Result<()> {
+    run(case)
+}
+
+#[rstest]
+#[case(ConditionCase { expression: "not w0", forms: Forms::Both, vars: with_bool(true), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "not w0", forms: Forms::Both, vars: with_bool(false), foreach: None, verdict: Verdict::Keeps(true) })]
+fn negated_variable_conditions(#[case] case: ConditionCase) -> Result<()> {
+    run(case)
+}
+
+#[rstest]
+#[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: with_integer(0), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: with_integer(1), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: with_integer(-1), foreach: None, verdict: Verdict::Keeps(true) })]
+fn integer_truthiness_conditions(#[case] case: ConditionCase) -> Result<()> {
+    run(case)
+}
+
+#[rstest]
+#[case(ConditionCase { expression: "w0 < 3", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 < 1", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 <= 2", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 <= 1", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 == 2", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 == 3", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 != 3", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 != 2", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 > 1", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 > 2", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 >= 2", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 >= 3", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
+fn variable_comparisons(#[case] case: ConditionCase) -> Result<()> {
+    run(case)
+}
+
+/// Build a foreach case over `items` keeping the listed indexes.
+fn over_indexes(expression: &'static str, indexes: &'static [u64]) -> ConditionCase {
+    ConditionCase {
+        expression,
+        forms: Forms::Both,
+        vars: None,
+        foreach: Some(json!([0, 1, 2, 3])),
+        verdict: Verdict::Indexes(indexes),
+    }
+}
+
+#[rstest]
+#[case(over_indexes("index < 2", &[0, 1]))]
+#[case(over_indexes("index <= 1", &[0, 1]))]
+#[case(over_indexes("index == 2", &[2]))]
+#[case(over_indexes("index != 2", &[0, 1, 3]))]
+#[case(over_indexes("index > 1", &[2, 3]))]
+#[case(over_indexes("index >= 2", &[2, 3]))]
+fn index_comparisons(#[case] case: ConditionCase) -> Result<()> {
+    run(case)
+}
+
+/// Build a foreach case over `1, 4, 4, 2` keeping the listed indexes.
+fn over_items(expression: &'static str, indexes: &'static [u64]) -> ConditionCase {
+    ConditionCase {
+        expression,
+        forms: Forms::Both,
+        vars: None,
+        foreach: Some(json!([1, 4, 4, 2])),
+        verdict: Verdict::Indexes(indexes),
+    }
+}
+
+#[rstest]
+#[case(over_items("item < 4", &[0, 3]))]
+#[case(over_items("item <= 1", &[0]))]
+#[case(over_items("item == 4", &[1, 2]))]
+#[case(over_items("item != 4", &[0, 3]))]
+#[case(over_items("item > 1", &[1, 2, 3]))]
+#[case(over_items("item >= 4", &[1, 2]))]
+fn item_comparisons(#[case] case: ConditionCase) -> Result<()> {
+    run(case)
+}
 
 /// Expand one entry and report whether its condition kept it.
 fn survives(
@@ -17,165 +206,35 @@ fn survives(
     vars_value: Option<ManifestValue>,
     foreach_value: Option<ManifestValue>,
 ) -> Result<bool> {
+    let mut document = witness_document(when, vars_value, foreach_value, false);
     let environment = Environment::new();
-    let mut entry = ManifestMap::new();
-    entry.insert("name".into(), json!("witness"));
-    if let Some(vars) = vars_value {
-        entry.insert("vars".into(), vars);
-    }
-    if let Some(foreach) = foreach_value {
-        entry.insert("foreach".into(), foreach);
-    }
-    entry.insert("when".into(), json!(when));
-    let mut document = json!({"targets": [ManifestValue::Object(entry)]});
     expand_foreach(&mut document, &environment)?;
     Ok(!targets(&document)?.is_empty())
 }
 
 /// Expand one foreach entry and return the indexes that survived.
 fn kept_indexes(when: &str, foreach: ManifestValue) -> Result<Vec<u64>> {
+    let mut document = witness_document(when, None, Some(foreach), true);
     let environment = Environment::new();
-    let mut entry = ManifestMap::new();
-    entry.insert("name".into(), json!("witness"));
-    entry.insert("foreach".into(), foreach);
-    entry.insert("when".into(), json!(when));
-    let mut document = json!({"targets": [ManifestValue::Object(entry)]});
     expand_foreach(&mut document, &environment)?;
     indexes(targets(&document)?, "targets")
 }
 
-/// Build a `vars` object holding one integer.
-fn integer_var(name: &str, value: i64) -> ManifestValue {
-    ManifestValue::Object(ManifestMap::from_iter([(
-        name.to_owned(),
-        ManifestValue::Number(value.into()),
-    )]))
-}
-
-#[rstest]
-#[case::literal_true("true", true)]
-#[case::literal_false("false", false)]
-#[case::literal_true_template("{{ true }}", true)]
-#[case::literal_false_template("{{ false }}", false)]
-fn literal_conditions(#[case] when: &str, #[case] expected: bool) -> Result<()> {
-    anyhow::ensure!(
-        survives(when, None, None)? == expected,
-        "`{when}` should {} the entry",
-        if expected { "keep" } else { "drop" }
-    );
-    Ok(())
-}
-
-#[rstest]
-#[case::flag_true("w0", true, true)]
-#[case::flag_false("w0", false, false)]
-#[case::flag_true_template("{{ w0 }}", true, true)]
-#[case::flag_false_template("{{ w0 }}", false, false)]
-fn boolean_variable_conditions(
-    #[case] when: &str,
-    #[case] value: bool,
-    #[case] expected: bool,
-) -> Result<()> {
-    let vars = ManifestValue::Object(ManifestMap::from_iter([(
-        "w0".to_owned(),
-        ManifestValue::Bool(value),
-    )]));
-    anyhow::ensure!(survives(when, Some(vars), None)? == expected);
-    Ok(())
-}
-
-#[rstest]
-#[case::negated_true("not w0", true, false)]
-#[case::negated_false("not w0", false, true)]
-#[case::negated_true_template("{{ not w0 }}", true, false)]
-#[case::negated_false_template("{{ not w0 }}", false, true)]
-fn negated_variable_conditions(
-    #[case] when: &str,
-    #[case] value: bool,
-    #[case] expected: bool,
-) -> Result<()> {
-    let vars = ManifestValue::Object(ManifestMap::from_iter([(
-        "w0".to_owned(),
-        ManifestValue::Bool(value),
-    )]));
-    anyhow::ensure!(survives(when, Some(vars), None)? == expected);
-    Ok(())
-}
-
-#[rstest]
-#[case::zero_is_false(0, false)]
-#[case::one_is_true(1, true)]
-#[case::negative_is_true(-1, true)]
-fn integer_truthiness_conditions(#[case] value: i64, #[case] expected: bool) -> Result<()> {
-    anyhow::ensure!(
-        survives("w0", Some(integer_var("w0", value)), None)? == expected,
-        "integer {value} used as a condition should {} the entry",
-        if expected { "keep" } else { "drop" }
-    );
-    Ok(())
-}
-
-#[rstest]
-#[case::lt(" < ", 3, true)]
-#[case::lt_false(" < ", 1, false)]
-#[case::le(" <= ", 2, true)]
-#[case::le_false(" <= ", 1, false)]
-#[case::eq(" == ", 2, true)]
-#[case::eq_false(" == ", 3, false)]
-#[case::ne(" != ", 3, true)]
-#[case::ne_false(" != ", 2, false)]
-#[case::gt(" > ", 1, true)]
-#[case::gt_false(" > ", 2, false)]
-#[case::ge(" >= ", 2, true)]
-#[case::ge_false(" >= ", 3, false)]
-fn variable_comparisons(
-    #[case] operator: &str,
-    #[case] constant: i64,
-    #[case] expected: bool,
-) -> Result<()> {
-    let when = format!("w0{operator}{constant}");
-    anyhow::ensure!(survives(&when, Some(integer_var("w0", 2)), None)? == expected);
-    let template = format!("{{{{ w0{operator}{constant} }}}}");
-    anyhow::ensure!(survives(&template, Some(integer_var("w0", 2)), None)? == expected);
-    Ok(())
-}
-
-#[rstest]
-#[case::lt(" < ", 2, &[0, 1])]
-#[case::le(" <= ", 1, &[0, 1])]
-#[case::eq(" == ", 2, &[2])]
-#[case::ne(" != ", 2, &[0, 1, 3])]
-#[case::gt(" > ", 1, &[2, 3])]
-#[case::ge(" >= ", 2, &[2, 3])]
-fn index_comparisons(
-    #[case] operator: &str,
-    #[case] constant: i64,
-    #[case] expected: &[u64],
-) -> Result<()> {
-    let items = json!([0, 1, 2, 3]);
-    let expression = format!("index{operator}{constant}");
-    anyhow::ensure!(kept_indexes(&expression, items.clone())? == expected);
-    let template = format!("{{{{ index{operator}{constant} }}}}");
-    anyhow::ensure!(kept_indexes(&template, items)? == expected);
-    Ok(())
-}
-
-#[rstest]
-#[case::lt(" < ", 4, &[0, 3])]
-#[case::le(" <= ", 1, &[0])]
-#[case::eq(" == ", 4, &[1, 2])]
-#[case::ne(" != ", 4, &[0, 3])]
-#[case::gt(" > ", 1, &[1, 2, 3])]
-#[case::ge(" >= ", 4, &[1, 2])]
-fn item_comparisons(
-    #[case] operator: &str,
-    #[case] constant: i64,
-    #[case] expected: &[u64],
-) -> Result<()> {
-    let items = json!([1, 4, 4, 2]);
-    let expression = format!("item{operator}{constant}");
-    anyhow::ensure!(kept_indexes(&expression, items.clone())? == expected);
-    let template = format!("{{{{ item{operator}{constant} }}}}");
-    anyhow::ensure!(kept_indexes(&template, items)? == expected);
-    Ok(())
+/// Build a one-entry document holding the condition under test.
+fn witness_document(
+    when: &str,
+    vars_value: Option<ManifestValue>,
+    foreach_value: Option<ManifestValue>,
+    iterates: bool,
+) -> ManifestValue {
+    let mut entry = ManifestMap::new();
+    entry.insert("name".into(), json!("witness"));
+    if let Some(vars) = vars_value {
+        entry.insert("vars".into(), vars);
+    }
+    if iterates && let Some(foreach) = foreach_value {
+        entry.insert("foreach".into(), foreach);
+    }
+    entry.insert("when".into(), json!(when));
+    json!({"targets": [ManifestValue::Object(entry)]})
 }

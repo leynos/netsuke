@@ -30,6 +30,7 @@ pub(super) fn var_name(slot: usize) -> &'static str {
     }
 }
 use proptest::strategy::ValueTree;
+use std::cmp::Ordering;
 
 /// Names a condition may reference.
 ///
@@ -55,6 +56,18 @@ pub(in crate::manifest::expand::property_tests) enum CmpOp {
     Ge,
 }
 
+/// The spelling and acceptance test that define one operator.
+///
+/// Keeping the two facts in one row means an operator is described once:
+/// a separate spelling match and evaluation match would be two copies of the
+/// same six-way table, and the copies drift when a seventh operator is added.
+struct OperatorSpec {
+    /// The operator as `MiniJinja` spells it.
+    spelling: &'static str,
+    /// Whether an ordering satisfies the operator.
+    accepts: fn(Ordering) -> bool,
+}
+
 impl CmpOp {
     /// Generate one operator.
     pub(super) fn strategy() -> impl Strategy<Value = Self> {
@@ -68,28 +81,44 @@ impl CmpOp {
         ]
     }
 
-    /// Render the operator's source spelling.
-    pub(super) const fn render(self) -> &'static str {
+    /// Look up this operator's single description.
+    const fn spec(self) -> OperatorSpec {
         match self {
-            Self::Lt => "<",
-            Self::Le => "<=",
-            Self::Eq => "==",
-            Self::Ne => "!=",
-            Self::Gt => ">",
-            Self::Ge => ">=",
+            Self::Lt => OperatorSpec {
+                spelling: "<",
+                accepts: Ordering::is_lt,
+            },
+            Self::Le => OperatorSpec {
+                spelling: "<=",
+                accepts: Ordering::is_le,
+            },
+            Self::Eq => OperatorSpec {
+                spelling: "==",
+                accepts: Ordering::is_eq,
+            },
+            Self::Ne => OperatorSpec {
+                spelling: "!=",
+                accepts: Ordering::is_ne,
+            },
+            Self::Gt => OperatorSpec {
+                spelling: ">",
+                accepts: Ordering::is_gt,
+            },
+            Self::Ge => OperatorSpec {
+                spelling: ">=",
+                accepts: Ordering::is_ge,
+            },
         }
     }
 
+    /// Render the operator's source spelling.
+    pub(super) const fn render(self) -> &'static str {
+        self.spec().spelling
+    }
+
     /// Evaluate the operator over two integers.
-    pub(super) const fn apply(self, lhs: i64, rhs: i64) -> bool {
-        match self {
-            Self::Lt => lhs < rhs,
-            Self::Le => lhs <= rhs,
-            Self::Eq => lhs == rhs,
-            Self::Ne => lhs != rhs,
-            Self::Gt => lhs > rhs,
-            Self::Ge => lhs >= rhs,
-        }
+    pub(super) fn apply(self, lhs: i64, rhs: i64) -> bool {
+        (self.spec().accepts)(lhs.cmp(&rhs))
     }
 }
 
@@ -214,6 +243,41 @@ mod tests {
     use proptest::test_runner::TestRunner;
     use std::collections::BTreeSet;
 
+    /// Name the shape's class for the reachability tally.
+    fn shape_class(shape: Condition) -> &'static str {
+        match shape {
+            Condition::Literal(_) => "literal",
+            Condition::Flag(_) => "flag",
+            Condition::NotFlag(_) => "not-flag",
+            Condition::Count(_) => "count",
+            Condition::VarCmp(..) => "var-cmp",
+            Condition::IndexCmp(..) => "index-cmp",
+            Condition::ItemCmp(..) => "item-cmp",
+        }
+    }
+
+    /// Verify the shape renders the binding it claims to read.
+    fn check_reads(shape: Condition) -> Result<(), String> {
+        if shape.reads_index() && !shape.render().starts_with("index") {
+            return Err(format!(
+                "{shape:?} reads index but renders {}",
+                shape.render()
+            ));
+        }
+        if shape.reads_item() && !shape.render().starts_with("item") {
+            return Err(format!(
+                "{shape:?} reads item but renders {}",
+                shape.render()
+            ));
+        }
+        if shape.has_template_form() || matches!(shape, Condition::Count(_)) {
+            return Ok(());
+        }
+        Err(format!(
+            "unexpected shape without a template form: {shape:?}"
+        ))
+    }
+
     #[test]
     fn every_shape_names_its_reads() -> Result<(), String> {
         let mut runner = TestRunner::deterministic();
@@ -224,33 +288,8 @@ mod tests {
                 .new_tree(&mut runner)
                 .map_err(|error| error.to_string())?
                 .current();
-            let label = match shape {
-                Condition::Literal(_) => "literal",
-                Condition::Flag(_) => "flag",
-                Condition::NotFlag(_) => "not-flag",
-                Condition::Count(_) => "count",
-                Condition::VarCmp(..) => "var-cmp",
-                Condition::IndexCmp(..) => "index-cmp",
-                Condition::ItemCmp(..) => "item-cmp",
-            };
-            seen.insert(label);
-            if shape.reads_index() && !shape.render().starts_with("index") {
-                return Err(format!(
-                    "{shape:?} reads index but renders {}",
-                    shape.render()
-                ));
-            }
-            if shape.reads_item() && !shape.render().starts_with("item") {
-                return Err(format!(
-                    "{shape:?} reads item but renders {}",
-                    shape.render()
-                ));
-            }
-            if !shape.has_template_form() && !matches!(shape, Condition::Count(_)) {
-                return Err(format!(
-                    "unexpected shape without a template form: {shape:?}"
-                ));
-            }
+            seen.insert(shape_class(shape));
+            check_reads(shape)?;
         }
         let expected = BTreeSet::from([
             "count",
