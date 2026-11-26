@@ -112,6 +112,18 @@ impl Demo {
          production code rather than undecidable; got {families:?}"
     );
 
+    // `feature` is multi-valued, so two distinct features are a real
+    // configuration. Asserting it keeps that distinction from being folded into
+    // the single-valued guard without any test noticing.
+    let features = by_name
+        .get("Demo::two_features")
+        .context("the probe must declare `Demo::two_features`")?;
+    ensure!(
+        (features.undecidable, features.selected_production) == (0, 1),
+        "two `feature` values are a valid configuration, so this is production \
+         code rather than undecidable; got {features:?}"
+    );
+
     // `unix` is defined as exactly `target_family = "unix"`, so the two are not
     // independent atoms. Declining is sound; searching them separately would
     // accept a target that cannot exist.
