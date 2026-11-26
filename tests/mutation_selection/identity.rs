@@ -66,10 +66,11 @@ fn trait_name(block: &ItemImpl) -> Option<String> {
 /// would make `m::<impl Trait for Demo>` and `<impl Trait for m::Demo>`
 /// indistinguishable, and those are different implementations.
 pub(super) fn implementation_owner(block: &ItemImpl, modules: &[String]) -> String {
-    let component = match trait_name(block) {
-        Some(trait_path) => format!("<impl {trait_path} for {}>", self_ty_name(block)),
-        None => self_ty_name(block),
-    };
+    let ty = self_ty_name(block);
+    let component = trait_name(block).map_or_else(
+        || ty.clone(),
+        |trait_path| format!("<impl {trait_path} for {ty}>"),
+    );
     let mut path = modules.to_vec();
     path.push(component);
     path.join("::")
