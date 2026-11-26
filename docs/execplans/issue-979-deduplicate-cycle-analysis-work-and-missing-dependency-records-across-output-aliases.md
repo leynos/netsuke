@@ -170,6 +170,12 @@ raised these budgets.
   Rationale: `rotate_index`, `visit_dependency`, `visit_known_edge`, and
   `visit` changed shape; the seeded faults are semantically unchanged.
   Date/Author: 2026-11-25, implementing agent.
+- D6. Decision: after the CodeRabbit remedy commit `ac3e008e0`, re-ran only
+  `check-fmt`, `markdownlint`, `doc-coverage`, `test`, and `lint`. Rationale:
+  that commit edits one test module; the production tree, Kani harnesses, and
+  mutation patches are byte-identical to the head that passed `kani-check`,
+  `kani-full`, and `test-kani-mutations`, so re-running those would re-prove
+  unchanged inputs. Date/Author: 2026-11-26, implementing agent.
 
 ## Outcomes & retrospective
 

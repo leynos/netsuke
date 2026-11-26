@@ -17,12 +17,12 @@ use super::analyse;
 use super::support::path_cmp;
 use super::support::{canonicalize_cycle, state_for_edge, target_entry_for_path};
 
-/// Tracks the visitation state of a node during cycle detection.
+/// Tracks the visitation state of a canonical edge during cycle detection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum VisitState {
-    /// The node is on the current DFS stack.
+    /// The edge is on the current DFS stack.
     Visiting,
-    /// The node and its dependencies were fully walked.
+    /// The edge and its dependencies were fully walked.
     Visited,
 }
 
