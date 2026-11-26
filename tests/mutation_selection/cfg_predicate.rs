@@ -185,10 +185,7 @@ fn collect_atoms(predicate: &Meta, atoms: &mut BTreeSet<String>) -> Option<()> {
             Some(())
         }
         Meta::List(list) => {
-            if !(list.path.is_ident("all")
-                || list.path.is_ident("any")
-                || list.path.is_ident("not"))
-            {
+            if !is_combinator(&list.path) {
                 return None;
             }
             for operand in nested_metas(list)? {
@@ -201,6 +198,14 @@ fn collect_atoms(predicate: &Meta, atoms: &mut BTreeSet<String>) -> Option<()> {
             Some(())
         }
     }
+}
+
+/// True when `path` is one of the three cfg combinators this model reads.
+///
+/// Split out of the caller because the repository's lint caps a condition at
+/// two `||` branches, and naming the set says more than a compound negation.
+fn is_combinator(path: &syn::Path) -> bool {
+    path.is_ident("all") || path.is_ident("any") || path.is_ident("not")
 }
 
 /// The key for a bare atom: its path as written.
