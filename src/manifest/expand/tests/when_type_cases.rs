@@ -2,9 +2,9 @@
 //!
 //! `when` accepts only a non-empty string. A YAML boolean, integer, null, list,
 //! or mapping is rejected rather than coerced, in both sections and for static
-//! and `foreach` entries alike. A condition naming an undefined variable is
-//! also rejected: the loader's environment is strict, so a typo is a failure
-//! rather than a silent exclusion.
+//! and `foreach` entries alike. Undefined names split two ways, which the cases
+//! below measure: a bare name is false, while a name that an operation or a
+//! template consumes is an error under the strict environment.
 
 use super::*;
 use anyhow::ensure;
@@ -27,7 +27,7 @@ fn expand_with_when(
     section: &str,
     when_value: JsonValue,
     is_foreach: bool,
-) -> Result<std::result::Result<ExpansionReport, String>> {
+) -> std::result::Result<ExpansionReport, String> {
     let mut entry = ManifestMap::new();
     entry.insert("name".into(), json!("subject"));
     entry.insert("command".into(), json!("echo subject"));
@@ -35,15 +35,13 @@ fn expand_with_when(
         entry.insert("foreach".into(), json!([1]));
     }
     entry.insert("when".into(), when_value);
-    let mut document = ManifestMap::new();
-    document.insert(
+    let mut object = ManifestMap::new();
+    object.insert(
         section.into(),
         JsonValue::Array(vec![JsonValue::Object(entry)]),
     );
-    let mut document = JsonValue::Object(document);
-    let outcome =
-        expand_foreach(&mut document, &strict_environment()).map_err(|error| format!("{error:#}"));
-    Ok(outcome)
+    let mut document = JsonValue::Object(object);
+    expand_foreach(&mut document, &strict_environment()).map_err(|error| format!("{error:#}"))
 }
 
 /// Build the section and entry-kind matrix every case iterates over.
@@ -67,7 +65,7 @@ fn non_string_when_is_rejected_in_every_section_and_kind() -> Result<()> {
             json!(["yes"]),
             json!({"nested": true}),
         ] {
-            let outcome = expand_with_when(section, when_value.clone(), is_foreach)?.map(|_| ());
+            let outcome = expand_with_when(section, when_value.clone(), is_foreach).map(|_| ());
             let message = outcome.expect_err("a non-string `when` must be rejected");
             ensure!(
                 message.contains(NOT_STRING),
@@ -87,7 +85,7 @@ fn non_string_when_is_rejected_in_every_section_and_kind() -> Result<()> {
 #[test]
 fn a_bare_undefined_name_excludes_the_entry() -> Result<()> {
     for (section, is_foreach) in when_type_matrix() {
-        let outcome = expand_with_when(section, json!("missing_flag"), is_foreach)?;
+        let outcome = expand_with_when(section, json!("missing_flag"), is_foreach);
         let report = outcome.map_err(|message| anyhow::anyhow!("{message}"))?;
         ensure!(
             report.stats.filtered_targets + report.stats.filtered_actions == 1,
@@ -104,7 +102,7 @@ fn a_bare_undefined_name_excludes_the_entry() -> Result<()> {
 #[case::undefined_template("{{ missing_flag }}")]
 fn consumed_undefined_names_are_errors(#[case] when: &str) -> Result<()> {
     for (section, is_foreach) in when_type_matrix() {
-        let outcome = expand_with_when(section, json!(when), is_foreach)?.map(|_| ());
+        let outcome = expand_with_when(section, json!(when), is_foreach).map(|_| ());
         let message = outcome.expect_err("a consumed undefined name must be an error");
         ensure!(
             !message.is_empty(),
