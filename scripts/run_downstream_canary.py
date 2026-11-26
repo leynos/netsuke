@@ -44,7 +44,8 @@ if typ.TYPE_CHECKING:
 #: The generated manifest, relative to the downstream checkout.
 MANIFEST = "build.ninja"
 #: A lane selector's variable name.
-SELECTOR_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+#: ``\Z`` rather than ``$``, which would also accept a trailing newline.
+SELECTOR_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*\Z")
 
 
 def parse_assignments(pairs: cabc.Iterable[str]) -> dict[str, str]:
@@ -261,8 +262,10 @@ def run_each_target(arguments: argparse.Namespace) -> dict[str, str]:
     dict[str, str]
         Each target's ``passed`` or ``failed`` status, in request order.
     """
-    ninja = shutil.which("ninja") or "ninja"
     env = child_environment(arguments)
+    # Look Ninja up on the PATH it will run with: an `--environment` override
+    # must select the executable as well as reach it.
+    ninja = shutil.which("ninja", path=env.get("PATH")) or "ninja"
     return {
         target: PASSED
         if run_tool([ninja, "-f", MANIFEST, target], arguments.workdir, env)

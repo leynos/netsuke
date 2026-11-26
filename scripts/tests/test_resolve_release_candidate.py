@@ -284,3 +284,38 @@ def test_main_reports_an_unresolvable_candidate(tmp_path: Path) -> None:
 
     assert status == 1, "resolution should fail"
     assert not output.exists(), "a failure must publish no outputs"
+
+
+def test_resolver_runs_from_outside_a_caller_tree_without_it(
+    repository: Path, tmp_path: Path
+) -> None:
+    """Resolve a caller's candidate with a resolver the caller does not hold.
+
+    The release workflow runs this script from its own checkout of this
+    repository while the working directory is the caller's checkout, which
+    need not contain the script. The caller here has only a manifest and refs.
+    """
+    assert not (repository / ".github").exists(), "the caller must lack the script"
+    head = git(repository, "rev-parse", "HEAD")
+    output = tmp_path / "github-output"
+
+    completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed interpreter and script.
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--workflow-sha",
+            head,
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository,
+        env=GIT_ENVIRONMENT,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert output.read_text(encoding="utf-8") == (
+        f"commit={head}\nversion=0.1.0-beta3\nsource=workflow\n"
+    ), "the resolver must read the caller's refs from its working directory"

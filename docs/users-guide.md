@@ -163,8 +163,11 @@ the run's own commit. Enforcement follows the run's mode, so a publishing run
 enforces while a pull-request dry run only observes. A publishing run refuses
 with `missing_evidence` and writes nothing until the release workflow produces a
 `release-admission-evidence` manifest for the candidate. The workflow's
-`release-admission-evidence` job writes that manifest after every downstream
-canary has run, and a caller supplies no new input for it. The history-scan and
+`release-admission-evidence` job writes that manifest after the downstream
+canary jobs conclude, including when they were skipped, as on a draft pull
+request's dry run. It records a canary whose provenance record is missing as
+that canary's failure. A produced manifest is therefore not proof that every
+canary ran. A caller supplies no new input for it. The history-scan and
 release-candidate results have no producer yet, so an enforcing run still
 refuses with `missing_evidence` until they exist. The admission job runs the
 gate from this repository's own workflow commit, so a calling workflow cannot
@@ -177,12 +180,17 @@ names the repository, commit, tag, and workflow run under release, was issued
 inside its freshness window, reports every required result as successful, and
 hashes to the digest the producer job published. The identity fields are
 compared with the run, which shows the manifest agrees with the candidate. The
-digest shows the producer wrote the document: a manifest that another job
-uploaded in the same run does not hash to it, so an enforcing run refuses it
-with `untrusted_evidence`. Until #598's live publishing runs are demonstrated,
-the workflow also keeps an interim block that refuses every manifest with that
-category, the producer's own included. Observation mode is unaffected: a
-pull-request dry run still reports the manifest it read.
+digest is a content binding, not a statement of who uploaded the document: a
+manifest whose bytes differ from the producer's output does not hash to the
+published digest, so an enforcing run refuses it with `untrusted_evidence`.
+Identical bytes from another job hash to the same digest, so the digest does
+not identify the uploading job. Attribution of the uploader rests on the
+producer's job output being nameable only by this workflow, together with the
+interim block, `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`, which the workflow
+ships as `false`. Until #598's live publishing runs are demonstrated, that
+block refuses every manifest with that category, the producer's own included.
+Observation mode is unaffected: a pull-request dry run still reports the
+manifest it read.
 
 When a publication is interrupted, rerun the crates.io publisher job. It
 re-probes the registry before any mutation: an absent version is published from

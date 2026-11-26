@@ -23,8 +23,8 @@ paths:
       # property in the contexts reference; actionlint 1.7.12's schema predates
       # it and reports the property as undefined. The source-pin contract holds
       # the repository, ref, checkout order, and gate step around that
-      # expression. The evidence producer and the downstream canary jobs pin
-      # their checkouts the same way, and
+      # expression. The evidence producer, the release-candidate resolver, and
+      # the downstream canary jobs pin their checkouts the same way, and
       # `tests/workflow_contracts/release_admission_producer_test.py` holds
       # those uses.
       - 'property "workflow_sha" is not defined in object type'

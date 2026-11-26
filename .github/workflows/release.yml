@@ -637,8 +637,24 @@ jobs:
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
-          # Every tag and `main`, so `auto` can choose between them.
+          # The caller's repository: every tag and `main`, so `auto` can
+          # choose between them. The resolver reads refs from here.
           fetch-depth: 0
+          persist-credentials: false
+      # The resolver itself comes from this repository at the workflow's own
+      # commit, as the evidence producer and the admission gate do: a
+      # reusable-workflow caller's tree need not contain it, and must not be
+      # able to supply a different one.
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          repository: leynos/netsuke
+          ref: ${{ job.workflow_sha }}
+          path: gate
+          sparse-checkout: |
+            /.github/scripts/
+          sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
@@ -650,9 +666,11 @@ jobs:
         name: Resolve the release candidate
         env:
           CANDIDATE_REF: ${{ inputs.candidate-ref }}
+        # Run from the caller's checkout, so Git resolves its refs, but with
+        # `--no-config`, so its `uv.toml` cannot redirect uv.
         run: >-
-          uv run --no-project --python 3.14
-          .github/scripts/resolve_release_candidate.py
+          uv run --no-config --no-project --python 3.14
+          gate/.github/scripts/resolve_release_candidate.py
           --requested "$CANDIDATE_REF" --workflow-sha "$GITHUB_SHA"
           --output "$GITHUB_OUTPUT"
 
@@ -682,7 +700,7 @@ jobs:
         include:
           - canary: repovec-appliance
             repository: leynos/repovec-appliance
-            ref: b1393fd70b552aa479c66ae6222ed0b2bd0879ae
+            ref: e8f9d709a53f504344230ef52298aeb20b5b7721
             targets: all
             tools: whitaker
             selectors: ''
@@ -718,7 +736,7 @@ jobs:
             postgres: false
           - canary: ortho-config
             repository: leynos/ortho-config
-            ref: 64cd6cb9526d1b7742373bc466a2121f8d395b50
+            ref: 2e5c291a53720057d539fb4773efdbf25232f59f
             targets: check-fmt lint test markdownlint generated-config
             tools: whitaker markdownlint
             selectors: ''
@@ -801,7 +819,7 @@ jobs:
         include:
           - canary: ortho-config-windows
             repository: leynos/ortho-config
-            ref: 64cd6cb9526d1b7742373bc466a2121f8d395b50
+            ref: 2e5c291a53720057d539fb4773efdbf25232f59f
             targets: powershell-wrapper-validate
     steps:
       - uses: >-

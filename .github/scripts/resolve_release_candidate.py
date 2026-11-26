@@ -27,9 +27,12 @@ from pathlib import Path
 AUTO_REF = "auto"
 #: The remote-tracking ref that ``auto`` falls back to.
 MAIN_REF = "refs/remotes/origin/main"
-#: A release tag: ``v`` followed by a SemVer 2.0 version without build metadata.
+#: A SemVer pre-release identifier: a number without leading zeros, or text.
+_PRERELEASE_IDENTIFIER = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
+#: ``v`` and a SemVer version, no build metadata; ``\Z`` refuses a trailing ``\n``.
 VERSION_TAG = re.compile(
-    r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
+    r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    rf"(?:-({_PRERELEASE_IDENTIFIER}(?:\.{_PRERELEASE_IDENTIFIER})*))?\Z"
 )
 #: The pre-release component of a release-candidate tag, such as ``rc1``.
 RELEASE_CANDIDATE = re.compile(r"^rc\.?\d+$")
@@ -37,6 +40,10 @@ RELEASE_CANDIDATE = re.compile(r"^rc\.?\d+$")
 COMMIT_ID = re.compile(r"^[0-9a-f]{40}$")
 
 type GitRunner = cabc.Callable[[cabc.Sequence[str]], str]
+#: A pre-release identifier's sort key: numbers first, numerically, then text.
+type IdentifierKey = tuple[int, int, str]
+#: SemVer precedence: core numbers, ``1`` release or ``0`` pre-release, then ids.
+type VersionKey = tuple[int, int, int, int, tuple[IdentifierKey, ...]]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -59,7 +66,7 @@ class Candidate:
     source: str
 
 
-def version_key(tag: str) -> tuple[object, ...] | None:
+def version_key(tag: str) -> VersionKey | None:
     """Return a SemVer precedence key for a version tag, if it is one.
 
     Parameters
@@ -69,7 +76,7 @@ def version_key(tag: str) -> tuple[object, ...] | None:
 
     Returns
     -------
-    tuple[object, ...] | None
+    VersionKey | None
         A key whose ordering matches SemVer 2.0 precedence, or ``None`` when
         the tag is not a version tag.
 
@@ -86,15 +93,14 @@ def version_key(tag: str) -> tuple[object, ...] | None:
     if match is None:
         return None
     major, minor, patch, prerelease = match.groups()
-    core = (int(major), int(minor), int(patch))
     if prerelease is None:
         # A release outranks every pre-release of the same version.
-        return (*core, 1, ())
+        return (int(major), int(minor), int(patch), 1, ())
     identifiers = tuple(
         (0, int(part), "") if part.isdigit() else (1, 0, part)
         for part in prerelease.split(".")
     )
-    return (*core, 0, identifiers)
+    return (int(major), int(minor), int(patch), 0, identifiers)
 
 
 def latest_version_tag(tags: cabc.Iterable[str]) -> str | None:

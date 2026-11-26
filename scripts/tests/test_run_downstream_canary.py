@@ -6,11 +6,14 @@ the downstream repository. The child receives an explicit environment, so no
 test mutates its own process environment.
 """
 
+import os
+import sys
 import typing as typ
 
 import downstream_canary_provenance as provenance
 import pytest
 from downstream_canary_test_support import (
+    FAKE_NINJA,
     IDENTITY_FIELDS,
     PHASE_FIELDS,
     Canary,
@@ -172,3 +175,41 @@ def test_malformed_selectors_are_refused(canary: Canary, pair: str) -> None:
 def test_statuses_stay_inside_the_vocabulary(value: object, expected: str) -> None:
     """A damaged state entry is reported as ``not_run``, never verbatim."""
     assert provenance.bounded_status(value) == expected, f"status for {value!r}"
+
+
+def test_ninja_is_resolved_on_the_child_environment_path(canary: Canary) -> None:
+    """A ``PATH`` passed through ``--environment`` selects the Ninja that runs.
+
+    The runner launches Ninja with the child environment, so it must also look
+    Ninja up there; resolving it on its own ``PATH`` would run a different
+    executable from the one the canary asked for.
+    """
+    child_bin = canary.root / "child-bin"
+    child_bin.mkdir()
+    child_ninja = child_bin / "ninja"
+    child_ninja.write_text(
+        f"#!{sys.executable}\n"
+        + FAKE_NINJA.replace('log.write(f"ninja ', 'log.write(f"child-ninja '),
+        encoding="utf-8",
+    )
+    child_ninja.chmod(0o755)
+    generate(canary)
+    child_path = f"{child_bin}{os.pathsep}{canary.environment()['PATH']}"
+
+    status = canary.step(
+        "run",
+        "--target",
+        "lint",
+        "--selector",
+        "MXD_BACKEND=sqlite",
+        "--environment",
+        f"PATH={child_path}",
+    )
+
+    assert status == 0, "the target should pass"
+    assert (
+        canary.log
+        .read_text(encoding="utf-8")
+        .splitlines()[-1]
+        .startswith("child-ninja -f build.ninja lint")
+    ), "the Ninja on the child environment's PATH must be the one that runs"

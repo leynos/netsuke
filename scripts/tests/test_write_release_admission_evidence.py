@@ -252,3 +252,14 @@ def test_the_manifest_names_the_release(tmp_path: Path) -> None:
     ) == (RELEASE["repository"], COMMIT, RELEASE["tag"], RELEASE["run-id"]), (
         "the manifest must name the release the gate compares it with"
     )
+
+
+def test_every_downstream_result_is_required_by_the_verifier() -> None:
+    """The gate refuses a manifest that omits any downstream canary.
+
+    The matrix contract ties the workflow's rows to ``downstream.CANARIES``;
+    this ties those names to the verifier, so dropping one from
+    ``policy.REQUIRED_RESULTS`` cannot pass unnoticed.
+    """
+    missing = sorted(set(downstream.RESULTS) - set(policy.REQUIRED_RESULTS))
+    assert not missing, f"the verifier must require every downstream result: {missing}"

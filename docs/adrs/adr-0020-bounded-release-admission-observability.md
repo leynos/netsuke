@@ -609,3 +609,14 @@ and publication stays fail-closed. The end-to-end demonstration of one admitted
 and one refused publishing run is outstanding follow-up. It needs a real
 release tag, and an admitted run also needs the two missing producers. This
 addendum does not record that demonstration as done.
+
+The sequence this addendum requires cannot start yet. While the interim block
+stands, an enforcing run refuses every manifest with `untrusted_evidence`, so
+no admitted live publishing run is possible while the literal
+`NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` is `false`. No route to the
+admitted demonstration exists yet. Any route needs a controlled procedure, for
+example a demonstration-only branch or fork in which the literal is `true`, and
+that procedure must be defined and accepted on
+[#598](https://github.com/leynos/netsuke/issues/598) before any change is made.
+The shipped workflow keeps the literal `false` until both the admitted and the
+refused live demonstrations have passed.

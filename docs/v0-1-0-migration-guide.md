@@ -1540,17 +1540,20 @@ The gate refuses with `error_category=missing_evidence` while the run has no
 result. It refuses with `error_category=untrusted_evidence` when the manifest's
 bytes do not hash to the digest the producer job published, and, while the
 interim block stands, for every manifest. The release workflow's
-`release-admission-evidence` job writes the manifest after every downstream
-canary has run, and the canaries' own results are read from their provenance
-records. Both refusals are deliberate: the path that published without evidence
-is closed, and a same-run document that the producer did not write is refused.
-A caller of the reusable `release.yml` needs no new input, because the producer
-runs inside the workflow; a caller that expected a publish to proceed now sees
-the admission job fail and every job that writes skipped. The admission job
-also runs the gate from this repository's own workflow commit, so a calling
-workflow cannot supply an older or modified gate that reports a more favourable
-decision. The `history_scan` and `release_candidate` results still have no
-producer, so publication stays unavailable until both exist.
+`release-admission-evidence` job writes the manifest after the downstream
+canary jobs conclude, including skipped ones, and records a canary whose
+provenance record is missing as that canary's failure. A produced manifest is
+therefore not proof that every canary ran: a canary counts as successful only
+when its job succeeded and its provenance record names this candidate and
+reports a pass. Both refusals are deliberate: the path that published without
+evidence is closed, and a same-run document that the producer did not write is
+refused. A caller of the reusable `release.yml` needs no new input, because the
+producer runs inside the workflow; a caller that expected a publish to proceed
+now sees the admission job fail and every job that writes skipped. The
+admission job also runs the gate from this repository's own workflow commit, so
+a calling workflow cannot supply an older or modified gate that reports a more
+favourable decision. The `history_scan` and `release_candidate` results still
+have no producer, so publication stays unavailable until both exist.
 
 See [Install Netsuke](users-guide.md#install-netsuke) for the caller-visible
 rules and the conditions the manifest must satisfy.

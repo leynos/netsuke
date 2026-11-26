@@ -1819,7 +1819,13 @@ credential is persisted into the downstream tree.
 
 `tests/workflow_release_canaries.rs` holds the release wiring, pins, lanes, and
 pull-request policy, and `tests/workflow_contracts/downstream_canary_test.py`
-holds the composite action's shape.
+holds the composite action's shape. The canary runner tests drive a fake
+downstream checkout, and fake `netsuke` and `ninja` executables, from
+`scripts/tests/downstream_canary_test_support.py`. The release-candidate
+installer is tested by `tests/release_candidate_installer.rs`, whose harness
+lives in `tests/release_candidate_installer/` and runs the installer against
+fake `git` and `cargo` adapters loaded from
+`tests/data/release_candidate_installer/`.
 
 A pull request's dry run rehearses the whole release, canaries included, when
 the pull request is marked ready for review, and publishes nothing; the canary
@@ -3492,14 +3498,18 @@ schema version, field readers, and its single refusal, `evidence` owns the
 freshness and admission decisions over a parsed manifest, the bounded maximum
 age, and the variables that set it, `admission_evidence` owns the shared read
 and the two evidence decisions, including the window re-read before admission,
-`records` owns the metric and trace shapes, `delivery` owns the metric, output,
-and trace sinks, `bounding` owns the process-group command bound and the stream
-wiring, `commands` owns the bounded external command runner, `statuses`
-translates an exit status, an elapsed bound, or a refused launch into the
-gate's own command result, `telemetry` owns the emitted records, `environment`
-reads a variable in one of Bash's two default forms, `filesystem` creates the
-artefact parents, truncates the artefacts, and performs the bounded evidence
-read with `read_bytes`, which refuses a document past its byte bound with
+`downstream` names the #598 canary rows and their `downstream_<canary>` result
+names. These are manifest keys, not metric labels, so a new canary widens no
+metric vocabulary. `records` owns the metric and trace shapes, `delivery` owns
+the metric, output, and trace sinks, `bounding` owns the process-group command
+bound and the stream wiring, `commands` owns the bounded external command
+runner, `statuses` translates an exit status, an elapsed bound, or a refused
+launch into the gate's own command result, `telemetry` owns the emitted records,
+`environment` reads a variable in one of Bash's two default forms, and
+`is_exactly_true` reads a switch that only the exact text `true` turns on, as
+the interim publication block does. `filesystem` creates the artefact parents,
+truncates the artefacts, and performs the bounded evidence read with
+`read_bytes`, which refuses a document past its byte bound with
 `EvidenceTooLargeError` and a path that is not a regular file with
 `NotRegularFileError`, `configuration` resolves the environment the gate is
 told, and `gate` composes the operations and reporting. The workflow's

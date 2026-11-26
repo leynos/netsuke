@@ -72,15 +72,22 @@ equal to this table.
 
 | Downstream repository      | Pinned revision                            | Selected targets                                                                                               | Lane selector (`MXD_BACKEND`)          | Platforms      |
 | -------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | -------------------------------------- | -------------- |
-| `leynos/repovec-appliance` | `b1393fd70b552aa479c66ae6222ed0b2bd0879ae` | `all`                                                                                                          | —                                      | Linux          |
+| `leynos/repovec-appliance` | `e8f9d709a53f504344230ef52298aeb20b5b7721` | `all`                                                                                                          | —                                      | Linux          |
 | `leynos/mxd`               | `737048017901868a885ae23dcd4c0473242eb765` | `check-fmt`, `lint`, `test`                                                                                    | `postgres`, `sqlite`, `wireframe-only` | Linux          |
-| `leynos/ortho-config`      | `64cd6cb9526d1b7742373bc466a2121f8d395b50` | Linux: `check-fmt`, `lint`, `test`, `markdownlint`, `generated-config`; Windows: `powershell-wrapper-validate` | —                                      | Linux, Windows |
+| `leynos/ortho-config`      | `2e5c291a53720057d539fb4773efdbf25232f59f` | Linux: `check-fmt`, `lint`, `test`, `markdownlint`, `generated-config`; Windows: `powershell-wrapper-validate` | —                                      | Linux, Windows |
 
 Every pin is a commit on the downstream `issue-598-v010-netsuke-canary` branch,
 and is also retained by a `netsuke-canary/<commit>` tag in that repository. A
 branch can be rewritten or deleted; the tag keeps the pinned commit fetchable
 for as long as the release needs it. Do not move or delete a retaining tag
 while a release, or a rehearsal of one, still names its commit.
+
+A pin fixes the downstream source, not every tool that checks it. Whitaker's
+lint suite is a rolling release, and the shared `install-whitaker` action
+refuses to pin it, so a pinned commit can start failing `lint` with no change
+on either side. That happened to OrthoConfig and Repovec Appliance in November
+2026, when `bumpy_road_function` widened; the cure was a downstream commit on
+the canary branch and a new pin, as the current pins record.
 
 ## Distinctive contracts
 

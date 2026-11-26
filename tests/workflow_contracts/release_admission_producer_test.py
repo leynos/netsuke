@@ -64,6 +64,16 @@ ADMISSION_GUARD = (
     "!cancelled() && needs.metadata.result == 'success' && "
     "needs.release-admission-evidence.result == 'success'"
 )
+RESOLVER_SCRIPT = "gate/.github/scripts/resolve_release_candidate.py"
+#: The release-candidate job's resolver checkout, sparse to the scripts.
+RESOLVER_CHECKOUT = {
+    "repository": "leynos/netsuke",
+    "ref": "${{ job.workflow_sha }}",
+    "path": "gate",
+    "sparse-checkout": "/.github/scripts/\n",
+    "sparse-checkout-cone-mode": False,
+    "persist-credentials": False,
+}
 #: The producer's checkout: this repository at the workflow's own commit.
 VERIFIER_CHECKOUT = {
     "persist-credentials": False,
@@ -226,4 +236,28 @@ def test_admission_waits_for_the_producer_and_trusts_only_its_digest() -> None:
     ), "the gate must receive the producer job's own digest output"
     assert environment.get("NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED") == ("false"), (
         "the interim block must stay until both live runs are demonstrated"
+    )
+
+
+def test_release_candidate_runs_this_repositorys_resolver() -> None:
+    """The resolver comes from this workflow's commit; the refs, from the caller.
+
+    Scenario: a reusable-workflow caller whose tree lacks the resolver, or
+    holds a different one. Invariant: the job checks the resolver out at
+    ``job.workflow_sha`` and runs that copy, from the caller's checkout.
+    """
+    steps = job_steps(_release(), "release-candidate")
+    caller = require_mapping(steps[0].get("with"), "caller checkout inputs")
+    assert caller.get("fetch-depth") == 0, "the caller's tags must be present"
+    assert "repository" not in caller, "the first checkout must be the caller's"
+    resolver = require_mapping(steps[1].get("with"), "resolver checkout inputs")
+    assert resolver == RESOLVER_CHECKOUT, (
+        f"the resolver must come from this workflow's commit: {resolver!r}"
+    )
+    resolve = _step("release-candidate", "Resolve the release candidate")
+    assert RESOLVER_SCRIPT in str(resolve.get("run")), (
+        "the job must run the pinned checkout's resolver"
+    )
+    assert "--no-config" in str(resolve.get("run")), (
+        "the caller's uv configuration must not apply"
     )
