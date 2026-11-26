@@ -42,6 +42,7 @@ use std::collections::BTreeMap;
 
 use crate::mutation_selection::cfg_predicate::Verdict;
 use anyhow::{Context, Result};
+use syn::spanned::Spanned;
 use syn::{Attribute, File, ImplItem, ImplItemFn, Item, ItemImpl, ItemMod, Meta, Signature};
 
 /// One implementation found in an `impl` block.
@@ -296,7 +297,6 @@ fn self_ty_name(block: &ItemImpl) -> String {
     {
         return segment.ident.to_string();
     }
-    use syn::spanned::Spanned;
     // `proc_macro2::Span` exposes a source location only through its `Debug`
     // rendering, which is stable enough to tell two blocks apart and is never
     // asserted on.
