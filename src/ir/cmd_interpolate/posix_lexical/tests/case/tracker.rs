@@ -135,6 +135,26 @@ fn quoted_spelling_of_case_before_hash_interpolates_normally() {
     );
 }
 
+// Verify a wholly quoted `case ... in` header does not trigger the guard.
+//
+// The guard matches a whole-word `case` followed by a whole-word `in`, and the
+// quote between them in `'case in'` breaks that pair, so this form is accepted
+// and its marker after the closer must still interpolate. This is a behaviour
+// anchor rather than a mutation-checked regression: relaxing the guard's
+// recorded-`case` condition does not change the outcome, and quoted argument
+// data that keeps `case` and `in` adjacent, such as `'x case in y'`, is still
+// rejected.
+#[test]
+fn wholly_quoted_case_header_before_hash_interpolates_normally() {
+    let (template, expected) = executable_quote_case("echo $(printf '%s' 'case in')");
+    assert_output(
+        &template,
+        &expected,
+        "a wholly quoted case header must not trigger the ambiguity guard",
+        Interpolators::Both,
+    );
+}
+
 // Verify an unquoted PowerShell substitution boundary still fails closed.
 //
 // PowerShell has no `case` patterns, so the ambiguity does not arise there and

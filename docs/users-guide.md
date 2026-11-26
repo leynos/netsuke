@@ -3222,18 +3222,18 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   in a substitution followed by a later marker is rejected as well. The scanner
   cannot otherwise distinguish a pattern terminator from one that closes a
   substitution, so a substitution containing the `case` reserved word is
-  rejected when a `)` is immediately followed by `#`. That check also requires
-  the scanner to have recorded the `case` as a bare word it could not place, so
-  a wholly quoted header such as `printf '%s' 'case in'` is accepted. Once it
-  has, the guard matches the substitution's raw source text, so a `case ... in`
-  written there as quoted data or comment text also trips it; that
-  over-approximation keeps the check independent of a second parse. To clear a
-  rejection, separate a real comment from the closer with whitespace, or keep a
-  literal `#` in a quoted region or escape it as `\#`; the
+  rejected when a `)` is immediately followed by `#`. The guard matches a
+  whole-word `case` followed by a whole-word `in` in the substitution's raw
+  text, so quoted argument data that keeps them adjacent, such as
+  `printf %s 'x case in y'`, also trips it; that over-approximation keeps the
+  check independent of a second parse. A quote between the two words breaks the
+  pair, so a wholly quoted header such as `printf '%s' 'case in'` is accepted.
+  To clear a rejection, separate a real comment from the closer with
+  whitespace, or keep a literal `#` in a quoted region or escape it as `\#`; the
   [v0.1.0 migration guide](v0-1-0-migration-guide.md#separate-a-substitution-closer-and-a-following-)
-  shows a form that preserves the emitted word and one that turns the text
-  into a comment. A non-breaking space or another non-ASCII space before `#`
-  does not start a comment, so a quote after it still opens or closes a quoted
+  shows a form that preserves the emitted word and one that turns the text into
+  a comment. A non-breaking space or another non-ASCII space before `#` does
+  not start a comment, so a quote after it still opens or closes a quoted
   region. A heredoc in a `script:` recipe has its own boundary: a marker in the
   delimiter word is interpolated, while a marker in the body is copied
   literally, because the body is inert text. The body ends at the line that
