@@ -78,6 +78,12 @@ impl Demo {
 
     #[cfg(all(not(kani), feature = \"a\", feature = \"b\"))]
     fn two_features(&self) -> u32 { 11 }
+
+    #[cfg(all(not(kani), target_family = \"unix\", target_family = \"wasm\"))]
+    fn two_families(&self) -> u32 { 12 }
+
+    #[cfg(all(not(kani), unix, not(target_family = \"unix\")))]
+    fn derived_mix(&self) -> u32 { 13 }
 }
 ";
     let by_name = implementations_by_name(source)?;
@@ -92,6 +98,30 @@ impl Demo {
         impossible.undecidable == 1,
         "a predicate naming two values of a single-valued built-in option must \
          be reported undecidable, not classified; got {impossible:?}"
+    );
+
+    // `target_family` is multi-valued: the reference lists a target with both
+    // `"unix"` and `"wasm"`, so two families are a real configuration and the
+    // predicate is ordinary code rather than an impossible one.
+    let families = by_name
+        .get("Demo::two_families")
+        .context("the probe must declare `Demo::two_families`")?;
+    ensure!(
+        (families.undecidable, families.selected_production) == (0, 1),
+        "two `target_family` values are a valid configuration, so this is \
+         production code rather than undecidable; got {families:?}"
+    );
+
+    // `unix` is defined as exactly `target_family = "unix"`, so the two are not
+    // independent atoms. Declining is sound; searching them separately would
+    // accept a target that cannot exist.
+    let derived = by_name
+        .get("Demo::derived_mix")
+        .context("the probe must declare `Demo::derived_mix`")?;
+    ensure!(
+        derived.undecidable == 1,
+        "a predicate mixing a derived family name with `target_family` must be \
+         declined rather than searched independently; got {derived:?}"
     );
 
     Ok(())

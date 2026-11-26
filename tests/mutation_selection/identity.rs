@@ -59,14 +59,18 @@ fn trait_name(block: &ItemImpl) -> Option<String> {
 
 /// The owner key for `block`, given the lexical module path it sits in.
 ///
-/// The trait, when present, wraps the type the way cargo-mutants prints it, so
-/// a trait implementation never collides with an inherent one.
+/// The implementation component is built first and the module path is
+/// prepended to it, which is the order cargo-mutants prints: `m::Demo` inherent
+/// is `m::Demo`, and `impl Trait for Demo` inside `m` is
+/// `m::<impl Trait for Demo>`. Wrapping the *already qualified* type instead
+/// would make `m::<impl Trait for Demo>` and `<impl Trait for m::Demo>`
+/// indistinguishable, and those are different implementations.
 pub(super) fn implementation_owner(block: &ItemImpl, modules: &[String]) -> String {
+    let component = match trait_name(block) {
+        Some(trait_path) => format!("<impl {trait_path} for {}>", self_ty_name(block)),
+        None => self_ty_name(block),
+    };
     let mut path = modules.to_vec();
-    path.push(self_ty_name(block));
-    let ty = path.join("::");
-    match trait_name(block) {
-        Some(trait_path) => format!("<impl {trait_path} for {ty}>"),
-        None => ty,
-    }
+    path.push(component);
+    path.join("::")
 }

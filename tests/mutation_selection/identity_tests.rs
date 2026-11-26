@@ -333,3 +333,48 @@ impl OtherTrait for Demo {
     );
     Ok(())
 }
+
+#[test]
+fn the_reader_puts_the_module_outside_the_trait_wrapper() -> Result<()> {
+    // `m::<impl Trait for Demo>` and `<impl Trait for m::Demo>` are different
+    // implementations, and cargo-mutants keeps them apart by building the
+    // implementation component first and prepending the module path. Wrapping
+    // an already-qualified type would merge them.
+    let source = "\
+trait Trait { fn paired(&self) -> u32; }
+struct Demo;
+
+mod m {
+    use super::Trait;
+
+    pub struct Demo;
+    #[cfg(kani)]
+    #[mutants::skip]
+    impl Trait for Demo {
+        fn paired(&self) -> u32 { 1 }
+    }
+}
+
+impl Trait for m::Demo {
+    fn paired(&self) -> u32 { 2 }
+}
+";
+    let by_name = implementations_by_name(source)?;
+    let nested = by_name
+        .get("m::<impl Trait for Demo>::paired")
+        .context("the probe must declare `m::<impl Trait for Demo>::paired`")?;
+    ensure!(
+        (nested.skipped, nested.selected) == (1, 0),
+        "the module-scoped implementation carries the skip; got {nested:?}"
+    );
+
+    let qualified = by_name
+        .get("<impl Trait for m::Demo>::paired")
+        .context("the probe must declare `<impl Trait for m::Demo>::paired`")?;
+    ensure!(
+        (qualified.skipped, qualified.selected_production) == (0, 1),
+        "the root-level implementation for a module-qualified type is distinct \
+         and must stay selected; got {qualified:?}"
+    );
+    Ok(())
+}

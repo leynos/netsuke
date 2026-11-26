@@ -390,6 +390,27 @@ selection and proof-specific verification.
 - [x] (2026-11-26) Four controls cover them, and each was checked against its
       seed: shortening the key fails all three identity probes, and removing the
       single-valued guard fails the cfg probe. All 27 pass when restored.
+- [x] (2026-11-26) The thirteenth review pass returned three findings; all three
+      were checked against the Rust reference before being acted on, and the
+      `target_family` pair pulled in opposite directions — which is why the
+      reference decided them:
+  - **`target_family` is not single-valued.** The reference lists a target with
+    both `"unix"` and `"wasm"` at once, so my conflict guard was returning
+    undecidable for a valid ordinary predicate. It is removed from the
+    single-valued set, which now holds only the options Rust sets once.
+  - **`unix` and `windows` are derived from `target_family`.** The reference
+    defines `unix` as set exactly when `target_family = "unix"` is set, so the
+    two are not independent atoms and `all(unix, not(target_family = "unix"))`
+    describes no target. A predicate mixing them is now declined rather than
+    searched.
+  - **The module path sat inside the trait wrapper.** `m::<impl Trait for
+    Demo>` and `<impl Trait for m::Demo>` are different implementations, and my
+    key built them identically. The implementation component is now built first
+    and the module path prepended, which is the order the tool prints.
+- [x] (2026-11-26) Three controls cover them, and each was checked against its
+      seed: restoring `target_family` to the single-valued set fails the
+      multi-family probe, and wrapping the qualified type fails the namespace
+      probe. All 30 pass when restored.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:
