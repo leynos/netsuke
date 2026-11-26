@@ -321,10 +321,17 @@ fn is_default_impl(block: &ItemImpl) -> bool {
 /// keyed by their source line instead, which keeps two distinct shapes from
 /// colliding under one empty key without claiming a name they do not have.
 fn self_ty_name(block: &ItemImpl) -> String {
-    if let syn::Type::Path(path) = &*block.self_ty
-        && let Some(segment) = path.path.segments.last()
-    {
-        return segment.ident.to_string();
+    if let syn::Type::Path(path) = &*block.self_ty {
+        // The whole path, not its last segment: `other::BuildGraph` is a
+        // different type from `BuildGraph`, and the pinned tool keeps the
+        // qualified name in its implementation namespace.
+        return path
+            .path
+            .segments
+            .iter()
+            .map(|segment| segment.ident.unraw().to_string())
+            .collect::<Vec<_>>()
+            .join("::");
     }
     // `proc_macro2::Span` exposes a source location only through its `Debug`
     // rendering, which is stable enough to tell two blocks apart and is never

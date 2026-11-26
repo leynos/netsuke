@@ -172,3 +172,86 @@ impl Demo {
     );
     Ok(())
 }
+
+#[test]
+fn the_reader_normalizes_raw_attribute_names() -> Result<()> {
+    // `#[r#cfg(kani)]` is `#[cfg(kani)]` to rustc: the raw marker is spelling,
+    // not identity. Reading the attribute name without normalizing would let it
+    // bypass the model, so a Kani-gated item would be counted as production.
+    let source = "\
+impl Demo {
+    #[r#cfg(kani)]
+    fn raw_attr(&self) -> u32 { 1 }
+
+    #[cfg(r#kani)]
+    fn raw_atom(&self) -> u32 { 2 }
+
+    #[r#cfg_attr(not(kani), cfg(any()))]
+    fn raw_cfg_attr(&self) -> u32 { 3 }
+}
+";
+    let by_name = implementations_by_name(source)?;
+    for name in ["Demo::raw_attr", "Demo::raw_atom"] {
+        let selection = by_name
+            .get(name)
+            .with_context(|| format!("the probe must declare `{name}`"))?;
+        ensure!(
+            (selection.selected, selection.selected_production) == (1, 0),
+            "`{name}` is Kani-gated under a raw spelling, so it must not count \
+             as production; got {selection:?}"
+        );
+    }
+
+    let raw_cfg_attr = by_name
+        .get("Demo::raw_cfg_attr")
+        .context("the probe must declare `Demo::raw_cfg_attr`")?;
+    ensure!(
+        raw_cfg_attr.undecidable == 1,
+        "a raw-spelled `cfg_attr` still expands to whatever it names, so it \
+         must reach the conservative fallback; got {raw_cfg_attr:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_reader_keeps_a_qualified_self_type_distinct() -> Result<()> {
+    // `other::BuildGraph` is a different type from `BuildGraph`, and the pinned
+    // tool keeps the qualified name in its implementation namespace. The two
+    // `impl` blocks below sit at the same lexical level, so only the `impl`
+    // path distinguishes them — keying by the last segment alone would merge
+    // them and let the skinned method's skip count against the other type.
+    let source = "\
+struct BuildGraph;
+impl BuildGraph {
+    #[cfg(kani)]
+    #[mutants::skip]
+    fn insert_edge(&self) -> u32 { 1 }
+}
+
+mod other {
+    pub struct BuildGraph;
+}
+
+impl other::BuildGraph {
+    pub fn insert_edge(&self) -> u32 { 2 }
+}
+";
+    let by_name = implementations_by_name(source)?;
+    let local = by_name
+        .get("BuildGraph::insert_edge")
+        .context("the probe must declare `BuildGraph::insert_edge`")?;
+    ensure!(
+        (local.skipped, local.selected) == (1, 0),
+        "the local type's method carries the skip; got {local:?}"
+    );
+
+    let qualified = by_name
+        .get("other::BuildGraph::insert_edge")
+        .context("the probe must declare `other::BuildGraph::insert_edge`")?;
+    ensure!(
+        (qualified.skipped, qualified.selected_production) == (0, 1),
+        "the path-qualified type is a distinct implementation and must not \
+         inherit that skip; got {qualified:?}"
+    );
+    Ok(())
+}

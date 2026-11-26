@@ -75,10 +75,10 @@ pub fn predicates(attrs: &[Attribute]) -> Option<Vec<Meta>> {
         let Meta::List(list) = &attr.meta else {
             continue;
         };
-        if list.path.is_ident("cfg_attr") {
+        if is_attr_named(&list.path, "cfg_attr") {
             return None;
         }
-        if !list.path.is_ident("cfg") {
+        if !is_attr_named(&list.path, "cfg") {
             continue;
         }
         // `cfg(true)` and `cfg(false)` are literal operands, which `syn::Meta`
@@ -225,6 +225,15 @@ fn path_key(path: &syn::Path) -> String {
         .map(|segment| segment.ident.unraw().to_string())
         .collect::<Vec<_>>()
         .join("::")
+}
+
+/// True when `path` is the attribute named `name`, in any spelling.
+///
+/// `#[r#cfg(kani)]` is the same attribute as `#[cfg(kani)]` to rustc: the raw
+/// marker is spelling, not identity. Comparing without normalizing would let a
+/// raw-spelled `cfg` bypass the model entirely and be read as unconstrained.
+fn is_attr_named(path: &syn::Path, name: &str) -> bool {
+    path.get_ident().is_some_and(|ident| ident.unraw() == name)
 }
 
 /// True when `path` names the `kani` atom in any spelling.

@@ -356,6 +356,21 @@ selection and proof-specific verification.
     numbers any edit invalidates.
 - [x] (2026-11-26) Three controls cover the first three; seeding each defect
       fails its own probe, and all 23 pass when restored.
+- [x] (2026-11-26) The eleventh review pass returned two more normalization
+      findings, both valid and both the same class as the previous round:
+  - `#[r#cfg(kani)]` is `#[cfg(kani)]` to rustc, but the attribute name was
+    compared without normalizing, so a raw-spelled `cfg` bypassed the model
+    entirely and the item read as production. Attribute names now compare
+    through `IdentExt::unraw`, so a raw-spelled `cfg_attr` also reaches the
+    conservative fallback.
+  - The owner key used only the last segment of the `impl` type, so
+    `impl other::BuildGraph` merged with `impl BuildGraph` at the same lexical
+    level. The key now keeps the whole qualified path.
+- [x] (2026-11-26) Two controls cover them. The first draft of the qualified
+      type control used a nested `mod`, which the module path already
+      distinguishes, so it passed against the defect; it was rewritten to the
+      path-qualified `impl` shape the finding describes, and then failed
+      correctly against the seed.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:
