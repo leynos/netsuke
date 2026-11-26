@@ -211,6 +211,35 @@ fn flatten_descends_into_a_lazy_iterable_member() -> Result<()> {
     Ok(())
 }
 
+/// A lazy iterable root yielding sequences is flattened successfully.
+///
+/// The rejection case below proves a lazy root is iterated at all; this case
+/// proves the iteration produces the documented result when its members are
+/// sequences, so a lazy root is a supported subject rather than only a
+/// rejection path.
+#[test]
+fn flatten_accepts_a_lazy_root_of_sequences() -> Result<()> {
+    let env = fallible::stdlib_env()?;
+    let lazy_root = Value::make_iterable(|| {
+        vec![
+            Value::from(vec![Value::from(1)]),
+            Value::from(vec![Value::from(2)]),
+        ]
+        .into_iter()
+    });
+    let output = env
+        .render_str(
+            "{{ subject | flatten | join(',') }}",
+            context!(subject => lazy_root),
+        )
+        .context("render a lazy root of sequences")?;
+    ensure!(
+        output == "1,2",
+        "a lazy root of sequences must flatten in order, but rendered {output:?}"
+    );
+    Ok(())
+}
+
 /// A lazy iterable root is iterated, and its scalar members are rejected.
 #[test]
 fn flatten_rejects_a_lazy_root_with_scalar_members() -> Result<()> {
