@@ -8311,17 +8311,33 @@ until [ "$(systemctl --user show -P LoadState "$unit.scope")" != loaded ]; do
 done
 # A refused sync must not end the snippet under `set -e`.
 journalctl --user --sync || true
+journalctl --user -q -u "$unit.scope" --no-pager -o cat -n 40 \
+    > "$capture.journal"
+```
+
+When the run was *expected* to reach its deadline, wait for the entry that
+proves it, and fail if it never arrives:
+
+```bash
+expected='Stopping timed out\. Killing\.'
 for _ in $(seq 1 25); do
+    grep -q "$expected" "$capture.journal" && break
     journalctl --user -q -u "$unit.scope" --no-pager -o cat -n 40 \
         > "$capture.journal"
-    grep -q 'Stopping timed out\. Killing\.' "$capture.journal" && break
     sleep 0.2
 done
-grep -q 'Stopping timed out\. Killing\.' "$capture.journal" || {
+grep -q "$expected" "$capture.journal" || {
     echo "the escalation entry never appeared in the journal" >&2
     exit 1
 }
 ```
+
+That second block belongs to a timeout claim, not to every non-zero exit. A
+verifier that simply fails — exit 7, a compile error, a failed assertion —
+leaves a scope the manager collects as a success, so its journal has no
+escalation entry at all, and demanding one would report a wrapped verifier
+failure as a harvest fault. For an ordinary failure the evidence is the
+caller's status, the capture and the journal as it stands.
 
 The `--sync` is a separate requirement from the poll. Waiting for collection
 proves the *unit* is gone; it says nothing about whether journald has flushed
@@ -8450,18 +8466,27 @@ for _ in $(seq 1 30); do
     esac
     sleep 1
 done
+# A bound that expires without a terminal state is a failed recovery, not a
+# successful one: the workload may still be running.
+if [ "$(systemctl --user show -P LoadState "$unit")" = loaded ] &&
+    [ "$state" != inactive ] && [ "$state" != failed ]; then
+    echo "$unit is still $state after the stop bound" >&2
+    exit 1
+fi
 if [ "$(systemctl --user show -P LoadState "$unit")" = loaded ] &&
     [ "$(systemctl --user show -P ActiveState "$unit")" = failed ]; then
     systemctl --user reset-failed "$unit"
 fi
 ```
 
-Three details in that sequence are load-bearing. The unit is named in full, for
+Four details in that sequence are load-bearing. The unit is named in full, for
 the reason above. The wait ends on `failed` as well as `inactive`: a stop that
 exhausts the scope's own `TimeoutStopSec` leaves the unit `failed`, which is a
 terminal state, and waiting only for `inactive` would loop until the bound
-above expired. And the reset is conditional on the unit still being both loaded
-and failed: a stop under `--collect` unloads the unit itself, and
+above expired. A bound that expires with the unit still active is reported as a
+failure, because a loop that simply falls through would describe an unrecovered
+scope as a recovered one. And the reset is conditional on the unit still being
+both loaded and failed: a stop under `--collect` unloads the unit itself, and
 `reset-failed` against a unit that is not loaded fails with "Unit … not loaded".
 
 A unit that is already unloaded needs neither step: the state the recovery

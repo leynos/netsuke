@@ -208,3 +208,25 @@ def property_arguments(block: str) -> dict[str, str]:
         name, _, raw = value.partition("=")
         properties[name] = raw.rstrip("\\")
     return properties
+
+
+def payload_statements(payload: str) -> list[str]:
+    """Return the payload's statements, with `;`-separated ones split out.
+
+    A substring search cannot tell an executed `set -o pipefail` from the same
+    text inside a quoted string: `echo "set -o pipefail"` prints the words and
+    enables nothing. Splitting on `;` and trimming gives the commands the shell
+    would actually run, which is what a contract about *effect* has to inspect.
+
+    This is not a shell parser. It handles the documented payload shape — a
+    short `;`-separated preamble followed by one pipeline — and would mis-split
+    a `;` inside quotes. That is acceptable here because the documents are ours
+    and the check fails closed: a payload it mis-splits simply fails to yield
+    the statement the contract wants.
+
+    Returns
+    -------
+    list[str]
+        The trimmed statements, in order, with empty ones dropped.
+    """
+    return [part.strip() for part in payload.split(";") if part.strip()]

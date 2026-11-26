@@ -247,8 +247,13 @@ def test_routine_examples_keep_pipefail_and_tee_inside_the_payload(path: Path) -
     Everything after `bash -c` includes the outer pipeline and any trailing
     comment, so a wrapper ending `bash -c 'make kani-ir' | tee capture # set -o
     pipefail` would satisfy a suffix check while masking the verifier exactly
-    as the contract forbids. `test_the_payload_check_rejects_an_outer_pipeline`
-    is that negative control.
+    as the contract forbids.
+
+    Within the payload the setting must be *executed*, so the statements are
+    split and compared rather than searched: `echo "set -o pipefail"` contains
+    the text and enables nothing. Two negative controls pin both halves —
+    `test_the_payload_check_rejects_an_outer_pipeline` and
+    `test_the_payload_check_rejects_a_printed_pipefail`.
     """
     for block in blocks.routine_blocks(path):
         payload = blocks.payload_argument(block)
@@ -256,13 +261,16 @@ def test_routine_examples_keep_pipefail_and_tee_inside_the_payload(path: Path) -
             f"{_relative(path)}: a routine example must pass `bash -c` a quoted "
             f"argument, so the payload can be identified:\n{block}"
         )
-        assert "set -o pipefail" in payload, (
-            f"{_relative(path)}: `set -o pipefail` must be set inside the "
-            f"`bash -c` payload, not in the shell that launches the scope:\n{block}"
+        statements = blocks.payload_statements(payload)
+        assert any(statement == "set -o pipefail" for statement in statements), (
+            f"{_relative(path)}: `set -o pipefail` must be an executed statement "
+            f"inside the `bash -c` payload. Printing the words enables nothing, "
+            f"and setting it in the launching shell does not reach the payload. "
+            f"The payload's statements were {statements}:\n{block}"
         )
-        assert "tee " in payload, (
-            f"{_relative(path)}: `tee` must write the capture from inside the "
-            f"scope's payload:\n{block}"
+        assert any("tee " in statement for statement in statements), (
+            f"{_relative(path)}: `tee` must run from inside the scope's "
+            f"payload:\n{block}"
         )
 
 
@@ -364,4 +372,20 @@ def _has_sequence(arguments: list[str], sequence: tuple[str, ...]) -> bool:
         arguments[start].rsplit("/", 1)[-1] == head
         and arguments[start + 1 : start + width] == rest
         for start in range(len(arguments) - width + 1)
+    )
+
+
+def test_the_payload_check_rejects_a_printed_pipefail() -> None:
+    """Prove a quoted `set -o pipefail` does not satisfy the check.
+
+    The payload prints the words and runs the pipeline unguarded, which is the
+    failure the contract exists to catch.
+    """
+    payload = 'echo "set -o pipefail"; make kani-ir 2>&1 | tee capture'
+    statements = blocks.payload_statements(payload)
+    assert "set -o pipefail" in payload, (
+        "the control must contain the text, or it would not exercise the quote trap"
+    )
+    assert not any(statement == "set -o pipefail" for statement in statements), (
+        f"a printed setting must not count as an executed one; got {statements}"
     )

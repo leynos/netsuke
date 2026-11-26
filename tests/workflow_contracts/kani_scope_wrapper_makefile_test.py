@@ -130,6 +130,26 @@ def test_the_strict_export_check_rejects_an_unexported_assignment() -> None:
     )
 
 
+def test_the_strict_export_check_rejects_an_inline_comment() -> None:
+    """Prove an export quoted in a trailing comment does not count.
+
+    The recipe runs the tests with no strict-mode assignment and mentions one
+    after a `#`, which a reader that only searched each line would accept.
+    """
+    export = f"export {EXPORT_VARIABLE}"
+    commented = f"{TARGET}:\n\tcargo nextest run # {export}\n"
+    recipe = _recipe_of(commented, TARGET)
+    statement = _single_statement_with(recipe, EXPORT_VARIABLE)
+    assert statement is None, (
+        "an export inside a trailing comment must not count as executed; "
+        f"got {statement!r}"
+    )
+    assert any(EXPORT_VARIABLE in line for line in _executable_lines(recipe)), (
+        "the control must still *contain* the text on an executable line, or it "
+        "would not exercise the comment filter"
+    )
+
+
 def test_the_strict_export_check_rejects_a_double_ampersand_chain() -> None:
     """Prove the check fires on a chained assignment too.
 
@@ -192,7 +212,7 @@ def _single_statement_with(recipe: list[str], needle: str) -> str | None:
     statements: list[str] = []
     current = ""
     for line in _executable_lines(recipe):
-        stripped = line.rstrip()
+        stripped = _strip_inline_comment(line).rstrip()
         continued = stripped.endswith("\\")
         current += stripped.removesuffix("\\")
         if not continued:
@@ -200,7 +220,10 @@ def _single_statement_with(recipe: list[str], needle: str) -> str | None:
             current = ""
     if current:
         statements.append(current)
-    return next((statement for statement in statements if needle in statement), None)
+    for statement in statements:
+        if needle in statement and _assigns_to_command(statement, needle):
+            return statement
+    return None
 
 
 def _recipe_of(text: str, target: str) -> list[str]:
@@ -226,6 +249,35 @@ def _recipe_of(text: str, target: str) -> list[str]:
             break
         body.append(line)
     return body
+
+
+def _strip_inline_comment(line: str) -> str:
+    """Return ``line`` with any trailing shell comment removed.
+
+    A `#` at the start of a word begins a comment; a `#` inside a word does
+    not, so a token such as `abc#def` survives. This matters here because a
+    comment can otherwise quote an export the command never runs.
+
+    Returns
+    -------
+    str
+        The executable part of the line.
+    """
+    marker = line.find(" #")
+    if marker < 0 and line.lstrip().startswith("#"):
+        return ""
+    return line if marker < 0 else line[:marker]
+
+
+def _assigns_to_command(statement: str, needle: str) -> bool:
+    """Whether ``needle`` appears before any comment in ``statement``.
+
+    Returns
+    -------
+    bool
+        True when the needle is part of the executed text.
+    """
+    return needle in _strip_inline_comment(statement)
 
 
 def _executable_lines(recipe: list[str]) -> list[str]:
