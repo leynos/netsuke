@@ -22,8 +22,7 @@ use anyhow::{Result, ensure};
 use super::{
     harness::capture_path,
     manager::{
-        JOURNAL_SETTLE_CEILING, JOURNAL_SETTLE_INTERVAL, Journal, captured, is_busy,
-        journal_extract, journal_extract_settled, scope_snapshot,
+        Journal, captured, is_busy, journal_extract, journal_extract_settled, scope_snapshot,
     },
     properties::ScopeSnapshot,
 };
@@ -120,28 +119,6 @@ impl Outcome {
     /// enough to *wait* for one whose final entries may still be arriving.
     pub(super) fn settle_journal(&mut self, required: &[&str]) {
         self.journal = journal_extract_settled(&self.unit, required);
-    }
-
-    /// Re-read until the extract stops changing, or a bounded wait ends.
-    ///
-    /// This is for a claim about an *absence* — "no failure line was written".
-    /// Such a claim means nothing while entries are still arriving, and there
-    /// is no positive line to wait for: a scope that exits cleanly logs only
-    /// its opening entry. Two consecutive identical reads are therefore the
-    /// honest barrier, and they are bounded so a journal that never settles
-    /// still ends the wait rather than hanging.
-    pub(super) fn settle_journal_stable(&mut self) {
-        let started = std::time::Instant::now();
-        let mut previous = self.journal.text().to_owned();
-        while started.elapsed() < JOURNAL_SETTLE_CEILING {
-            std::thread::sleep(JOURNAL_SETTLE_INTERVAL);
-            self.journal = journal_extract(&self.unit);
-            let current = self.journal.text().to_owned();
-            if current == previous {
-                return;
-            }
-            previous = current;
-        }
     }
 
     /// The caller's exit status, naming a signal death rather than omitting it.

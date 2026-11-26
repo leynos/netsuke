@@ -130,6 +130,26 @@ def test_the_strict_export_check_rejects_an_unexported_assignment() -> None:
     )
 
 
+def test_the_strict_export_check_rejects_a_double_ampersand_chain() -> None:
+    """Prove the check fires on a chained assignment too.
+
+    `NAME=value && cargo ...` looks like a prefix to a reader and is measured
+    not to export: the assignment is its own simple command.
+    """
+    chained = f"{TARGET}:\n\t{EXPORT_VARIABLE} && cargo nextest run\n"
+    recipe = _recipe_of(chained, TARGET)
+    statement = _single_statement_with(recipe, EXPORT_VARIABLE)
+    assert statement is not None, "the control must still yield a statement"
+    assert "cargo" in statement, (
+        "the control must join the assignment to the command, or it would test "
+        f"the continuation check instead; got {statement!r}"
+    )
+    assert not _exports_to_command(statement), (
+        "a `NAME=value && command` chain exports nothing and the check must "
+        f"say so; got {statement!r}"
+    )
+
+
 def _exports_to_command(statement: str) -> bool:
     """Whether the strict-mode variable reaches the command's environment.
 
@@ -146,9 +166,14 @@ def _exports_to_command(statement: str) -> bool:
         return True
     if EXPORT_VARIABLE not in statement:
         return False
-    # A prefix assignment leaves the command immediately after the value.
+    # A prefix assignment leaves the command immediately after the value. A
+    # command separator of any kind means the assignment ended a command of its
+    # own: `NAME=value && cmd` and `NAME=value; cmd` both set a shell variable
+    # and export nothing, which is measured behaviour rather than a guess.
     remainder = statement.split(EXPORT_VARIABLE, 1)[1].lstrip()
-    return not remainder.startswith(";")
+    if not remainder:
+        return False
+    return not remainder.startswith((";", "&&", "||", "|", "&"))
 
 
 def _single_statement_with(recipe: list[str], needle: str) -> str | None:

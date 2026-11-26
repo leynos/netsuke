@@ -347,12 +347,7 @@ fn collected_scope_propagates_a_failing_status_without_accumulating() -> Result<
             "echo verifier-failed; exit 7",
         )?;
         wait_until_unloaded(scope.unit())?;
-        let mut outcome = Outcome::harvest(scope.unit(), &output)?;
-        // The claim here is an *absence* — that no failure was recorded — and
-        // an absence only means something once the journal has stopped growing.
-        // A scope that exits logs only its opening entry, so there is no
-        // terminal line to wait for; stability is the honest barrier.
-        outcome.settle_journal_stable();
+        let outcome = Outcome::harvest(scope.unit(), &output)?;
 
         ensure!(
             outcome.caller_code == Some(7),
@@ -366,17 +361,12 @@ fn collected_scope_propagates_a_failing_status_without_accumulating() -> Result<
             "the complete capture must survive collection: {}",
             outcome.describe()
         );
-        if outcome.journal.is_empty() {
-            return skip(
-                scenario,
-                "the per-user journal is empty or unreadable for this unit",
-            );
-        }
-        ensure!(
-            !outcome.journal.text().contains("Failed with result"),
-            "a payload that exited non-zero must not leave the scope itself failed: {}",
-            outcome.describe()
-        );
+        // Whether the scope itself failed is read from the manager, not from
+        // the journal. An absence in the journal is only meaningful once
+        // journald has promised the extract is complete, and `--sync` is
+        // refused on this host, so a journal-based absence check could pass on
+        // a partial extract. `Result=` on a loaded unit cannot: it is the
+        // manager's own answer, and it is what the claim is really about.
         outcome.ensure_no_failed_scope("a collected scope must never be left failed")
     })?;
     ensure_own_unit_settled(&unit, "a collected scope must leave no failed unit behind")

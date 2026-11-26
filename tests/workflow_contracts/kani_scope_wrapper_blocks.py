@@ -168,7 +168,15 @@ def argument_tokens(block: str) -> list[str]:
         collapsed. Empty when the block is empty.
     """
     arguments = block.split("bash -c", 1)[0]
-    return arguments.replace("\\\n", " ").split()
+    # Join continuations first, so a flag split across two source lines is one
+    # token, then drop whole-line comments: a comment supplies no arguments, and
+    # a block whose comment quotes a bound it never sets must not satisfy a
+    # check that reads arguments.
+    joined = arguments.replace("\\\n", " ")
+    uncommented = [
+        line for line in joined.splitlines() if not line.lstrip().startswith("#")
+    ]
+    return " ".join(uncommented).split()
 
 
 def property_arguments(block: str) -> dict[str, str]:

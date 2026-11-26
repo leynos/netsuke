@@ -8317,6 +8317,10 @@ for _ in $(seq 1 25); do
     grep -q 'Stopping timed out\. Killing\.' "$capture.journal" && break
     sleep 0.2
 done
+grep -q 'Stopping timed out\. Killing\.' "$capture.journal" || {
+    echo "the escalation entry never appeared in the journal" >&2
+    exit 1
+}
 ```
 
 The `--sync` is a separate requirement from the poll. Waiting for collection
@@ -8335,13 +8339,19 @@ refused sync is a loss of guarantee, not a reason to abandon the harvest, and
 under `set -e` a bare failing command would end the snippet before it wrote
 anything.
 
-Read for the entry your claim depends on, which differs by scenario: a run
-stopped at its deadline needs the escalation line, while a routine run may need
-only confirmation that no failure line was written. A bounded wait is what
-distinguishes "journald is still flushing" from "the entry was never written":
-the latter must still fail, not silently pass on a partial extract. When the
-entry is expected to be *absent*, wait for a known terminal line first — an
-absence is only meaningful once the journal has stopped growing.
+Read for the entry your claim depends on. A run stopped at its deadline needs
+the escalation line, and the loop above ends with a `grep` that *fails* when
+the entry never arrived: a bounded wait distinguishes "journald is still
+flushing" from "the entry was never written", and only the second is a failure.
+Losing that final check turns the bounded wait into a bounded silence.
+
+Do not try to prove an *absence* from the journal. "No failure line was
+written" cannot be established without the completeness a successful `--sync`
+provides, and an absent line in a partial extract looks exactly like an absent
+line in a complete one. Read the manager instead:
+`systemctl --user show -P Result` on a unit that is still loaded is the
+manager's own answer to whether the scope failed, and it is what such a check
+is really about.
 
 #### Reading a scope's `Result`
 
