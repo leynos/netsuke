@@ -1257,6 +1257,27 @@ manifest_parsing_names_the_first_unknown_field_in_authoring_order: 1 passed
 all manifest unit tests: 386 tests run: 386 passed
 ```
 
+### EP-M4 notes
+
+- `when_type_cases.rs` covers a non-string `when` (YAML boolean, integer, null,
+  list, mapping) in both sections and both entry kinds, asserting the localized
+  `must be a string.` message. The message renders the field name between
+  Fluent isolation marks, so the assertion and the scenario match the stable
+  tail rather than the quoted name.
+- The first run measured the undefined-name behaviour rather than assuming it:
+  a bare undefined name is false and excludes the entry, while an operand,
+  comparison, or template substitution that consumes it is an error under the
+  strict environment. Clause `C-4` records both.
+- The layout contract rejected `json_value_strategy_test_support` (a `json_`
+  sibling of `json_envelope`) and `condition_shape_cases` (a `condition_`
+  sibling of `condition_cases`). Both pairs are unrelated, so the modules were
+  renamed to `arbitrary_json_test_support` and `shape_cases`, which the
+  contract's guidance prefers over recording an exception.
+- The `make proptest` census comment now names
+  `cargo nextest list --workspace --all-targets --all-features -E '<filter>'`
+  as the measuring command instead of quoting a count that has already changed
+  twice.
+
 ### EP-M3 mutation evidence
 
 Each patch was applied alone to the committed candidate, the whole
@@ -1447,8 +1468,14 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   `manifest::expand::property_tests` suite; all six mutation patches are
   detected by their named property for the intended reason and compile under
   `make test-kani-mutations`.
-- [ ] EP-M3 plateau gates.
-- [ ] EP-M4 unhappy paths, scenarios, documentation, and closure.
+- [x] (2026-11-26) EP-M3 plateau gates. Full seven-gate set green at
+  `4debbf39d` after the restriction-lint repairs; all four lint substages ran.
+- [x] (2026-11-26 10:36Z) EP-M4 unhappy paths, scenarios, documentation, and
+  closure. `when_type_cases.rs`, two behavioural scenarios with a recorded
+  deliberate-misstatement red run, the design/developers'/verification/layout/
+  contents/changelog/roadmap updates, and the Makefile census sentence.
+  `make test-workflow-contracts` passes after the two layout-contract renames.
+- [ ] EP-M4 closure gates and PR delivery.
 
 ## Surprises & discoveries
 
@@ -1640,6 +1667,12 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   first four would exceed the production-change tolerance, so they stay, and a
   follow-up issue may propose a `disallowed-methods` guard. Date/Author:
   2026-11-25, implementation agent.
+- Decision: rename the two new modules rather than record layout-contract
+  exceptions. Rationale: `json_envelope` and `arbitrary_json_test_support` are
+  unrelated, as are `condition_cases` and `shape_cases`; the contract's own
+  guidance is to rename a coincidental prefix match, and an exception table
+  entry would need a reason that does not exist. Date/Author: 2026-11-26,
+  implementation agent.
 - Decision: weight the two iteration-reading condition shapes at 3/15 each and
   draw condition presence 3:1. Rationale: the five-percent floor the plan sets
   for `condition-reads-index`, `condition-reads-item`, and `inject-gap` was not
