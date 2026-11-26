@@ -433,7 +433,15 @@ selection and proof-specific verification.
       a valid `target_family` predicate is now declined too, and its probe
       asserts that, because a visible decline is the safe direction and a
       guessed verdict is not.
-- [ ] Milestone 4: push, re-review, and the draft PR.
+- [x] (2026-11-26) Milestone 4: pushed and opened draft PR #1199. The branch
+      tracks `origin/issue-1038-exclude-kani-only-graph-implementations-from-ordinary-mutation-selection`
+      and the remote head matches local on every push, checked with
+      `ls-remote` rather than assumed.
+- [x] (2026-11-27) CodeRabbit reviewed the final head with **0 findings**. The
+      loop ran fifteen times; every finding was verified before being acted on,
+      and each was either fixed with a regression control or corrected in the
+      test when the expectation was wrong. The final two rounds each found one
+      real defect, and the last found none.
 
 Two gate findings were real and are fixed, not suppressed:
 
