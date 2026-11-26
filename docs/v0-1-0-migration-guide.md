@@ -751,12 +751,14 @@ it starts a comment. The scanner cannot tell the two apart without the `case`
 grammar, so it fails closed rather than encode a later path for the wrong shell
 context.
 
-The check reads the substitution's raw source, so it also fires when `case`
-appears only inside a quoted string or a comment, where the shell never reads
-it as a reserved word. That over-approximation is deliberate: narrowing it
-would mean parsing the substitution a second time, which is the ambiguity the
-check exists to avoid. A recipe of that shape takes the same remedy as any
-other rejected one.
+The check has two parts. The scanner must first record a `case` in a position
+it could not place, which needs the word to be bare: a wholly quoted header
+such as `printf '%s' 'case in'` is accepted. Once that has happened, the guard
+matches the substitution's raw text, so a `case ... in` written there as quoted
+argument data or comment text also triggers it. That second over-approximation
+is deliberate — narrowing it would mean parsing the substitution again, which
+is the ambiguity the check exists to avoid — so a recipe of that shape takes
+the same remedy as any other rejected one.
 
 The remedy depends on what the `#` means in your recipe.
 

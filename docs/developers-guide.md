@@ -10040,6 +10040,16 @@ opening only keeps the substitution open longer, where the boundary check
 rejects the marker instead of lowering it for a context the shell does not
 share.
 
+Every other keyword the tracker recognizes needs bare spelling, because the
+shell treats a quoted or escaped word as ordinary data. That covers the `time`
+and `coproc` prefixes and the command-list continuation words such as `if` and
+`{`: reading `\coproc` or `\time` as a prefix kept command position open, so
+the next word was read as a keyword where the shell reads an argument, and an
+`esac` there closed the construct early. A `(` directly after `<` or `>` is a
+process substitution rather than Bash's optional pattern-list opener, so it
+always raises the grouping depth; written in a header it records the subject,
+which keeps `$(case <(printf x) in *) …` accepted.
+
 The tracker takes comments from the traversal rather than inferring them from
 `#`, because comment text is copied verbatim and is never offered to it: the
 traversal reports the comment's start and the newline that ends it, so a `case`

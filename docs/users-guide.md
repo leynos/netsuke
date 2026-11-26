@@ -3222,10 +3222,12 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   in a substitution followed by a later marker is rejected as well. The scanner
   cannot otherwise distinguish a pattern terminator from one that closes a
   substitution, so a substitution containing the `case` reserved word is
-  rejected when a `)` is immediately followed by `#`. That check matches the
-  substitution's raw source text, so it can also reject a substitution whose
-  `case` appears only inside quotes or a comment; that over-approximation keeps
-  the check independent of a second parse of the substitution. To clear a
+  rejected when a `)` is immediately followed by `#`. That check also requires
+  the scanner to have recorded the `case` as a bare word it could not place, so
+  a wholly quoted header such as `printf '%s' 'case in'` is accepted. Once it
+  has, the guard matches the substitution's raw source text, so a `case ... in`
+  written there as quoted data or comment text also trips it; that
+  over-approximation keeps the check independent of a second parse. To clear a
   rejection, separate a real comment from the closer with whitespace, or keep a
   literal `#` in a quoted region or escape it as `\#`; the
   [v0.1.0 migration guide](v0-1-0-migration-guide.md#separate-a-substitution-closer-and-a-following-)
