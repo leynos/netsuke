@@ -318,6 +318,21 @@ selection and proof-specific verification.
       exact enumeration — no assignment satisfies `unix` and its negation — so
       it is a gate, not an unknown. The probe asserts that. Seeding the
       lost-conjunction defect fails two probes; all 19 pass when restored.
+- [x] (2026-11-26) The ninth review pass returned two identity findings, both
+      valid, and both the same shape as the earlier ones — a key that was
+      shorter than the thing it identified:
+  - **Selections were keyed by bare method name.** Two types can each declare
+    `output_index`, so a skip on one would satisfy a check about the other and
+    the protected method would go on producing false survivors. Selections are
+    now keyed `Owner::method`, and every assertion names its owner.
+  - **A `name = "value"` cfg atom was collected under one key and looked up
+    under another**, so `cfg(feature = "alpha")` read as undecidable rather
+    than production. Collection and evaluation now share `lookup_key`.
+- [x] (2026-11-26) Two probes cover them: a wrong-owner control (two types with
+      the same method name, one skipped) and a feature-value control. Seeding
+      the bare-name key or the mismatched lookup each fails its probe; all 21
+      pass when restored. The ownership and identity probes moved to
+      `identity_tests.rs` when `scope_tests.rs` crossed 400 lines.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:

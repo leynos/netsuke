@@ -38,7 +38,7 @@ mod outer {
 }
 ";
     let by_name = implementations_by_name(source)?;
-    for name in ["under_skipped_mod", "also_under_skipped_mod"] {
+    for name in ["Inner::under_skipped_mod", "Inner::also_under_skipped_mod"] {
         let selection = by_name
             .get(name)
             .with_context(|| format!("the probe must declare `{name}`"))?;
@@ -50,7 +50,7 @@ mod outer {
     }
 
     let kept = by_name
-        .get("under_open_mod")
+        .get("Kept::under_open_mod")
         .context("the probe must declare `under_open_mod`")?;
     ensure!(
         (kept.selected, kept.skipped) == (1, 0),
@@ -79,7 +79,7 @@ impl Demo {
 }
 ";
     let by_name = implementations_by_name(source)?;
-    for name in ["unsafe_method", "new", "empty_body"] {
+    for name in ["Demo::unsafe_method", "Demo::new", "Demo::empty_body"] {
         let selection = by_name
             .get(name)
             .with_context(|| format!("the probe must declare `{name}`"))?;
@@ -91,7 +91,7 @@ impl Demo {
     }
 
     let plain = by_name
-        .get("plain")
+        .get("Demo::plain")
         .context("the probe must declare `plain`")?;
     ensure!(
         (plain.selected, plain.skipped) == (1, 0),
@@ -120,7 +120,7 @@ impl Demo {
 ";
     let by_name = implementations_by_name(source)?;
     let paired = by_name
-        .get("paired")
+        .get("Demo::paired")
         .context("the probe must declare `paired`")?;
     ensure!(
         (paired.selected, paired.selected_production) == (2, 1),
@@ -129,7 +129,7 @@ impl Demo {
     );
 
     let proof_only = by_name
-        .get("proof_only")
+        .get("Demo::proof_only")
         .context("the probe must declare `proof_only`")?;
     ensure!(
         (proof_only.selected, proof_only.selected_production) == (1, 0),
@@ -173,7 +173,11 @@ impl Demo {
 }
 ";
     let by_name = implementations_by_name(source)?;
-    for name in ["bare_kani", "all_of_kani", "all_kani_and_unix"] {
+    for name in [
+        "Demo::bare_kani",
+        "Demo::all_of_kani",
+        "Demo::all_kani_and_unix",
+    ] {
         let selection = by_name
             .get(name)
             .with_context(|| format!("the probe must declare `{name}`"))?;
@@ -186,7 +190,7 @@ impl Demo {
 
     // `not(not(kani))` is `kani`, so it is still a gate.
     let doubled = by_name
-        .get("double_negation")
+        .get("Demo::double_negation")
         .context("the probe must declare `double_negation`")?;
     ensure!(
         (doubled.selected, doubled.selected_production) == (1, 0),
@@ -199,10 +203,10 @@ impl Demo {
     // `all(not(kani), not(unix))`, which holds when both are false. Both are
     // therefore satisfiable without Kani and are production code.
     for name in [
-        "any_kani_or_unix",
-        "not_kani",
-        "not_any_kani_or_unix",
-        "not_unix",
+        "Demo::any_kani_or_unix",
+        "Demo::not_kani",
+        "Demo::not_any_kani_or_unix",
+        "Demo::not_unix",
     ] {
         let selection = by_name
             .get(name)
@@ -235,7 +239,7 @@ impl Open {
 ";
     let by_name = implementations_by_name(source)?;
     let gated = by_name
-        .get("under_kani_impl")
+        .get("Gated::under_kani_impl")
         .context("the probe must declare `under_kani_impl`")?;
     ensure!(
         (gated.selected, gated.selected_production) == (1, 0),
@@ -244,7 +248,7 @@ impl Open {
     );
 
     let open = by_name
-        .get("under_open_impl")
+        .get("Open::under_open_impl")
         .context("the probe must declare `under_open_impl`")?;
     ensure!(
         (open.selected, open.selected_production) == (1, 1),
@@ -268,7 +272,7 @@ impl CrossScope {
 ";
     let by_name = implementations_by_name(source)?;
     let crossed = by_name
-        .get("cross_scope")
+        .get("CrossScope::cross_scope")
         .context("the probe must declare `cross_scope`")?;
     ensure!(
         (crossed.selected, crossed.selected_production) == (1, 0),
@@ -299,7 +303,7 @@ impl Demo {
 }
 ";
     let by_name = implementations_by_name(source)?;
-    for name in ["boolean_operand", "cfg_attr_expansion"] {
+    for name in ["Demo::boolean_operand", "Demo::cfg_attr_expansion"] {
         let selection = by_name
             .get(name)
             .with_context(|| format!("the probe must declare `{name}`"))?;
@@ -319,7 +323,7 @@ impl Demo {
     // assignments shows no assignment satisfies `unix` and its negation at
     // once, so the predicate requires Kani. It is a gate, not an unknown.
     let correlated = by_name
-        .get("correlated_atom")
+        .get("Demo::correlated_atom")
         .context("the probe must declare `correlated_atom`")?;
     ensure!(
         (correlated.undecidable, correlated.selected_production) == (0, 0),
@@ -329,7 +333,7 @@ impl Demo {
     );
 
     let decidable = by_name
-        .get("decidable")
+        .get("Demo::decidable")
         .context("the probe must declare `decidable`")?;
     ensure!(
         (decidable.undecidable, decidable.selected_production) == (0, 0),

@@ -49,6 +49,12 @@ use syn::{Attribute, File, ImplItem, ImplItemFn, Item, ItemImpl, ItemMod, Meta, 
 pub struct Implementation {
     /// The method name cargo-mutants would print for this implementation.
     pub name: String,
+    /// The type the method is implemented for.
+    ///
+    /// Kept alongside the name because a bare method name does not identify an
+    /// implementation: two types can each declare `output_index`, and a skip on
+    /// one would otherwise be counted against the other.
+    pub owner: String,
     /// True when this implementation produces no mutants at all.
     ///
     /// This is the *effective* decision: it accounts for a skip on the method
@@ -277,6 +283,26 @@ fn accumulate_module(module: &ItemMod, scope: &Scope, by_name: &mut BTreeMap<Str
     collect_items(items, &scope.clone().nested(&module.attrs), by_name);
 }
 
+/// The name of the type an `impl` block is for.
+///
+/// A path type yields its last segment, which is what cargo-mutants prints. A
+/// non-path type — a reference, a tuple, a generic binder — has no such name,
+/// and the model has no token printer available to render one. Those blocks are
+/// keyed by their source line instead, which keeps two distinct shapes from
+/// colliding under one empty key without claiming a name they do not have.
+fn self_ty_name(block: &ItemImpl) -> String {
+    if let syn::Type::Path(path) = &*block.self_ty
+        && let Some(segment) = path.path.segments.last()
+    {
+        return segment.ident.to_string();
+    }
+    use syn::spanned::Spanned;
+    // `proc_macro2::Span` exposes a source location only through its `Debug`
+    // rendering, which is stable enough to tell two blocks apart and is never
+    // asserted on.
+    format!("<impl at {:?}>", block.self_ty.span())
+}
+
 /// Fold one `impl` block's methods into `by_name`.
 ///
 /// An exclusion or a Kani gate on this block joins whatever the file and
@@ -290,10 +316,12 @@ fn accumulate_impl(block: &ItemImpl, scope: &Scope, by_name: &mut BTreeMap<Strin
         let method_scope = block_scope.clone().nested(&method.attrs);
         let implementation = Implementation {
             name: method.sig.ident.to_string(),
+            owner: self_ty_name(block),
             skipped: method_scope.excluded || is_ineligible(method),
             cfg: method_scope.verdict(),
         };
-        let entry = by_name.entry(implementation.name).or_default();
+        let key = format!("{}::{}", implementation.owner, implementation.name);
+        let entry = by_name.entry(key).or_default();
         if implementation.cfg == Verdict::Undecidable {
             entry.undecidable += 1;
         }
@@ -313,6 +341,8 @@ fn accumulate_impl(block: &ItemImpl, scope: &Scope, by_name: &mut BTreeMap<Strin
 
 mod cfg_predicate;
 
+#[cfg(test)]
+mod identity_tests;
 #[cfg(test)]
 mod scope_tests;
 #[cfg(test)]

@@ -90,11 +90,16 @@ fn fixture_source() -> Result<String> {
 ///
 /// Three of them are one half of a same-named pair, so the property that
 /// matters for those is that the *other* half stays selected.
+/// The four proof-only implementations issue #1038 reported as false survivors.
+///
+/// Qualified by owner: a bare method name does not identify an implementation,
+/// so keying the selection by name alone would let a skip on another type's
+/// `output_index` satisfy the checks below.
 const PROOF_ONLY_NAMES: [&str; 4] = [
-    "insert_edge",
-    "output_index",
-    "edge_id_for_output",
-    "target_for_output",
+    "BuildGraph::insert_edge",
+    "BuildGraph::output_index",
+    "BuildGraph::edge_id_for_output",
+    "BuildGraph::target_for_output",
 ];
 
 /// The subset of [`PROOF_ONLY_NAMES`] whose production counterpart exists.
@@ -104,18 +109,21 @@ const PROOF_ONLY_NAMES: [&str; 4] = [
 /// the target map directly. A blanket "every proof-only name keeps a selected
 /// twin" rule would demand a production method that does not exist, and adding
 /// one to satisfy a test would be the test dictating the design.
-const PROOF_ONLY_WITH_PRODUCTION_TWIN: [&str; 3] =
-    ["insert_edge", "edge_id_for_output", "target_for_output"];
+const PROOF_ONLY_WITH_PRODUCTION_TWIN: [&str; 3] = [
+    "BuildGraph::insert_edge",
+    "BuildGraph::edge_id_for_output",
+    "BuildGraph::target_for_output",
+];
 
 /// Named shared or production implementations that must stay selected.
 const STAYS_SELECTED: [&str; 7] = [
-    "insert_canonical_edge",
-    "index_output_aliases",
-    "index_output",
-    "replace_edge_for_output",
-    "duplicate_output",
-    "edge_count",
-    "output_count",
+    "BuildGraph::insert_canonical_edge",
+    "BuildGraph::index_output_aliases",
+    "BuildGraph::index_output",
+    "BuildGraph::replace_edge_for_output",
+    "BuildGraph::duplicate_output",
+    "BuildGraph::edge_count",
+    "BuildGraph::output_count",
 ];
 
 #[test]
@@ -238,7 +246,7 @@ fn the_fixture_distinguishes_which_half_of_a_pair_is_skipped() -> Result<()> {
     let by_name = implementations_by_name(&fixture_source()?)?;
 
     let skipped_kani = by_name
-        .get("skipped_kani_half")
+        .get("Demo::skipped_kani_half")
         .context("the fixture must declare `skipped_kani_half`")?;
     ensure!(
         (skipped_kani.selected, skipped_kani.skipped) == (1, 1),
@@ -248,7 +256,7 @@ fn the_fixture_distinguishes_which_half_of_a_pair_is_skipped() -> Result<()> {
     );
 
     let skipped_production = by_name
-        .get("skipped_production_half")
+        .get("Demo::skipped_production_half")
         .context("the fixture must declare `skipped_production_half`")?;
     ensure!(
         (
@@ -270,7 +278,10 @@ fn the_fixture_covers_an_enclosing_skip() -> Result<()> {
     // attribute of their own. It exists so the enclosing-skip rule has a
     // committed case as well as the inline probes above.
     let by_name = implementations_by_name(&fixture_source()?)?;
-    for name in ["under_skipped_impl", "also_under_skipped_impl"] {
+    for name in [
+        "SkippedImpl::under_skipped_impl",
+        "SkippedImpl::also_under_skipped_impl",
+    ] {
         let selection = by_name
             .get(name)
             .with_context(|| format!("the fixture must declare `{name}`"))?;

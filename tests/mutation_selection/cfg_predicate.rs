@@ -148,7 +148,7 @@ fn evaluate(predicate: &Meta, names: &[String], assignment: &[bool]) -> Option<b
                 None
             }
         }
-        Meta::NameValue(pair) => lookup(&pair.path, names, assignment),
+        Meta::NameValue(pair) => lookup_key(&name_value_key(pair)?, names, assignment),
     }
 }
 
@@ -156,10 +156,19 @@ fn evaluate(predicate: &Meta, names: &[String], assignment: &[bool]) -> Option<b
 ///
 /// A path that is not enumerated is `kani`, whose value is false.
 fn lookup(path: &syn::Path, names: &[String], assignment: &[bool]) -> Option<bool> {
-    let key = path_key(path);
+    lookup_key(&path_key(path), names, assignment)
+}
+
+/// The value of `key` under the assignment, if it is an enumerated atom.
+///
+/// Shared by both atom shapes so collection and evaluation cannot disagree
+/// about what identifies an atom: `collect_atoms` stores a `name = "value"`
+/// predicate under [`name_value_key`], and looking it up by bare name would
+/// find nothing and report the predicate as undecidable.
+fn lookup_key(key: &str, names: &[String], assignment: &[bool]) -> Option<bool> {
     names
         .iter()
-        .position(|name| *name == key)
+        .position(|name| name == key)
         .and_then(|index| assignment.get(index).copied())
 }
 

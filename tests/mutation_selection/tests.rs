@@ -36,7 +36,7 @@ fn bare_path_condition(&self) -> u32 { 2 }
 ";
     let by_name = implementations_by_name(source)?;
     let dropped = by_name
-        .get("parenthesized_condition")
+        .get("Demo::parenthesized_condition")
         .context("the probe must declare `parenthesized_condition`")?;
     ensure!(
         (dropped.selected, dropped.skipped) == (1, 0),
@@ -45,7 +45,7 @@ fn bare_path_condition(&self) -> u32 { 2 }
     );
 
     let honoured = by_name
-        .get("bare_path_condition")
+        .get("Demo::bare_path_condition")
         .context("the probe must declare `bare_path_condition`")?;
     ensure!(
         (honoured.selected, honoured.skipped) == (0, 1),
@@ -69,7 +69,10 @@ fn also_under_parenthesized_skip(&self) -> u32 { 2 }
 }
 ";
     let by_name = implementations_by_name(source)?;
-    for name in ["under_parenthesized_skip", "also_under_parenthesized_skip"] {
+    for name in [
+        "Demo::under_parenthesized_skip",
+        "Demo::also_under_parenthesized_skip",
+    ] {
         let selection = by_name
             .get(name)
             .with_context(|| format!("the probe must declare `{name}`"))?;
@@ -97,7 +100,7 @@ fn under_skipped_impl(&self) -> u32 { 1 }
 ";
     let by_name = implementations_by_name(source)?;
     let enclosed = by_name
-        .get("under_skipped_impl")
+        .get("Demo::under_skipped_impl")
         .context("the probe must declare `under_skipped_impl`")?;
     ensure!(
         (enclosed.selected, enclosed.skipped) == (0, 1),
@@ -137,7 +140,10 @@ fn under_nested_test_cfg(&self) -> u32 { 4 }
 }
 ";
     let by_name = implementations_by_name(source)?;
-    for name in ["under_cfg_test_impl", "under_cfg_test_method"] {
+    for name in [
+        "TestOnly::under_cfg_test_impl",
+        "Demo::under_cfg_test_method",
+    ] {
         let selection = by_name
             .get(name)
             .with_context(|| format!("the probe must declare `{name}`"))?;
@@ -148,7 +154,7 @@ fn under_nested_test_cfg(&self) -> u32 { 4 }
         );
     }
 
-    for name in ["plain", "under_nested_test_cfg"] {
+    for name in ["Demo::plain", "Demo::under_nested_test_cfg"] {
         let selection = by_name
             .get(name)
             .with_context(|| format!("the probe must declare `{name}`"))?;
@@ -176,7 +182,7 @@ fn in_a_skipped_file(&self) -> u32 { 1 }
 ";
     let by_name = implementations_by_name(source)?;
     let enclosed = by_name
-        .get("in_a_skipped_file")
+        .get("Demo::in_a_skipped_file")
         .context("the probe must declare `in_a_skipped_file`")?;
     ensure!(
         (enclosed.selected, enclosed.skipped) == (0, 1),
