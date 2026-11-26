@@ -2607,7 +2607,7 @@ Three rules decide which refusal a request receives, and their order matters:
    exceptions are `CardinalityError::Overflow`, whose count does not fit in
    `u64`, and `StreamLimitExceeded`, which names the `StreamKind` that passed
    its ceiling.
-3. **Zero and identity are exact, in that order.** `product` with
+3. **Identity and zero are exact, in that order.** `product` with
    `repeat == 0` yields one empty tuple, whatever the operands are. Otherwise a
    zero-length operand yields zero tuples. Both are answered before any ceiling
    comparison, because neither can grow; `repeat == 0` is checked first, so it
