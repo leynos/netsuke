@@ -17,10 +17,10 @@ use proptest::prelude::*;
 
 proptest! {
     #[test]
-    fn foreach_removal_keeps_authoring_key_order(spec in foreach_entry_spec_strategy()) {
+    fn foreach_removal_keeps_authoring_key_order(drawn in foreach_entry_spec_strategy()) {
         let spec = EntrySpec {
-            section: spec.section,
-            body: spec.body.without_condition(),
+            section: drawn.section,
+            body: drawn.body.without_condition(),
         };
         let expected = expected_outputs(&spec);
         let mut document = spec.render_document();

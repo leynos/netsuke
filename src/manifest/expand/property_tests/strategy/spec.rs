@@ -123,16 +123,12 @@ impl BodySpec {
     pub(in crate::manifest::expand::property_tests) fn predicted_vars_keys(
         &self,
     ) -> Option<Vec<String>> {
-        let mut keys: Vec<String> = self
-            .vars
-            .as_ref()
-            .map(|vars| vars.iter().map(|(key, _)| key.clone()).collect())
-            .unwrap_or_default();
+        let mut keys: Vec<String> = self.vars.as_ref().map_or_else(Vec::new, |vars| {
+            vars.iter().map(|(key, _)| key.clone()).collect()
+        });
         if self.is_foreach() {
             for injected in OVERRIDE_NAMES {
-                if !keys.iter().any(|key| key == injected) {
-                    keys.push(injected.to_owned());
-                }
+                append_missing(&mut keys, injected);
             }
         }
         (self.vars.is_some() || self.is_foreach()).then_some(keys)
@@ -141,19 +137,17 @@ impl BodySpec {
     /// The `vars` value an expanded entry must carry at one iteration.
     pub(in crate::manifest::expand::property_tests) fn predicted_vars(
         &self,
-        iteration: Option<(ManifestValue, usize)>,
+        iteration: Option<&(ManifestValue, usize)>,
     ) -> Option<ManifestMap> {
-        let mut map = self
-            .vars
-            .as_ref()
-            .map(|vars| ManifestMap::from_iter(vars.iter().cloned()))
-            .unwrap_or_default();
+        let mut map = self.vars.as_ref().map_or_else(ManifestMap::new, |vars| {
+            ManifestMap::from_iter(vars.iter().cloned())
+        });
         let has_iteration = iteration.is_some();
         if let Some((item, index)) = iteration {
-            map.insert("item".to_owned(), item);
+            map.insert("item".to_owned(), item.clone());
             map.insert(
                 "index".to_owned(),
-                ManifestValue::Number(Number::from(index as u64)),
+                ManifestValue::Number(Number::from(u64::try_from(*index).unwrap_or(u64::MAX))),
             );
         }
         (self.vars.is_some() || has_iteration).then_some(map)
@@ -255,10 +249,16 @@ impl BodySpec {
 
     /// The authored `vars` keys, for collision checks.
     pub(in crate::manifest::expand::property_tests) fn vars_keys(&self) -> Vec<&str> {
-        self.vars
-            .as_ref()
-            .map(|vars| vars.iter().map(|(key, _)| key.as_str()).collect())
-            .unwrap_or_default()
+        self.vars.as_ref().map_or_else(Vec::new, |vars| {
+            vars.iter().map(|(key, _)| key.as_str()).collect()
+        })
+    }
+}
+
+/// Append `key` unless the sequence already contains it.
+fn append_missing(keys: &mut Vec<String>, key: &str) {
+    if !keys.iter().any(|candidate| candidate == key) {
+        keys.push(key.to_owned());
     }
 }
 

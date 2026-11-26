@@ -15,6 +15,20 @@
 
 use super::Bindings;
 use proptest::prelude::*;
+
+/// Name the variable a slot stands for.
+///
+/// Generated slots are drawn from `0..VAR_NAMES.len()`, and the fallback keeps
+/// a future draw out of range from panicking while still naming a real
+/// variable, so a mismatch shows up as a property failure rather than a crash.
+pub(super) fn var_name(slot: usize) -> &'static str {
+    match slot {
+        0 => "w0",
+        1 => "w1",
+        2 => "w2",
+        _ => "w3",
+    }
+}
 use proptest::strategy::ValueTree;
 
 /// Names a condition may reference.
@@ -101,7 +115,7 @@ pub(in crate::manifest::expand::property_tests) enum Condition {
 impl Condition {
     /// Generate one shape from the closed set.
     pub(super) fn strategy() -> impl Strategy<Value = Self> {
-        let op = CmpOp::strategy().boxed();
+        let operator = CmpOp::strategy().boxed();
         // The two iteration shapes carry extra weight: they are only legal on
         // a foreach entry, and the coverage tripwire requires each to reach
         // five percent of *all* entry draws, most of which are static.
@@ -110,10 +124,14 @@ impl Condition {
             2 => (0..VAR_NAMES.len()).prop_map(Self::Flag),
             2 => (0..VAR_NAMES.len()).prop_map(Self::NotFlag),
             2 => (0..VAR_NAMES.len()).prop_map(Self::Count),
-            2 => ((0..VAR_NAMES.len()), op.clone(), -2i64..10)
-                .prop_map(|(slot, op, constant)| Self::VarCmp(slot, op, constant)),
-            3 => (op.clone(), -2i64..10).prop_map(|(op, constant)| Self::IndexCmp(op, constant)),
-            3 => (op, -2i64..10).prop_map(|(op, constant)| Self::ItemCmp(op, constant)),
+            2 => ((0..VAR_NAMES.len()), operator.clone(), -2i64..10)
+                .prop_map(|(slot, drawn_operator, constant)| {
+                    Self::VarCmp(slot, drawn_operator, constant)
+                }),
+            3 => (operator.clone(), -2i64..10)
+                .prop_map(|(drawn_operator, constant)| Self::IndexCmp(drawn_operator, constant)),
+            3 => (operator, -2i64..10)
+                .prop_map(|(drawn_operator, constant)| Self::ItemCmp(drawn_operator, constant)),
         ]
     }
 
@@ -121,7 +139,7 @@ impl Condition {
     pub(in crate::manifest::expand::property_tests) fn variable(self) -> Option<&'static str> {
         match self {
             Self::Flag(slot) | Self::NotFlag(slot) | Self::Count(slot) | Self::VarCmp(slot, ..) => {
-                Some(VAR_NAMES[slot])
+                Some(var_name(slot))
             }
             Self::Literal(_) | Self::IndexCmp(..) | Self::ItemCmp(..) => None,
         }
@@ -137,6 +155,11 @@ impl Condition {
     /// static entry.
     pub(in crate::manifest::expand::property_tests) const fn reads_item(self) -> bool {
         matches!(self, Self::ItemCmp(..))
+    }
+
+    /// Report whether the shape reads either iteration binding.
+    pub(in crate::manifest::expand::property_tests) const fn reads_iteration(self) -> bool {
+        self.reads_index() || self.reads_item()
     }
 
     /// Report whether the shape has a template form at all.
@@ -161,7 +184,9 @@ impl Condition {
             Self::NotFlag(slot) => !bindings.flag(slot),
             Self::Count(slot) => bindings.count(slot) != 0,
             Self::VarCmp(slot, op, constant) => op.apply(bindings.count(slot), constant),
-            Self::IndexCmp(op, constant) => op.apply(index as i64, constant),
+            Self::IndexCmp(op, constant) => {
+                op.apply(i64::try_from(index).unwrap_or(i64::MAX), constant)
+            }
             Self::ItemCmp(op, constant) => item.is_some_and(|value| op.apply(value, constant)),
         }
     }
@@ -170,11 +195,10 @@ impl Condition {
     pub(in crate::manifest::expand::property_tests) fn render(self) -> String {
         match self {
             Self::Literal(value) => value.to_string(),
-            Self::Flag(slot) => VAR_NAMES[slot].to_owned(),
-            Self::NotFlag(slot) => format!("not {}", VAR_NAMES[slot]),
-            Self::Count(slot) => VAR_NAMES[slot].to_owned(),
+            Self::Flag(slot) | Self::Count(slot) => var_name(slot).to_owned(),
+            Self::NotFlag(slot) => format!("not {}", var_name(slot)),
             Self::VarCmp(slot, op, constant) => {
-                format!("{} {} {constant}", VAR_NAMES[slot], op.render())
+                format!("{} {} {constant}", var_name(slot), op.render())
             }
             Self::IndexCmp(op, constant) => format!("index {} {constant}", op.render()),
             Self::ItemCmp(op, constant) => format!("item {} {constant}", op.render()),
@@ -184,6 +208,8 @@ impl Condition {
 
 #[cfg(test)]
 mod tests {
+    //! Reachability check for the closed set of shapes.
+
     use super::*;
     use proptest::test_runner::TestRunner;
     use std::collections::BTreeSet;
@@ -226,18 +252,18 @@ mod tests {
                 ));
             }
         }
-        assert_eq!(
-            seen,
-            BTreeSet::from([
-                "count",
-                "flag",
-                "index-cmp",
-                "item-cmp",
-                "literal",
-                "not-flag",
-                "var-cmp",
-            ])
-        );
+        let expected = BTreeSet::from([
+            "count",
+            "flag",
+            "index-cmp",
+            "item-cmp",
+            "literal",
+            "not-flag",
+            "var-cmp",
+        ]);
+        if seen != expected {
+            return Err(format!("reached {seen:?}, expected {expected:?}"));
+        }
         Ok(())
     }
 }

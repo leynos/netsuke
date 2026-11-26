@@ -45,7 +45,7 @@ type Tally = BTreeMap<&'static str, usize>;
 
 /// Count the classes of a fixed-seed sample of one strategy.
 fn tally<S: Strategy>(
-    strategy: S,
+    strategy: &S,
     classify: impl Fn(&S::Value, &mut Tally),
 ) -> Result<Tally, String> {
     let mut runner = TestRunner::new(Config {
@@ -55,7 +55,7 @@ fn tally<S: Strategy>(
     });
     let counts = RefCell::new(Tally::new());
     runner
-        .run(&strategy, |value| {
+        .run(strategy, |value| {
             classify(&value, &mut counts.borrow_mut());
             Ok(())
         })
@@ -65,7 +65,7 @@ fn tally<S: Strategy>(
 
 /// Fail when any required class reaches less than the floor.
 fn check_floors(tally: &Tally, required: &[&'static str], total: usize) -> Result<(), String> {
-    let floor = total * MINIMUM_CLASS_PERCENT / 100;
+    let floor = total.saturating_mul(MINIMUM_CLASS_PERCENT).div_euclid(100);
     let unreached: Vec<String> = required
         .iter()
         .filter(|class| tally.get(**class).copied().unwrap_or(0) < floor)
@@ -83,6 +83,16 @@ fn check_floors(tally: &Tally, required: &[&'static str], total: usize) -> Resul
         "classes below {MINIMUM_CLASS_PERCENT}% of {total} draws: {}; all counts: {tally:?}",
         unreached.join("; ")
     ))
+}
+
+/// Write one tally to standard output for a `--no-capture` run.
+///
+/// The repository denies `print_stdout`, and the tally is diagnostic evidence
+/// rather than test output, so it goes through the `Write` API and a failure
+/// to write it cannot fail the test.
+fn report(label: &str, tally: &Tally) {
+    use std::io::Write as _;
+    writeln!(std::io::stdout(), "{label} classes: {tally:?}").ok();
 }
 
 /// Add one class to a tally.
@@ -116,89 +126,139 @@ fn value_classes(value: &ManifestValue, depth: usize, tally: &mut Tally) {
             if depth >= 1 {
                 count(tally, "value-nested");
             }
-            for value in map.values() {
-                value_classes(value, depth + 1, tally);
+            for nested in map.values() {
+                value_classes(nested, depth + 1, tally);
             }
+        }
+    }
+}
+
+/// Classify one general entry's section, control-key layout, and bodies.
+fn entry_classes(spec: &super::strategy::EntrySpec, tally: &mut Tally) {
+    let body = &spec.body;
+    count(tally, spec.section.name());
+    count(
+        tally,
+        if body.is_foreach() {
+            "foreach"
+        } else {
+            "static"
+        },
+    );
+    count(tally, if body.has_vars() { "vars" } else { "no-vars" });
+    condition_classes(body, tally);
+    count(tally, control_class(body));
+    foreach_classes(body, tally);
+    value_and_vars_classes(body, tally);
+}
+
+/// Classify a condition's presence, form, and free names.
+fn condition_classes(body: &super::strategy::BodySpec, tally: &mut Tally) {
+    let Some(condition) = body.condition() else {
+        count(tally, "no-condition");
+        return;
+    };
+    count(tally, "condition");
+    count(tally, condition_form_class(body));
+    if condition.variable().is_some() {
+        count(tally, "condition-reads-vars");
+    }
+    if condition.reads_index() {
+        count(tally, "condition-reads-index");
+    }
+    if condition.reads_item() {
+        count(tally, "condition-reads-item");
+    }
+}
+
+/// Name the condition's spelling class.
+fn condition_form_class(body: &super::strategy::BodySpec) -> &'static str {
+    if body.condition_is_template() {
+        "condition-template"
+    } else {
+        "condition-expression"
+    }
+}
+
+/// Name the class of keys that follow the control block.
+fn control_class(body: &super::strategy::BodySpec) -> &'static str {
+    match body.following_key_count() {
+        0 => "control-last",
+        1 => "control-one-following",
+        _ => "control-two-or-more-following",
+    }
+}
+
+/// Classify the foreach spelling and whether the value list is empty.
+fn foreach_classes(body: &super::strategy::BodySpec, tally: &mut Tally) {
+    let Some(items) = body.items() else {
+        return;
+    };
+    count(
+        tally,
+        if items.len() == 0 {
+            "foreach-empty"
+        } else {
+            "foreach-non-empty"
+        },
+    );
+    count(
+        tally,
+        match body.foreach_form() {
+            Some(super::strategy::ForeachForm::InlineArray) => "foreach-array",
+            Some(super::strategy::ForeachForm::ListLiteral) => "foreach-string",
+            None => "foreach-missing-form",
+        },
+    );
+}
+
+/// Classify every authored field and `vars` value by JSON kind.
+fn value_and_vars_classes(body: &super::strategy::BodySpec, tally: &mut Tally) {
+    for (_, value) in body.fields() {
+        value_classes(value, 0, tally);
+    }
+    for key in body.vars_keys() {
+        if let Some(value) = body.vars_value(key) {
+            value_classes(value, 0, tally);
         }
     }
 }
 
 #[test]
 fn entry_generator_reaches_every_material_class() -> Result<(), String> {
-    let tally = tally(entry_spec_strategy(), |spec, tally| {
-        let body = &spec.body;
-        count(tally, spec.section.name());
-        count(
-            tally,
-            if body.is_foreach() {
-                "foreach"
-            } else {
-                "static"
-            },
-        );
-        count(tally, if body.has_vars() { "vars" } else { "no-vars" });
-        match body.condition() {
-            Some(condition) => {
-                count(tally, "condition");
-                count(
-                    tally,
-                    if body.condition_is_template() {
-                        "condition-template"
-                    } else {
-                        "condition-expression"
-                    },
-                );
-                if condition.variable().is_some() {
-                    count(tally, "condition-reads-vars");
-                }
-                if condition.reads_index() {
-                    count(tally, "condition-reads-index");
-                }
-                if condition.reads_item() {
-                    count(tally, "condition-reads-item");
-                }
-            }
-            None => count(tally, "no-condition"),
-        }
-        match body.following_key_count() {
-            0 => count(tally, "control-last"),
-            1 => count(tally, "control-one-following"),
-            _ => count(tally, "control-two-or-more-following"),
-        }
-        if let Some(items) = body.items() {
-            count(
-                tally,
-                if items.len() == 0 {
-                    "foreach-empty"
-                } else {
-                    "foreach-non-empty"
-                },
-            );
-            count(
-                tally,
-                match body.foreach_form() {
-                    Some(super::strategy::ForeachForm::InlineArray) => "foreach-array",
-                    Some(super::strategy::ForeachForm::ListLiteral) => "foreach-string",
-                    None => "foreach-missing-form",
-                },
-            );
-        }
-        for (_, value) in body.fields() {
-            value_classes(value, 0, tally);
-        }
-        for key in body.vars_keys() {
-            if let Some(value) = body.vars_value(key) {
-                value_classes(value, 0, tally);
-            }
-        }
-    })?;
-    println!("entry classes: {tally:?}");
+    let tally = tally(&entry_spec_strategy(), entry_classes)?;
+    report("entry", &tally);
     check_floors(&tally, ENTRY_CLASSES, COVERAGE_CASES as usize)
+}
+
+/// Count the item kinds one foreach entry's values reach.
+fn item_classes(body: &super::strategy::BodySpec, items: &Items, tally: &mut Tally) {
+    let Items::Arbitrary(values) = items else {
+        count(tally, "item-number");
+        return;
+    };
+    let string_form = body.foreach_form() == Some(super::strategy::ForeachForm::ListLiteral);
+    for value in values {
+        let kind = match value {
+            ManifestValue::Null => {
+                if string_form {
+                    count(tally, "item-null-string");
+                }
+                "item-null"
+            }
+            ManifestValue::Bool(_) => "item-bool",
+            ManifestValue::Number(_) => "item-number",
+            ManifestValue::String(_) => "item-string",
+            ManifestValue::Array(_) => "item-array",
+            ManifestValue::Object(_) => "item-object",
+        };
+        count(tally, kind);
+    }
 }
 
 #[test]
 fn foreach_generator_reaches_every_injection_class() -> Result<(), String> {
-    let tally = tally(foreach_entry_spec_strategy(), |spec, tally| {
+    let tally = tally(&foreach_entry_spec_strategy(), |spec, tally| {
         let body = &spec.body;
         if let Some(form) = body.foreach_form() {
             count(
@@ -234,36 +294,15 @@ fn foreach_generator_reaches_every_injection_class() -> Result<(), String> {
         {
             count(tally, "inject-gap");
         }
-        match items {
-            Items::Integers(_) => count(tally, "item-number"),
-            Items::Arbitrary(values) => {
-                for value in values {
-                    match value {
-                        ManifestValue::Null => {
-                            count(tally, "item-null");
-                            if body.foreach_form()
-                                == Some(super::strategy::ForeachForm::ListLiteral)
-                            {
-                                count(tally, "item-null-string");
-                            }
-                        }
-                        ManifestValue::Bool(_) => count(tally, "item-bool"),
-                        ManifestValue::Number(_) => count(tally, "item-number"),
-                        ManifestValue::String(_) => count(tally, "item-string"),
-                        ManifestValue::Array(_) => count(tally, "item-array"),
-                        ManifestValue::Object(_) => count(tally, "item-object"),
-                    }
-                }
-            }
-        }
+        item_classes(body, items, tally);
     })?;
-    println!("inject classes: {tally:?}");
+    report("inject", &tally);
     check_floors(&tally, INJECT_CLASSES, COVERAGE_CASES as usize)
 }
 
 #[test]
 fn static_condition_generator_reaches_every_verdict_class() -> Result<(), String> {
-    let tally = tally(static_condition_entry_spec_strategy(), |spec, tally| {
+    let tally = tally(&static_condition_entry_spec_strategy(), |spec, tally| {
         let body = &spec.body;
         let verdict_holds = expected_filtered(body).is_empty();
         let template = body.condition_is_template();
@@ -285,13 +324,13 @@ fn static_condition_generator_reaches_every_verdict_class() -> Result<(), String
             count(tally, "reads-vars");
         }
     })?;
-    println!("static classes: {tally:?}");
+    report("static", &tally);
     check_floors(&tally, STATIC_CLASSES, COVERAGE_CASES as usize)
 }
 
 #[test]
 fn document_generator_reaches_every_section_class() -> Result<(), String> {
-    let tally = tally(document_spec_strategy(), |spec, tally| {
+    let tally = tally(&document_spec_strategy(), |spec, tally| {
         if !spec.targets.is_empty() {
             count(tally, "targets-entries");
         }
@@ -312,7 +351,7 @@ fn document_generator_reaches_every_section_class() -> Result<(), String> {
             }
         }
     })?;
-    println!("document classes: {tally:?}");
+    report("document", &tally);
     check_floors(&tally, DOCUMENT_CLASSES, COVERAGE_CASES as usize)
 }
 
@@ -323,7 +362,7 @@ fn document_generator_reaches_every_section_class() -> Result<(), String> {
 /// and name that class.
 #[test]
 fn the_threshold_check_reports_an_unreached_class() -> Result<(), String> {
-    let observed = tally(foreach_entry_spec_strategy(), |spec, tally| {
+    let observed = tally(&foreach_entry_spec_strategy(), |spec, tally| {
         let forced = spec.body.clone().with_control_last();
         match forced.following_key_count() {
             0 => count(tally, "control-last"),

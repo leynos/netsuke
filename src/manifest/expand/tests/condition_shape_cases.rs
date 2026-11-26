@@ -14,16 +14,16 @@ use serde_json::json;
 /// Expand one entry and report whether its condition kept it.
 fn survives(
     when: &str,
-    vars: Option<ManifestValue>,
-    foreach: Option<ManifestValue>,
+    vars_value: Option<ManifestValue>,
+    foreach_value: Option<ManifestValue>,
 ) -> Result<bool> {
     let environment = Environment::new();
     let mut entry = ManifestMap::new();
     entry.insert("name".into(), json!("witness"));
-    if let Some(vars) = vars {
+    if let Some(vars) = vars_value {
         entry.insert("vars".into(), vars);
     }
-    if let Some(foreach) = foreach {
+    if let Some(foreach) = foreach_value {
         entry.insert("foreach".into(), foreach);
     }
     entry.insert("when".into(), json!(when));

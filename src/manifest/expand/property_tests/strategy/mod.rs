@@ -191,20 +191,24 @@ impl Bindings {
     }
 
     /// Read the boolean value one variable name holds.
+    ///
+    /// Slots are drawn from `0..4`; the default keeps an out-of-range slot
+    /// from panicking, so a generator defect shows up as a property failure
+    /// rather than as a crashed test.
     pub(in crate::manifest::expand::property_tests) fn flag(&self, slot: usize) -> bool {
-        self.flags[slot]
+        self.flags.get(slot).copied().unwrap_or_default()
     }
 
     /// Read the integer value one variable name holds.
     pub(in crate::manifest::expand::property_tests) fn count(&self, slot: usize) -> i64 {
-        self.counts[slot]
+        self.counts.get(slot).copied().unwrap_or_default()
     }
 
     /// Render the value a condition reading one of its names must see.
     pub(super) fn binding_for(condition: Condition, slot: usize, bindings: &Self) -> ManifestValue {
         match condition {
-            Condition::Flag(_) | Condition::NotFlag(_) => ManifestValue::Bool(bindings.flags[slot]),
-            _ => ManifestValue::Number(Number::from(bindings.counts[slot])),
+            Condition::Flag(_) | Condition::NotFlag(_) => ManifestValue::Bool(bindings.flag(slot)),
+            _ => ManifestValue::Number(Number::from(bindings.count(slot))),
         }
     }
 }

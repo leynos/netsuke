@@ -61,6 +61,6 @@ pub(super) fn owned_key_sequence(map: &ManifestMap) -> Vec<String> {
 }
 
 /// Read one entry's `vars` object, when it carries one.
-pub(super) fn vars_of<'a>(entry: &'a ManifestValue) -> Option<&'a ManifestMap> {
+pub(super) fn vars_of(entry: &ManifestValue) -> Option<&ManifestMap> {
     entry.get("vars").and_then(ManifestValue::as_object)
 }

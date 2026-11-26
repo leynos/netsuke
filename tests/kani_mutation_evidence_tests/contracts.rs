@@ -33,7 +33,7 @@ const EXEMPT_HARNESSES: &[(&str, &str)] = &[];
 /// `ninja_gen__determinism` entries state contract properties over whole
 /// emitted bundles, which the bounded harnesses do not model. The
 /// `manifest__expand` entries state contracts over authored entry maps, whose
-/// evaluation runs MiniJinja and allocates `serde_json` maps, which ADR-0047
+/// evaluation runs `MiniJinja` and allocates `serde_json` maps, which ADR-0047
 /// already found impractical for the bounded model checker. Keep this list
 /// narrow: each entry must name a live Proptest property, and the patch still
 /// has to apply cleanly below.

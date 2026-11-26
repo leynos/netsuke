@@ -66,16 +66,16 @@ fn every_section_and_foreach_form_is_reachable() -> Result<(), String> {
             seen.insert("vars");
         }
     }
-    assert_eq!(
-        seen,
-        BTreeSet::from([
-            "actions",
-            "condition",
-            "foreach",
-            "static",
-            "targets",
-            "vars"
-        ])
-    );
+    let expected = BTreeSet::from([
+        "actions",
+        "condition",
+        "foreach",
+        "static",
+        "targets",
+        "vars",
+    ]);
+    if seen != expected {
+        return Err(format!("reached {seen:?}, expected {expected:?}"));
+    }
     Ok(())
 }

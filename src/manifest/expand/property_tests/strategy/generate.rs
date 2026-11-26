@@ -3,7 +3,7 @@
 //! Every generator constructs a legal entry rather than filtering for one, so
 //! no draw is discarded and the coverage classification counts real cases.
 
-use super::condition::{Condition, VAR_NAMES};
+use super::condition::{Condition, VAR_NAMES, var_name};
 use super::spec::ControlLayout;
 use super::{
     Bindings, BodySpec, DocumentSpec, EntrySpec, ForeachForm, Items, OVERRIDE_NAMES, Section,
@@ -109,8 +109,8 @@ fn fields_strategy() -> impl Strategy<Value = Vec<(String, ManifestValue)>> {
 fn vars_strategy(
     condition: Option<Condition>,
     is_foreach: bool,
-    bindings: Bindings,
-) -> impl Strategy<Value = Vec<(String, ManifestValue)>> {
+    bindings: &Bindings,
+) -> impl Strategy<Value = Vec<(String, ManifestValue)>> + use<> {
     let mut pool: Vec<&'static str> = VAR_NAMES.to_vec();
     if is_foreach {
         pool.extend(OVERRIDE_NAMES);
@@ -120,16 +120,16 @@ fn vars_strategy(
         .into_iter()
         .filter(|name| Some(*name) != free_variable)
         .collect();
-    let bound = condition.zip(free_variable).and_then(|(condition, name)| {
+    let bound = condition.zip(free_variable).and_then(|(shape, name)| {
         VAR_NAMES
             .iter()
             .position(|candidate| *candidate == name)
-            .map(|slot| (condition, slot))
+            .map(|slot| (shape, slot))
     });
-    let bound_value = bound.map(|(condition, slot)| {
+    let bound_value = bound.map(|(shape, slot)| {
         (
-            VAR_NAMES[slot].to_owned(),
-            Bindings::binding_for(condition, slot, &bindings),
+            var_name(slot).to_owned(),
+            Bindings::binding_for(shape, slot, bindings),
         )
     });
     (
@@ -142,7 +142,10 @@ fn vars_strategy(
                 return chosen;
             }
             for (position, index) in indexes.iter().enumerate() {
-                let name = extra_pool[index.index(extra_pool.len())];
+                let name = extra_pool
+                    .get(index.index(extra_pool.len()))
+                    .copied()
+                    .unwrap_or("w0");
                 if chosen.iter().any(|(key, _)| key == name) {
                     continue;
                 }
@@ -187,32 +190,36 @@ fn body_strategy(has_foreach: bool, has_when: bool) -> impl Strategy<Value = Bod
                 has_vars,
                 (control_position, vars_position),
             )| {
-                let condition = normalise_condition(drawn_condition, has_foreach);
-                let condition = has_when.then_some(condition);
-                let integer_domain = integer_domain || condition.is_some_and(Condition::reads_item);
-                let vars = vars_strategy(condition, has_foreach, bindings.clone());
+                let normalised = normalise_condition(drawn_condition, has_foreach);
+                let maybe_condition = has_when.then_some(normalised);
+                let integer_items =
+                    integer_domain || maybe_condition.is_some_and(Condition::reads_item);
+                let vars = vars_strategy(maybe_condition, has_foreach, &bindings);
                 // Only a boolean-valued shape has a template form. A template
                 // that rendered an integer would read as false, which is not
                 // what the condition means.
-                let accepts_template = condition.is_some_and(Condition::has_template_form);
+                let accepts_template = maybe_condition.is_some_and(Condition::has_template_form);
                 let template = any::<bool>().prop_map(move |drawn| drawn && accepts_template);
-                let items: BoxedStrategy<Option<Items>> = if has_foreach {
-                    items_strategy(integer_domain).prop_map(Some).boxed()
+                let item_values: BoxedStrategy<Option<Items>> = if has_foreach {
+                    items_strategy(integer_items).prop_map(Some).boxed()
                 } else {
                     Just(None).boxed()
                 };
-                (vars, template, items).prop_map(move |(vars, template, items)| {
-                    let vars = (has_vars || condition.is_some()).then_some(vars);
-                    BodySpec {
-                        fields: fields.clone(),
-                        vars,
-                        vars_position,
-                        foreach: items.map(|items| (form, items)),
-                        when: condition.map(|condition| (condition, template)),
-                        control_layout: ControlLayout::drawn(control_position),
-                        bindings: bindings.clone(),
-                    }
-                })
+                (vars, template, item_values).prop_map(
+                    move |(drawn_vars, drawn_template, drawn_items)| {
+                        let final_vars =
+                            (has_vars || maybe_condition.is_some()).then_some(drawn_vars);
+                        BodySpec {
+                            fields: fields.clone(),
+                            vars: final_vars,
+                            vars_position,
+                            foreach: drawn_items.map(|values| (form, values)),
+                            when: maybe_condition.map(|shape| (shape, drawn_template)),
+                            control_layout: ControlLayout::drawn(control_position),
+                            bindings: bindings.clone(),
+                        }
+                    },
+                )
             },
         )
 }
@@ -240,11 +247,13 @@ fn entry_with_controls(has_foreach: bool, has_when: bool) -> impl Strategy<Value
 
 /// Replace a condition that a static entry cannot legally carry.
 fn normalise_condition(condition: Condition, has_foreach: bool) -> Condition {
-    if has_foreach || !(condition.reads_index() || condition.reads_item()) {
-        condition
-    } else {
-        Condition::Literal(true)
+    if has_foreach {
+        return condition;
     }
+    if condition.reads_iteration() {
+        return Condition::Literal(true);
+    }
+    condition
 }
 
 /// Generate one entry with its section.
