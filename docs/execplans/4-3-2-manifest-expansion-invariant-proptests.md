@@ -351,7 +351,11 @@ RM-4.3.2.d -> DES-FOREACH -> C-4 -> EP-M4
   -> manifest.feature "Static targets and actions honour when"
   -> manifest.feature "Parsing fails when a when condition is not a string"
 FV-EXP -> EP-M3
-  -> manifest::expand::property_tests::coverage::generators_reach_every_material_class
+  -> manifest::expand::property_tests::coverage::entry_generator_reaches_every_material_class
+  -> manifest::expand::property_tests::coverage::foreach_generator_reaches_every_injection_class
+  -> manifest::expand::property_tests::coverage::static_condition_generator_reaches_every_verdict_class
+  -> manifest::expand::property_tests::coverage::document_generator_reaches_every_section_class
+  -> manifest::expand::property_tests::coverage::the_threshold_check_reports_an_unreached_class
 ```
 
 ## Constraints
@@ -764,7 +768,8 @@ when its condition holds, and the report counts every exclusion.*
   `TestRunner::new` alone seeds from the operating system and would not be
   reproducible.
 - Artefact:
-  `src/manifest/expand/property_tests/coverage.rs::generators_reach_every_material_class`.
+  `src/manifest/expand/property_tests/coverage/`, one classifier per strategy
+  plus the negative control `the_threshold_check_reports_an_unreached_class`.
 - Evidence: the test prints per-class counts under `--no-capture` and fails if
   any class falls below threshold.
 - Non-vacuity: a negative control in the same module,
@@ -1273,6 +1278,20 @@ all manifest unit tests: 386 tests run: 386 passed
   sibling of `condition_cases`). Both pairs are unrelated, so the modules were
   renamed to `arbitrary_json_test_support` and `shape_cases`, which the
   contract's guidance prefers over recording an exception.
+- The two EP-M4 scenarios each ran once with a deliberate misstatement before
+  the recorded green run. Transcript of the static-`when` scenario's red run,
+  with the expected target count temporarily written as three:
+
+  ```plaintext
+  cargo nextest run --all-features --test bdd_tests \
+    -E 'test(/manifest_static_targets_and_actions_honour_when/)'
+  FAIL ... Step failed at index 2: Then the manifest has 3 targets -
+  expected manifest to have 3 targets, got 2
+  ```
+
+  The corrected count (two) then passed, and the non-string scenario passed on
+  its first green run after the message assertion was narrowed to the stable
+  tail of the localized message.
 - The `make proptest` census comment now names
   `cargo nextest list --workspace --all-targets --all-features -E '<filter>'`
   as the measuring command instead of quoting a count that has already changed
@@ -1283,43 +1302,609 @@ all manifest unit tests: 386 tests run: 386 passed
 Each patch was applied alone to the committed candidate, the whole
 `manifest::expand` filter was run with
 `PROPTEST_DISABLE_FAILURE_PERSISTENCE=1`, and the patch was reverted. Every
-named property is in its failure set.
+named property is in its failure set. The record below is from the final code,
+after the assessment repairs. The test identifiers are long enough to exceed
+the prose line limit, so this block disables that one rule rather than breaking
+a name across lines.
+
+<!-- markdownlint-disable MD013 -->
+
+### MUT-PRESERVE
+
+Failure set (17):
+
+- `manifest::expand::property_tests::expansion_report::foreach_preserves_description_templates`
+- `manifest::expand::property_tests::order::foreach_removal_keeps_authoring_key_order`
+- `manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field`
+- `manifest::expand::property_tests::when_removed::no_expanded_entry_carries_a_control_key`
+- `manifest::expand::tests::description_cases::expand_foreach_descriptions_are_rendered_with_item::case_1_targets`
+- `manifest::expand::tests::description_cases::expand_foreach_descriptions_are_rendered_with_item::case_2_actions`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_01_targets_first`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_02_targets_second`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_03_targets_third`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_04_targets_fourth`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_05_targets_last`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_06_actions_first`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_07_actions_second`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_08_actions_third`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_09_actions_fourth`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_10_actions_last`
+- `manifest::expand::tests::structure_cases::expand_foreach_preserves_object_key_order`
+
+Shrunk input:
 
 ```plaintext
-MUT-PRESERVE (retain name/command/vars/when)
-  preserve::expansion_copies_every_non_control_field
-    left  ["vars", "name"]
-    right ["z8", "vars", "name"]              entry key sequence
-  also: order::foreach_removal…, when_removed…, description cases,
-        key_order_cases foreach cases, structure_cases
-MUT-ORDER-FOREACH (restore entry.remove("foreach"))
-  order::foreach_removal_keeps_authoring_key_order
-    left  ["description", "u4_x7e", "q71lto__", "always", "script", "vars"]
-    right ["description", "q71lto__", "always", "script", "vars", "u4_x7e"]
-  also: preserve…, key_order_cases foreach cases
-MUT-ORDER-WHEN (restore map.remove("when"))
-  order::when_removal_keeps_authoring_key_order
-    left  ["description", "vars", "k9otl_"]
-    right ["description", "k9otl_", "vars"]
-  also: preserve…, key_order_cases static cases
-MUT-WHEN-KEEP (map.get("when") instead of shift_remove)
-  when_removed::no_expanded_entry_carries_a_control_key
-    expanded actions entry still carries `when`: {"when":"w0 < 1",…}
-  also: order::when…, preserve…, expansion_report::foreach_key_is_removed…
-MUT-INDEX (index: expanded.len() instead of the iterator position)
-  inject::each_expansion_carries_its_own_item_and_index
-    expanded entry count: left 0, right 1
-  also: expansion_report::filtering_report…, foreach_sequences::
-        foreach_filters_generated_sequence_values, foreach/condition example cases
-MUT-STATIC-LEAK (excluded static entry returned instead of dropped)
-  static_when::static_entries_survive_exactly_when_their_condition_holds
-    kept entry count: left 1, right 0
-  also: when_removed…, order::when…, preserve…, many condition cases
+thread 'manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field' (2842907) panicked at src/manifest/expand/property_tests/preserve.rs:12:1:
+    Test failed: assertion failed: `(left == right)`
+      left: `["vars"]`,
+     right: `["m", "vars", "phony"]`: entry key sequence at src/manifest/expand/property_tests/preserve.rs:27.
+    minimal failing input: spec = EntrySpec {
+        section: Targets,
+        body: BodySpec {
+            fields: [
+                (
+                    "m",
+                    Number(18446744073709551615),
+                ),
+                (
+                    "phony",
+                    Object {},
+                ),
+            ],
+            vars: Some(
+                [
+                    (
+                        "w0",
+                        Bool(false),
+                    ),
+                    (
+                        "w3",
+                        String("e_1_"),
+                    ),
+                    (
+                        "w2",
+                        Number(9223372036854775807),
+                    ),
+                    (
+                        "w1",
+                        Number(18446744073709551615),
+                    ),
+                ],
+            ),
+            vars_position: Index(
+                10290398661289040038,
+            ),
+            foreach: Some(
+                (
+                    InlineArray,
+                    Integers(
+                        [
+                            -1,
+                            0,
+                            2,
+                            5,
+                            -1,
+                        ],
+                    ),
+                ),
+            ),
+            when: Some(
+                (
+                    NotFlag(
+                        0,
+                    ),
+                    true,
+                ),
+            ),
+            control_layout: Drawn(
+                Index(
+                    2093209201134512442,
+                ),
+            ),
+            control_order: WhenFirst,
+            control_adjacency: Adjacent,
+            bindings: Bindings {
+                flags: [
+                    false,
+                    false,
+                    false,
+                    false,
+                ],
+                counts: [
+                    1,
+                    0,
+                    0,
+                    0,
+                ],
+            },
+        },
+    }
+    	successes: 3
+    	local rejects: 0
+    	global rejects: 0
 ```
 
-Every patch also passed `make test-kani-mutations` (the compile guard compiles
-each patched tree under `-D warnings`), and the contract tests accept all six
-stems.
+### MUT-ORDER-FOREACH
+
+Failure set (8):
+
+- `manifest::expand::property_tests::order::foreach_removal_keeps_authoring_key_order`
+- `manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_01_targets_first`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_02_targets_second`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_03_targets_third`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_06_actions_first`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_07_actions_second`
+- `manifest::expand::tests::key_order_cases::foreach_removal_keeps_authoring_key_order::case_08_actions_third`
+
+Shrunk input:
+
+```plaintext
+thread 'manifest::expand::property_tests::order::foreach_removal_keeps_authoring_key_order' (2713999) panicked at src/manifest/expand/property_tests/order.rs:18:1:
+    Test failed: assertion failed: `(left == right)`
+      left: `["description", "oix7_", "vars"]`,
+     right: `["description", "vars", "oix7_"]`: entry key sequence at src/manifest/expand/property_tests/order.rs:36.
+    minimal failing input: drawn = EntrySpec {
+        section: Targets,
+        body: BodySpec {
+            fields: [
+                (
+                    "description",
+                    Object {
+                        "ag": Object {
+                            "": String("{{ item }}"),
+                            "z": Number(5226254704213463909),
+                        },
+                    },
+                ),
+                (
+                    "oix7_",
+                    Object {},
+                ),
+            ],
+            vars: Some(
+                [],
+            ),
+            vars_position: Index(
+                10343849444351811568,
+            ),
+            foreach: Some(
+                (
+                    ListLiteral,
+                    Integers(
+                        [
+                            0,
+                        ],
+                    ),
+                ),
+            ),
+            when: Some(
+                (
+                    Literal(
+                        false,
+                    ),
+                    false,
+                ),
+            ),
+            control_layout: Drawn(
+                Index(
+                    5127002501699666988,
+                ),
+            ),
+            control_order: WhenFirst,
+            control_adjacency: Separated,
+            bindings: Bindings {
+                flags: [
+                    false,
+                    false,
+                    false,
+                    false,
+                ],
+                counts: [
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            },
+        },
+    }
+    	successes: 1
+    	local rejects: 0
+    	global rejects: 0
+```
+
+### MUT-ORDER-WHEN
+
+Failure set (8):
+
+- `manifest::expand::property_tests::order::when_removal_keeps_authoring_key_order`
+- `manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_01_targets_first`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_02_targets_second`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_03_targets_third`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_06_actions_first`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_07_actions_second`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_08_actions_third`
+
+Shrunk input:
+
+```plaintext
+thread 'manifest::expand::property_tests::order::when_removal_keeps_authoring_key_order' (2767631) panicked at src/manifest/expand/property_tests/order.rs:18:1:
+    Test failed: assertion failed: `(left == right)`
+      left: `["df6_n6t", "zf9_a_0", "vars"]`,
+     right: `["df6_n6t", "vars", "zf9_a_0"]`: entry key sequence at src/manifest/expand/property_tests/order.rs:63.
+    minimal failing input: spec = EntrySpec {
+        section: Targets,
+        body: BodySpec {
+            fields: [
+                (
+                    "df6_n6t",
+                    Null,
+                ),
+                (
+                    "zf9_a_0",
+                    Number(-9223372036854775808),
+                ),
+            ],
+            vars: Some(
+                [
+                    (
+                        "w0",
+                        Bool(false),
+                    ),
+                    (
+                        "w3",
+                        Array [],
+                    ),
+                ],
+            ),
+            vars_position: Index(
+                11546097470625972027,
+            ),
+            foreach: None,
+            when: Some(
+                (
+                    NotFlag(
+                        0,
+                    ),
+                    false,
+                ),
+            ),
+            control_layout: Drawn(
+                Index(
+                    4835333019593789487,
+                ),
+            ),
+            control_order: ForeachFirst,
+            control_adjacency: Separated,
+            bindings: Bindings {
+                flags: [
+                    false,
+                    false,
+                    false,
+                    false,
+                ],
+                counts: [
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            },
+        },
+    }
+    	successes: 2
+    	local rejects: 0
+    	global rejects: 0
+```
+
+### MUT-WHEN-KEEP
+
+Failure set (30):
+
+- `manifest::expand::property_tests::expansion_report::foreach_key_is_removed_from_all_entries`
+- `manifest::expand::property_tests::order::when_removal_keeps_authoring_key_order`
+- `manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field`
+- `manifest::expand::property_tests::when_removed::no_expanded_entry_carries_a_control_key`
+- `manifest::expand::tests::action_condition_cases::expand_static_action_when_supports_complementary_command_available_branches::case_1_present`
+- `manifest::expand::tests::action_condition_cases::expand_static_action_when_supports_complementary_command_available_branches::case_2_absent`
+- `manifest::expand::tests::command_available::no_shell_cases::command_available_fallback_does_not_invoke_impure_helpers`
+- `manifest::expand::tests::command_available::selection_cases::real_command_available_selects_exactly_one_action::case_1_nextest_present`
+- `manifest::expand::tests::command_available::selection_cases::real_command_available_selects_exactly_one_action::case_2_nextest_absent`
+- `manifest::expand::tests::condition_cases::expand_foreach_when_injects_iteration_vars_only_for_kept_entries::case_1_targets`
+- `manifest::expand::tests::condition_cases::expand_foreach_when_injects_iteration_vars_only_for_kept_entries::case_2_actions`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_03`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_04`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_06`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_07`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_08`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_09`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_01_targets_first`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_02_targets_second`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_03_targets_third`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_04_targets_fourth`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_05_targets_last`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_06_actions_first`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_07_actions_second`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_08_actions_third`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_09_actions_fourth`
+- `manifest::expand::tests::key_order_cases::static_when_removal_keeps_authoring_key_order::case_10_actions_last`
+- `manifest::expand::tests::structure_cases::expand_foreach_preserves_object_key_order`
+- `manifest::expand::tests::target_command_available_cases::expand_static_target_when_supports_complementary_command_available_branches::case_1_present`
+- `manifest::expand::tests::target_command_available_cases::expand_static_target_when_supports_complementary_command_available_branches::case_2_absent`
+
+Shrunk input:
+
+```plaintext
+thread 'manifest::expand::property_tests::when_removed::no_expanded_entry_carries_a_control_key' (2943487) panicked at src/manifest/expand/property_tests/when_removed.rs:12:1:
+    Test failed: expanded actions entry still carries `when`: {"when":"true","vars":{}} at src/manifest/expand/property_tests/when_removed.rs:33.
+    minimal failing input: spec = DocumentSpec {
+        targets: [],
+        actions: [
+            EntrySpec {
+                section: Actions,
+                body: BodySpec {
+                    fields: [],
+                    vars: Some(
+                        [],
+                    ),
+                    vars_position: Index(
+                        6462038354837510584,
+                    ),
+                    foreach: None,
+                    when: Some(
+                        (
+                            Literal(
+                                true,
+                            ),
+                            false,
+                        ),
+                    ),
+                    control_layout: Drawn(
+                        Index(
+                            31154,
+                        ),
+                    ),
+                    control_order: ForeachFirst,
+                    control_adjacency: Adjacent,
+                    bindings: Bindings {
+                        flags: [
+                            false,
+                            false,
+                            false,
+                            false,
+                        ],
+                        counts: [
+                            0,
+                            0,
+                            0,
+                            0,
+                        ],
+                    },
+                },
+            },
+        ],
+    }
+    	successes: 0
+    	local rejects: 0
+    	global rejects: 0
+```
+
+### MUT-INDEX
+
+Failure set (18):
+
+- `manifest::expand::property_tests::expansion_report::filtering_report_matches_removed_entries`
+- `manifest::expand::property_tests::foreach_sequences::foreach_filters_generated_sequence_values`
+- `manifest::expand::property_tests::inject::each_expansion_carries_its_own_item_and_index`
+- `manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field`
+- `manifest::expand::property_tests::shape_cases::index_comparisons::case_3`
+- `manifest::expand::property_tests::shape_cases::index_comparisons::case_4`
+- `manifest::expand::property_tests::shape_cases::index_comparisons::case_5`
+- `manifest::expand::property_tests::shape_cases::index_comparisons::case_6`
+- `manifest::expand::property_tests::shape_cases::item_comparisons::case_1`
+- `manifest::expand::property_tests::shape_cases::item_comparisons::case_3`
+- `manifest::expand::property_tests::shape_cases::item_comparisons::case_4`
+- `manifest::expand::property_tests::shape_cases::item_comparisons::case_5`
+- `manifest::expand::property_tests::shape_cases::item_comparisons::case_6`
+- `manifest::expand::property_tests::when_removed::no_expanded_entry_carries_a_control_key`
+- `manifest::expand::tests::action_condition_cases::expand_foreach_applies_action_when_expression`
+- `manifest::expand::tests::condition_cases::expand_foreach_applies_when_expression`
+- `manifest::expand::tests::condition_cases::expand_foreach_when_injects_iteration_vars_only_for_kept_entries::case_1_targets`
+- `manifest::expand::tests::condition_cases::expand_foreach_when_injects_iteration_vars_only_for_kept_entries::case_2_actions`
+
+Shrunk input:
+
+```plaintext
+thread 'manifest::expand::property_tests::inject::each_expansion_carries_its_own_item_and_index' (2649757) panicked at src/manifest/expand/property_tests/inject.rs:15:1:
+    Test failed: assertion failed: `(left == right)`
+      left: `0`,
+     right: `1`: expanded entry count at src/manifest/expand/property_tests/inject.rs:31.
+    minimal failing input: spec = EntrySpec {
+        section: Targets,
+        body: BodySpec {
+            fields: [
+                (
+                    "conditional",
+                    String("{{ item }}"),
+                ),
+                (
+                    "order_only_deps",
+                    Object {},
+                ),
+                (
+                    "deps",
+                    Number(9223372036854775807),
+                ),
+            ],
+            vars: Some(
+                [],
+            ),
+            vars_position: Index(
+                9577905342736275154,
+            ),
+            foreach: Some(
+                (
+                    InlineArray,
+                    Arbitrary(
+                        [
+                            Null,
+                            Null,
+                            Number(-731),
+                            Array [
+                                Bool(false),
+                                Object {
+                                    "": Number(4559849100416636647),
+                                    "nlde": Bool(true),
+                                    "p": String("plain text"),
+                                    "rb": Null,
+                                },
+                                Number(-2436893430145674900),
+                            ],
+                        ],
+                    ),
+                ),
+            ),
+            when: Some(
+                (
+                    IndexCmp(
+                        Gt,
+                        2,
+                    ),
+                    false,
+                ),
+            ),
+            control_layout: Drawn(
+                Index(
+                    52932725173566466,
+                ),
+            ),
+            control_order: ForeachFirst,
+            control_adjacency: Separated,
+            bindings: Bindings {
+                flags: [
+                    false,
+                    false,
+                    false,
+                    false,
+                ],
+                counts: [
+                    4,
+                    -1,
+                    8,
+                    2,
+                ],
+            },
+        },
+    }
+    	successes: 3
+    	local rejects: 0
+    	global rejects: 0
+```
+
+### MUT-STATIC-LEAK
+
+Failure set (32):
+
+- `manifest::expand::property_tests::order::when_removal_keeps_authoring_key_order`
+- `manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field`
+- `manifest::expand::property_tests::shape_cases::boolean_variable_conditions::case_2`
+- `manifest::expand::property_tests::shape_cases::integer_truthiness_conditions::case_1`
+- `manifest::expand::property_tests::shape_cases::literal_conditions::case_2`
+- `manifest::expand::property_tests::shape_cases::negated_variable_conditions::case_1`
+- `manifest::expand::property_tests::shape_cases::variable_comparisons::case_02`
+- `manifest::expand::property_tests::shape_cases::variable_comparisons::case_04`
+- `manifest::expand::property_tests::shape_cases::variable_comparisons::case_06`
+- `manifest::expand::property_tests::shape_cases::variable_comparisons::case_08`
+- `manifest::expand::property_tests::shape_cases::variable_comparisons::case_10`
+- `manifest::expand::property_tests::shape_cases::variable_comparisons::case_12`
+- `manifest::expand::property_tests::static_when::static_entries_survive_exactly_when_their_condition_holds`
+- `manifest::expand::property_tests::when_removed::no_expanded_entry_carries_a_control_key`
+- `manifest::expand::tests::action_condition_cases::expand_static_action_when_false_drops_action`
+- `manifest::expand::tests::action_condition_cases::expand_static_action_when_supports_complementary_command_available_branches::case_1_present`
+- `manifest::expand::tests::action_condition_cases::expand_static_action_when_supports_complementary_command_available_branches::case_2_absent`
+- `manifest::expand::tests::command_available::no_shell_cases::command_available_fallback_does_not_invoke_impure_helpers`
+- `manifest::expand::tests::command_available::selection_cases::real_command_available_selects_exactly_one_action::case_1_nextest_present`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_01`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_02`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_05`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_10`
+- `manifest::expand::tests::condition_cases::expand_static_target_when_evaluation::case_11`
+- `manifest::expand::tests::condition_cases::expand_static_when_can_read_entry_vars`
+- `manifest::expand::tests::condition_cases::expand_static_when_false_removes_entry_before_typed_ast::case_1_targets`
+- `manifest::expand::tests::condition_cases::expand_static_when_false_removes_entry_before_typed_ast::case_2_actions`
+- `manifest::expand::tests::description_cases::expand_when_filter_drops_description_with_the_entry::case_1_targets`
+- `manifest::expand::tests::description_cases::expand_when_filter_drops_description_with_the_entry::case_2_actions`
+- `manifest::expand::tests::expand_foreach_returns_filtering_stats`
+- `manifest::expand::tests::target_command_available_cases::expand_static_target_when_supports_complementary_command_available_branches::case_1_present`
+- `manifest::expand::tests::target_command_available_cases::expand_static_target_when_supports_complementary_command_available_branches::case_2_absent`
+
+Shrunk input:
+
+```plaintext
+thread 'manifest::expand::property_tests::static_when::static_entries_survive_exactly_when_their_condition_holds' (2887282) panicked at src/manifest/expand/property_tests/static_when.rs:13:1:
+    Test failed: assertion failed: `(left == right)`
+      left: `1`,
+     right: `0`: kept entry count at src/manifest/expand/property_tests/static_when.rs:26.
+    minimal failing input: spec = EntrySpec {
+        section: Targets,
+        body: BodySpec {
+            fields: [],
+            vars: Some(
+                [
+                    (
+                        "w0",
+                        Number(6),
+                    ),
+                ],
+            ),
+            vars_position: Index(
+                0,
+            ),
+            foreach: None,
+            when: Some(
+                (
+                    VarCmp(
+                        0,
+                        Lt,
+                        5,
+                    ),
+                    false,
+                ),
+            ),
+            control_layout: Drawn(
+                Index(
+                    0,
+                ),
+            ),
+            control_order: ForeachFirst,
+            control_adjacency: Adjacent,
+            bindings: Bindings {
+                flags: [
+                    false,
+                    false,
+                    false,
+                    false,
+                ],
+                counts: [
+                    6,
+                    0,
+                    0,
+                    0,
+                ],
+            },
+        },
+    }
+    	successes: 0
+    	local rejects: 0
+    	global rejects: 0
+```
+
+<!-- markdownlint-enable MD013 -->
+
+Every patch also passed `make test-kani-mutations`, and the contract tests
+accept all six stems.
 
 Coverage counts, fixed seed `0x432`, 512 draws, all floors at 5%:
 
@@ -1475,7 +2060,10 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   deliberate-misstatement red run, the design/developers'/verification/layout/
   contents/changelog/roadmap updates, and the Makefile census sentence.
   `make test-workflow-contracts` passes after the two layout-contract renames.
-- [ ] EP-M4 closure gates and PR delivery.
+- [x] (2026-11-26) EP-M4 closure gates and PR delivery. The eleven-target
+  closure set passed at `f93d43173`; the hosted completeness assessment then
+  found six gaps, all repaired at `b0d3f9496` and re-gated.
+- [ ] Hosted assessment re-check and merge.
 
 ## Surprises & discoveries
 
