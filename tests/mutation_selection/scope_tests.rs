@@ -252,3 +252,89 @@ impl Open {
     );
     Ok(())
 }
+
+#[test]
+fn the_reader_conjoins_cfg_conditions_across_scopes() -> Result<()> {
+    // Each condition alone is satisfiable without `kani`, but together they are
+    // not: the block needs `unix` and the method needs its negation. Treating
+    // the two verdicts as independent, rather than conjoining them, would call
+    // this production code and let a missing counterpart pass the check.
+    let source = "\
+#[cfg(any(kani, unix))]
+impl CrossScope {
+    #[cfg(any(kani, not(unix)))]
+    fn cross_scope(&self) -> u32 { 1 }
+}
+";
+    let by_name = implementations_by_name(source)?;
+    let crossed = by_name
+        .get("cross_scope")
+        .context("the probe must declare `cross_scope`")?;
+    ensure!(
+        (crossed.selected, crossed.selected_production) == (1, 0),
+        "the conjunction of the block's and the method's conditions requires \
+         `kani`, so `cross_scope` must not count as production; got {crossed:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_reader_refuses_conditions_it_cannot_decide() -> Result<()> {
+    // Four forms are beyond the model, and each must be reported rather than
+    // guessed at. Guessing "production" would certify a counterpart that may
+    // not exist, which is the defect this contract exists to catch.
+    let source = "\
+impl Demo {
+    #[cfg(any(true))]
+    fn boolean_operand(&self) -> u32 { 1 }
+
+    #[cfg(any(kani, all(unix, not(unix))))]
+    fn correlated_atom(&self) -> u32 { 2 }
+
+    #[cfg_attr(not(kani), cfg(any()))]
+    fn cfg_attr_expansion(&self) -> u32 { 3 }
+
+    #[cfg(kani)]
+    fn decidable(&self) -> u32 { 4 }
+}
+";
+    let by_name = implementations_by_name(source)?;
+    for name in ["boolean_operand", "cfg_attr_expansion"] {
+        let selection = by_name
+            .get(name)
+            .with_context(|| format!("the probe must declare `{name}`"))?;
+        ensure!(
+            selection.undecidable == 1,
+            "`{name}` uses a form the model cannot read, so it must be \
+             reported as undecidable rather than classified; got {selection:?}"
+        );
+        ensure!(
+            selection.selected_production == 0,
+            "an undecidable condition must never be certified as production; \
+             got {selection:?}"
+        );
+    }
+
+    // `any(kani, all(unix, not(unix)))` is decidable after all: enumerating
+    // assignments shows no assignment satisfies `unix` and its negation at
+    // once, so the predicate requires Kani. It is a gate, not an unknown.
+    let correlated = by_name
+        .get("correlated_atom")
+        .context("the probe must declare `correlated_atom`")?;
+    ensure!(
+        (correlated.undecidable, correlated.selected_production) == (0, 0),
+        "`correlated_atom` requires `kani` once its repeated atom is resolved, \
+         so it must be decided as a gate rather than reported undecidable; got \
+         {correlated:?}"
+    );
+
+    let decidable = by_name
+        .get("decidable")
+        .context("the probe must declare `decidable`")?;
+    ensure!(
+        (decidable.undecidable, decidable.selected_production) == (0, 0),
+        "a plain `cfg(kani)` is decidable and is not production, so it must \
+         report neither; got {decidable:?}"
+    );
+    Ok(())
+}

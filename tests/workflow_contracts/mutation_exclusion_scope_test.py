@@ -15,18 +15,16 @@ reported six false survivors from them. Those items carry per-item
 These assertions hold the workflow side: the excludes stay a whole-file set, and
 the mixed file is never added to it. They live here rather than in
 ``mutation_testing_test`` so that module stays inside the repository's 400-line
-limit; the parsing helpers are imported from it rather than duplicated, so there
-is one definition of where ``exclude-globs`` is read from.
+limit. The two accessors both contracts need — the parsed ``with:`` block and
+the string narrowing — live in ``mutation_caller_support``, so there is one
+definition of where ``exclude-globs`` is read from and neither module imports a
+private helper from the other.
 
 Run via ``make test-workflow-contracts``.
 """
 
-from mutation_testing_test import (
-    KANI_EXCLUDES,
-    MIXED_KANI_FILE,
-    _mutation_with_block,
-    _require_str,
-)
+from mutation_caller_support import mutation_with_block, require_str
+from mutation_testing_test import KANI_EXCLUDES, MIXED_KANI_FILE
 
 
 def _excluded_globs() -> tuple[str, ...]:
@@ -41,8 +39,8 @@ def _excluded_globs() -> tuple[str, ...]:
     tuple[str, ...]
         The comma-separated globs with surrounding whitespace removed.
     """
-    exclude_globs = _require_str(
-        _mutation_with_block().get("exclude-globs"),
+    exclude_globs = require_str(
+        mutation_with_block().get("exclude-globs"),
         "jobs.mutation.with.exclude-globs",
     )
     return tuple(glob.strip() for glob in exclude_globs.split(",") if glob.strip())

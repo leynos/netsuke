@@ -43,7 +43,7 @@ Run via ``make test-workflow-contracts``.
 
 import copy
 
-import pytest
+from mutation_caller_support import mutation_with_block, require_str
 from workflow_loading import (
     MUTATION_TESTING_WORKFLOW_PATH,
     load_workflow,
@@ -293,50 +293,9 @@ def test_flag_guard_rejects_a_seeded_override() -> None:
     )
 
 
-def _mutation_with_block() -> dict[str, object]:
-    """Return the caller's ``with:`` block."""
-    return require_mapping(
-        _mutation_job(load_workflow(MUTATION_TESTING_WORKFLOW_PATH)).get("with"),
-        "jobs.mutation.with",
-    )
-
-
-def _require_str(value: object, description: str, consequence: str = "") -> str:
-    """Return ``value`` as a string, failing the test when it is not one.
-
-    The caller supplies the consequence rather than this helper, because
-    only the caller knows *why* the type matters: for ``install-mold`` a
-    YAML boolean is an argument-type error at workflow-call time, whereas
-    for ``setup-commands`` any non-string is simply the wrong shape.
-
-    Parameters
-    ----------
-    value
-        The parsed YAML value to narrow.
-    description
-        How to name the value in a failure, e.g. the caller's dotted path.
-    consequence
-        A clause appended to the failure message explaining why the type
-        matters. Empty when the wrong shape is self-evidently wrong.
-
-    Returns
-    -------
-    str
-        ``value`` itself, narrowed to ``str``.
-    """
-    match value:
-        case str() as text:
-            return text
-        case other:
-            pytest.fail(
-                f"{description} must be a string, got {other!r} "
-                f"({type(other).__name__}){consequence}"
-            )
-
-
 def test_with_block_carries_the_caller_configuration() -> None:
     """The caller passes exactly the documented configuration."""
-    with_block = _mutation_with_block()
+    with_block = mutation_with_block()
     assert with_block == EXPECTED_WITH, (
         "jobs.mutation.with must be exactly the documented configuration "
         "(the #[cfg(kani)] module excludes, --all-features to match the CI "
@@ -355,8 +314,8 @@ def test_install_mold_is_enabled_in_the_type_the_shared_workflow_declares() -> N
     would be rejected, so the value's type is asserted and not just its
     truthiness.
     """
-    value = _require_str(
-        _mutation_with_block().get(INSTALL_MOLD_INPUT),
+    value = require_str(
+        mutation_with_block().get(INSTALL_MOLD_INPUT),
         f"jobs.mutation.with.{INSTALL_MOLD_INPUT}",
         "; the shared workflow declares it type: string, and a YAML boolean "
         "would be rejected at workflow-call time",
@@ -377,8 +336,8 @@ def test_setup_commands_verify_the_build_tool_pins_before_the_baseline() -> None
     printed variables are what the run log carries for the open question
     about which flag source selects the linker.
     """
-    value = _require_str(
-        _mutation_with_block().get(SETUP_COMMANDS_INPUT),
+    value = require_str(
+        mutation_with_block().get(SETUP_COMMANDS_INPUT),
         f"jobs.mutation.with.{SETUP_COMMANDS_INPUT}",
     )
     assert BUILD_TOOLS_TARGET in value, (

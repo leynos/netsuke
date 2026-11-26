@@ -292,6 +292,32 @@ selection and proof-specific verification.
       The test was also wrong and is corrected: `not(any(kani, unix))` moved to
       the production group, and a `not(unix)` control was added. Seeding the
       previous negation rule fails that one test while the other fifteen pass.
+- [x] (2026-11-26) The eighth review pass returned six findings. They had one
+      root cause between them, plus two independent corrections:
+  - Four were the same defect in different clothes: the model answered a
+    two-valued question (*is this a Kani gate?*) when correctness needs three —
+    proven production, proven Kani-only, or **undecidable** — and it silently
+    chose "production" for anything it could not read. The cases were a
+    `cfg_attr` expanding to `cfg`, a Boolean operand such as `cfg(any(true))`,
+    two atoms correlated across a predicate, and two conditions correlated
+    across nested scopes. The model is now exact within a bound: it collects
+    the distinct atoms, enumerates their assignments with `kani` pinned false,
+    and evaluates the whole conjoined predicate under each. Nested scopes are
+    conjoined as predicates before evaluation rather than combined as separate
+    verdicts, which is what makes the cross-scope case come out right.
+    Anything still unreadable is reported as `Undecidable`, and a new contract
+    assertion makes an undecidable node in the graph module a failure rather
+    than a quiet pass.
+  - The workflow comment named the test file as the file holding both halves,
+    which made "do not add the file here" ambiguous. It now names
+    `src/ir/graph/mod.rs` and describes the test only as the contract.
+  - Two private helpers were imported from one collected test module by
+    another. They moved to `mutation_caller_support.py`, which both import.
+- [x] (2026-11-26) One expectation was wrong and corrected rather than the code
+      bent to match it: `any(kani, all(unix, not(unix)))` is *decidable* under
+      exact enumeration — no assignment satisfies `unix` and its negation — so
+      it is a gate, not an unknown. The probe asserts that. Seeding the
+      lost-conjunction defect fails two probes; all 19 pass when restored.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:

@@ -45,11 +45,13 @@ jobs:
       # Whole files only, deliberately. This glob is path-scoped, so it
       # cannot exclude a proof-only item from a file that also holds the
       # production counterpart the ordinary lane must keep judging.
-      # src/ir/graph/mod.rs is exactly that case: its four #[cfg(kani)]
-      # implementations carry per-item `#[mutants::skip]` attributes
-      # instead, and `tests/mutation_selection_contract_tests.rs` holds
-      # both halves of that arrangement. Do not add the file here — it
-      # would take the cfg(not(kani)) counterparts out of the lane too.
+      # src/ir/graph/mod.rs is exactly that case: it holds four #[cfg(kani)]
+      # implementations beside their cfg(not(kani)) counterparts, and the
+      # proof-only four carry per-item `#[mutants::skip]` attributes instead.
+      # Do not add src/ir/graph/mod.rs to this list — the exclusion would take
+      # its cfg(not(kani)) counterparts out of the lane as well.
+      # `tests/mutation_selection_contract_tests.rs` is the contract that
+      # checks both halves; it is a test, not the file being protected.
       exclude-globs: "src/ir/cycle/verification.rs,src/ir/cmd_interpolate/verification.rs,\
         src/ir/from_manifest/verification.rs,src/ir/graph/kani_map.rs"
       # Match the CI baseline (`make test` runs --all-features) so

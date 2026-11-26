@@ -4,142 +4,261 @@
 //! counterpart check relies on: an implementation that cannot compile without
 //! `kani` is proof-only, so it must not be counted as a production counterpart.
 //!
-//! The question is a *satisfiability* one — "is there any assignment of the
-//! other cfg atoms, with `kani` false, that makes this predicate hold?" — and it
-//! cannot be answered by scanning for the `kani` token, nor by tracking a single
-//! negation polarity. Two counter-examples that a polarity model gets wrong:
+//! The question is a *satisfiability* one: is there an assignment of the other
+//! cfg atoms, with `kani` false, under which the predicate holds? Three-valued
+//! answers are the only honest kind here:
 //!
-//! - `not(unix)` holds whenever `unix` is false, so it is satisfiable without
-//!   `kani` and is *not* a gate.
-//! - `not(any(kani, unix))` is `all(not(kani), not(unix))`, which holds when
-//!   both atoms are false, so it is not a gate either.
+//! - [`Verdict::Production`] — such an assignment exists.
+//! - [`Verdict::KaniOnly`] — none does.
+//! - [`Verdict::Undecidable`] — the model cannot decide, so nothing may be
+//!   certified.
 //!
-//! The model below therefore evaluates each subexpression to the pair of truth
-//! values it *can* take — can it be true, and can it be false — rather than to a
-//! single value. `kani` is special-cased to "false only", every other atom is
-//! unconstrained, and negation swaps the pair. A predicate is a gate exactly
-//! when it cannot be true.
+//! The third value is what makes this a contract rather than a guess. Answering
+//! `Production` for a form the model cannot read would certify a counterpart
+//! that may not exist, which is the defect the surrounding test exists to
+//! catch; those forms are surfaced and the caller turns them into a failure.
+//!
+//! The evaluation is exact within a bound rather than a heuristic. It collects
+//! the distinct atoms the predicate mentions, enumerates their assignments with
+//! `kani` pinned to false, and evaluates the predicate under each. That is what
+//! makes the awkward cases come out right:
+//!
+//! - `any(kani, unix)` — satisfied by `unix = true`, so production code;
+//! - `not(unix)` and `not(any(kani, unix))` — satisfied by `unix = false`;
+//! - `not(not(kani))` — satisfied by nothing, since it is `kani`;
+//! - `any(kani, all(unix, not(unix)))` — `unix` and `not(unix)` cannot both
+//!   hold, so no assignment satisfies it and it is a Kani gate;
+//! - `cfg(any(kani, unix))` on an `impl` around
+//!   `cfg(any(kani, not(unix)))` on its method — the conjunction needs `unix`
+//!   and its negation at once, so the pair is a gate even though each half is
+//!   not. Assignments are enumerated over the *whole* combined predicate, which
+//!   is why nested scopes are conjoined before evaluation rather than combined
+//!   as separate verdicts.
+//!
+//! A heuristic pair-of-truth-values model was tried first and got the last two
+//! cases wrong; enumerating assignments removes the class of error rather than
+//! adding a case for it.
 
-use syn::{Attribute, Meta};
+use std::collections::BTreeSet;
 
-/// The truth values a predicate can take when `kani` is false.
+use syn::{Attribute, Expr, Lit, Meta};
+
+/// The most distinct atoms the enumeration will span.
 ///
-/// Every other cfg atom is treated as unconstrained, which is what makes the
-/// answer independent of the host: `unix` may or may not hold, so a predicate
-/// mentioning it is satisfiable without `kani` if *any* assignment of that atom
-/// works.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Possibility {
-    /// Some assignment of the other atoms makes the predicate true.
-    can_be_true: bool,
-    /// Some assignment of the other atoms makes the predicate false.
-    can_be_false: bool,
+/// Two to the power of this bounds the work. Exceeding it is reported as
+/// undecidable rather than truncated, because a truncated enumeration would
+/// answer `KaniOnly` for a predicate it merely failed to satisfy.
+const MAX_ATOMS: usize = 12;
+
+/// What the model can say about one condition.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Verdict {
+    /// Cannot hold with `kani` false: proof-only code.
+    KaniOnly,
+    /// Can hold with `kani` false: ordinary code.
+    #[default]
+    Production,
+    /// The model cannot decide, so nothing may be certified either way.
+    Undecidable,
 }
 
-impl Possibility {
-    /// A predicate whose value the model cannot constrain.
-    const FREE: Self = Self {
-        can_be_true: true,
-        can_be_false: true,
-    };
-
-    /// A predicate that is false in every assignment: `kani` with Kani absent.
-    const ALWAYS_FALSE: Self = Self {
-        can_be_true: false,
-        can_be_false: true,
-    };
-
-    /// The pair for `not(self)`.
-    fn negated(self) -> Self {
-        Self {
-            can_be_true: self.can_be_false,
-            can_be_false: self.can_be_true,
+impl Verdict {
+    /// Combine this verdict with another condition that must also hold.
+    ///
+    /// Used where two verdicts genuinely stand alone, such as two independent
+    /// `cfg` attributes. Nested scopes are *not* combined this way: their
+    /// predicates are conjoined and re-evaluated as one formula, because atoms
+    /// correlate across them.
+    #[must_use]
+    pub fn and(self, other: Self) -> Self {
+        match (self, other) {
+            // A conjunction with an unsatisfiable conjunct is unsatisfiable,
+            // whatever else is undecidable.
+            (Self::KaniOnly, _) | (_, Self::KaniOnly) => Self::KaniOnly,
+            (Self::Undecidable, _) | (_, Self::Undecidable) => Self::Undecidable,
+            (Self::Production, Self::Production) => Self::Production,
         }
     }
 }
 
-/// True when `attr` is a `cfg` whose predicate cannot hold without `kani`.
+/// The predicates a set of attributes imposes, or `None` if one is unreadable.
 ///
-/// The whole predicate is evaluated rather than scanned for a `kani` token, so
-/// compound forms classify by what they actually permit:
-///
-/// - `cfg(kani)`, `cfg(all(kani))`, `cfg(all(kani, unix))` and
-///   `cfg(not(not(kani)))` are gates: no assignment satisfies them with Kani
-///   absent;
-/// - `cfg(any(kani, unix))`, `cfg(not(kani))`, `cfg(not(unix))` and
-///   `cfg(not(any(kani, unix)))` are not, because each can hold while Kani is
-///   absent.
-///
-/// Treating every predicate that merely mentions `kani` as a gate would
-/// misclassify the second group as proof-only and, worse, hide a genuine
-/// production counterpart from the counterpart check.
-pub(super) fn is_kani_gate(attr: &Attribute) -> bool {
-    let Meta::List(list) = &attr.meta else {
-        return false;
-    };
-    if !list.path.is_ident("cfg") {
-        return false;
+/// A `cfg_attr` is not modelled: it expands to whatever it names, and this
+/// model does not follow that expansion. Any `cfg_attr` therefore makes the
+/// whole set undecidable rather than being skipped, because skipping one could
+/// hide a condition that removes the item from the ordinary build.
+pub fn predicates(attrs: &[Attribute]) -> Option<Vec<Meta>> {
+    let mut found = Vec::new();
+    for attr in attrs {
+        let Meta::List(list) = &attr.meta else {
+            continue;
+        };
+        if list.path.is_ident("cfg_attr") {
+            return None;
+        }
+        if !list.path.is_ident("cfg") {
+            continue;
+        }
+        // `cfg(true)` and `cfg(false)` are literal operands, which `syn::Meta`
+        // does not parse. Reading the failure as "no constraint" would call
+        // `cfg(any(true))` proof-only by accident, so it is surfaced instead.
+        found.push(syn::parse2::<Meta>(list.tokens.clone()).ok()?);
     }
-    let Ok(predicate) = syn::parse2::<Meta>(list.tokens.clone()) else {
-        // An unparsable predicate is not something this model can classify, so
-        // it is treated as no gate rather than being guessed at.
-        return false;
-    };
-    !possibility(&predicate).can_be_true
+    Some(found)
 }
 
-/// The truth values `predicate` can take when `kani` is false.
-fn possibility(predicate: &Meta) -> Possibility {
+/// The verdict for the conjunction of `predicates`.
+///
+/// An empty list constrains nothing and is ordinary code.
+#[must_use]
+pub fn verdict(predicates: &[Meta]) -> Verdict {
+    let Some(atoms) = atoms_of_all(predicates) else {
+        return Verdict::Undecidable;
+    };
+    if atoms.len() > MAX_ATOMS {
+        return Verdict::Undecidable;
+    }
+    let names: Vec<String> = atoms.into_iter().collect();
+    // `kani` is pinned to false, so only the other atoms are enumerated.
+    for assignment in 0..(1u32 << names.len()) {
+        let values: Vec<bool> = (0..names.len())
+            .map(|bit| assignment & (1 << bit) != 0)
+            .collect();
+        let mut satisfiable = Some(true);
+        for predicate in predicates {
+            match evaluate(predicate, &names, &values) {
+                Some(value) => satisfiable = satisfiable.map(|acc| acc && value),
+                None => return Verdict::Undecidable,
+            }
+        }
+        if satisfiable == Some(true) {
+            return Verdict::Production;
+        }
+    }
+    Verdict::KaniOnly
+}
+
+/// Evaluate `predicate` under one assignment of the enumerated atoms.
+///
+/// Returns `None` for a form the model does not read, which the caller turns
+/// into [`Verdict::Undecidable`].
+fn evaluate(predicate: &Meta, names: &[String], values: &[bool]) -> Option<bool> {
+    match predicate {
+        // `kani` is false throughout, which is the whole question.
+        Meta::Path(path) => lookup(path, names, values).or(Some(false)),
+        Meta::List(list) => {
+            let operands = nested_metas(list)?;
+            if list.path.is_ident("all") {
+                operands
+                    .iter()
+                    .map(|operand| evaluate(operand, names, values))
+                    .try_fold(true, |acc, value| value.map(|value| acc && value))
+            } else if list.path.is_ident("any") {
+                operands
+                    .iter()
+                    .map(|operand| evaluate(operand, names, values))
+                    .try_fold(false, |acc, value| value.map(|value| acc || value))
+            } else if list.path.is_ident("not") {
+                operands
+                    .first()
+                    .and_then(|operand| evaluate(operand, names, values))
+                    .map(|value| !value)
+            } else {
+                None
+            }
+        }
+        Meta::NameValue(named) => lookup(&named.path, names, values),
+    }
+}
+
+/// The value of `path` under the assignment, if it is an enumerated atom.
+///
+/// A path that is not enumerated is `kani`, whose value is false.
+fn lookup(path: &syn::Path, names: &[String], values: &[bool]) -> Option<bool> {
+    let key = path_key(path);
+    names
+        .iter()
+        .position(|name| *name == key)
+        .map(|index| values[index])
+}
+
+/// Collect the distinct atom keys across `predicates`.
+///
+/// Returns `None` for a form whose identity the model cannot key soundly, such
+/// as a `feature`-style predicate with a non-literal value.
+fn atoms_of_all(predicates: &[Meta]) -> Option<BTreeSet<String>> {
+    let mut atoms = BTreeSet::new();
+    for predicate in predicates {
+        collect_atoms(predicate, &mut atoms)?;
+    }
+    Some(atoms)
+}
+
+/// Add every free atom `predicate` mentions to `atoms`.
+fn collect_atoms(predicate: &Meta, atoms: &mut BTreeSet<String>) -> Option<()> {
     match predicate {
         Meta::Path(path) => {
-            if path.is_ident("kani") {
-                Possibility::ALWAYS_FALSE
-            } else {
-                Possibility::FREE
+            if !path.is_ident("kani") {
+                atoms.insert(path_key(path));
             }
+            Some(())
         }
         Meta::List(list) => {
-            let operands = nested_metas(list);
-            let values: Vec<Possibility> = operands.iter().map(possibility).collect();
-            if list.path.is_ident("all") {
-                // Every conjunct must hold, so the group can be true only if
-                // all of them can, and false if any of them can be.
-                Possibility {
-                    can_be_true: values.iter().all(|value| value.can_be_true),
-                    can_be_false: values.iter().any(|value| value.can_be_false),
-                }
-            } else if list.path.is_ident("any") {
-                // One disjunct is enough to make the group true, but all of
-                // them must be able to be false for the group to be false.
-                Possibility {
-                    can_be_true: values.iter().any(|value| value.can_be_true),
-                    can_be_false: values.iter().all(|value| value.can_be_false),
-                }
-            } else if list.path.is_ident("not") {
-                values
-                    .first()
-                    .copied()
-                    .map_or(Possibility::FREE, Possibility::negated)
-            } else {
-                // An unknown combinator. `FREE` is the conservative answer: it
-                // keeps the item classified as production rather than claiming
-                // a gate the model cannot justify.
-                Possibility::FREE
+            if !(list.path.is_ident("all")
+                || list.path.is_ident("any")
+                || list.path.is_ident("not"))
+            {
+                return None;
             }
+            for operand in nested_metas(list)? {
+                collect_atoms(&operand, atoms)?;
+            }
+            Some(())
         }
-        Meta::NameValue(_) => Possibility::FREE,
+        Meta::NameValue(named) => {
+            atoms.insert(name_value_key(named)?);
+            Some(())
+        }
+    }
+}
+
+/// The key for a bare atom: its path as written.
+fn path_key(path: &syn::Path) -> String {
+    path.segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>()
+        .join("::")
+}
+
+/// The key for `name = value`, which must be a string or Boolean literal.
+///
+/// Including the literal keeps `feature = "a"` and `feature = "b"` distinct
+/// atoms; keying only on the name would make two unrelated conditions look
+/// correlated.
+fn name_value_key(named: &syn::MetaNameValue) -> Option<String> {
+    let name = path_key(&named.path);
+    match &named.value {
+        Expr::Lit(literal) => match &literal.lit {
+            Lit::Str(text) => Some(format!("{name}={:?}", text.value())),
+            Lit::Bool(value) => Some(format!("{name}={}", value.value)),
+            _ => None,
+        },
+        _ => None,
     }
 }
 
 /// Parse a cfg combinator's operands.
 ///
-/// Returns an empty list rather than failing: a caller that cannot read the
-/// operands treats the combinator as unconstrained, which keeps the item
-/// classified as production rather than claiming a gate it cannot justify.
-fn nested_metas(list: &syn::MetaList) -> Vec<Meta> {
+/// Returns `None` when the operands cannot be read as metadata. Each operand is
+/// a predicate, and a literal such as `any(true)` is not one, so the caller
+/// must not treat the failure as an empty list: an empty `any()` is false,
+/// whereas an unreadable `any(true)` is always true.
+fn nested_metas(list: &syn::MetaList) -> Option<Vec<Meta>> {
     syn::parse::Parser::parse2(
         syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated,
         list.tokens.clone(),
     )
-    .map_or_else(|_| Vec::new(), |parsed| parsed.into_iter().collect())
+    .ok()
+    .map(|parsed| parsed.into_iter().collect())
 }

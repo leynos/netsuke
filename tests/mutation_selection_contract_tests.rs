@@ -119,6 +119,31 @@ const STAYS_SELECTED: [&str; 7] = [
 ];
 
 #[test]
+fn no_graph_implementation_has_an_undecidable_cfg() -> Result<()> {
+    // The reader is deliberately three-valued: it reports `Undecidable` rather
+    // than guessing when a `cfg` condition is beyond it, such as a `cfg_attr`
+    // that expands to `cfg` or a predicate correlating two occurrences of one
+    // atom. Every other assertion in this file treats "not proven proof-only"
+    // as ordinary code, so an undecidable condition there would be read as a
+    // production implementation that may not exist. This test makes that state
+    // a failure instead.
+    let by_name = implementations_by_name(&graph_source()?)?;
+    let undecidable: Vec<(&str, usize)> = by_name
+        .iter()
+        .filter(|(_, selection)| selection.undecidable > 0)
+        .map(|(name, selection)| (name.as_str(), selection.undecidable))
+        .collect();
+
+    ensure!(
+        undecidable.is_empty(),
+        "the graph module's cfg conditions are all decidable, so the other \
+         assertions can rely on the reader's classification; these are not: \
+         {undecidable:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn every_skipped_graph_implementation_is_kani_only() -> Result<()> {
     let by_name = implementations_by_name(&graph_source()?)?;
     let offenders: Vec<(&str, usize)> = by_name

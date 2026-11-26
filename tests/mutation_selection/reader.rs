@@ -40,6 +40,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::mutation_selection::cfg_predicate::Verdict;
 use anyhow::{Context, Result};
 use syn::{Attribute, File, ImplItem, ImplItemFn, Item, ItemImpl, ItemMod, Meta, Signature};
 
@@ -54,8 +55,8 @@ pub struct Implementation {
     /// itself, one inherited from the enclosing `impl` block, module or file,
     /// and the walker's eligibility checks.
     pub skipped: bool,
-    /// True when the item is gated to the Kani runner.
-    pub kani_only: bool,
+    /// What the model can say about the item's `cfg` conditions.
+    pub cfg: Verdict,
 }
 
 /// What one method name resolves to across all its implementations.
@@ -72,8 +73,14 @@ pub struct Selection {
     pub selected_production: usize,
     /// Implementations of this name that carry a skip, inherited or direct.
     pub skipped: usize,
-    /// Skipped implementations that are not `cfg(kani)`.
+    /// Skipped implementations that are not proven `cfg(kani)`.
     pub skipped_outside_kani: usize,
+    /// Implementations whose `cfg` conditions the model could not decide.
+    ///
+    /// Any occurrence is a failure, not a pass: an undecidable condition means
+    /// the reader cannot tell proof-only code from ordinary code, so the
+    /// contract must refuse to certify either.
+    pub undecidable: usize,
 }
 
 /// True when `attrs` exclude the node from mutation altogether.
@@ -162,13 +169,14 @@ fn is_cfg_test(attr: &Attribute) -> bool {
     parsed.is_ok() && found
 }
 
-/// True when `attrs` gate the item to the Kani runner.
+/// The `cfg` predicates `attrs` impose, or `None` if any is unreadable.
 ///
-/// A `cfg_attr` carrying a `kani` condition is deliberately not treated as a
-/// Kani gate: the ordinary lane does not evaluate it, so such an item would be
-/// present in the test binaries and must keep its mutants.
-fn is_kani_only(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(cfg_predicate::is_kani_gate)
+/// A `cfg_attr` expands to whatever it names, and this model does not follow
+/// that expansion, so its presence makes the set unreadable rather than being
+/// skipped: skipping one could hide a condition that removes the item from the
+/// ordinary build.
+fn cfg_predicates(attrs: &[Attribute]) -> Option<Vec<Meta>> {
+    cfg_predicate::predicates(attrs)
 }
 
 /// True when the walker would skip this method for a reason other than an
@@ -194,20 +202,39 @@ fn is_ineligible_signature(sig: &Signature) -> bool {
 /// excluded if anything around it is, and is Kani-only if anything around it
 /// requires Kani. Carrying them as one value keeps the recursion from growing a
 /// parameter per rule.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct Scope {
     /// Some enclosing scope excludes its contents from mutation.
     excluded: bool,
-    /// Some enclosing scope compiles only under `cfg(kani)`.
-    kani_only: bool,
+    /// Every enclosing scope's `cfg` predicates.
+    ///
+    /// Kept as predicates rather than as verdicts so the whole conjunction can
+    /// be evaluated as one formula. Nested conditions must all hold together,
+    /// and their atoms correlate: `cfg(any(kani, unix))` around
+    /// `cfg(any(kani, not(unix)))` needs `unix` and its negation at once, so the
+    /// pair requires Kani even though neither half does on its own.
+    cfg: Vec<Meta>,
+    /// True when an enclosing scope had a `cfg` the model could not read.
+    cfg_unreadable: bool,
 }
 
 impl Scope {
     /// Return the scope inside `attrs`, inheriting `self`.
-    fn nested(self, attrs: &[Attribute]) -> Self {
-        Self {
-            excluded: self.excluded || is_excluded(attrs),
-            kani_only: self.kani_only || is_kani_only(attrs),
+    fn nested(mut self, attrs: &[Attribute]) -> Self {
+        self.excluded = self.excluded || is_excluded(attrs);
+        match cfg_predicates(attrs) {
+            Some(predicates) => self.cfg.extend(predicates),
+            None => self.cfg_unreadable = true,
+        }
+        self
+    }
+
+    /// The verdict for everything gathered so far.
+    fn verdict(&self) -> Verdict {
+        if self.cfg_unreadable {
+            Verdict::Undecidable
+        } else {
+            cfg_predicate::verdict(&self.cfg)
         }
     }
 }
@@ -224,12 +251,12 @@ pub fn implementations_by_name(source: &str) -> Result<BTreeMap<String, Selectio
     // returns from `visit_file` before walking any item.
     let file_scope = Scope::default().nested(&parsed.attrs);
     let mut by_name: BTreeMap<String, Selection> = BTreeMap::new();
-    collect_items(&parsed.items, file_scope, &mut by_name);
+    collect_items(&parsed.items, &file_scope, &mut by_name);
     Ok(by_name)
 }
 
 /// Fold a list of items into `by_name`, recursing through inline modules.
-fn collect_items(items: &[Item], scope: Scope, by_name: &mut BTreeMap<String, Selection>) {
+fn collect_items(items: &[Item], scope: &Scope, by_name: &mut BTreeMap<String, Selection>) {
     for item in items {
         match item {
             Item::Impl(block) => accumulate_impl(block, scope, by_name),
@@ -240,40 +267,44 @@ fn collect_items(items: &[Item], scope: Scope, by_name: &mut BTreeMap<String, Se
 }
 
 /// Fold one inline module's items into `by_name`, inheriting its decisions.
-fn accumulate_module(module: &ItemMod, scope: Scope, by_name: &mut BTreeMap<String, Selection>) {
+fn accumulate_module(module: &ItemMod, scope: &Scope, by_name: &mut BTreeMap<String, Selection>) {
     // `mod foo;` has no inline content: its items live in another file, which
     // this reader does not follow. `cargo-mutants` does, so a source with such
     // a declaration is outside what this model can say anything about.
     let Some((_, items)) = &module.content else {
         return;
     };
-    collect_items(items, scope.nested(&module.attrs), by_name);
+    collect_items(items, &scope.clone().nested(&module.attrs), by_name);
 }
 
 /// Fold one `impl` block's methods into `by_name`.
 ///
 /// An exclusion or a Kani gate on this block joins whatever the file and
 /// modules already decided, so a method inherits them all.
-fn accumulate_impl(block: &ItemImpl, scope: Scope, by_name: &mut BTreeMap<String, Selection>) {
-    let block_scope = scope.nested(&block.attrs);
+fn accumulate_impl(block: &ItemImpl, scope: &Scope, by_name: &mut BTreeMap<String, Selection>) {
+    let block_scope = scope.clone().nested(&block.attrs);
     for item in &block.items {
         let ImplItem::Fn(method) = item else {
             continue;
         };
+        let method_scope = block_scope.clone().nested(&method.attrs);
         let implementation = Implementation {
             name: method.sig.ident.to_string(),
-            skipped: block_scope.excluded || is_excluded(&method.attrs) || is_ineligible(method),
-            kani_only: block_scope.kani_only || is_kani_only(&method.attrs),
+            skipped: method_scope.excluded || is_ineligible(method),
+            cfg: method_scope.verdict(),
         };
         let entry = by_name.entry(implementation.name).or_default();
+        if implementation.cfg == Verdict::Undecidable {
+            entry.undecidable += 1;
+        }
         if implementation.skipped {
             entry.skipped += 1;
-            if !implementation.kani_only {
+            if implementation.cfg != Verdict::KaniOnly {
                 entry.skipped_outside_kani += 1;
             }
         } else {
             entry.selected += 1;
-            if !implementation.kani_only {
+            if implementation.cfg == Verdict::Production {
                 entry.selected_production += 1;
             }
         }
