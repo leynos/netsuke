@@ -1257,6 +1257,68 @@ manifest_parsing_names_the_first_unknown_field_in_authoring_order: 1 passed
 all manifest unit tests: 386 tests run: 386 passed
 ```
 
+### EP-M3 mutation evidence
+
+Each patch was applied alone to the committed candidate, the whole
+`manifest::expand` filter was run with
+`PROPTEST_DISABLE_FAILURE_PERSISTENCE=1`, and the patch was reverted. Every
+named property is in its failure set.
+
+```plaintext
+MUT-PRESERVE (retain name/command/vars/when)
+  preserve::expansion_copies_every_non_control_field
+    left  ["vars", "name"]
+    right ["z8", "vars", "name"]              entry key sequence
+  also: order::foreach_removal…, when_removed…, description cases,
+        key_order_cases foreach cases, structure_cases
+MUT-ORDER-FOREACH (restore entry.remove("foreach"))
+  order::foreach_removal_keeps_authoring_key_order
+    left  ["description", "u4_x7e", "q71lto__", "always", "script", "vars"]
+    right ["description", "q71lto__", "always", "script", "vars", "u4_x7e"]
+  also: preserve…, key_order_cases foreach cases
+MUT-ORDER-WHEN (restore map.remove("when"))
+  order::when_removal_keeps_authoring_key_order
+    left  ["description", "vars", "k9otl_"]
+    right ["description", "k9otl_", "vars"]
+  also: preserve…, key_order_cases static cases
+MUT-WHEN-KEEP (map.get("when") instead of shift_remove)
+  when_removed::no_expanded_entry_carries_a_control_key
+    expanded actions entry still carries `when`: {"when":"w0 < 1",…}
+  also: order::when…, preserve…, expansion_report::foreach_key_is_removed…
+MUT-INDEX (index: expanded.len() instead of the iterator position)
+  inject::each_expansion_carries_its_own_item_and_index
+    expanded entry count: left 0, right 1
+  also: expansion_report::filtering_report…, foreach_sequences::
+        foreach_filters_generated_sequence_values, foreach/condition example cases
+MUT-STATIC-LEAK (excluded static entry returned instead of dropped)
+  static_when::static_entries_survive_exactly_when_their_condition_holds
+    kept entry count: left 1, right 0
+  also: when_removed…, order::when…, preserve…, many condition cases
+```
+
+Every patch also passed `make test-kani-mutations` (the compile guard compiles
+each patched tree under `-D warnings`), and the contract tests accept all six
+stems.
+
+Coverage counts, fixed seed `0x432`, 512 draws, all floors at 5%:
+
+```plaintext
+entry:   static 236, foreach 276, vars 446, no-vars 66,
+         condition 384, condition-expression 218, condition-template 166,
+         condition-reads-vars 201, -index 57, -item 36,
+         control-last 118, control-one-following 153, control-two-or-more 241,
+         value kinds 376–1521 each, value-nested 586, value-jinja-string 182
+inject:  array 249, string 263, empty 68, all-included 277,
+         all-excluded 112, gap 39, item kinds 87–469, null-in-string 47,
+         user-item-collision 143, user-index-collision 141
+static:  8 verdict×form×section classes 31–117 each, reads-vars 290
+document: targets-entries 427, actions-entries 402, static 1043,
+         foreach 1100, condition 1622
+```
+
+`make proptest` wall time: 8.4 s for all 243 selected tests; the 139-test
+`manifest::expand` tree runs in 2.0 s, so the new suite adds about 2 s.
+
 ### EP-M1 plateau gate run and rebase
 
 Run one (candidate `7c69bcf03`, base `b99c9c92b`): `check-fmt`, `typecheck`,
@@ -1378,8 +1440,14 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   the `--lib whitaker_suite` selection; `make lint-whitaker` is green on the
   rebased candidate and the 21 key-order cases and the authoring-order scenario
   still pass.
-- [ ] EP-M2 shared test support and relocation.
-- [ ] EP-M3 generators, oracles, coverage, and properties.
+- [x] (2026-11-26) EP-M2 shared test support and relocation. `make proptest`
+  selects 7 `expansion_report` and 5 `foreach_sequences` tests after the move.
+- [x] (2026-11-26 07:41Z) EP-M3 generators, oracles, coverage, and properties.
+  139 expansion tests pass; `make proptest` runs 243 and selects the whole
+  `manifest::expand::property_tests` suite; all six mutation patches are
+  detected by their named property for the intended reason and compile under
+  `make test-kani-mutations`.
+- [ ] EP-M3 plateau gates.
 - [ ] EP-M4 unhappy paths, scenarios, documentation, and closure.
 
 ## Surprises & discoveries
@@ -1451,6 +1519,14 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   (`entry.remove("foreach")`) and `src/manifest/expand/evaluation.rs`
   (`map.remove("when")`). Impact: the substance of the plan is unchanged; line
   numbers in the plan text are advisory.
+- Observation (2026-11-26): the first properties found two bugs in the test
+  scaffolding, not in production. A `Count` condition was given a template
+  form, whose rendered integer falls back to false while the oracle said true;
+  and the coverage floor check iterated only the classes it had counted, so a
+  class the sample never reached was silently accepted. Both are fixed by
+  construction (only boolean shapes get a template; the check iterates a
+  declared required list), and the five regression seeds proptest wrote for the
+  first bug were deleted because they record no production defect.
 - Observation (2026-11-26): the rolling Whitaker suite reds base code again,
   and the branch's base predated the repository's remedy. Measured: the
   `whitaker-lints-2747628` Linux asset was published at `2026-11-25T16:32:47Z`;
@@ -1564,6 +1640,13 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   first four would exceed the production-change tolerance, so they stay, and a
   follow-up issue may propose a `disallowed-methods` guard. Date/Author:
   2026-11-25, implementation agent.
+- Decision: weight the two iteration-reading condition shapes at 3/15 each and
+  draw condition presence 3:1. Rationale: the five-percent floor the plan sets
+  for `condition-reads-index`, `condition-reads-item`, and `inject-gap` was not
+  met by a uniform draw (20, 16, and 24 of 512), because those shapes are legal
+  only on a foreach entry and half the entries carry no condition. The weights
+  are a generator change, not a filter: every draw remains a valid case.
+  Date/Author: 2026-11-26, implementation agent.
 - Decision: rebase onto `origin/main` `56d1e0a22` instead of absorbing the two
   base refactors or adding a lint exemption. Rationale: the gate failed on
   files this branch never touches, because a rolling Whitaker suite asset was
