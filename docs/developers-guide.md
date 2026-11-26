@@ -11284,6 +11284,15 @@ stderr itself. `tests/kani_cfg_ui_tests.rs`,
 compiled as standalone binaries with no dependencies on this workspace, so a
 compile-time contract can be checked without building the crate it describes.
 
+Because a fixture is standalone, it pins the diagnostic shape it declares, not
+the production API it describes: a fixture that mirrors a crate-private type
+still compiles after that type changes. Production API contracts need an
+in-crate assertion. `tests/reserved_state_proof_ui_tests.rs` covers the
+diagnostic shape of the reservation proof, and the real signature is pinned by
+`the_reset_signature_requires_the_proof` in
+`src/runner/phony_state/tests/mod.rs`, which is the check to extend when the
+reset's inputs change.
+
 ### `runner::path_helpers`
 
 `src/runner/path_helpers.rs` owns how a command turns the selected working
