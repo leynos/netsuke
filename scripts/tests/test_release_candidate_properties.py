@@ -7,9 +7,9 @@ version tag. The properties here generate version tags in the shapes that
 
 The ordering properties draw SemVer-canonical pre-release identifiers, meaning
 numeric identifiers carry no leading zero, because that is the form SemVer 2.0
-defines precedence for. ``VERSION_TAG`` also accepts leading zeros. The strict
-expected failure at the end of this module records what that acceptance does
-to the key: it makes distinct tags compare equal.
+defines precedence for. ``VERSION_TAG`` refuses a zero-padded numeric
+identifier, and the last property here holds it to that: such a tag is not a
+version tag, so it cannot share a key with the tag it pads.
 """
 
 import importlib.util

@@ -1,3 +1,8 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.14"
+# dependencies = ["cuprum>=0.1.0,<0.2.0"]
+# ///
 """Drive one downstream migration canary and record its provenance.
 
 The ``downstream-canary`` composite action calls this script in three steps so
@@ -22,10 +27,11 @@ import json
 import os
 import re
 import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import] - the canary runs fixed downstream tools.
 import sys
 import typing as typ
 
+from cuprum import ExecutionContext, Program, ProgramCatalogue, SafeCmd, sh
+from cuprum.catalogue import ProjectSettings
 from downstream_canary_arguments import build_parser, normalize_lists
 from downstream_canary_provenance import (
     FAILED,
@@ -144,6 +150,37 @@ def save_state(path: Path, state: cabc.Mapping[str, object]) -> None:
     path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
 
 
+def allowlisted(program: str, *arguments: str) -> SafeCmd:
+    """Build a Cuprum command whose catalogue allows exactly ``program``.
+
+    The canary's executables are resolved at run time -- the candidate
+    ``netsuke`` and the selected ``ninja`` are absolute paths -- so a static
+    catalogue cannot name them; one built per launch holds only the resolved
+    path, and Cuprum refuses anything else.
+
+    Returns
+    -------
+    SafeCmd
+        The command, ready to run.
+
+    Examples
+    --------
+    >>> allowlisted("/usr/bin/git", "--version").argv
+    ('--version',)
+    """
+    catalogue = ProgramCatalogue(
+        projects=(
+            ProjectSettings(
+                name="downstream-canary",
+                programs=(Program(program),),
+                documentation_locations=(),
+                noise_rules=(),
+            ),
+        )
+    )
+    return sh.make(Program(program), catalogue=catalogue)(*arguments)
+
+
 def run_tool(command: cabc.Sequence[str], workdir: Path, env: dict[str, str]) -> bool:
     """Run one tool in the downstream checkout, streaming its output.
 
@@ -163,13 +200,15 @@ def run_tool(command: cabc.Sequence[str], workdir: Path, env: dict[str, str]) ->
     """
     print(f"::group::{' '.join(command)}", flush=True)
     try:
-        completed = subprocess.run(command, cwd=workdir, env=env, check=False)  # ruff: ignore[subprocess-without-shell-equals-true] - argument vector, no shell.
+        result = allowlisted(*command).run_sync(
+            capture=False, context=ExecutionContext(env=env, cwd=workdir)
+        )
     except OSError as error:
         print(f"cannot start {command[0]}: {error}", file=sys.stderr)
         return False
     finally:
         print("::endgroup::", flush=True)
-    return completed.returncode == 0
+    return result.exit_code == 0
 
 
 def child_environment(arguments: argparse.Namespace) -> dict[str, str]:
@@ -290,13 +329,8 @@ def observed_head(workdir: Path) -> str | None:
     git = shutil.which("git")
     if git is None or not workdir.is_dir():
         return None
-    completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - resolved program, list arguments.
-        [git, "-C", str(workdir), "rev-parse", "HEAD"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    return completed.stdout.strip() if completed.returncode == 0 else None
+    result = allowlisted(git, "-C", str(workdir), "rev-parse", "HEAD").run_sync()
+    return (result.stdout or "").strip() if result.exit_code == 0 else None
 
 
 def report(arguments: argparse.Namespace) -> int:

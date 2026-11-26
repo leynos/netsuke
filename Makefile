@@ -437,7 +437,8 @@ test-release-admission: ## Validate the release-admission runtime contract
 
 test-downstream-canary: ## Validate the downstream migration-canary tooling
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
-		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 --with 'cuprum==0.1.0' \
+		python -m pytest \
 		scripts/tests/test_resolve_release_candidate.py \
 		scripts/tests/test_release_candidate_properties.py \
 		scripts/tests/test_downstream_canary_properties.py \

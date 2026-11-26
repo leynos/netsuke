@@ -1773,7 +1773,16 @@ targets, and the retained Makefile boundaries; this section covers the tooling.
   to another ref, or to `auto`: the newest `-rcN` tag while it is also the
   newest version tag by SemVer precedence, and otherwise `main`. It publishes
   the commit, the version that commit's `Cargo.toml` declares, and the
-  selecting rule.
+  selecting rule. The job runs it from this repository at `job.workflow_sha`,
+  with the caller's checkout as its working directory, so the refs come from
+  the caller and the code from this repository. Its only process boundary is
+  `.github/scripts/release_candidate_git.py`, which runs `git` through a Cuprum
+  catalogue allowing exactly that executable, as `docs/scripting-standards.md`
+  requires, and reports a failing command as `GitCommandError`. It imports
+  Cuprum inside `run_git`, because `lint-workflow-scripts` loads every module
+  there without its dependencies. `scripts/run_downstream_canary.py` launches
+  its tools the same way, with a catalogue holding only the resolved `netsuke`,
+  `ninja`, or `git` path.
 - The [downstream-canary action][downstream-canary-action] is the shared
   bootstrap. The caller checks out only `.github/actions/` and `scripts/` from
   `leynos/netsuke` at `job.workflow_sha`, so a reusable-workflow caller cannot

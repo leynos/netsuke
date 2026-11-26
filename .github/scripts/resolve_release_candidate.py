@@ -1,3 +1,8 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.14"
+# dependencies = ["cuprum>=0.1.0,<0.2.0"]
+# ///
 """Resolve the exact Netsuke commit that the downstream canaries exercise.
 
 The release workflow runs the three downstream migration canaries against one
@@ -17,11 +22,18 @@ import argparse
 import collections.abc as cabc
 import dataclasses
 import re
-import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import] - Git is invoked with fixed argument vectors.
 import sys
 import tomllib
 from pathlib import Path
+
+# The workflow runs this file by path, so the Git adapter beside it is not
+# importable by default; ``write_release_admission_evidence.py`` does the same.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from release_candidate_git import (
+    GitCommandError,
+    run_git,
+)
 
 #: The requested-ref value that applies the release-candidate selection rule.
 AUTO_REF = "auto"
@@ -39,6 +51,7 @@ RELEASE_CANDIDATE = re.compile(r"^rc\.?\d+$")
 #: A full hexadecimal commit identifier.
 COMMIT_ID = re.compile(r"^[0-9a-f]{40}$")
 
+#: Runs Git with an argument vector, raising :class:`GitCommandError` on failure.
 type GitRunner = cabc.Callable[[cabc.Sequence[str]], str]
 #: A pre-release identifier's sort key: numbers first, numerically, then text.
 type IdentifierKey = tuple[int, int, str]
@@ -245,7 +258,7 @@ def requested_ref(requested: str, workflow_sha: str, git: GitRunner) -> tuple[st
 def peel_to_commit(ref: str, git: GitRunner) -> str:
     """Return Git's resolution of ``ref`` to a commit.
 
-    A ref that does not resolve raises ``subprocess.CalledProcessError``.
+    A ref that does not resolve raises :class:`GitCommandError`.
 
     Parameters
     ----------
@@ -275,7 +288,7 @@ def resolve_commit(ref: str, source: str, git: GitRunner) -> str:
     so an explicitly requested name that does not resolve as given is tried
     under ``refs/remotes/origin/``. A name that resolves as given, such as a
     tag, always wins. When neither resolves, the remote spelling's
-    ``subprocess.CalledProcessError`` propagates.
+    :class:`GitCommandError` propagates.
 
     Parameters
     ----------
@@ -295,7 +308,7 @@ def resolve_commit(ref: str, source: str, git: GitRunner) -> str:
         return peel_to_commit(ref, git)
     try:
         return peel_to_commit(ref, git)
-    except subprocess.CalledProcessError:
+    except GitCommandError:
         return peel_to_commit(f"refs/remotes/origin/{ref}", git)
 
 
@@ -332,36 +345,6 @@ def resolve(requested: str, workflow_sha: str, git: GitRunner) -> Candidate:
     return Candidate(commit=commit, version=version, source=source)
 
 
-def run_git(arguments: cabc.Sequence[str]) -> str:
-    """Run Git in the current directory and return its standard output.
-
-    A failing Git command raises ``subprocess.CalledProcessError``.
-
-    Parameters
-    ----------
-    arguments
-        Git arguments, excluding the ``git`` program name.
-
-    Returns
-    -------
-    str
-        The command's standard output.
-
-    Raises
-    ------
-    FileNotFoundError
-        When no ``git`` executable is on ``PATH``.
-    """
-    program = shutil.which("git")
-    if program is None:
-        msg = "git is not on PATH"
-        raise FileNotFoundError(msg)
-    completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - resolved program, list arguments.
-        [program, *arguments], check=True, capture_output=True, text=True
-    )
-    return completed.stdout
-
-
 def main(argv: cabc.Sequence[str] | None = None) -> int:
     """Resolve the candidate and append it to the ``GITHUB_OUTPUT`` file.
 
@@ -382,7 +365,7 @@ def main(argv: cabc.Sequence[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     try:
         candidate = resolve(arguments.requested, arguments.workflow_sha, run_git)
-    except (ValueError, TypeError, OSError, subprocess.CalledProcessError) as error:
+    except (ValueError, TypeError, OSError, GitCommandError) as error:
         print(f"release candidate resolution failed: {error}", file=sys.stderr)
         return 1
     with arguments.output.open("a", encoding="utf-8") as output:

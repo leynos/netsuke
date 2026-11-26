@@ -9,9 +9,13 @@ import importlib.util
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the tests build real Git repositories.
 import sys
+import typing as typ
 from pathlib import Path
 
 import pytest
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 SCRIPT = (
     Path(__file__).resolve().parents[2]
@@ -116,7 +120,15 @@ def run_git_in_repository(repository: Path) -> resolver.GitRunner:
     resolver.GitRunner
         The adapter the resolver calls in place of :func:`resolver.run_git`.
     """
-    return lambda arguments: git(repository, *arguments) + "\n"
+
+    def run(arguments: cabc.Sequence[str]) -> str:
+        """Run Git in ``repository``, failing as the production runner does."""
+        try:
+            return git(repository, *arguments) + "\n"
+        except subprocess.CalledProcessError as error:
+            raise resolver.GitCommandError(str(error)) from error
+
+    return run
 
 
 @pytest.mark.parametrize(
@@ -245,7 +257,7 @@ def test_a_ref_that_resolves_as_given_wins_over_the_remote(repository: Path) -> 
 @pytest.mark.parametrize("ref", ["--output=/tmp/owned", "no-such-ref"])
 def test_unresolvable_refs_are_refused(repository: Path, ref: str) -> None:
     """Option-shaped and unknown refs fail rather than selecting anything."""
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(resolver.GitCommandError):
         resolver.resolve(ref, "0" * 40, run_git_in_repository(repository))
 
 
