@@ -438,6 +438,10 @@ operator, user, and contributor references are easier to find.
   Falsification plan for a nested Cargo fixture timeout under shared compiler
   admission pressure.
 - [execplans/](execplans/): Execution plans and implementation handoff notes.
+  - [4-3-2-manifest-expansion-invariant-proptests.md](execplans/4-3-2-manifest-expansion-invariant-proptests.md):
+    Proptest coverage for the manifest expansion invariants, the key-order
+    defect its `C-2` clause fixed, and the mutation evidence behind each
+    obligation.
 
 ## Testing and quality references
 

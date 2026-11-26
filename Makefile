@@ -307,13 +307,18 @@ test-rfc-stdlib-coverage: check-build-tools ## Check the RFC 0006 split and its 
 # The shape is a *segment* anchor, `(^|::)…($|::)`, not a leading anchor.
 # A leading anchor selects nothing at all: the suites are reached through a
 # module path (`ir::cmd_interpolate::property_tests::…`), so
-# `test(/^property_tests($|::)/) | test(/^proptests($|::)/)` matches zero of
-# the 90 selected tests. Both suffixes appear in the tree (`helper_proptests`
-# and `hex::property_tests`), and they diverge at index four, so a single
-# substring cannot cover both. Measured: this spelling selects 90 of the 3848
-# tests `--workspace` lists, exactly the census of names carrying either
-# suffix. Drop `--workspace` and the corpus and the count both shrink (3807
-# and 86), which is why the discharge reads the recipe's own flags.
+# `test(/^property_tests($|::)/) | test(/^proptests($|::)/)` matches none of
+# them. Both suffixes appear in the tree (`helper_proptests` and
+# `hex::property_tests`), and they diverge at index four, so a single
+# substring cannot cover both. To measure the selection, list the repository's
+# tests with this filter and count them:
+#
+#   cargo nextest list --workspace --all-targets --all-features \
+#     -E '$(PROPTEST_FILTER)'
+#
+# which prints exactly the corpus the recipe runs. Dropping `--workspace`
+# shrinks both the listed corpus and the selection, which is why the discharge
+# reads the recipe's own flags.
 #
 # Another agent's tests compiling concurrently are unaffected: this runs the
 # same binaries `make test` does and uses the same build cache.

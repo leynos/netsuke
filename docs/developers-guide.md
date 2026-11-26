@@ -9535,6 +9535,37 @@ removing a stem and its patch together can therefore go undetected. When one
 fault demonstrates two properties, register a separate stem and patch for each
 property so both associations remain visible.
 
+#### Manifest expansion suites
+
+The suites that verify the expansion clauses in `docs/netsuke-design.md`
+section 2.5 live in `src/manifest/expand/property_tests/`, one module per
+obligation, behind `#[cfg(test)]`. They share `strategy/` (the authored-entry
+model and its generators), `model.rs` (the oracle that predicts expansion
+output from the model), and `support.rs` (the strict-undefined environment and
+the expansion driver). A second generator or a second oracle would be a second
+statement of the contract, and the two drift while both keep passing.
+
+The oracle reads the model, never the rendered map, and never removes a key
+from a `serde_json::Map`: the removal is the operation several of these
+properties test, so sharing it would make the oracle agree with any defect it
+was meant to catch. Conditions come from a closed set of shapes with a one-line
+Rust meaning each; a template form is generated only for boolean-valued shapes,
+because a template that rendered an integer would fall back to false.
+
+`coverage/` is the non-vacuity tripwire. It classifies a fixed-seed sample of
+each generator, fails below a five-percent floor per class, and carries a
+negative control that forces the control key to the end of the entry and proves
+the check reports the unreachable key-order class. Add a class to
+`coverage/classes.rs` when a new property depends on a shape the existing lists
+do not name.
+
+The shared JSON strategy lives in `src/json_value_strategy_test_support.rs`,
+outside this suite, because the shell-selection decoder needs the same
+generator. It is test-only support owned by the crate root: it carries no
+manifest, shell, or configuration knowledge, its string leaf is a parameter,
+and a caller that needs another leaf kind composes it at its own call site
+rather than changing the shared function.
+
 ### Parametrized unit tests with rstest
 
 Plain `#[rstest]` (not rstest-bdd) is used for exhaustive state-enumeration
@@ -10455,6 +10486,12 @@ metadata, such as a non-object `vars` value, expression parse or evaluation
 failures in `foreach` or `when`, and serialization failures while copying the
 MiniJinja item value into manifest `vars`. Propagate these errors with context
 rather than defaulting to a partially expanded `ManifestValue`.
+
+An entry without `foreach` is not passed through unchanged: it loses `when`,
+which is evaluated and removed, and keeps every other key in authoring order.
+The full contract is stated as clauses `C-1` to `C-5` in
+`docs/netsuke-design.md` section 2.5 and is verified by the suites described
+under *Manifest expansion suites* above.
 
 Minimal target-level example:
 
