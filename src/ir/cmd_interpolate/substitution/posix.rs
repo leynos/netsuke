@@ -51,8 +51,7 @@ impl SubstitutionTraversal<'_, '_> {
         if let Some(next) = self.append_unquoted_posix_lexical_character(pos, ch)? {
             return Ok(next);
         }
-        let opens_backtick = !self.matches_single_quote_context() && !self.matches_ansi_c_context();
-        if ch == '`' && opens_backtick {
+        if self.is_backtick_delimiter(ch) {
             self.toggle_backtick_region();
             self.output.push(ch);
             return Ok(pos + 1);
@@ -62,6 +61,16 @@ impl SubstitutionTraversal<'_, '_> {
             self.start_pending_heredoc_after(self.newline_context())?;
         }
         Ok(next)
+    }
+
+    /// Report whether `ch` opens or closes a legacy backtick region.
+    ///
+    /// A backtick is literal inside ordinary single quotes and inside an
+    /// ANSI-C string, so only one outside both kinds of quotes delimits a
+    /// region.
+    fn is_backtick_delimiter(&self, ch: char) -> bool {
+        let is_quoted = self.matches_single_quote_context() || self.matches_ansi_c_context();
+        ch == '`' && !is_quoted
     }
 
     /// Describe what the newline at the current position is part of.
