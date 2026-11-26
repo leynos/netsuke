@@ -84,6 +84,9 @@ impl Demo {
 
     #[cfg(all(not(kani), unix, not(target_family = \"unix\")))]
     fn derived_mix(&self) -> u32 { 13 }
+
+    #[cfg(all(not(kani), target_endian = \"middle\"))]
+    fn middle_endian(&self) -> u32 { 14 }
 }
 ";
     let by_name = implementations_by_name(source)?;
@@ -100,17 +103,23 @@ impl Demo {
          be reported undecidable, not classified; got {impossible:?}"
     );
 
-    // `target_family` is multi-valued: the reference lists a target with both
-    // `"unix"` and `"wasm"`, so two families are a real configuration and the
-    // predicate is ordinary code rather than an impossible one.
-    let families = by_name
-        .get("Demo::two_families")
-        .context("the probe must declare `Demo::two_families`")?;
-    ensure!(
-        (families.undecidable, families.selected_production) == (0, 1),
-        "two `target_family` values are a valid configuration, so this is \
-         production code rather than undecidable; got {families:?}"
-    );
+    // A built-in option's value domain is closed and version-dependent: the
+    // reference gives `target_endian` as `"little"` or `"big"`, lists
+    // `target_os` values that grow each release, and allows several
+    // `target_family` values at once. The model cannot know any of those
+    // domains, so it declines every built-in value atom rather than guessing —
+    // including valid ones like this.
+    for name in ["Demo::two_families", "Demo::middle_endian"] {
+        let selection = by_name
+            .get(name)
+            .with_context(|| format!("the probe must declare `{name}`"))?;
+        ensure!(
+            selection.undecidable == 1,
+            "`{name}` names a built-in option, whose value domain the model \
+             cannot know, so it must be declined rather than classified; got \
+             {selection:?}"
+        );
+    }
 
     // `feature` is multi-valued, so two distinct features are a real
     // configuration. Asserting it keeps that distinction from being folded into

@@ -221,6 +221,9 @@ syn = { version = "2", features = ["full", "visit"] }
 # `quote` is already in the graph through `syn`; naming it here makes the
 # contract's own dependency explicit.
 quote = "1.0.47"
+# The identity renderer joins punctuation token by token, which needs the token
+# types themselves. Like `quote`, this is already in the graph through `syn`.
+proc-macro2 = "1.0.47"
 # Plural-selection tests pass numeric arguments to Fluent through
 # `ortho_config::LocalizationArgs`. `ortho_config` re-exports `FluentValue`, so
 # the tests reach the value type through it rather than depending on

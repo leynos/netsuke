@@ -411,6 +411,28 @@ selection and proof-specific verification.
       seed: restoring `target_family` to the single-valued set fails the
       multi-family probe, and wrapping the qualified type fails the namespace
       probe. All 30 pass when restored.
+- [x] (2026-11-26) The fourteenth review pass returned two findings. Rather
+      than add a fifth guard to the same partial model, both were closed by
+      removing the partial model:
+  - **An invalid built-in value was certified as production.**
+    `target_endian = "middle"` cannot hold on any target, but the search
+    assigned it freely. The previous two rounds had each added a guard for one
+    facet of the same problem — conflicting values, then derived families — and
+    each guard needed a value domain this model does not have. The rule is now
+    one line: a `name = "value"` atom on a built-in option is declined outright,
+    because Rust's domains are closed and version-dependent. `feature` is
+    exempt, being Cargo's open-valued key. This removed both earlier guards and
+    their tables.
+  - **String rewriting corrupted literals.** `compact` collapsed `" :: "` in the
+    *rendered text*, so `Demo<{"a :: b".len()}>` and `Demo<{"a::b".len()}>`
+    became one key. Rendering is now token-by-token over the `TokenStream`, so
+    punctuation joins without touching a literal's contents.
+- [x] (2026-11-26) Both controls were checked against seeds. The literal case
+      merges to a single key under the old rendering and separates under the
+      new one. The trade the first change makes is recorded rather than hidden:
+      a valid `target_family` predicate is now declined too, and its probe
+      asserts that, because a visible decline is the safe direction and a
+      guessed verdict is not.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:

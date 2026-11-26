@@ -8,6 +8,7 @@
 //! Three distinctions matter and all are handled here: the module path, the
 //! generic arguments of the self type, and the implemented trait.
 
+use proc_macro2::{Spacing, TokenTree};
 use quote::ToTokens;
 use syn::ItemImpl;
 
@@ -32,20 +33,49 @@ fn self_ty_name(block: &ItemImpl) -> String {
     compact(&block.self_ty)
 }
 
-/// Render `node` as the compact text cargo-mutants prints.
+/// Render `node` as compact text, joining punctuation without spaces.
 ///
-/// `TokenStream`'s own `Display` separates every token with a space, so
-/// `other::BuildGraph` would become `other :: BuildGraph`. Collapsing the
-/// spacing around path separators and angle brackets keeps the key readable and
-/// stable — it is an identity, never asserted on for its exact spelling.
+/// `TokenStream`'s `Display` separates every token with a space, so
+/// `other::BuildGraph` would become `other :: BuildGraph`. The join is done over
+/// the token stream rather than over the rendered string, because a literal is
+/// one token whose contents are not punctuation: rewriting `" :: "` inside
+/// `Demo<{"a :: b".len()}>` would turn two distinct self types into one, and a
+/// skip on one would then appear to answer for the other.
+///
+/// Only path separators and angle brackets are joined. Identifiers, literals and
+/// grouped tokens keep a separating space, so `impl Trait` and `for Demo` stay
+/// readable.
 fn compact(node: &impl ToTokens) -> String {
-    node.to_token_stream()
-        .to_string()
-        .replace(" :: ", "::")
-        .replace(" < ", "<")
-        .replace(" > ", ">")
-        .replace("< ", "<")
-        .replace(" >", ">")
+    let mut out = String::new();
+    let mut join_to_previous = false;
+    let mut skip_colon = false;
+    for tree in node.to_token_stream() {
+        match &tree {
+            TokenTree::Punct(punct) if skip_colon && punct.as_char() == ':' => {
+                // Second half of a path separator already emitted as `::`.
+                skip_colon = false;
+                continue;
+            }
+            TokenTree::Punct(punct) if punct.as_char() == ':' => {
+                out.push_str("::");
+                skip_colon = punct.spacing() == Spacing::Joint;
+                join_to_previous = true;
+                continue;
+            }
+            TokenTree::Punct(punct) if matches!(punct.as_char(), '<' | '>') => {
+                out.push(punct.as_char());
+                join_to_previous = true;
+                continue;
+            }
+            _ => {}
+        }
+        if !out.is_empty() && !join_to_previous {
+            out.push(' ');
+        }
+        out.push_str(&tree.to_token_stream().to_string());
+        join_to_previous = false;
+    }
+    out
 }
 
 /// The trait an `impl` block implements, when it implements one.

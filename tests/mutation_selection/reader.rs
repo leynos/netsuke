@@ -347,6 +347,8 @@ mod gate_tests;
 #[cfg(test)]
 mod identity_tests;
 #[cfg(test)]
+mod render_tests;
+#[cfg(test)]
 mod scope_tests;
 #[cfg(test)]
 mod tests;

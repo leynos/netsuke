@@ -51,37 +51,6 @@ use syn::{Attribute, Expr, Lit, Meta};
 /// answer `KaniOnly` for a predicate it merely failed to satisfy.
 const MAX_ATOMS: usize = 12;
 
-/// Built-in `cfg` options Rust sets exactly once.
-///
-/// Enumerating `target_os = "linux"` and `target_os = "windows"` as independent
-/// atoms would consider an assignment rustc can never make, and could report a
-/// predicate as satisfiable when it is not. A predicate naming two values of one
-/// of these options is therefore left undecided rather than searched.
-///
-/// The options Rust may set several values for are deliberately absent:
-/// `feature`, `target_family`, `target_feature`, and `target_has_atomic`. The
-/// reference lists `target_family` values as including both `"unix"` and
-/// `"wasm"` at once, so a conflict there is a real configuration, not an
-/// impossible one.
-const SINGLE_VALUED_OPTIONS: [&str; 8] = [
-    "target_arch",
-    "target_os",
-    "target_vendor",
-    "target_env",
-    "target_abi",
-    "target_endian",
-    "target_pointer_width",
-    "panic",
-];
-
-/// The two `cfg` names derived from a `target_family` value.
-///
-/// The reference defines `unix` as set exactly when `target_family = "unix"` is
-/// set, and `windows` likewise. Enumerating a derived name and its source as
-/// independent atoms would accept `all(unix, not(target_family = "unix"))`,
-/// which no target satisfies.
-const DERIVED_FAMILIES: [&str; 2] = ["unix", "windows"];
-
 /// What the model can say about one condition.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Verdict {
@@ -128,7 +97,7 @@ pub fn verdict(predicates: &[Meta]) -> Verdict {
     let Some(atoms) = atoms_of_all(predicates) else {
         return Verdict::Undecidable;
     };
-    if has_conflicting_single_valued(&atoms) || has_derived_family_mix(&atoms) {
+    if atoms.iter().any(|atom| is_built_in_value_atom(atom)) {
         return Verdict::Undecidable;
     }
     if atoms.len() > MAX_ATOMS {
@@ -219,31 +188,23 @@ fn atoms_of_all(predicates: &[Meta]) -> Option<BTreeSet<String>> {
     Some(atoms)
 }
 
-/// True when `atoms` names two values of one single-valued built-in option.
+/// True when `atom` is a `name = "value"` pair on a built-in option.
 ///
-/// Atom keys are rendered as `option="value"` for these options, so a shared
-/// prefix before the `=` is what marks the conflict.
-fn has_conflicting_single_valued(atoms: &BTreeSet<String>) -> bool {
-    SINGLE_VALUED_OPTIONS.iter().any(|option| {
-        atoms
-            .iter()
-            .filter(|atom| atom.starts_with(&format!("{option}=")))
-            .count()
-            > 1
-    })
-}
-
-/// True when `atoms` mixes a derived family name with a `target_family` value.
+/// Rust assigns the built-in options from closed, version-dependent domains:
+/// `target_endian` is `"little"` or `"big"`, `target_os` is one of a list that
+/// grows with each release, and a target may carry several `target_family`
+/// values at once. This model cannot know those domains. Enumerating such an
+/// atom as free would let it certify code that cannot compile; enumerating it as
+/// constrained would need the domain it does not have. Either way the answer
+/// would be a guess, so the predicate is declined instead.
 ///
-/// The two are not independent — `unix` *is* `target_family = "unix"` — so the
-/// search cannot assign them separately. Rather than model the implication,
-/// which would need one atom to drive another, the case is declined.
-fn has_derived_family_mix(atoms: &BTreeSet<String>) -> bool {
-    let derived = atoms
-        .iter()
-        .any(|atom| DERIVED_FAMILIES.contains(&atom.as_str()));
-    let family = atoms.iter().any(|atom| atom.starts_with("target_family="));
-    derived && family
+/// `feature` is deliberately exempt: it is Cargo's key, its value set is open,
+/// and several are enabled at once, so a feature atom really is free.
+fn is_built_in_value_atom(atom: &str) -> bool {
+    let Some((key, _)) = atom.split_once('=') else {
+        return false;
+    };
+    key == "target_arch" || key == "target_os" || key == "panic" || key.starts_with("target_")
 }
 
 /// Add every free atom `predicate` mentions to `atoms`.
