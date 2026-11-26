@@ -6,7 +6,7 @@
 //! test.
 
 use super::condition::Condition;
-use super::layout::{ControlAdjacency, ControlLayout, ControlOrder};
+use super::layout::{ControlLayout, ControlOrder};
 use super::{Bindings, ForeachForm, Items, OVERRIDE_NAMES, Section};
 use crate::manifest::{ManifestMap, ManifestValue};
 use proptest::sample::Index;
@@ -25,12 +25,12 @@ pub(in crate::manifest::expand::property_tests) struct BodySpec {
     pub(super) foreach: Option<(ForeachForm, Items)>,
     /// The condition and whether it is written in template form.
     pub(super) when: Option<(Condition, bool)>,
-    /// Where the control keys sit among the authored keys.
+    /// The slot the first-written control key takes.
     pub(super) control_layout: ControlLayout,
+    /// The slot the second-written control key takes.
+    pub(super) second_control_layout: ControlLayout,
     /// Which control key is written first when both are present.
     pub(super) control_order: ControlOrder,
-    /// Whether the two control keys are written adjacently.
-    pub(super) control_adjacency: ControlAdjacency,
     /// The values the condition's free variable sees.
     pub(super) bindings: Bindings,
 }
@@ -43,12 +43,10 @@ impl BodySpec {
 
     /// The authored key sequence with the control keys in place.
     ///
-    /// Each control key takes its own drawn position. Adjacency decides whether
-    /// the two positions coincide, which reads as one block, or are separated
-    /// by at least one authored key; the order decides which control key takes
-    /// the earlier slot. Both interleavings therefore reach the properties, so
-    /// a fault visible only when the two removals interact is not hidden by a
-    /// single fixed layout.
+    /// Each control key has its own independently drawn slot. The key written
+    /// first takes the lower slot; on a tie it is inserted after the other, so
+    /// it still ends up first. The recorded order and the observed sequence
+    /// therefore cannot disagree.
     fn authored_entries(&self) -> Vec<(String, ManifestValue)> {
         let mut entries = self.fields_with_vars();
         let base = entries.len();
@@ -56,31 +54,20 @@ impl BodySpec {
         let Some(first) = controls.next() else {
             return entries;
         };
-        let first_position = self.control_layout.position(base + 1);
+        let first_slot = self.control_layout.position(base);
         let Some(second) = controls.next() else {
-            entries.insert(first_position.min(base), first);
+            entries.insert(first_slot.min(base), first);
             return entries;
         };
-        let second_position = match self.control_adjacency {
-            ControlAdjacency::Adjacent => first_position,
-            // The second slot must differ from the first, so a draw that
-            // collided is bumped rather than silently made adjacent.
-            ControlAdjacency::Separated => {
-                let drawn = self.control_layout.position(base + 1);
-                if drawn <= first_position {
-                    first_position + 1
-                } else {
-                    drawn
-                }
-            }
-        };
-        let (low, high) = if second_position >= first_position {
-            ((first_position, first), (second_position, second))
+        let second_slot = self.second_control_layout.position(base);
+        let (low_slot, high_slot) = (first_slot.min(second_slot), first_slot.max(second_slot));
+        let (low_key, high_key) = if first_slot <= second_slot {
+            (first, second)
         } else {
-            ((second_position, second), (first_position, first))
+            (second, first)
         };
-        entries.insert(high.0.min(entries.len()), high.1);
-        entries.insert(low.0.min(entries.len()), low.1);
+        entries.insert(high_slot.min(entries.len()), high_key);
+        entries.insert(low_slot.min(entries.len()), low_key);
         entries
     }
 
@@ -248,12 +235,12 @@ impl BodySpec {
     /// This is the class `swap_remove` corrupts when it is two or more.
     pub(in crate::manifest::expand::property_tests) fn following_key_count(&self) -> usize {
         let base = self.fields.len() + usize::from(self.vars.is_some());
-        let earliest = self.control_layout.position(base + 1);
-        let offset = match (self.control_entries().len(), self.control_adjacency) {
-            (0 | 1, _) | (_, ControlAdjacency::Adjacent) => 0,
-            (_, ControlAdjacency::Separated) => 1,
+        let first = self.control_layout.position(base);
+        let earliest = match self.control_entries().len() {
+            0 | 1 => first,
+            _ => first.min(self.second_control_layout.position(base)),
         };
-        base.saturating_sub(earliest + offset)
+        base.saturating_sub(earliest)
     }
 
     /// Report which control key the entry writes first.
@@ -261,11 +248,15 @@ impl BodySpec {
         self.control_order
     }
 
-    /// Report whether the entry writes its control keys adjacently.
-    pub(in crate::manifest::expand::property_tests) const fn control_adjacency(
-        &self,
-    ) -> ControlAdjacency {
-        self.control_adjacency
+    /// Report whether the entry's two control keys share one slot.
+    ///
+    /// Derived from the drawn slots, not stored beside them.
+    pub(in crate::manifest::expand::property_tests) fn control_same_slot(&self) -> bool {
+        if self.control_entries().len() < 2 {
+            return true;
+        }
+        let base = self.fields.len() + usize::from(self.vars.is_some());
+        self.control_layout.position(base) == self.second_control_layout.position(base)
     }
 
     /// Drop the condition, keeping everything else as authored.
@@ -281,7 +272,7 @@ impl BodySpec {
     /// exactly the class the check must report as unreached.
     pub(in crate::manifest::expand::property_tests) fn with_control_last(mut self) -> Self {
         self.control_layout = ControlLayout::Last;
-        self.control_adjacency = ControlAdjacency::Adjacent;
+        self.second_control_layout = ControlLayout::Last;
         self
     }
 
@@ -380,11 +371,6 @@ impl DocumentSpec {
             Section::Targets => &self.targets,
             Section::Actions => &self.actions,
         }
-    }
-
-    /// Borrow every entry in both sections, in document order.
-    pub(in crate::manifest::expand::property_tests) fn all_entries(&self) -> Vec<&EntrySpec> {
-        self.targets.iter().chain(self.actions.iter()).collect()
     }
 }
 

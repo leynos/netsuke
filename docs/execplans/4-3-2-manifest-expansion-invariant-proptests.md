@@ -1278,9 +1278,10 @@ all manifest unit tests: 386 tests run: 386 passed
   sibling of `condition_cases`). Both pairs are unrelated, so the modules were
   renamed to `arbitrary_json_test_support` and `shape_cases`, which the
   contract's guidance prefers over recording an exception.
-- The two EP-M4 scenarios each ran once with a deliberate misstatement before
-  the recorded green run. Transcript of the static-`when` scenario's red run,
-  with the expected target count temporarily written as three:
+- The two EP-M4 scenarios reached green by different red paths, recorded here
+  rather than described as two deliberate misstatements. The static-`when`
+  scenario's red stage was a deliberate misstatement: the expected target count
+  was written as three, and the run failed on that step exactly:
 
   ```plaintext
   cargo nextest run --all-features --test bdd_tests \
@@ -1289,9 +1290,12 @@ all manifest unit tests: 386 tests run: 386 passed
   expected manifest to have 3 targets, got 2
   ```
 
-  The corrected count (two) then passed, and the non-string scenario passed on
-  its first green run after the message assertion was narrowed to the stable
-  tail of the localized message.
+  The corrected count (two) passed. The non-string scenario's red stage was a
+  genuine failure, not a misstatement: its first run asserted the whole message
+  `Field 'when' must be a string.` and failed because Fluent wraps the
+  substituted field name in isolation marks, so the observed text is
+  `Field '⁨when⁩' must be a string.`. The assertion and the scenario were
+  narrowed to the stable tail, `must be a string.`, and the rerun passed.
 - The `make proptest` census comment now names
   `cargo nextest list --workspace --all-targets --all-features -E '<filter>'`
   as the measuring command instead of quoting a count that has already changed
@@ -1906,26 +1910,38 @@ thread 'manifest::expand::property_tests::static_when::static_entries_survive_ex
 Every patch also passed `make test-kani-mutations`, and the contract tests
 accept all six stems.
 
-Coverage counts, fixed seed `0x432`, 512 draws, all floors at 5%:
+Coverage counts, fixed seed `0x432`, 512 draws per strategy. The tally counts
+each class once per draw, and the floor is a rounded-up 5% of the draws in the
+strategy's scope, which for every classifier below is all 512 but the static
+verdicts, whose strategy always carries a condition and so is also fully in
+scope.
 
 ```plaintext
-entry:   static 236, foreach 276, vars 446, no-vars 66,
-         condition 384, condition-expression 218, condition-template 166,
-         condition-reads-vars 201, -index 57, -item 36,
-         control-last 118, control-one-following 153, control-two-or-more 241,
-         value kinds 376–1521 each, value-nested 586, value-jinja-string 182
-inject:  array 249, string 263, empty 68, all-included 277,
-         all-excluded 112, gap 39, item kinds 87–469, null-in-string 47,
-         user-item-collision 143, user-index-collision 141
-static:  8 verdict×form×section classes 31–117 each, reads-vars 290
-document: targets-entries 427, actions-entries 402, static 1043,
-         foreach 1100, condition 1622
+entry:            static 276, foreach 236, vars 462, no-vars 50,
+                  condition 399, condition-expression 207, template 192,
+                  reads-vars 158, reads-index 51, reads-item 54,
+                  control-last 98, one-following 122, two-or-more 292,
+                  same-slot 39, two-slots 149,
+                  both-foreach-first 101, both-when-first 87,
+                  value kinds 212-446 each, nested 196, jinja-string 133
+inject:           array 247, string 265, empty 158, all-included 218,
+                  all-excluded 95, partial 41, gap 28,
+                  item kinds 34-272 each, null-in-string 55,
+                  user-item-collision 138, user-index-collision 138
+static-condition: 8 verdict x section x form classes 49-81 each, reads-vars 194
+static-entry:     static 512, vars 371, no-vars 141, condition 254,
+                  no-condition 258, control classes 126-241
+document:         targets-entries 409, actions-entries 408, static 433,
+                  foreach 434, per-section held 323-325, failed 170-185,
+                  absent 191-198
 ```
 
-`make proptest` wall time: 8.4 s for all 243 selected tests; the 139-test
-`manifest::expand` tree runs in 2.0 s, so the new suite adds about 2 s.
+`make proptest` wall time: 8-10 s for all 279 selected property tests, which
+now include the witness cases and the oracle's regression tests, because both
+live under the suite's `property_tests` path. The 141-test `manifest::expand`
+tree runs in 2 s.
 
-### EP-M1 plateau gate run and rebase
+### EP-M1 plateau gate run and rebase### EP-M1 plateau gate run and rebase
 
 Run one (candidate `7c69bcf03`, base `b99c9c92b`): `check-fmt`, `typecheck`,
 `doc-coverage`, `markdownlint`, `nixie`, and `test` passed; `make lint` failed

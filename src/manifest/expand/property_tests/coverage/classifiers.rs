@@ -5,7 +5,7 @@
 //! counts what a draw contains.
 
 use super::super::strategy::{
-    BodySpec, ControlAdjacency, ControlOrder, DocumentSpec, EntrySpec, ForeachForm, Items, Section,
+    BodySpec, ControlOrder, DocumentSpec, EntrySpec, ForeachForm, Items, Section,
 };
 use super::{ClassSet, count};
 use crate::manifest::ManifestValue;
@@ -107,14 +107,15 @@ fn control_order_class(body: &BodySpec) -> &'static str {
     }
 }
 
-/// Name whether the control keys are adjacent or separated.
+/// Name whether the two control keys share one slot or take separate ones.
 fn control_adjacency_class(body: &BodySpec) -> &'static str {
     if !(body.is_foreach() && body.has_condition()) {
-        return "control-adjacency-inapplicable";
+        return "control-slot-inapplicable";
     }
-    match body.control_adjacency() {
-        ControlAdjacency::Adjacent => "control-adjacent",
-        ControlAdjacency::Separated => "control-separated",
+    if body.control_same_slot() {
+        "control-same-slot"
+    } else {
+        "control-two-slots"
     }
 }
 
@@ -212,20 +213,42 @@ pub(super) fn document_classes(spec: &DocumentSpec, tally: &mut ClassSet) -> boo
     if !spec.actions.is_empty() {
         count(tally, "actions-entries");
     }
-    for entry in spec.all_entries() {
-        count(
-            tally,
-            if entry.body.is_foreach() {
-                "document-foreach"
-            } else {
-                "document-static"
-            },
-        );
-        if entry.body.has_condition() {
-            count(tally, "document-condition");
+    for section in [Section::Targets, Section::Actions] {
+        for entry in spec.entries(section) {
+            count(
+                tally,
+                if entry.body.is_foreach() {
+                    "document-foreach"
+                } else {
+                    "document-static"
+                },
+            );
+            count(tally, section_verdict_class(section, &entry.body));
         }
     }
     true
+}
+
+/// Name one entry's condition verdict within its section.
+///
+/// `OBL-WHEN-REMOVED` requires, per section, entries whose condition held,
+/// entries whose condition failed, and entries with no condition; the document
+/// classifier must reach all three or the property could pass without ever
+/// exercising one of them.
+fn section_verdict_class(section: Section, body: &BodySpec) -> &'static str {
+    if !body.has_condition() {
+        return match section {
+            Section::Targets => "targets-entry-absent",
+            Section::Actions => "actions-entry-absent",
+        };
+    }
+    let held = super::super::model::expected_filtered(body).is_empty();
+    match (section, held) {
+        (Section::Targets, true) => "targets-entry-held",
+        (Section::Targets, false) => "targets-entry-failed",
+        (Section::Actions, true) => "actions-entry-held",
+        (Section::Actions, false) => "actions-entry-failed",
+    }
 }
 
 /// Classify one foreach entry for the injection obligations.

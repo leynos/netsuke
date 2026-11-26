@@ -4,7 +4,7 @@
 //! no draw is discarded and the coverage classification counts real cases.
 
 use super::condition::{Condition, VAR_NAMES, var_name};
-use super::layout::{ControlAdjacency, ControlLayout, ControlOrder};
+use super::layout::{ControlLayout, ControlOrder};
 use super::verdict::static_verdict_body;
 use super::{
     Bindings, BodySpec, DocumentSpec, EntrySpec, ForeachForm, Items, OVERRIDE_NAMES, Section,
@@ -172,10 +172,18 @@ fn items_strategy(integer_domain: bool) -> BoxedStrategy<Items> {
         ]
         .boxed()
     } else {
+        // A null item in the list-literal spelling is the only way to exercise
+        // that kind through the string form, and a uniformly drawn value rarely
+        // produces one, so it gets its own arm.
         prop_oneof![
             1 => Just(Items::Arbitrary(Vec::new())),
             2 => proptest::collection::vec(json_values(field_string_strategy()), non_empty)
                 .prop_map(Items::Arbitrary),
+            2 => proptest::collection::vec(json_values(field_string_strategy()), 0..=3)
+                .prop_map(|mut values| {
+                    values.push(ManifestValue::Null);
+                    Items::Arbitrary(values)
+                }),
         ]
         .boxed()
     }
@@ -190,9 +198,8 @@ fn body_strategy(has_foreach: bool, has_when: bool) -> impl Strategy<Value = Bod
         ForeachForm::strategy(),
         any::<bool>(),
         any::<bool>(),
-        (any::<Index>(), any::<Index>()),
+        (any::<Index>(), any::<Index>(), any::<Index>()),
         ControlOrder::strategy(),
-        ControlAdjacency::strategy(),
     )
         .prop_flat_map(
             move |(
@@ -202,9 +209,8 @@ fn body_strategy(has_foreach: bool, has_when: bool) -> impl Strategy<Value = Bod
                 form,
                 integer_domain,
                 has_vars,
-                (control_position, vars_position),
+                (control_position, second_control_position, vars_position),
                 control_order,
-                control_adjacency,
             )| {
                 let normalised = normalise_condition(drawn_condition, has_foreach);
                 let maybe_condition = has_when.then_some(normalised);
@@ -232,8 +238,8 @@ fn body_strategy(has_foreach: bool, has_when: bool) -> impl Strategy<Value = Bod
                             foreach: drawn_items.map(|values| (form, values)),
                             when: maybe_condition.map(|shape| (shape, drawn_template)),
                             control_layout: ControlLayout::drawn(control_position),
+                            second_control_layout: ControlLayout::drawn(second_control_position),
                             control_order,
-                            control_adjacency,
                             bindings: bindings.clone(),
                         }
                     },
@@ -301,10 +307,12 @@ pub(in crate::manifest::expand::property_tests) fn static_entry_spec_strategy()
     )
 }
 
-/// Generate one static entry that carries a condition.
+/// Generate one static entry that always carries a condition.
 pub(in crate::manifest::expand::property_tests) fn static_condition_entry_spec_strategy()
 -> impl Strategy<Value = EntrySpec> {
-    entry_with_controls(false, true)
+    (Section::strategy(), any::<bool>()).prop_flat_map(|(section, verdict_holds)| {
+        static_verdict_body(verdict_holds).prop_map(move |body| EntrySpec { section, body })
+    })
 }
 
 /// Generate a whole document, forcing each list's section.

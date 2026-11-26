@@ -774,7 +774,11 @@ deserializer sees only its output. The obligations are stated here as clauses
   as environment globals. It is removed whether the entry is kept or dropped.
   The clause covers static and `foreach` entries in both the `targets` and
   `actions` sections. A static entry whose `vars` is not an object is evaluated
-  against an empty context rather than rejected.
+  against an empty context rather than rejected. A bare undefined name excludes
+  the entry, because `MiniJinja` truthiness reads the undefined value as false;
+  an undefined name that an expression consumes — as an operand, in a
+  comparison, or as a template substitution — is an error under the strict
+  undefined setting.
 - `C-5` **Outside the contract.** Manifest-query mode, where a refused helper
   leaves an entry `Conditional` and expansion adds the synthetic
   `conditional: true` field, and the document state observable after an error,

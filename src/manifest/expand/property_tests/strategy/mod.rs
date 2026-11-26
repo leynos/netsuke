@@ -31,7 +31,7 @@ pub(in crate::manifest::expand::property_tests) use generate::{
     document_spec_strategy, entry_spec_strategy, foreach_entry_spec_strategy,
     static_condition_entry_spec_strategy, static_entry_spec_strategy,
 };
-pub(in crate::manifest::expand::property_tests) use layout::{ControlAdjacency, ControlOrder};
+pub(in crate::manifest::expand::property_tests) use layout::ControlOrder;
 pub(in crate::manifest::expand::property_tests) use spec::{BodySpec, DocumentSpec, EntrySpec};
 
 use crate::manifest::ManifestValue;
@@ -194,16 +194,25 @@ impl Bindings {
             .prop_map(|(flags, counts)| Self { flags, counts })
     }
 
-    /// Build bindings with one integer slot fixed and the rest drawn.
+    /// Build cleared bindings holding one integer value.
     pub(super) fn with_count(slot: usize, value: i64) -> Self {
-        let mut counts = [0i64; VAR_NAMES.len()];
-        if let Some(entry) = counts.get_mut(slot) {
+        let mut bindings = Self {
+            flags: [false; VAR_NAMES.len()],
+            counts: [0i64; VAR_NAMES.len()],
+        };
+        if let Some(entry) = bindings.counts.get_mut(slot) {
             *entry = value;
         }
-        Self {
-            flags: [false; VAR_NAMES.len()],
-            counts,
+        bindings
+    }
+
+    /// Build cleared bindings holding one boolean value.
+    pub(super) fn with_flag(slot: usize, value: bool) -> Self {
+        let mut bindings = Self::with_count(slot, 0);
+        if let Some(entry) = bindings.flags.get_mut(slot) {
+            *entry = value;
         }
+        bindings
     }
 
     /// Read the boolean value one variable name holds.

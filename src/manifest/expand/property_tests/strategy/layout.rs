@@ -1,9 +1,10 @@
 //! Where a generated entry writes its control keys.
 //!
-//! Each control key takes its own slot. `ControlLayout` supplies the slot,
-//! `ControlOrder` decides which key takes the earlier one, and
-//! `ControlAdjacency` decides whether the two slots coincide. Keeping the
-//! three apart means the layout can vary without touching the entry model.
+//! Each control key takes its own independently drawn slot, and
+//! `ControlOrder` decides which written key takes the lower one. Whether the
+//! two slots coincide is then derived from the drawn values rather than
+//! chosen separately, so "adjacent" cannot be asserted while the positions
+//! disagree.
 
 use proptest::prelude::*;
 use proptest::sample::Index;
@@ -34,24 +35,6 @@ impl ControlOrder {
     /// Generate one order.
     pub(super) fn strategy() -> impl Strategy<Value = Self> {
         prop_oneof![Just(Self::ForeachFirst), Just(Self::WhenFirst)]
-    }
-}
-
-/// Whether an entry's two control keys are written next to each other.
-#[derive(Clone, Copy, Debug)]
-pub(in crate::manifest::expand::property_tests) enum ControlAdjacency {
-    /// The two control keys are adjacent, so removing both leaves the authored
-    /// fields' relative order unchanged.
-    Adjacent,
-    /// Authored fields sit between the two control keys, so each removal moves
-    /// a different key and the two sites' interactions become visible.
-    Separated,
-}
-
-impl ControlAdjacency {
-    /// Generate one adjacency choice.
-    pub(super) fn strategy() -> impl Strategy<Value = Self> {
-        prop_oneof![Just(Self::Adjacent), Just(Self::Separated)]
     }
 }
 

@@ -13,9 +13,11 @@
 
 use super::strategy::{
     document_spec_strategy, entry_spec_strategy, foreach_entry_spec_strategy,
-    static_entry_spec_strategy,
+    static_condition_entry_spec_strategy, static_entry_spec_strategy,
 };
-use classes::{DOCUMENT_CLASSES, ENTRY_CLASSES, INJECT_CLASSES, STATIC_CLASSES};
+use classes::{
+    DOCUMENT_CLASSES, ENTRY_CLASSES, INJECT_CLASSES, STATIC_CLASSES, STATIC_ENTRY_CLASSES,
+};
 use classifiers::{
     document_classes, entry_classes, forced_control_classes, injection_classes, static_classes,
 };
@@ -97,6 +99,13 @@ fn tally<S: Strategy>(
 
 /// Fail when any required class reaches less than the floor.
 fn check_floors(tally: &Tally, required: &[&'static str], total: usize) -> Result<(), String> {
+    // An empty denominator would make every floor zero and pass a sample that
+    // never exercised the classes at all.
+    if total == 0 {
+        return Err(format!(
+            "the sample placed no draw in scope, so no class can be checked: {tally:?}"
+        ));
+    }
     // Round up: 5% of 512 is 25.6, so a floor of 25 would sit below the
     // stated share and admit a class rarer than the contract allows.
     let floor = total.saturating_mul(MINIMUM_CLASS_PERCENT).div_ceil(100);
@@ -143,11 +152,20 @@ fn foreach_generator_reaches_every_injection_class() -> Result<(), String> {
     check_floors(&tally, INJECT_CLASSES, draws)
 }
 
+/// Classify the strategy the `when`-order property draws from.
 #[test]
 fn static_condition_generator_reaches_every_verdict_class() -> Result<(), String> {
-    let (tally, draws) = tally(&static_entry_spec_strategy(), static_classes)?;
-    report("static", &tally);
+    let (tally, draws) = tally(&static_condition_entry_spec_strategy(), static_classes)?;
+    report("static-condition", &tally);
     check_floors(&tally, STATIC_CLASSES, draws)
+}
+
+/// Classify the strategy the static-survival property draws from.
+#[test]
+fn static_entry_generator_reaches_every_shape_class() -> Result<(), String> {
+    let (tally, draws) = tally(&static_entry_spec_strategy(), entry_classes)?;
+    report("static-entry", &tally);
+    check_floors(&tally, STATIC_ENTRY_CLASSES, draws)
 }
 
 #[test]
