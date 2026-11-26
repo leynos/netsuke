@@ -6,10 +6,10 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: APPROVED
+Status: COMPLETE
 
-The plan has been through one expert design review and was approved by the user
-on 2026-11-25. Implementation proceeds through EP-M0 to EP-M4.
+The plan went through one expert design review and was approved by the user on
+2026-11-25. All five milestones and the closure gate set are complete.
 
 ## Purpose / big picture
 
@@ -1693,30 +1693,63 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
 
 ## Outcomes & retrospective
 
-Not yet started.
+Delivered in seventeen commits on
+`4-3-2-manifest-expansion-invariant-proptests`, rebased once onto `origin/main`
+`56d1e0a22`.
 
-## Revision note
+**What exists now.**
 
-2026-10-31, after expert design review. Four reviewers (property testing,
-codebase accuracy, process compliance, and pre-mortem) found two blockers and a
-dozen major issues. Changes:
+- The two control-key removals use `shift_remove`, so expansion keeps the
+  authoring key order. `key_order_cases.rs` (21 rstest cases) and the "Parsing
+  names the first unknown field in authoring order" scenario pin the fix; both
+  were seen red before it and green after.
+- A shared, parameterized JSON strategy in `src/arbitrary_json_test_support.rs`
+  serves both the shell-selection decoder and the expansion suite.
+- `src/manifest/expand/property_tests/` holds five properties (one per
+  obligation), a fixed-seed coverage tripwire with a negative control, the
+  authored-entry model, the independent oracle, and the relocated generated
+  tests. `make proptest` selects all of it: 243 tests, 11 s.
+- Six mutation patches, registered in `SUPPLEMENTAL_PROPERTY_PATCHES`, each
+  make their named property fail for the intended reason and compile under the
+  mutation compile guard.
+- `when_type_cases.rs` and `shape_cases.rs` pin the unhappy paths and every
+  condition shape, operator, and form.
+- The contract is stated as clauses `C-1` to `C-5` in the design document and
+  cited from the developers' guide, the verification survey, the repository
+  layout, the users' guide, the changelog, and the roadmap, whose 4.3.2 item
+  and all four sub-items are marked done.
 
-- Restated `AXIOM-MJ-SERDE` (MiniJinja sorts map keys) and added
-  `AXIOM-MAP-EQ` (map equality ignores order), with a constraint that order is
-  asserted on key sequences.
-- Replaced the recursive condition grammar with a closed set of shapes, with
-  a keyword-free variable pool and structural free-name checks.
-- Fixed the mutation patches so that they compile under denied warnings,
-  re-targeted `MUT-INDEX` at the renumbering fault with its true detection
-  class, and changed acceptance to failure sets.
-- Corrected the order oracle for static entries and added `vars` to the
-  generated layout.
-- Dropped ADR-0068, `OBL-INJECT-EXPR` as a separate property, the pipeline
-  property, and the snapshot; added three behavioural scenarios and an
-  unhappy-path rstest table.
-- Added reuse of `json_values()` and relocation of the existing generated
-  tests.
-- Consolidated seven milestones into five, with the full gate set at each
-  plateau, and raised the scope tolerance to match the planned file list.
+**Deviations, all recorded above.**
 
-The remaining work is unchanged in purpose: approval, then EP-M0 to EP-M4.
+- The branch was rebased onto current `main` when a rolling Whitaker suite
+  asset published after main's last lint run reddened base code; no production
+  change or exemption was added.
+- The two new modules were renamed to satisfy the module-layout contract
+  rather than recorded as exceptions.
+- The undefined-name behaviour was measured, not assumed: a bare undefined name
+  is false, while a consumed one errors. Clause `C-4` states both.
+
+**Lessons.**
+
+- The repository's restriction lints are part of the design surface for a test
+  suite: shadowing, slice indexing, `println!`, and integer division all fail
+  the gate. Budget a full lint pass per plateau.
+- A generator defect and an oracle defect look exactly like a production
+  defect in a property failure. The first two failures here were both
+  scaffolding (a template form on an integer shape, and a floor check that
+  iterated only the classes it had counted); neither justified the plan's
+  production-defect stop.
+- `serde_json::Map` equality ignores order, so every key-order claim must be
+  stated over key sequences. The one existing test that looked like it covered
+  order never reached the defect.
+
+**Final evidence.** The eleven-target closure set passed at `731241b49`:
+`check-fmt`, `typecheck`, `lint` (all four substages), `doc-coverage` (98.38%),
+`markdownlint`, `nixie`, `test` (6739 nextest tests plus doctests), `proptest`
+(243), `mbake`, `test-workflow-contracts` (2561 plus 69), and
+`test-kani-mutations`.
+
+**Residual gaps.** Those recorded under *Residual gaps* above, unchanged: query
+mode, post-error document state, non-object static `vars`, `glob()` and stdlib
+conditions, sorted keys inside an object `item`, and the trusted MiniJinja and
+`serde_json` internals.
