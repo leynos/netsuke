@@ -2287,12 +2287,12 @@ Implementation notes for collection filters:
   `InvalidOperation` error to avoid silently iterating over strings or other
   unintended inputs.
 - `flatten` carries one traversal allowance, owned by
-  `src/stdlib/collections/flatten.rs` as `FlattenLimits` and `FlattenBudget`.
-  The traversal charges every yielded item (containers included) as a visit,
-  every retained leaf, and the depth of each item, and it checks each ceiling
-  before descending or appending. The defaults are 1,000,000 visits, 100,000
-  retained leaves, and a nesting depth of 128. A breach is a localized
-  `InvalidOperation` error naming the ceiling.
+  `src/stdlib/collections/flatten/mod.rs` as `FlattenLimits` and
+  `FlattenBudget`. The traversal charges every yielded item (containers
+  included) as a visit, every retained leaf, and the depth of each item, and it
+  checks each ceiling before descending or appending. The defaults are
+  1,000,000 visits, 100,000 retained leaves, and a nesting depth of 128. A
+  breach is a localized `InvalidOperation` error naming the ceiling.
 - `collections::register_filters` creates one `FlattenBudget` and the registered
   filter captures it, so the visit and leaf ceilings are **shared by every call
   on that environment**, not per call. An environment is built once per

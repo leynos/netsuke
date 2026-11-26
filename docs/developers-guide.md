@@ -245,11 +245,12 @@ rendering still registers the full standard library; this restriction applies
 only to query rendering.
 
 The `flatten` filter owns a fixed traversal allowance in
-`src/stdlib/collections/flatten.rs`. `collections::register_filters` delegates
-to `register_filters_with_limits` with `FlattenLimits::DEFAULT`; that helper
-builds one `FlattenBudget` and the filter closure captures it, so the visit and
-leaf ceilings are shared by every call on that environment. An environment is
-built once per manifest load, which matches the scope `ManifestBudget` uses.
+`src/stdlib/collections/flatten/mod.rs`. `collections::register_filters`
+delegates to `register_filters_with_limits` with `FlattenLimits::DEFAULT`; that
+helper builds one `FlattenBudget` and the filter closure captures it, so the
+visit and leaf ceilings are shared by every call on that environment. An
+environment is built once per manifest load, which matches the scope
+`ManifestBudget` uses.
 
 Two seams keep this testable without widening the public surface:
 
@@ -270,7 +271,7 @@ default. The ceilings — 1,000,000 visits, 100,000 retained leaves, and depth
 rendering alike, so the regression coverage in
 `tests/std_filter_tests/collection_filters/flatten_tests.rs`, the
 exact-threshold unit cases, and the generated properties in
-`src/stdlib/collections/flatten_property.rs` must change with it.
+`src/stdlib/collections/flatten/property.rs` must change with it.
 
 Three constraints remain. A single `next()` call on a custom host object can
 still block or allocate without bound, because the allowance bounds the number

@@ -18,7 +18,7 @@
 //! production traversal, so these are statements about the domain rather than
 //! restatements of the implementation.
 
-use super::flatten::{FlattenBudget, FlattenLimits, flatten_filter};
+use super::{FlattenBudget, FlattenLimits, flatten_filter};
 use anyhow::{Result, ensure};
 use minijinja::value::{Value, ValueKind};
 use proptest::collection::{btree_map, vec};

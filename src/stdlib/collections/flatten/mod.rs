@@ -245,3 +245,6 @@ fn limit_error(key: &'static str, limit: usize) -> Error {
             .to_string(),
     )
 }
+
+#[cfg(test)]
+mod property;

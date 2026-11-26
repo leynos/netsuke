@@ -19,9 +19,6 @@ use crate::localization::{self, keys};
 mod flatten;
 
 #[cfg(test)]
-mod flatten_property;
-
-#[cfg(test)]
 mod tests;
 
 /// Register the collection filters (`uniq`, `flatten`, `compact`, `group_by`)
