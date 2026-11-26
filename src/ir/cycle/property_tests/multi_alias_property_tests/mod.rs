@@ -79,7 +79,7 @@ fn representative_cyclic_graph() -> BuildGraph {
         },
         AliasCounts {
             explicit: 2,
-            implicit: 0,
+            implicit: 1,
         },
     ];
     let extras = [Vec::new(), Vec::new()];
@@ -149,9 +149,12 @@ fn representative_generated_shapes_satisfy_the_invariants() {
         analyse(&acyclic).cycle.is_none(),
         "the acyclic representative must stay acyclic",
     );
+    let cyclic_witness = analyse(&cyclic)
+        .cycle
+        .expect("the cyclic representative must report a cycle");
     assert!(
-        analyse(&cyclic).cycle.is_some(),
-        "the cyclic representative must report a cycle",
+        cyclic_witness.contains(&Utf8PathBuf::from("n1i0")),
+        "the witness must close through the implicit alias: {cyclic_witness:?}",
     );
     assert!(
         declared_entries(&acyclic) > 0,
