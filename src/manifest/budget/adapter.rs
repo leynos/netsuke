@@ -34,6 +34,24 @@ impl BudgetErrorExt for ManifestBudgetExhaustion {
     }
 }
 
+/// Report whether a `MiniJinja` failure already carries typed exhaustion.
+///
+/// Native callbacks adapt their own domain failures, so a callback that
+/// exhausts a counter other than engine fuel returns an `OutOfFuel` error with
+/// a typed [`ManifestBudgetExhaustion`] source. The translation branches must
+/// keep that error; replacing it with a generic fuel exhaustion would report
+/// the wrong stage and counter.
+pub(crate) fn preserves_budget_exhaustion(error: &Error) -> bool {
+    let mut source = std::error::Error::source(error);
+    while let Some(current) = source {
+        if current.downcast_ref::<ManifestBudgetExhaustion>().is_some() {
+            return true;
+        }
+        source = current.source();
+    }
+    false
+}
+
 /// Recover a bounded diagnostic without exposing enclosing template contexts.
 pub(crate) fn budget_exhaustion_message(error: &anyhow::Error) -> Option<LocalizedMessage> {
     error

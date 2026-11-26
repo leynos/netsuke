@@ -87,6 +87,8 @@ fn flatten_errors_on_scalar_items() -> Result<()> {
     Ok(())
 }
 
+mod compact_limit_tests;
+
 mod compact_property;
 
 mod compact_tests;

@@ -24,7 +24,11 @@ use super::{probe_config, probe_expression};
 fn refusal_environment() -> Environment<'static> {
     let mut env = Environment::new();
     let config = probe_config();
-    let _state = register_for_test(&mut env, &config);
+    let _state = register_for_test(
+        &mut env,
+        &config,
+        &crate::manifest::CollectionAllowance::standalone(),
+    );
     register_glob_refusal(&mut env, RestrictedSurface::Test);
     env
 }

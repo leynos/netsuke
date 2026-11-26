@@ -14138,6 +14138,36 @@ registration, which suppresses budget-exhaustion telemetry at the loading
 boundary and omits the expansion-report observer, while other instrumentation
 remains owned by the boundaries that invoke it.
 
+Native callbacks are outside MiniJinja fuel, so helpers that can consume an
+unbounded iterator charge their own allowance. `CollectionAllowance` in
+`src/manifest/budget/allowance.rs` has two modes: `Manifest`, which wraps the
+load's `ManifestBudget` and charges both a per-call ceiling and a manifest-wide
+aggregate, and `Standalone`, which enforces the per-call ceiling alone because
+no manifest evaluation exists to charge. The public `register` and
+`register_with_config` functions use `Standalone`; the loader passes
+`budget.collection_allowance()` through `register_with_collection_allowance`,
+`register_with_config_and_collection_allowance`, `register_manifest_query`, and
+`register_for_test`. Both ceilings are fixed contract values (100,000 members
+per call and 1,000,000 per manifest) rather than fields on the public
+`ManifestBudgetLimits`; `ManifestBudget::with_collection_limits` and
+`ManifestLoadOptions::with_budget` exist only for focused tests.
+
+`compact` is the first helper to use the allowance. It charges each member
+before the blank check and before appending it, so neither an all-blank lazy
+repetition nor a retained one can pull more members than the ceiling. The
+per-call check uses the zero-based member index without touching shared state,
+mirroring `foreach` cardinality; the aggregate charge then debits the shared
+counter. The new vocabulary is `collection` and `collection_aggregate` for
+`ManifestBudgetStage`, and `collection_call_items` and `collection_items` for
+`ManifestBudgetKind`. Other collection filters remain unaccounted.
+
+The translation branches must preserve typed exhaustion. A native callback
+reports its exhausted counter as `OutOfFuel`, so `evaluate_with_state`,
+`render_template_at`, and the macro fallback in `invocation.rs` check
+`adapter::preserves_budget_exhaustion` before mapping a bare engine failure to
+`fuel_exhaustion`. Without that check the error would be re-labelled as a fuel
+exhaustion and lose the stage and counter that telemetry reports.
+
 The runner boundary promotes a budget exhaustion to the typed
 `RunnerError::ManifestBudgetExceeded` variant. Its localized terminal
 diagnostic carries only the fixed stage and numeric limit; JSON serialization

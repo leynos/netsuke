@@ -23,7 +23,10 @@ mod target_command_available_cases;
 #[fixture]
 pub(super) fn manifest_query_environment() -> Environment<'static> {
     let mut env = Environment::new();
-    let _state = crate::stdlib::register_manifest_query(&mut env);
+    let _state = crate::stdlib::register_manifest_query(
+        &mut env,
+        &crate::manifest::CollectionAllowance::standalone(),
+    );
     env
 }
 

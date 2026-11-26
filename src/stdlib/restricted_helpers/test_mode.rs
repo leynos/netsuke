@@ -21,6 +21,7 @@ use minijinja::{
 };
 
 use crate::localization::{self, keys};
+use crate::manifest::CollectionAllowance;
 
 use super::{HelperKind, RestrictedSurface, SURFACE};
 
@@ -138,10 +139,11 @@ fn refusal_error(operation: &str) -> Error {
 pub(crate) fn register_for_test(
     env: &mut Environment<'_>,
     config: &crate::stdlib::StdlibConfig,
+    collection_allowance: &CollectionAllowance,
 ) -> crate::stdlib::StdlibState {
     super::super::register::register_legacy_boolean_formatter(env);
     super::super::path::register_query_filters(env);
-    super::super::collections::register_filters(env);
+    super::super::collections::register_filters(env, collection_allowance);
     super::super::recipe_text::register_filters(env, config.dialect());
     if config.clock().is_system() {
         register_function_refusal(env, "now");

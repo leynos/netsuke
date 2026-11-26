@@ -23,9 +23,15 @@ use minijinja::{
 use std::sync::Arc;
 
 use crate::localization::{self, keys};
+use crate::manifest::CollectionAllowance;
 use crate::shell_word::ShellDialect;
 
 /// Register standard library helpers with the `MiniJinja` environment.
+///
+/// Standalone registration has no manifest evaluation to charge, so the
+/// `compact` filter enforces the fixed per-call member ceiling alone. A
+/// manifest load registers through the crate-private allowance-aware path and
+/// shares the manifest-wide allowance instead.
 ///
 /// # Examples
 /// ```
@@ -49,6 +55,17 @@ use crate::shell_word::ShellDialect;
 /// directory no longer exists) or when the current directory path contains
 /// non-UTF-8 components and cannot be converted into a UTF-8 workspace root.
 pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
+    register_with_collection_allowance(env, &CollectionAllowance::standalone())
+}
+
+/// Register the ambient stdlib with a manifest's collection allowance.
+///
+/// The loader calls this for ambient manifest loads. It is the same surface as
+/// [`register`], but `compact` charges the load's shared collection counters.
+pub(crate) fn register_with_collection_allowance(
+    env: &mut Environment<'_>,
+    collection_allowance: &CollectionAllowance,
+) -> anyhow::Result<StdlibState> {
     let root = Dir::open_ambient_dir(".", ambient_authority())
         .context(localization::message(keys::STDLIB_REGISTER_OPEN_DIR))?;
     let cwd = std::env::current_dir()
@@ -60,13 +77,17 @@ pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
                 .with_arg("path", path.display().to_string())
         )
     })?;
-    register_with_config(
+    Ok(register_with_config_and_collection_allowance(
         env,
         StdlibConfig::new(root)?.with_workspace_root_path(path)?,
-    )
+        collection_allowance,
+    ))
 }
 
 /// Register stdlib helpers using an explicit configuration.
+///
+/// Standalone registration has no manifest evaluation to charge, so the
+/// `compact` filter enforces the fixed per-call member ceiling alone.
 ///
 /// This is intended for callers that have already derived a capability-scoped
 /// workspace directory and need to wire the stdlib into a `MiniJinja`
@@ -94,9 +115,27 @@ pub fn register_with_config(
     env: &mut Environment<'_>,
     config: StdlibConfig,
 ) -> anyhow::Result<StdlibState> {
+    Ok(register_with_config_and_collection_allowance(
+        env,
+        config,
+        &CollectionAllowance::standalone(),
+    ))
+}
+
+/// Register an explicit stdlib configuration with a collection allowance.
+///
+/// The loader calls this for fully configured manifest loads so `compact`
+/// charges the load's shared collection counters. Registration itself cannot
+/// fail once the configuration exists, which the public wrappers express as a
+/// `Result` for the callers that also build that configuration.
+pub(crate) fn register_with_config_and_collection_allowance(
+    env: &mut Environment<'_>,
+    config: StdlibConfig,
+    collection_allowance: &CollectionAllowance,
+) -> StdlibState {
     register_legacy_boolean_formatter(env);
     let state = StdlibState::default();
-    register_read_only_helpers(env, &config);
+    register_read_only_helpers(env, &config, collection_allowance);
     let clock = config.clock().clone();
     tracing::debug!(
         clock_source = clock.source_label(),
@@ -111,7 +150,7 @@ pub fn register_with_config(
         "registered stdlib file-reading filters"
     );
     command::register(env, impure, command_config);
-    Ok(state)
+    state
 }
 
 /// Preserve lowercase Boolean interpolation for existing manifests.
@@ -136,16 +175,23 @@ pub(super) fn register_legacy_boolean_formatter(env: &mut Environment<'_>) {
 /// host, perform I/O, or invoke commands so consumers can render discovery
 /// metadata without disclosing host state.
 ///
-pub(crate) fn register_manifest_query(env: &mut Environment<'_>) -> StdlibState {
+pub(crate) fn register_manifest_query(
+    env: &mut Environment<'_>,
+    collection_allowance: &CollectionAllowance,
+) -> StdlibState {
     let state = StdlibState::default();
-    register_query_helpers(env);
+    register_query_helpers(env, collection_allowance);
     time::register_query_functions(env);
     restricted_helpers::register_query_refusals(env);
     state
 }
 
 /// Register helpers that do not execute a command or make a network request.
-fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) {
+fn register_read_only_helpers(
+    env: &mut Environment<'_>,
+    config: &StdlibConfig,
+    collection_allowance: &CollectionAllowance,
+) {
     register_file_tests(env);
     let reading_root = path::ReadingRoot::new(
         Arc::clone(&config.workspace_root),
@@ -157,7 +203,7 @@ fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) 
         config.file_max_read_bytes(),
         reading_root,
     );
-    collections::register_filters(env);
+    collections::register_filters(env, collection_allowance);
     recipe_text::register_filters(env, config.dialect());
     let which_cache_capacity = config.which_cache_capacity();
     let which_skip_dirs = WorkspaceSkipList::from_names(config.workspace_skip_dirs());
@@ -177,9 +223,9 @@ fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) 
 /// not depend on the host or on build-shell configuration. Query metadata is
 /// never executed; full manifest rendering continues to use the selected
 /// recipe shell.
-fn register_query_helpers(env: &mut Environment<'_>) {
+fn register_query_helpers(env: &mut Environment<'_>, collection_allowance: &CollectionAllowance) {
     path::register_query_filters(env);
-    collections::register_filters(env);
+    collections::register_filters(env, collection_allowance);
     recipe_text::register_filters(env, ShellDialect::Sh);
 }
 

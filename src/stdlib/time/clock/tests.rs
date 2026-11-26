@@ -219,7 +219,10 @@ fn eval_expression_error(env: &Environment<'_>, expr: &str) -> Result<minijinja:
 #[case::offset("now(offset='+02:00')")]
 fn manifest_query_registration_refuses_now(#[case] expression: &str) -> Result<()> {
     let mut env = Environment::new();
-    let _state = crate::stdlib::register_manifest_query(&mut env);
+    let _state = crate::stdlib::register_manifest_query(
+        &mut env,
+        &crate::manifest::CollectionAllowance::standalone(),
+    );
 
     let error = eval_expression_error(&env, expression)?;
 

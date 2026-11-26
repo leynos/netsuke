@@ -1776,6 +1776,15 @@ Example: `{{ ['a', none, '', 'b'] | compact | join(',') }}` produces `a,b`. The
 [template standard-library guide](stdlib-yaml-and-jinja-guide.md)
 gives the full filter reference.
 
+`compact` examines at most 100,000 members per call and 1,000,000 members per
+manifest. Both ceilings are fixed rather than configurable, and they count
+members examined, not members kept, so an all-blank subject is bounded exactly
+like a fully retained one. A call that would examine more fails with
+`Manifest resource budget exhausted during collection` naming the ceiling. This
+matters because `MiniJinja` repetition is lazy: `[none] * n` costs a few source
+bytes and names `n` members, so a manifest could otherwise request an
+arbitrarily large scan from a short expression.
+
 In human-readable output, a conditional entry carries `[◇ conditional]` when
 emoji output is allowed, or `[? conditional]` in the ASCII theme. JSON output
 always includes a boolean `conditional` field: `true` means that discovery
@@ -2144,12 +2153,22 @@ bounds a filter's intermediate buffer, which exists before any rendered value
 does, and it applies before `manifest_rendered_value_bytes` or
 `manifest_rendered_manifest_bytes` can see the result.
 
+`compact` likewise enforces fixed ceilings, which are not configurable: 100,000
+members examined per call and 1,000,000 members examined per manifest. `uniq`,
+`flatten`, `group_by`, and the other collection helpers do not yet charge such
+an allowance, so a manifest should not treat the `compact` ceilings as a
+general bound on collection work. The shared manifest budget still applies to
+every evaluation, and `MiniJinja` fuel remains the control for engine
+instructions.
+
 These budgets reduce, rather than eliminate, resource-exhaustion exposure. Byte
 limits are enforced before the buffer Netsuke controls accepts output, but
 `MiniJinja` materializes a macro result before its size can be checked, so a
-macro can allocate above the per-value ceiling before the limit is reported.
-That residual gap and its deferral are recorded in
-[ADR-0050](adrs/adr-0050-bound-manifest-template-evaluation.md).
+macro can allocate above the per-value ceiling before the limit is reported. The
+`compact` allowance bounds members consumed inside that one filter call; it
+does not bound an eager upstream operation that already materialized a sequence
+before the filter was reached. Those residual gaps and their deferral are
+recorded in [ADR-0050](adrs/adr-0050-bound-manifest-template-evaluation.md).
 
 MiniJinja 2.24.0 also rejects one repeated string above 100 MB with the
 `repeated string is too large` template error. This rejection happens before

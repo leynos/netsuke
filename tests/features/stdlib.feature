@@ -77,6 +77,10 @@ Feature: Template stdlib filters
     When I render template "{{ 'abc' | compact }}" at stdlib path "file"
     Then the stdlib error contains "compact expects a sequence"
 
+  Scenario: compact bounds consumption of a lazily repeated input
+    When I render template "{{ ([none] * 100001) | compact | length }}" at stdlib path "file"
+    Then the stdlib error contains "resource budget exhausted"
+
   Scenario: group_by clusters items by attribute
     When I render template "{{ ([{'name': 'one', 'kind': 'tool'}, {'name': 'two', 'kind': 'tool'}, {'name': 'three', 'kind': 'material'}] | group_by('kind')).tool | length }}" at stdlib path "file"
     Then the stdlib output equals "2"

@@ -10,17 +10,35 @@ use anyhow::Result;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 pub(in crate::manifest) mod adapter;
+mod allowance;
 mod types;
 mod writer;
+pub(crate) use allowance::CollectionAllowance;
 pub use types::ManifestBudgetLimits;
-pub(crate) use types::{ManifestBudgetExhaustion, ManifestBudgetKind, ManifestBudgetStage};
+pub(crate) use types::{
+    DEFAULT_COLLECTION_CALL_ITEMS, DEFAULT_COLLECTION_ITEMS, ManifestBudgetExhaustion,
+    ManifestBudgetKind, ManifestBudgetStage,
+};
 pub(crate) use writer::CappedWriter;
+
+/// Select which per-call cardinality ceiling a check applies.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CardinalityLimit {
+    /// The per-`foreach` value ceiling.
+    Foreach,
+    /// The per-collection-call member ceiling.
+    Collection,
+}
 
 /// Hold mutable resource counters behind a shared manifest-local handle.
 #[derive(Clone, Debug)]
 pub(crate) struct ManifestBudget {
     /// Retains immutable configured ceilings for deterministic diagnostics.
     limits: ManifestBudgetLimits,
+    /// Caps members consumed by one native collection filter call.
+    collection_call_items: usize,
+    /// Caps members consumed by native collection filters across the manifest.
+    collection_items_limit: usize,
     /// Shares mutable counter state without widening loader signatures to `&mut`.
     state: Arc<Mutex<ManifestBudgetState>>,
 }
@@ -36,6 +54,8 @@ struct ManifestBudgetState {
     expanded_entries: usize,
     /// Tracks fuel reserved by active or completed evaluations.
     fuel: u64,
+    /// Tracks remaining native collection-filter members.
+    collection_items: usize,
 }
 
 impl ManifestBudget {
@@ -45,16 +65,95 @@ impl ManifestBudget {
     ///
     /// Returns an error when any configured limit is zero.
     pub(crate) fn new(limits: ManifestBudgetLimits) -> Result<Self> {
-        let validated_limits = limits.validate()?;
-        Ok(Self {
+        Ok(Self::from_validated_limits(limits.validate()?))
+    }
+
+    /// Build the counters and fixed collection ceilings from validated limits.
+    ///
+    /// One constructor serves `new` and `Default`, so the mapping from a limit
+    /// to its remaining counter is stated once rather than repeated per
+    /// entry point.
+    fn from_validated_limits(limits: ManifestBudgetLimits) -> Self {
+        Self {
             state: Arc::new(Mutex::new(ManifestBudgetState {
-                rendered_bytes: validated_limits.rendered_manifest_bytes,
-                source_bytes: validated_limits.source_bytes,
-                expanded_entries: validated_limits.expanded_entries,
-                fuel: validated_limits.manifest_fuel,
+                rendered_bytes: limits.rendered_manifest_bytes,
+                source_bytes: limits.source_bytes,
+                expanded_entries: limits.expanded_entries,
+                fuel: limits.manifest_fuel,
+                collection_items: DEFAULT_COLLECTION_ITEMS,
             })),
-            limits: validated_limits,
-        })
+            collection_call_items: DEFAULT_COLLECTION_CALL_ITEMS,
+            collection_items_limit: DEFAULT_COLLECTION_ITEMS,
+            limits,
+        }
+    }
+
+    /// Construct accounting with crate-internal collection ceilings for tests.
+    ///
+    /// The public limit type deliberately does not expose these ceilings: the
+    /// collection bound is a fixed contract rather than an operator setting.
+    /// Tests still need small values, so this constructor replaces both without
+    /// widening the public configuration surface.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when any configured public limit is zero.
+    #[cfg(test)]
+    pub(crate) fn with_collection_limits(
+        limits: ManifestBudgetLimits,
+        collection_call_items: usize,
+        collection_items: usize,
+    ) -> Result<Self> {
+        let mut budget = Self::new(limits)?;
+        budget.collection_call_items = collection_call_items;
+        budget.collection_items_limit = collection_items;
+        budget.lock_state().collection_items = collection_items;
+        Ok(budget)
+    }
+
+    /// Borrow this manifest's collection allowance for one registration.
+    pub(crate) fn collection_allowance(&self) -> CollectionAllowance {
+        CollectionAllowance::Manifest(self.clone())
+    }
+
+    /// Check one zero-based iterator position against a per-call ceiling.
+    pub(crate) const fn check_cardinality(
+        &self,
+        index: usize,
+        limit: CardinalityLimit,
+    ) -> std::result::Result<(), ManifestBudgetExhaustion> {
+        let (ceiling, kind, stage) = match limit {
+            CardinalityLimit::Foreach => (
+                self.limits.foreach_cardinality,
+                ManifestBudgetKind::ForeachCardinality,
+                ManifestBudgetStage::Foreach,
+            ),
+            CardinalityLimit::Collection => (
+                self.collection_call_items,
+                ManifestBudgetKind::CollectionCallItems,
+                ManifestBudgetStage::Collection,
+            ),
+        };
+        if index < ceiling {
+            Ok(())
+        } else {
+            Err(Self::exhaustion(kind, stage, ceiling as u64))
+        }
+    }
+
+    /// Charge one collection-filter member against the manifest aggregate.
+    pub(crate) fn charge_collection_item(
+        &self,
+    ) -> std::result::Result<(), ManifestBudgetExhaustion> {
+        Self::charge_remaining(
+            &mut self.lock_state().collection_items,
+            1,
+            Self::exhaustion(
+                ManifestBudgetKind::CollectionItems,
+                ManifestBudgetStage::CollectionAggregate,
+                self.collection_items_limit as u64,
+            ),
+        )
     }
 
     /// Charge template source bytes before `MiniJinja` parses them.
@@ -121,22 +220,6 @@ impl ManifestBudget {
                 self.limits.expanded_entries as u64,
             ),
         )
-    }
-
-    /// Check one iterator position against the per-`foreach` ceiling.
-    pub(crate) const fn check_foreach_cardinality(
-        &self,
-        index: usize,
-    ) -> std::result::Result<(), ManifestBudgetExhaustion> {
-        if index < self.limits.foreach_cardinality {
-            Ok(())
-        } else {
-            Err(Self::exhaustion(
-                ManifestBudgetKind::ForeachCardinality,
-                ManifestBudgetStage::Foreach,
-                self.limits.foreach_cardinality as u64,
-            ))
-        }
     }
 
     /// Construct a writer that bounds one rendered string and shared output.
@@ -209,16 +292,7 @@ impl ManifestBudget {
 impl Default for ManifestBudget {
     /// Construct fresh accounting from the safe production defaults.
     fn default() -> Self {
-        let limits = ManifestBudgetLimits::default();
-        Self {
-            state: Arc::new(Mutex::new(ManifestBudgetState {
-                rendered_bytes: limits.rendered_manifest_bytes,
-                source_bytes: limits.source_bytes,
-                expanded_entries: limits.expanded_entries,
-                fuel: limits.manifest_fuel,
-            })),
-            limits,
-        }
+        Self::from_validated_limits(ManifestBudgetLimits::default())
     }
 }
 

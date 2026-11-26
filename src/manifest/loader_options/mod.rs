@@ -14,15 +14,13 @@
 use std::sync::OnceLock;
 
 use camino::Utf8PathBuf;
-use minijinja::Environment;
 
 use super::{
     EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment, ManifestLoadStage,
     ManifestName, ManifestParse, NetsukeManifest, TemplateOverlays, TestSurface,
     budget::adapter::from_str_named,
-    registration::{register_env_function, register_glob_function},
 };
-use crate::stdlib::{RestrictedSurface, StdlibConfig, StdlibState};
+use crate::stdlib::{RestrictedSurface, StdlibConfig};
 
 /// State whether the loader installs a real host-reading helper or a refusal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -133,11 +131,33 @@ pub struct ManifestLoadOptions<'a> {
     environment: ManifestEnvironment<'a>,
     /// Resource ceilings resolved before loading.
     budget_limits: ManifestBudgetLimits,
+    /// Test-only accounting that replaces the limits-derived budget.
+    #[cfg(test)]
+    budget: Option<super::budget::ManifestBudget>,
     /// Observes load stages without changing parsing behaviour.
     on_stage: Option<&'a mut dyn FnMut(ManifestLoadStage)>,
 }
 
 impl<'a> ManifestLoadOptions<'a> {
+    /// Build options from a registration decision and an environment.
+    ///
+    /// The four entry points below differ only in those two inputs, so the
+    /// default ceilings and the absent observer are stated once here rather
+    /// than repeated per entry point.
+    fn with_registration_and_environment(
+        registration: StdlibRegistration,
+        environment: ManifestEnvironment<'a>,
+    ) -> Self {
+        Self {
+            registration,
+            environment,
+            budget_limits: ManifestBudgetLimits::default(),
+            #[cfg(test)]
+            budget: None,
+            on_stage: None,
+        }
+    }
+
     /// Load with the complete build stdlib and explicit environment inputs.
     ///
     /// # Examples
@@ -158,12 +178,10 @@ impl<'a> ManifestLoadOptions<'a> {
     /// ```
     #[must_use]
     pub fn full(config: StdlibConfig, environment: ManifestEnvironment<'a>) -> Self {
-        Self {
-            registration: StdlibRegistration::Full(Box::new(config)),
+        Self::with_registration_and_environment(
+            StdlibRegistration::Full(Box::new(config)),
             environment,
-            budget_limits: ManifestBudgetLimits::default(),
-            on_stage: None,
-        }
+        )
     }
 
     /// Load with the ambient build stdlib and explicit environment inputs.
@@ -172,12 +190,7 @@ impl<'a> ManifestLoadOptions<'a> {
     /// process working directory, exactly as before options existed.
     #[must_use]
     pub(crate) fn ambient(environment: ManifestEnvironment<'a>) -> Self {
-        Self {
-            registration: StdlibRegistration::AmbientFull,
-            environment,
-            budget_limits: ManifestBudgetLimits::default(),
-            on_stage: None,
-        }
+        Self::with_registration_and_environment(StdlibRegistration::AmbientFull, environment)
     }
 
     /// Load with the deny-by-default test surface.
@@ -194,12 +207,10 @@ impl<'a> ManifestLoadOptions<'a> {
     /// ```
     #[must_use]
     pub fn test(surface: TestSurface) -> Self {
-        Self {
-            registration: StdlibRegistration::Test(Box::new(surface)),
-            environment: query_environment(),
-            budget_limits: ManifestBudgetLimits::default(),
-            on_stage: None,
-        }
+        Self::with_registration_and_environment(
+            StdlibRegistration::Test(Box::new(surface)),
+            query_environment(),
+        )
     }
 
     /// Load for a side-effect-free discovery query.
@@ -209,12 +220,10 @@ impl<'a> ManifestLoadOptions<'a> {
     /// refusal stubs the registration installs.
     #[must_use]
     pub(crate) fn manifest_query<'options>() -> ManifestLoadOptions<'options> {
-        ManifestLoadOptions {
-            registration: StdlibRegistration::ManifestQuery,
-            environment: query_environment(),
-            budget_limits: ManifestBudgetLimits::default(),
-            on_stage: None,
-        }
+        ManifestLoadOptions::with_registration_and_environment(
+            StdlibRegistration::ManifestQuery,
+            query_environment(),
+        )
     }
 
     /// Placeholder for a path load whose registration the workspace decides.
@@ -225,18 +234,25 @@ impl<'a> ManifestLoadOptions<'a> {
     /// builder chain serve string and path loads.
     #[must_use]
     pub(crate) fn deferred(environment: ManifestEnvironment<'a>) -> Self {
-        Self {
-            registration: StdlibRegistration::AmbientFull,
-            environment,
-            budget_limits: ManifestBudgetLimits::default(),
-            on_stage: None,
-        }
+        Self::with_registration_and_environment(StdlibRegistration::AmbientFull, environment)
     }
 
     /// Supply resource ceilings.
     #[must_use]
     pub const fn with_budget_limits(mut self, limits: ManifestBudgetLimits) -> Self {
         self.budget_limits = limits;
+        self
+    }
+
+    /// Replace the limits-derived accounting with a constructed budget.
+    ///
+    /// The collection ceilings are fixed contract values rather than operator
+    /// settings, so focused tests need this seam to exercise them at small
+    /// sizes. Production callers always use the limits-derived budget.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_budget(mut self, budget: super::budget::ManifestBudget) -> Self {
+        self.budget = Some(budget);
         self
     }
 
@@ -271,6 +287,8 @@ impl<'a> ManifestLoadOptions<'a> {
             registration: self.registration,
             environment: self.environment,
             budget_limits: self.budget_limits,
+            #[cfg(test)]
+            budget: self.budget,
             on_stage: self.on_stage,
         }
     }
@@ -316,47 +334,8 @@ pub fn from_str_with_options<'a>(
     from_str_named(yaml, options.into_parse(name, None))
 }
 
-/// Register `env()` and `glob()` from the load's registration decision.
-///
-/// The loader owns these two helpers rather than the stdlib registrations,
-/// because whether a load may read the host is a property of the load, not of
-/// the library surface (C5). The refusal shapes still come from the restricted
-/// surface's inventory, so query refusal text is unchanged (C2).
-pub(super) fn register_host_helpers(
-    env: &mut Environment<'_>,
-    registration: &StdlibRegistration,
-    environment: &ManifestEnvironment<'_>,
-    manifest_root: Option<Utf8PathBuf>,
-) {
-    match registration.env_disposition() {
-        HostHelperDisposition::Real => {
-            let reader = registration.env_reader(environment.reader());
-            register_env_function(env, reader, environment.access_policy());
-        }
-        HostHelperDisposition::Refused(_) => crate::stdlib::register_env_refusal(env),
-    }
-    match registration.glob_disposition() {
-        HostHelperDisposition::Real => register_glob_function(env, manifest_root),
-        HostHelperDisposition::Refused(surface) => {
-            crate::stdlib::register_glob_refusal(env, surface);
-        }
-    }
-}
-
-/// Register the stdlib surface the registration selects.
-pub(super) fn register_stdlib(
-    env: &mut Environment<'_>,
-    registration: StdlibRegistration,
-) -> anyhow::Result<StdlibState> {
-    match registration {
-        StdlibRegistration::AmbientFull => crate::stdlib::register(env),
-        StdlibRegistration::Full(config) => crate::stdlib::register_with_config(env, *config),
-        StdlibRegistration::ManifestQuery => Ok(crate::stdlib::register_manifest_query(env)),
-        StdlibRegistration::Test(surface) => {
-            Ok(crate::stdlib::register_for_test(env, surface.config()))
-        }
-    }
-}
+mod registration;
+pub(super) use registration::{register_host_helpers, register_stdlib};
 
 /// Return a `'static` environment whose reader refuses every lookup.
 ///

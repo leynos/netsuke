@@ -269,6 +269,51 @@ budget-aware internal buffer deferred in
 [#720](https://github.com/leynos/netsuke/issues/720); it neither discharges nor
 narrows that deferred work.
 
+## Addendum G: Native collection consumption account (2026-11-24)
+
+[#974](https://github.com/leynos/netsuke/issues/974) reports that `compact`
+exhausted its input iterable and collected every retained member with no work
+or allocation limit. `MiniJinja` repetition is lazy: `repeat_iterable` in
+2.24.0 returns `Value::make_object_iterable` over `len * n` promises without
+materializing them, so `[none] * n` names an arbitrarily large logical input in
+a few source bytes. Fuel does not bound that work, because the pulls happen
+inside a native callback, and the aggregate rendered-byte budgets only see a
+completed value.
+
+`compact` now charges a `CollectionAllowance` for every member it examines: a
+fixed 100,000 per call and 1,000,000 per manifest. The per-call check is
+index-based and state-free, and the aggregate charge debits the shared
+`ManifestBudget`. Two orderings carry the guarantee: the charge precedes the
+blank check, which bounds an all-blank repetition, and it precedes the append,
+which bounds the retained vector. The result is built without a second
+serialization pass and without `size_hint` preallocation, because a lazy
+repetition's unchecked `len * n` hint would reintroduce the hazard.
+
+The bounds are deliberately not fields on `ManifestBudgetLimits`. They are a
+fixed contract on one filter's consumption, not an operator resource ceiling,
+and the public configuration surface is unchanged. Standalone registration —
+the public `register` and `register_with_config` — has no manifest to charge,
+so it enforces the per-call ceiling alone; manifest loading passes the shared
+allowance through every registration path, so build, query, and test loads
+enforce both.
+
+Remaining constraints, recorded so they are not read as covered:
+
+- Only `compact` charges the allowance. `uniq`, `flatten`, `group_by`, and the
+  other collection helpers still collect without a consumption bound.
+- An eager upstream operation that materializes a sequence before the filter
+  is reached is outside the bound; the allowance starts when the filter pulls.
+- MiniJinja 2.24.0 reports a repetition's length through
+  `enumerator_len()`, and the `len * n` product is unchecked. A callback cannot
+  debit engine fuel, which is why the separate domain allowance exists.
+- `Value::from_serialize` is removed in MiniJinja 3.0.0, where
+  `Value::from(Serde(&value))` replaces it. Revisit this boundary at the final
+  3.0.0 release alongside [#720](https://github.com/leynos/netsuke/issues/720).
+
+This addendum narrows the exposure for one filter. It does not discharge the
+internal macro and capture buffering gap that Addenda A–D record, and it does
+not change the guarantee those addenda state.
+
 ## References
 
 - [#651](https://github.com/leynos/netsuke/issues/651) and

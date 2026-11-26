@@ -153,6 +153,56 @@ mod tests {
 
     use super::{RunnerError, promote_manifest_budget};
     use crate::manifest::{ManifestBudgetLimits, from_str_with_limits};
+    use rstest::rstest;
+    use test_support::{EnLocalizer, en_localizer, fluent::normalize_fluent_isolates};
+
+    /// Verify collection exhaustion promotes with its stage and no template text.
+    #[rstest]
+    fn promoted_collection_exhaustion_keeps_its_stage_and_redacts_the_template(
+        en_localizer: EnLocalizer,
+    ) {
+        let _en = en_localizer;
+        let yaml = concat!(
+            "netsuke_version: 1.0.0\n",
+            "targets:\n",
+            "  - name: s3cr3t-target\n",
+            "    command: \"{{ (['s3cr3t-value'] * 100001) | compact | length }}\"\n",
+        );
+        let error = from_str_with_limits(yaml, ManifestBudgetLimits::default())
+            .expect_err("the repetition must exceed the per-call collection ceiling")
+            .context("s3cr3t outer context");
+        let promoted = promote_manifest_budget(error);
+
+        let diagnostic = promoted
+            .downcast_ref::<RunnerError>()
+            .expect("collection exhaustion must promote to the typed runner variant");
+        assert!(
+            matches!(diagnostic, RunnerError::ManifestBudgetExceeded { .. }),
+            "unexpected runner variant for a collection failure"
+        );
+        assert_eq!(
+            miette::Diagnostic::code(diagnostic)
+                .map(|code| code.to_string())
+                .as_deref(),
+            Some("netsuke::runner::manifest_budget_exceeded"),
+            "the promoted diagnostic must keep its stable JSON code"
+        );
+
+        let rendered = normalize_fluent_isolates(&format!("{promoted:#}"));
+        assert!(
+            rendered.contains("during collection"),
+            "the promoted diagnostic must keep the collection stage: {rendered}"
+        );
+        assert!(
+            !rendered.contains("s3cr3t"),
+            "the promoted diagnostic must not echo manifest text: {rendered}"
+        );
+        assert_eq!(
+            promoted.chain().count(),
+            1,
+            "promotion must drop the enclosing template context"
+        );
+    }
 
     #[test]
     fn promoted_budget_diagnostic_excludes_enclosing_secret_context() {

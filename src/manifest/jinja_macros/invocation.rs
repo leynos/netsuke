@@ -3,7 +3,7 @@
 use super::call::call_macro_value;
 use super::telemetry;
 use crate::localization::{self, keys};
-use crate::manifest::budget::adapter::BudgetErrorExt;
+use crate::manifest::budget::adapter::{BudgetErrorExt, preserves_budget_exhaustion};
 use crate::manifest::budget::{ManifestBudget, ManifestBudgetStage};
 use minijinja::{
     AutoEscape, Captured, Environment, Error, ErrorKind, State,
@@ -93,8 +93,12 @@ fn invoke_macro(state: &State, request: &MacroInvocation<'_>) -> Result<Value, E
 }
 
 /// Translate engine fuel exhaustion into the manifest budget diagnostic.
+///
+/// A macro body may call a native callback that reports its own exhausted
+/// counter as `OutOfFuel`. That error already carries typed exhaustion, so
+/// replacing it here would misreport the stage and counter.
 fn map_macro_fuel_exhaustion(error: Error, budget: &ManifestBudget) -> Error {
-    if error.kind() == ErrorKind::OutOfFuel {
+    if error.kind() == ErrorKind::OutOfFuel && !preserves_budget_exhaustion(&error) {
         budget
             .fuel_exhaustion(ManifestBudgetStage::Macro)
             .into_error(ErrorKind::OutOfFuel)

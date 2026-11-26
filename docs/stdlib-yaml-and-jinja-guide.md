@@ -211,7 +211,10 @@ Collection filters are pure and preserve input order.
   string are retained. That is what distinguishes it from MiniJinja's `select`,
   which keeps only truthy values and so also discards `0`, `false`, and empty
   sequences. Example: `{{ ['a', none, '', 'b'] | compact | join(',') }}`
-  produces `a,b`.
+  produces `a,b`. The filter examines at most 100,000 members per call and
+  1,000,000 members per manifest; exceeding either fixed ceiling fails with
+  `Manifest resource budget exhausted during collection`. Members are counted
+  as they are examined, so an all-blank subject is bounded too.
 
 The following complete manifest exercises every path and collection filter. Its
 filesystem inputs are created by the documentation test before Netsuke is run.

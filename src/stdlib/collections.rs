@@ -9,13 +9,21 @@ use minijinja::{
 };
 
 use crate::localization::{self, keys};
+use crate::manifest::CollectionAllowance;
 
 /// Register the collection filters (`uniq`, `flatten`, `compact`, `group_by`)
 /// on an environment.
-pub(crate) fn register_filters(env: &mut Environment<'_>) {
+///
+/// Only `compact` consumes an allowance. It is the filter whose input can name
+/// an enormous logical sequence through `MiniJinja`'s lazy repetition while
+/// producing almost no source text.
+pub(crate) fn register_filters(env: &mut Environment<'_>, allowance: &CollectionAllowance) {
+    let compact_allowance = allowance.clone();
     env.add_filter("uniq", |values: Value| uniq_filter(&values));
     env.add_filter("flatten", |values: Value| flatten_filter(&values));
-    env.add_filter("compact", |values: Value| compact_filter(&values));
+    env.add_filter("compact", move |values: Value| {
+        compact_filter(&values, &compact_allowance)
+    });
     env.add_filter("group_by", |values: Value, attr: String| {
         group_by_filter(&values, &attr)
     });
@@ -118,13 +126,21 @@ fn is_blank(value: &Value) -> bool {
 
 /// Drop blank members from a sequence, preserving order.
 ///
+/// Each member is charged to the collection allowance before the blank check
+/// and before any append, so neither an all-blank lazy repetition nor a
+/// retained one can pull or retain more members than the per-call ceiling
+/// allows. The retained vector is built without a second serialization pass.
+///
 /// # Errors
 ///
 /// Returns an error naming the received kind when the subject is not a
 /// sequence. See decision D8: `Value::try_iter()` is not a sequence check — it
 /// accepts a map (yielding its keys) and a string (yielding its characters), so
 /// `{{ my_map | compact }}` would quietly return the map's keys.
-fn compact_filter(values: &Value) -> Result<Value, Error> {
+///
+/// Returns a resource-limit error when the call or manifest collection
+/// allowance is exhausted.
+fn compact_filter(values: &Value, allowance: &CollectionAllowance) -> Result<Value, Error> {
     let kind = values.kind();
     if !matches!(kind, ValueKind::Seq | ValueKind::Iterable) {
         return Err(Error::new(
@@ -135,8 +151,17 @@ fn compact_filter(values: &Value) -> Result<Value, Error> {
         ));
     }
 
-    let kept: Vec<Value> = values.try_iter()?.filter(|item| !is_blank(item)).collect();
-    Ok(Value::from_serialize(kept))
+    // No `size_hint` preallocation: a lazy repetition reports `len * n`, and
+    // reserving against it would reintroduce the allocation hazard this bound
+    // exists to prevent.
+    let mut kept = Vec::new();
+    for (index, item) in values.try_iter()?.enumerate() {
+        allowance.charge_member(index)?;
+        if !is_blank(&item) {
+            kept.push(item);
+        }
+    }
+    Ok(Value::from_iter(kept))
 }
 
 /// Flatten nested sequences within `values` into a single flat sequence.
@@ -258,7 +283,7 @@ mod tests {
 
     fn render_filter(template: &str, ctx: Value) -> Result<Value, Error> {
         let mut env = Environment::new();
-        register_filters(&mut env);
+        register_filters(&mut env, &CollectionAllowance::standalone());
         env.compile_expression(template)?.eval(ctx)
     }
 
