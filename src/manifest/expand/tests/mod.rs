@@ -9,6 +9,7 @@ mod action_condition_cases;
 
 mod command_available;
 mod condition_cases;
+mod condition_shape_cases;
 
 mod description_cases;
 

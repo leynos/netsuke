@@ -31,7 +31,10 @@ const EXEMPT_HARNESSES: &[(&str, &str)] = &[];
 /// The `ir__cmd_interpolate` entries exercise scanner and command-guard
 /// contracts that exceed the bounded Kani resource cap; the
 /// `ninja_gen__determinism` entries state contract properties over whole
-/// emitted bundles, which the bounded harnesses do not model. Keep this list
+/// emitted bundles, which the bounded harnesses do not model. The
+/// `manifest__expand` entries state contracts over authored entry maps, whose
+/// evaluation runs MiniJinja and allocates `serde_json` maps, which ADR-0047
+/// already found impractical for the bounded model checker. Keep this list
 /// narrow: each entry must name a live Proptest property, and the patch still
 /// has to apply cleanly below.
 const SUPPLEMENTAL_PROPERTY_PATCHES: &[&str] = &[
@@ -48,6 +51,12 @@ const SUPPLEMENTAL_PROPERTY_PATCHES: &[&str] = &[
     "ninja_gen__determinism__property_tests__order__ordered_actions_ignore_input_order",
     "ninja_gen__determinism__property_tests__order__ordered_edges_ignore_input_order",
     "ninja_gen__determinism__property_tests__path_key__path_key_is_permutation_invariant",
+    "manifest__expand__property_tests__preserve__expansion_copies_every_non_control_field",
+    "manifest__expand__property_tests__order__foreach_removal_keeps_authoring_key_order",
+    "manifest__expand__property_tests__order__when_removal_keeps_authoring_key_order",
+    "manifest__expand__property_tests__when_removed__no_expanded_entry_carries_a_control_key",
+    "manifest__expand__property_tests__inject__each_expansion_carries_its_own_item_and_index",
+    "manifest__expand__property_tests__static_when__static_entries_survive_exactly_when_their_condition_holds",
 ];
 
 /// Resolve the source file that declares the property named by a patch stem.
