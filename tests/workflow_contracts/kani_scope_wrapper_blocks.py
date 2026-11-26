@@ -33,6 +33,12 @@ if typ.TYPE_CHECKING:
 #: scanner cannot see is a block no contract checks.
 OPENING_FENCE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 
+#: `set -o pipefail` as the payload's first statement, before anything runs.
+PIPEFAIL_PREFIX = re.compile(r"\A\s*set -o pipefail\s*;")
+
+#: A pipeline stage that captures: a `|` followed by a `tee` and its path.
+PIPELINE_TEE = re.compile(r"\|\s*tee\s+\S+")
+
 
 def fenced_blocks(path: Path) -> list[str]:
     """Return the body of every fenced code block in ``path``.
@@ -210,23 +216,32 @@ def property_arguments(block: str) -> dict[str, str]:
     return properties
 
 
-def payload_statements(payload: str) -> list[str]:
-    """Return the payload's statements, with `;`-separated ones split out.
+def payload_is_guarded(payload: str) -> bool:
+    """Whether the payload is the documented guarded-pipeline shape.
 
-    A substring search cannot tell an executed `set -o pipefail` from the same
-    text inside a quoted string: `echo "set -o pipefail"` prints the words and
-    enables nothing. Splitting on `;` and trimming gives the commands the shell
-    would actually run, which is what a contract about *effect* has to inspect.
+    The shape is exactly: `set -o pipefail` as the *first* statement, then a
+    pipeline whose right-hand stage is `tee`. That is checked structurally
+    rather than by searching for words, because three different payloads all
+    contain the text and none of them works:
 
-    This is not a shell parser. It handles the documented payload shape — a
-    short `;`-separated preamble followed by one pipeline — and would mis-split
-    a `;` inside quotes. That is acceptable here because the documents are ours
-    and the check fails closed: a payload it mis-splits simply fails to yield
-    the statement the contract wants.
+    - `echo "set -o pipefail"; make ... | tee x` prints the setting;
+    - `make ... | tee x; set -o pipefail` sets it after the pipeline, where
+      its status is the shell's, not the pipeline's;
+    - `echo "tee x"; make ...` mentions the capture without making one.
+
+    Anchoring on "first statement" answers all three: only the documented
+    shape puts the setting ahead of the pipeline, unquoted.
+
+    This is deliberately not a shell parser. It recognises the documented
+    payload and rejects everything else, which is the right bias for a
+    contract: an unrecognised shape is a failure to review, not a pass.
 
     Returns
     -------
-    list[str]
-        The trimmed statements, in order, with empty ones dropped.
+    bool
+        True when the payload sets `pipefail` first and then pipes into `tee`.
     """
-    return [part.strip() for part in payload.split(";") if part.strip()]
+    opening = PIPEFAIL_PREFIX.match(payload)
+    if opening is None:
+        return False
+    return PIPELINE_TEE.search(payload, opening.end()) is not None

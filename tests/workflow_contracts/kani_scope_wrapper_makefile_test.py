@@ -150,6 +150,31 @@ def test_the_strict_export_check_rejects_an_inline_comment() -> None:
     )
 
 
+def test_the_strict_export_check_rejects_a_comment_between_assignment_and_command() -> (
+    None
+):
+    """Prove a comment line ends the shell invocation.
+
+    Make passes recipe comments to the shell, so a comment line without a
+    trailing backslash terminates the command: the assignment above it never
+    reaches the command below. Stripping comments before joining would hide
+    that boundary.
+    """
+    separated = (
+        f"{TARGET}:\n"
+        f"\t{EXPORT_VARIABLE} \\\n"
+        "\t# a note between them\n"
+        "\tcargo nextest run\n"
+    )
+    recipe = _recipe_of(separated, TARGET)
+    statement = _single_statement_with(recipe, EXPORT_VARIABLE)
+    assert statement is not None, "the control must still find the assignment"
+    assert "cargo" not in statement, (
+        "a comment line must end the invocation, so the command is not in the "
+        f"same statement as the assignment; got {statement!r}"
+    )
+
+
 def test_the_strict_export_check_rejects_a_double_ampersand_chain() -> None:
     """Prove the check fires on a chained assignment too.
 
@@ -211,15 +236,22 @@ def _single_statement_with(recipe: list[str], needle: str) -> str | None:
     """
     statements: list[str] = []
     current = ""
-    for line in _executable_lines(recipe):
-        stripped = _strip_inline_comment(line).rstrip()
+    for line in recipe:
+        # Continuations are joined across *all* recipe lines, comments
+        # included, because that is how the shell sees them: a comment line
+        # without a trailing backslash ends the invocation, so an assignment
+        # above it never reaches the command below. Stripping comments first
+        # would silently join across that boundary.
+        if not line.startswith(("\t", " ")):
+            continue
+        stripped = line.rstrip()
         continued = stripped.endswith("\\")
         current += stripped.removesuffix("\\")
         if not continued:
-            statements.append(current)
+            statements.append(_strip_inline_comment(current))
             current = ""
     if current:
-        statements.append(current)
+        statements.append(_strip_inline_comment(current))
     for statement in statements:
         if needle in statement and _assigns_to_command(statement, needle):
             return statement

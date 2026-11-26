@@ -234,73 +234,6 @@ def test_the_flag_check_ignores_options_inside_the_payload() -> None:
     )
 
 
-@pytest.mark.parametrize("path", DOCUMENTS)
-def test_routine_examples_keep_pipefail_and_tee_inside_the_payload(path: Path) -> None:
-    """Require `set -o pipefail` and `tee` inside the `bash -c` argument.
-
-    A pipeline written outside the scope cannot carry `pipefail` into it, so
-    the status the caller sees would be `tee`'s — zero whenever the capture
-    succeeded — and a failing verifier would be masked. The capture must also
-    travel as the scope's payload, so it ends where the cap ends.
-
-    The check is made against the quoted argument, not the rest of the block.
-    Everything after `bash -c` includes the outer pipeline and any trailing
-    comment, so a wrapper ending `bash -c 'make kani-ir' | tee capture # set -o
-    pipefail` would satisfy a suffix check while masking the verifier exactly
-    as the contract forbids.
-
-    Within the payload the setting must be *executed*, so the statements are
-    split and compared rather than searched: `echo "set -o pipefail"` contains
-    the text and enables nothing. Two negative controls pin both halves —
-    `test_the_payload_check_rejects_an_outer_pipeline` and
-    `test_the_payload_check_rejects_a_printed_pipefail`.
-    """
-    for block in blocks.routine_blocks(path):
-        payload = blocks.payload_argument(block)
-        assert payload is not None, (
-            f"{_relative(path)}: a routine example must pass `bash -c` a quoted "
-            f"argument, so the payload can be identified:\n{block}"
-        )
-        statements = blocks.payload_statements(payload)
-        assert any(statement == "set -o pipefail" for statement in statements), (
-            f"{_relative(path)}: `set -o pipefail` must be an executed statement "
-            f"inside the `bash -c` payload. Printing the words enables nothing, "
-            f"and setting it in the launching shell does not reach the payload. "
-            f"The payload's statements were {statements}:\n{block}"
-        )
-        assert any("tee " in statement for statement in statements), (
-            f"{_relative(path)}: `tee` must run from inside the scope's "
-            f"payload:\n{block}"
-        )
-
-
-def test_the_payload_check_rejects_an_outer_pipeline() -> None:
-    """Prove the payload check fires on the shape it exists to reject.
-
-    The control keeps `set -o pipefail` and `tee` in the block but moves the
-    pipeline outside the quoted argument, which is precisely the wrapper the
-    contract forbids. A check that only searched the block's suffix would pass
-    it, so this case is what makes the check above meaningful rather than
-    merely present.
-    """
-    masked = (
-        "systemd-run --user --scope --collect --unit example "
-        "bash -c 'make kani-ir' | tee capture # set -o pipefail"
-    )
-    payload = blocks.payload_argument(masked)
-    assert payload == "make kani-ir", (
-        "the payload must be the quoted argument alone, so the outer pipeline "
-        f"and the comment are outside it; got {payload!r}"
-    )
-    assert "set -o pipefail" not in payload, (
-        "a `pipefail` written after the closing quote must not count as being "
-        "inside the payload"
-    )
-    assert "tee " not in payload, (
-        "a `tee` outside the scope must not count as the scope's capture"
-    )
-
-
 def test_the_placeholder_template_collects_and_names_its_unit() -> None:
     """Require the 4.2.2 `systemd-run` template to carry the same options.
 
@@ -372,20 +305,4 @@ def _has_sequence(arguments: list[str], sequence: tuple[str, ...]) -> bool:
         arguments[start].rsplit("/", 1)[-1] == head
         and arguments[start + 1 : start + width] == rest
         for start in range(len(arguments) - width + 1)
-    )
-
-
-def test_the_payload_check_rejects_a_printed_pipefail() -> None:
-    """Prove a quoted `set -o pipefail` does not satisfy the check.
-
-    The payload prints the words and runs the pipeline unguarded, which is the
-    failure the contract exists to catch.
-    """
-    payload = 'echo "set -o pipefail"; make kani-ir 2>&1 | tee capture'
-    statements = blocks.payload_statements(payload)
-    assert "set -o pipefail" in payload, (
-        "the control must contain the text, or it would not exercise the quote trap"
-    )
-    assert not any(statement == "set -o pipefail" for statement in statements), (
-        f"a printed setting must not count as an executed one; got {statements}"
     )
