@@ -114,7 +114,14 @@ raised these budgets.
   green. The property fails on the pre-fix detector with "5 missing records
   exceed 3 declared entries" and "7 dependency scans exceed 3 declared
   entries", proving the bound is non-vacuous.
-- [ ] `EP-M3`: Documentation, mutation evidence, and all gates complete.
+- [x] (2026-11-26 05:20Z) `EP-M3`: Documentation and mutation evidence are
+  complete, and all nine gates pass. `make check-fmt`, `make markdownlint`,
+  `make doc-coverage` (98.38%), `make test` (6671/6671), `make lint`,
+  `make test-workflow-contracts`, `make kani-check`, and `make kani-full`
+  (17/17) passed on commit `16567c54b`. `make test-kani-mutations` timed out
+  its cold prewarm at 900.032s on the first attempt; a warm retry passed the
+  prewarm (671.9s), the negative control, and every patched-tree compile
+  (1228.6s).
 - [ ] `EP-M4`: Branch pushed and draft pull request opened.
 
 ## Surprises & discoveries
@@ -129,6 +136,13 @@ raised these budgets.
 - Observation: the plan cites a `nightly-2026-10-22` pin, but the repository
   pins `nightly-2026-11-10`. Evidence: `rust-toolchain.toml`. Impact: the pull
   request records the actual pin.
+- Observation: the first `make test-kani-mutations` run timed out its cold
+  prewarm at 900.032s without a compiler diagnostic. Evidence:
+  `/tmp/test-kani-mutations-issue-979-…out` and the 536M shared
+  `target/kani-mutation-compile` tree it left behind. Impact: the gate allows
+  900s for a cold prewarm; the warm retry passed the prewarm in 671.9s and the
+  patch sweep in 1228.6s. Treat the first timeout as host-capacity latency, not
+  a code defect.
 
 ## Decision log
 
@@ -159,9 +173,21 @@ raised these budgets.
 
 ## Outcomes & retrospective
 
-Pending. At completion this section records the measured scan and record
-bounds, the diagnostic differences for multi-alias self-cycles, and the gate
-results.
+The detector now expands each canonical edge once. Measured on the focused
+regressions, four aliases over four absent entries retain four records (was
+sixteen), and three aliases over two entries are scanned twice (was six). The
+generated-graph property fails on the previous detector with five records and
+seven scans against three declared entries, so the bound is not vacuous.
+
+Single-output witnesses are unchanged. Multi-alias self-cycles now report the
+requested alias, for example `[x, x]` rather than the first alias; the accepted
+plan calls for that. The public API, error display text, and users' guide are
+unchanged.
+
+The heavy gates are load-sensitive: the Kani mutation prewarm's 900-second
+allowance is sized for a loaded host, and this host exceeded it on a cold
+target. The shared Kani target persists, so re-running the same target warmed
+passed. Record that as a capacity retry, not a code defect.
 
 ## Context and orientation
 

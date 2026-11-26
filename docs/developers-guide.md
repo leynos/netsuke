@@ -14897,7 +14897,7 @@ under the alias that entered the dependent edge. Recorded pairs are therefore
 bounded by the declared `inputs`, `implicit_deps`, and `order_only_deps`
 entries rather than by the product of alias and dependency counts. The
 `scan_counter` sibling module counts examined entries in test builds only;
-`alias_regression_tests` and `property_tests/multi_alias_property_tests.rs` use
+`alias_regression_tests` and `property_tests/multi_alias_property_tests/` use
 it to prove the once-per-edge bound.
 
 `CycleDetector` is a deliberate struct rather than a closure or group of free
