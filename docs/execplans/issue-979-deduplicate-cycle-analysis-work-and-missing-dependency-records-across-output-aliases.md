@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 Branch:
 `issue-979-deduplicate-cycle-analysis-work-and-missing-dependency-records-across-output-aliases`
@@ -122,7 +122,9 @@ raised these budgets.
   its cold prewarm at 900.032s on the first attempt; a warm retry passed the
   prewarm (671.9s), the negative control, and every patched-tree compile
   (1228.6s).
-- [ ] `EP-M4`: Branch pushed and draft pull request opened.
+- [x] (2026-11-26 06:00Z) `EP-M4`: Branch pushed over SSH and draft pull
+  request [#1198](https://github.com/leynos/netsuke/pull/1198) opened against
+  `main`. CodeRabbit's final review reports zero findings.
 
 ## Surprises & discoveries
 
@@ -281,3 +283,6 @@ mutation patches seed faults that the harnesses reject.
 - 2026-11-25: initial draft created from the supplied coding plan, with the
   `order_only_deps` exclusion recorded as not actioned and the actual toolchain
   pin noted.
+- 2026-11-26: recorded the Red and Green evidence, the non-vacuity probe, the
+  nine-gate results, the Kani prewarm capacity retry, the CodeRabbit remedy,
+  and the draft pull request; the plan is complete.
