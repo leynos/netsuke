@@ -62,25 +62,6 @@ pub enum Verdict {
     Undecidable,
 }
 
-impl Verdict {
-    /// Combine this verdict with another condition that must also hold.
-    ///
-    /// Used where two verdicts genuinely stand alone, such as two independent
-    /// `cfg` attributes. Nested scopes are *not* combined this way: their
-    /// predicates are conjoined and re-evaluated as one formula, because atoms
-    /// correlate across them.
-    #[must_use]
-    pub fn and(self, other: Self) -> Self {
-        match (self, other) {
-            // A conjunction with an unsatisfiable conjunct is unsatisfiable,
-            // whatever else is undecidable.
-            (Self::KaniOnly, _) | (_, Self::KaniOnly) => Self::KaniOnly,
-            (Self::Undecidable, _) | (_, Self::Undecidable) => Self::Undecidable,
-            (Self::Production, Self::Production) => Self::Production,
-        }
-    }
-}
-
 /// The predicates a set of attributes imposes, or `None` if one is unreadable.
 ///
 /// A `cfg_attr` is not modelled: it expands to whatever it names, and this
@@ -142,44 +123,44 @@ pub fn verdict(predicates: &[Meta]) -> Verdict {
 ///
 /// Returns `None` for a form the model does not read, which the caller turns
 /// into [`Verdict::Undecidable`].
-fn evaluate(predicate: &Meta, names: &[String], values: &[bool]) -> Option<bool> {
+fn evaluate(predicate: &Meta, names: &[String], assignment: &[bool]) -> Option<bool> {
     match predicate {
         // `kani` is false throughout, which is the whole question.
-        Meta::Path(path) => lookup(path, names, values).or(Some(false)),
+        Meta::Path(path) => lookup(path, names, assignment).or(Some(false)),
         Meta::List(list) => {
             let operands = nested_metas(list)?;
             if list.path.is_ident("all") {
                 operands
                     .iter()
-                    .map(|operand| evaluate(operand, names, values))
-                    .try_fold(true, |acc, value| value.map(|value| acc && value))
+                    .map(|operand| evaluate(operand, names, assignment))
+                    .try_fold(true, |acc, operand| operand.map(|held| acc && held))
             } else if list.path.is_ident("any") {
                 operands
                     .iter()
-                    .map(|operand| evaluate(operand, names, values))
-                    .try_fold(false, |acc, value| value.map(|value| acc || value))
+                    .map(|operand| evaluate(operand, names, assignment))
+                    .try_fold(false, |acc, operand| operand.map(|held| acc || held))
             } else if list.path.is_ident("not") {
                 operands
                     .first()
-                    .and_then(|operand| evaluate(operand, names, values))
+                    .and_then(|operand| evaluate(operand, names, assignment))
                     .map(|value| !value)
             } else {
                 None
             }
         }
-        Meta::NameValue(named) => lookup(&named.path, names, values),
+        Meta::NameValue(pair) => lookup(&pair.path, names, assignment),
     }
 }
 
 /// The value of `path` under the assignment, if it is an enumerated atom.
 ///
 /// A path that is not enumerated is `kani`, whose value is false.
-fn lookup(path: &syn::Path, names: &[String], values: &[bool]) -> Option<bool> {
+fn lookup(path: &syn::Path, names: &[String], assignment: &[bool]) -> Option<bool> {
     let key = path_key(path);
     names
         .iter()
         .position(|name| *name == key)
-        .map(|index| values[index])
+        .and_then(|index| assignment.get(index).copied())
 }
 
 /// Collect the distinct atom keys across `predicates`.
