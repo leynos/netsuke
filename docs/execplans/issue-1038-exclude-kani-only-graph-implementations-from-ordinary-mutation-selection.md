@@ -278,6 +278,20 @@ selection and proof-specific verification.
       `tests/mutation_selection/cfg_predicate.rs`; with the negation handling
       and its probes the reader had reached 387 lines, close enough to the
       400-line limit to leave no room for the next change.
+- [x] (2026-11-26) The seventh review pass found that the polarity model itself
+      was wrong, and it was right to. `not(unix)` holds whenever `unix` is
+      false, and `not(any(kani, unix))` is `all(not(kani), not(unix))`, which
+      holds when both atoms are false; both are satisfiable without Kani, so
+      neither is a gate. My previous rule made `not(<anything>)` a gate.
+      The evaluator now models the question as satisfiability: each
+      subexpression maps to the pair of truth values it *can* take with `kani`
+      false, `kani` alone is pinned to false-only, negation swaps the pair, and
+      `all`/`any` combine the pairs. A predicate is a gate exactly when it
+      cannot be true. That is correct by construction rather than by case
+      analysis, and it collapses the polarity threading entirely.
+      The test was also wrong and is corrected: `not(any(kani, unix))` moved to
+      the production group, and a `not(unix)` control was added. Seeding the
+      previous negation rule fails that one test while the other fifteen pass.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:

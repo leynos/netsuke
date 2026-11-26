@@ -167,6 +167,9 @@ impl Demo {
 
     #[cfg(not(any(kani, unix)))]
     fn not_any_kani_or_unix(&self) -> u32 { 7 }
+
+    #[cfg(not(unix))]
+    fn not_unix(&self) -> u32 { 8 }
 }
 ";
     let by_name = implementations_by_name(source)?;
@@ -181,21 +184,26 @@ impl Demo {
         );
     }
 
-    // Negation inverts the combinator rather than erasing the gate:
-    // `not(not(kani))` is `kani`, and `not(any(kani, unix))` is
-    // `all(not(kani), not(unix))`, which is unsatisfiable without Kani.
-    for name in ["double_negation", "not_any_kani_or_unix"] {
-        let selection = by_name
-            .get(name)
-            .with_context(|| format!("the probe must declare `{name}`"))?;
-        ensure!(
-            (selection.selected, selection.selected_production) == (1, 0),
-            "`{name}` cannot compile without `kani` once its negations are \
-             resolved, so it must not count as production; got {selection:?}"
-        );
-    }
+    // `not(not(kani))` is `kani`, so it is still a gate.
+    let doubled = by_name
+        .get("double_negation")
+        .context("the probe must declare `double_negation`")?;
+    ensure!(
+        (doubled.selected, doubled.selected_production) == (1, 0),
+        "`not(not(kani))` is `kani` and cannot compile without it, so it must \
+         not count as production; got {doubled:?}"
+    );
 
-    for name in ["any_kani_or_unix", "not_kani"] {
+    // A negated *non-Kani* atom is not a gate: `not(unix)` holds whenever
+    // `unix` is false, and `not(any(kani, unix))` is
+    // `all(not(kani), not(unix))`, which holds when both are false. Both are
+    // therefore satisfiable without Kani and are production code.
+    for name in [
+        "any_kani_or_unix",
+        "not_kani",
+        "not_any_kani_or_unix",
+        "not_unix",
+    ] {
         let selection = by_name
             .get(name)
             .with_context(|| format!("the probe must declare `{name}`"))?;
