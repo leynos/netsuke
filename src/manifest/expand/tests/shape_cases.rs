@@ -57,19 +57,19 @@ enum Verdict {
 impl ConditionCase {
     /// Run the case in every spelling that is meaningful for its shape.
     fn check(&self) -> Result<()> {
-        self.check_form(self.expression.to_owned())?;
+        self.check_form(self.expression)?;
         if matches!(self.forms, Forms::Both) {
-            self.check_form(format!("{{{{ {} }}}}", self.expression))?;
+            self.check_form(&format!("{{{{ {} }}}}", self.expression))?;
         }
         Ok(())
     }
 
     /// Run the case with one spelling of the condition.
-    fn check_form(&self, when: String) -> Result<()> {
+    fn check_form(&self, when: &str) -> Result<()> {
         match self.verdict {
             Verdict::Keeps(expected) => {
                 anyhow::ensure!(
-                    survives(&when, self.vars.clone(), self.foreach.clone())? == expected,
+                    survives(when, self.vars.clone(), self.foreach.clone())? == expected,
                     "`{when}` should {} the entry",
                     if expected { "keep" } else { "drop" }
                 );
@@ -80,7 +80,7 @@ impl ConditionCase {
                     .clone()
                     .ok_or_else(|| anyhow::anyhow!("`{when}` needs a foreach value"))?;
                 anyhow::ensure!(
-                    kept_indexes(&when, items)? == expected,
+                    kept_indexes(when, items)? == expected,
                     "`{when}` should keep {expected:?}"
                 );
             }
@@ -89,24 +89,29 @@ impl ConditionCase {
     }
 }
 
-/// Build a static case whose condition reads a boolean `w0`.
-fn with_bool(value: bool) -> Option<ManifestValue> {
-    Some(ManifestValue::Object(ManifestMap::from_iter([(
-        "w0".to_owned(),
-        ManifestValue::Bool(value),
-    )])))
+/// Build a `vars` object holding one boolean `w0`.
+fn with_bool(value: bool) -> ManifestValue {
+    vars_with_bool(value)
 }
 
-/// Build a static case whose condition reads an integer `w0`.
-fn with_integer(value: i64) -> Option<ManifestValue> {
-    Some(ManifestValue::Object(ManifestMap::from_iter([(
+/// Build a `vars` object holding one integer `w0`.
+fn with_integer(value: i64) -> ManifestValue {
+    ManifestValue::Object(ManifestMap::from_iter([(
         "w0".to_owned(),
         ManifestValue::Number(value.into()),
-    )])))
+    )]))
+}
+
+/// Build a `vars` object holding one boolean `w0`.
+fn vars_with_bool(value: bool) -> ManifestValue {
+    ManifestValue::Object(ManifestMap::from_iter([(
+        "w0".to_owned(),
+        ManifestValue::Bool(value),
+    )]))
 }
 
 /// Run one table row.
-fn run(case: ConditionCase) -> Result<()> {
+fn run(case: &ConditionCase) -> Result<()> {
     case.check()
 }
 
@@ -114,46 +119,46 @@ fn run(case: ConditionCase) -> Result<()> {
 #[case(ConditionCase { expression: "true", forms: Forms::Both, vars: None, foreach: None, verdict: Verdict::Keeps(true) })]
 #[case(ConditionCase { expression: "false", forms: Forms::Both, vars: None, foreach: None, verdict: Verdict::Keeps(false) })]
 fn literal_conditions(#[case] case: ConditionCase) -> Result<()> {
-    run(case)
+    run(&case)
 }
 
 #[rstest]
-#[case(ConditionCase { expression: "w0", forms: Forms::Both, vars: with_bool(true), foreach: None, verdict: Verdict::Keeps(true) })]
-#[case(ConditionCase { expression: "w0", forms: Forms::Both, vars: with_bool(false), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0", forms: Forms::Both, vars: Some(with_bool(true)), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0", forms: Forms::Both, vars: Some(with_bool(false)), foreach: None, verdict: Verdict::Keeps(false) })]
 fn boolean_variable_conditions(#[case] case: ConditionCase) -> Result<()> {
-    run(case)
+    run(&case)
 }
 
 #[rstest]
-#[case(ConditionCase { expression: "not w0", forms: Forms::Both, vars: with_bool(true), foreach: None, verdict: Verdict::Keeps(false) })]
-#[case(ConditionCase { expression: "not w0", forms: Forms::Both, vars: with_bool(false), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "not w0", forms: Forms::Both, vars: Some(with_bool(true)), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "not w0", forms: Forms::Both, vars: Some(with_bool(false)), foreach: None, verdict: Verdict::Keeps(true) })]
 fn negated_variable_conditions(#[case] case: ConditionCase) -> Result<()> {
-    run(case)
+    run(&case)
 }
 
 #[rstest]
-#[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: with_integer(0), foreach: None, verdict: Verdict::Keeps(false) })]
-#[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: with_integer(1), foreach: None, verdict: Verdict::Keeps(true) })]
-#[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: with_integer(-1), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: Some(with_integer(0)), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: Some(with_integer(1)), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: Some(with_integer(-1)), foreach: None, verdict: Verdict::Keeps(true) })]
 fn integer_truthiness_conditions(#[case] case: ConditionCase) -> Result<()> {
-    run(case)
+    run(&case)
 }
 
 #[rstest]
-#[case(ConditionCase { expression: "w0 < 3", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
-#[case(ConditionCase { expression: "w0 < 1", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
-#[case(ConditionCase { expression: "w0 <= 2", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
-#[case(ConditionCase { expression: "w0 <= 1", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
-#[case(ConditionCase { expression: "w0 == 2", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
-#[case(ConditionCase { expression: "w0 == 3", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
-#[case(ConditionCase { expression: "w0 != 3", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
-#[case(ConditionCase { expression: "w0 != 2", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
-#[case(ConditionCase { expression: "w0 > 1", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
-#[case(ConditionCase { expression: "w0 > 2", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
-#[case(ConditionCase { expression: "w0 >= 2", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(true) })]
-#[case(ConditionCase { expression: "w0 >= 3", forms: Forms::Both, vars: with_integer(2), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 < 3", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 < 1", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 <= 2", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 <= 1", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 == 2", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 == 3", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 != 3", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 != 2", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 > 1", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 > 2", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0 >= 2", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0 >= 3", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(false) })]
 fn variable_comparisons(#[case] case: ConditionCase) -> Result<()> {
-    run(case)
+    run(&case)
 }
 
 /// Build a foreach case over `items` keeping the listed indexes.
@@ -175,7 +180,7 @@ fn over_indexes(expression: &'static str, indexes: &'static [u64]) -> ConditionC
 #[case(over_indexes("index > 1", &[2, 3]))]
 #[case(over_indexes("index >= 2", &[2, 3]))]
 fn index_comparisons(#[case] case: ConditionCase) -> Result<()> {
-    run(case)
+    run(&case)
 }
 
 /// Build a foreach case over `1, 4, 4, 2` keeping the listed indexes.
@@ -197,7 +202,7 @@ fn over_items(expression: &'static str, indexes: &'static [u64]) -> ConditionCas
 #[case(over_items("item > 1", &[1, 2, 3]))]
 #[case(over_items("item >= 4", &[1, 2]))]
 fn item_comparisons(#[case] case: ConditionCase) -> Result<()> {
-    run(case)
+    run(&case)
 }
 
 /// Expand one entry and report whether its condition kept it.
