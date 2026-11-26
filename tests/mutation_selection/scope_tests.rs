@@ -38,7 +38,10 @@ mod outer {
 }
 ";
     let by_name = implementations_by_name(source)?;
-    for name in ["Inner::under_skipped_mod", "Inner::also_under_skipped_mod"] {
+    for name in [
+        "outer::excluded::Inner::under_skipped_mod",
+        "outer::excluded::Inner::also_under_skipped_mod",
+    ] {
         let selection = by_name
             .get(name)
             .with_context(|| format!("the probe must declare `{name}`"))?;
@@ -50,7 +53,7 @@ mod outer {
     }
 
     let kept = by_name
-        .get("Kept::under_open_mod")
+        .get("outer::included::Kept::under_open_mod")
         .context("the probe must declare `under_open_mod`")?;
     ensure!(
         (kept.selected, kept.skipped) == (1, 0),
@@ -170,6 +173,9 @@ impl Demo {
 
     #[cfg(not(unix))]
     fn not_unix(&self) -> u32 { 8 }
+
+    #[cfg(r#kani)]
+    fn raw_kani(&self) -> u32 { 9 }
 }
 ";
     let by_name = implementations_by_name(source)?;
@@ -187,6 +193,17 @@ impl Demo {
              production implementation; got {selection:?}"
         );
     }
+
+    // A raw spelling is the same identifier to rustc: `r#kani` needs no
+    // separate check-cfg declaration, so it must pin the atom too.
+    let raw = by_name
+        .get("Demo::raw_kani")
+        .context("the probe must declare `Demo::raw_kani`")?;
+    ensure!(
+        (raw.selected, raw.selected_production) == (1, 0),
+        "`#[cfg(r#kani)]` is the same atom as `#[cfg(kani)]` and cannot \
+         compile without it, so it must not count as production; got {raw:?}"
+    );
 
     // `not(not(kani))` is `kani`, so it is still a gate.
     let doubled = by_name

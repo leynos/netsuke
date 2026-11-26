@@ -41,6 +41,7 @@
 
 use std::collections::BTreeSet;
 
+use syn::ext::IdentExt;
 use syn::{Attribute, Expr, Lit, Meta};
 
 /// The most distinct atoms the enumeration will span.
@@ -188,7 +189,7 @@ fn atoms_of_all(predicates: &[Meta]) -> Option<BTreeSet<String>> {
 fn collect_atoms(predicate: &Meta, atoms: &mut BTreeSet<String>) -> Option<()> {
     match predicate {
         Meta::Path(path) => {
-            if !path.is_ident("kani") {
+            if !is_kani_path(path) {
                 atoms.insert(path_key(path));
             }
             Some(())
@@ -221,9 +222,15 @@ fn is_combinator(path: &syn::Path) -> bool {
 fn path_key(path: &syn::Path) -> String {
     path.segments
         .iter()
-        .map(|segment| segment.ident.to_string())
+        .map(|segment| segment.ident.unraw().to_string())
         .collect::<Vec<_>>()
         .join("::")
+}
+
+/// True when `path` names the `kani` atom in any spelling.
+fn is_kani_path(path: &syn::Path) -> bool {
+    path.get_ident()
+        .is_some_and(|ident| ident.unraw() == "kani")
 }
 
 /// The key for `name = value`, which must be a string or Boolean literal.

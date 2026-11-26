@@ -6590,10 +6590,18 @@ survivor therefore says nothing about test quality.
 
 `exclude-globs` cannot repair that inside a *mixed* file. It is path-scoped, so
 excluding the file would also remove the `cfg(not(kani))` counterparts that the
-ordinary lane genuinely judges. A name-based exclusion is no better: the two
-halves of a same-named pair emit **identical** mutant names, so `--exclude-re`
-or `mutants::exclude_re` would either leave the false survivors in place or
-take the production mutants too.
+ordinary lane genuinely judges.
+
+A regex exclusion is awkward for a different reason. `--exclude-re` and
+`mutants::exclude_re` match the *fully qualified* mutant name, which in
+cargo-mutants 27.1.0 includes the source location — `allows_mutant` filters on
+`Mutant::name(true)`, and the `true` is the line-and-column flag. A pattern
+anchored on a line can therefore separate the two halves of a same-named pair.
+It is a poor tool here all the same, on two counts: a pattern naming only the
+function matches **both** implementations, which is the failure the issue
+describes; and a location-qualified pattern is pinned to line numbers, so it
+stops matching the moment anything above it is edited. The item-level attribute
+needs no line numbers and cannot drift.
 
 The mechanism that can distinguish them is an item-level attribute, which is
 what [`src/ir/graph/mod.rs`](../src/ir/graph/mod.rs) uses for the four

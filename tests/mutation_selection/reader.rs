@@ -42,6 +42,7 @@ use std::collections::BTreeMap;
 
 use crate::mutation_selection::cfg_predicate::Verdict;
 use anyhow::{Context, Result};
+use syn::ext::IdentExt;
 use syn::spanned::Spanned;
 use syn::{Attribute, File, ImplItem, ImplItemFn, Item, ItemImpl, ItemMod, Meta, Signature};
 
@@ -223,6 +224,12 @@ struct Scope {
     cfg: Vec<Meta>,
     /// True when an enclosing scope had a `cfg` the model could not read.
     cfg_unreadable: bool,
+    /// The lexical module path, e.g. `outer::inner`.
+    ///
+    /// Part of an implementation's identity because two modules may each
+    /// declare a type of the same name; cargo-mutants prints the module path,
+    /// so omitting it would merge two distinct types' methods.
+    modules: Vec<String>,
 }
 
 impl Scope {
@@ -234,6 +241,19 @@ impl Scope {
             None => self.cfg_unreadable = true,
         }
         self
+    }
+
+    /// Return the scope inside `module`, inheriting `self`.
+    fn within(mut self, module: &ItemMod) -> Self {
+        self.modules.push(module.ident.unraw().to_string());
+        self.nested(&module.attrs)
+    }
+
+    /// The owner key for a type declared as `name` in this scope.
+    fn owner_key(&self, name: &str) -> String {
+        let mut path = self.modules.clone();
+        path.push(name.to_owned());
+        path.join("::")
     }
 
     /// The verdict for everything gathered so far.
@@ -281,7 +301,16 @@ fn accumulate_module(module: &ItemMod, scope: &Scope, by_name: &mut BTreeMap<Str
     let Some((_, items)) = &module.content else {
         return;
     };
-    collect_items(items, &scope.clone().nested(&module.attrs), by_name);
+    collect_items(items, &scope.clone().within(module), by_name);
+}
+
+/// True when `block` implements `Default`.
+fn is_default_impl(block: &ItemImpl) -> bool {
+    block
+        .trait_
+        .as_ref()
+        .and_then(|(_, path, _)| path.segments.last())
+        .is_some_and(|segment| segment.ident == "Default")
 }
 
 /// The name of the type an `impl` block is for.
@@ -308,6 +337,13 @@ fn self_ty_name(block: &ItemImpl) -> String {
 /// An exclusion or a Kani gate on this block joins whatever the file and
 /// modules already decided, so a method inherits them all.
 fn accumulate_impl(block: &ItemImpl, scope: &Scope, by_name: &mut BTreeMap<String, Selection>) {
+    // The walker returns from `visit_item_impl` for any `Default`
+    // implementation, because it cannot invent a viable different default. The
+    // whole block is invisible to mutation, so nothing in it can be a
+    // production counterpart.
+    if is_default_impl(block) {
+        return;
+    }
     let block_scope = scope.clone().nested(&block.attrs);
     for item in &block.items {
         let ImplItem::Fn(method) = item else {
@@ -316,7 +352,7 @@ fn accumulate_impl(block: &ItemImpl, scope: &Scope, by_name: &mut BTreeMap<Strin
         let method_scope = block_scope.clone().nested(&method.attrs);
         let implementation = Implementation {
             name: method.sig.ident.to_string(),
-            owner: self_ty_name(block),
+            owner: method_scope.owner_key(&self_ty_name(block)),
             skipped: method_scope.excluded || is_ineligible(method),
             cfg: method_scope.verdict(),
         };

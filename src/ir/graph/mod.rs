@@ -165,9 +165,10 @@ impl BuildGraph {
     ///
     /// Skipped by `cargo-mutants`: only the `cfg(not(kani))` counterpart above
     /// is linked into the ordinary test binaries, so a mutation here would
-    /// survive for want of a caller rather than for want of a test. The two
-    /// implementations also emit *identical* mutant names, so a name-based
-    /// exclusion could not separate them; the skip is per item.
+    /// survive for want of a caller rather than for want of a test. A
+    /// function-name exclusion would also remove the production half, and a
+    /// location-qualified one would be pinned to line numbers; the skip is per
+    /// item for both reasons.
     #[cfg(kani)]
     #[mutants::skip]
     #[must_use]

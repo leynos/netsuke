@@ -94,3 +94,81 @@ impl Demo {
     );
     Ok(())
 }
+
+#[test]
+fn the_reader_keys_types_by_their_module_path() -> Result<()> {
+    // Two modules may each declare a type of the same name. cargo-mutants
+    // prints the module path, so a key that dropped it would merge the two and
+    // let a selected method on one satisfy a check about the other.
+    let source = "\
+mod left {
+    struct BuildGraph;
+    impl BuildGraph {
+        fn insert_edge(&self) -> u32 { 1 }
+    }
+}
+
+mod right {
+    struct BuildGraph;
+    impl BuildGraph {
+        #[cfg(kani)]
+        #[mutants::skip]
+        fn insert_edge(&self) -> u32 { 2 }
+    }
+}
+";
+    let by_name = implementations_by_name(source)?;
+    let left = by_name
+        .get("left::BuildGraph::insert_edge")
+        .context("the probe must declare `left::BuildGraph::insert_edge`")?;
+    ensure!(
+        (left.skipped, left.selected) == (0, 1),
+        "the left module's method carries no skip; got {left:?}"
+    );
+
+    let right = by_name
+        .get("right::BuildGraph::insert_edge")
+        .context("the probe must declare `right::BuildGraph::insert_edge`")?;
+    ensure!(
+        (right.skipped, right.selected) == (1, 0),
+        "the right module's method carries the skip and must not be merged \
+         with the left one; got {right:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_reader_excludes_default_implementations() -> Result<()> {
+    // The walker returns from `visit_item_impl` for any `Default`
+    // implementation, so nothing inside it is mutable or selectable. Counting
+    // its methods as production would hand an inherent skipped `default` a
+    // false counterpart.
+    let source = "\
+struct Demo { value: u32 }
+
+impl Default for Demo {
+    fn default() -> Self { Demo { value: 1 } }
+}
+
+impl Demo {
+    fn inherent(&self) -> u32 { 2 }
+}
+";
+    let by_name = implementations_by_name(source)?;
+    ensure!(
+        by_name.is_empty() || !by_name.keys().any(|key| key.ends_with("::default")),
+        "a `Default` implementation produces no mutants, so its methods must \
+         not appear as selected; got {:?}",
+        by_name.keys().collect::<Vec<_>>()
+    );
+
+    let inherent = by_name
+        .get("Demo::inherent")
+        .context("the probe must declare `Demo::inherent`")?;
+    ensure!(
+        (inherent.skipped, inherent.selected) == (0, 1),
+        "an ordinary inherent method must stay selected, so the exclusion above \
+         is specific to the trait block; got {inherent:?}"
+    );
+    Ok(())
+}

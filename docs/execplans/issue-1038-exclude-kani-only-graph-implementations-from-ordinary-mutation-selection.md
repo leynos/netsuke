@@ -333,6 +333,29 @@ selection and proof-specific verification.
       the bare-name key or the mismatched lookup each fails its probe; all 21
       pass when restored. The ownership and identity probes moved to
       `identity_tests.rs` when `scope_tests.rs` crossed 400 lines.
+- [x] (2026-11-26) The tenth review pass returned four findings; all four were
+      verified against the pinned tool or the language reference first, and all
+      four were valid:
+  - **A raw identifier was treated as a different atom.** `#[cfg(r#kani)]` is
+    the same atom to rustc — measured: it needs no separate `check-cfg`
+    declaration — so it must pin `kani`. Paths are now compared through
+    `IdentExt::unraw`, in both the pinning test and the atom key.
+  - **A module path was missing from the owner key.** Two modules can each
+    declare the same type name, and cargo-mutants prints the module path, so
+    the key now carries the lexical path: `left::BuildGraph::insert_edge` and
+    `right::BuildGraph::insert_edge` are distinct.
+  - **`impl Default` was not excluded.** The walker returns from
+    `visit_item_impl` for any `Default` implementation, so nothing in it can be
+    a production counterpart. The reader skips the whole block.
+  - **The guide overstated what `--exclude-re` can do.** `allows_mutant`
+    filters on `Mutant::name(true)`, and the `true` is the line-and-column
+    flag, so a location-qualified pattern *can* separate a same-named pair.
+    The guide, the plan, and the graph module's comment now say that, while
+    explaining why such a pattern is still the wrong tool: a name-only pattern
+    hits both implementations, and a location-qualified one is pinned to line
+    numbers any edit invalidates.
+- [x] (2026-11-26) Three controls cover the first three; seeding each defect
+      fails its own probe, and all 23 pass when restored.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:
@@ -409,13 +432,16 @@ unreferenced in ordinary builds, Cargo's `unused_dependencies` lint may warn
 there. The plan measures the real build's warnings and handles what actually
 appears.
 
-A separate negative result closes off the alternative mechanism. The mutant
+A separate negative result closes off the obvious alternatives. The mutant
 names emitted for the Kani-only `target_for_output` and its production
-counterpart are *identical* — the baseline inventory lists the same two strings
-at line 181 and line 194 — so a name-based `--exclude-re` or
-`mutants::exclude_re` cannot separate them. Excluding by name would either
-leave the false survivors in place or remove the production mutants too. The
-source attribute is the only mechanism that can distinguish the two.
+counterpart differ only by line and column: the baseline inventory lists the
+same text at line 181 and line 194. cargo-mutants 27.1.0 matches `--exclude-re`
+and `mutants::exclude_re` against `Mutant::name(true)`, which includes that
+location, so a pattern *could* separate them. It is still the wrong tool: a
+pattern naming only the function matches both implementations, which is the
+failure this issue describes, and a location-qualified pattern is pinned to
+line numbers that any edit above it invalidates. The source attribute needs
+neither and cannot drift.
 
 ## Decision log
 
