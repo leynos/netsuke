@@ -43,32 +43,70 @@ fn config(cases: u32) -> ProptestConfig {
     }
 }
 
+/// A generated graph and whether it was built with a repeated reference.
+///
+/// The flag is set by construction, not inferred by comparing values: two
+/// equal leaves are indistinguishable by value but are not a shared
+/// descendant, and only the construction site knows which one it made. The
+/// corpus test reads the flag to prove the shared arm is exercised.
+#[derive(Clone, Debug)]
+struct Generated {
+    /// The graph the filter will traverse.
+    value: Value,
+    /// Whether some container in the graph stores one child twice.
+    shared: bool,
+}
+
 /// A nested graph drawn from leaves, containers, and shared descendants.
 ///
 /// `prop_recursive` bounds the depth and branch size, so a generated graph
 /// stays inside a test's time budget while spanning ragged nesting, empty
-/// containers, and repeated references. The container arm stores one drawn
-/// child twice whenever `share` says so, which is the compact shared graph the
-/// ceiling exists to stop expanding for free. A map is a leaf to `flatten`, not
-/// a container to descend into, so it belongs in the corpus too.
-fn graph() -> impl Strategy<Value = Value> {
+/// containers, and repeated references. The shared arm stores one drawn child
+/// twice whenever `share` says so, which is the compact graph the ceiling
+/// exists to stop expanding for free. A map is a leaf to `flatten`, not a
+/// container to descend into, so it belongs in the corpus too.
+fn graph() -> impl Strategy<Value = Generated> {
     let leaf = prop_oneof![
         Just(Value::from(1)),
         Just(Value::from("s")),
         Just(Value::from(true)),
-    ];
+    ]
+    .prop_map(|value| Generated {
+        value,
+        shared: false,
+    });
     leaf.prop_recursive(3, 8, 3, |inner| {
         prop_oneof![
-            2 => vec(inner.clone(), 0..3).prop_map(Value::from),
+            2 => vec(inner.clone(), 0..3).prop_map(|children| {
+                let shared = children.iter().any(|child| child.shared);
+                Generated {
+                    value: Value::from(
+                        children.into_iter().map(|child| child.value).collect::<Vec<_>>(),
+                    ),
+                    shared,
+                }
+            }),
             2 => (inner.clone(), any::<bool>()).prop_map(|(child, share)| {
                 if share {
-                    Value::from(vec![child.clone(), child])
+                    let value = Value::from(vec![child.value.clone(), child.value]);
+                    Generated {
+                        value,
+                        shared: true,
+                    }
                 } else {
-                    Value::from(vec![child])
+                    Generated {
+                        value: Value::from(vec![child.value]),
+                        shared: child.shared,
+                    }
                 }
             }),
             1 => btree_map("[a-c]", any::<u8>(), 0..2).prop_map(|map: BTreeMap<String, u8>| {
-                Value::from_iter(map.into_iter().map(|(key, value)| (key, Value::from(value))))
+                Generated {
+                    value: Value::from_iter(
+                        map.into_iter().map(|(key, value)| (key, Value::from(value))),
+                    ),
+                    shared: false,
+                }
             }),
         ]
     })
@@ -79,9 +117,31 @@ fn graph() -> impl Strategy<Value = Value> {
 /// Every immediate member is itself a list because the filter rejects a scalar
 /// or map member at the top level. Nested members may still be any graph,
 /// including scalars and maps, where those are leaves.
-fn subject() -> impl Strategy<Value = Value> {
-    let member = vec(graph(), 0..3).prop_map(Value::from);
-    vec(member, 0..4).prop_map(Value::from)
+fn subject() -> impl Strategy<Value = Generated> {
+    let member = vec(graph(), 0..3).prop_map(|children| {
+        let shared = children.iter().any(|child| child.shared);
+        Generated {
+            value: Value::from(
+                children
+                    .into_iter()
+                    .map(|child| child.value)
+                    .collect::<Vec<_>>(),
+            ),
+            shared,
+        }
+    });
+    vec(member, 0..4).prop_map(|drawn| {
+        let shared = drawn.iter().any(|entry| entry.shared);
+        Generated {
+            value: Value::from(
+                drawn
+                    .into_iter()
+                    .map(|entry| entry.value)
+                    .collect::<Vec<_>>(),
+            ),
+            shared,
+        }
+    })
 }
 
 /// The visit count and greatest depth the filter charges for `value`.
@@ -151,7 +211,8 @@ proptest! {
     /// the independent depth-first model then catches a traversal that dropped,
     /// duplicated, or reordered a leaf.
     #[test]
-    fn flatten_within_the_ceilings_matches_a_reference_expansion(value in subject()) {
+    fn flatten_within_the_ceilings_matches_a_reference_expansion(generated in subject()) {
+        let value = generated.value;
         let (visits, leaves, depth) = exact_limits(&value);
         let mut expected = Vec::new();
         reference_leaves(&value, &mut expected);
@@ -172,10 +233,11 @@ proptest! {
     /// probes its own boundary rather than one chosen example. Depth and leaf
     /// ceilings are exact, so neither can mask the visit error.
     #[test]
-    fn flatten_rejects_exactly_past_the_visit_ceiling(value in subject().prop_filter(
+    fn flatten_rejects_exactly_past_the_visit_ceiling(generated in subject().prop_filter(
         "an empty subject has no visit to remove",
-        |value| reference_counts(value).0 > 0,
+        |generated| reference_counts(&generated.value).0 > 0,
     )) {
+        let value = generated.value;
         let (visits, leaves, depth) = exact_limits(&value);
         let budget = FlattenBudget::new(FlattenLimits::for_test(depth, visits - 1, leaves));
         let err = flatten_filter(&value, &budget)
@@ -183,6 +245,54 @@ proptest! {
         let message = err.to_string();
         prop_assert!(message.contains("exceeded the traversal visit limit"),
             "the visit ceiling must be the one reported, but was {message:?}");
+    }
+
+    /// A graph one leaf past the ceiling is rejected by the leaf ceiling.
+    ///
+    /// The visit ceiling is exact and the depth ceiling is raised above the
+    /// graph, so only the leaf ceiling can be the one that fires. This is the
+    /// counterpart to the visit case: without it the leaf boundary would be
+    /// covered by hand-picked examples alone.
+    #[test]
+    fn flatten_rejects_exactly_past_the_leaf_ceiling(generated in subject().prop_filter(
+        "a leaf-free subject has no leaf to remove",
+        |generated| exact_limits(&generated.value).1 > 0,
+    )) {
+        let value = generated.value;
+        let (visits, leaves, depth) = exact_limits(&value);
+        let budget = FlattenBudget::new(FlattenLimits::for_test(
+            depth,
+            visits,
+            leaves - 1,
+        ));
+        let err = flatten_filter(&value, &budget)
+            .expect_err("one leaf short of the graph's own count must be rejected");
+        let message = err.to_string();
+        prop_assert!(message.contains("exceeded the retained item limit"),
+            "the retained-item ceiling must be the one reported, but was {message:?}");
+    }
+
+    /// A graph one level past the ceiling is rejected by the depth ceiling.
+    ///
+    /// The visit and leaf ceilings are exact and the depth ceiling is one below
+    /// the graph, so the depth ceiling is the only one that can fire.
+    #[test]
+    fn flatten_rejects_exactly_past_the_depth_ceiling(generated in subject().prop_filter(
+        "a flat subject has no depth to remove",
+        |generated| reference_counts(&generated.value).1 > 0,
+    )) {
+        let value = generated.value;
+        let (visits, leaves, depth) = exact_limits(&value);
+        let budget = FlattenBudget::new(FlattenLimits::for_test(
+            depth - 1,
+            visits,
+            leaves,
+        ));
+        let err = flatten_filter(&value, &budget)
+            .expect_err("one level short of the graph's own depth must be rejected");
+        let message = err.to_string();
+        prop_assert!(message.contains("exceeded the nesting depth limit"),
+            "the depth ceiling must be the one reported, but was {message:?}");
     }
 
     /// Two calls on one budget consume the sum of their charges.
@@ -225,12 +335,16 @@ fn the_generated_corpus_reaches_nesting_and_sharing() -> Result<()> {
     // tuple is `(nested, shared, deepest)`.
     let tallies: Cell<(bool, bool, usize)> = Cell::new((false, false, 0));
     runner
-        .run(&subject(), |value| {
+        .run(&subject(), |generated| {
             let (nested, shared, deepest) = tallies.get();
-            let depth = reference_counts(&value).1;
+            let depth = reference_counts(&generated.value).1;
             tallies.set((
                 nested || depth >= 2,
-                shared || has_repeated_child(&value),
+                // The flag is set where the repeated child is built. Comparing
+                // values instead would count two equal, independently drawn
+                // leaves as sharing, so the corpus could report the shared arm
+                // exercised when it never was.
+                shared || generated.shared,
                 deepest.max(depth),
             ));
             Ok(())
@@ -246,23 +360,4 @@ fn the_generated_corpus_reaches_nesting_and_sharing() -> Result<()> {
         "the corpus must reach a container that stores one child twice"
     );
     Ok(())
-}
-
-/// Whether some container under `value` repeats one of its children.
-fn has_repeated_child(value: &Value) -> bool {
-    if !is_container(value) {
-        return false;
-    }
-    let Ok(iter) = value.try_iter() else {
-        return false;
-    };
-    let members: Vec<Value> = iter.collect();
-    let mut seen: Vec<&Value> = Vec::new();
-    for member in &members {
-        if seen.contains(&member) {
-            return true;
-        }
-        seen.push(member);
-    }
-    members.iter().any(has_repeated_child)
 }
