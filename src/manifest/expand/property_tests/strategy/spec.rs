@@ -6,34 +6,11 @@
 //! test.
 
 use super::condition::Condition;
+use super::layout::{ControlAdjacency, ControlLayout, ControlOrder};
 use super::{Bindings, ForeachForm, Items, OVERRIDE_NAMES, Section};
 use crate::manifest::{ManifestMap, ManifestValue};
 use proptest::sample::Index;
 use serde_json::Number;
-
-/// Where the control block sits in the authored key sequence.
-#[derive(Clone, Copy, Debug)]
-pub(super) enum ControlLayout {
-    /// A drawn position among the authored keys.
-    Drawn(Index),
-    /// Forced to the end, for the coverage test's negative control.
-    Last,
-}
-
-impl ControlLayout {
-    /// A drawn position among the authored keys.
-    pub(super) const fn drawn(index: Index) -> Self {
-        Self::Drawn(index)
-    }
-
-    /// Resolve the position the block is inserted at.
-    fn position(self, base_len: usize) -> usize {
-        match self {
-            Self::Drawn(index) => index.index(base_len + 1),
-            Self::Last => base_len,
-        }
-    }
-}
 
 /// The authored side of one entry: everything except its section.
 #[derive(Clone, Debug)]
@@ -50,6 +27,10 @@ pub(in crate::manifest::expand::property_tests) struct BodySpec {
     pub(super) when: Option<(Condition, bool)>,
     /// Where the control keys sit among the authored keys.
     pub(super) control_layout: ControlLayout,
+    /// Which control key is written first when both are present.
+    pub(super) control_order: ControlOrder,
+    /// Whether the two control keys are written adjacently.
+    pub(super) control_adjacency: ControlAdjacency,
     /// The values the condition's free variable sees.
     pub(super) bindings: Bindings,
 }
@@ -61,12 +42,45 @@ impl BodySpec {
     }
 
     /// The authored key sequence with the control keys in place.
+    ///
+    /// Each control key takes its own drawn position. Adjacency decides whether
+    /// the two positions coincide, which reads as one block, or are separated
+    /// by at least one authored key; the order decides which control key takes
+    /// the earlier slot. Both interleavings therefore reach the properties, so
+    /// a fault visible only when the two removals interact is not hidden by a
+    /// single fixed layout.
     fn authored_entries(&self) -> Vec<(String, ManifestValue)> {
         let mut entries = self.fields_with_vars();
-        let position = self.control_layout.position(entries.len());
-        for (offset, control) in self.control_entries().into_iter().enumerate() {
-            entries.insert(position + offset, control);
-        }
+        let base = entries.len();
+        let mut controls = self.control_entries().into_iter();
+        let Some(first) = controls.next() else {
+            return entries;
+        };
+        let first_position = self.control_layout.position(base + 1);
+        let Some(second) = controls.next() else {
+            entries.insert(first_position.min(base), first);
+            return entries;
+        };
+        let second_position = match self.control_adjacency {
+            ControlAdjacency::Adjacent => first_position,
+            // The second slot must differ from the first, so a draw that
+            // collided is bumped rather than silently made adjacent.
+            ControlAdjacency::Separated => {
+                let drawn = self.control_layout.position(base + 1);
+                if drawn <= first_position {
+                    first_position + 1
+                } else {
+                    drawn
+                }
+            }
+        };
+        let (low, high) = if second_position >= first_position {
+            ((first_position, first), (second_position, second))
+        } else {
+            ((second_position, second), (first_position, first))
+        };
+        entries.insert(high.0.min(entries.len()), high.1);
+        entries.insert(low.0.min(entries.len()), low.1);
         entries
     }
 
@@ -90,20 +104,34 @@ impl BodySpec {
         entries
     }
 
-    /// The control keys this entry carries, in authoring order.
+    /// The control keys this entry carries, in the authored order.
     fn control_entries(&self) -> Vec<(String, ManifestValue)> {
-        let mut controls: Vec<(String, ManifestValue)> = Vec::new();
-        if let Some((form, items)) = &self.foreach {
-            let value = match form {
-                ForeachForm::InlineArray => items.inline_array(),
-                ForeachForm::ListLiteral => ManifestValue::String(items.list_literal()),
-            };
-            controls.push(("foreach".to_owned(), value));
-        }
-        if let Some((form, template)) = self.when {
-            controls.push(("when".to_owned(), rendered_condition(form, template)));
+        let mut controls: Vec<(String, ManifestValue)> =
+            self.foreach_control().into_iter().collect();
+        if let Some(when) = self.when_control() {
+            if matches!(self.control_order, ControlOrder::WhenFirst) {
+                controls.insert(0, when);
+            } else {
+                controls.push(when);
+            }
         }
         controls
+    }
+
+    /// Build the `foreach` control entry, when the entry iterates.
+    fn foreach_control(&self) -> Option<(String, ManifestValue)> {
+        let (form, items) = self.foreach.as_ref()?;
+        let value = match form {
+            ForeachForm::InlineArray => items.inline_array(),
+            ForeachForm::ListLiteral => ManifestValue::String(items.list_literal()),
+        };
+        Some(("foreach".to_owned(), value))
+    }
+
+    /// Build the `when` control entry, when the entry has a condition.
+    fn when_control(&self) -> Option<(String, ManifestValue)> {
+        let (condition, template) = self.when?;
+        Some(("when".to_owned(), rendered_condition(condition, template)))
     }
 
     /// The entry-level key sequence an expanded entry must carry.
@@ -220,7 +248,24 @@ impl BodySpec {
     /// This is the class `swap_remove` corrupts when it is two or more.
     pub(in crate::manifest::expand::property_tests) fn following_key_count(&self) -> usize {
         let base = self.fields.len() + usize::from(self.vars.is_some());
-        base - self.control_layout.position(base)
+        let earliest = self.control_layout.position(base + 1);
+        let offset = match (self.control_entries().len(), self.control_adjacency) {
+            (0 | 1, _) | (_, ControlAdjacency::Adjacent) => 0,
+            (_, ControlAdjacency::Separated) => 1,
+        };
+        base.saturating_sub(earliest + offset)
+    }
+
+    /// Report which control key the entry writes first.
+    pub(in crate::manifest::expand::property_tests) const fn control_order(&self) -> ControlOrder {
+        self.control_order
+    }
+
+    /// Report whether the entry writes its control keys adjacently.
+    pub(in crate::manifest::expand::property_tests) const fn control_adjacency(
+        &self,
+    ) -> ControlAdjacency {
+        self.control_adjacency
     }
 
     /// Drop the condition, keeping everything else as authored.
@@ -236,6 +281,7 @@ impl BodySpec {
     /// exactly the class the check must report as unreached.
     pub(in crate::manifest::expand::property_tests) fn with_control_last(mut self) -> Self {
         self.control_layout = ControlLayout::Last;
+        self.control_adjacency = ControlAdjacency::Adjacent;
         self
     }
 

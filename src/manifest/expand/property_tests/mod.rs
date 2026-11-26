@@ -29,6 +29,7 @@ mod inject;
 mod model;
 mod order;
 mod preserve;
+mod shape_cases;
 mod static_when;
 mod strategy;
 mod support;

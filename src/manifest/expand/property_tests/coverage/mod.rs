@@ -13,7 +13,7 @@
 
 use super::strategy::{
     document_spec_strategy, entry_spec_strategy, foreach_entry_spec_strategy,
-    static_condition_entry_spec_strategy,
+    static_entry_spec_strategy,
 };
 use classes::{DOCUMENT_CLASSES, ENTRY_CLASSES, INJECT_CLASSES, STATIC_CLASSES};
 use classifiers::{
@@ -25,7 +25,7 @@ mod classes;
 mod classifiers;
 use proptest::test_runner::{Config, RngSeed, TestRunner};
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Cases each classifier draws.
 const COVERAGE_CASES: u32 = 512;
@@ -42,37 +42,64 @@ const COVERAGE_SEED: u64 = 0x432;
 /// with probability above 99.8%.
 const MINIMUM_CLASS_PERCENT: usize = 5;
 
-/// One classification tally.
+/// One classification tally, counting draws rather than occurrences.
 type Tally = BTreeMap<&'static str, usize>;
 
-/// Add one class to a tally.
-fn count(tally: &mut Tally, class: &'static str) {
-    *tally.entry(class).or_insert(0) += 1;
+/// The classes one draw belongs to.
+///
+/// A set, not a counter: a class floor is a share of *draws*, so a draw that
+/// contains three fields of one kind contributes one hit, not three. Counting
+/// occurrences would let a handful of draws satisfy a floor on their own.
+type ClassSet = BTreeSet<&'static str>;
+
+/// Record that one draw belongs to `class`.
+///
+/// Classifiers import this as `count`, because their call sites read as
+/// "count this class for this draw".
+fn count(classes: &mut ClassSet, class: &'static str) {
+    classes.insert(class);
 }
 
 /// Count the classes of a fixed-seed sample of one strategy.
+///
+/// The classifier reports whether the draw is in the scope its classes
+/// describe. A draw outside it, such as a static entry without a condition
+/// when the classes are verdicts, contributes to neither the classes nor the
+/// denominator: including it would dilute a share of draws into a share of a
+/// larger set the class cannot occur in.
 fn tally<S: Strategy>(
     strategy: &S,
-    classify: impl Fn(&S::Value, &mut Tally),
-) -> Result<Tally, String> {
+    classify: impl Fn(&S::Value, &mut ClassSet) -> bool,
+) -> Result<(Tally, usize), String> {
     let mut runner = TestRunner::new(Config {
         cases: COVERAGE_CASES,
         rng_seed: RngSeed::Fixed(COVERAGE_SEED),
         ..Config::default()
     });
     let counts = RefCell::new(Tally::new());
+    let in_scope = RefCell::new(0usize);
     runner
         .run(strategy, |value| {
-            classify(&value, &mut counts.borrow_mut());
+            let mut classes = ClassSet::new();
+            if !classify(&value, &mut classes) {
+                return Ok(());
+            }
+            *in_scope.borrow_mut() += 1;
+            let mut tally = counts.borrow_mut();
+            for class in classes {
+                *tally.entry(class).or_insert(0) += 1;
+            }
             Ok(())
         })
         .map_err(|error| error.to_string())?;
-    Ok(counts.into_inner())
+    Ok((counts.into_inner(), in_scope.into_inner()))
 }
 
 /// Fail when any required class reaches less than the floor.
 fn check_floors(tally: &Tally, required: &[&'static str], total: usize) -> Result<(), String> {
-    let floor = total.saturating_mul(MINIMUM_CLASS_PERCENT).div_euclid(100);
+    // Round up: 5% of 512 is 25.6, so a floor of 25 would sit below the
+    // stated share and admit a class rarer than the contract allows.
+    let floor = total.saturating_mul(MINIMUM_CLASS_PERCENT).div_ceil(100);
     let unreached: Vec<String> = required
         .iter()
         .filter(|class| tally.get(**class).copied().unwrap_or(0) < floor)
@@ -104,30 +131,30 @@ fn report(label: &str, tally: &Tally) {
 
 #[test]
 fn entry_generator_reaches_every_material_class() -> Result<(), String> {
-    let tally = tally(&entry_spec_strategy(), entry_classes)?;
+    let (tally, draws) = tally(&entry_spec_strategy(), entry_classes)?;
     report("entry", &tally);
-    check_floors(&tally, ENTRY_CLASSES, COVERAGE_CASES as usize)
+    check_floors(&tally, ENTRY_CLASSES, draws)
 }
 
 #[test]
 fn foreach_generator_reaches_every_injection_class() -> Result<(), String> {
-    let tally = tally(&foreach_entry_spec_strategy(), injection_classes)?;
+    let (tally, draws) = tally(&foreach_entry_spec_strategy(), injection_classes)?;
     report("inject", &tally);
-    check_floors(&tally, INJECT_CLASSES, COVERAGE_CASES as usize)
+    check_floors(&tally, INJECT_CLASSES, draws)
 }
 
 #[test]
 fn static_condition_generator_reaches_every_verdict_class() -> Result<(), String> {
-    let tally = tally(&static_condition_entry_spec_strategy(), static_classes)?;
+    let (tally, draws) = tally(&static_entry_spec_strategy(), static_classes)?;
     report("static", &tally);
-    check_floors(&tally, STATIC_CLASSES, COVERAGE_CASES as usize)
+    check_floors(&tally, STATIC_CLASSES, draws)
 }
 
 #[test]
 fn document_generator_reaches_every_section_class() -> Result<(), String> {
-    let tally = tally(&document_spec_strategy(), document_classes)?;
+    let (tally, draws) = tally(&document_spec_strategy(), document_classes)?;
     report("document", &tally);
-    check_floors(&tally, DOCUMENT_CLASSES, COVERAGE_CASES as usize)
+    check_floors(&tally, DOCUMENT_CLASSES, draws)
 }
 
 /// Verify the floor check reports a class the sample never reaches.
@@ -137,12 +164,12 @@ fn document_generator_reaches_every_section_class() -> Result<(), String> {
 /// and name that class.
 #[test]
 fn the_threshold_check_reports_an_unreached_class() -> Result<(), String> {
-    let observed = tally(&foreach_entry_spec_strategy(), forced_control_classes)?;
+    let (observed, draws) = tally(&foreach_entry_spec_strategy(), forced_control_classes)?;
     let unreached = "control-two-or-more-following";
     let failure = check_floors(
         &observed,
         &["control-last", "control-one-following", unreached],
-        COVERAGE_CASES as usize,
+        draws,
     )
     .expect_err("a sample with the forced layout must fail the floor check");
     if !failure.contains(unreached) {

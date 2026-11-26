@@ -4,12 +4,14 @@
 //! lists those properties require live in `classes.rs`; this module only
 //! counts what a draw contains.
 
-use super::super::strategy::{BodySpec, DocumentSpec, EntrySpec, ForeachForm, Items, Section};
-use super::{Tally, count};
+use super::super::strategy::{
+    BodySpec, ControlAdjacency, ControlOrder, DocumentSpec, EntrySpec, ForeachForm, Items, Section,
+};
+use super::{ClassSet, count};
 use crate::manifest::ManifestValue;
 
 /// Count the JSON kind of one value, and whether it nests another container.
-fn value_classes(value: &ManifestValue, depth: usize, tally: &mut Tally) {
+fn value_classes(value: &ManifestValue, depth: usize, tally: &mut ClassSet) {
     match value {
         ManifestValue::Null => count(tally, "value-null"),
         ManifestValue::Bool(_) => count(tally, "value-bool"),
@@ -42,7 +44,10 @@ fn value_classes(value: &ManifestValue, depth: usize, tally: &mut Tally) {
 }
 
 /// Classify one general entry's section, control-key layout, and bodies.
-pub(super) fn entry_classes(spec: &super::super::strategy::EntrySpec, tally: &mut Tally) {
+pub(super) fn entry_classes(
+    spec: &super::super::strategy::EntrySpec,
+    tally: &mut ClassSet,
+) -> bool {
     let body = &spec.body;
     count(tally, spec.section.name());
     count(
@@ -56,12 +61,15 @@ pub(super) fn entry_classes(spec: &super::super::strategy::EntrySpec, tally: &mu
     count(tally, if body.has_vars() { "vars" } else { "no-vars" });
     condition_classes(body, tally);
     count(tally, control_class(body));
+    count(tally, control_order_class(body));
+    count(tally, control_adjacency_class(body));
     foreach_classes(body, tally);
     value_and_vars_classes(body, tally);
+    true
 }
 
 /// Classify a condition's presence, form, and free names.
-fn condition_classes(body: &super::super::strategy::BodySpec, tally: &mut Tally) {
+fn condition_classes(body: &super::super::strategy::BodySpec, tally: &mut ClassSet) {
     let Some(condition) = body.condition() else {
         count(tally, "no-condition");
         return;
@@ -88,6 +96,28 @@ fn condition_form_class(body: &super::super::strategy::BodySpec) -> &'static str
     }
 }
 
+/// Name which control key the entry writes first, if it writes both.
+fn control_order_class(body: &BodySpec) -> &'static str {
+    match (body.is_foreach(), body.has_condition()) {
+        (true, true) => match body.control_order() {
+            ControlOrder::ForeachFirst => "control-both-foreach-first",
+            ControlOrder::WhenFirst => "control-both-when-first",
+        },
+        _ => "control-single",
+    }
+}
+
+/// Name whether the control keys are adjacent or separated.
+fn control_adjacency_class(body: &BodySpec) -> &'static str {
+    if !(body.is_foreach() && body.has_condition()) {
+        return "control-adjacency-inapplicable";
+    }
+    match body.control_adjacency() {
+        ControlAdjacency::Adjacent => "control-adjacent",
+        ControlAdjacency::Separated => "control-separated",
+    }
+}
+
 /// Name the class of keys that follow the control block.
 fn control_class(body: &super::super::strategy::BodySpec) -> &'static str {
     match body.following_key_count() {
@@ -98,7 +128,7 @@ fn control_class(body: &super::super::strategy::BodySpec) -> &'static str {
 }
 
 /// Classify the foreach spelling and whether the value list is empty.
-fn foreach_classes(body: &super::super::strategy::BodySpec, tally: &mut Tally) {
+fn foreach_classes(body: &super::super::strategy::BodySpec, tally: &mut ClassSet) {
     let Some(items) = body.items() else {
         return;
     };
@@ -121,7 +151,7 @@ fn foreach_classes(body: &super::super::strategy::BodySpec, tally: &mut Tally) {
 }
 
 /// Classify every authored field and `vars` value by JSON kind.
-fn value_and_vars_classes(body: &super::super::strategy::BodySpec, tally: &mut Tally) {
+fn value_and_vars_classes(body: &super::super::strategy::BodySpec, tally: &mut ClassSet) {
     for (_, value) in body.fields() {
         value_classes(value, 0, tally);
     }
@@ -136,19 +166,23 @@ fn value_and_vars_classes(body: &super::super::strategy::BodySpec, tally: &mut T
 ///
 /// This is the negative control's classifier: it can never reach
 /// `control-two-or-more-following`, so the floor check must report that class.
-pub(super) fn forced_control_classes(spec: &EntrySpec, tally: &mut Tally) {
+pub(super) fn forced_control_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool {
     let forced = spec.body.clone().with_control_last();
     let class = match forced.following_key_count() {
         0 => "control-last",
         1 => "control-one-following",
         _ => "control-two-or-more-following",
     };
-    *tally.entry(class).or_insert(0) += 1;
+    count(tally, class);
+    true
 }
 
 /// Classify a static-condition entry by section, verdict, and spelling.
-pub(super) fn static_classes(spec: &EntrySpec, tally: &mut Tally) {
+pub(super) fn static_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool {
     let body = &spec.body;
+    if !body.has_condition() {
+        return false;
+    }
     let verdict_holds = super::super::model::expected_filtered(body).is_empty();
     let class = match (spec.section, verdict_holds, body.condition_is_template()) {
         (Section::Targets, true, false) => "targets-held-expression",
@@ -167,10 +201,11 @@ pub(super) fn static_classes(spec: &EntrySpec, tally: &mut Tally) {
     {
         count(tally, "reads-vars");
     }
+    true
 }
 
 /// Classify a whole document's sections and entry mix.
-pub(super) fn document_classes(spec: &DocumentSpec, tally: &mut Tally) {
+pub(super) fn document_classes(spec: &DocumentSpec, tally: &mut ClassSet) -> bool {
     if !spec.targets.is_empty() {
         count(tally, "targets-entries");
     }
@@ -190,17 +225,18 @@ pub(super) fn document_classes(spec: &DocumentSpec, tally: &mut Tally) {
             count(tally, "document-condition");
         }
     }
+    true
 }
 
 /// Classify one foreach entry for the injection obligations.
-pub(super) fn injection_classes(spec: &EntrySpec, tally: &mut Tally) {
+pub(super) fn injection_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool {
     let body = &spec.body;
     if let Some(form) = body.foreach_form() {
         count(tally, foreach_form_class(form));
     }
     user_collisions(body, tally);
     let Some(items) = body.items() else {
-        return;
+        return false;
     };
     let included: Vec<usize> = (0..items.len())
         .filter(|index| body.condition_holds(items.value_at(*index).as_i64(), *index))
@@ -210,12 +246,17 @@ pub(super) fn injection_classes(spec: &EntrySpec, tally: &mut Tally) {
         count(tally, "inject-gap");
     }
     item_classes(body, items, tally);
+    true
 }
 
 /// Count the item kinds one foreach entry's values reach.
-fn item_classes(body: &BodySpec, items: &Items, tally: &mut Tally) {
+fn item_classes(body: &BodySpec, items: &Items, tally: &mut ClassSet) {
     let Items::Arbitrary(values) = items else {
-        count(tally, "item-number");
+        // An empty integer sequence reaches no item kind at all; reporting
+        // one here would credit a class the draw never contained.
+        if items.len() > 0 {
+            count(tally, "item-number");
+        }
         return;
     };
     let string_form = body.foreach_form() == Some(ForeachForm::ListLiteral);
@@ -246,7 +287,7 @@ fn foreach_form_class(form: ForeachForm) -> &'static str {
 }
 
 /// Count a user `vars` key that collides with an injected name.
-fn user_collisions(body: &BodySpec, tally: &mut Tally) {
+fn user_collisions(body: &BodySpec, tally: &mut ClassSet) {
     let keys = body.vars_keys();
     if keys.contains(&"item") {
         count(tally, "user-item-collision");

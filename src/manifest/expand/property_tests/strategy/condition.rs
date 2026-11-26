@@ -148,18 +148,22 @@ impl Condition {
         // The two iteration shapes carry extra weight: they are only legal on
         // a foreach entry, and the coverage tripwire requires each to reach
         // five percent of *all* entry draws, most of which are static.
+        // The comparison shapes carry more weight than the bare-variable ones
+        // because only they can fail for a fraction of values: a literal or a
+        // flag yields one verdict per draw, so an unlucky sample can starve a
+        // verdict class that the once-per-draw floor requires.
         prop_oneof![
             1 => any::<bool>().prop_map(Self::Literal),
-            2 => (0..VAR_NAMES.len()).prop_map(Self::Flag),
-            2 => (0..VAR_NAMES.len()).prop_map(Self::NotFlag),
-            2 => (0..VAR_NAMES.len()).prop_map(Self::Count),
-            2 => ((0..VAR_NAMES.len()), operator.clone(), -2i64..10)
+            1 => (0..VAR_NAMES.len()).prop_map(Self::Flag),
+            1 => (0..VAR_NAMES.len()).prop_map(Self::NotFlag),
+            1 => (0..VAR_NAMES.len()).prop_map(Self::Count),
+            4 => ((0..VAR_NAMES.len()), operator.clone(), -2i64..10)
                 .prop_map(|(slot, drawn_operator, constant)| {
                     Self::VarCmp(slot, drawn_operator, constant)
                 }),
-            3 => (operator.clone(), -2i64..10)
+            5 => (operator.clone(), -2i64..10)
                 .prop_map(|(drawn_operator, constant)| Self::IndexCmp(drawn_operator, constant)),
-            3 => (operator, -2i64..10)
+            5 => (operator, -2i64..10)
                 .prop_map(|(drawn_operator, constant)| Self::ItemCmp(drawn_operator, constant)),
         ]
     }

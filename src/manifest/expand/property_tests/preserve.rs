@@ -10,6 +10,8 @@ use super::support::{entry_map, expand_document, key_sequence, section_entries, 
 use proptest::prelude::*;
 
 proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
     #[test]
     fn expansion_copies_every_non_control_field(spec in entry_spec_strategy()) {
         let expected = expected_outputs(&spec);

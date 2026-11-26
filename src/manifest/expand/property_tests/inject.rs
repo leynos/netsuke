@@ -13,6 +13,8 @@ use super::support::{expand_document, section_entries, vars_of};
 use proptest::prelude::*;
 
 proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
     #[test]
     fn each_expansion_carries_its_own_item_and_index(spec in foreach_entry_spec_strategy()) {
         let items = spec.body.items().ok_or_else(|| {

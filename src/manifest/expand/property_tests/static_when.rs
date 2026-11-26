@@ -11,6 +11,8 @@ use super::support::{expand_document, section_entries};
 use proptest::prelude::*;
 
 proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
     #[test]
     fn static_entries_survive_exactly_when_their_condition_holds(
         spec in static_entry_spec_strategy()

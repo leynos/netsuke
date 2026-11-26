@@ -15,7 +15,6 @@ mod description_cases;
 mod foreach;
 
 mod key_order_cases;
-mod shape_cases;
 mod structure_cases;
 
 mod target_command_available_cases;

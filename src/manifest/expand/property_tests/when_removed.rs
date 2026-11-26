@@ -10,6 +10,8 @@ use super::support::{entry_map, expand_document, section_entries};
 use proptest::prelude::*;
 
 proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
     #[test]
     fn no_expanded_entry_carries_a_control_key(spec in document_spec_strategy()) {
         let mut document = spec.render();

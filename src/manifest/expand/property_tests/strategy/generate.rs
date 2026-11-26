@@ -4,7 +4,8 @@
 //! no draw is discarded and the coverage classification counts real cases.
 
 use super::condition::{Condition, VAR_NAMES, var_name};
-use super::spec::ControlLayout;
+use super::layout::{ControlAdjacency, ControlLayout, ControlOrder};
+use super::verdict::static_verdict_body;
 use super::{
     Bindings, BodySpec, DocumentSpec, EntrySpec, ForeachForm, Items, OVERRIDE_NAMES, Section,
 };
@@ -79,7 +80,7 @@ fn field_value_strategy() -> impl Strategy<Value = ManifestValue> {
 }
 
 /// Generate up to [`MAX_FIELDS`] fields, keeping the first of each name.
-fn fields_strategy() -> impl Strategy<Value = Vec<(String, ManifestValue)>> {
+pub(super) fn fields_strategy() -> impl Strategy<Value = Vec<(String, ManifestValue)>> {
     proptest::collection::vec(
         (field_key_strategy(), field_value_strategy()),
         0..=MAX_FIELDS,
@@ -106,7 +107,7 @@ fn fields_strategy() -> impl Strategy<Value = Vec<(String, ManifestValue)>> {
 /// the condition is live rather than short-circuited. Other names are drawn
 /// freely, and a foreach entry may also claim `item` or `index` to exercise
 /// override.
-fn vars_strategy(
+pub(super) fn vars_strategy(
     condition: Option<Condition>,
     is_foreach: bool,
     bindings: &Bindings,
@@ -157,15 +158,26 @@ fn vars_strategy(
 }
 
 /// Generate the iteration values for one entry.
+///
+/// An empty sequence is drawn in its own arm rather than left to `0..=MAX_ITEMS`.
+/// A uniform range yields it once in nine, and the coverage floor is a share
+/// of all entry draws, most of which are static, so uniform length would put
+/// `foreach-empty` far below the floor.
 fn items_strategy(integer_domain: bool) -> BoxedStrategy<Items> {
+    let non_empty = 1..=MAX_ITEMS;
     if integer_domain {
-        proptest::collection::vec(-2i64..10, 0..=MAX_ITEMS)
-            .prop_map(Items::Integers)
-            .boxed()
+        prop_oneof![
+            1 => Just(Items::Integers(Vec::new())),
+            2 => proptest::collection::vec(-2i64..10, non_empty).prop_map(Items::Integers),
+        ]
+        .boxed()
     } else {
-        proptest::collection::vec(json_values(field_string_strategy()), 0..=MAX_ITEMS)
-            .prop_map(Items::Arbitrary)
-            .boxed()
+        prop_oneof![
+            1 => Just(Items::Arbitrary(Vec::new())),
+            2 => proptest::collection::vec(json_values(field_string_strategy()), non_empty)
+                .prop_map(Items::Arbitrary),
+        ]
+        .boxed()
     }
 }
 
@@ -179,6 +191,8 @@ fn body_strategy(has_foreach: bool, has_when: bool) -> impl Strategy<Value = Bod
         any::<bool>(),
         any::<bool>(),
         (any::<Index>(), any::<Index>()),
+        ControlOrder::strategy(),
+        ControlAdjacency::strategy(),
     )
         .prop_flat_map(
             move |(
@@ -189,6 +203,8 @@ fn body_strategy(has_foreach: bool, has_when: bool) -> impl Strategy<Value = Bod
                 integer_domain,
                 has_vars,
                 (control_position, vars_position),
+                control_order,
+                control_adjacency,
             )| {
                 let normalised = normalise_condition(drawn_condition, has_foreach);
                 let maybe_condition = has_when.then_some(normalised);
@@ -216,6 +232,8 @@ fn body_strategy(has_foreach: bool, has_when: bool) -> impl Strategy<Value = Bod
                             foreach: drawn_items.map(|values| (form, values)),
                             when: maybe_condition.map(|shape| (shape, drawn_template)),
                             control_layout: ControlLayout::drawn(control_position),
+                            control_order,
+                            control_adjacency,
                             bindings: bindings.clone(),
                         }
                     },
@@ -271,7 +289,16 @@ pub(in crate::manifest::expand::property_tests) fn foreach_entry_spec_strategy()
 /// Generate one static entry, with or without a condition.
 pub(in crate::manifest::expand::property_tests) fn static_entry_spec_strategy()
 -> impl Strategy<Value = EntrySpec> {
-    condition_presence().prop_flat_map(|has_when| entry_with_controls(false, has_when))
+    (Section::strategy(), any::<bool>(), any::<bool>()).prop_flat_map(
+        |(section, has_when, verdict_holds)| {
+            let drawn = if has_when {
+                static_verdict_body(verdict_holds).boxed()
+            } else {
+                body_strategy(false, false).boxed()
+            };
+            drawn.prop_map(move |body| EntrySpec { section, body })
+        },
+    )
 }
 
 /// Generate one static entry that carries a condition.

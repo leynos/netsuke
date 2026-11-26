@@ -117,10 +117,6 @@
 
 ### Security
 
-- Keep manifest entries in authoring key order when expansion removes `when` or
-  `foreach`, so an unknown-field error in an entry with two or more unknown
-  fields after the control key names the first unknown field as written rather
-  than a later one ([#1055](https://github.com/leynos/netsuke/pull/1055))
 - Preserve `script` bytes byte for byte through the `printf %b` transport, so a
   literal backslash sequence supplied through a placeholder, `env()`, or
   `shell_quote` cannot be reconstructed as shell syntax
@@ -180,6 +176,10 @@
   and full rendering alike, so a compact template graph with shared descendants
   cannot force an exponential expansion
   ([#973](https://github.com/leynos/netsuke/issues/973))
+- Keep manifest entries in authoring key order when expansion removes `when` or
+  `foreach`, so an unknown-field error in an entry with two or more unknown
+  fields after the control key names the first unknown field as written rather
+  than a later one ([#1055](https://github.com/leynos/netsuke/pull/1055))
 - Bound `shell_join`'s intermediate allocation: the filter appends into one
   buffer under a fixed 1 MiB ceiling and rejects an over-limit join with
   `netsuke::jinja::shell::join_limit`, instead of materializing an encoded copy

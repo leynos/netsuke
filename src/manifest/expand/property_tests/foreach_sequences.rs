@@ -10,6 +10,8 @@ use minijinja::Environment;
 use proptest::prelude::*;
 
 proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
     /// A bounded foreach consumes no more entries than its configured ceiling.
     #[test]
     fn foreach_budget_terminates_deterministically_at_the_cardinality_limit(

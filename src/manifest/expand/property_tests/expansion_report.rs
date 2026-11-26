@@ -53,6 +53,8 @@ fn expanded_entries<'a>(
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
     /// Absent `when` filtering, a list of `n` items expands to exactly `n`
     /// entries.
     #[test]

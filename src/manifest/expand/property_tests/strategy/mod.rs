@@ -21,13 +21,17 @@
 
 pub(in crate::manifest::expand::property_tests) mod condition;
 mod generate;
+mod layout;
 mod spec;
+mod verdict;
 
 pub(in crate::manifest::expand::property_tests) use condition::Condition;
+use condition::VAR_NAMES;
 pub(in crate::manifest::expand::property_tests) use generate::{
     document_spec_strategy, entry_spec_strategy, foreach_entry_spec_strategy,
     static_condition_entry_spec_strategy, static_entry_spec_strategy,
 };
+pub(in crate::manifest::expand::property_tests) use layout::{ControlAdjacency, ControlOrder};
 pub(in crate::manifest::expand::property_tests) use spec::{BodySpec, DocumentSpec, EntrySpec};
 
 use crate::manifest::ManifestValue;
@@ -188,6 +192,18 @@ impl Bindings {
             proptest::array::uniform4(-2i64..10),
         )
             .prop_map(|(flags, counts)| Self { flags, counts })
+    }
+
+    /// Build bindings with one integer slot fixed and the rest drawn.
+    pub(super) fn with_count(slot: usize, value: i64) -> Self {
+        let mut counts = [0i64; VAR_NAMES.len()];
+        if let Some(entry) = counts.get_mut(slot) {
+            *entry = value;
+        }
+        Self {
+            flags: [false; VAR_NAMES.len()],
+            counts,
+        }
     }
 
     /// Read the boolean value one variable name holds.

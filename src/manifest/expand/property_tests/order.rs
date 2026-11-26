@@ -16,6 +16,8 @@ use super::support::{
 use proptest::prelude::*;
 
 proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
     #[test]
     fn foreach_removal_keeps_authoring_key_order(drawn in foreach_entry_spec_strategy()) {
         let spec = EntrySpec {

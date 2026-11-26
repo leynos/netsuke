@@ -13,7 +13,10 @@
 //! condition has no template form: the fallback reads a rendered integer as
 //! false, so testing one in template form would assert the wrong contract.
 
-use super::*;
+use super::super::expand_foreach;
+use super::super::tests::{indexes, targets};
+use crate::manifest::{ManifestMap, ManifestValue};
+use anyhow::Result;
 use minijinja::Environment;
 use rstest::rstest;
 use serde_json::json;
