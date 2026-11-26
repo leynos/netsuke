@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -599,4 +599,68 @@ compile gate's timeout is recorded as an environment limitation, not as a pass.
 
 ## Outcomes & retrospective
 
-To be completed.
+The issue's own acceptance criteria are met. The six reported false survivors
+are gone from the pinned-tool inventory, nothing was added, and every
+production counterpart plus the shared graph logic remains selected. The proof
+lane is unchanged and verified: `make kani-full` reports all 17 harnesses
+verified.
+
+### What the work actually cost, and why
+
+The source change is 30 lines. The contract around it is roughly 2,400 lines
+across nine files. That ratio is the honest headline: the four skipped items
+were trivial to write and expensive to *prove correct*, because the reader that
+certifies the exclusion has to model cargo-mutants' selection rules faithfully.
+
+Thirteen review passes found three classes of defect in that reader, each
+recurring several times:
+
+1. **A key shorter than the thing it identified.** The owner key was shortened
+   to the bare method name, then to the type's last path segment, then lost its
+   module path. Each round the reviewer found the next distinction it had
+   dropped. Fixing it at the root — render the whole self type, prepend the
+   module path, wrap trait implementations outside it — closed the class.
+2. **A two-valued answer to a three-valued question.** "Is this a Kani gate?"
+   has a third answer, *undecidable*, and the first model silently chose
+   "production" for anything it could not read. Making `Undecidable` a real
+   value, and a failure rather than a quiet pass, closed that class.
+3. **A boolean search over impossible worlds.** Enumerating cfg atoms as
+   independent considers assignments rustc cannot make. Exact enumeration fixed
+   the single-predicate cases; the cross-scope case needed the predicates
+   conjoined and evaluated as one formula; the built-in-option cases needed the
+   reference to say which options are single-valued and which, like
+   `target_family`, are not.
+
+The lesson worth carrying: when a test certifies another tool's behaviour, the
+test's fidelity *is* the work. A contract that models a rule approximately will
+pass every seed written against its own approximation, and only an adversarial
+review reading the tool's source finds the gap. Several of these rounds were
+found by the reviewer's citation to a specific line of `visit.rs` or
+`options.rs`, which is the standard the contract should have been held to from
+the start.
+
+### What was deliberately not done
+
+- `make test-kani-mutations` never completed. It timed out twice at its 900 s
+  prewarm under heavy host saturation, with zero crates compiled in the second
+  run. The one thing this change could have broken — line shifts displacing the
+  committed proof patches — was checked directly instead: all 30 still apply.
+  Recording a timeout as a pass would have been dishonest.
+- No proof-aware mutation lane was built. Judging these implementations by
+  mutation needs a runner that executes `cargo kani` per mutant with real
+  harness verification and negative controls. That does not exist here, and the
+  guide records its absence rather than implying the exclusion is equivalent to
+  proof.
+- One assertion was corrected rather than the code being changed to match it:
+  `any(kani, all(unix, not(unix)))` *is* decidable under exact enumeration, and
+  is a gate. Bending the model to accept the original expectation would have
+  introduced a real defect to satisfy a wrong test.
+
+### Residual risk
+
+The reader is a model, not the tool. `MAX_ATOMS` bounds the search, and a
+predicate beyond that bound is reported undecidable rather than answered. That
+is the safe direction: an undecidable node in the graph module fails
+`no_graph_implementation_has_an_undecidable_cfg`, so a future predicate the
+model cannot handle surfaces as a test failure rather than as a silent
+misclassification.
