@@ -298,7 +298,9 @@ under `-D warnings`, so a patch that leaves a variable unused fails.
 
 ## Conformance basis
 
-Upstream artefacts, at `origin/main` commit `08d0a918d`:
+Upstream artefacts, at `origin/main` commit `08d0a918d` when the plan was
+drafted and re-verified at `origin/main` commit `56d1e0a22` after the
+2026-11-26 rebase; every named file and section below still exists there.
 
 - `docs/roadmap.md`, item 4.3.2, sub-items `RM-4.3.2.a` (foreach preserves
   non-control fields), `RM-4.3.2.b` (`when` removed after evaluation),
@@ -1255,6 +1257,37 @@ manifest_parsing_names_the_first_unknown_field_in_authoring_order: 1 passed
 all manifest unit tests: 386 tests run: 386 passed
 ```
 
+### EP-M1 plateau gate run and rebase
+
+Run one (candidate `7c69bcf03`, base `b99c9c92b`): `check-fmt`, `typecheck`,
+`doc-coverage`, `markdownlint`, `nixie`, and `test` passed; `make lint` failed
+at `lint-whitaker` with two `bumpy_road_function` findings in
+`src/cli/merge/observability.rs` and `src/ninja_gen/dyndep/staging.rs`. Both
+files are byte-identical to the base, and neither `dylint.toml` differs.
+
+Root cause, measured from GitHub metadata rather than inferred:
+
+```plaintext
+whitaker rolling asset whitaker-lints-2747628-…-linux-gnu.tar.zst
+  created_at 2026-11-25T16:32:47Z
+main CI run 45654111683 lint step
+  downloaded whitaker-lints-f593c08 at 2026-11-25T16:31:05Z   (green)
+i.e. the suite that reds the two functions was published 102 s after
+the suite main's green lint run used.
+```
+
+`origin/main` `56d1e0a22` already carries the remedy in both `dylint.toml` files
+(`[bumpy_road_function] min_bump_lines = 15`) and the
+`WHITAKER_SUITE_SELECTION := --lib whitaker_suite --fail-on-no-libraries`
+recipe. The two reported bumps span 5/3 and 2/5 lines, so the 15-line floor
+excludes both. After rebasing onto `56d1e0a22`:
+
+```plaintext
+make lint-whitaker: exit 0 (both passes)
+key_order_cases: 21 tests run: 21 passed
+manifest_parsing_names_the_first_unknown_field_in_authoring_order: 1 passed
+```
+
 ## Interfaces and dependencies
 
 No production interface changes. The test-only interfaces are:
@@ -1335,7 +1368,16 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   now use `shift_remove`; the other `serde_json::Map::remove` sites
   inventoried; design clause `C-2`, the changelog entry, and the users' guide
   sentence written.
-- [ ] EP-M1 plateau gates.
+- [x] (2026-11-26) EP-M1 plateau gate run one: six gates passed, `make lint`
+  failed at `lint-whitaker` on two base files the candidate never touches.
+  Investigated to root cause: the rolling Whitaker suite asset
+  `whitaker-lints-2747628` was published at 2026-11-25T16:32:47Z, 102 seconds
+  after main's last CI lint step downloaded the previous one. Rebased the
+  branch onto `origin/main` `56d1e0a22`, which already carries
+  `[bumpy_road_function] min_bump_lines = 15` in both `dylint.toml` files and
+  the `--lib whitaker_suite` selection; `make lint-whitaker` is green on the
+  rebased candidate and the 21 key-order cases and the authoring-order scenario
+  still pass.
 - [ ] EP-M2 shared test support and relocation.
 - [ ] EP-M3 generators, oracles, coverage, and properties.
 - [ ] EP-M4 unhappy paths, scenarios, documentation, and closure.
@@ -1409,6 +1451,18 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   (`entry.remove("foreach")`) and `src/manifest/expand/evaluation.rs`
   (`map.remove("when")`). Impact: the substance of the plan is unchanged; line
   numbers in the plan text are advisory.
+- Observation (2026-11-26): the rolling Whitaker suite reds base code again,
+  and the branch's base predated the repository's remedy. Measured: the
+  `whitaker-lints-2747628` Linux asset was published at `2026-11-25T16:32:47Z`;
+  main's CI lint step downloaded `whitaker-lints-f593c08` at `16:31:05Z`, 102
+  seconds earlier. Under 2747628 the local gate reported `bumpy_road_function`
+  on `src/cli/merge/observability.rs::collect_leaf_paths` (bumps spanning 5 and
+  3 lines) and `src/ninja_gen/dyndep/staging.rs::render_serial_block` (2 and 5
+  lines); both files are byte-identical to this branch's base. `origin/main`
+  already carries `[bumpy_road_function] min_bump_lines = 15` in both
+  `dylint.toml` files, which excludes both artefacts by span. Impact: rebasing
+  onto current `main` cleared the gate; no production change, no config change,
+  and no suppression was added by this branch.
 
 ## Decision log
 
@@ -1510,6 +1564,16 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   first four would exceed the production-change tolerance, so they stay, and a
   follow-up issue may propose a `disallowed-methods` guard. Date/Author:
   2026-11-25, implementation agent.
+- Decision: rebase onto `origin/main` `56d1e0a22` instead of absorbing the two
+  base refactors or adding a lint exemption. Rationale: the gate failed on
+  files this branch never touches, because a rolling Whitaker suite asset was
+  published 102 seconds after main's last CI lint step. Current `main` already
+  carries the repository's documented remedy, `min_bump_lines = 15` in both
+  `dylint.toml` files plus the `--lib whitaker_suite` selection, and rebasing
+  cleared the gate with no candidate change. Refactoring those functions would
+  breach the plan's production-change tolerance for an unrelated fault; adding
+  an exemption would weaken the lint. Date/Author: 2026-11-26, implementation
+  agent.
 
 ## Outcomes & retrospective
 
