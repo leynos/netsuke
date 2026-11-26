@@ -8319,7 +8319,7 @@ When the run was *expected* to reach its deadline, wait for the entry that
 proves it, and fail if it never arrives:
 
 ```bash
-expected='Stopping timed out\. Killing\.'
+expected='Scope reached runtime time limit'
 for _ in $(seq 1 25); do
     grep -q "$expected" "$capture.journal" && break
     journalctl --user -q -u "$unit.scope" --no-pager -o cat -n 40 \
@@ -8327,10 +8327,19 @@ for _ in $(seq 1 25); do
     sleep 0.2
 done
 grep -q "$expected" "$capture.journal" || {
-    echo "the escalation entry never appeared in the journal" >&2
+    echo "the runtime-limit entry never appeared in the journal" >&2
     exit 1
 }
 ```
+
+The entry to wait for depends on the claim. `Scope reached runtime time limit`
+proves the *deadline* fired, and it is what a timeout assertion should cite:
+the deadline reaching its bound is the whole claim.
+`Stopping timed out. Killing.` proves something narrower — that the payload
+outlived `SIGTERM` and had to be killed — so require it only when the payload
+is known to ignore `SIGTERM`. A cooperative payload stopped on `SIGTERM` at the
+deadline is correct behaviour with no escalation entry, and demanding one would
+report it as a harvest fault.
 
 That second block belongs to a timeout claim, not to every non-zero exit. A
 verifier that simply fails — exit 7, a compile error, a failed assertion —

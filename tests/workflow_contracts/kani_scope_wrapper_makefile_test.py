@@ -175,6 +175,21 @@ def test_the_strict_export_check_rejects_a_comment_between_assignment_and_comman
     )
 
 
+def test_the_strict_export_check_rejects_a_printed_export() -> None:
+    """Prove an `export` that is only printed does not count.
+
+    The recipe passes the words to `echo`, so the command receives nothing.
+    """
+    printed = f"{TARGET}:\n\techo export {EXPORT_VARIABLE}; cargo nextest run\n"
+    recipe = _recipe_of(printed, TARGET)
+    statement = _single_statement_with(recipe, EXPORT_VARIABLE)
+    assert statement is not None, "the control must still yield a statement"
+    assert not _exports_to_command(statement), (
+        "an `export` given to `echo` exports nothing and the check must say so; "
+        f"got {statement!r}"
+    )
+
+
 def test_the_strict_export_check_rejects_a_double_ampersand_chain() -> None:
     """Prove the check fires on a chained assignment too.
 
@@ -207,7 +222,8 @@ def _exports_to_command(statement: str) -> bool:
     bool
         True when the variable is exported rather than merely assigned.
     """
-    if f"export {EXPORT_VARIABLE}" in statement:
+    tokens = statement.split()
+    if f"export {EXPORT_VARIABLE}" in statement and tokens[:1] == ["export"]:
         return True
     if EXPORT_VARIABLE not in statement:
         return False

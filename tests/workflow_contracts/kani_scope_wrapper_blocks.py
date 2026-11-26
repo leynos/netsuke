@@ -39,6 +39,15 @@ PIPEFAIL_PREFIX = re.compile(r"\A\s*set -o pipefail\s*;")
 #: A pipeline stage that captures: a `|` followed by a `tee` and its path.
 PIPELINE_TEE = re.compile(r"\|\s*tee\s+\S+")
 
+#: A single- or double-quoted span.
+#:
+#: Everything here lexes shell text with regular expressions, and quoting is
+#: what makes that unsound: `echo "a;set -o pipefail;b"` would split into a
+#: standalone `set -o pipefail`, and `echo "make x | tee y"` would look like a
+#: pipeline. Masking each quoted span before looking for operators removes the
+#: ambiguity without pretending to be a parser.
+QUOTED_SPAN = re.compile(r"'[^']*'|\"[^\"]*\"")
+
 
 def fenced_blocks(path: Path) -> list[str]:
     """Return the body of every fenced code block in ``path``.
@@ -180,9 +189,11 @@ def argument_tokens(block: str) -> list[str]:
     # check that reads arguments.
     joined = arguments.replace("\\\n", " ")
     uncommented = [
-        line for line in joined.splitlines() if not line.lstrip().startswith("#")
+        _without_inline_comment(line)
+        for line in joined.splitlines()
+        if not line.lstrip().startswith("#")
     ]
-    return " ".join(uncommented).split()
+    return mask_quoted(" ".join(uncommented)).split()
 
 
 def property_arguments(block: str) -> dict[str, str]:
@@ -241,7 +252,40 @@ def payload_is_guarded(payload: str) -> bool:
     bool
         True when the payload sets `pipefail` first and then pipes into `tee`.
     """
-    opening = PIPEFAIL_PREFIX.match(payload)
+    masked = mask_quoted(payload)
+    opening = PIPEFAIL_PREFIX.match(masked)
     if opening is None:
         return False
-    return PIPELINE_TEE.search(payload, opening.end()) is not None
+    return PIPELINE_TEE.search(masked, opening.end()) is not None
+
+
+def _without_inline_comment(line: str) -> str:
+    """Return ``line`` with any trailing shell comment removed.
+
+    A `#` at the start of a word begins a comment; one inside a word does not,
+    so `abc#def` survives. Without this, a preamble whose comment quotes a
+    bound would supply it as though the command set it.
+
+    Returns
+    -------
+    str
+        The executable part of the line.
+    """
+    marker = line.find(" #")
+    return line if marker < 0 else line[:marker]
+
+
+def mask_quoted(text: str) -> str:
+    """Replace every quoted span with a single placeholder word.
+
+    The placeholder keeps the text a word so token positions survive, while
+    removing any operator that only *appears* inside a string. `echo "a;b"`
+    masks to `echo Q`, so nothing mistakes the quoted `;` for a statement
+    boundary.
+
+    Returns
+    -------
+    str
+        The text with each quoted span replaced by `Q`.
+    """
+    return QUOTED_SPAN.sub("Q", text)
