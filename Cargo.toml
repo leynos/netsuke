@@ -215,6 +215,12 @@ regex = "1.12.2"
 # comment or a literal quoting the same name is not one. Full syntax, because
 # the items being read are ordinary source files.
 syn = { version = "2", features = ["full", "visit"] }
+# The mutation-selection contract renders a self type and a cfg predicate back
+# to tokens, so two implementations of the same nominal type stay distinct
+# whether they differ by module path, generic arguments, or implemented trait.
+# `quote` is already in the graph through `syn`; naming it here makes the
+# contract's own dependency explicit.
+quote = "1.0.47"
 # Plural-selection tests pass numeric arguments to Fluent through
 # `ortho_config::LocalizationArgs`. `ortho_config` re-exports `FluentValue`, so
 # the tests reach the value type through it rather than depending on

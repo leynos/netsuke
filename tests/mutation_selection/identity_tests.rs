@@ -255,3 +255,81 @@ impl other::BuildGraph {
     );
     Ok(())
 }
+
+#[test]
+fn the_reader_keeps_generic_arguments_in_the_owner_key() -> Result<()> {
+    // `Demo<u8>` and `Demo<u16>` are different types. Keying by the nominal
+    // name alone would merge them, so a skip on one specialization's method
+    // would appear to answer for the other's.
+    let source = "\
+struct Demo<T>(T);
+
+impl Demo<u8> {
+    #[cfg(kani)]
+    #[mutants::skip]
+    fn value(&self) -> u32 { 1 }
+}
+
+impl Demo<u16> {
+    fn value(&self) -> u32 { 2 }
+}
+";
+    let by_name = implementations_by_name(source)?;
+    let narrow = by_name
+        .get("Demo<u8>::value")
+        .context("the probe must declare `Demo<u8>::value`")?;
+    ensure!(
+        (narrow.skipped, narrow.selected) == (1, 0),
+        "the `u8` specialization carries the skip; got {narrow:?}"
+    );
+
+    let wide = by_name
+        .get("Demo<u16>::value")
+        .context("the probe must declare `Demo<u16>::value`")?;
+    ensure!(
+        (wide.skipped, wide.selected_production) == (0, 1),
+        "the `u16` specialization is a distinct implementation and must stay \\
+         selected; got {wide:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_reader_separates_trait_implementations_from_inherent_ones() -> Result<()> {
+    // cargo-mutants gives a trait implementation its own namespace. An
+    // inherent `Demo::paired` and `<impl OtherTrait for Demo>::paired` are
+    // different implementations, so one must not answer for the other.
+    let source = "\
+struct Demo;
+
+impl Demo {
+    #[cfg(kani)]
+    #[mutants::skip]
+    fn paired(&self) -> u32 { 1 }
+}
+
+trait OtherTrait { fn paired(&self) -> u32; }
+
+impl OtherTrait for Demo {
+    fn paired(&self) -> u32 { 2 }
+}
+";
+    let by_name = implementations_by_name(source)?;
+    let inherent = by_name
+        .get("Demo::paired")
+        .context("the probe must declare the inherent `Demo::paired`")?;
+    ensure!(
+        (inherent.skipped, inherent.selected) == (1, 0),
+        "the inherent method carries the skip; got {inherent:?}"
+    );
+
+    let trait_impl = by_name
+        .get("<impl OtherTrait for Demo>::paired")
+        .context("the probe must declare the trait implementation")?;
+    ensure!(
+        (trait_impl.skipped, trait_impl.selected_production) == (0, 1),
+        "the trait method is a separate implementation and must stay selected; \\
+         got {trait_impl:?}"
+    );
+    Ok(())
+}

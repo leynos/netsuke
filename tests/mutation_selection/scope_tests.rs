@@ -176,6 +176,9 @@ impl Demo {
 
     #[cfg(r#kani)]
     fn raw_kani(&self) -> u32 { 9 }
+
+    #[cfg(all(not(kani), target_os = \"linux\", target_os = \"windows\"))]
+    fn impossible_target(&self) -> u32 { 10 }
 }
 ";
     let by_name = implementations_by_name(source)?;
@@ -193,6 +196,19 @@ impl Demo {
              production implementation; got {selection:?}"
         );
     }
+
+    // Rust assigns `target_os` exactly one value, so a predicate naming two of
+    // them describes no target. Searching independent assignments for it would
+    // answer about an impossible world, so the model must decline rather than
+    // report a verdict.
+    let impossible = by_name
+        .get("Demo::impossible_target")
+        .context("the probe must declare `Demo::impossible_target`")?;
+    ensure!(
+        impossible.undecidable == 1,
+        "a predicate naming two values of a single-valued built-in option must \
+         be reported undecidable, not classified; got {impossible:?}"
+    );
 
     // A raw spelling is the same identifier to rustc: `r#kani` needs no
     // separate check-cfg declaration, so it must pin the atom too.

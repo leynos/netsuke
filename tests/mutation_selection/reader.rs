@@ -43,7 +43,6 @@ use std::collections::BTreeMap;
 use crate::mutation_selection::cfg_predicate::Verdict;
 use anyhow::{Context, Result};
 use syn::ext::IdentExt;
-use syn::spanned::Spanned;
 use syn::{Attribute, File, ImplItem, ImplItemFn, Item, ItemImpl, ItemMod, Meta, Signature};
 
 /// One implementation found in an `impl` block.
@@ -304,41 +303,6 @@ fn accumulate_module(module: &ItemMod, scope: &Scope, by_name: &mut BTreeMap<Str
     collect_items(items, &scope.clone().within(module), by_name);
 }
 
-/// True when `block` implements `Default`.
-fn is_default_impl(block: &ItemImpl) -> bool {
-    block
-        .trait_
-        .as_ref()
-        .and_then(|(_, path, _)| path.segments.last())
-        .is_some_and(|segment| segment.ident == "Default")
-}
-
-/// The name of the type an `impl` block is for.
-///
-/// A path type yields its last segment, which is what cargo-mutants prints. A
-/// non-path type — a reference, a tuple, a generic binder — has no such name,
-/// and the model has no token printer available to render one. Those blocks are
-/// keyed by their source line instead, which keeps two distinct shapes from
-/// colliding under one empty key without claiming a name they do not have.
-fn self_ty_name(block: &ItemImpl) -> String {
-    if let syn::Type::Path(path) = &*block.self_ty {
-        // The whole path, not its last segment: `other::BuildGraph` is a
-        // different type from `BuildGraph`, and the pinned tool keeps the
-        // qualified name in its implementation namespace.
-        return path
-            .path
-            .segments
-            .iter()
-            .map(|segment| segment.ident.unraw().to_string())
-            .collect::<Vec<_>>()
-            .join("::");
-    }
-    // `proc_macro2::Span` exposes a source location only through its `Debug`
-    // rendering, which is stable enough to tell two blocks apart and is never
-    // asserted on.
-    format!("<impl at {:?}>", block.self_ty.span())
-}
-
 /// Fold one `impl` block's methods into `by_name`.
 ///
 /// An exclusion or a Kani gate on this block joins whatever the file and
@@ -348,7 +312,7 @@ fn accumulate_impl(block: &ItemImpl, scope: &Scope, by_name: &mut BTreeMap<Strin
     // implementation, because it cannot invent a viable different default. The
     // whole block is invisible to mutation, so nothing in it can be a
     // production counterpart.
-    if is_default_impl(block) {
+    if identity::is_default_impl(block) {
         return;
     }
     let block_scope = scope.clone().nested(&block.attrs);
@@ -359,7 +323,7 @@ fn accumulate_impl(block: &ItemImpl, scope: &Scope, by_name: &mut BTreeMap<Strin
         let method_scope = block_scope.clone().nested(&method.attrs);
         let implementation = Implementation {
             name: method.sig.ident.to_string(),
-            owner: method_scope.owner_key(&self_ty_name(block)),
+            owner: identity::implementation_owner(block, &method_scope.modules),
             skipped: method_scope.excluded || is_ineligible(method),
             cfg: method_scope.verdict(),
         };
@@ -383,6 +347,7 @@ fn accumulate_impl(block: &ItemImpl, scope: &Scope, by_name: &mut BTreeMap<Strin
 }
 
 mod cfg_predicate;
+mod identity;
 
 #[cfg(test)]
 mod identity_tests;

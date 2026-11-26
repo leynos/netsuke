@@ -371,6 +371,25 @@ selection and proof-specific verification.
       distinguishes, so it passed against the defect; it was rewritten to the
       path-qualified `impl` shape the finding describes, and then failed
       correctly against the seed.
+- [x] (2026-11-26) The twelfth review pass returned three findings that closed a
+      whole class rather than adding cases, so they were fixed at the root:
+  - **The owner key dropped information the tool keeps.** Two rounds had
+    already shortened it — first dropping the module, then the qualification.
+    The identity is now the *rendered self type*, plus the lexical module path,
+    plus the implemented trait when there is one. That covers generic arguments
+    (`Demo<u8>` vs `Demo<u16>`) and trait implementations
+    (`<impl OtherTrait for Demo>`) in one change instead of one per round.
+    Rendering uses `quote::ToTokens`, now a named dev-dependency; it was
+    already in the graph through `syn`.
+  - **The cfg search explored worlds rustc cannot produce.** Rust assigns
+    `target_os` exactly one value, so `all(not(kani), target_os = "linux",
+    target_os = "windows")` can never hold. Enumerating those atoms as
+    independent would answer about an impossible target. A predicate naming two
+    values of a single-valued built-in option is now reported undecidable
+    rather than searched; `feature` stays multi-valued and is unaffected.
+- [x] (2026-11-26) Four controls cover them, and each was checked against its
+      seed: shortening the key fails all three identity probes, and removing the
+      single-valued guard fails the cfg probe. All 27 pass when restored.
 - [ ] Milestone 4: push, re-review, and the draft PR.
 
 Two gate findings were real and are fixed, not suppressed:

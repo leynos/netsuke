@@ -51,6 +51,27 @@ use syn::{Attribute, Expr, Lit, Meta};
 /// answer `KaniOnly` for a predicate it merely failed to satisfy.
 const MAX_ATOMS: usize = 12;
 
+/// Built-in `cfg` options that Rust assigns exactly one value.
+///
+/// Enumerating `target_os = "linux"` and `target_os = "windows"` as independent
+/// atoms would consider an assignment rustc can never make, and could report a
+/// predicate as satisfiable when it is not. A predicate that mentions two
+/// different values of one of these options is therefore left undecided rather
+/// than searched, because the search would answer a question about an
+/// impossible world. `feature` is deliberately absent: several features are
+/// enabled at once.
+const SINGLE_VALUED_OPTIONS: [&str; 9] = [
+    "target_arch",
+    "target_os",
+    "target_family",
+    "target_vendor",
+    "target_env",
+    "target_abi",
+    "target_endian",
+    "target_pointer_width",
+    "panic",
+];
+
 /// What the model can say about one condition.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Verdict {
@@ -97,6 +118,9 @@ pub fn verdict(predicates: &[Meta]) -> Verdict {
     let Some(atoms) = atoms_of_all(predicates) else {
         return Verdict::Undecidable;
     };
+    if has_conflicting_single_valued(&atoms) {
+        return Verdict::Undecidable;
+    }
     if atoms.len() > MAX_ATOMS {
         return Verdict::Undecidable;
     }
@@ -183,6 +207,20 @@ fn atoms_of_all(predicates: &[Meta]) -> Option<BTreeSet<String>> {
         collect_atoms(predicate, &mut atoms)?;
     }
     Some(atoms)
+}
+
+/// True when `atoms` names two values of one single-valued built-in option.
+///
+/// Atom keys are rendered as `option="value"` for these options, so a shared
+/// prefix before the `=` is what marks the conflict.
+fn has_conflicting_single_valued(atoms: &BTreeSet<String>) -> bool {
+    SINGLE_VALUED_OPTIONS.iter().any(|option| {
+        atoms
+            .iter()
+            .filter(|atom| atom.starts_with(&format!("{option}=")))
+            .count()
+            > 1
+    })
 }
 
 /// Add every free atom `predicate` mentions to `atoms`.
