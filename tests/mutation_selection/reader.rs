@@ -248,13 +248,6 @@ impl Scope {
         self.nested(&module.attrs)
     }
 
-    /// The owner key for a type declared as `name` in this scope.
-    fn owner_key(&self, name: &str) -> String {
-        let mut path = self.modules.clone();
-        path.push(name.to_owned());
-        path.join("::")
-    }
-
     /// The verdict for everything gathered so far.
     fn verdict(&self) -> Verdict {
         if self.cfg_unreadable {

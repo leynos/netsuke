@@ -197,6 +197,21 @@ impl Demo {
         );
     }
 
+    Ok(())
+}
+
+#[test]
+fn the_reader_refuses_impossible_built_in_assignments() -> Result<()> {
+    let source = "\
+impl Demo {
+    #[cfg(all(not(kani), target_os = \"linux\", target_os = \"windows\"))]
+    fn impossible_target(&self) -> u32 { 10 }
+
+    #[cfg(all(not(kani), feature = \"a\", feature = \"b\"))]
+    fn two_features(&self) -> u32 { 11 }
+}
+";
+    let by_name = implementations_by_name(source)?;
     // Rust assigns `target_os` exactly one value, so a predicate naming two of
     // them describes no target. Searching independent assignments for it would
     // answer about an impossible world, so the model must decline rather than
@@ -210,6 +225,38 @@ impl Demo {
          be reported undecidable, not classified; got {impossible:?}"
     );
 
+    Ok(())
+}
+
+#[test]
+fn the_reader_handles_negation_through_the_atoms() -> Result<()> {
+    // `not(not(kani))` is `kani` and is still a gate. A negated *non-Kani* atom
+    // is not: `not(unix)` holds whenever `unix` is false, and
+    // `not(any(kani, unix))` is `all(not(kani), not(unix))`, which holds when
+    // both are false. A raw spelling is the same identifier to rustc, so
+    // `r#kani` pins the atom exactly as `kani` does.
+    let source = "\
+impl Demo {
+    #[cfg(r#kani)]
+    fn raw_kani(&self) -> u32 { 9 }
+
+    #[cfg(not(not(kani)))]
+    fn double_negation(&self) -> u32 { 10 }
+
+    #[cfg(any(kani, unix))]
+    fn any_kani_or_unix(&self) -> u32 { 11 }
+
+    #[cfg(not(kani))]
+    fn not_kani(&self) -> u32 { 12 }
+
+    #[cfg(not(any(kani, unix)))]
+    fn not_any_kani_or_unix(&self) -> u32 { 13 }
+
+    #[cfg(not(unix))]
+    fn not_unix(&self) -> u32 { 14 }
+}
+";
+    let by_name = implementations_by_name(source)?;
     // A raw spelling is the same identifier to rustc: `r#kani` needs no
     // separate check-cfg declaration, so it must pin the atom too.
     let raw = by_name
