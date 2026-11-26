@@ -5,7 +5,7 @@
 //! index sequencing, `when` determinism, whitespace-only `when` rejection,
 //! and `foreach` key removal.
 
-use super::*;
+use super::super::*;
 use minijinja::Environment;
 use proptest::prelude::*;
 use serde_json::json;

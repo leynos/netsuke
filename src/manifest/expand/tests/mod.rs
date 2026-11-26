@@ -17,7 +17,6 @@ mod foreach;
 mod key_order_cases;
 mod structure_cases;
 
-mod property_cases;
 mod target_command_available_cases;
 
 /// Build the restricted template environment used by manifest-query tests.

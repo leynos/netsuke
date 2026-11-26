@@ -3,6 +3,7 @@
 //! The fixed cases pin specific regressions, while these properties vary
 //! sequence values, filtering, variable collisions, and source key order.
 
+use super::super::tests::targets;
 use super::super::*;
 use crate::manifest::ManifestBudgetLimits;
 use minijinja::Environment;

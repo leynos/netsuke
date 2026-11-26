@@ -299,4 +299,6 @@ fn expand_static_target(
 }
 
 #[cfg(test)]
+mod property_tests;
+#[cfg(test)]
 mod tests;
