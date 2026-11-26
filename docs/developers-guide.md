@@ -11300,7 +11300,10 @@ generated state: the reservation refusal, dyndep publication and pruning, and
 the force-node reset all use that value's handle, so a `-C` symlink retargeted
 mid-command cannot move one step to a directory another never judged. The Ninja
 tool path has no workspace in scope, so it opens one directory for the
-invocation and publishes, prunes, and runs Ninja through that same handle.
+invocation and publishes and prunes through that handle. Ninja itself is
+launched with the canonical path resolved at startup, because the process API
+takes a path rather than a capability handle; the handle therefore bounds
+Netsuke's own generated-state work, not the directory Ninja later opens.
 
 `open_effective_dir` is therefore for callers that need their own handle to the
 effective working directory; prefer passing a resolved `Workspace` where one

@@ -1059,8 +1059,11 @@ destroy the output the manifest named. `netsuke generate` leaves
 running the generated file by hand requires that path to be absent. Before
 removing it manually, confirm that `.netsuke` and `.netsuke/phony` are real
 directories: a symbolic link there would send the removal somewhere else, and
-the build refuses rather than following one. Then check the selected `--file`
-manifest and every declared path the manifest names — outputs, inputs, implicit
+the build refuses rather than following one. `.netsuke/phony` is reserved
+generated state, and `.netsuke/phony/force` may hold entries the selected
+`--file` manifest never names — inspect them and preserve anything you did not
+create before removing the path. Then check the selected `--file` manifest and
+every declared path the manifest names — outputs, inputs, implicit
 dependencies, and order-only dependencies — against the node the way the build
 does. An absolute spelling, a `..` path that returns to the working directory,
 and a symbolic-link alias all resolve to the same node; if any of them names
