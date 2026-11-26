@@ -135,15 +135,15 @@ fn representative_generated_shapes_satisfy_the_invariants() {
     );
     let cyclic = representative_cyclic_graph();
 
-    let violations = analysis_violations(&acyclic);
+    let acyclic_violations = analysis_violations(&acyclic);
     assert!(
-        violations.is_empty(),
-        "acyclic representative violated invariants: {violations:?}",
+        acyclic_violations.is_empty(),
+        "acyclic representative violated invariants: {acyclic_violations:?}",
     );
-    let violations = analysis_violations(&cyclic);
+    let cyclic_violations = analysis_violations(&cyclic);
     assert!(
-        violations.is_empty(),
-        "cyclic representative violated invariants: {violations:?}",
+        cyclic_violations.is_empty(),
+        "cyclic representative violated invariants: {cyclic_violations:?}",
     );
     assert!(
         analyse(&acyclic).cycle.is_none(),

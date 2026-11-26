@@ -179,11 +179,11 @@ fn alias_of(
     if prefer_implicit && counts.implicit > 0 {
         return implicit_output(edge_index, ordinal.min(counts.implicit - 1));
     }
-    let ordinal = ordinal.min(counts.total().saturating_sub(1));
-    if ordinal < counts.explicit {
-        explicit_output(edge_index, ordinal)
+    let bounded_ordinal = ordinal.min(counts.total().saturating_sub(1));
+    if bounded_ordinal < counts.explicit {
+        explicit_output(edge_index, bounded_ordinal)
     } else {
-        implicit_output(edge_index, ordinal - counts.explicit)
+        implicit_output(edge_index, bounded_ordinal - counts.explicit)
     }
 }
 
@@ -231,6 +231,19 @@ fn build_edge(edge_index: usize, counts: AliasCounts) -> BuildEdge {
     }
 }
 
+/// Resolve one extra prerequisite against the target edge's declared aliases.
+fn resolve_extra_dependency(
+    spec: DependencySpec,
+    target: usize,
+    counts: AliasCounts,
+    edge_index: usize,
+) -> Utf8PathBuf {
+    if spec.is_absent {
+        return absent_path(edge_index, spec.alias);
+    }
+    alias_of(target, counts, spec.alias, false)
+}
+
 /// Build the graph described by `alias_counts`, `extra_deps`, and `back_arc`.
 pub(super) fn build_graph(
     alias_counts: &[AliasCounts],
@@ -260,13 +273,7 @@ pub(super) fn build_graph(
             let target = spec.target.min(edge_index - 1);
             let dependency = alias_counts.get(target).copied().map_or_else(
                 || absent_path(edge_index, spec.alias),
-                |counts| {
-                    if spec.is_absent {
-                        absent_path(edge_index, spec.alias)
-                    } else {
-                        alias_of(target, counts, spec.alias, false)
-                    }
-                },
+                |counts| resolve_extra_dependency(*spec, target, counts, edge_index),
             );
             push_dependency(edge, dependency, spec.kind);
         }
