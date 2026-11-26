@@ -751,6 +751,16 @@ it starts a comment. The scanner cannot tell the two apart without the `case`
 grammar, so it fails closed rather than encode a later path for the wrong shell
 context.
 
+The check matches a whole-word `case` followed by a whole-word `in` in the
+substitution's raw text. That over-approximation is deliberate: narrowing it
+would mean parsing the substitution again, which is the ambiguity the check
+exists to avoid. Two consequences follow. Quoted argument data that keeps the
+two words adjacent, such as `printf %s 'x case in y'`, is rejected even though
+the shell reads it as a string. A wholly quoted header such as
+`printf '%s' 'case in'` is accepted, because the quote between the words breaks
+the pair. Either way a recipe of that shape takes the same remedy as any other
+rejected one.
+
 The remedy depends on what the `#` means in your recipe.
 
 - When `#` starts a comment, separate it from the closer with a space, a tab,
@@ -826,6 +836,28 @@ independently of `)#`, so a recipe whose delimiter carries a non-ASCII space
 changes behaviour whether or not it places `#` after a substitution closer. The
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary)
 describes the full comment and substitution rules.
+
+## Keep a `case` pattern list inside its command substitution
+
+A `case` construct inside a POSIX or Bash `$(...)` substitution no longer ends
+the substitution early. The scanner tracks the construct's pattern lists and
+arms, so the `)` that terminates a pattern stays inside the substitution and
+only the real closer is checked. A path marker in the arm is still refused,
+because Netsuke does not lower a marker inside a command substitution; move the
+marker after the substitution, or compute the value first and use a shell
+variable inside it.
+
+Bash allows one optional `(` before a pattern list, and the whole list may be
+spelled `esac`, as in `case esac in (esac) …`. The opener now starts the list,
+so that pattern is text rather than the construct's end. A recipe that placed a
+path marker in such an arm used to be accepted with the marker encoded for the
+enclosing quote context; it is rejected like any other marker inside a command
+substitution.
+
+The check also scans raw source, so a substitution whose text reads as a
+`case ... in` header, such as `grep case in file`, is rejected when a later
+marker follows. Move the marker before that substitution, or pass the word
+through a variable so the substitution no longer contains the header.
 
 ## Update heredoc delimiters the tracker cannot model
 

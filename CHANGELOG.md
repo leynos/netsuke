@@ -149,6 +149,21 @@
   comment that hides a marker; compact comments after static member access such
   as `[string]::Empty#` are tracked, and a completed block comment counts as
   whitespace (CWE-78) ([#993](https://github.com/leynos/netsuke/issues/993))
+- **Breaking:** keep a `case` construct's pattern terminator from passing for
+  the closer of a command substitution. The scanner now recognizes `case`
+  behind a `time` option, a `coproc` name, or the opening `{` of a brace group,
+  and fails closed on a `case` it cannot place while a later path marker
+  depends on the substitution's quote context. A misplaced closer previously
+  lowered a marker in the case arm for the enclosing context, which could place
+  executable shell syntax inside the substitution body (CWE-78). The optional
+  `(` Bash accepts before a pattern list is read as pattern syntax and starts
+  the list, so a list whose first pattern is spelled `esac`, such as
+  `case esac in (esac) …`, keeps its arm inside the substitution instead of
+  ending it at the pattern. The raw-text check also rejects argument data that
+  reads as a `case ... in` header, such as `grep case in file`, when a later
+  marker follows the substitution; place the marker before that substitution,
+  or pass the word through a variable so the substitution no longer contains
+  the header ([#999](https://github.com/leynos/netsuke/issues/999))
 
 <!-- markdownlint-disable-next-line MD024 -->
 ### Fixed

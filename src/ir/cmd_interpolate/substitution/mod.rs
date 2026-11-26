@@ -1,15 +1,18 @@
 //! Hold the state required for one-pass recipe placeholder substitution.
+//!
+//! Command-substitution delimiters and the `case` boundaries they imply live
+//! in [`delimiters`], so this module owns the traversal state itself: the
+//! character-by-character dispatch, shell-specific delegation, and marker
+//! lowering for the active quote context.
 
 use super::{
     CommandBindings, IrGenError, QuoteContext, RejectionReason,
-    command_substitution::{
-        CaseObservation, CommandSubstitution, CommandSubstitutionDelimiter, SubstitutionBoundary,
-        reject_ambiguous_case_comment,
-    },
-    find_substitution, invalid_command_error,
-    posix_lexical::{PosixLexicalState, SubstitutionKind},
+    command_substitution::CommandSubstitution, find_substitution, invalid_command_error,
+    posix_lexical::PosixLexicalState,
 };
 use crate::recipe_shell::RecipeShell;
+
+mod delimiters;
 
 mod posix;
 
@@ -137,203 +140,6 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         self.update_quote_context(pos, ch);
         self.append_marker_for_context(pos, ch, marker_protection(self, pos))
     }
-    /// Track `$()` nesting and preserve its delimiters before marker handling.
-    fn append_command_substitution_delimiter(
-        &mut self,
-        pos: usize,
-        ch: char,
-    ) -> Result<Option<usize>, IrGenError> {
-        let Some(delimiter) = self.classify_command_substitution_delimiter(pos, ch) else {
-            return Ok(None);
-        };
-        match delimiter {
-            CommandSubstitutionDelimiter::Start => {
-                self.command_substitutions.push(CommandSubstitution::new(
-                    pos,
-                    SubstitutionKind::at(self.chars, pos),
-                ));
-                self.posix_lexical.enter_command_substitution_region();
-                self.output.push_str("$(");
-                Ok(Some(pos + 2))
-            }
-            CommandSubstitutionDelimiter::NestedOpen => {
-                self.increment_command_substitution_parenthesis_depth();
-                self.output.push(ch);
-                Ok(Some(pos + 1))
-            }
-            CommandSubstitutionDelimiter::Close => self.close_substitution(pos, ch),
-        }
-    }
-
-    /// Record one source character for `case` nesting inside a substitution.
-    ///
-    /// Only the innermost substitution is updated: a `case` in an outer region
-    /// cannot terminate a pattern of an inner one.
-    fn observe_case_word(&mut self, pos: usize, ch: char) {
-        let is_unquoted = self.matches_unquoted_quote_context();
-        let next = self.chars.get(pos + 1).copied();
-        if let Some(substitution) = self.command_substitutions.last_mut() {
-            let observation =
-                CaseObservation::new(ch, next, is_unquoted, substitution.parenthesis_depth);
-            substitution.case_nesting.observe(observation);
-        }
-    }
-
-    /// Tell the innermost substitution's tracker that an unquoted comment began.
-    fn begin_case_comment(&mut self) {
-        if let Some(substitution) = self.command_substitutions.last_mut() {
-            substitution.case_nesting.begin_comment();
-        }
-    }
-
-    /// Tell the innermost substitution's tracker that a comment ended.
-    fn end_case_comment(&mut self) {
-        if let Some(substitution) = self.command_substitutions.last_mut() {
-            substitution.case_nesting.end_comment();
-        }
-    }
-
-    /// Report whether the current `)` terminates a `case` pattern.
-    ///
-    /// While a `case` construct is open, a `)` at that construct's own depth
-    /// cannot close the substitution: the shell reads it as a pattern
-    /// terminator. The depth matters because a `case` may sit inside a nested
-    /// group, where its terminator is one level below the substitution's.
-    /// Keeping the substitution open makes the real closer the one that is
-    /// checked.
-    fn is_case_pattern_terminator(&self) -> bool {
-        self.command_substitutions
-            .last()
-            .is_some_and(|substitution| {
-                substitution
-                    .case_nesting
-                    .is_open_at(substitution.parenthesis_depth)
-            })
-    }
-
-    /// Close one substitution level and reject an ambiguous `case` boundary.
-    fn close_substitution(&mut self, pos: usize, ch: char) -> Result<Option<usize>, IrGenError> {
-        if self.is_case_pattern_terminator() {
-            self.output.push(ch);
-            return Ok(Some(pos + 1));
-        }
-        let boundary = self.boundary_at(pos);
-        if self.decrement_command_substitution_parenthesis_depth() {
-            self.posix_lexical.leave_command_substitution_region();
-            self.reject_ambiguous_boundary(&boundary)?;
-            self.posix_lexical.record_closed_command_substitution(pos);
-        }
-        self.output.push(ch);
-        Ok(Some(pos + 1))
-    }
-
-    /// Describe the substitution boundary that the `)` at `pos` may close.
-    ///
-    /// The description is captured before the depth is decremented, because
-    /// closing the substitution discards the state the report is built from.
-    fn boundary_at(&self, pos: usize) -> SubstitutionBoundary {
-        self.command_substitutions
-            .last()
-            .filter(|substitution| substitution.parenthesis_depth == 1)
-            .map_or_else(
-                || SubstitutionBoundary::new(pos, None, false),
-                |substitution| {
-                    SubstitutionBoundary::new(
-                        pos,
-                        Some(substitution.start),
-                        substitution.case_nesting.saw_case(),
-                    )
-                },
-            )
-    }
-
-    /// Reject a `)#` boundary that the active shell cannot disambiguate.
-    ///
-    /// PowerShell has no `case` patterns, so its ambiguity only arises in an
-    /// unquoted region; POSIX and Bash always check.
-    fn reject_ambiguous_boundary(&self, boundary: &SubstitutionBoundary) -> Result<(), IrGenError> {
-        let is_checked =
-            self.bindings.shell != RecipeShell::PowerShell || self.matches_unquoted_quote_context();
-        if is_checked {
-            reject_ambiguous_case_comment(self.chars, boundary)?;
-        }
-        Ok(())
-    }
-
-    /// Classify a character that delimits an active command substitution.
-    fn classify_command_substitution_delimiter(
-        &self,
-        pos: usize,
-        ch: char,
-    ) -> Option<CommandSubstitutionDelimiter> {
-        if self.matches_substitution_context() && self.starts_command_substitution(pos, ch) {
-            return Some(CommandSubstitutionDelimiter::Start);
-        }
-        if self.starts_nested_command_substitution_parenthesis(ch) {
-            return Some(CommandSubstitutionDelimiter::NestedOpen);
-        }
-        if self.matches_substitution_context() && self.ends_command_substitution(ch) {
-            return Some(CommandSubstitutionDelimiter::Close);
-        }
-        None
-    }
-
-    /// Report whether `ch` starts a POSIX or PowerShell `$()` expression.
-    fn starts_command_substitution(&self, pos: usize, ch: char) -> bool {
-        ch == '$' && self.chars.get(pos + 1) == Some(&'(')
-    }
-
-    /// Report whether the innermost active substitution is arithmetic.
-    ///
-    /// An arithmetic body evaluates numbers, so `<<` there is a shift
-    /// operator. Heredoc tracking must not run inside one: the tracker would
-    /// invent a body the shell never starts and end it at a line that is still
-    /// inside an expansion.
-    fn is_in_arithmetic_expansion(&self) -> bool {
-        self.command_substitutions
-            .last()
-            .is_some_and(CommandSubstitution::is_arithmetic)
-    }
-
-    /// Report whether `ch` opens a grouped expression inside a `$()` region.
-    fn starts_nested_command_substitution_parenthesis(&self, ch: char) -> bool {
-        self.is_in_command_substitution() && self.matches_unquoted_quote_context() && ch == '('
-    }
-
-    /// Report whether `ch` closes the current `$()` expression.
-    fn ends_command_substitution(&self, ch: char) -> bool {
-        self.is_in_command_substitution() && self.matches_unquoted_quote_context() && ch == ')'
-    }
-
-    /// Report whether the traversal is currently inside a command substitution.
-    const fn is_in_command_substitution(&self) -> bool {
-        !self.command_substitutions.is_empty()
-    }
-
-    /// Increase the grouping depth in the innermost command substitution.
-    fn increment_command_substitution_parenthesis_depth(&mut self) {
-        if let Some(substitution) = self.command_substitutions.last_mut() {
-            substitution.parenthesis_depth += 1;
-        }
-    }
-
-    /// Close one grouping level and report whether the substitution ended.
-    ///
-    /// Only the `)` that leaves the substitution belongs to the outer word; a
-    /// `)` closing an inner group is still a separator inside the substitution.
-    /// A `true` result also marks the point where the caller ends the region's
-    /// `${ }` bookkeeping, because the region itself has ended here.
-    fn decrement_command_substitution_parenthesis_depth(&mut self) -> bool {
-        let Some(substitution) = self.command_substitutions.last_mut() else {
-            return false;
-        };
-        substitution.parenthesis_depth -= 1;
-        let is_closed = substitution.parenthesis_depth == 0;
-        if is_closed {
-            self.command_substitutions.pop();
-        }
-        is_closed
-    }
 
     /// Lower a marker when its current shell context permits substitution.
     fn append_marker_for_context(
@@ -389,3 +195,5 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         self.output
     }
 }
+// weave: run 'weave explain src/ir/cmd_interpolate/substitution/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
+// weave: run 'weave explain src/ir/cmd_interpolate/substitution/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

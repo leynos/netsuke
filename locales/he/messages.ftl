@@ -206,6 +206,7 @@ ir.duplicate_outputs = זוהו פלטים כפולים: { $outputs }.
 ir.circular_dependency = זוהתה תלות מעגלית: { $cycle }.
 ir.action_serialisation = לא ניתן היה לבצע סריאליזציה לפעולה: { $details }.
 ir.invalid_command = שיבוץ לא תקין בפקודה: { $reason }.
+ir.unplaced_case = החלפת פקודה שאינה נתמכת: 'case' מחוץ למיקום פקודה מזוהה (כתבו אותו ראשון בהחלפה, אחרי מפריד או בתחילת קבוצת סוגרים מסולסלים).
 ir.ambiguous_substitution_boundary = גבול החלפת פקודה דו-משמעי בתו { $position }; הפרידו את סוגר הסגירה של ההחלפה מתו ה-'#' הבא.
 ir.unfinished_power_shell_region = הרשומה { $entry } ברשימת הפקודות של PowerShell מסתיימת בתוך { $region }; סגרו את האזור או מזגו את הרשומה עם הבאה.
 

@@ -206,6 +206,7 @@ ir.duplicate_outputs = Wykryto zduplikowane wyjścia: { $outputs }.
 ir.circular_dependency = Wykryto zależność cykliczną: { $cycle }.
 ir.action_serialisation = Nie udało się zserializować działania: { $details }.
 ir.invalid_command = Nieprawidłowa interpolacja w poleceniu: { $reason }.
+ir.unplaced_case = Nieobsługiwane podstawienie polecenia: 'case' poza rozpoznaną pozycją polecenia (napisz je najpierw w podstawieniu, po separatorze lub na początku grupy nawiasów klamrowych).
 ir.ambiguous_substitution_boundary = Niejednoznaczna granica podstawienia polecenia na znaku { $position }; oddziel zamykający nawias podstawienia od następnego '#'.
 ir.unfinished_power_shell_region = Wpis { $entry } listy poleceń programu PowerShell kończy się wewnątrz { $region }; zamknij obszar lub połącz wpis z następnym.
 

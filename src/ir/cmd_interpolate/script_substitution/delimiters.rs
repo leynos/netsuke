@@ -5,8 +5,9 @@
 //! helpers own that nesting state, keeping the parent traversal within the
 //! repository's module-size cap.
 
+use super::super::case_nesting::{CaseNesting, CaseObservation};
 use super::super::command_substitution::{
-    CaseNesting, CaseObservation, SubstitutionBoundary, reject_ambiguous_case_comment,
+    SourceText, SubstitutionBoundary, reject_ambiguous_case_comment, reject_unplaced_case,
 };
 use super::super::posix_lexical::SubstitutionKind;
 use super::super::{RejectionReason, invalid_command_error};
@@ -124,8 +125,9 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             return Ok(None);
         };
         if is_closed {
+            reject_unplaced_case(SourceText::new(self.chars), &boundary)?;
             self.posix_lexical.leave_command_substitution_region();
-            reject_ambiguous_case_comment(self.chars, &boundary)?;
+            reject_ambiguous_case_comment(SourceText::new(self.chars), &boundary)?;
             self.posix_lexical.record_closed_command_substitution(pos);
         }
         self.output.push(ch);
@@ -140,14 +142,18 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         self.command_substitutions
             .last()
             .filter(|substitution| substitution.parenthesis_depth == 1)
-            .map_or_else(
-                || SubstitutionBoundary::new(pos, None, false),
-                |substitution| {
-                    SubstitutionBoundary::new(
-                        pos,
-                        Some(substitution.start),
-                        substitution.case_nesting.saw_case(),
-                    )
+            .map_or(
+                SubstitutionBoundary {
+                    pos,
+                    start: None,
+                    saw_case: false,
+                    has_unplaced_case: false,
+                },
+                |substitution| SubstitutionBoundary {
+                    pos,
+                    start: Some(substitution.start),
+                    saw_case: substitution.case_nesting.saw_case(),
+                    has_unplaced_case: substitution.case_nesting.has_unplaced_case(),
                 },
             )
     }
@@ -217,7 +223,7 @@ impl ScriptSubstitutionTraversal<'_, '_> {
 
     /// Classify a character that delimits an active script command substitution.
     fn classify_command_substitution_delimiter(
-        &self,
+        &mut self,
         pos: usize,
         ch: char,
     ) -> Option<ScriptCommandSubstitutionDelimiter> {
@@ -232,13 +238,56 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         if self.is_backtick_body_text() {
             return None;
         }
-        if self.is_unquoted_command_substitution() && ch == '(' {
+        if self.opens_grouped_expression(pos, ch) {
             return Some(ScriptCommandSubstitutionDelimiter::NestedOpen);
         }
-        if self.is_unquoted_command_substitution() && ch == ')' {
+        if self.closes_command_substitution(ch) {
             return Some(ScriptCommandSubstitutionDelimiter::Close);
         }
         None
+    }
+
+    /// Report whether the `(` at `pos` opens a grouped expression.
+    ///
+    /// A process substitution raises the depth and names a header subject; a
+    /// plain `(` is the optional pattern-list opener only when the tracker
+    /// consumes it, and is a group otherwise.
+    fn opens_grouped_expression(&mut self, pos: usize, ch: char) -> bool {
+        if !self.is_unquoted_command_substitution() {
+            return false;
+        }
+        if ch != '(' {
+            return false;
+        }
+        if self.opens_process_substitution(pos) {
+            self.observe_process_substitution();
+            return true;
+        }
+        !self.consume_pattern_opener()
+    }
+
+    /// Report whether `ch` closes the active command substitution.
+    fn closes_command_substitution(&self, ch: char) -> bool {
+        self.is_unquoted_command_substitution() && ch == ')'
+    }
+
+    /// Report whether the `(` at `pos` follows `<` or `>`.
+    ///
+    /// That pair is a process substitution rather than Bash's optional
+    /// pattern-list opener, so it always raises the grouping depth.
+    fn opens_process_substitution(&self, pos: usize) -> bool {
+        pos.checked_sub(1)
+            .and_then(|previous| self.chars.get(previous))
+            .is_some_and(|ch| matches!(ch, '<' | '>'))
+    }
+
+    /// Record a process substitution for the innermost `case` tracker.
+    fn observe_process_substitution(&mut self) {
+        if let Some(substitution) = self.command_substitutions.last_mut() {
+            substitution
+                .case_nesting
+                .observe_process_substitution(substitution.parenthesis_depth);
+        }
     }
 
     /// Report whether the cursor sits directly in an open backtick body.
@@ -265,6 +314,25 @@ impl ScriptSubstitutionTraversal<'_, '_> {
             && self.active_quote_context() == ShellQuoteContext::Unquoted
     }
 
+    /// Consume a `(` at the active depth that opens a `case` pattern list.
+    ///
+    /// Bash accepts one optional `(` immediately before a pattern list, and
+    /// that opener must not raise the grouping depth: the pattern terminator
+    /// after it stands at the case's own depth, where the tracker recognises
+    /// it. Reading the opener as a group would move the terminator one level
+    /// deeper, where it closes nothing and leaves the construct in its pattern
+    /// phase. Consuming it also records that the list has started, so an
+    /// `esac` written as its first pattern stays pattern text.
+    fn consume_pattern_opener(&mut self) -> bool {
+        self.command_substitutions
+            .last_mut()
+            .is_some_and(|substitution| {
+                substitution
+                    .case_nesting
+                    .consume_pattern_opener(substitution.parenthesis_depth)
+            })
+    }
+
     /// Increase the grouping depth in the innermost command substitution.
     fn increment_command_substitution_parenthesis_depth(&mut self) {
         if let Some(substitution) = self.command_substitutions.last_mut() {
@@ -286,3 +354,4 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         Some(is_closed)
     }
 }
+// weave: run 'weave explain src/ir/cmd_interpolate/script_substitution/delimiters.rs' for per-hunk detail, 'weave check' to verify your resolution

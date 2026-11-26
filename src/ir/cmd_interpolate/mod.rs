@@ -15,6 +15,8 @@ use std::cell::Cell;
 use super::IrGenError;
 use crate::recipe_shell::RecipeShell;
 
+mod case_nesting;
+
 mod command_substitution;
 
 mod posix_lexical;

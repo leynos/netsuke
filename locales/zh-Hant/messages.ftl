@@ -205,6 +205,7 @@ ir.duplicate_outputs = 偵測到重複的輸出：{ $outputs }。
 ir.circular_dependency = 偵測到循環相依：{ $cycle }。
 ir.action_serialisation = 無法序列化動作：{ $details }。
 ir.invalid_command = 命令中的插值無效：{ $reason }。
+ir.unplaced_case = 不支援的命令替換：'case' 位於可辨識的命令位置之外（請將其寫在替換的開頭、分隔符之後或大括號群組的開頭）。
 ir.ambiguous_substitution_boundary = 字元 { $position } 處的命令替換邊界不明確；請將替換的右括號與後面的 '#' 分開。
 ir.unfinished_power_shell_region = PowerShell 命令清單的第 { $entry } 項在 { $region } 內結束；請關閉該區域，或將該項與下一項合併。
 

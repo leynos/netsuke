@@ -250,6 +250,43 @@ fn readme_backtick_interpolation_snapshot() -> Result<()> {
     })
 }
 
+/// A parenthesised case pattern cannot carry a marker out of `$()`.
+///
+/// This is the form that previously let the tracker close the substitution at
+/// the pattern's `esac`, encode the arm's marker for the enclosing double
+/// quotes, and place executable substitution text in the command. The CLI path
+/// is the one users run, and the rejection is decided during graph
+/// construction, so it needs no shell on the host. Only the POSIX route parses
+/// `case`, so the Windows build has no equivalent failure to assert.
+#[cfg(unix)]
+#[test]
+fn case_pattern_opener_interpolation_is_rejected() -> Result<()> {
+    let manifest = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: out.txt\n",
+        "    sources: 'x\"; touch injected; echo \"y'\n",
+        "    command: \"echo \\\"$(case esac in (esac) printf %s {{ ins }} ;; esac)\\\"\"\n",
+        "defaults: [out.txt]\n",
+    );
+    let workspace = workspace_with(manifest)?;
+    let rendered = failing_generate(workspace.path())?;
+    for text in [
+        "Failed to build graph from the manifest.",
+        "Invalid command interpolation: recipe marker inside a protected shell region",
+    ] {
+        ensure!(
+            rendered.contains(text),
+            "the opener rejection must report {text:?}, got: {rendered}"
+        );
+    }
+    ensure!(
+        !rendered.contains("touch injected"),
+        "the diagnostic must not echo the hostile path, got: {rendered}"
+    );
+    Ok(())
+}
+
 /// A missing manifest keeps the runner's code, summary, and recovery help.
 #[test]
 fn missing_manifest_snapshot() -> Result<()> {

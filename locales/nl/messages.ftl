@@ -206,6 +206,7 @@ ir.duplicate_outputs = Dubbele uitvoer aangetroffen: { $outputs }.
 ir.circular_dependency = Circulaire afhankelijkheid aangetroffen: { $cycle }.
 ir.action_serialisation = De actie kon niet worden geserialiseerd: { $details }.
 ir.invalid_command = Ongeldige interpolatie in de opdracht: { $reason }.
+ir.unplaced_case = Niet-ondersteunde opdrachtvervanging: 'case' buiten een herkende opdrachtpositie (schrijf het eerst in de vervanging, na een scheidingsteken of aan het begin van een accoladegroep).
 ir.ambiguous_substitution_boundary = Onduidelijke grens van opdrachtvervanging bij teken { $position }; scheid de afsluitende haak van de vervanging van de volgende '#'.
 ir.unfinished_power_shell_region = Het PowerShell-opdrachtlijstitem { $entry } eindigt binnen { $region }; sluit de regio of voeg het item samen met het volgende.
 

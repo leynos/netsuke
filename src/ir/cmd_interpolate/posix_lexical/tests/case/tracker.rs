@@ -22,17 +22,45 @@ fn case_keyword_spelled_with_line_continuation_fails_closed() {
     );
 }
 
-// Verify a keyword spelled with backslash escapes is recognised.
+// Verify a keyword after a long run of continuations is still recognised.
 //
-// An unquoted backslash removes the special meaning of the escaped character
-// and contributes it literally, so `ca\se` is the `case` reserved word. The
-// same fail-closed rule applies as for the plainly spelled keyword.
+// The raw-source scan runs the keyword test at every position it reads, so a
+// test that skipped continuations before comparing the first character would
+// walk the rest of the run from each position inside it and make the
+// fail-closed check quadratic. Rejecting a position that does not spell the
+// first character keeps each candidate constant-time, while `c` followed by any
+// number of pairs and `ase` is still the keyword the shell builds.
 #[test]
-fn case_keyword_spelled_with_escape_fails_closed() {
-    let template = format!("echo $(ca\\se x in x) :;; esac)#{INS_TOKEN}");
-    assert_both_reject(
+fn keyword_after_a_long_continuation_run_is_recognised() {
+    let run = "\\\n".repeat(4096);
+    let template =
+        format!("echo \"$(coproc \"jobs\" c{run}ase x in x) echo {INS_TOKEN} ;; esac)\"");
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &hostile_bash_bindings())
+            .expect_err("a continued keyword after a long run must fail closed");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+    }
+}
+
+// Verify an escaped spelling of `case` is not treated as the keyword.
+//
+// An unquoted backslash quotes the character it escapes, and Bash recognises a
+// reserved word only when every character of it is unquoted. `ca\se` is
+// therefore an ordinary command word: the shell runs a command named `case`,
+// and the `)` after the word is the substitution's closer. The plain raw-source
+// scan cannot match it either, because the backslash interrupts the letters, so
+// the `)#` boundary is unambiguous and this supported recipe must interpolate.
+#[test]
+fn escaped_spelling_of_case_before_hash_interpolates_normally() {
+    let (template, expected) = executable_quote_case("echo $(ca\\se x in x) :;; esac");
+    assert_output(
         &template,
-        "an escaped spelling of the keyword must still fail closed",
+        &expected,
+        "an escaped spelling of 'case' must not trigger the ambiguity guard",
+        Interpolators::Both,
     );
 }
 
@@ -89,6 +117,44 @@ fn word_starting_with_case_before_hash_interpolates_normally() {
     );
 }
 
+// Verify a quoted spelling of `case` is not treated as the keyword.
+//
+// A reserved word is recognised only in its bare spelling, so `ca""se` passes
+// an ordinary argument. The tracker still buffers `case` for that word, and the
+// raw-source scan cannot match it because the quotes interrupt the letters, so
+// the `)#` boundary is unambiguous. Treating the buffered text as the keyword
+// would reject this supported recipe.
+#[test]
+fn quoted_spelling_of_case_before_hash_interpolates_normally() {
+    let (template, expected) = executable_quote_case("echo $(printf %s ca\"\"se)");
+    assert_output(
+        &template,
+        &expected,
+        "a quoted spelling of 'case' must not trigger the ambiguity guard",
+        Interpolators::Both,
+    );
+}
+
+// Verify a wholly quoted `case ... in` header does not trigger the guard.
+//
+// The guard matches a whole-word `case` followed by a whole-word `in`, and the
+// quote between them in `'case in'` breaks that pair, so this form is accepted
+// and its marker after the closer must still interpolate. This is a behaviour
+// anchor rather than a mutation-checked regression: relaxing the guard's
+// recorded-`case` condition does not change the outcome, and quoted argument
+// data that keeps `case` and `in` adjacent, such as `'x case in y'`, is still
+// rejected.
+#[test]
+fn wholly_quoted_case_header_before_hash_interpolates_normally() {
+    let (template, expected) = executable_quote_case("echo $(printf '%s' 'case in')");
+    assert_output(
+        &template,
+        &expected,
+        "a wholly quoted case header must not trigger the ambiguity guard",
+        Interpolators::Both,
+    );
+}
+
 // Verify an unquoted PowerShell substitution boundary still fails closed.
 //
 // PowerShell has no `case` patterns, so the ambiguity does not arise there and
@@ -110,6 +176,31 @@ fn unquoted_power_shell_case_boundary_fails_closed() {
         assert!(
             matches!(error, IrGenError::AmbiguousSubstitutionBoundary { .. }),
             "unexpected error: {error:?}"
+        );
+    }
+}
+
+// Verify a PowerShell backslash-newline is not folded into a keyword.
+//
+// PowerShell preserves a backslash and the newline after it, so `c` written
+// before the pair and `ase` after it are separate words there. Folding the
+// pair, as POSIX and Bash do when they splice, would report a `case` keyword
+// the PowerShell route never sees and reject a recipe it accepts today.
+#[test]
+fn power_shell_boundary_scan_does_not_fold_continuations() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("input")],
+        &[Utf8PathBuf::from("output")],
+        RecipeShell::PowerShell,
+    );
+    let template = "Write-Output $(Write-Output ' c\\\nase ')#value";
+
+    for interpolate in both_interpolators() {
+        let output = interpolate(template, &bindings)
+            .expect("PowerShell preserves the backslash and newline");
+        assert_eq!(
+            output, template,
+            "a contiguous scan must not join the fragments into a keyword"
         );
     }
 }
@@ -165,4 +256,94 @@ fn esac_used_as_a_command_argument_fails_closed() {
         &template,
         "an 'esac' argument must not close the construct before the real boundary",
     );
+}
+
+// Verify a process substitution can be the `case` subject.
+//
+// Bash reads `<(...)` as an ordinary word, so one written between `case` and
+// `in` is the subject and the `in` after it completes the header. A tracker
+// that does not record it takes the following `in` for the subject, so the
+// `esac` is ignored while the frame stays in its header phase and the marker
+// after the real closer is refused. The marker-free form must keep its text.
+#[test]
+fn process_substitution_subject_keeps_the_substitution_boundary() {
+    let template = format!("echo $(case <(printf x) in *) :;; esac) {OUTS_TOKEN}");
+    let expected = "echo $(case <(printf x) in *) :;; esac) output";
+
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(&template, &bindings())
+                .expect("a process substitution is a supported case subject"),
+            expected,
+            "the marker after the real closer must lower to its path"
+        );
+    }
+}
+
+// Verify a `;;` split by a line continuation still ends the arm.
+//
+// Verify the pattern-list grammar keeps the substitution boundary intact.
+//
+// Each rejected row is a way the tracker could misread an operator. Bash
+// deletes an unquoted backslash-newline pair before tokenising, so `;` + a
+// continuation + `;` is the `;;` arm terminator: a tracker that records the
+// backslash never sees the pair, reads the next pattern list as arm text, lets
+// the `esac` in that list close the construct, and treats the following pattern
+// terminator as the substitution closer. Bash also accepts an optional `(`
+// before a pattern list, so `(x)` is the pattern `x`: counting that `(` as a
+// group reads the terminator at a deeper depth, where it closes nothing, and
+// leaves the construct in its pattern phase. Each accepted row holds the same
+// grammar without a marker, which is supported Bash and must keep its text.
+#[rstest]
+#[case::continued_terminator(
+    "echo \"$(case x in a) : ;\\\n; x|esac) printf %s {INS_TOKEN} ;; esac)\"",
+    Some("a `;;` split by a continuation must still end the arm"),
+    "a `;;` split by a continuation is supported Bash"
+)]
+#[case::optional_opener(
+    "echo \"$(case z in (x) case y in y) : ;; esac ;; z) printf %s {INS_TOKEN} ;; esac)\"",
+    Some("an optional pattern opener must not hide the nested construct"),
+    "Bash accepts an optional pattern opener"
+)]
+#[case::process_substitution_pattern(
+    "echo \"$(case x in <(case x in x) : ;; esac)|x) printf %s {INS_TOKEN} ;; esac)\"",
+    Some("a process substitution's body must not be read as a pattern list"),
+    "Bash reads case patterns through process substitution"
+)]
+#[case::continued_terminator_without_markers(
+    "echo \"$(case x in a) : ;\\\n; esac)\"",
+    None,
+    "a `;;` split by a continuation is supported Bash"
+)]
+#[case::optional_opener_without_markers(
+    "echo \"$(case z in (x) : ;; esac)\"",
+    None,
+    "Bash accepts an optional pattern opener"
+)]
+fn pattern_list_grammar_keeps_the_substitution_boundary(
+    #[case] template: &str,
+    #[case] rejection: Option<&str>,
+    #[case] acceptance: &str,
+) {
+    let expanded = template.replace("{INS_TOKEN}", INS_TOKEN);
+    let hostile = hostile_posix_bindings();
+    for interpolate in both_interpolators() {
+        let Some(context) = rejection else {
+            assert_eq!(
+                interpolate(&expanded, &bindings()).expect(acceptance),
+                expanded,
+                "a supported `case` substitution must keep its text"
+            );
+            continue;
+        };
+        let error = interpolate(&expanded, &hostile).expect_err(context);
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered for the outer quote context: {error:?}"
+        );
+        assert!(
+            interpolate(&expanded, &bindings()).is_err(),
+            "a marker inside the substitution must stay inside it"
+        );
+    }
 }

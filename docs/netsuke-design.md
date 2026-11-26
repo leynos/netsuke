@@ -405,9 +405,28 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   `)` that closes a command or arithmetic expansion also stays in the
   surrounding word, so `#` immediately after it does not start a comment. A `)`
   that terminates a `case` pattern is an operator instead, and the two are
-  lexically identical without the `case` grammar, so a substitution whose
-  source contains `case` is rejected when a `)` is immediately followed by `#`.
-  PowerShell permits markers only at unquoted sites and rejects other
+  lexically identical without the `case` grammar. The scanner therefore tracks
+  `case ... esac` at the command positions the shell keeps open: the start of
+  the substitution, after an operator or newline, inside a brace group or
+  function body, behind a `time` option, and behind a `coproc` name. It also
+  reads each construct's phase, so an `esac` after a `|` is another alternative
+  pattern rather than the terminator, and requires a bare spelling, so a quoted
+  or escaped `esac` stays pattern text. The same spelling rule covers the
+  `time` and `coproc` prefixes and the command-list continuation words, since
+  the shell reads a quoted or escaped keyword as ordinary data. The header's
+  first word is the subject even when it spells `in` or is wholly quoted, and a
+  quote does not end the token. A process substitution is the subject when it
+  appears in the header, and its `(` always raises the grouping depth. An
+  optional `(` immediately before a pattern list belongs to the pattern syntax
+  and starts the list, so an `esac` written inside it is pattern text rather
+  than the terminator, and a `;;` split by a line continuation still ends the
+  arm. A pattern terminator then no longer closes the substitution, and a
+  substitution whose source contains `case` is rejected when a `)` is
+  immediately followed by `#`. A `case` written where the scanner's word model
+  cannot place it, such as behind a quoted `coproc` name, fails closed when a
+  whole-word `in` precedes the closer and a path marker follows, so a pattern
+  terminator is never mistaken for the closer while a marker depends on the
+  answer. PowerShell permits markers only at unquoted sites and rejects other
   shell-sensitive contexts. Longer identifiers such as `$input` and `$output`,
   and non-placeholder text inside backticks, remain unchanged. A scalar command
   is emitted unchanged, but still undergoes marker lowering and backend

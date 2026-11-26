@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc c1ae5459071da01476842186de641c268c0763194a79cd423d4f0c47f2812c70 # shrinks to prefix = "echo $'\n'"
 cc ad7e8e10ec53be6b4a92895369377623fcd54cad37c4a3516ed04af4af0c6381 # shrinks to prefix = "echo $'$(\n'"
+cc 38f52b77f5227686fe29f45661871a76f5d18dd798954d0f54a6d1f43c04ff42 # shrinks to prefix = "echo $'`''`\n'"

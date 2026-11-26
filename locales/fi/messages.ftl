@@ -206,6 +206,7 @@ ir.duplicate_outputs = Havaittiin päällekkäisiä tulosteita: { $outputs }.
 ir.circular_dependency = Havaittiin kehäriippuvuus: { $cycle }.
 ir.action_serialisation = Toimintoa ei voitu sarjallistaa: { $details }.
 ir.invalid_command = Virheellinen komennon sijoitus: { $reason }.
+ir.unplaced_case = Tukematon komennon korvaus: 'case' tunnistetun komentopaikan ulkopuolella (kirjoita se ensin korvaukseen, erottimen jälkeen tai aaltosulkuryhmän alkuun).
 ir.ambiguous_substitution_boundary = Epäselvä komennon korvauksen raja merkissä { $position }; erota korvauksen päättävä sulkumerkki seuraavasta '#'-merkistä.
 ir.unfinished_power_shell_region = PowerShell-komentolistan merkintä { $entry } päättyy { $region } sisään; sulje alue tai yhdistä merkintä seuraavaan.
 

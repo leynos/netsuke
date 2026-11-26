@@ -48,6 +48,28 @@ pub(super) fn hostile_posix_bindings() -> CommandBindings {
     )
 }
 
+/// Build benign Bash bindings for cases that only need path lowering.
+pub(super) fn bash_bindings() -> CommandBindings {
+    CommandBindings::new(
+        &[Utf8PathBuf::from("input")],
+        &[Utf8PathBuf::from("output")],
+        RecipeShell::Bash,
+    )
+}
+
+/// Build hostile Bash bindings for the `time` and `coproc` word forms.
+///
+/// Those forms are Bash syntax, so a case that pins them selects the Bash
+/// recipe shell while keeping the same wrong-encoding probe as the POSIX
+/// bindings.
+pub(super) fn hostile_bash_bindings() -> CommandBindings {
+    CommandBindings::new(
+        &[Utf8PathBuf::from(HOSTILE_PATH)],
+        &[Utf8PathBuf::from(HOSTILE_PATH)],
+        RecipeShell::Bash,
+    )
+}
+
 /// Return both POSIX interpolators that share the comment scanner.
 ///
 /// A boundary case that holds for one traversal should hold for the other.
@@ -66,7 +88,7 @@ pub(super) enum Interpolators {
 
 impl Interpolators {
     /// Return the interpolator functions this selection exercises.
-    const fn select(self) -> &'static [Interpolator] {
+    pub(super) const fn select(self) -> &'static [Interpolator] {
         match self {
             Self::Both => &BOTH_INTERPOLATORS,
             Self::ScriptOnly => &SCRIPT_INTERPOLATOR,

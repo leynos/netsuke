@@ -108,6 +108,33 @@ fn command_without_placeholders_remains_valid() -> Result<()> {
     Ok(())
 }
 
+// Verify a parenthesised case pattern cannot carry a marker out of `$()`.
+//
+// Bash accepts one optional `(` before a pattern list, so `(esac)` is a list
+// whose only pattern is spelled `esac`, and the substitution continues to the
+// real `esac`. A builder that closed the substitution at the pattern terminator
+// would read the arm's marker as outer text and encode it for the enclosing
+// double quotes, where the hostile path becomes executable shell syntax.
+// Generation must refuse the recipe instead.
+#[test]
+fn case_pattern_opener_does_not_escape_a_command_substitution() -> Result<()> {
+    let yaml = manifest_yaml(concat!(
+        "targets:\n",
+        "  - name: out\n",
+        "    sources: 'x\"; touch injected; echo \"y'\n",
+        "    command: \"echo \\\"$(case esac in (esac) printf %s {{ ins }} ;; esac)\\\"\"\n",
+    ));
+    let manifest = manifest::from_str(&yaml)?;
+    let Err(err) = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix) else {
+        bail!("a hostile path in a parenthesised case arm must not be lowered");
+    };
+    ensure!(
+        err.to_string().contains("Invalid command interpolation"),
+        "unexpected error: {err}"
+    );
+    Ok(())
+}
+
 #[rstest]
 #[case("echo \"unterminated")]
 #[case("echo 'unterminated")]
