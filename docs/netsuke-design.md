@@ -3228,9 +3228,9 @@ alias, and a dangling alias are judged too. The refusal returns a proof value
 that the force-node reset requires, so the destructive step cannot run without
 the check. The reset itself runs before Ninja for `build` and not for
 `generate`: writing the plan never removes the node. Both steps, with dyndep
-publication and pruning between them, are sequenced by `publish_then_reset` in
-`src/runner/generated_state.rs`, which `execute_build` in `src/runner/mod.rs`
-calls once. See
+publication and pruning between them, are sequenced by
+`refuse_publish_prune_and_reset` in `src/runner/generated_state.rs`, which
+`execute_build` in `src/runner/mod.rs` calls once. See
 [ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md)
 and its 2026-11-19 amendment for the rationale.
 
