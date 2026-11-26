@@ -8364,10 +8364,11 @@ refused sync is a loss of guarantee, not a reason to abandon the harvest, and
 under `set -e` a bare failing command would end the snippet before it wrote
 anything.
 
-Read for the entry your claim depends on. A run stopped at its deadline needs
-the escalation line, and the loop above ends with a `grep` that *fails* when
-the entry never arrived: a bounded wait distinguishes "journald is still
-flushing" from "the entry was never written", and only the second is a failure.
+Read for the entry your claim depends on: `Scope reached runtime time limit`
+for a deadline, `Stopping timed out. Killing.` only when the payload is meant
+to ignore `SIGTERM`. The loop above ends with a `grep` that *fails* when the
+entry never arrived, because a bounded wait distinguishes "journald is still
+flushing" from "the entry was never written" and only the second is a failure.
 Losing that final check turns the bounded wait into a bounded silence.
 
 Do not try to prove an *absence* from the journal. "No failure line was

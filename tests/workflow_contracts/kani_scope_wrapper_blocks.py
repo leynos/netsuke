@@ -243,9 +243,9 @@ def payload_is_guarded(payload: str) -> bool:
     Anchoring on "first statement" answers all three: only the documented
     shape puts the setting ahead of the pipeline, unquoted.
 
-    This is deliberately not a shell parser. It recognises the documented
+    This is deliberately not a shell parser. It recognizes the documented
     payload and rejects everything else, which is the right bias for a
-    contract: an unrecognised shape is a failure to review, not a pass.
+    contract: an unrecognized shape is a failure to review, not a pass.
 
     Returns
     -------
@@ -256,7 +256,12 @@ def payload_is_guarded(payload: str) -> bool:
     opening = PIPEFAIL_PREFIX.match(masked)
     if opening is None:
         return False
-    return PIPELINE_TEE.search(masked, opening.end()) is not None
+    stage = PIPELINE_TEE.search(masked, opening.end())
+    if stage is None:
+        return False
+    # Nothing may follow the capture. A trailing statement — `| tee cap; true`
+    # — would set the script's status to its own, masking the verifier again.
+    return not masked[stage.end() :].strip()
 
 
 def _without_inline_comment(line: str) -> str:

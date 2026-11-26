@@ -148,23 +148,35 @@ fn guard_stops_an_active_scope_and_reaps_the_launcher() -> Result<()> {
     }
     let unit = unit_name(scenario);
     let mut spawned = None;
-    with_unit(unit.clone(), |scope| {
+    let outcome = with_unit(unit.clone(), |scope| {
+        // Record the child before anything else can fail. Dropping a `Child`
+        // neither stops nor waits for it, so a probe that returned early would
+        // leave the launcher running: it could register its scope *after*
+        // teardown had looked and found nothing, and the unit would outlive its
+        // guard. The assignment is what lets the reaping below happen.
         let child = spawn_scoped(
             scope.unit(),
             ROUTINE_RUNTIME_CAP,
             Retention::Collect,
             &format!("sleep {}", PAYLOAD_LIFETIME.as_secs()),
         )?;
-        wait_until_active(scope.unit())?;
         spawned = Some(child);
+        wait_until_active(scope.unit())?;
         Ok(())
-    })?;
+    });
 
-    let mut launcher = spawned.context("the body must have spawned the launcher")?;
-    let status = launcher.wait().context("reap the stopped launcher")?;
+    // Reap the launcher whether or not the body succeeded, so a failed probe
+    // cannot leave a process behind. The status is only meaningful when the
+    // body reached its assertions.
+    let reaped = match &mut spawned {
+        Some(child) => Some(child.wait().context("reap the stopped launcher")?),
+        None => None,
+    };
+    outcome?;
+    let exit = reaped.context("the body must have spawned the launcher")?;
     ensure!(
-        !status.success(),
-        "a scope stopped by teardown should not report success to its launcher, got {status:?}"
+        !exit.success(),
+        "a scope stopped by teardown should not report success to its launcher, got {exit:?}"
     );
     ensure_own_unit_settled(&unit, "stopping an active scope must leave no failed unit")
 }

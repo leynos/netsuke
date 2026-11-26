@@ -120,8 +120,8 @@ fn stop_grace_is_additive_to_the_runtime_cap() -> Result<()> {
         // before it, so the tolerance only ever absorbs overshoot.
         let expected_floor = RUNTIME_CAP + STOP_GRACE;
         let tolerance = STOP_GRACE / 4;
-        // The tolerance is half the grace, so this cannot underflow for any
-        // grace short enough to be meaningful; `saturating_sub` states that
+        // The tolerance is a quarter of the grace, so this cannot underflow for
+        // any grace short enough to be meaningful; `saturating_sub` states that
         // rather than panicking on a configuration the constants exclude.
         let minimum = expected_floor.saturating_sub(tolerance);
         ensure!(

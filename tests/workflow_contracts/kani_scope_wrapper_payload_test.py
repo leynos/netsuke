@@ -132,6 +132,9 @@ def test_the_payload_check_rejects_the_shapes_that_mask_a_failure() -> None:
         "printed capture": 'set -o pipefail; echo "tee cap"; make kani-ir',
         "quoted semicolons": 'echo "x;set -o pipefail;y"; make kani-ir 2>&1 | tee cap',
         "quoted pipeline": 'set -o pipefail; echo "make kani-ir | tee /tmp/x"',
+        "success after the capture": (
+            "set -o pipefail; make kani-ir 2>&1 | tee cap; true"
+        ),
     }
     for name, payload in misleading.items():
         assert "set -o pipefail" in payload or "tee " in payload, (

@@ -153,12 +153,7 @@ def test_routine_examples_keep_every_flag_property_and_niceness(path: Path) -> N
             f"{' '.join(REQUIRED_NICE)}, so it cannot crowd the machine; the "
             f"arguments were {arguments}"
         )
-        properties = blocks.property_arguments(block)
-        wrong = [
-            f"{name}={properties.get(name)!r} (want {value!r})"
-            for name, value in REQUIRED_PROPERTIES.items()
-            if properties.get(name) != value
-        ]
+        wrong = _wrong_properties(blocks.property_arguments(block))
         assert not wrong, (
             f"{_relative(path)}: a routine example does not set the documented "
             f"bounds {wrong}. These are the caps that keep an uncapped verifier "
@@ -306,3 +301,19 @@ def _has_sequence(arguments: list[str], sequence: tuple[str, ...]) -> bool:
         and arguments[start + 1 : start + width] == rest
         for start in range(len(arguments) - width + 1)
     )
+
+
+def _wrong_properties(properties: dict[str, str]) -> list[str]:
+    """Return the documented bounds that ``properties`` does not match.
+
+    Returns
+    -------
+    list[str]
+        One `name=actual (want expected)` entry per mismatch, so a failure names
+        both the value found and the value required.
+    """
+    return [
+        f"{name}={properties.get(name)!r} (want {value!r})"
+        for name, value in REQUIRED_PROPERTIES.items()
+        if properties.get(name) != value
+    ]
