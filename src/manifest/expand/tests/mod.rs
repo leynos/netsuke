@@ -9,13 +9,13 @@ mod action_condition_cases;
 
 mod command_available;
 mod condition_cases;
-mod condition_shape_cases;
 
 mod description_cases;
 
 mod foreach;
 
 mod key_order_cases;
+mod shape_cases;
 mod structure_cases;
 
 mod target_command_available_cases;

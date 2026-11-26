@@ -8,7 +8,7 @@ use super::spec::ControlLayout;
 use super::{
     Bindings, BodySpec, DocumentSpec, EntrySpec, ForeachForm, Items, OVERRIDE_NAMES, Section,
 };
-use crate::json_value_strategy_test_support::json_values;
+use crate::arbitrary_json_test_support::json_values;
 use crate::manifest::ManifestValue;
 use proptest::prelude::*;
 use proptest::sample::Index;

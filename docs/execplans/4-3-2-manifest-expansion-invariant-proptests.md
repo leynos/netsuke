@@ -802,7 +802,7 @@ documentation, and the roadmap update, then runs the closure gates.
 ### Files to create
 
 ```plaintext
-src/json_value_strategy_test_support.rs
+src/arbitrary_json_test_support.rs
 src/manifest/expand/tests/key_order_cases.rs
 src/manifest/expand/tests/when_type_cases.rs
 src/manifest/expand/property_tests/mod.rs
@@ -845,7 +845,7 @@ src/manifest/expand/tests/foreach/property_cases.rs
 - `src/manifest/expand/tests/mod.rs` and
   `src/manifest/expand/tests/foreach/mod.rs`: declare the new rstest modules;
   drop the moved `property_cases` declarations.
-- `src/lib.rs`: declare `#[cfg(test)] mod json_value_strategy_test_support;`
+- `src/lib.rs`: declare `#[cfg(test)] mod arbitrary_json_test_support;`
   beside `snapshot_test_support`.
 - `src/shell_selection/selection/property_tests.rs`: import the lifted
   strategy instead of its local copy.
@@ -868,7 +868,7 @@ src/manifest/expand/tests/foreach/property_cases.rs
   expansion invariants and key order now exist, and where.
 - `docs/repository-layout.md`: entries for
   `src/manifest/expand/property_tests/` and
-  `src/json_value_strategy_test_support.rs` with their test-only scope.
+  `src/arbitrary_json_test_support.rs` with their test-only scope.
 - `docs/contents.md`: index this ExecPlan.
 - `docs/users-guide.md`: one prose sentence (no new fenced example, so no
   `tested-example` marker is needed) stating that expansion keeps fields in
@@ -980,8 +980,8 @@ Outcome, in two atomic refactor commits:
 
 1. `json_values()` and `json_kind()` move from
    `src/shell_selection/selection/property_tests.rs` to
-   `src/json_value_strategy_test_support.rs`, unchanged except that the string
-   leaf becomes a parameter. The shell-selection suite passes before and after.
+   `src/arbitrary_json_test_support.rs`, unchanged except that the string leaf
+   becomes a parameter. The shell-selection suite passes before and after.
 2. The two `property_cases` modules move into
    `src/manifest/expand/property_tests/` as `expansion_report.rs` and
    `foreach_sequences.rs` with `git mv`, changing only their imports, so
@@ -1355,7 +1355,7 @@ manifest_parsing_names_the_first_unknown_field_in_authoring_order: 1 passed
 No production interface changes. The test-only interfaces are:
 
 ```rust
-// src/json_value_strategy_test_support.rs (crate-level, #[cfg(test)])
+// src/arbitrary_json_test_support.rs (crate-level, #[cfg(test)])
 pub(crate) fn json_values(strings: BoxedStrategy<String>) -> impl Strategy<Value = Value>;
 pub(crate) fn json_kind(value: &Value) -> &'static str;
 

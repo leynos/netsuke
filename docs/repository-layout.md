@@ -464,7 +464,7 @@ assertions, but it must not be used by production code or the Kani harnesses.
 Keep those proof and production boundaries explicit; move a helper here only
 when it serves more than one command-interpolation property test.
 
-### `src/json_value_strategy_test_support.rs`
+### `src/arbitrary_json_test_support.rs`
 
 Crate-level, `#[cfg(test)]` support holding one Proptest strategy over
 arbitrary JSON values with every kind and bounded recursion. The

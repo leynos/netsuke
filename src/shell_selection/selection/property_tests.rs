@@ -1,7 +1,7 @@
 //! Exercise selector decoding and serialization over bounded recursive values.
 
 use super::ShellSelection;
-use crate::json_value_strategy_test_support::{json_kind, json_values};
+use crate::arbitrary_json_test_support::{json_kind, json_values};
 use crate::shell_selection::{ShellName, name::property_tests};
 use pretty_assertions::assert_eq;
 use proptest::{prelude::*, strategy::ValueTree, test_runner::TestRunner};

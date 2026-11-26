@@ -9559,12 +9559,12 @@ the check reports the unreachable key-order class. Add a class to
 `coverage/classes.rs` when a new property depends on a shape the existing lists
 do not name.
 
-The shared JSON strategy lives in `src/json_value_strategy_test_support.rs`,
-outside this suite, because the shell-selection decoder needs the same
-generator. It is test-only support owned by the crate root: it carries no
-manifest, shell, or configuration knowledge, its string leaf is a parameter,
-and a caller that needs another leaf kind composes it at its own call site
-rather than changing the shared function.
+The shared JSON strategy lives in `src/arbitrary_json_test_support.rs`, outside
+this suite, because the shell-selection decoder needs the same generator. It is
+test-only support owned by the crate root: it carries no manifest, shell, or
+configuration knowledge, its string leaf is a parameter, and a caller that
+needs another leaf kind composes it at its own call site rather than changing
+the shared function.
 
 ### Parametrized unit tests with rstest
 
