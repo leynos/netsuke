@@ -16,6 +16,8 @@ pub(crate) use host::matching as host_matching;
 pub use host::pattern as host_pattern;
 pub mod ir;
 mod json_envelope;
+#[cfg(test)]
+mod json_value_strategy_test_support;
 #[cfg(feature = "lint")]
 pub mod lint;
 mod locale;
