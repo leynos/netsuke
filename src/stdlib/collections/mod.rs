@@ -19,6 +19,9 @@ use crate::localization::{self, keys};
 mod flatten;
 
 #[cfg(test)]
+mod flatten_property;
+
+#[cfg(test)]
 mod tests;
 
 /// Register the collection filters (`uniq`, `flatten`, `compact`, `group_by`)
@@ -29,7 +32,17 @@ mod tests;
 /// allowance. An environment is built once per manifest load, which is the
 /// scope the manifest budget uses.
 pub(crate) fn register_filters(env: &mut Environment<'_>) {
-    let flatten_budget = Arc::new(flatten::FlattenBudget::new(flatten::FlattenLimits::DEFAULT));
+    register_filters_with_limits(env, flatten::FlattenLimits::DEFAULT);
+}
+
+/// Register the collection filters under an explicit flatten allowance.
+///
+/// This is the single registration implementation; [`register_filters`] passes
+/// the production ceilings. The extra parameter is what lets the sibling
+/// `tests` module drive the *registration* path — not just the filter — with
+/// ceilings small enough that a cumulative breach is reached in a few calls.
+fn register_filters_with_limits(env: &mut Environment<'_>, limits: flatten::FlattenLimits) {
+    let flatten_budget = Arc::new(flatten::FlattenBudget::new(limits));
     env.add_filter("uniq", |values: Value| uniq_filter(&values));
     env.add_filter("flatten", move |values: Value| {
         flatten::flatten_filter(&values, &flatten_budget)

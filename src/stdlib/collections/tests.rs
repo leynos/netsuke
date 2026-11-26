@@ -274,6 +274,43 @@ fn flatten_charges_every_call_against_one_budget(
     ensure_limit_error(&err, fragment)
 }
 
+/// A template loop through `register_filters` shares one allowance.
+///
+/// The cases above pass a budget straight to the filter, so they hold for any
+/// registration that creates one. This case renders a template loop instead:
+/// each `flatten` call fits the ceiling on its own, and only their cumulative
+/// charge breaches it. A registration that built a fresh budget per call — or
+/// per filter invocation — would render every iteration successfully and fail
+/// this test, which is the counterfactual the unit cases cannot express.
+#[rstest]
+#[case::leaves_per_call(
+    FlattenLimits::for_test(8, 100, 3),
+    "{% for _ in range(3) %}{{ [[1, 2]] | flatten | length }}{% endfor %}",
+    "exceeded the retained item limit"
+)]
+#[case::visits_per_call(
+    FlattenLimits::for_test(8, 4, 100),
+    "{% for _ in range(5) %}{{ [ns] | flatten | length }}{% endfor %}",
+    "exceeded the traversal visit limit"
+)]
+fn flatten_loop_through_registration_shares_one_budget(
+    #[case] limits: FlattenLimits,
+    #[case] template: &str,
+    #[case] fragment: &str,
+) -> Result<()> {
+    let mut env = Environment::new();
+    register_filters_with_limits(&mut env, limits);
+    // One empty list is one visit and no leaf per call.
+    let ctx = context! { ns => Value::from(Vec::<Value>::new()) };
+    let err = match env.render_str(template, ctx) {
+        Ok(rendered) => {
+            bail!("the loop should exceed the shared allowance, but rendered {rendered:?}")
+        }
+        Err(err) => err,
+    };
+    ensure_limit_error(&err, fragment)
+}
+
 #[rstest]
 fn group_by_filter_clusters_items_and_preserves_key_types() -> Result<()> {
     #[derive(serde::Serialize)]
