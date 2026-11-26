@@ -238,6 +238,28 @@ fn esac_used_as_a_command_argument_fails_closed() {
     );
 }
 
+// Verify a process substitution can be the `case` subject.
+//
+// Bash reads `<(...)` as an ordinary word, so one written between `case` and
+// `in` is the subject and the `in` after it completes the header. A tracker
+// that does not record it takes the following `in` for the subject, so the
+// `esac` is ignored while the frame stays in its header phase and the marker
+// after the real closer is refused. The marker-free form must keep its text.
+#[test]
+fn process_substitution_subject_keeps_the_substitution_boundary() {
+    let template = format!("echo $(case <(printf x) in *) :;; esac) {OUTS_TOKEN}");
+    let expected = "echo $(case <(printf x) in *) :;; esac) output";
+
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(&template, &bindings())
+                .expect("a process substitution is a supported case subject"),
+            expected,
+            "the marker after the real closer must lower to its path"
+        );
+    }
+}
+
 // Verify a `;;` split by a line continuation still ends the arm.
 //
 // Verify the pattern-list grammar keeps the substitution boundary intact.
@@ -262,6 +284,11 @@ fn esac_used_as_a_command_argument_fails_closed() {
     "echo \"$(case z in (x) case y in y) : ;; esac ;; z) printf %s {INS_TOKEN} ;; esac)\"",
     Some("an optional pattern opener must not hide the nested construct"),
     "Bash accepts an optional pattern opener"
+)]
+#[case::process_substitution_pattern(
+    "echo \"$(case x in <(case x in x) : ;; esac)|x) printf %s {INS_TOKEN} ;; esac)\"",
+    Some("a process substitution's body must not be read as a pattern list"),
+    "Bash reads case patterns through process substitution"
 )]
 #[case::continued_terminator_without_markers(
     "echo \"$(case x in a) : ;\\\n; esac)\"",

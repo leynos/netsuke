@@ -205,9 +205,12 @@ fn check_twin(
 /// shell-specific refusal does not make the sweep look vacuous.
 fn check_pair(pair: &TemplatePair) -> Result<bool, String> {
     let shells = [hostile_posix_bindings(), hostile_bash_bindings()];
-    shells.iter().try_fold(false, |is_preserved, bindings| {
-        Ok::<bool, String>(is_preserved || check_pair_with(pair, bindings)?)
-    })
+    let mut is_preserved = false;
+    for bindings in &shells {
+        let accepts_pair = check_pair_with(pair, bindings)?;
+        is_preserved |= accepts_pair;
+    }
+    Ok(is_preserved)
 }
 
 /// Report whether the word closes the `case` construct.
@@ -225,19 +228,27 @@ fn closes_construct(spelling: &str) -> Result<bool, String> {
     let template = format!("echo \"$(case x in x) : ;; {spelling}){{MARK}}\"");
     let with_marker = template.replace("{MARK}", INS_TOKEN);
     let expected = template.replace("{MARK}", "input");
+    let bindings = bindings();
+    let mut accepted = 0_usize;
+    let mut refused = 0_usize;
     for interpolate in both_interpolators() {
-        match interpolate(&with_marker, &bindings()) {
-            Ok(output) if output == expected => return Ok(true),
+        match interpolate(&with_marker, &bindings) {
+            Ok(output) if output == expected => accepted += 1,
             Ok(output) => {
                 return Err(format!(
                     "a marker after the closer must lower to its path ({with_marker:?}): \
                      {output:?}"
                 ));
             }
-            Err(_) => {}
+            Err(_) => refused += 1,
         }
     }
-    Ok(false)
+    if accepted > 0 && refused > 0 {
+        return Err(format!(
+            "the interpolators disagree about `{spelling}`: {accepted} accept and {refused} refuse"
+        ));
+    }
+    Ok(accepted > 0)
 }
 
 proptest! {

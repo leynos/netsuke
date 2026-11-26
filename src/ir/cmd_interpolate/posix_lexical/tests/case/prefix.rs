@@ -136,6 +136,14 @@ fn coproc_simple_command_keeps_the_case_terminator_a_keyword() {
     "case x in x) esac\"\" foo ;; y) printf %s {INS_TOKEN} ;; esac)",
     "a quoted `esac` in an arm is an ordinary command word"
 )]
+#[case::escaped_coproc(
+    "case y in x) \\coproc esac ;; y) printf %s {INS_TOKEN} ;; esac)",
+    "an escaped `coproc` is an ordinary command word"
+)]
+#[case::escaped_time(
+    "case y in x) \\time esac ;; y) printf %s {INS_TOKEN} ;; esac)",
+    "an escaped `time` is an ordinary command word"
+)]
 fn unreadable_words_keep_the_substitution_open(#[case] substitution: &str, #[case] context: &str) {
     let template = format!("echo \"$({substitution})\"").replace("{INS_TOKEN}", INS_TOKEN);
     let bindings = hostile_bash_bindings();

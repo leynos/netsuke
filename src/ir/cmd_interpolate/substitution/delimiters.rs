@@ -160,7 +160,7 @@ impl SubstitutionTraversal<'_, '_> {
         if self.matches_substitution_context() && self.starts_command_substitution(pos, ch) {
             return Some(CommandSubstitutionDelimiter::Start);
         }
-        if self.starts_nested_command_substitution_parenthesis(ch) {
+        if self.starts_nested_command_substitution_parenthesis(pos, ch) {
             return Some(CommandSubstitutionDelimiter::NestedOpen);
         }
         if self.matches_substitution_context() && self.ends_command_substitution(ch) {
@@ -186,7 +186,7 @@ impl SubstitutionTraversal<'_, '_> {
             .is_some_and(CommandSubstitution::is_arithmetic)
     }
 
-    /// Report whether `ch` opens a grouped expression inside a `$()` region.
+    /// Report whether the `(` at `pos` opens a grouped expression in a `$()`.
     ///
     /// Bash accepts one optional `(` immediately before a `case` pattern list,
     /// and that opener must not raise the grouping depth: the pattern
@@ -194,11 +194,39 @@ impl SubstitutionTraversal<'_, '_> {
     /// recognises it. Reading the opener as a group would move the terminator
     /// one level deeper, where it closes nothing and leaves the construct in
     /// its pattern phase.
-    fn starts_nested_command_substitution_parenthesis(&mut self, ch: char) -> bool {
+    ///
+    /// A `(` directly after `<` or `>` is a process substitution, not that
+    /// opener. It is ordinary word data in a header and a grouped body in a
+    /// pattern, so it always raises the depth and its header use names the
+    /// subject.
+    fn starts_nested_command_substitution_parenthesis(&mut self, pos: usize, ch: char) -> bool {
         let opens_group =
             self.is_in_command_substitution() && self.matches_unquoted_quote_context();
         let is_parenthesis = opens_group && ch == '(';
-        is_parenthesis && !self.consume_pattern_opener()
+        if !is_parenthesis {
+            return false;
+        }
+        if self.opens_process_substitution(pos) {
+            self.observe_process_substitution();
+            return true;
+        }
+        !self.consume_pattern_opener()
+    }
+
+    /// Report whether the `(` at `pos` follows `<` or `>`.
+    fn opens_process_substitution(&self, pos: usize) -> bool {
+        pos.checked_sub(1)
+            .and_then(|previous| self.chars.get(previous))
+            .is_some_and(|ch| matches!(ch, '<' | '>'))
+    }
+
+    /// Record a process substitution for the innermost `case` tracker.
+    fn observe_process_substitution(&mut self) {
+        if let Some(substitution) = self.command_substitutions.last_mut() {
+            substitution
+                .case_nesting
+                .observe_process_substitution(substitution.parenthesis_depth);
+        }
     }
 
     /// Consume a `(` at the active depth that opens a `case` pattern list.

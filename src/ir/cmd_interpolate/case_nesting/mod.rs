@@ -139,6 +139,21 @@ impl CaseNesting {
             .any(|frame| frame.depth == parenthesis_depth)
     }
 
+    /// Record a process substitution in the header as the subject token.
+    ///
+    /// The shell reads `<(...)` and `>(...)` as ordinary words, so one written
+    /// between `case` and `in` is the subject. Its body is read at the deeper
+    /// group depth and must not affect the header. Without this record the
+    /// following `in` looks like the subject, and an `esac` after it is
+    /// mistaken for header data, so a valid recipe is refused.
+    pub(super) fn observe_process_substitution(&mut self, parenthesis_depth: usize) {
+        if let Some(frame) = self.open_construct_at_mut(parenthesis_depth)
+            && matches!(frame.phase, CasePhase::Header)
+        {
+            frame.subject_seen = true;
+        }
+    }
+
     /// Consume the optional `(` before a pattern list, reporting whether this
     /// position is one.
     ///

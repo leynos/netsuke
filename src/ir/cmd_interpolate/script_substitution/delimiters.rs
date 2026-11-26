@@ -238,14 +238,56 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         if self.is_backtick_body_text() {
             return None;
         }
-        let opens_group = self.is_unquoted_command_substitution() && ch == '(';
-        if opens_group && !self.consume_pattern_opener() {
+        if self.opens_grouped_expression(pos, ch) {
             return Some(ScriptCommandSubstitutionDelimiter::NestedOpen);
         }
-        if self.is_unquoted_command_substitution() && ch == ')' {
+        if self.closes_command_substitution(ch) {
             return Some(ScriptCommandSubstitutionDelimiter::Close);
         }
         None
+    }
+
+    /// Report whether the `(` at `pos` opens a grouped expression.
+    ///
+    /// A process substitution raises the depth and names a header subject; a
+    /// plain `(` is the optional pattern-list opener only when the tracker
+    /// consumes it, and is a group otherwise.
+    fn opens_grouped_expression(&mut self, pos: usize, ch: char) -> bool {
+        if !self.is_unquoted_command_substitution() {
+            return false;
+        }
+        if ch != '(' {
+            return false;
+        }
+        if self.opens_process_substitution(pos) {
+            self.observe_process_substitution();
+            return true;
+        }
+        !self.consume_pattern_opener()
+    }
+
+    /// Report whether `ch` closes the active command substitution.
+    fn closes_command_substitution(&self, ch: char) -> bool {
+        self.is_unquoted_command_substitution() && ch == ')'
+    }
+
+    /// Report whether the `(` at `pos` follows `<` or `>`.
+    ///
+    /// That pair is a process substitution rather than Bash's optional
+    /// pattern-list opener, so it always raises the grouping depth.
+    fn opens_process_substitution(&self, pos: usize) -> bool {
+        pos.checked_sub(1)
+            .and_then(|previous| self.chars.get(previous))
+            .is_some_and(|ch| matches!(ch, '<' | '>'))
+    }
+
+    /// Record a process substitution for the innermost `case` tracker.
+    fn observe_process_substitution(&mut self) {
+        if let Some(substitution) = self.command_substitutions.last_mut() {
+            substitution
+                .case_nesting
+                .observe_process_substitution(substitution.parenthesis_depth);
+        }
     }
 
     /// Report whether the cursor sits directly in an open backtick body.

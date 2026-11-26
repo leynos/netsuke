@@ -352,10 +352,14 @@ impl super::CaseNesting {
     /// `coproc` restarts its slot rather than being read as its own option or
     /// name.
     fn classify_prefix_word(&self, word: &str, is_command_position: bool) -> WordRole {
-        if word == "time" && is_command_position {
+        // A quoted or escaped `time` or `coproc` is an ordinary command word,
+        // so it must not keep command position open: doing so lets the next
+        // word be read as a keyword when the shell reads it as an argument.
+        let is_keyword_position = is_command_position && self.spelling.is_literal();
+        if word == "time" && is_keyword_position {
             return WordRole::TimePrefix;
         }
-        if word == "coproc" && is_command_position {
+        if word == "coproc" && is_keyword_position {
             return WordRole::CoprocKeyword;
         }
         if self.prefix_slot == PrefixSlot::TimeOption && is_option_word(word) {
@@ -364,8 +368,13 @@ impl super::CaseNesting {
         if self.prefix_slot == PrefixSlot::CoprocName && !starts_command_list(word) {
             return WordRole::CoprocName;
         }
+        // A quoted or escaped shell keyword is ordinary data, so it must not
+        // resume a command list: otherwise the word after it would be read as
+        // a keyword where the shell reads an argument.
+        let continues_command_list =
+            is_command_position && self.spelling.is_literal() && starts_command_list(word);
         WordRole::Other {
-            continues_command_list: is_command_position && starts_command_list(word),
+            continues_command_list,
         }
     }
 }
