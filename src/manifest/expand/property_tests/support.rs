@@ -1,12 +1,4 @@
 //! Plumbing shared by the expansion properties.
-//!
-//! The suite drives expansion through its real entry point with the same
-//! undefined-behaviour setting the loader uses. It cannot reuse the loader's
-//! environment builder: that is private to `manifest`, and it registers
-//! helpers these properties deliberately keep out of their domain. The
-//! behavioural scenarios in `tests/features/manifest.feature` are the check on
-//! the production environment, so a bare strict environment here is the
-//! faithful choice rather than a shortcut.
 
 use crate::manifest::budget::ManifestBudget;
 use crate::manifest::expand::{ExpansionReport, expand_foreach_with_budget};

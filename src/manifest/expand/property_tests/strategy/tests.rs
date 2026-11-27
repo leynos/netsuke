@@ -82,15 +82,6 @@ fn every_section_and_foreach_form_is_reachable() -> Result<(), String> {
     Ok(())
 }
 
-/// Draw one `Index` for a body whose `vars` is absent, where it is unused.
-fn any_index() -> Result<Index, String> {
-    let mut runner = TestRunner::deterministic();
-    any::<Index>()
-        .new_tree(&mut runner)
-        .map(|tree| tree.current())
-        .map_err(|error| error.to_string())
-}
-
 /// Build a two-control entry with the given slots and order.
 fn two_control_body(
     first_slot: ControlLayout,
@@ -100,7 +91,7 @@ fn two_control_body(
     Ok(BodySpec {
         fields: vec![("name".to_owned(), ManifestValue::String("x".to_owned()))],
         vars: None,
-        vars_position: any_index()?,
+        vars_position: index_for_unused_vars()?,
         foreach: Some((ForeachForm::InlineArray, Items::Integers(vec![1]))),
         when: Some((Condition::Literal(true), false)),
         control_layout: first_slot,
@@ -136,10 +127,6 @@ proptest! {
     #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
 
     /// Both draw orders render the key written first before the other.
-    ///
-    /// The two slots are drawn independently, so a reversed pair occurs
-    /// whenever the first draw is the higher of the two; the assignment must
-    /// still place the first-written key at the lower slot.
     #[test]
     fn independently_drawn_slots_render_in_the_recorded_order(
         first in any::<Index>(),
@@ -161,4 +148,13 @@ proptest! {
             expected.iter().map(|key| (*key).to_owned()).collect::<Vec<_>>()
         );
     }
+}
+
+/// Draw one `Index` for a body whose `vars` is absent, where it is unused.
+fn index_for_unused_vars() -> Result<Index, String> {
+    let mut runner = TestRunner::deterministic();
+    any::<Index>()
+        .new_tree(&mut runner)
+        .map(|tree| tree.current())
+        .map_err(|error| error.to_string())
 }

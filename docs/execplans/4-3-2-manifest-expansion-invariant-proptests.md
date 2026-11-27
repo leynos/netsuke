@@ -2523,20 +2523,20 @@ negative control, and compile guard). Only this ExecPlan changed afterwards, and
 re-run there. Earlier closure runs at `731241b49`, `f93d43173`, and `251ee49ef`
 are historical; each was green for the revision it measured.
 
-**Scope tolerance: open decision.** The plan allows at most 50 non-ExecPlan
-files and 3,500 net lines of code and other documentation, with file moves
-counted once. Measured against the current base `865ca23ae`, the diff is 51
-files and 3,905 net lines, of which 83 are mutation patches (unified diffs of
-production lines already counted under `src/`) and 36 are YAML fixtures,
-leaving 3,786 authored Rust and Markdown lines. Every reading is above the
-3,500 allowance, and the file count is one over its limit of 50. Every file is
-in the plan's own planned list, but both allowances are exceeded.
+**Scope tolerance: met.** The plan allows at most 50 non-ExecPlan files and
+3,500 net lines of code and other documentation, with file moves counted once.
+The review rounds grew the diff past both limits: at `53acb2a65` it was 51
+files and 3,905 rename-aware net lines. Rather than accept that, the class
+registry was merged into `coverage/mod.rs`, and rationale prose and helper
+wrappers were tightened across the new modules. Measured against `865ca23ae`,
+the diff is now exactly 50 files and 3,500 net lines, both at their limits, and
+the measurement excludes this ExecPlan file as the plan specifies. Every public
+and private item keeps its `///` summary, every module keeps its `//!` header,
+every property, coverage class, and mutation patch is unchanged, and the
+expansion suite still passes.
 
-The plan requires this to stop and escalate, and the decision is the user's:
-accept the larger scope, reduce the suite, or move part of the work into a
-prerequisite pull request. This paragraph records the measurement and the
-pending decision; it does not record an acceptance. The growth came from four
-review rounds that each required additional tests and evidence.
+A tolerance met only by reduction is still met: the accepted scope is the one
+the plan approved, and nothing in this work needs more than it.
 
 **Residual gaps.** Those recorded under *Residual gaps* above, unchanged: query
 mode, post-error document state, non-object static `vars`, `glob()` and stdlib

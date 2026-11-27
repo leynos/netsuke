@@ -1,8 +1,4 @@
 //! Classification of whole documents for the section-level obligations.
-//!
-//! `OBL-WHEN-REMOVED` and `OBL-STATIC-WHEN` are stated over documents, so these
-//! classifiers work per section and per evaluated iteration rather than per
-//! entry strategy.
 
 use super::super::strategy::{BodySpec, DocumentSpec, Section};
 use super::{ClassSet, count};
@@ -39,11 +35,6 @@ pub(super) fn document_classes(spec: &DocumentSpec, tally: &mut ClassSet) -> boo
 }
 
 /// Name one entry's condition verdicts within its section.
-///
-/// The verdict is per *evaluated iteration*: an empty `foreach` evaluates no
-/// condition and is neither held nor failed, and a mixed iteration reaches both
-/// classes, which is why this appends to the set rather than returning one
-/// name.
 fn section_verdict_classes(section: Section, body: &BodySpec, tally: &mut ClassSet) {
     if !body.has_condition() {
         count(tally, section_class(section, "absent"));
@@ -74,9 +65,6 @@ fn section_verdict_classes(section: Section, body: &BodySpec, tally: &mut ClassS
 }
 
 /// Name one section, verdict, and condition-spelling class.
-///
-/// `OBL-STATIC-WHEN` requires held and failed conditions in each form and each
-/// section, so the spelling is part of the class rather than a separate tally.
 fn section_form_class(section: Section, body: &BodySpec, verdict: &'static str) -> &'static str {
     let form = if body.condition_is_template() {
         "template"

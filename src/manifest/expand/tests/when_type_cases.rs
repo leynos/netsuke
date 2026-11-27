@@ -1,10 +1,4 @@
 //! Unhappy-path cases for a `when` condition that expansion must reject.
-//!
-//! `when` accepts only a non-empty string. A YAML boolean, integer, null, list,
-//! or mapping is rejected rather than coerced, in both sections and for static
-//! and `foreach` entries alike. Undefined names split two ways, which the cases
-//! below measure: a bare name is false, while a name that an operation or a
-//! template consumes is an error under the strict environment.
 
 use super::*;
 use anyhow::ensure;
@@ -78,10 +72,6 @@ fn non_string_when_is_rejected_in_every_section_and_kind() -> Result<()> {
 }
 
 /// Verify a bare undefined name is falsy rather than an error.
-///
-/// `MiniJinja` evaluates a bare name to an undefined value, and its truthiness
-/// is false. The strict-undefined setting bites when the value is consumed, as
-/// the next test shows, not when it is merely tested.
 #[test]
 fn a_bare_undefined_name_excludes_the_entry() -> Result<()> {
     for (section, is_foreach) in when_type_matrix() {

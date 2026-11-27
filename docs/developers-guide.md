@@ -9537,34 +9537,27 @@ property so both associations remain visible.
 
 #### Manifest expansion suites
 
-The suites that verify the expansion clauses in `docs/netsuke-design.md`
-section 2.5 live in `src/manifest/expand/property_tests/`, one module per
-obligation, behind `#[cfg(test)]`. They share `strategy/` (the authored-entry
-model and its generators), `model.rs` (the oracle that predicts expansion
-output from the model), and `support.rs` (the strict-undefined environment and
-the expansion driver). A second generator or a second oracle would be a second
-statement of the contract, and the two drift while both keep passing.
+The expansion-clause suites for `docs/netsuke-design.md` section 2.5 live in
+`src/manifest/expand/property_tests/`, one module per obligation, behind
+`#[cfg(test)]`. They share `strategy/` (the authored-entry model and its
+generators), `model.rs` (the oracle), and `support.rs` (the strict-undefined
+environment and the expansion driver); a second generator or oracle would
+restate the contract and drift from it.
 
 The oracle reads the model, never the rendered map, and never removes a key
-from a `serde_json::Map`: the removal is the operation several of these
-properties test, so sharing it would make the oracle agree with any defect it
-was meant to catch. Conditions come from a closed set of shapes with a one-line
-Rust meaning each; a template form is generated only for boolean-valued shapes,
-because a template that rendered an integer would fall back to false.
+from a `serde_json::Map`, because the removal is what several properties test.
+Conditions come from a closed set; only boolean-valued shapes have a template
+form, since a template rendering an integer falls back to false.
 
-`coverage/` is the non-vacuity tripwire. It classifies a fixed-seed sample of
+`coverage/` is the non-vacuity tripwire: it classifies a fixed-seed sample of
 each generator, fails below a five-percent floor per class, and carries a
-negative control that forces the control key to the end of the entry and proves
-the check reports the unreachable key-order class. Add a class to
-`coverage/classes.rs` when a new property depends on a shape the existing lists
-do not name.
+negative control. Add a class there when a new property depends on a shape the
+existing lists do not name.
 
-The shared JSON strategy lives in `src/arbitrary_json_test_support.rs`, outside
-this suite, because the shell-selection decoder needs the same generator. It is
-test-only support owned by the crate root: it carries no manifest, shell, or
-configuration knowledge, its string leaf is a parameter, and a caller that
-needs another leaf kind composes it at its own call site rather than changing
-the shared function.
+The shared JSON strategy lives in `src/arbitrary_json_test_support.rs` because
+the shell-selection decoder needs it too. It is test-only support owned by the
+crate root, carries no manifest knowledge, takes its string leaf as a
+parameter, and callers compose extra leaves at their own call site.
 
 ### Parametrized unit tests with rstest
 

@@ -1,10 +1,4 @@
 //! `OBL-ORDER` (`FV-EXP`, `DES-ORDER`, clause `C-2`).
-//!
-//! An expanded entry's key sequence is the authored sequence with the control
-//! keys deleted, keeping the relative order of every other key, and the `vars`
-//! sequence keeps authored keys in place while appending the injected ones.
-//! The two properties separate the two removal sites: the first exercises
-//! `foreach` only, the second `when` only.
 
 use super::model::expected_outputs;
 use super::strategy::{

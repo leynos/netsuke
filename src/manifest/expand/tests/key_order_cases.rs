@@ -1,13 +1,4 @@
 //! Key-order regressions for `foreach` and `when` removal.
-//!
-//! `serde_json::Map::remove` is a `swap_remove` while `preserve_order` is
-//! enabled, so removing a control key from anywhere but the tail moves the
-//! entry's last key into the vacated slot. The design document promises that
-//! the ordered manifest map retains the authoring order after expansion, so
-//! these cases pin the key sequence at both places expansion edits: the entry
-//! map and its `vars` map. Cases with two or more keys after the control key
-//! are the ones `swap_remove` corrupts; the last two positions stay as
-//! boundary witnesses for the shapes that happened to survive.
 
 use super::*;
 use anyhow::{Result, ensure};
@@ -16,9 +7,6 @@ use pretty_assertions::{assert_eq, assert_ne};
 use serde_json::json;
 
 /// The non-control fields every case writes, in authoring order.
-///
-/// `vars` is among them because expansion edits it for foreach entries; every
-/// other field must be copied verbatim.
 fn fields() -> Vec<(&'static str, ManifestValue)> {
     vec![
         ("name", json!("ordered")),
@@ -29,10 +17,6 @@ fn fields() -> Vec<(&'static str, ManifestValue)> {
 }
 
 /// Build an entry with `control` inserted at `position` among four fields.
-///
-/// The position is the index the control key takes in the authored sequence,
-/// so `0` puts it first, `3` leaves exactly one field after it, and `4`
-/// appends it.
 fn entry_with_control(position: usize, control: (&str, ManifestValue)) -> ManifestMap {
     let (control_key, control_value) = control;
     let mut map = ManifestMap::new();

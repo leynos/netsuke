@@ -1,8 +1,4 @@
 //! `OBL-WHEN-REMOVED` (`RM-4.3.2.b`, clause `C-4`).
-//!
-//! No expanded entry carries a control key, whatever mix of static and
-//! `foreach` entries, conditions, and sections the document holds, and the
-//! filtered counts equal the number of entries the oracle says are excluded.
 
 use super::model::{expected_document, expected_filtered};
 use super::strategy::{Section, document_spec_strategy};

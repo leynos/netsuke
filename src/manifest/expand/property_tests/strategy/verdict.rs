@@ -1,8 +1,4 @@
 //! A static entry whose condition verdict is constructed, not hoped for.
-//!
-//! The coverage tripwire requires each verdict class to reach a share of
-//! draws. Leaving that to a random comparison put one class below the floor,
-//! so the verdict is chosen first and a comparison built to satisfy it.
 
 use super::Bindings;
 use super::condition::{CmpOp, Condition, VAR_NAMES};
@@ -14,12 +10,6 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 
 /// Generate one static body whose condition verdict is fixed.
-///
-/// The verdict is constructed rather than drawn: the bindings are chosen so
-/// the condition holds or fails, which guarantees each of the four
-/// section-and-spelling verdict classes per draw. Hoping a random comparison
-/// fails often enough put `actions-failed-expression` below the once-per-draw
-/// floor.
 pub(super) fn static_verdict_body(verdict_holds: bool) -> impl Strategy<Value = BodySpec> {
     (
         fields_strategy(),
@@ -70,12 +60,6 @@ pub(super) fn condition_vars(
 }
 
 /// Build a condition and the bindings that make it hold or fail.
-///
-/// The shape is drawn from the same closed set the rest of the suite uses, so
-/// the property keeps generating literals, flags, negations, truthiness tests,
-/// and comparisons; only the bindings are constructed, to force the requested
-/// verdict. Iteration shapes are replaced because a static entry cannot carry
-/// them.
 fn verdict_condition(shape: Condition, verdict_holds: bool) -> (Condition, Bindings) {
     shape_with_verdict(shape, verdict_holds)
 }
@@ -100,7 +84,6 @@ fn shape_with_verdict(shape: Condition, verdict_holds: bool) -> (Condition, Bind
 }
 
 /// Pick a constant that makes `operator` return `verdict_holds` for a left
-/// operand of zero.
 fn verdict_constant(operator: CmpOp, verdict_holds: bool) -> i64 {
     // For a left operand of zero, one of -1, 0, and 1 always produces the
     // wanted verdict for any operator; searching the three keeps this a

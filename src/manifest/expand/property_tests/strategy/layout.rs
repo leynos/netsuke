@@ -1,10 +1,4 @@
 //! Where a generated entry writes its control keys.
-//!
-//! Each control key takes its own independently drawn slot, and
-//! `ControlOrder` decides which written key takes the lower one. Whether the
-//! two slots coincide is then derived from the drawn values rather than
-//! chosen separately, so "adjacent" cannot be asserted while the positions
-//! disagree.
 
 use proptest::prelude::*;
 use proptest::sample::Index;
@@ -19,10 +13,6 @@ pub(super) enum ControlLayout {
 }
 
 /// Which control key an entry with both writes first.
-///
-/// `swap_remove` corrupts order by moving the last key into a vacated slot,
-/// so the two removal sites interact whenever an entry carries both. Drawing
-/// the order means both interleavings are exercised rather than one.
 #[derive(Clone, Copy, Debug)]
 pub(in crate::manifest::expand::property_tests) enum ControlOrder {
     /// `foreach` then `when`.

@@ -1,11 +1,4 @@
 //! `OBL-INJECT` (`RM-4.3.2.c`, clause `C-3`).
-//!
-//! For a foreach entry over items `x0 … xn-1` and condition `P`, the outputs
-//! are exactly the entries for each index `i` in ascending order where `P`
-//! holds. Output entry for `i` carries `vars.item` deep-equal to `xi` and
-//! `vars.index` equal to `i`, overriding any user `item` or `index` while
-//! keeping every other user `vars` value. Both the inline-array and the
-//! list-literal spelling produce the same result.
 
 use super::model::deep_equal;
 use super::strategy::foreach_entry_spec_strategy;

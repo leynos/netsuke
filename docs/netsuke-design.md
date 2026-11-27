@@ -746,9 +746,9 @@ behaves the same as if every target were declared explicitly.
 
 #### Expansion invariants
 
-Expansion is a pure transform of the parsed manifest value: the typed
-deserializer sees only its output. The obligations are stated here as clauses
-`C-1` to `C-5` so that tests, diagnostics, and later design work can cite them.
+Expansion is a pure transform of the parsed manifest value. The obligations are
+stated as clauses `C-1` to `C-5` so tests, diagnostics, and later design work
+can cite them.
 
 - `C-1` **Verbatim copy.** Every field that is not a control key (`foreach`,
   `when`) is copied into each generated entry unchanged. `vars` is the only
@@ -758,9 +758,9 @@ deserializer sees only its output. The obligations are stated here as clauses
   every other key. A `foreach` entry that has no `vars` gains `vars` at the end.
   `item` and `index` are appended to the `vars` key sequence, or keep their
   position when the author already wrote that key. Static entries gain no keys.
-  Because `serde_json::Map::remove` is a `swap_remove` while `preserve_order`
-  is enabled, both control-key removals use `shift_remove`: a plain `remove`
-  moves the entry's last key into the vacated slot whenever two or more keys
+  Both control-key removals use `shift_remove`, because
+  `serde_json::Map::remove` is a `swap_remove` under `preserve_order` and would
+  move the entry's last key into the vacated slot whenever two or more keys
   follow the control key.
 - `C-3` **Iteration values.** `item` is the iteration value as the evaluator
   returns it, and `index` is its zero-based position as a `u64`. Both override
@@ -785,10 +785,9 @@ deserializer sees only its output. The obligations are stated here as clauses
   are not part of these invariants.
 
 ADR-0003 scopes `foreach` and `when` to "manifest targets" and rejects
-*action-level* control keys, meaning expansion of the steps inside a target's
-own recipe. The top-level `actions` section remains in scope under that
-reading: it is a list of target-shaped entries rather than a nested recipe, and
-the same expansion pass walks both sections.
+*action-level* control keys: expansion of the steps inside a target's own
+recipe. The top-level `actions` section stays in scope under that reading; it
+is a list of target-shaped entries, and the same pass walks both sections.
 
 ### 2.6 Planned Recipe Ergonomics and Execution Feedback
 

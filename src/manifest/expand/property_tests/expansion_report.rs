@@ -1,9 +1,4 @@
 //! Property-based tests for manifest `foreach`/`when` expansion invariants.
-//!
-//! These complement the example-based cases in `condition_cases.rs` by
-//! checking the expansion contract across generated inputs: entry counts,
-//! index sequencing, `when` determinism, whitespace-only `when` rejection,
-//! and `foreach` key removal.
 
 use super::super::*;
 use minijinja::Environment;
@@ -34,7 +29,6 @@ fn item_names(max: usize) -> impl Strategy<Value = Vec<String>> {
 }
 
 /// Strategy producing items drawn from a keep/skip alphabet so `when`
-/// expressions filter a meaningful subset.
 fn keep_skip_items(max: usize) -> impl Strategy<Value = Vec<String>> {
     proptest::collection::vec(
         prop_oneof![Just("keep".to_owned()), Just("skip".to_owned())],
@@ -56,7 +50,6 @@ proptest! {
     #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
 
     /// Absent `when` filtering, a list of `n` items expands to exactly `n`
-    /// entries.
     #[test]
     fn expansion_yields_one_entry_per_item(items in item_names(10)) {
         let env = Environment::new();
@@ -72,7 +65,6 @@ proptest! {
     }
 
     /// `index` values across expanded entries are unique and form the
-    /// sequence `0..n`.
     #[test]
     fn indexes_are_sequential_and_unique(items in item_names(10)) {
         let env = Environment::new();
@@ -96,7 +88,6 @@ proptest! {
     }
 
     /// Every `foreach` clone keeps its discovery metadata so final rendering
-    /// can resolve the same item-specific description as the target name.
     #[test]
     fn foreach_preserves_description_templates(items in item_names(10)) {
         let env = Environment::new();
@@ -140,7 +131,6 @@ proptest! {
     }
 
     /// Re-evaluating the same `when` expression on the same input always
-    /// produces the same set of entries.
     #[test]
     fn when_filtering_is_deterministic(items in keep_skip_items(10)) {
         let env = Environment::new();
@@ -198,7 +188,6 @@ proptest! {
     }
 
     /// Any `when` value composed solely of whitespace characters is rejected,
-    /// regardless of whitespace kind or length.
     #[test]
     fn whitespace_only_when_is_rejected(
         ws in proptest::collection::vec(

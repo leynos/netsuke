@@ -467,25 +467,19 @@ when it serves more than one command-interpolation property test.
 ### `src/arbitrary_json_test_support.rs`
 
 Crate-level, `#[cfg(test)]` support holding one Proptest strategy over
-arbitrary JSON values with every kind and bounded recursion. The
-shell-selection decoder and the manifest-expansion properties both take "some
-JSON value" as an input, so they share this generator instead of each keeping a
-copy that drifts. It carries no manifest, shell, or configuration knowledge:
-its string leaf is a parameter, and a caller needing another leaf kind composes
-it at its own call site. Production code must not depend on it.
+arbitrary JSON values. The shell-selection decoder and the manifest-expansion
+properties share it rather than keeping copies that drift. It carries no
+manifest knowledge: its string leaf is a parameter, and callers compose extra
+leaf kinds themselves. Production code must not depend on it.
 
 ### `src/manifest/expand/property_tests/`
 
-The generated suites for manifest expansion, one module per obligation
-(`preserve`, `order`, `when_removed`, `inject`, `static_when`), described by
-the clauses in `docs/netsuke-design.md` section 2.5. `strategy/` holds the
-authored-entry model and its generators, `model.rs` the oracle that predicts
-expansion output, and `support.rs` the strict-undefined environment and the
-expansion driver. `coverage/` is the fixed-seed non-vacuity tripwire, with its
-class lists in `coverage/classes.rs`. The `property_tests` segment is
-load-bearing: `make proptest` selects suites by it. The module is declared
-`#[cfg(test)] mod property_tests;` beside `mod tests;`, and no production code
-may import it.
+The generated suites for manifest expansion, one module per obligation,
+described by the clauses in `docs/netsuke-design.md` section 2.5. `strategy/`
+holds the authored-entry model and generators, `model.rs` the oracle, and
+`support.rs` the expansion driver. `coverage/` is the non-vacuity tripwire. The
+`property_tests` segment is load-bearing: `make proptest` selects suites by it.
+No production code may import it.
 
 ### `src/ir/cmd_interpolate/power_shell_tests.rs`
 

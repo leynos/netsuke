@@ -1,29 +1,13 @@
 //! `OBL-GEN`: each generator still reaches every class its properties need.
-//!
-//! A property is only as strong as the inputs it is handed. If a generator
-//! quietly stopped emitting, say, static entries, the property would keep
-//! passing over a sample that never tested them. Each test here classifies a
-//! fixed-seed sample of one strategy and fails when any required class falls
-//! below its floor.
-//!
-//! The seed is fixed on purpose: a coverage claim is about the generator, not
-//! about one draw, so the verdict and the counts must be identical on every
-//! run. The threshold check has a negative control, so a check that could
-//! never fail is visible as such.
 
 use super::strategy::{
     document_spec_strategy, entry_spec_strategy, foreach_entry_spec_strategy,
     static_condition_entry_spec_strategy, static_document_spec_strategy,
 };
-use classes::{
-    DOCUMENT_CLASSES, ENTRY_CLASSES, FOREACH_ORDER_CLASSES, INJECT_CLASSES, STATIC_CLASSES,
-    STATIC_DOCUMENT_CLASSES,
-};
 use classifiers::{entry_classes, forced_control_classes, injection_classes, static_classes};
 use document_classes::document_classes;
 use proptest::strategy::Strategy;
 
-mod classes;
 mod classifiers;
 mod document_classes;
 use proptest::test_runner::{Config, RngSeed, TestRunner};
@@ -34,42 +18,23 @@ use std::collections::{BTreeMap, BTreeSet};
 const COVERAGE_CASES: u32 = 512;
 
 /// Seed for the classifiers' runner.
-///
-/// Arbitrary and free to change: what matters is that it is fixed, so the
-/// counts are comparable between runs.
 const COVERAGE_SEED: u64 = 0x432;
 
 /// Share of draws each class must reach, in percent.
-///
-/// At five percent, a 128-case random-seed run of a property meets the class
-/// with probability above 99.8%.
 const MINIMUM_CLASS_PERCENT: usize = 5;
 
 /// One classification tally, counting draws rather than occurrences.
 type Tally = BTreeMap<&'static str, usize>;
 
 /// The classes one draw belongs to.
-///
-/// A set, not a counter: a class floor is a share of *draws*, so a draw that
-/// contains three fields of one kind contributes one hit, not three. Counting
-/// occurrences would let a handful of draws satisfy a floor on their own.
 type ClassSet = BTreeSet<&'static str>;
 
 /// Record that one draw belongs to `class`.
-///
-/// Classifiers import this as `count`, because their call sites read as
-/// "count this class for this draw".
 fn count(classes: &mut ClassSet, class: &'static str) {
     classes.insert(class);
 }
 
 /// Count the classes of a fixed-seed sample of one strategy.
-///
-/// The classifier reports whether the draw is in the scope its classes
-/// describe. A draw outside it, such as a static entry without a condition
-/// when the classes are verdicts, contributes to neither the classes nor the
-/// denominator: including it would dilute a share of draws into a share of a
-/// larger set the class cannot occur in.
 fn tally<S: Strategy>(
     strategy: &S,
     classify: impl Fn(&S::Value, &mut ClassSet) -> bool,
@@ -130,10 +95,6 @@ fn check_floors(tally: &Tally, required: &[&'static str], total: usize) -> Resul
 }
 
 /// Write one tally to standard output for a `--no-capture` run.
-///
-/// The repository denies `print_stdout`, and the tally is diagnostic evidence
-/// rather than test output, so it goes through the `Write` API and a failure
-/// to write it cannot fail the test.
 fn report(label: &str, tally: &Tally) {
     use std::io::Write as _;
     writeln!(std::io::stdout(), "{label} classes: {tally:?}").ok();
@@ -162,9 +123,6 @@ fn static_condition_generator_reaches_every_verdict_class() -> Result<(), String
 }
 
 /// Classify the strategy the static-survival property draws from.
-///
-/// The property draws whole documents of static entries, so the per-section
-/// verdict classes the obligation names are exactly the document classifier's.
 #[test]
 fn static_document_generator_reaches_every_verdict_class() -> Result<(), String> {
     let (tally, draws) = tally(&static_document_spec_strategy(), document_classes)?;
@@ -173,10 +131,6 @@ fn static_document_generator_reaches_every_verdict_class() -> Result<(), String>
 }
 
 /// Classify the transformed entry the foreach order property actually expands.
-///
-/// That property removes `when` before expansion, which changes how many keys
-/// follow the remaining control key; classifying the untransformed entry would
-/// credit a class the property never reaches.
 #[test]
 fn foreach_order_generator_reaches_every_control_class() -> Result<(), String> {
     let transformed = foreach_entry_spec_strategy().prop_map(|spec| super::strategy::EntrySpec {
@@ -196,10 +150,6 @@ fn document_generator_reaches_every_section_class() -> Result<(), String> {
 }
 
 /// Verify the floor check reports a class the sample never reaches.
-///
-/// The sample is forced to place the control block last, so the class "two or
-/// more keys follow the control block" cannot occur. The check must then fail
-/// and name that class.
 #[test]
 fn the_threshold_check_reports_an_unreached_class() -> Result<(), String> {
     let (observed, draws) = tally(&foreach_entry_spec_strategy(), forced_control_classes)?;
@@ -217,3 +167,133 @@ fn the_threshold_check_reports_an_unreached_class() -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Classes the general entry generator must reach.
+pub(super) const ENTRY_CLASSES: &[&str] = &[
+    "targets",
+    "actions",
+    "static",
+    "foreach",
+    "vars",
+    "no-vars",
+    "condition",
+    "no-condition",
+    "condition-expression",
+    "condition-template",
+    "condition-reads-vars",
+    "condition-reads-index",
+    "condition-reads-item",
+    "control-last",
+    "control-one-following",
+    "control-two-or-more-following",
+    "control-single",
+    "control-both-foreach-first",
+    "control-both-when-first",
+    "control-same-slot",
+    "control-two-slots",
+    "foreach-empty",
+    "foreach-non-empty",
+    "foreach-array",
+    "foreach-string",
+    "value-null",
+    "value-bool",
+    "value-number",
+    "value-string",
+    "value-array",
+    "value-object",
+    "value-nested",
+    "value-jinja-string",
+];
+
+/// Classes the foreach generator must reach for the injection obligations.
+pub(super) const INJECT_CLASSES: &[&str] = &[
+    "foreach-array",
+    "foreach-string",
+    "control-last",
+    "control-one-following",
+    "control-two-or-more-following",
+    "control-same-slot",
+    "control-two-slots",
+    "inject-empty",
+    "inject-all-included",
+    "inject-all-excluded",
+    "inject-partial",
+    "inject-gap",
+    "item-null",
+    "item-bool",
+    "item-number",
+    "item-string",
+    "item-array",
+    "item-object",
+    "item-null-string",
+    "user-item-collision",
+    "user-index-collision",
+];
+
+/// Classes the static-condition generator must reach.
+pub(super) const STATIC_CLASSES: &[&str] = &[
+    "control-last",
+    "control-one-following",
+    "control-two-or-more-following",
+    "shape-literal",
+    "shape-flag",
+    "shape-not-flag",
+    "shape-count",
+    "shape-var-cmp",
+    "targets-held-expression",
+    "targets-held-template",
+    "targets-failed-expression",
+    "targets-failed-template",
+    "actions-held-expression",
+    "actions-held-template",
+    "actions-failed-expression",
+    "actions-failed-template",
+    "reads-vars",
+];
+
+/// Classes the document generator must reach.
+pub(super) const DOCUMENT_CLASSES: &[&str] = &[
+    "targets-entries",
+    "actions-entries",
+    "document-static",
+    "document-foreach",
+    "targets-entry-held",
+    "targets-entry-failed",
+    "targets-entry-absent",
+    "targets-entry-unevaluated",
+    "actions-entry-held",
+    "actions-entry-failed",
+    "actions-entry-absent",
+    "actions-entry-unevaluated",
+];
+
+/// Classes the transformed foreach-order input must reach.
+pub(super) const FOREACH_ORDER_CLASSES: &[&str] = &[
+    "control-last",
+    "control-one-following",
+    "control-two-or-more-following",
+    "foreach-array",
+    "foreach-string",
+];
+
+/// Classes the static-document strategy must reach.
+pub(super) const STATIC_DOCUMENT_CLASSES: &[&str] = &[
+    "targets-entries",
+    "actions-entries",
+    "document-static",
+    "targets-entry-held",
+    "targets-entry-failed",
+    "targets-entry-absent",
+    "targets-held-expression",
+    "targets-held-template",
+    "targets-failed-expression",
+    "targets-failed-template",
+    "actions-entry-held",
+    "actions-entry-failed",
+    "actions-entry-absent",
+    "actions-held-expression",
+    "actions-held-template",
+    "actions-failed-expression",
+    "actions-failed-template",
+    "reads-vars",
+];

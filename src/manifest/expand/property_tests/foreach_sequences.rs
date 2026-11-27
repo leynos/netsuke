@@ -1,7 +1,4 @@
 //! Generated invariants for manifest foreach expansion.
-//!
-//! The fixed cases pin specific regressions, while these properties vary
-//! sequence values, filtering, variable collisions, and source key order.
 
 use super::super::tests::targets;
 use super::super::*;

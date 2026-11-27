@@ -1,8 +1,4 @@
 //! Classification of one generated sample into its material classes.
-//!
-//! Each classifier names the classes its owning property depends on. The
-//! lists those properties require live in `classes.rs`; this module only
-//! counts what a draw contains.
 
 use super::super::strategy::{BodySpec, EntrySpec, ForeachForm, Items, Section};
 use super::{ClassSet, count};
@@ -88,9 +84,6 @@ fn condition_classes(body: &super::super::strategy::BodySpec, tally: &mut ClassS
 }
 
 /// Name a static entry's verdict class, for the static-survival strategy.
-///
-/// The strategy always has one entry per draw in one section, so the class is
-/// its section and whether the condition held.
 fn section_verdict_class(body: &BodySpec) -> &'static str {
     if super::super::model::expected_filtered(body).is_empty() {
         "single-entry-held"
@@ -192,8 +185,6 @@ fn value_and_vars_classes(body: &super::super::strategy::BodySpec, tally: &mut C
 }
 
 /// Count the classes of a sample whose control block is forced to the end.
-///
-/// The negative control: it can never reach `control-two-or-more-following`.
 pub(super) fn forced_control_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool {
     let forced = spec.body.clone().with_control_last();
     let class = match forced.following_key_count() {
@@ -295,12 +286,13 @@ fn foreach_form_class(form: ForeachForm) -> &'static str {
 
 /// Count a user `vars` key that collides with an injected name.
 fn user_collisions(body: &BodySpec, tally: &mut ClassSet) {
-    let keys = body.vars_keys();
-    if keys.contains(&"item") {
-        count(tally, "user-item-collision");
-    }
-    if keys.contains(&"index") {
-        count(tally, "user-index-collision");
+    for (key, class) in [
+        ("item", "user-item-collision"),
+        ("index", "user-index-collision"),
+    ] {
+        if body.vars_keys().contains(&key) {
+            count(tally, class);
+        }
     }
 }
 
@@ -318,9 +310,6 @@ fn inclusion_class(item_count: usize, included: &[usize]) -> &'static str {
 }
 
 /// Report whether an excluded item precedes an included one.
-///
-/// This is the only selection shape on which renumbering an injected index is
-/// visible: a prefix-shaped selection keeps true and renumbered indexes equal.
 fn has_gap(item_count: usize, included: &[usize]) -> bool {
     (0..item_count)
         .any(|index| !included.contains(&index) && included.iter().any(|kept| *kept > index))

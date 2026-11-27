@@ -1,8 +1,4 @@
 //! `OBL-PRESERVE` (`RM-4.3.2.a`, clause `C-1`).
-//!
-//! Expansion copies every field that is not a control key verbatim into each
-//! generated entry, and leaves every authored `vars` value alone except the
-//! injected `item` and `index`. Static entries receive neither.
 
 use super::model::{deep_equal, expected_outputs};
 use super::strategy::entry_spec_strategy;

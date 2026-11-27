@@ -1,7 +1,4 @@
 //! Strategies that construct authored entries and documents.
-//!
-//! Every generator constructs a legal entry rather than filtering for one, so
-//! no draw is discarded and the coverage classification counts real cases.
 
 use super::condition::{Condition, VAR_NAMES, var_name};
 use super::layout::{ControlLayout, ControlOrder};
@@ -16,7 +13,6 @@ use proptest::sample::Index;
 use serde_json::Number;
 
 /// Field names a `Target` really carries, used often enough to keep the
-/// generated entries recognisable.
 const REAL_FIELD_NAMES: [&str; 11] = [
     "name",
     "command",
@@ -102,11 +98,6 @@ pub(super) fn fields_strategy() -> impl Strategy<Value = Vec<(String, ManifestVa
 }
 
 /// Generate the authored `vars` entries for one entry.
-///
-/// The condition's own variable is bound to the value the oracle expects, so
-/// the condition is live rather than short-circuited. Other names are drawn
-/// freely, and a foreach entry may also claim `item` or `index` to exercise
-/// override.
 pub(super) fn vars_strategy(
     condition: Option<Condition>,
     is_foreach: bool,
@@ -158,11 +149,6 @@ pub(super) fn vars_strategy(
 }
 
 /// Generate the iteration values for one entry.
-///
-/// An empty sequence is drawn in its own arm rather than left to `0..=MAX_ITEMS`.
-/// A uniform range yields it once in nine, and the coverage floor is a share
-/// of all entry draws, most of which are static, so uniform length would put
-/// `foreach-empty` far below the floor.
 fn items_strategy(integer_domain: bool) -> BoxedStrategy<Items> {
     let non_empty = 1..=MAX_ITEMS;
     if integer_domain {
@@ -249,10 +235,6 @@ fn body_strategy(has_foreach: bool, has_when: bool) -> impl Strategy<Value = Bod
 }
 
 /// Generate one body with both control keys decided by the draw.
-///
-/// A condition is three times as likely as no condition: the condition shapes
-/// are what the key-order, filtering, and injection obligations are about, and
-/// a coin flip leaves the rarer shapes below their coverage floor.
 fn body_choices() -> impl Strategy<Value = BodySpec> {
     (any::<bool>(), condition_presence())
         .prop_flat_map(|(has_foreach, has_when)| body_strategy(has_foreach, has_when))
@@ -301,9 +283,6 @@ pub(in crate::manifest::expand::property_tests) fn static_condition_entry_spec_s
 }
 
 /// Generate a document whose entries are all static.
-///
-/// `OBL-STATIC-WHEN` is stated over documents with static entries in both
-/// sections, so the property draws whole documents rather than one entry.
 pub(in crate::manifest::expand::property_tests) fn static_document_spec_strategy()
 -> impl Strategy<Value = DocumentSpec> {
     let entries = || {

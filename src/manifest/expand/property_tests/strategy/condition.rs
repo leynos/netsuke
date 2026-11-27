@@ -1,26 +1,9 @@
 //! The closed set of condition shapes a generated manifest may carry.
-//!
-//! A recursive expression grammar would put `MiniJinja`'s evaluator under test
-//! rather than expansion, and would bring an oracle that has to re-implement
-//! it. The shapes here are the ones the expansion contract actually depends
-//! on: a literal, a boolean variable, its negation, an integer used as a
-//! truthiness test, an integer comparison against a variable, and comparisons
-//! against `index` and `item`. Each has a one-line Rust meaning, so the oracle
-//! shares no code with the evaluator.
-//!
-//! Every shape except [`Condition::Count`] also has a template form. `Count` is
-//! deliberately excluded: a template renders a string, and the fallback only
-//! accepts `true` or `1`, so a rendered integer would silently read as false
-//! and the oracle would no longer describe the production path.
 
 use super::Bindings;
 use proptest::prelude::*;
 
 /// Name the variable a slot stands for.
-///
-/// Generated slots are drawn from `0..VAR_NAMES.len()`, and the fallback keeps
-/// a future draw out of range from panicking while still naming a real
-/// variable, so a mismatch shows up as a property failure rather than a crash.
 pub(super) fn var_name(slot: usize) -> &'static str {
     match slot {
         0 => "w0",
@@ -33,9 +16,6 @@ use proptest::strategy::ValueTree;
 use std::cmp::Ordering;
 
 /// Names a condition may reference.
-///
-/// None of these can collide with a `MiniJinja` keyword, so a generated
-/// identifier is always read as a variable rather than as syntax.
 pub(in crate::manifest::expand::property_tests) const VAR_NAMES: [&str; 4] =
     ["w0", "w1", "w2", "w3"];
 
@@ -57,10 +37,6 @@ pub(in crate::manifest::expand::property_tests) enum CmpOp {
 }
 
 /// The spelling and acceptance test that define one operator.
-///
-/// Keeping the two facts in one row means an operator is described once:
-/// a separate spelling match and evaluation match would be two copies of the
-/// same six-way table, and the copies drift when a seventh operator is added.
 struct OperatorSpec {
     /// The operator as `MiniJinja` spells it.
     spelling: &'static str,
@@ -179,13 +155,11 @@ impl Condition {
     }
 
     /// Report whether the shape reads `index`, and so cannot appear on a
-    /// static entry.
     pub(in crate::manifest::expand::property_tests) const fn reads_index(self) -> bool {
         matches!(self, Self::IndexCmp(..))
     }
 
     /// Report whether the shape reads `item`, and so cannot appear on a
-    /// static entry.
     pub(in crate::manifest::expand::property_tests) const fn reads_item(self) -> bool {
         matches!(self, Self::ItemCmp(..))
     }
@@ -214,10 +188,6 @@ impl Condition {
     }
 
     /// Evaluate the shape in Rust, without `MiniJinja`.
-    ///
-    /// `item` is the iteration value read as an integer, and is `None` when
-    /// the value is not an integer; a shape that never reads `item` ignores
-    /// it. `index` is the zero-based iteration position.
     pub(in crate::manifest::expand::property_tests) fn holds(
         self,
         bindings: &Bindings,

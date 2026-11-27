@@ -1,27 +1,9 @@
 //! Shared Proptest strategy for arbitrary JSON values.
-//!
-//! Several suites take "some JSON value" as an input: the shell-selection
-//! decoder and the manifest-expansion properties both do. They share one
-//! generator rather than copying it, because a second copy is a second
-//! statement of what a well-formed value is, and the two drift silently while
-//! both keep passing.
-//!
-//! Scope and re-use policy: this module is test-only support
-//! (`#[cfg(test)]`), owned by the crate root, and carries no manifest, shell,
-//! or configuration knowledge. The string leaf is a parameter so a caller can
-//! supply names, near misses, or template-looking text without changing the
-//! generator. A caller that needs an extra leaf kind composes it at its own
-//! call site; new leaf kinds do not belong here.
 
 use proptest::prelude::*;
 use serde_json::{Map, Number, Value};
 
 /// Generate every JSON value kind with bounded recursive containers.
-///
-/// Leaves cover all six kinds; containers add empty and nested arrays and
-/// objects, with recursion depth and width bounded so shrinking stays cheap.
-/// The float arm draws only from a finite range, so it never asks
-/// `Number::from_f64` for a value JSON cannot hold.
 pub(crate) fn json_values(strings: BoxedStrategy<String>) -> impl Strategy<Value = Value> {
     let leaves = prop_oneof![
         Just(Value::Null),

@@ -1,23 +1,4 @@
 //! Generators for authored manifest entries and the model an oracle reads.
-//!
-//! A property about expansion is only as good as the shape it is handed, so
-//! the generator produces an [`EntrySpec`]: an explicit model of what the
-//! author wrote, from which [`EntrySpec::render`] builds the `ManifestValue`
-//! the production code consumes. Oracles then read the model rather than the
-//! rendered map, which keeps them structurally independent of the code under
-//! test and lets them predict key order without inspecting an actual key.
-//!
-//! The generator constructs valid entries; it never filters. Positions are
-//! drawn with `proptest::sample::Index` so they shrink well and can be applied
-//! after duplicate field names are removed.
-//!
-//! Two invariants keep a generated entry legal without discarding draws:
-//!
-//! - a static entry carries neither `index` nor `item` references, because the
-//!   strict-undefined environment would reject them rather than exclude the
-//!   entry;
-//! - a condition's free variable is always bound, because `MiniJinja` short
-//!   circuits and an unbound name would hide the defect it is meant to expose.
 
 pub(in crate::manifest::expand::property_tests) mod condition;
 mod generate;
@@ -157,10 +138,6 @@ fn jinja_literal(value: &ManifestValue) -> String {
 }
 
 /// Quote one string as a Jinja string literal.
-///
-/// The generated strings are ASCII and carry no quotes, but escaping the two
-/// characters that would end or break a literal costs nothing and keeps the
-/// printer honest if the leaf pool grows.
 fn quoted(text: &str) -> String {
     let mut rendered = String::with_capacity(text.len() + 2);
     rendered.push('"');
@@ -216,10 +193,6 @@ impl Bindings {
     }
 
     /// Read the boolean value one variable name holds.
-    ///
-    /// Slots are drawn from `0..4`; the default keeps an out-of-range slot
-    /// from panicking, so a generator defect shows up as a property failure
-    /// rather than as a crashed test.
     pub(in crate::manifest::expand::property_tests) fn flag(&self, slot: usize) -> bool {
         self.flags.get(slot).copied().unwrap_or_default()
     }

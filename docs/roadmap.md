@@ -652,15 +652,12 @@ and test workflow intact. See
   - [x] Prove static targets still honour `when`.
   Completed:
   [execplan 4.3.2](execplans/4-3-2-manifest-expansion-invariant-proptests.md)
-  delivers the suites under `src/manifest/expand/property_tests/` and records
-  the contract as clauses `C-1` to `C-5` in
+  delivers the suites and the `C-1` to `C-5` clauses in
   [the design document](netsuke-design.md#expansion-invariants). Each
-  obligation is demonstrated by a committed mutation patch that its named
-  property fails on, a fixed-seed coverage tripwire keeps every generator's
-  material classes reachable, and the key-order clause `C-2` also fixed a real
-  defect: removing `when` or `foreach` used a `swap_remove` that reordered the
-  remaining keys, so an unknown-field error could name a later field instead of
-  the first one written.
+  obligation has a mutation patch its named property fails on, a coverage
+  tripwire keeps every generator class reachable, and clause `C-2` also fixed a
+  real defect: `swap_remove` reordered keys after a control key, so an
+  unknown-field error could name a later field than the first one written.
 - [ ] 4.3.3. Add Proptest coverage for render stability. Requires 4.3.2. See
   the
   [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).

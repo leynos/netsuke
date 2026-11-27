@@ -1,9 +1,4 @@
 //! Oracles that predict expansion output from the authored model.
-//!
-//! Every function here reads the [`EntrySpec`] model and computes what
-//! expansion must produce. None of them calls a production helper, and none
-//! removes a key from a `serde_json::Map`: the oracle must not share the
-//! operation under test.
 
 use super::strategy::{BodySpec, DocumentSpec, EntrySpec, Section};
 use crate::manifest::{ManifestMap, ManifestValue};
@@ -32,9 +27,6 @@ pub(super) fn expected_outputs(spec: &EntrySpec) -> Vec<ManifestValue> {
 }
 
 /// Predict which iterations one authored entry filters out.
-///
-/// A static entry contributes `None`; a foreach entry contributes the index
-/// of each excluded item.
 pub(super) fn expected_filtered(body: &BodySpec) -> Vec<Option<usize>> {
     body.items().map_or_else(
         || {
@@ -82,18 +74,6 @@ fn expected_entry(body: &BodySpec, iteration: Option<&(ManifestValue, usize)>) -
 }
 
 /// Compare two JSON values, requiring identical float bit patterns.
-///
-/// `serde_json::Value` equality treats `-0.0` and `0.0` as equal, and the
-/// contract is bit-exact survival through the evaluator, so floats are
-/// compared by [`f64::to_bits`] instead.
-/// Compare two JSON values, requiring identical numeric representations.
-///
-/// `serde_json::Value` equality treats `-0.0` and `0.0` as equal, and the
-/// contract is bit-exact survival through the evaluator, so floats are
-/// compared by [`f64::to_bits`] instead. The two values must also agree on
-/// whether they are floats at all: converting a large integer to `f64` rounds
-/// it, so comparing `9007199254740993` against `9007199254740992.0` through
-/// `as_f64` would report equality for values the evaluator keeps distinct.
 pub(super) fn deep_equal(actual: &ManifestValue, expected: &ManifestValue) -> bool {
     match (actual, expected) {
         (ManifestValue::Number(actual_number), ManifestValue::Number(expected_number)) => {
@@ -137,11 +117,6 @@ mod tests {
     use serde_json::Number;
 
     /// Verify an integer never compares equal to a float that rounds to it.
-    ///
-    /// `9007199254740993` is `2^53 + 1`, the first integer a binary64 cannot
-    /// represent. Comparing both through `as_f64` would round the integer onto
-    /// the float's value and report equality for two values the evaluator
-    /// keeps distinct, so the oracle would accept a real fidelity defect.
     #[test]
     fn integer_and_float_representations_never_compare_equal() {
         let integer = ManifestValue::Number(Number::from(9_007_199_254_740_993_i64));

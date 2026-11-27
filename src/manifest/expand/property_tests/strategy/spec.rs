@@ -1,9 +1,4 @@
 //! The authored-entry model an oracle reads.
-//!
-//! The model holds what the author wrote, in authoring order, and derives the
-//! expected expanded shape from it. It deliberately contains no
-//! `serde_json::Map` removal: the oracle must not share the operation under
-//! test.
 
 use super::condition::Condition;
 use super::layout::{ControlLayout, ControlOrder};
@@ -42,10 +37,6 @@ impl BodySpec {
     }
 
     /// The authored key sequence with the control keys in place.
-    ///
-    /// Each control key has its own drawn slot. The key written first takes
-    /// the lower slot, and a tie inserts it after the other, so the recorded
-    /// order and the observed sequence cannot disagree.
     fn authored_entries(&self) -> Vec<(String, ManifestValue)> {
         let mut entries = self.fields_with_vars();
         let base = entries.len();
@@ -139,8 +130,6 @@ impl BodySpec {
     }
 
     /// The `vars` key sequence an expanded entry must carry.
-    ///
-    /// Returns `None` when the expanded entry carries no `vars` at all.
     pub(in crate::manifest::expand::property_tests) fn predicted_vars_keys(
         &self,
     ) -> Option<Vec<String>> {
@@ -234,8 +223,6 @@ impl BodySpec {
     }
 
     /// Report how many authored keys follow the control block.
-    ///
-    /// This is the class `swap_remove` corrupts when it is two or more.
     pub(in crate::manifest::expand::property_tests) fn following_key_count(&self) -> usize {
         let base = self.fields.len() + usize::from(self.vars.is_some());
         let first = self.control_layout.position(base);
@@ -247,8 +234,6 @@ impl BodySpec {
     }
 
     /// Report whether the entry's two control keys share one slot.
-    ///
-    /// Derived from the drawn slots, not stored beside them.
     pub(in crate::manifest::expand::property_tests) fn control_same_slot(&self) -> bool {
         if self.control_entries().len() < 2 {
             return true;
@@ -264,10 +249,6 @@ impl BodySpec {
     }
 
     /// Force the control block to the end of the authored sequence.
-    ///
-    /// This exists for the coverage test's negative control: a strategy built
-    /// on it can never produce a control key followed by another key, which is
-    /// exactly the class the check must report as unreached.
     pub(in crate::manifest::expand::property_tests) fn with_control_last(mut self) -> Self {
         self.control_layout = ControlLayout::Last;
         self.second_control_layout = ControlLayout::Last;

@@ -1,17 +1,4 @@
 //! Witness cases for every condition shape expansion evaluates.
-//!
-//! The generated properties state the same shapes over random values; these
-//! fixed cases pin one example per shape, operator, and form. A regression in
-//! a shape's spelling is then visible without reading a shrunk
-//! counter-example, and the integer-truthiness shape gets an explicit zero
-//! case rather than relying on a draw.
-//!
-//! The cases share one `ConditionCase` table rather than repeating the same
-//! four-line body per group: the interesting content is the table, and a copy
-//! per group would drift when the expected rendering rules change. Each row
-//! also states which spellings are meaningful, because an integer-valued
-//! condition has no template form: the fallback reads a rendered integer as
-//! false, so testing one in template form would assert the wrong contract.
 
 use super::super::expand_foreach;
 use super::super::tests::{indexes, targets};
@@ -36,11 +23,6 @@ struct ConditionCase {
 }
 
 /// Which spellings of a condition are meaningful.
-///
-/// A template renders to a string, and the fallback accepts only `true` or
-/// `1`. An integer-valued condition therefore has no template form: `{{ w0 }}`
-/// rendering `-1` would read as false, so testing it in that form would assert
-/// the wrong contract.
 #[derive(Clone, Copy)]
 enum Forms {
     /// Expression and template spellings both mean the same thing.
@@ -93,10 +75,6 @@ impl ConditionCase {
 }
 
 /// Build a `vars` object holding one boolean `w0`.
-fn with_bool(value: bool) -> ManifestValue {
-    vars_with_bool(value)
-}
-
 /// Build a `vars` object holding one integer `w0`.
 fn with_integer(value: i64) -> ManifestValue {
     ManifestValue::Object(ManifestMap::from_iter([(
@@ -113,30 +91,25 @@ fn vars_with_bool(value: bool) -> ManifestValue {
     )]))
 }
 
-/// Run one table row.
-fn run(case: &ConditionCase) -> Result<()> {
-    case.check()
-}
-
 #[rstest]
 #[case(ConditionCase { expression: "true", forms: Forms::Both, vars: None, foreach: None, verdict: Verdict::Keeps(true) })]
 #[case(ConditionCase { expression: "false", forms: Forms::Both, vars: None, foreach: None, verdict: Verdict::Keeps(false) })]
 fn literal_conditions(#[case] case: ConditionCase) -> Result<()> {
-    run(&case)
+    case.check()
 }
 
 #[rstest]
-#[case(ConditionCase { expression: "w0", forms: Forms::Both, vars: Some(with_bool(true)), foreach: None, verdict: Verdict::Keeps(true) })]
-#[case(ConditionCase { expression: "w0", forms: Forms::Both, vars: Some(with_bool(false)), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "w0", forms: Forms::Both, vars: Some(vars_with_bool(true)), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "w0", forms: Forms::Both, vars: Some(vars_with_bool(false)), foreach: None, verdict: Verdict::Keeps(false) })]
 fn boolean_variable_conditions(#[case] case: ConditionCase) -> Result<()> {
-    run(&case)
+    case.check()
 }
 
 #[rstest]
-#[case(ConditionCase { expression: "not w0", forms: Forms::Both, vars: Some(with_bool(true)), foreach: None, verdict: Verdict::Keeps(false) })]
-#[case(ConditionCase { expression: "not w0", forms: Forms::Both, vars: Some(with_bool(false)), foreach: None, verdict: Verdict::Keeps(true) })]
+#[case(ConditionCase { expression: "not w0", forms: Forms::Both, vars: Some(vars_with_bool(true)), foreach: None, verdict: Verdict::Keeps(false) })]
+#[case(ConditionCase { expression: "not w0", forms: Forms::Both, vars: Some(vars_with_bool(false)), foreach: None, verdict: Verdict::Keeps(true) })]
 fn negated_variable_conditions(#[case] case: ConditionCase) -> Result<()> {
-    run(&case)
+    case.check()
 }
 
 #[rstest]
@@ -144,7 +117,7 @@ fn negated_variable_conditions(#[case] case: ConditionCase) -> Result<()> {
 #[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: Some(with_integer(1)), foreach: None, verdict: Verdict::Keeps(true) })]
 #[case(ConditionCase { expression: "w0", forms: Forms::ExpressionOnly, vars: Some(with_integer(-1)), foreach: None, verdict: Verdict::Keeps(true) })]
 fn integer_truthiness_conditions(#[case] case: ConditionCase) -> Result<()> {
-    run(&case)
+    case.check()
 }
 
 #[rstest]
@@ -161,7 +134,7 @@ fn integer_truthiness_conditions(#[case] case: ConditionCase) -> Result<()> {
 #[case(ConditionCase { expression: "w0 >= 2", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(true) })]
 #[case(ConditionCase { expression: "w0 >= 3", forms: Forms::Both, vars: Some(with_integer(2)), foreach: None, verdict: Verdict::Keeps(false) })]
 fn variable_comparisons(#[case] case: ConditionCase) -> Result<()> {
-    run(&case)
+    case.check()
 }
 
 /// Build a foreach case over `items` keeping the listed indexes.
@@ -183,7 +156,7 @@ fn over_indexes(expression: &'static str, indexes: &'static [u64]) -> ConditionC
 #[case(over_indexes("index > 1", &[2, 3]))]
 #[case(over_indexes("index >= 2", &[2, 3]))]
 fn index_comparisons(#[case] case: ConditionCase) -> Result<()> {
-    run(&case)
+    case.check()
 }
 
 /// Build a foreach case over `1, 4, 4, 2` keeping the listed indexes.
@@ -205,7 +178,7 @@ fn over_items(expression: &'static str, indexes: &'static [u64]) -> ConditionCas
 #[case(over_items("item > 1", &[1, 2, 3]))]
 #[case(over_items("item >= 4", &[1, 2]))]
 fn item_comparisons(#[case] case: ConditionCase) -> Result<()> {
-    run(&case)
+    case.check()
 }
 
 /// Expand one entry and report whether its condition kept it.
