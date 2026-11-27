@@ -74,7 +74,6 @@ impl ConditionCase {
     }
 }
 
-/// Build a `vars` object holding one boolean `w0`.
 /// Build a `vars` object holding one integer `w0`.
 fn with_integer(value: i64) -> ManifestValue {
     ManifestValue::Object(ManifestMap::from_iter([(

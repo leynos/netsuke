@@ -154,12 +154,12 @@ impl Condition {
         }
     }
 
-    /// Report whether the shape reads `index`, and so cannot appear on a
+    /// Report whether the shape reads `index`, so it cannot suit a static entry.
     pub(in crate::manifest::expand::property_tests) const fn reads_index(self) -> bool {
         matches!(self, Self::IndexCmp(..))
     }
 
-    /// Report whether the shape reads `item`, and so cannot appear on a
+    /// Report whether the shape reads `item`, so it cannot suit a static entry.
     pub(in crate::manifest::expand::property_tests) const fn reads_item(self) -> bool {
         matches!(self, Self::ItemCmp(..))
     }

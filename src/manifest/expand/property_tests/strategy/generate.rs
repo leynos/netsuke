@@ -12,7 +12,7 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use serde_json::Number;
 
-/// Field names a `Target` really carries, used often enough to keep the
+/// Field names a `Target` really carries, listed once for the generators.
 const REAL_FIELD_NAMES: [&str; 11] = [
     "name",
     "command",

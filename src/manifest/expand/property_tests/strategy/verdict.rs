@@ -83,7 +83,7 @@ fn shape_with_verdict(shape: Condition, verdict_holds: bool) -> (Condition, Bind
     }
 }
 
-/// Pick a constant that makes `operator` return `verdict_holds` for a left
+/// Pick a constant making `operator` return `verdict_holds` against zero.
 fn verdict_constant(operator: CmpOp, verdict_holds: bool) -> i64 {
     // For a left operand of zero, one of -1, 0, and 1 always produces the
     // wanted verdict for any operator; searching the three keeps this a

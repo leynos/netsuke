@@ -6,7 +6,7 @@ use crate::manifest::{ManifestMap, ManifestValue};
 use minijinja::{Environment, UndefinedBehavior};
 use proptest::test_runner::TestCaseError;
 
-/// Build the strict-undefined environment the production loader builds.
+/// Build the strict-undefined environment the properties evaluate against.
 pub(super) fn strict_environment() -> Environment<'static> {
     let mut environment = Environment::new();
     environment.set_undefined_behavior(UndefinedBehavior::Strict);

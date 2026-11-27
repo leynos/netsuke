@@ -28,7 +28,7 @@ fn item_names(max: usize) -> impl Strategy<Value = Vec<String>> {
     proptest::collection::vec("[a-z]{1,8}", 0..=max)
 }
 
-/// Strategy producing items drawn from a keep/skip alphabet so `when`
+/// Draw items from a keep/skip alphabet so `when` has both verdicts.
 fn keep_skip_items(max: usize) -> impl Strategy<Value = Vec<String>> {
     proptest::collection::vec(
         prop_oneof![Just("keep".to_owned()), Just("skip".to_owned())],
@@ -49,7 +49,7 @@ fn expanded_entries<'a>(
 proptest! {
     #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
 
-    /// Absent `when` filtering, a list of `n` items expands to exactly `n`
+    /// Absent `when` filtering, a list of `n` items expands to `n` entries.
     #[test]
     fn expansion_yields_one_entry_per_item(items in item_names(10)) {
         let env = Environment::new();
@@ -64,7 +64,7 @@ proptest! {
         }
     }
 
-    /// `index` values across expanded entries are unique and form the
+    /// `index` values across expanded entries are unique and form `0..n`.
     #[test]
     fn indexes_are_sequential_and_unique(items in item_names(10)) {
         let env = Environment::new();
@@ -87,7 +87,7 @@ proptest! {
         }
     }
 
-    /// Every `foreach` clone keeps its discovery metadata so final rendering
+    /// Every `foreach` clone keeps its discovery metadata for final rendering.
     #[test]
     fn foreach_preserves_description_templates(items in item_names(10)) {
         let env = Environment::new();
@@ -130,7 +130,7 @@ proptest! {
         }
     }
 
-    /// Re-evaluating the same `when` expression on the same input always
+    /// Re-evaluating the same `when` expression on the same input agrees.
     #[test]
     fn when_filtering_is_deterministic(items in keep_skip_items(10)) {
         let env = Environment::new();
@@ -187,7 +187,7 @@ proptest! {
         }
     }
 
-    /// Any `when` value composed solely of whitespace characters is rejected,
+    /// Any `when` value of only whitespace characters is rejected outright.
     #[test]
     fn whitespace_only_when_is_rejected(
         ws in proptest::collection::vec(
