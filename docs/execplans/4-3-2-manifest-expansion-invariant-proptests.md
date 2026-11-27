@@ -2525,9 +2525,14 @@ tests plus doctests), `proptest` (284), `mbake validate Makefile`,
 negative control, and compile guard).
 
 `e821ba791` then completed the doc-comment summaries the reduction had cut
-short, a comment-only change to six test modules. At that commit, `check-fmt`,
-`lint`, `doc-coverage` (98.41%), `proptest` (284), and `test` (6,833 plus
-doctests) passed again, and `typecheck`, `markdownlint`, `nixie`,
+short, a comment-only change to six test modules. `30c1694a2` restored the
+seven module headers the reduction had left as bare requirement labels: each
+now states its purpose, what it provides, and its relation to `strategy`,
+`model`, `support`, and `coverage`, with the `OBL-*` and `RM-4.3.2.*`
+identifiers kept as cross-references. Those lines came from compressing inline
+comments, not from dropping a guarantee. At that commit, `check-fmt`, `lint`,
+`doc-coverage` (98.41%), `proptest` (284), and `test` (6,833 plus doctests)
+passed again, and `typecheck`, `markdownlint`, `nixie`,
 `mbake validate Makefile`, `test-workflow-contracts`, and `test-kani-mutations`
 were re-run green at the head that records this paragraph, which differs from
 `e821ba791` only in this ExecPlan.
