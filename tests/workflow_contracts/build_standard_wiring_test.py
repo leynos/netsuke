@@ -14,7 +14,10 @@ pinned tools, so that declaration is what this module follows.
 
 Two exclusions run the other way. A build whose output is a measurement is a
 reproducibility claim, so the coverage steps assign ``RUSTFLAGS`` themselves,
-which displaces every ``rustflags`` table in the configuration.
+which displaces every ``rustflags`` table in the configuration. The
+configuration's ``linker`` key survives that assignment, so every excluded
+shape also sets ``NETSUKE_PLATFORM_LINKER=1`` to opt the linker wrapper out:
+the coverage steps, and the jobs that package a releasable artefact.
 
 These tests assert the command each lane runs and the environment each coverage
 step declares, not a step name: renaming a step must not be able to satisfy

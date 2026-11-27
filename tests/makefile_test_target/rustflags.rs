@@ -57,6 +57,17 @@ struct RustflagsVariable {
         expect(dead_code, reason = "read only by the Unix-only expansion test")
     )]
     carries_standard: bool,
+    /// Whether the composed value opts the configuration's `linker` wrapper
+    /// out, so the platform linker is used. The release and Kani exclusions
+    /// turn on this being true: an assigned `RUSTFLAGS` does not displace the
+    /// `linker` key, so the opt-out has to be stated.
+    ///
+    /// Read only by the shell-expansion test, as above.
+    #[cfg_attr(
+        not(unix),
+        expect(dead_code, reason = "read only by the Unix-only expansion test")
+    )]
+    selects_platform_linker: bool,
 }
 
 /// Every Make variable that assigns `RUSTFLAGS`.
@@ -69,23 +80,28 @@ const RUSTFLAGS_VARIABLES: [RustflagsVariable; 4] = [
         name: "GATE_RUSTFLAGS",
         denies_warnings: true,
         carries_standard: true,
+        selects_platform_linker: false,
     },
     RustflagsVariable {
         name: "DEBUG_RUSTFLAGS",
         denies_warnings: false,
         carries_standard: true,
+        selects_platform_linker: false,
     },
     RustflagsVariable {
         name: "RELEASE_RUSTFLAGS",
         denies_warnings: false,
         carries_standard: false,
+        selects_platform_linker: true,
     },
     // Kani denies warnings but takes none of the standard: it compiles through
-    // `kani-compiler` on its own bundled toolchain, where neither flag applies.
+    // `kani-compiler` on its own bundled toolchain, where neither flag applies,
+    // and it may not have the pinned mold on `PATH`.
     RustflagsVariable {
         name: "KANI_RUSTFLAGS",
         denies_warnings: true,
         carries_standard: false,
+        selects_platform_linker: true,
     },
 ];
 

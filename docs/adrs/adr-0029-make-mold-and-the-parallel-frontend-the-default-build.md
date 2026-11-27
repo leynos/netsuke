@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted.
+Accepted. Amended by ADR-0086 (2026-11-24): the Linux table's `linker` key now
+selects mold, and the exclusions carry an explicit opt-out. The `## Amendments`
+section below records the correction; the decision itself is unchanged.
 
 ## Date
 
@@ -233,9 +235,69 @@ Two things follow, and neither changes the decision:
   tests would meet none of them. Other repositories on this estate do use
   Cranelift, and this record does not argue against that.
 
+## Amendments
+
+### Amendment 1: the Linux table's `linker` key selects the pinned mold
+
+Recorded 2026-11-24 by
+[ADR-0086](adr-0086-select-the-pinned-mold-through-cargos-linker-key.md).
+
+The decision above says the standard is committed to `.cargo/config.toml` and
+that the release and coverage exclusions work by assigning `RUSTFLAGS`, which
+displaces the configuration's `rustflags` tables. That remains the decision.
+This amendment records the one setting that displacement does not reach, and
+the exclusion shape it therefore needs.
+
+The gap is a build whose _caller_ exports `RUSTFLAGS`. The mutation worker is
+one: the shared workflow exports `RUSTFLAGS="-D warnings"` for the whole job,
+so the `-Clink-arg=-fuse-ld=mold` entry in the Linux table is displaced. A
+census of a `--verbose` baseline log found the emitted flag on 0 of 569 `rustc`
+invocations while `-D warnings` appeared on all 569. Installing the pinned mold
+is therefore necessary but not sufficient.
+
+The `cfg(target_os = "linux")` table now names `linker = ".cargo/mold-linker"`,
+a repository-owned wrapper. An exported `RUSTFLAGS` does not displace a
+`linker` entry, and the shared `setup-rust` action documents the same division
+of labour: its `install-mold` input "sets no linker flag: select mold in the
+project's Cargo configuration".
+
+- The wrapper appends `-fuse-ld=mold` after the forwarded arguments rather
+  than prepending it. `rustc` forwards its own `-fuse-ld=lld`, and a compiler
+  driver honours the last `-fuse-ld` it sees, so a prepended flag would be
+  overridden and the worker would link with lld.
+- The wrapper takes `cc` alone when `NETSUKE_PLATFORM_LINKER=1`. That opt-out
+  is what the release recipe, both packaging lanes, both coverage steps, and
+  the Kani variables set, because assignment no longer excludes this key.
+- The packaged Linux builds run inside a `cross` container, which forwards
+  only a short allowlist of host variables (`CARGO_*`, `CROSS_*`, and a few
+  others). `Cross.toml` therefore passes the opt-out through; without it the
+  variable would stop at the container boundary and the wrapper would demand a
+  mold the image does not install.
+- The wrapper defaults to the standard, so a build that forgets the opt-out is
+  accelerated rather than silently unaccelerated.
+- Cargo resolves the relative value as a config-relative path from the
+  directory that contains `.cargo`, not from the working directory, measured
+  from a subdirectory with `--manifest-path`. The wrapper is therefore found
+  from any invocation directory and from cargo-mutants' copied build tree,
+  whose file copy preserves the execute bit.
+- A caller-supplied `CARGO_TARGET_<triple>_LINKER` still outranks the
+  configuration key, so cross-compilation keeps the linker its toolchain
+  supplies.
+
+**Amended consequence.** The _Consequences_ section says that adding anything
+new to `.cargo/config.toml` reaches release and coverage, so a setting safe
+only for the development loop belongs in the Makefile's composed `RUSTFLAGS`.
+That remains true for every setting except this one, and the exception is the
+point: the `linker` key cannot be excluded by displacement because displacement
+does not reach it. Its exclusion is therefore an explicit variable read by the
+wrapper, asserted by contract for each lane rather than assumed.
+
 ## Implementation references
 
 - The standard itself: [`.cargo/config.toml`](../../.cargo/config.toml)
+- The linker wrapper: [`.cargo/mold-linker`](../../.cargo/mold-linker)
+- Container passthrough for the packaged builds:
+  [`Cross.toml`](../../Cross.toml)
 - Composed flags and gate prerequisites: [`Makefile`](../../Makefile)
 - Capability check and installer:
   [`scripts/check-build-tools.sh`](../../scripts/check-build-tools.sh) and
@@ -243,6 +305,10 @@ Two things follow, and neither changes the decision:
 - Version and checksum pins: [`tools/mold/`](../../tools/mold)
 - Configuration contract:
   [`tests/build_tools_cargo_config_tests.rs`](../../tests/build_tools_cargo_config_tests.rs)
+- Linker wrapper contract:
+  [`tests/build_tools_linker_tests.rs`](../../tests/build_tools_linker_tests.rs)
+- The amendment recording this change:
+  [ADR-0086](adr-0086-select-the-pinned-mold-through-cargos-linker-key.md)
 - Makefile and configuration held equal:
   [`tests/build_tools_make_target_tests.rs`](../../tests/build_tools_make_target_tests.rs)
   and

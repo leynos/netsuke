@@ -30,12 +30,16 @@ be a type error at workflow-call time. No mold version is passed, because
 the shared revision declares none and the repository's pin lives in
 ``tools/mold/VERSION``, which the preflight checks at run time.
 
+The caller must also never assign the variables these commands report. That
+prohibition and its parametrized negative control live in
+``mutation_caller_guard_test.py``, so this module stays within the
+file-length rule.
+
 Run via ``make test-workflow-contracts``.
 """
 
-import copy
-
 import pytest
+from mutation_caller_variables import REPORTED_VARIABLES
 from workflow_loading import (
     MUTATION_TESTING_WORKFLOW_PATH,
     load_workflow,
@@ -63,20 +67,26 @@ SETUP_COMMANDS_INPUT = "setup-commands"
 #: The repository target that verifies every build-tool pin.
 BUILD_TOOLS_TARGET = "make check-build-tools"
 
-#: The flag names the setup commands print for the run log.
-FLAG_VARIABLES = ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS")
+#: The commands that record how the worker's Cargo resolves the linker.
+#: Installation is not selection: `config get target` shows the configuration
+#: key the worker discovered, including the `linker` entry that survives the
+#: exported `RUSTFLAGS`, and `test -x` shows the wrapper it names is present.
+LINKER_SELECTION_CHECKS = (
+    "cargo -Zunstable-options config get target\ntest -x .cargo/mold-linker\n"
+)
 
 
-# Both variables are printed because Cargo gives `CARGO_ENCODED_RUSTFLAGS`
+# Every variable is printed because Cargo gives `CARGO_ENCODED_RUSTFLAGS`
 # precedence and falls back to `RUSTFLAGS` only when the encoded form is unset,
 # so a run where just one is set is visible in the log. An unset variable is
 # not an error: the shared workflow's guide documents that `setup-rust` may
 # leave `RUSTFLAGS` such that the project's own Cargo configuration decides the
-# linker.
+# linker. The opt-out is printed for the same reason: an unset value is the
+# expected state, and a set one would explain a platform link.
 def _flag_report_lines() -> str:
-    """Return one setup command per linker-flag variable, for the run log."""
+    """Return one setup command per reported linker variable, for the run log."""
     return "".join(
-        f'printf "{name}=%s\\n" "${{{name}-<unset>}}"\n' for name in FLAG_VARIABLES
+        f'printf "{name}=%s\\n" "${{{name}-<unset>}}"\n' for name in REPORTED_VARIABLES
     )
 
 
@@ -86,7 +96,9 @@ EXPECTED_WITH = {
     "exclude-globs": ",".join(KANI_EXCLUDES),
     "extra-args": "--all-features",
     INSTALL_MOLD_INPUT: "true",
-    SETUP_COMMANDS_INPUT: BUILD_TOOLS_TARGET + "\n" + _flag_report_lines(),
+    SETUP_COMMANDS_INPUT: (
+        BUILD_TOOLS_TARGET + "\n" + LINKER_SELECTION_CHECKS + _flag_report_lines()
+    ),
 }
 
 
@@ -184,94 +196,6 @@ def test_triggers_keep_schedule_and_plain_dispatch() -> None:
     )
 
 
-def _flag_override_problems(workflow: dict[str, object]) -> list[str]:
-    """Return every place the caller sets a compiler-flag variable.
-
-    Invariant I1 of the ExecPlan forbids the caller from setting
-    ``RUSTFLAGS`` or ``CARGO_ENCODED_RUSTFLAGS`` anywhere, because Cargo takes
-    an assigned ``RUSTFLAGS`` over every ``rustflags`` table in
-    ``.cargo/config.toml``: an ``env:`` block here would silently displace the
-    project configuration the build standard is defined by. The whole-workflow
-    walk is deliberate — the prohibition is on *any* scope, so a future job,
-    step, or reusable-workflow argument cannot introduce the override in a
-    corner this test never looks at.
-
-    Kept separate from the assertion itself so a seeded edit can be checked
-    against the same predicate: that is the negative control the ExecPlan
-    promises, and it cannot be run by re-reading only the file on disk.
-
-    Returns
-    -------
-    list[str]
-        One entry per offending key, naming the dotted path and the variable,
-        or an empty list when the caller satisfies the invariant. An empty
-        result is the passing outcome, so the caller asserts on truthiness
-        rather than on a sentinel.
-    """
-    found: list[str] = []
-
-    def walk(node: object, path: str) -> None:
-        """Record each flag-variable key under ``node``, recursing into children."""
-        match node:
-            case dict():
-                for key, child in node.items():
-                    child_path = f"{path}.{key}"
-                    if key in FLAG_VARIABLES:
-                        found.append(f"{child_path} (a {key} key)")
-                    walk(child, child_path)
-            case list():
-                for index, child in enumerate(node):
-                    walk(child, f"{path}[{index}]")
-
-    walk(workflow, "workflow")
-    return found
-
-
-def test_no_compiler_flag_variable_is_set_anywhere_in_the_caller() -> None:
-    """The caller never assigns a compiler-flag variable, at any scope.
-
-    ``setup-rust`` already exports ``RUSTFLAGS`` in the worker, and Cargo
-    prefers an assigned ``RUSTFLAGS`` over the ``rustflags`` table in
-    ``.cargo/config.toml``. Setting it here — to "help" with the linker, or to
-    override anything else — would displace the build standard rather than
-    configure it, so the prohibition is asserted over the whole parsed
-    workflow and not only over the job's ``with:`` block. Printing the
-    variables in ``setup-commands`` is unaffected: a ``printf`` reads them, it
-    does not assign them.
-    """
-    problems = _flag_override_problems(load_workflow(MUTATION_TESTING_WORKFLOW_PATH))
-    assert not problems, (
-        "the caller must not set a compiler-flag variable anywhere, because "
-        "Cargo takes an assigned RUSTFLAGS over the project's rustflags table; "
-        f"found {problems}"
-    )
-
-
-def test_flag_guard_rejects_a_seeded_override() -> None:
-    """The I1 guard fails on a caller that sets ``RUSTFLAGS``.
-
-    This is the ExecPlan's promised negative control, kept as a test rather
-    than a one-off manual edit so it stays runnable: a guard that cannot fail
-    on the defect it names is not a guard. The fixture mirrors the shape the
-    real caller could grow — an ``env:`` block on the calling job — and the
-    control would also catch it at workflow, step, or argument scope.
-    """
-    workflow = load_workflow(MUTATION_TESTING_WORKFLOW_PATH)
-    seeded = copy.deepcopy(workflow)
-    job = require_mapping(
-        require_mapping(seeded.get("jobs"), "jobs")["mutation"], "jobs.mutation"
-    )
-    job["env"] = {"RUSTFLAGS": "-D warnings"}
-
-    assert _flag_override_problems(seeded), (
-        "the I1 guard must reject a caller that seeds an env.RUSTFLAGS "
-        "override; it accepted one"
-    )
-    assert not _flag_override_problems(workflow), (
-        "the unmodified caller must satisfy the I1 guard"
-    )
-
-
 def _mutation_with_block() -> dict[str, object]:
     """Return the caller's ``with:`` block."""
     return require_mapping(
@@ -365,7 +289,12 @@ def test_setup_commands_verify_the_build_tool_pins_before_the_baseline() -> None
         f"{BUILD_TOOLS_TARGET!r} so a missing or drifted tool stops the run "
         f"before the baseline compiles; got {value!r}"
     )
-    for name in FLAG_VARIABLES:
+    for check in LINKER_SELECTION_CHECKS.splitlines():
+        assert check in value, (
+            f"jobs.mutation.with.{SETUP_COMMANDS_INPUT} must record how the "
+            f"worker selects its linker, including {check!r}; got {value!r}"
+        )
+    for name in REPORTED_VARIABLES:
         assert name in value, (
             f"jobs.mutation.with.{SETUP_COMMANDS_INPUT} must report {name} "
             f"in the run log; got {value!r}"

@@ -1,0 +1,19 @@
+#!/bin/sh
+# Select the linker for a Cargo build in this repository.
+#
+# Cargo passes its `linker` configuration to rustc as `-C linker`, and that key
+# survives an exported `RUSTFLAGS` where a `rustflags` table does not. Routing
+# the link through this script is therefore how the development standard keeps
+# `mold` selected on a worker that exports its own flags, which the mutation
+# worker does.
+#
+# The default is the development standard. Release, packaging, and coverage
+# builds must keep the platform linker, so those lanes export
+# `NETSUKE_PLATFORM_LINKER=1`; no other value opts out.
+if [ "${NETSUKE_PLATFORM_LINKER:-0}" = "1" ]; then
+    exec cc "$@"
+fi
+# Appended, not prepended: rustc passes its own `-fuse-ld=lld` among the
+# forwarded arguments, and the last `-fuse-ld` a compiler driver sees wins.
+# A leading mold flag would therefore be overridden by rustc's lld choice.
+exec cc "$@" -fuse-ld=mold

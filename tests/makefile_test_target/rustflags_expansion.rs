@@ -26,6 +26,11 @@ const CALLER_RUSTFLAGS: &str = "-C target-cpu=native";
 
 const DENY_WARNINGS: &str = "-D warnings";
 
+/// The opt-out the Cargo `linker` wrapper reads. Only the excluded variables
+/// carry it, because an assigned `RUSTFLAGS` does not displace the `linker`
+/// key the wrapper is named by.
+const PLATFORM_LINKER_OPT_OUT: &str = "NETSUKE_PLATFORM_LINKER=1";
+
 /// Asks Make to expand `name`, returning the assignment it yields.
 ///
 /// Make is the authority rather than a substitution written here: one of these
@@ -167,6 +172,44 @@ fn behavioural_each_variable_carries_its_own_policy() -> Result<()> {
                 } else {
                     "exclude"
                 }
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The excluded variables opt the configuration's `linker` wrapper out.
+///
+/// This is a second, independent policy: an assigned `RUSTFLAGS` displaces
+/// every `rustflags` table, which is why release and Kani already exclude the
+/// standard by carrying neither flag, but it does not displace the `linker`
+/// key. Without this opt-out the shipped artefact and the Kani lane would
+/// still link with mold.
+#[test]
+fn behavioural_each_variable_carries_its_linker_policy() -> Result<()> {
+    for variable in RUSTFLAGS_VARIABLES {
+        let expanded = expanded_variable(variable.name)?;
+        ensure!(
+            expanded.contains(PLATFORM_LINKER_OPT_OUT) == variable.selects_platform_linker,
+            "{} should {} the linker wrapper, expanded to {expanded:?}",
+            variable.name,
+            if variable.selects_platform_linker {
+                "opt out of"
+            } else {
+                "keep"
+            }
+        );
+        if variable.selects_platform_linker {
+            // Shell assignments preceding a command apply to it, so the
+            // opt-out has to sit before the `RUSTFLAGS` assignment, not after
+            // the command it was composed for.
+            let opt_out = expanded.find(PLATFORM_LINKER_OPT_OUT);
+            let assignment = expanded.find("RUSTFLAGS=");
+            ensure!(
+                matches!((opt_out, assignment), (Some(at), Some(flags)) if at < flags),
+                "{} should place the linker opt-out before its RUSTFLAGS \
+                 assignment, expanded to {expanded:?}",
+                variable.name
             );
         }
     }

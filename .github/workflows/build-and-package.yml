@@ -145,6 +145,12 @@ jobs:
       # it succeeds. It stays empty on every other platform.
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: >-
         ${{ inputs.platform == 'windows' && 'true' || '' }}
+      # Release and packaging are excluded from the build standard, so the
+      # shipped artefact links with the platform linker. Assigning `RUSTFLAGS`
+      # displaces the configuration's `rustflags` tables but not its `linker`
+      # key, so the exclusion also has to opt the linker wrapper out by name.
+      # The nested `rust-build-release` action exports the assigned value.
+      NETSUKE_PLATFORM_LINKER: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -382,6 +388,26 @@ jobs:
           # host scope even for the arm64 release lane.
           $linkerSetting = "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linkerPath"
           Add-Content -Path $env:GITHUB_ENV -Value $linkerSetting -Encoding utf8
+
+      - name: Install the build standard
+        if: inputs.platform == 'linux'
+        # `Generate release help` runs a nested Cargo build in this checkout,
+        # and `.cargo/config.toml` names `.cargo/mold-linker` as the linker for
+        # every Linux build. The job-level `NETSUKE_PLATFORM_LINKER=1` is meant
+        # to send that nested build to the platform linker, but the variable
+        # did not reach it: the run failed with `collect2: fatal error: cannot
+        # find 'ld'`, the signature of a wrapper that fell through to mold with
+        # none installed. Installing the pinned standard and putting it on
+        # `PATH` makes the lane work whichever branch the nested build takes,
+        # which is the same remedy every other Linux lane applies.
+        #
+        # The packaged artefact is unaffected: `Build release binary` already
+        # ran, and `cross` links inside its own container with the linker its
+        # image supplies, which outranks the configuration key.
+        run: |
+          set -euo pipefail
+          make install-build-tools
+          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
 
       - name: Generate release help
         shell: bash

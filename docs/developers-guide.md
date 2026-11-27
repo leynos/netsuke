@@ -7153,9 +7153,12 @@ separate metadata emission; no raw rustc metadata flag is used.
 The [`mold`] linker and the parallel `rustc` frontend (`-Zthreads=8`) are the
 **defaults** for development, test, lint, and typecheck builds. They are
 committed to `.cargo/config.toml`, which Cargo auto-discovers, so a bare
-`cargo build` in the repository gets them as well as every Make target. Release
-and coverage builds are excluded, and the exclusions are enforced rather than
-assumed; see *Exclusions* below.
+`cargo build` in the repository gets them as well as every Make target. The
+Linux table also names a repository-owned `linker` wrapper, which keeps mold
+selected when a caller exports its own `RUSTFLAGS`; see *Selection survives an
+exported `RUSTFLAGS`* below. Release, packaging, and coverage builds are
+excluded, and the exclusions are enforced rather than assumed; see *Exclusions*
+below.
 
 The Cranelift codegen backend is deliberately **not** part of the standard, and
 a contract refuses one. See *Why Cranelift is not part of the standard* below
@@ -7164,8 +7167,10 @@ for the evidence.
 The decision, the exclusions it carries, and the evidence behind the Cranelift
 refusal are recorded in
 [ADR-0029](adrs/adr-0029-make-mold-and-the-parallel-frontend-the-default-build.md).
-This section is the working reference; that record is why the standard takes
-this shape.
+The `linker` key and its opt-out are recorded in
+[ADR-0086](adrs/adr-0086-select-the-pinned-mold-through-cargos-linker-key.md),
+which amends it. This section is the working reference; those records are why
+the standard takes this shape.
 
 [`mold`]: https://github.com/rui314/mold
 
@@ -7226,6 +7231,33 @@ The linker writes its own version into the artefact, so a build that silently
 fell back to the platform linker carries no such line. That is worth checking
 after any change to how `RUSTFLAGS` is composed, because the fallback is
 otherwise completely silent.
+
+### Selection survives an exported `RUSTFLAGS`
+
+Restating the flags covers the builds a recipe drives. It cannot cover a build
+whose caller exports `RUSTFLAGS` after the fact, and that is the mutation
+worker: the shared workflow sets `RUSTFLAGS="-D warnings"` for the whole job, so
+`-Zthreads=8` is absent there (leynos/shared-actions#544). A caller-owned
+replacement is forbidden here, because it would make the caller own a value the
+project owns, so the remaining route has to be one the export does not displace.
+
+That route is Cargo's `linker` key. Cargo passes it to `rustc` as `-C linker`,
+and an assigned `RUSTFLAGS` does not replace it the way it replaces a
+`rustflags` table. The `cfg(target_os = "linux")` table therefore names
+`.cargo/mold-linker`, a repository-owned wrapper that runs `cc -fuse-ld=mold`.
+A relative value is a config-relative path: Cargo resolves it from the
+directory that contains `.cargo`, not from the working directory, so the
+wrapper is found from a subdirectory and from cargo-mutants' copied build tree;
+that copy preserves the file's execute bit. The wrapper appends its
+`-fuse-ld=mold`, because `rustc` passes its own `-fuse-ld=lld` among the
+arguments the wrapper forwards and the last flag wins.
+
+The wrapper defaults to the development standard and takes the platform linker
+when `NETSUKE_PLATFORM_LINKER=1`. The opt-out is explicit because assignment no
+longer excludes this key: the excluded shapes cannot rely on displacement here.
+Release, packaging, coverage, and the Kani lane set it; see *Exclusions* below.
+A Linux contributor without the pinned mold still gets a failure at link, never
+a silent fallback: `cc` is told to use mold and reports that it cannot find it.
 
 ### Toolchain contract
 
@@ -7310,12 +7342,16 @@ That placement is the mechanism: the standard applies to every build in the
 repository whether or not it went through a Make target, which is what makes it
 a default rather than an opt-in.
 
-The file carries three settings and nothing else:
+The file carries four settings and nothing else:
 
 - `-Zthreads=8` in `[build] rustflags`;
 - the same flag repeated in a `cfg(target_os = "linux")` table, beside
   `-Clink-arg=-fuse-ld=mold`. The repetition is required, not redundant: see
   *Why the flags are written down twice* above;
+- `linker = ".cargo/mold-linker"` in that same table. It is the one setting an
+  exported `RUSTFLAGS` does not displace, which is what keeps mold selected on
+  a worker that exports its own flags; see *Selection survives an exported
+  `RUSTFLAGS`* above;
 - `embed-metadata = false` in `[unstable]`, the native Cargo key that the
   Concordat `rust-dev-build-footprint` rule requires on dated nightlies from
   2026-07-31. It is a Cargo setting, not a `rustc` flag, so it does not
@@ -7330,7 +7366,10 @@ standard* below.
 Adding anything else to that file applies it to release and coverage builds
 too. A setting that is only safe for the development loop does not belong
 there; put it in the Makefile's composed `RUSTFLAGS` instead, where a target
-chooses whether to take it.
+chooses whether to take it. The `linker` key is the deliberate exception, and
+it is the exception precisely because assignment does not displace it: its
+exclusions are the explicit `NETSUKE_PLATFORM_LINKER=1` opt-out rather than
+displacement, and contracts assert each one.
 
 The file once carried the Polonius flag and was deleted when the pinned nightly
 began enabling the analysis by default. It must not carry one now: the analysis
@@ -7339,23 +7378,41 @@ file among others to keep the directive from returning.
 
 ### Exclusions
 
-Two build shapes are excluded from the standard, and each exclusion works by a
-different mechanism.
+Two build shapes are excluded from the standard, and each exclusion works by
+two mechanisms: displacement for the `rustflags` tables and an explicit opt-out
+for the `linker` key.
 
 **Release and packaging.** A `[target.*]` table applies to every profile, so
 `make release` assigns `RUSTFLAGS` — to the caller's inherited value, or to
 nothing — because *assigning it at all* is what displaces the configuration's
-tables. A recipe that left the variable unset would ship an artefact built with
-the parallel frontend and `mold`. On CI the release lanes are already covered,
-because `setup-rust` exports `RUSTFLAGS` for the whole job.
+`rustflags` tables. A recipe that left the variable unset would ship an
+artefact built with the parallel frontend. On CI the release lanes are already
+covered, because `setup-rust` exports `RUSTFLAGS` for the whole job. The
+`linker` key survives that assignment, so the release recipe and both packaging
+lanes also set `NETSUKE_PLATFORM_LINKER=1`; without it the shipped artefact
+would still link with `mold`. The packaged Linux builds run inside a `cross`
+container, and `cross` forwards only a short allowlist of host variables, so
+`Cross.toml` passes the opt-out through; otherwise the variable would stop at
+the container boundary.
+
+The opt-out is necessary but was not sufficient on the packaging lane. That job
+also runs a nested Cargo build in the checkout, for `cargo-orthohelp`, and a
+run failed with `collect2: fatal error: cannot find 'ld'` — the signature of a
+wrapper that fell through to `mold` on a runner that installs none, because the
+variable did not reach the nested tool. The lane therefore also runs
+`make install-build-tools` and puts the prefix on `PATH` before that step, as
+every other Linux lane does. The shipped artefact is unaffected: it is linked by
+`cross` in its own container, whose target linker outranks the configuration
+key.
 
 **Coverage.** A build whose output is a measurement is a reproducibility claim,
 so it takes neither the parallel frontend nor the linker change. Both coverage
 steps assign `RUSTFLAGS` at the step itself rather than inheriting it from the
 toolchain action, so the exclusion is visible where it applies and a contract
-has something to read. `tests/workflow_contracts/build_standard_wiring_test.py`
-asserts the assignment and, separately, that no excluded flag appears; the two
-fail to different edits.
+has something to read. Both also set `NETSUKE_PLATFORM_LINKER=1` for the same
+reason as release. `tests/workflow_contracts/build_standard_wiring_test.py`
+asserts the assignment, the opt-out, and, separately, that no excluded flag
+appears; the three fail to different edits.
 
 The coverage lanes install the pinned `mold` all the same, with
 `make install-build-tools` ahead of the coverage step. The measured build never

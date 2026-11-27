@@ -372,6 +372,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0085: Bound canonical admission resources](adrs/adr-0085-bound-canonical-admission-resources.md):
   Occurrence-based depth, node, and byte ceilings for canonical admission, so a
   shared host graph is refused rather than expanded without bound.
+- [ADR-0086: Select the pinned mold through Cargo's linker key](adrs/adr-0086-select-the-pinned-mold-through-cargos-linker-key.md):
+  The `linker` key as the setting an exported `RUSTFLAGS` does not displace,
+  the wrapper that selects mold, and the opt-out the excluded lanes set.
 
 ## Proposals
 

@@ -23,6 +23,12 @@
 # be repeated in each source, including the `RUSTFLAGS` the Makefile composes
 # for the gate targets. tests/build_tools_cargo_config_tests.rs and
 # tests/makefile_test_target/rustflags.rs hold the sources equal.
+#
+# The `linker` key is the exception: an exported `RUSTFLAGS` does not displace
+# it. That is what keeps mold selected on a worker whose caller exports its own
+# flags, such as the mutation worker. The wrapper honours an explicit opt-out
+# for the release, packaging, and coverage shapes that must keep the platform
+# linker.
 [build]
 rustflags = ["-Zthreads=8"]
 
@@ -31,6 +37,7 @@ rustflags = ["-Zthreads=8"]
 # platform default linker.
 [target.'cfg(target_os = "linux")']
 rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]
+linker = ".cargo/mold-linker"
 
 [unstable]
 embed-metadata = false

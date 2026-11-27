@@ -1,0 +1,16 @@
+# Configuration for `cross`, which the pinned `rust-build-release` action uses
+# for the packaged Linux builds.
+#
+# `cross` does not pass arbitrary host variables into its build container: it
+# forwards `CARGO_*`, `CROSS_*`, and a short list of others. The build standard
+# excludes release and packaging by setting `NETSUKE_PLATFORM_LINKER=1`, but a
+# variable that never reaches the container cannot opt the linker wrapper out.
+# The wrapper is selected by `.cargo/config.toml`'s `linker` key, which
+# survives the `RUSTFLAGS` the action exports, so without this passthrough the
+# container would try `cc -fuse-ld=mold` and need a mold the image does not
+# install.
+#
+# The target linker the cross image configures is unaffected: an environment
+# `CARGO_TARGET_<triple>_LINKER` outranks the configuration key.
+[build.env]
+passthrough = ["NETSUKE_PLATFORM_LINKER"]
