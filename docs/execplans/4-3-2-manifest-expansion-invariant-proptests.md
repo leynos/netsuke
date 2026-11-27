@@ -2474,7 +2474,7 @@ Delivered in seventeen commits on
 - `src/manifest/expand/property_tests/` holds five properties (one per
   obligation), a fixed-seed coverage tripwire with a negative control, the
   authored-entry model, the independent oracle, and the relocated generated
-  tests. `make proptest` selects all of it: 280 tests, about 11 s.
+  tests. `make proptest` selects all of it: 284 tests, about 10 s.
 - Six mutation patches, registered in `SUPPLEMENTAL_PROPERTY_PATCHES`, each
   make their named property fail for the intended reason and compile under the
   mutation compile guard.
@@ -2509,11 +2509,11 @@ Delivered in seventeen commits on
   stated over key sequences. The one existing test that looked like it covered
   order never reached the defect.
 
-**Final evidence.** The eleven-target closure set passed at `98dcd9f6b` after
+**Final evidence.** The eleven-target closure set passed at `7c771a36d` after
 the branch was rebased onto `origin/main` `865ca23ae`: `check-fmt`, `typecheck`,
 `lint` (all four substages, including Whitaker's four passes), `doc-coverage`
 (98.38%), `markdownlint` including spelling, `nixie`, `test` (6,737 nextest
-tests plus doctests), `proptest` (280), `mbake validate Makefile`,
+tests plus doctests), `proptest` (284), `mbake validate Makefile`,
 `test-workflow-contracts` (2,561 plus 69), and `test-kani-mutations` (prewarm,
 negative guard, and compile guard). Only this ExecPlan changed afterwards, at
 `799b9dce9` and the closure-record commit that follows it, and `make check-fmt`,
