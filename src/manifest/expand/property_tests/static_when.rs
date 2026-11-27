@@ -1,4 +1,5 @@
-//! `OBL-STATIC-WHEN` (`RM-4.3.2.d`, clause `C-4`).
+//! Check a static entry survives exactly when its condition holds
+//! (`OBL-STATIC-WHEN`, `C-4`), via `static_document_spec_strategy` and `model`.
 
 use super::model::{expected_document, expected_filtered};
 use super::strategy::{DocumentSpec, static_document_spec_strategy};

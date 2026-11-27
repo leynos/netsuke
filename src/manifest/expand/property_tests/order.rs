@@ -1,4 +1,5 @@
-//! `OBL-ORDER` (`FV-EXP`, `DES-ORDER`, clause `C-2`).
+//! Check authoring key order survives expansion (`OBL-ORDER`, `FV-EXP`,
+//! `C-2`), comparing `strategy` draws with `model::expected_outputs`.
 
 use super::model::expected_outputs;
 use super::strategy::{

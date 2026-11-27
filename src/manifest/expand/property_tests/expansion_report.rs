@@ -206,9 +206,8 @@ proptest! {
         let expr: String = ws.into_iter().collect();
         for section in ["targets", "actions"] {
             let mut doc = foreach_doc(section, &items, Some(&expr));
-            // The whitespace-only check applies on the iteration path and the
-            // plain path alike; with zero items the `when` clause is never
-            // reached, so anchor the non-iterating variant too.
+            // The check applies on both paths; with zero items the `when`
+            // clause is never reached, so anchor the non-iterating variant.
             let mut plain_section = ManifestMap::new();
             plain_section.insert(
                 section.into(),

@@ -1,4 +1,7 @@
 //! `OBL-GEN`: each generator still reaches every class its properties need.
+//! `classifiers` names one sample's classes, `document_classes` a document's,
+//! and each test enforces the floor on a fixed-seed sample, so a generator
+//! that stopped emitting a shape fails here.
 
 use super::strategy::{
     document_spec_strategy, entry_spec_strategy, foreach_entry_spec_strategy,
@@ -65,15 +68,13 @@ fn tally<S: Strategy>(
 
 /// Fail when any required class reaches less than the floor.
 fn check_floors(tally: &Tally, required: &[&'static str], total: usize) -> Result<(), String> {
-    // An empty denominator would make every floor zero and pass a sample that
-    // never exercised the classes at all.
+    // An empty denominator would make every floor zero and pass any sample.
     if total == 0 {
         return Err(format!(
             "the sample placed no draw in scope, so no class can be checked: {tally:?}"
         ));
     }
-    // Round up: 5% of 512 is 25.6, so a floor of 25 would sit below the
-    // stated share and admit a class rarer than the contract allows.
+    // Round up so a floor never sits below the stated 5% share.
     let floor = total.saturating_mul(MINIMUM_CLASS_PERCENT).div_ceil(100);
     let unreached: Vec<String> = required
         .iter()

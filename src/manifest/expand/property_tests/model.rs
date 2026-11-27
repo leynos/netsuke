@@ -85,8 +85,7 @@ pub(super) fn deep_equal(actual: &ManifestValue, expected: &ManifestValue) -> bo
                         actual_float.to_bits() == expected_float.to_bits()
                     }),
                 (false, false) => actual_number == expected_number,
-                // An integer and a float are different representations, and
-                // comparing them through `f64` would round the integer.
+                // Different representations: `f64` comparison rounds integers.
                 (true, false) | (false, true) => false,
             }
         }

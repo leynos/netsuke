@@ -158,9 +158,8 @@ fn items_strategy(integer_domain: bool) -> BoxedStrategy<Items> {
         ]
         .boxed()
     } else {
-        // A null item in the list-literal spelling is the only way to exercise
-        // that kind through the string form, and a uniformly drawn value rarely
-        // produces one, so it gets its own arm.
+        // A null item is the only way to reach that kind through the string
+        // form, and a uniform draw rarely makes one, so it gets its own arm.
         prop_oneof![
             1 => Just(Items::Arbitrary(Vec::new())),
             2 => proptest::collection::vec(json_values(field_string_strategy()), non_empty)
@@ -203,9 +202,8 @@ fn body_strategy(has_foreach: bool, has_when: bool) -> impl Strategy<Value = Bod
                 let integer_items =
                     integer_domain || maybe_condition.is_some_and(Condition::reads_item);
                 let vars = vars_strategy(maybe_condition, has_foreach, &bindings);
-                // Only a boolean-valued shape has a template form. A template
-                // that rendered an integer would read as false, which is not
-                // what the condition means.
+                // Only a boolean-valued shape has a template form; a rendered
+                // integer would read as false.
                 let accepts_template = maybe_condition.is_some_and(Condition::has_template_form);
                 let template = any::<bool>().prop_map(move |drawn| drawn && accepts_template);
                 let item_values: BoxedStrategy<Option<Items>> = if has_foreach {

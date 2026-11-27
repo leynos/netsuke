@@ -68,8 +68,7 @@ fn verdict_condition(shape: Condition, verdict_holds: bool) -> (Condition, Bindi
 fn shape_with_verdict(shape: Condition, verdict_holds: bool) -> (Condition, Bindings) {
     let literal = |holds: bool| (Condition::Literal(holds), Bindings::with_count(0, 0));
     match shape {
-        // A static entry cannot read either iteration binding, and a literal
-        // is simply replaced.
+        // A static entry cannot read an iteration binding; a literal is replaced.
         Condition::Literal(_) | Condition::IndexCmp(..) | Condition::ItemCmp(..) => {
             literal(verdict_holds)
         }
@@ -85,9 +84,8 @@ fn shape_with_verdict(shape: Condition, verdict_holds: bool) -> (Condition, Bind
 
 /// Pick a constant making `operator` return `verdict_holds` against zero.
 fn verdict_constant(operator: CmpOp, verdict_holds: bool) -> i64 {
-    // For a left operand of zero, one of -1, 0, and 1 always produces the
-    // wanted verdict for any operator; searching the three keeps this a
-    // property of `apply` rather than a second table of operator meanings.
+    // For a zero left operand, one of -1, 0, or 1 gives the wanted verdict
+    // under any operator, so search those instead of tabulating meanings.
     [-1_i64, 0, 1]
         .into_iter()
         .find(|constant| operator.apply(0, *constant) == verdict_holds)

@@ -1,4 +1,5 @@
-//! `OBL-WHEN-REMOVED` (`RM-4.3.2.b`, clause `C-4`).
+//! Check both control keys are removed and counts exact (`OBL-WHEN-REMOVED`,
+//! `RM-4.3.2.b`, `C-4`) against `model::expected_document` and `expected_filtered`.
 
 use super::model::{expected_document, expected_filtered};
 use super::strategy::{Section, document_spec_strategy};

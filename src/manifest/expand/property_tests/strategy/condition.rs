@@ -121,13 +121,10 @@ impl Condition {
     /// Generate one shape from the closed set.
     pub(super) fn strategy() -> impl Strategy<Value = Self> {
         let operator = CmpOp::strategy().boxed();
-        // The two iteration shapes carry extra weight: they are only legal on
-        // a foreach entry, and the coverage tripwire requires each to reach
-        // five percent of *all* entry draws, most of which are static.
-        // The comparison shapes carry more weight than the bare-variable ones
-        // because only they can fail for a fraction of values: a literal or a
-        // flag yields one verdict per draw, so an unlucky sample can starve a
-        // verdict class that the once-per-draw floor requires.
+        // The iteration shapes are only legal on a foreach entry, yet the
+        // coverage floor counts them over all entry draws. The comparison
+        // shapes outweigh the bare-variable ones because only they can fail
+        // for a fraction of values, which a once-per-draw floor can starve.
         prop_oneof![
             1 => any::<bool>().prop_map(Self::Literal),
             1 => (0..VAR_NAMES.len()).prop_map(Self::Flag),

@@ -250,8 +250,7 @@ pub(super) fn injection_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool 
 /// Count the item kinds one foreach entry's values reach.
 fn item_classes(body: &BodySpec, items: &Items, tally: &mut ClassSet) {
     let Items::Arbitrary(values) = items else {
-        // An empty integer sequence reaches no item kind at all; reporting
-        // one here would credit a class the draw never contained.
+        // An empty integer sequence reaches no item kind, so credit none.
         if items.len() > 0 {
             count(tally, "item-number");
         }

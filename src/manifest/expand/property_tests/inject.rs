@@ -1,4 +1,5 @@
-//! `OBL-INJECT` (`RM-4.3.2.c`, clause `C-3`).
+//! Prove each `foreach` iteration injects `item` and `index` (`OBL-INJECT`,
+//! `RM-4.3.2.c`, `C-3`) via `expand_foreach`, `support` and `model`.
 
 use super::model::deep_equal;
 use super::strategy::foreach_entry_spec_strategy;

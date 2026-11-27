@@ -1,4 +1,5 @@
-//! `OBL-PRESERVE` (`RM-4.3.2.a`, clause `C-1`).
+//! Check non-control fields survive expansion unchanged (`OBL-PRESERVE`,
+//! `RM-4.3.2.a`, `C-1`), comparing `support` with `model::expected_outputs`.
 
 use super::model::{deep_equal, expected_outputs};
 use super::strategy::entry_spec_strategy;
