@@ -1978,10 +1978,10 @@ document:         targets-entries 409, actions-entries 408, static 433,
                   absent 191-198
 ```
 
-`make proptest` wall time: 8-10 s for all 279 selected property tests, which
-now include the witness cases and the oracle's regression tests, because both
-live under the suite's `property_tests` path. The 141-test `manifest::expand`
-tree runs in 2 s.
+`make proptest` wall time: about 11 s for all 280 selected property tests,
+which now include the witness cases and the oracle's regression tests, because
+both live under the suite's `property_tests` path. The 141-test
+`manifest::expand` tree runs in 2 s.
 
 ### EP-M1 plateau gate run and rebase### EP-M1 plateau gate run and rebase
 
@@ -2361,7 +2361,7 @@ Delivered in seventeen commits on
 - `src/manifest/expand/property_tests/` holds five properties (one per
   obligation), a fixed-seed coverage tripwire with a negative control, the
   authored-entry model, the independent oracle, and the relocated generated
-  tests. `make proptest` selects all of it: 243 tests, 11 s.
+  tests. `make proptest` selects all of it: 280 tests, about 11 s.
 - Six mutation patches, registered in `SUPPLEMENTAL_PROPERTY_PATCHES`, each
   make their named property fail for the intended reason and compile under the
   mutation compile guard.
@@ -2396,11 +2396,24 @@ Delivered in seventeen commits on
   stated over key sequences. The one existing test that looked like it covered
   order never reached the defect.
 
-**Final evidence.** The eleven-target closure set passed at `731241b49`:
-`check-fmt`, `typecheck`, `lint` (all four substages), `doc-coverage` (98.38%),
-`markdownlint`, `nixie`, `test` (6739 nextest tests plus doctests), `proptest`
-(243), `mbake`, `test-workflow-contracts` (2561 plus 69), and
-`test-kani-mutations`.
+**Final evidence.** The eleven-target closure set passed at `7f5adce30`, the
+last code revision: `check-fmt`, `typecheck`, `lint` (all four substages,
+including Whitaker's four passes), `doc-coverage` (98.38%), `markdownlint`
+including spelling, `nixie`, `test` (6,737 nextest tests plus doctests),
+`proptest` (280), `mbake validate Makefile`, `test-workflow-contracts` (2,561
+plus 69), and `test-kani-mutations` (prewarm, negative guard, and compile
+guard). Only this ExecPlan changed afterwards, at `799b9dce9` and the
+closure-record commit that follows it, and `make check-fmt`,
+`make markdownlint`, and the ExecPlan status contract were re-run there.
+
+**Scope tolerance.** The plan allows at most 50 non-ExecPlan files and 3,500
+net lines of code and other documentation, with file moves counted once.
+Measured against `56d1e0a22`, the diff is exactly 50 files. A raw `--numstat`
+sum reports 3,588 net lines because the two `git mv` moves of the relocated
+generated tests appear as whole-file additions; with each move counted once, as
+the plan requires, the net is 3,161 lines. Both counts are within tolerance.
+The measurement treats the mutation patches and the YAML fixtures as planned
+files, which the plan's own file list does.
 
 **Residual gaps.** Those recorded under *Residual gaps* above, unchanged: query
 mode, post-error document state, non-object static `vars`, `glob()` and stdlib

@@ -43,10 +43,9 @@ impl BodySpec {
 
     /// The authored key sequence with the control keys in place.
     ///
-    /// Each control key has its own independently drawn slot. The key written
-    /// first takes the lower slot; on a tie it is inserted after the other, so
-    /// it still ends up first. The recorded order and the observed sequence
-    /// therefore cannot disagree.
+    /// Each control key has its own drawn slot. The key written first always
+    /// takes the lower slot, and a tie inserts it after the other, so the
+    /// recorded order and the observed sequence cannot disagree.
     fn authored_entries(&self) -> Vec<(String, ManifestValue)> {
         let mut entries = self.fields_with_vars();
         let base = entries.len();
@@ -61,13 +60,8 @@ impl BodySpec {
         };
         let second_slot = self.second_control_layout.position(base);
         let (low_slot, high_slot) = (first_slot.min(second_slot), first_slot.max(second_slot));
-        let (low_key, high_key) = if first_slot <= second_slot {
-            (first, second)
-        } else {
-            (second, first)
-        };
-        entries.insert(high_slot.min(entries.len()), high_key);
-        entries.insert(low_slot.min(entries.len()), low_key);
+        entries.insert(high_slot.min(entries.len()), second);
+        entries.insert(low_slot.min(entries.len()), first);
         entries
     }
 
@@ -119,6 +113,32 @@ impl BodySpec {
     fn when_control(&self) -> Option<(String, ManifestValue)> {
         let (condition, template) = self.when?;
         Some(("when".to_owned(), rendered_condition(condition, template)))
+    }
+
+    /// The authored control block's rendered order.
+    ///
+    /// This is derived from the slots after the first-written key is placed,
+    /// so a classifier reads what the entry actually renders rather than what
+    /// it intended.
+    pub(in crate::manifest::expand::property_tests) fn rendered_control_order(
+        &self,
+    ) -> Option<ControlOrder> {
+        let rendered: Vec<String> = self
+            .authored_entries()
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|key| key == "foreach" || key == "when")
+            .collect();
+        match rendered
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .as_slice()
+        {
+            ["foreach", "when"] => Some(ControlOrder::ForeachFirst),
+            ["when", "foreach"] => Some(ControlOrder::WhenFirst),
+            _ => None,
+        }
     }
 
     /// The entry-level key sequence an expanded entry must carry.
@@ -241,11 +261,6 @@ impl BodySpec {
             _ => first.min(self.second_control_layout.position(base)),
         };
         base.saturating_sub(earliest)
-    }
-
-    /// Report which control key the entry writes first.
-    pub(in crate::manifest::expand::property_tests) const fn control_order(&self) -> ControlOrder {
-        self.control_order
     }
 
     /// Report whether the entry's two control keys share one slot.

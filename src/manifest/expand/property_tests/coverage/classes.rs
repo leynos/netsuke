@@ -45,6 +45,11 @@ pub(super) const ENTRY_CLASSES: &[&str] = &[
 pub(super) const INJECT_CLASSES: &[&str] = &[
     "foreach-array",
     "foreach-string",
+    "control-last",
+    "control-one-following",
+    "control-two-or-more-following",
+    "control-same-slot",
+    "control-two-slots",
     "inject-empty",
     "inject-all-included",
     "inject-all-excluded",
@@ -63,6 +68,9 @@ pub(super) const INJECT_CLASSES: &[&str] = &[
 
 /// Classes the static-condition generator must reach.
 pub(super) const STATIC_CLASSES: &[&str] = &[
+    "control-last",
+    "control-one-following",
+    "control-two-or-more-following",
     "targets-held-expression",
     "targets-held-template",
     "targets-failed-expression",
@@ -83,9 +91,11 @@ pub(super) const DOCUMENT_CLASSES: &[&str] = &[
     "targets-entry-held",
     "targets-entry-failed",
     "targets-entry-absent",
+    "targets-entry-unevaluated",
     "actions-entry-held",
     "actions-entry-failed",
     "actions-entry-absent",
+    "actions-entry-unevaluated",
 ];
 
 /// Classes the static-entry generator must reach.
@@ -101,6 +111,9 @@ pub(super) const STATIC_ENTRY_CLASSES: &[&str] = &[
     "no-vars",
     "condition",
     "no-condition",
+    "condition-expression",
+    "condition-template",
+    "condition-reads-vars",
     "control-last",
     "control-one-following",
     "control-two-or-more-following",

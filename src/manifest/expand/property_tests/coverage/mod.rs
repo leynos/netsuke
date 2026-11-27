@@ -161,6 +161,10 @@ fn static_condition_generator_reaches_every_verdict_class() -> Result<(), String
 }
 
 /// Classify the strategy the static-survival property draws from.
+///
+/// This strategy decides whether a condition is present, so it must reach both
+/// the condition-free and condition-carrying classes, and for the latter the
+/// verdict and shape families that property asserts over.
 #[test]
 fn static_entry_generator_reaches_every_shape_class() -> Result<(), String> {
     let (tally, draws) = tally(&static_entry_spec_strategy(), entry_classes)?;

@@ -96,12 +96,20 @@ fn condition_form_class(body: &super::super::strategy::BodySpec) -> &'static str
     }
 }
 
+/// Count the classes every entry's control-key layout reaches.
+fn control_classes(body: &BodySpec, tally: &mut ClassSet) {
+    count(tally, control_class(body));
+    count(tally, control_order_class(body));
+    count(tally, control_adjacency_class(body));
+}
+
 /// Name which control key the entry writes first, if it writes both.
 fn control_order_class(body: &BodySpec) -> &'static str {
     match (body.is_foreach(), body.has_condition()) {
-        (true, true) => match body.control_order() {
-            ControlOrder::ForeachFirst => "control-both-foreach-first",
-            ControlOrder::WhenFirst => "control-both-when-first",
+        (true, true) => match body.rendered_control_order() {
+            Some(ControlOrder::ForeachFirst) => "control-both-foreach-first",
+            Some(ControlOrder::WhenFirst) => "control-both-when-first",
+            None => "control-both-single-key",
         },
         _ => "control-single",
     }
@@ -184,6 +192,7 @@ pub(super) fn static_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool {
     if !body.has_condition() {
         return false;
     }
+    control_classes(body, tally);
     let verdict_holds = super::super::model::expected_filtered(body).is_empty();
     let class = match (spec.section, verdict_holds, body.condition_is_template()) {
         (Section::Targets, true, false) => "targets-held-expression",
@@ -223,31 +232,61 @@ pub(super) fn document_classes(spec: &DocumentSpec, tally: &mut ClassSet) -> boo
                     "document-static"
                 },
             );
-            count(tally, section_verdict_class(section, &entry.body));
+            section_verdict_classes(section, &entry.body, tally);
         }
     }
     true
 }
 
-/// Name one entry's condition verdict within its section.
+/// Name one entry's condition verdicts within its section.
 ///
 /// `OBL-WHEN-REMOVED` requires, per section, entries whose condition held,
-/// entries whose condition failed, and entries with no condition; the document
-/// classifier must reach all three or the property could pass without ever
-/// exercising one of them.
-fn section_verdict_class(section: Section, body: &BodySpec) -> &'static str {
+/// entries whose condition failed, and entries with no condition. The
+/// verdict is per *evaluated iteration*, not per entry: an empty `foreach`
+/// evaluates no condition and so is neither held nor failed, and a mixed
+/// iteration reaches both classes at once. One draw may therefore contribute
+/// two classes, which is why this appends to the set rather than returning one
+/// name.
+fn section_verdict_classes(section: Section, body: &BodySpec, tally: &mut ClassSet) {
     if !body.has_condition() {
-        return match section {
-            Section::Targets => "targets-entry-absent",
-            Section::Actions => "actions-entry-absent",
-        };
+        count(tally, section_class(section, "absent"));
+        return;
     }
-    let held = super::super::model::expected_filtered(body).is_empty();
-    match (section, held) {
-        (Section::Targets, true) => "targets-entry-held",
-        (Section::Targets, false) => "targets-entry-failed",
-        (Section::Actions, true) => "actions-entry-held",
-        (Section::Actions, false) => "actions-entry-failed",
+    if let Some(items) = body.items() {
+        let verdicts: Vec<bool> = (0..items.len())
+            .map(|index| body.condition_holds(items.value_at(index).as_i64(), index))
+            .collect();
+        if verdicts.is_empty() {
+            // No iteration ran, so no condition was evaluated.
+            count(tally, section_class(section, "unevaluated"));
+        }
+        if verdicts.iter().any(|held| *held) {
+            count(tally, section_class(section, "held"));
+        }
+        if verdicts.iter().any(|held| !*held) {
+            count(tally, section_class(section, "failed"));
+        }
+        return;
+    }
+    let verdict = if body.condition_holds(None, 0) {
+        "held"
+    } else {
+        "failed"
+    };
+    count(tally, section_class(section, verdict));
+}
+
+/// Name one section-and-verdict class.
+fn section_class(section: Section, verdict: &'static str) -> &'static str {
+    match (section, verdict) {
+        (Section::Targets, "absent") => "targets-entry-absent",
+        (Section::Targets, "held") => "targets-entry-held",
+        (Section::Targets, "failed") => "targets-entry-failed",
+        (Section::Targets, _) => "targets-entry-unevaluated",
+        (Section::Actions, "absent") => "actions-entry-absent",
+        (Section::Actions, "held") => "actions-entry-held",
+        (Section::Actions, "failed") => "actions-entry-failed",
+        (Section::Actions, _) => "actions-entry-unevaluated",
     }
 }
 
@@ -257,6 +296,7 @@ pub(super) fn injection_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool 
     if let Some(form) = body.foreach_form() {
         count(tally, foreach_form_class(form));
     }
+    control_classes(body, tally);
     user_collisions(body, tally);
     let Some(items) = body.items() else {
         return false;
