@@ -43,18 +43,22 @@ fn config(cases: u32) -> ProptestConfig {
     }
 }
 
-/// A generated graph and whether it was built with a repeated reference.
+/// A generated graph and whether it repeats a *traversed* child.
 ///
 /// The flag is set by construction, not inferred by comparing values: two
 /// equal leaves are indistinguishable by value but are not a shared
-/// descendant, and only the construction site knows which one it made. The
-/// corpus test reads the flag to prove the shared arm is exercised.
+/// descendant, and only the construction site knows which one it made.
+///
+/// A duplicated leaf does not produce the compact expansion the ceiling
+/// exists for, so the flag records only a container that stores a container
+/// child twice. The corpus test reads it to prove that shape was generated,
+/// rather than merely that two equal scalars appeared.
 #[derive(Clone, Debug)]
 struct Generated {
     /// The graph the filter will traverse.
     value: Value,
-    /// Whether some container in the graph stores one child twice.
-    shared: bool,
+    /// Whether some container stores another container as a child twice.
+    shared_container: bool,
 }
 
 /// A nested graph drawn from leaves, containers, and shared descendants.
@@ -73,30 +77,33 @@ fn graph() -> impl Strategy<Value = Generated> {
     ]
     .prop_map(|value| Generated {
         value,
-        shared: false,
+        shared_container: false,
     });
     leaf.prop_recursive(3, 8, 3, |inner| {
         prop_oneof![
             2 => vec(inner.clone(), 0..3).prop_map(|children| {
-                let shared = children.iter().any(|child| child.shared);
+                let shared_container = children.iter().any(|child| child.shared_container);
                 Generated {
                     value: Value::from(
                         children.into_iter().map(|child| child.value).collect::<Vec<_>>(),
                     ),
-                    shared,
+                    shared_container,
                 }
             }),
             2 => (inner.clone(), any::<bool>()).prop_map(|(child, share)| {
+                // Only a repeated container is the traversal-expanding shape;
+                // repeating a scalar leaf expands nothing.
+                let duplicated_container = share && is_container(&child.value);
+                let shared_container = child.shared_container || duplicated_container;
                 if share {
-                    let value = Value::from(vec![child.value.clone(), child.value]);
                     Generated {
-                        value,
-                        shared: true,
+                        value: Value::from(vec![child.value.clone(), child.value]),
+                        shared_container,
                     }
                 } else {
                     Generated {
                         value: Value::from(vec![child.value]),
-                        shared: child.shared,
+                        shared_container,
                     }
                 }
             }),
@@ -105,7 +112,7 @@ fn graph() -> impl Strategy<Value = Generated> {
                     value: Value::from_iter(
                         map.into_iter().map(|(key, value)| (key, Value::from(value))),
                     ),
-                    shared: false,
+                    shared_container: false,
                 }
             }),
         ]
@@ -119,7 +126,7 @@ fn graph() -> impl Strategy<Value = Generated> {
 /// including scalars and maps, where those are leaves.
 fn subject() -> impl Strategy<Value = Generated> {
     let member = vec(graph(), 0..3).prop_map(|children| {
-        let shared = children.iter().any(|child| child.shared);
+        let shared_container = children.iter().any(|child| child.shared_container);
         Generated {
             value: Value::from(
                 children
@@ -127,11 +134,11 @@ fn subject() -> impl Strategy<Value = Generated> {
                     .map(|child| child.value)
                     .collect::<Vec<_>>(),
             ),
-            shared,
+            shared_container,
         }
     });
     vec(member, 0..4).prop_map(|drawn| {
-        let shared = drawn.iter().any(|entry| entry.shared);
+        let shared_container = drawn.iter().any(|entry| entry.shared_container);
         Generated {
             value: Value::from(
                 drawn
@@ -139,7 +146,7 @@ fn subject() -> impl Strategy<Value = Generated> {
                     .map(|entry| entry.value)
                     .collect::<Vec<_>>(),
             ),
-            shared,
+            shared_container,
         }
     })
 }
@@ -332,32 +339,33 @@ proptest! {
 fn the_generated_corpus_reaches_nesting_and_sharing() -> Result<()> {
     let mut runner = TestRunner::new(config(96));
     // `TestRunner::run` takes an `Fn`, so the tallies live in a `Cell`. The
-    // tuple is `(nested, shared, deepest)`.
+    // tuple is `(nested, shared_container, deepest)`.
     let tallies: Cell<(bool, bool, usize)> = Cell::new((false, false, 0));
     runner
         .run(&subject(), |generated| {
-            let (nested, shared, deepest) = tallies.get();
+            let (nested, shared_container, deepest) = tallies.get();
             let depth = reference_counts(&generated.value).1;
             tallies.set((
                 nested || depth >= 2,
-                // The flag is set where the repeated child is built. Comparing
-                // values instead would count two equal, independently drawn
-                // leaves as sharing, so the corpus could report the shared arm
-                // exercised when it never was.
-                shared || generated.shared,
+                // The flag is set where the repeated child is built, and only
+                // for a repeated container. Comparing values instead would
+                // count two equal, independently drawn leaves as sharing, so
+                // the corpus could report the expanding shape exercised when
+                // only scalars were duplicated.
+                shared_container || generated.shared_container,
                 deepest.max(depth),
             ));
             Ok(())
         })
         .map_err(|err| anyhow::anyhow!("the corpus runner failed: {err}"))?;
-    let (saw_nested, saw_shared, deepest) = tallies.get();
+    let (saw_nested, saw_shared_container, deepest) = tallies.get();
     ensure!(
         saw_nested,
         "the corpus must reach a graph nested at least two levels deep; deepest was {deepest}"
     );
     ensure!(
-        saw_shared,
-        "the corpus must reach a container that stores one child twice"
+        saw_shared_container,
+        "the corpus must reach a container that stores a container child twice"
     );
     Ok(())
 }
