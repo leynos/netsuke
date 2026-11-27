@@ -387,6 +387,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = असमर्थित है�
 
 # संग्रह सहायकों के निदान।
 stdlib.collections.flatten.expected_sequence = flatten को अनुक्रम की मदें अपेक्षित थीं, किंतु { $kind } मिला।
+stdlib.collections.flatten.depth_limit = flatten ने { $limit } की नेस्टिंग गहराई सीमा पार की।
+stdlib.collections.flatten.item_limit = flatten ने { $limit } बनाए रखे गए आइटम की सीमा पार की।
+stdlib.collections.flatten.visit_limit = flatten ने { $limit } आइटम की ट्रैवर्सल सीमा पार की।
 stdlib.collections.compact.not_sequence = compact को अनुक्रम अपेक्षित था, किंतु { $kind } मिला।
 stdlib.collections.group_by.empty_attribute = group_by को अरिक्त गुण चाहिए।
 stdlib.collections.group_by.unresolved = group_by { $kind } प्रकार की मद पर “{ $attr }” नहीं खोज सका।

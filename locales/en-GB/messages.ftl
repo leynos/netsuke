@@ -387,6 +387,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Unsupported hash algorithm '{ $a
 
 # Collection helper diagnostics.
 stdlib.collections.flatten.expected_sequence = Flatten expected sequence items but found { $kind }.
+stdlib.collections.flatten.depth_limit = Flatten exceeded the nesting depth limit of { $limit }.
+stdlib.collections.flatten.item_limit = Flatten exceeded the retained item limit of { $limit } leaves.
+stdlib.collections.flatten.visit_limit = Flatten exceeded the traversal visit limit of { $limit } items.
 stdlib.collections.compact.not_sequence = compact expects a sequence, received { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by requires a non-empty attribute.
 stdlib.collections.group_by.unresolved = group_by could not resolve '{ $attr }' on item of kind { $kind }.

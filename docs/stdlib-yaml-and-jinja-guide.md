@@ -199,9 +199,14 @@ Collection filters are pure and preserve input order.
 
 - `values | uniq` removes later duplicate values. Example:
   `{{ ['alpha', 'alpha', 'beta'] | uniq | join(',') }}` produces `alpha,beta`.
-- `values | flatten` recursively flattens nested sequences and rejects scalar
-  members. Example: `{{ [[1, 2], [3]] | flatten | join(',') }}` produces
-  `1,2,3`.
+- `values | flatten` recursively flattens nested sequences. The subject and
+  each immediate member of it must be a sequence or iterable; an immediate
+  member that is a scalar is an error. Scalars reached *inside* a sequence are
+  the values being collected and are retained in the result. Example:
+  `{{ [[1, 2], [3]] | flatten | join(',') }}` produces `1,2,3`, whose leaves
+  are the scalars `1`, `2`, and `3`. Leaves are kept depth-first from left to
+  right, a shared value is expanded once per occurrence, and a string or map
+  member is retained as a leaf rather than descended into.
 - `values | group_by(attribute)` groups objects by an attribute while
   preserving first-seen key order. Missing attributes are errors. Example:
   `{{ ([{'kind': 'tool'}, {'kind': 'tool'}] | group_by('kind')).tool | length }}`
@@ -212,6 +217,28 @@ Collection filters are pure and preserve input order.
   which keeps only truthy values and so also discards `0`, `false`, and empty
   sequences. Example: `{{ ['a', none, '', 'b'] | compact | join(',') }}`
   produces `a,b`.
+
+`flatten` is bounded by fixed ceilings: at most 1,000,000 traversal visits
+(containers included), at most 100,000 retained leaves, and a nesting depth of
+at most 128. A breach raises an `InvalidOperation` error naming the ceiling
+through `stdlib.collections.flatten.visit_limit`,
+`stdlib.collections.flatten.item_limit`, or
+`stdlib.collections.flatten.depth_limit`.
+
+The visit and leaf ceilings are shared by every `flatten` call in one manifest
+load, so a template loop that calls the filter repeatedly draws from the same
+allowance rather than multiplying its work by the iteration count. The depth
+ceiling applies to each traversal. The ceilings are identical during manifest
+discovery, including `netsuke help targets`, and during full build rendering,
+and they are not configurable.
+
+The ceilings exist because MiniJinja sequences share their descendants, so a
+compact template can describe an expansion far larger than the template that
+built it, and because MiniJinja fuel counts engine instructions rather than
+work performed inside a native filter. One cost stays unbounded: a single
+`next()` call on a custom host object can block or allocate as much as the
+object's implementation chooses. The traversal bounds how many items it asks
+for, not the cost of one item.
 
 The following complete manifest exercises every path and collection filter. Its
 filesystem inputs are created by the documentation test before Netsuke is run.

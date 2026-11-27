@@ -389,6 +389,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nieobsługiwany algorytm skrótu
 
 # Diagnostyka pomocników kolekcji.
 stdlib.collections.flatten.expected_sequence = flatten oczekiwał elementów sekwencji, ale napotkał { $kind }.
+stdlib.collections.flatten.depth_limit = flatten przekroczył limit głębokości zagnieżdżenia { $limit }.
+stdlib.collections.flatten.item_limit = flatten przekroczył limit { $limit } zachowanych elementów.
+stdlib.collections.flatten.visit_limit = flatten przekroczył limit przejść { $limit } elementów.
 stdlib.collections.compact.not_sequence = compact oczekiwał sekwencji; typ otrzymanej wartości: { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by wymaga niepustego atrybutu.
 stdlib.collections.group_by.unresolved = group_by nie zdołał odnaleźć „{ $attr }” w elemencie typu { $kind }.

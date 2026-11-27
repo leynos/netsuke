@@ -388,6 +388,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Μη υποστηριζόμεν�
 
 # Διαγνωστικά των βοηθημάτων συλλογών.
 stdlib.collections.flatten.expected_sequence = Το flatten περίμενε στοιχεία ακολουθίας αλλά βρήκε { $kind }.
+stdlib.collections.flatten.depth_limit = Το flatten υπερέβη το όριο βάθους ένθεσης { $limit }.
+stdlib.collections.flatten.item_limit = Το flatten υπερέβη το όριο των { $limit } διατηρούμενων στοιχείων.
+stdlib.collections.flatten.visit_limit = Το flatten υπερέβη το όριο διέλευσης των { $limit } στοιχείων.
 stdlib.collections.compact.not_sequence = Το compact περιμένει ακολουθία· τύπος τιμής που βρέθηκε: { $kind }.
 stdlib.collections.group_by.empty_attribute = Το group_by απαιτεί μη κενό γνώρισμα.
 stdlib.collections.group_by.unresolved = Το group_by δεν μπόρεσε να εντοπίσει το «{ $attr }» σε στοιχείο τύπου { $kind }.

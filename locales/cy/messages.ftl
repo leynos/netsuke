@@ -391,6 +391,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algorithm stwnsio nas cefnogir: 
 
 # Diagnosteg cynorthwywyr y casgliadau.
 stdlib.collections.flatten.expected_sequence = Roedd flatten yn disgwyl eitemau dilyniant ond cafodd { $kind }.
+stdlib.collections.flatten.depth_limit = flatten a aeth y tu hwnt i'r terfyn dyfnder nythu o { $limit }.
+stdlib.collections.flatten.item_limit = flatten a aeth y tu hwnt i'r terfyn o { $limit } eitem a gedwir.
+stdlib.collections.flatten.visit_limit = flatten a aeth y tu hwnt i'r terfyn mynd trwyddo o { $limit } eitem.
 stdlib.collections.compact.not_sequence = Mae compact yn disgwyl dilyniant ond cafodd { $kind }.
 stdlib.collections.group_by.empty_attribute = Mae group_by angen priodoledd nad yw'n wag.
 stdlib.collections.group_by.unresolved = Methodd group_by â chanfod ‘{ $attr }’ ar eitem o'r math { $kind }.

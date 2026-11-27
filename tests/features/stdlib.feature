@@ -69,6 +69,14 @@ Feature: Template stdlib filters
     When I render template "{{ [['a'], 'b'] | flatten }}" at stdlib path "file"
     Then the stdlib error contains "Flatten expected sequence items"
 
+  Scenario: flatten rejects a shared graph at the traversal visit allowance
+    When I render template "{% set ns = namespace(v=[]) %}{% for _ in range(20) %}{% set ns.v = [ns.v, ns.v] %}{% endfor %}{{ [ns.v] | flatten | length }}" at stdlib path "file"
+    Then the stdlib error contains "exceeded the traversal visit limit"
+
+  Scenario: flatten rejects a deep chain at the nesting depth allowance
+    When I render template "{% set ns = namespace(v=[]) %}{% for _ in range(200) %}{% set ns.v = [ns.v] %}{% endfor %}{{ [ns.v] | flatten | length }}" at stdlib path "file"
+    Then the stdlib error contains "exceeded the nesting depth limit"
+
   Scenario: compact drops empty strings and nulls but keeps falsy values
     When I render template "{{ ['a', '', none, 0, false, 'b'] | compact | join(',') }}" at stdlib path "file"
     Then the stdlib output equals "a,0,False,b"

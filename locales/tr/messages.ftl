@@ -387,6 +387,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Desteklenmeyen özet algoritmas�
 
 # Koleksiyon yardımcılarının tanılaması.
 stdlib.collections.flatten.expected_sequence = flatten dizi öğeleri bekliyordu, ancak { $kind } buldu.
+stdlib.collections.flatten.depth_limit = flatten { $limit } iç içe geçme derinliği sınırını aştı.
+stdlib.collections.flatten.item_limit = flatten { $limit } saklanan öğe sınırını aştı.
+stdlib.collections.flatten.visit_limit = flatten { $limit } öğe gezinme sınırını aştı.
 stdlib.collections.compact.not_sequence = compact bir dizi bekliyordu, ancak { $kind } buldu.
 stdlib.collections.group_by.empty_attribute = group_by boş olmayan bir öznitelik gerektirir.
 stdlib.collections.group_by.unresolved = group_by, { $kind } türündeki bir öğede "{ $attr }" özniteliğini bulamadı.

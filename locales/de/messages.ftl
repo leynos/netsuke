@@ -387,6 +387,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nicht unterstützter Hash-Algori
 
 # Diagnosen der Sammlungshelfer.
 stdlib.collections.flatten.expected_sequence = flatten erwartete Sequenzelemente, fand aber { $kind }.
+stdlib.collections.flatten.depth_limit = flatten hat die maximale Verschachtelungstiefe von { $limit } überschritten.
+stdlib.collections.flatten.item_limit = flatten hat die Grenze von { $limit } zurückbehaltener Elemente überschritten.
+stdlib.collections.flatten.visit_limit = flatten hat die Durchlaufgrenze von { $limit } Elementen überschritten.
 stdlib.collections.compact.not_sequence = compact erwartet eine Sequenz, fand aber { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by benötigt ein nicht leeres Attribut.
 stdlib.collections.group_by.unresolved = group_by konnte „{ $attr }“ an einem Element vom Typ { $kind } nicht auflösen.

@@ -387,6 +387,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Het hash-algoritme ‘{ $algorit
 
 # Diagnostiek van de verzamelinghelpers.
 stdlib.collections.flatten.expected_sequence = flatten verwachtte items uit een reeks, maar vond { $kind }.
+stdlib.collections.flatten.depth_limit = flatten overschreed de maximale nestelingsdiepte van { $limit }.
+stdlib.collections.flatten.item_limit = flatten overschreed de limiet van { $limit } behouden items.
+stdlib.collections.flatten.visit_limit = flatten overschreed de traverseringslimiet van { $limit } items.
 stdlib.collections.compact.not_sequence = compact verwachtte een reeks, maar vond { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vereist een attribuut dat niet leeg is.
 stdlib.collections.group_by.unresolved = group_by kon ‘{ $attr }’ niet vinden op een item van het type { $kind }.

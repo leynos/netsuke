@@ -1,4 +1,10 @@
 //! Collection filters available in the `MiniJinja` standard library.
+//!
+//! [`register_filters`] is the only caller that may expose these filters to a
+//! template environment, and every registration path — full manifest
+//! rendering, discovery, and the manifest-query surface — goes through it.
+//! The `flatten` traversal and its resource allowance live in the [`flatten`]
+//! child module so the bound has one owner; the remaining filters stay here.
 
 use indexmap::{IndexMap, IndexSet};
 use std::sync::Arc;
@@ -10,11 +16,34 @@ use minijinja::{
 
 use crate::localization::{self, keys};
 
+mod flatten;
+
+#[cfg(test)]
+mod tests;
+
 /// Register the collection filters (`uniq`, `flatten`, `compact`, `group_by`)
 /// on an environment.
+///
+/// One [`flatten::FlattenBudget`] is created here and captured by the
+/// `flatten` filter, so every call on this environment draws from the same
+/// allowance. An environment is built once per manifest load, which is the
+/// scope the manifest budget uses.
 pub(crate) fn register_filters(env: &mut Environment<'_>) {
+    register_filters_with_limits(env, flatten::FlattenLimits::DEFAULT);
+}
+
+/// Register the collection filters under an explicit flatten allowance.
+///
+/// This is the single registration implementation; [`register_filters`] passes
+/// the production ceilings. The extra parameter is what lets the sibling
+/// `tests` module drive the *registration* path — not just the filter — with
+/// ceilings small enough that a cumulative breach is reached in a few calls.
+fn register_filters_with_limits(env: &mut Environment<'_>, limits: flatten::FlattenLimits) {
+    let flatten_budget = Arc::new(flatten::FlattenBudget::new(limits));
     env.add_filter("uniq", |values: Value| uniq_filter(&values));
-    env.add_filter("flatten", |values: Value| flatten_filter(&values));
+    env.add_filter("flatten", move |values: Value| {
+        flatten::flatten_filter(&values, &flatten_budget)
+    });
     env.add_filter("compact", |values: Value| compact_filter(&values));
     env.add_filter("group_by", |values: Value, attr: String| {
         group_by_filter(&values, &attr)
@@ -139,55 +168,6 @@ fn compact_filter(values: &Value) -> Result<Value, Error> {
     Ok(Value::from_serialize(kept))
 }
 
-/// Flatten nested sequences within `values` into a single flat sequence.
-///
-/// # Errors
-///
-/// Returns an error when a top-level item is not a sequence or iterable.
-fn flatten_filter(values: &Value) -> Result<Value, Error> {
-    let iter = values.try_iter()?;
-    let mut flattened = Vec::new();
-
-    for item in iter {
-        match item.kind() {
-            ValueKind::Seq | ValueKind::Iterable => {
-                collect_flattened_values(item, &mut flattened)?;
-            }
-            kind => {
-                return Err(Error::new(
-                    ErrorKind::InvalidOperation,
-                    localization::message(keys::STDLIB_COLLECTIONS_FLATTEN_EXPECTED_SEQUENCE)
-                        .with_arg("kind", kind.to_string())
-                        .to_string(),
-                ));
-            }
-        }
-    }
-
-    Ok(Value::from_serialize(flattened))
-}
-
-/// Recursively append the leaves of `value` to `output`.
-///
-/// # Errors
-///
-/// Returns an error when a nested sequence or iterable value cannot be
-/// iterated.
-fn collect_flattened_values(value: Value, output: &mut Vec<Value>) -> Result<(), Error> {
-    match value.kind() {
-        ValueKind::Seq | ValueKind::Iterable => {
-            for nested in value.try_iter()? {
-                collect_flattened_values(nested, output)?;
-            }
-            Ok(())
-        }
-        _ => {
-            output.push(value);
-            Ok(())
-        }
-    }
-}
-
 /// Cluster items of `values` by the resolved value of `attr`, preserving
 /// first-key-seen order.
 ///
@@ -245,113 +225,5 @@ fn ensure_resolved(value: Value, attr: &str, item: &Value) -> Result<Value, Erro
         ))
     } else {
         Ok(value)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    //! Unit tests for the stdlib collection helpers.
-    use super::*;
-    use anyhow::{Result, anyhow, ensure};
-    use minijinja::context;
-    use rstest::rstest;
-
-    fn render_filter(template: &str, ctx: Value) -> Result<Value, Error> {
-        let mut env = Environment::new();
-        register_filters(&mut env);
-        env.compile_expression(template)?.eval(ctx)
-    }
-
-    #[rstest]
-    fn uniq_filter_removes_duplicates() -> Result<()> {
-        let ctx = context! { values => vec![1, 1, 2, 2, 3, 1] };
-        let result = render_filter("values | uniq", ctx)?;
-        let iter = result.try_iter()?;
-        let collected: Vec<_> = iter.map(|value| format!("{value}")).collect();
-        ensure!(
-            collected == ["1", "2", "3"],
-            "uniq filter output {collected:?} did not match expectation"
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    fn flatten_filter_flattens_deeply_nested_sequences() -> Result<()> {
-        let ctx = context! { values => vec![vec![vec![1], vec![2]], vec![vec![3]]] };
-        let result = render_filter("values | flatten", ctx)?;
-        let iter = result.try_iter()?;
-        let collected: Vec<_> = iter.map(|value| format!("{value}")).collect();
-        ensure!(
-            collected == ["1", "2", "3"],
-            "flatten filter output {collected:?} did not match expectation"
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    fn flatten_filter_rejects_scalars() -> Result<()> {
-        let ctx = context! { values => vec!["a", "b"] };
-        match render_filter("values | flatten", ctx) {
-            Ok(value) => Err(anyhow!(
-                "flatten should error for scalars but returned {value:?}"
-            )),
-            Err(err) => {
-                ensure!(
-                    err.kind() == ErrorKind::InvalidOperation,
-                    "unexpected error kind {kind:?}",
-                    kind = err.kind()
-                );
-                Ok(())
-            }
-        }
-    }
-
-    #[rstest]
-    fn group_by_filter_clusters_items_and_preserves_key_types() -> Result<()> {
-        #[derive(serde::Serialize)]
-        struct Item {
-            kind: Value,
-            value: &'static str,
-        }
-
-        let ctx = context! { values => vec![
-            Item { kind: Value::from(1), value: "one" },
-            Item { kind: Value::from(1), value: "two" },
-            Item { kind: Value::from("label"), value: "three" },
-        ]};
-        let result = render_filter("values | group_by('kind')", ctx)?;
-
-        let numeric_iter = result.get_item(&Value::from(1))?.try_iter()?;
-        let numeric_group = numeric_iter.count();
-        let labelled_iter = result.get_attr("label")?.try_iter()?;
-        let labelled_group = labelled_iter.count();
-
-        ensure!(
-            numeric_group == 2,
-            "expected numeric group length 2 but observed {numeric_group}"
-        );
-        ensure!(
-            labelled_group == 1,
-            "expected labelled group length 1 but observed {labelled_group}"
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    fn group_by_filter_rejects_empty_attribute() -> Result<()> {
-        let ctx = context! { values => vec![context!(kind => "tool")] };
-        match render_filter("values | group_by('')", ctx) {
-            Ok(value) => Err(anyhow!(
-                "group_by should reject empty attribute but returned {value:?}"
-            )),
-            Err(err) => {
-                ensure!(
-                    err.kind() == ErrorKind::InvalidOperation,
-                    "unexpected error kind {kind:?}",
-                    kind = err.kind()
-                );
-                Ok(())
-            }
-        }
     }
 }

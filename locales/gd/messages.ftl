@@ -389,6 +389,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algairim hais gun taic: “{ $al
 
 # Breithneachadh chuidichean nan cruinneachaidhean.
 stdlib.collections.flatten.expected_sequence = Bha dùil aig flatten ri nithean sreath ach fhuair e { $kind }.
+stdlib.collections.flatten.depth_limit = flatten a dh'fhalbh thairis air a' chrìoch doimhneachd neachaidh { $limit }.
+stdlib.collections.flatten.item_limit = flatten a dh'fhalbh thairis air a' chrìoch de { $limit } nì a chaidh a chumail.
+stdlib.collections.flatten.visit_limit = flatten a dh'fhalbh thairis air a' chrìoch turais de { $limit } nì.
 stdlib.collections.compact.not_sequence = Bha dùil aig compact ri sreath ach fhuair e { $kind }.
 stdlib.collections.group_by.empty_attribute = Tha group_by ag iarraidh buadh nach eil falamh.
 stdlib.collections.group_by.unresolved = Cha b' urrainn do group_by “{ $attr }” a lorg air nì den t-seòrsa { $kind }.

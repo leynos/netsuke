@@ -386,6 +386,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritme hash tidak didukung: "
 
 # Diagnostik pembantu koleksi.
 stdlib.collections.flatten.expected_sequence = flatten mengharapkan butir urutan tetapi menemukan { $kind }.
+stdlib.collections.flatten.depth_limit = flatten melewati batas kedalaman penyusunan { $limit }.
+stdlib.collections.flatten.item_limit = flatten melewati batas { $limit } item yang dipertahankan.
+stdlib.collections.flatten.visit_limit = flatten melewati batas penelusuran { $limit } item.
 stdlib.collections.compact.not_sequence = compact mengharapkan urutan tetapi menemukan { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by memerlukan atribut yang tidak kosong.
 stdlib.collections.group_by.unresolved = group_by tidak dapat menemukan "{ $attr }" pada butir bertipe { $kind }.

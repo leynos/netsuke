@@ -387,6 +387,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = الگوریتم درهم‌سا
 
 # تشخیص‌های یاورهای گردایه‌ها.
 stdlib.collections.flatten.expected_sequence = ‏flatten عضوهای یک دنباله را انتظار داشت اما { $kind } یافت.
+stdlib.collections.flatten.depth_limit = ‏flatten از حد عمق تودرتویی { $limit } فراتر رفت.
+stdlib.collections.flatten.item_limit = ‏flatten از حد { $limit } مورد نگه‌داشته‌شده فراتر رفت.
+stdlib.collections.flatten.visit_limit = ‏flatten از حد بازدید پیمایش { $limit } فراتر رفت.
 stdlib.collections.compact.not_sequence = ‏compact یک دنباله را انتظار داشت اما { $kind } یافت.
 stdlib.collections.group_by.empty_attribute = ‏group_by به ویژگی‌ای ناتهی نیاز دارد.
 stdlib.collections.group_by.unresolved = ‏group_by نتوانست «{ $attr }» را روی عضوی از گونهٔ { $kind } بیابد.

@@ -385,6 +385,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = 不支持的散列算法“{ $al
 
 # 集合辅助函数的诊断。
 stdlib.collections.flatten.expected_sequence = flatten 期望序列元素，却发现 { $kind }。
+stdlib.collections.flatten.depth_limit = flatten 超过了 { $limit } 的嵌套深度限制。
+stdlib.collections.flatten.item_limit = flatten 超过了 { $limit } 个保留项的限制。
+stdlib.collections.flatten.visit_limit = flatten 超过了 { $limit } 个遍历访问的限制。
 stdlib.collections.compact.not_sequence = compact 期望序列，却发现 { $kind }。
 stdlib.collections.group_by.empty_attribute = group_by 需要非空的属性。
 stdlib.collections.group_by.unresolved = group_by 无法在类型为 { $kind } 的元素上解析“{ $attr }”。

@@ -386,6 +386,9 @@ stdlib.path.hash.unsupported_algorithm_legacy = ไม่รองรับข�
 
 # การวินิจฉัยของตัวช่วยด้านคอลเลกชัน
 stdlib.collections.flatten.expected_sequence = flatten คาดว่าจะพบสมาชิกของลำดับ แต่พบ { $kind }
+stdlib.collections.flatten.depth_limit = flatten เกินขีดจำกัดความลึกของการซ้อน { $limit }
+stdlib.collections.flatten.item_limit = flatten เกินขีดจำกัดรายการที่เก็บไว้ { $limit }
+stdlib.collections.flatten.visit_limit = flatten เกินขีดจำกัดการเยี่ยมชมการเดินสำรวจ { $limit }
 stdlib.collections.compact.not_sequence = compact คาดว่าจะพบลำดับ แต่พบ { $kind }
 stdlib.collections.group_by.empty_attribute = group_by ต้องมีแอตทริบิวต์ที่ไม่ว่างเปล่า
 stdlib.collections.group_by.unresolved = group_by หา “{ $attr }” ในสมาชิกชนิด { $kind } ไม่พบ
