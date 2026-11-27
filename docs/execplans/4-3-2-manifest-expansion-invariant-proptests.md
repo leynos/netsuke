@@ -2511,6 +2511,10 @@ Delivered in seventeen commits on
 - `serde_json::Map` equality ignores order, so every key-order claim must be
   stated over key sequences. The one existing test that looked like it covered
   order never reached the defect.
+- Trimming prose to fit a line budget is safe; trimming a sentence until it
+  stops being one is not. The scope reduction left several `///` summaries
+  ending on "a", and only a review pass caught them. Tighten by deleting
+  rationale, not by cutting the clause that makes the summary true.
 
 **Final evidence.** The eleven-target closure set passed at `ec46236c9`, the
 commit that reduced the diff to the scope tolerance: `check-fmt`, `typecheck`,
@@ -2520,26 +2524,32 @@ tests plus doctests), `proptest` (284), `mbake validate Makefile`,
 `test-workflow-contracts` (2,561 plus 69), and `test-kani-mutations` (prewarm,
 negative control, and compile guard).
 
+`e821ba791` then completed the doc-comment summaries the reduction had cut
+short, a comment-only change to six test modules. At that commit, `check-fmt`,
+`lint`, `doc-coverage` (98.41%), `proptest` (284), and `test` (6,833 plus
+doctests) passed again, and `typecheck`, `markdownlint`, `nixie`,
+`mbake validate Makefile`, `test-workflow-contracts`, and `test-kani-mutations`
+were re-run green at the head that records this paragraph, which differs from
+`e821ba791` only in this ExecPlan.
+
 Two earlier runs are on this branch and both were green for their revision.
 `869f363ae` was the last code revision before the reduction, when the static
 document classes were added. `7c771a36d` predates that: four coverage source
 files changed between it and `869f363ae`, so its result does not cover them.
-`731241b49`, `f93d43173`, and `251ee49ef` are older still and historical. Only
-this ExecPlan changed after `ec46236c9`; `make check-fmt`, `make markdownlint`,
-and the ExecPlan status contract were re-run at the head that records this
-paragraph.
+`731241b49`, `f93d43173`, and `251ee49ef` are older still and historical.
 
 **Scope tolerance: met.** The plan allows at most 50 non-ExecPlan files and
 3,500 net lines of code and other documentation, with file moves counted once.
 The review rounds grew the diff past both limits: at `53acb2a65` it was 51
 files and 3,905 rename-aware net lines. Rather than accept that, the class
 registry was merged into `coverage/mod.rs`, and rationale prose and helper
-wrappers were tightened across the new modules. Measured against `865ca23ae`,
-the diff is now exactly 50 files and 3,500 net lines, both at their limits, and
-the measurement excludes this ExecPlan file as the plan specifies. Every public
-and private item keeps its `///` summary, every module keeps its `//!` header,
-every property, coverage class, and mutation patch is unchanged, and the
-expansion suite still passes.
+wrappers were tightened across the new modules. At `0381d83fe` the diff
+measured exactly 50 files and 3,500 net lines, both at their limits; the
+doc-comment repairs that followed brought it to 3,499. The measurement excludes
+this ExecPlan file as the plan specifies. Every public and private item keeps
+its `///` summary, every module keeps its `//!` header, every property,
+coverage class, and mutation patch is unchanged, and the expansion suite still
+passes.
 
 A tolerance met only by reduction is still met: the accepted scope is the one
 the plan approved, and nothing in this work needs more than it.
