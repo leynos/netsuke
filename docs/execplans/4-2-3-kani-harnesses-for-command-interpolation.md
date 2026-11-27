@@ -1238,10 +1238,16 @@ propagation. A double fork alone does not escape it: the descendant keeps the
 group it inherited, so the signal still reaches it.
 
 ```bash
-systemd-run \
+capture=/tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out
+unit=netsuke-kani-$(date +%Y%m%dT%H%M%S)-$$
+caller_status=0
+
+CAPTURE="$capture" UNIT="$unit" systemd-run \
     --user \
     --scope \
+    --collect \
     --expand-environment=no \
+    --unit "$unit" \
     -p RuntimeMaxSec=8m \
     -p TimeoutStopSec=20s \
     -p CPUQuota=200% \
@@ -1253,8 +1259,18 @@ systemd-run \
     bash -c 'set -o pipefail; \
       env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
       make kani-ir 2>&1 \
-      | tee /tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out'
+      | tee "$CAPTURE"' || caller_status=$?
+printf 'unit=%s.scope caller_exit=%s\n' "$unit" "$caller_status" > "$capture.status"
+(exit "$caller_status")
 ```
+
+The unit is named so a failure can be addressed individually, and `--collect`
+unloads it whether it succeeded or failed, so a routine run leaves nothing for
+a later reset. The sidecar keeps the caller's `$?` and the unit name after the
+unit itself is gone; the name still addresses the journal. Read `Result=` only
+from a unit whose `LoadState` is `loaded`, and defer collection for a run whose
+evidence is that `Result` — see "Kani scope wrapper" in
+[`docs/developers-guide.md`](../developers-guide.md).
 
 To iterate on a single harness, add
 `KANI_FLAGS="--harness shell_variable_prefix_does_not_match"` to the `make`
@@ -2319,3 +2335,38 @@ the 4.2.2 plan, which states it in three places.
 
 No obligation, criterion, or completion state changes: header `COMPLETE`,
 roadmap `[x]`.
+
+**Revision 3 (2026-11-23, issue #1078).** The composed wrapper in
+`Concrete steps` now names its unit, passes `--collect`, and is followed by a
+status sidecar.
+
+The unit was previously unnamed, so a failed scope could not be addressed
+individually, and it was not collected, so every failed run left a failed unit
+loaded until someone reset it. On 2026-11-01 the user manager was `degraded`
+and that accumulation was part of the reason. `--collect` is
+`CollectMode=inactive-or-failed`: the unit unloads whether it succeeded or
+failed, so a routine run leaves nothing behind.
+
+Collection does not cost a routine run its evidence. The caller's `$?`, the
+`/tmp` capture, the unit identity and the journal all survive it, and the
+sidecar records the first and the third. What collection does discard is the
+unit's own execution results, so a run whose evidence is `Result=timeout` or a
+resource breach keeps its unit loaded, reads it, and resets it by exact name.
+
+Two readings the contract now states explicitly, both measured on the reference
+host: a payload that exits 7 leaves a scope the manager collects as a success,
+because a scope has no main process and nothing maps an exit status onto
+`Result=`; and a payload that exits zero can leave a `Result=timeout` scope,
+because the runtime deadline covers the whole control group and can fire during
+teardown. The second is the reachable cause documented for the failed
+`netsuke-kani-wrapper-*-ok` units observed on 2026-11-01. It is not claimed as
+*their* cause: the `-ok` is the scenario name rather than a claim about the
+scope, those units had been reset before the investigation began, and the
+journal no longer covers that date, so their individual `Result=` values are
+unrecoverable.
+
+The full contract — routine versus deferred collection, the `LoadState=loaded`
+prerequisite, the `Result`-versus-exit-status distinction, unit-specific
+cleanup, and prefix-scoped recovery after a runner kill — is documented under
+"Kani scope wrapper" in `docs/developers-guide.md`. No obligation, criterion,
+or completion state changes: header `COMPLETE`, roadmap `[x]`.

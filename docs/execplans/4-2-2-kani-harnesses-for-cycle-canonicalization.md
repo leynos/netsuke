@@ -131,7 +131,9 @@ of decisions that need the user's confirmation.
   systemd-run \
       --user \
       --scope \
+      --collect \
       --expand-environment=no \
+      --unit "netsuke-kani-$(date +%Y%m%dT%H%M%S)-$$" \
       -p RuntimeMaxSec=8m \
       -p TimeoutStopSec=20s \
       -p CPUQuota=200% \
@@ -218,6 +220,20 @@ of decisions that need the user's confirmation.
   capture. When the pipeline is placed inside the scope, `pipefail` must be set
   in the same shell as the pipeline; see the composed command in
   `Concrete steps`.
+
+  `--collect` is what keeps a routine run from leaving a failed unit behind.
+  Without it the manager keeps a failed scope loaded until someone resets it,
+  and those units accumulate until `systemctl --user is-system-running` reports
+  `degraded`. Collection is deferred only when the evidence lives in the
+  stopped unit itself: a scope's `Result` is unreadable once it is unloaded, so
+  a run that must read `Result=timeout` keeps its unit and resets it by exact
+  name afterwards. The durable evidence a routine run does keep — the caller's
+  `$?`, the `/tmp` capture, the `/tmp/<capture>.status` sidecar, the unit
+  identity and a bounded journal extract — does not depend on the unit staying
+  loaded. "Routine collection and deferred collection", "Harvesting evidence
+  from a routine run" and "Reading a scope's `Result`" in
+  [`docs/developers-guide.md`](../developers-guide.md) state the contract in
+  full.
 
   Include the known Kani `LD_LIBRARY_PATH` inside `<kani-command>` when invoking
   `cargo kani`, `make kani-ir`, or `make kani-full`. On this host, the
@@ -1205,13 +1221,21 @@ inside the `systemd-run --user --scope` cap with `RuntimeMaxSec` from
 Constraints, with the explicit Kani `LD_LIBRARY_PATH`. The bare commands show
 the inner command only.
 
-Composed in full, the cap around `make kani-ir` is a single command:
+Composed in full, the cap around `make kani-ir` is a single command, followed
+by the status sidecar that keeps the caller's outcome after the unit is
+collected:
 
 ```bash
-systemd-run \
+capture=/tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out
+unit=netsuke-kani-$(date +%Y%m%dT%H%M%S)-$$
+caller_status=0
+
+CAPTURE="$capture" UNIT="$unit" systemd-run \
     --user \
     --scope \
+    --collect \
     --expand-environment=no \
+    --unit "$unit" \
     -p RuntimeMaxSec=8m \
     -p TimeoutStopSec=20s \
     -p CPUQuota=200% \
@@ -1223,7 +1247,9 @@ systemd-run \
     bash -c 'set -o pipefail; \
       env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
       make kani-ir 2>&1 \
-      | tee /tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out'
+      | tee "$CAPTURE"' || caller_status=$?
+printf 'unit=%s.scope caller_exit=%s\n' "$unit" "$caller_status" > "$capture.status"
+(exit "$caller_status")
 ```
 
 `tee` is inside the scope, so the captured file is exactly the output the cap
@@ -1235,6 +1261,14 @@ without it the status would be `tee`'s, which is zero whenever the capture
 succeeded, so a failing verifier would be masked by a successful `tee`. A
 pipeline written outside the scope cannot carry `pipefail` into it, which is
 the reason the pipeline travels as the scope's payload.
+
+`--collect` unloads the unit once it finishes, so a failed run cannot
+accumulate. The status sidecar written by the invoking shell is what survives
+the unit: it records the caller's `$?` and the unit name, and the unit name
+still addresses the journal after collection. A run whose evidence includes the
+scope's own `Result` must instead defer collection, read the loaded unit, and
+reset it by exact name — see "Routine collection and deferred collection" in
+[`docs/developers-guide.md`](../developers-guide.md).
 
 Expected shape of success:
 
@@ -1487,3 +1521,25 @@ change rather than the extra fork. The same correction is made to the two other
 documents that restate the claim, `docs/developers-guide.md` and roadmap 4.2.3,
 whose Revision 2.32 records it. Nothing in this plan's scope, obligations, or
 completion state is affected: status remains `COMPLETE`.
+
+- 2026-11-23 (issue #1078): The wrapper in `Constraints` and in
+  `Concrete steps` now names its unit, passes `--collect`, and is followed by a
+  status sidecar. The unit was previously unnamed, so a failed scope could not
+  be addressed individually, and it was not collected, so every failed run left
+  a failed unit loaded until someone reset it; on 2026-11-01 the user manager
+  was `degraded` in part because of them. `--collect` is
+  `CollectMode=inactive-or-failed`: the unit unloads whether it succeeded or
+  failed, so a routine run cannot accumulate. The evidence a routine run needs
+  does not live in the manager's memory — the caller's `$?`, the `/tmp`
+  capture, the unit identity and the journal all survive collection — and the
+  sidecar records the first and third of those. Collection is deferred only
+  where the evidence is the stopped unit's own `Result`, which is unreadable
+  once the unit unloads; such a run keeps the unit, reads it, and resets it by
+  exact name. The `set -o pipefail` note is unchanged in substance: it must be
+  set in the shell that runs the pipeline, and the composed example keeps the
+  pipeline inside the scope for that reason. The full evidence contract, the
+  `LoadState=loaded` prerequisite for reading `Result`, the distinction between
+  a scope's `Result` and the payload's exit status, and prefix-scoped recovery
+  after a runner kill are documented under "Kani scope wrapper" in
+  `docs/developers-guide.md`. Nothing in this plan's scope, obligations, or
+  completion state is affected: status remains `COMPLETE`.
