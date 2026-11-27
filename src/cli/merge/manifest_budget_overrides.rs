@@ -52,5 +52,11 @@ pub(super) fn insert_manifest_budget_cli_overrides(
         "manifest_expanded_entries",
         &cli.manifest_expanded_entries,
         root,
+    )?;
+    maybe_insert_explicit(
+        matches,
+        "manifest_expanded_bytes",
+        &cli.manifest_expanded_bytes,
+        root,
     )
 }

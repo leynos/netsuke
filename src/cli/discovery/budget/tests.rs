@@ -25,6 +25,8 @@ enum ManifestBudgetField {
     ForeachCardinality,
     /// Select the aggregate expanded-entry limit.
     ExpandedEntries,
+    /// Select the aggregate expansion-byte limit.
+    ExpandedBytes,
 }
 
 impl ManifestBudgetField {
@@ -38,6 +40,7 @@ impl ManifestBudgetField {
             Self::SourceBytes => "manifest_source_bytes",
             Self::ForeachCardinality => "manifest_foreach_cardinality",
             Self::ExpandedEntries => "manifest_expanded_entries",
+            Self::ExpandedBytes => "manifest_expanded_bytes",
         }
     }
 
@@ -51,6 +54,7 @@ impl ManifestBudgetField {
             Self::SourceBytes => "--manifest-source-bytes",
             Self::ForeachCardinality => "--manifest-foreach-cardinality",
             Self::ExpandedEntries => "--manifest-expanded-entries",
+            Self::ExpandedBytes => "--manifest-expanded-bytes",
         }
     }
 }
@@ -159,7 +163,8 @@ fn automatic_project_chain_budget_limits_remain_monotonic_through_merge(
         ManifestBudgetField::RenderedManifestBytes,
         ManifestBudgetField::SourceBytes,
         ManifestBudgetField::ForeachCardinality,
-        ManifestBudgetField::ExpandedEntries
+        ManifestBudgetField::ExpandedEntries,
+        ManifestBudgetField::ExpandedBytes
     )]
     field: ManifestBudgetField,
     #[case] inherited_request: u64,

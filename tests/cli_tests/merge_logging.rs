@@ -145,6 +145,8 @@ fn explicit_manifest_budget_flags_override_environment_limits() -> Result<()> {
             "16",
             "--manifest-expanded-entries",
             "17",
+            "--manifest-expanded-bytes",
+            "18",
         ],
         &localizer,
         clap::ColorChoice::Auto,
@@ -159,6 +161,7 @@ fn explicit_manifest_budget_flags_override_environment_limits() -> Result<()> {
             ("NETSUKE_MANIFEST_SOURCE_BYTES", "105"),
             ("NETSUKE_MANIFEST_FOREACH_CARDINALITY", "106"),
             ("NETSUKE_MANIFEST_EXPANDED_ENTRIES", "107"),
+            ("NETSUKE_MANIFEST_EXPANDED_BYTES", "108"),
         ]
         .into_iter()
         .map(|(name, value)| (OsString::from(name), OsString::from(value)))
@@ -175,7 +178,8 @@ fn explicit_manifest_budget_flags_override_environment_limits() -> Result<()> {
             merged.manifest_source_bytes,
             merged.manifest_foreach_cardinality,
             merged.manifest_expanded_entries,
-        ) == (11, 12, 13, 14, 15, 16, 17),
+            merged.manifest_expanded_bytes,
+        ) == (11, 12, 13, 14, 15, 16, 17, 18),
         "explicit manifest-budget flags must override environment limits"
     );
     Ok(())

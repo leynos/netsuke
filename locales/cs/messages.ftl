@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Omezit celkový počet bajtů v
 cli.flag.manifest_source_bytes.help = Omezit počet bajtů zdroje šablon a maker spotřebovaných pro jeden manifest.
 cli.flag.manifest_foreach_cardinality.help = Omezit počet hodnot zpracovaných jedním rozšířením foreach.
 cli.flag.manifest_expanded_entries.help = Omezit počet cílů a akcí rozšířených z jednoho manifestu.
+cli.flag.manifest_expanded_bytes.help = Omezit bajty uchované rozšířenými položkami foreach.
 cli.flag.json.help = Vypisovat strojově čitelný výstup JSON.
 cli.flag.no_input.help = Nikdy nečíst interaktivní vstup.
 cli.flag.color.help = Zásada barevného výstupu (auto, always, never).

@@ -38,6 +38,7 @@ define_keys! {
     CLI_FLAG_MANIFEST_SOURCE_BYTES_HELP => "cli.flag.manifest_source_bytes.help",
     CLI_FLAG_MANIFEST_FOREACH_CARDINALITY_HELP => "cli.flag.manifest_foreach_cardinality.help",
     CLI_FLAG_MANIFEST_EXPANDED_ENTRIES_HELP => "cli.flag.manifest_expanded_entries.help",
+    CLI_FLAG_MANIFEST_EXPANDED_BYTES_HELP => "cli.flag.manifest_expanded_bytes.help",
     CLI_FLAG_JSON_HELP => "cli.flag.json.help",
     CLI_FLAG_NO_INPUT_HELP => "cli.flag.no_input.help",
     CLI_FLAG_COLOR_HELP => "cli.flag.color.help",

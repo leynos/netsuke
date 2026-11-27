@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Cyfyngu ar gyfanswm y beitiau a
 cli.flag.manifest_source_bytes.help = Cyfyngu ar feintiau beit ffynhonnell templedi a macros a ddefnyddir fesul maniffest.
 cli.flag.manifest_foreach_cardinality.help = Cyfyngu ar y gwerthoedd a brosesir gan un ehangiad foreach.
 cli.flag.manifest_expanded_entries.help = Cyfyngu ar y targedau a'r gweithredoedd a ehangir o un maniffest.
+cli.flag.manifest_expanded_bytes.help = Cyfyngu ar y beitiau a gedwir gan gofnodion foreach a ehangir.
 cli.flag.json.help = Allbynnu JSON y gall pheiriant ei ddarllen.
 cli.flag.no_input.help = Peidio byth â darllen mewnbwn rhyngweithiol.
 cli.flag.color.help = Polisi allbwn lliw (auto, always, never).

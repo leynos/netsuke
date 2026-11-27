@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Cuir crìoch air na beitean iom
 cli.flag.manifest_source_bytes.help = Cuir crìoch air beitean tùs nan teamplaidean agus macros a thèid an cleachdadh gach foirm-liosta.
 cli.flag.manifest_foreach_cardinality.help = Cuir crìoch air na luachan a làimhsicheas aon leudachadh foreach.
 cli.flag.manifest_expanded_entries.help = Cuir crìoch air na targaidean agus gnìomhan a leudaichear à aon fhoirm-liosta.
+cli.flag.manifest_expanded_bytes.help = Cuir crìoch air na beataichean a thèid an gleidheadh le innteartan foreach leudaichte.
 cli.flag.json.help = Cuir a-mach JSON a leughas inneal.
 cli.flag.no_input.help = Na leugh cur-a-steach eadar-ghnìomhach idir.
 cli.flag.color.help = Poileasaidh an às-chuir dhathte (auto, always, never).

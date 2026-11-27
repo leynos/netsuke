@@ -10,6 +10,7 @@ use anyhow::Result;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 pub(in crate::manifest) mod adapter;
+pub(crate) mod retained_size;
 mod types;
 mod writer;
 pub use types::ManifestBudgetLimits;
@@ -34,6 +35,8 @@ struct ManifestBudgetState {
     source_bytes: usize,
     /// Tracks remaining expanded target and action entries.
     expanded_entries: usize,
+    /// Tracks remaining modelled bytes retained by expansion.
+    expanded_bytes: usize,
     /// Tracks fuel reserved by active or completed evaluations.
     fuel: u64,
 }
@@ -51,6 +54,7 @@ impl ManifestBudget {
                 rendered_bytes: validated_limits.rendered_manifest_bytes,
                 source_bytes: validated_limits.source_bytes,
                 expanded_entries: validated_limits.expanded_entries,
+                expanded_bytes: validated_limits.expanded_bytes,
                 fuel: validated_limits.manifest_fuel,
             })),
             limits: validated_limits,
@@ -120,6 +124,41 @@ impl ManifestBudget {
                 stage,
                 self.limits.expanded_entries as u64,
             ),
+        )
+    }
+
+    /// Charge modelled retained bytes before cloning an expansion entry.
+    pub(crate) fn charge_expanded_bytes(
+        &self,
+        stage: ManifestBudgetStage,
+        amount: usize,
+    ) -> std::result::Result<(), ManifestBudgetExhaustion> {
+        Self::charge_remaining(
+            &mut self.lock_state().expanded_bytes,
+            amount,
+            self.expanded_bytes_exhaustion(stage),
+        )
+    }
+
+    /// Return the modelled bytes still available to expansion.
+    pub(crate) fn remaining_expanded_bytes(&self) -> usize {
+        self.lock_state().expanded_bytes
+    }
+
+    /// Return the configured expansion-byte ceiling.
+    pub(crate) const fn expanded_bytes_limit(&self) -> usize {
+        self.limits.expanded_bytes
+    }
+
+    /// Describe an expansion-byte refusal that carries no manifest data.
+    pub(crate) const fn expanded_bytes_exhaustion(
+        &self,
+        stage: ManifestBudgetStage,
+    ) -> ManifestBudgetExhaustion {
+        Self::exhaustion(
+            ManifestBudgetKind::ExpandedBytes,
+            stage,
+            self.limits.expanded_bytes as u64,
         )
     }
 
@@ -215,6 +254,7 @@ impl Default for ManifestBudget {
                 rendered_bytes: limits.rendered_manifest_bytes,
                 source_bytes: limits.source_bytes,
                 expanded_entries: limits.expanded_entries,
+                expanded_bytes: limits.expanded_bytes,
                 fuel: limits.manifest_fuel,
             })),
             limits,

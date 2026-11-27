@@ -2140,10 +2140,25 @@ Netsuke bounds each manifest evaluation before it runs a build command or
 answers `help targets`. The defaults are 1,000,000 `MiniJinja` instructions per
 evaluation, 100,000,000 per manifest, 1 MiB per rendered value, 16 MiB
 aggregate rendered output, 4 MiB template source, 10,000 values per `foreach`,
-and 50,000 expanded entries. Each evaluation reserves at most the
-per-evaluation fuel limit. Successful expressions, macro calls, and renders
-refund unused fuel to the aggregate manifest allowance; exhausted evaluations
-do not.
+50,000 expanded entries, and 256 MiB of modelled expansion bytes. Each
+evaluation reserves at most the per-evaluation fuel limit. Successful
+expressions, macro calls, and renders refund unused fuel to the aggregate
+manifest allowance; exhausted evaluations do not.
+
+The expansion-byte allowance bounds the entry data that `foreach` retains.
+Every admitted item is charged a conservative structural estimate of its cloned
+entry before the clone is made: one JSON value slot per node, each string's
+byte length, and one key header plus index slot per mapping entry. The estimate
+is a model of retained structure, not an allocator measurement or a serialized
+size. `when` is evaluated against the borrowed source, so a filtered item
+retains and charges no expansion bytes. The item itself is still estimated
+first, so an item larger than the remaining allowance is rejected even when
+`when` would filter it out. If serializing the item into `vars.item` produces a
+larger structure than the item estimate, only the growth is charged. An empty
+`foreach` retains nothing, so it is not refused even when its source mapping
+alone exceeds the allowance. This allowance is shared by every `foreach` in the
+manifest, so one small recipe repeated many times cannot multiply a large entry
+past the ceiling.
 
 `shell_join` additionally enforces a fixed 1 MiB ceiling on the encoded command
 line it builds. Unlike the budgets here, that ceiling is not configurable: it
@@ -2168,26 +2183,29 @@ buffering gap.
 
 The configuration keys are `manifest_evaluation_fuel`, `manifest_fuel`,
 `manifest_rendered_value_bytes`, `manifest_rendered_manifest_bytes`,
-`manifest_source_bytes`, `manifest_foreach_cardinality`, and
-`manifest_expanded_entries`. Set them in a trusted configuration file, through
-the matching environment variables (`NETSUKE_MANIFEST_EVALUATION_FUEL`,
-`NETSUKE_MANIFEST_FUEL`, `NETSUKE_MANIFEST_RENDERED_VALUE_BYTES`,
+`manifest_source_bytes`, `manifest_foreach_cardinality`,
+`manifest_expanded_entries`, and `manifest_expanded_bytes`. Set them in a
+trusted configuration file, through the matching environment variables
+(`NETSUKE_MANIFEST_EVALUATION_FUEL`, `NETSUKE_MANIFEST_FUEL`,
+`NETSUKE_MANIFEST_RENDERED_VALUE_BYTES`,
 `NETSUKE_MANIFEST_RENDERED_MANIFEST_BYTES`, `NETSUKE_MANIFEST_SOURCE_BYTES`,
-`NETSUKE_MANIFEST_FOREACH_CARDINALITY`, and
-`NETSUKE_MANIFEST_EXPANDED_ENTRIES`), or with the corresponding flags
+`NETSUKE_MANIFEST_FOREACH_CARDINALITY`, `NETSUKE_MANIFEST_EXPANDED_ENTRIES`, and
+`NETSUKE_MANIFEST_EXPANDED_BYTES`), or with the corresponding flags
 (`--manifest-evaluation-fuel`, `--manifest-fuel`,
 `--manifest-rendered-value-bytes`, `--manifest-rendered-manifest-bytes`,
-`--manifest-source-bytes`, `--manifest-foreach-cardinality`, and
-`--manifest-expanded-entries`). Project `.netsuke.toml` values, including
-values supplied through its `extends` chain, may narrow a ceiling but cannot
-widen a value already established by defaults, user configuration, the
-environment, or the CLI. Invalid or non-positive budget values are rejected as
-configuration errors rather than ignored. A resource-limit failure reports
-`Manifest resource budget exhausted` with its fixed stage and numeric limit,
-never template text, context values, or rendered secrets. At the runner
-boundary, this failure has the stable JSON diagnostic code
-`netsuke::runner::manifest_budget_exceeded`; other manifest diagnostics retain
-their existing codes and error handling.
+`--manifest-source-bytes`, `--manifest-foreach-cardinality`,
+`--manifest-expanded-entries`, and `--manifest-expanded-bytes`). Project
+`.netsuke.toml` values, including values supplied through its `extends` chain,
+may narrow a ceiling but cannot widen a value already established by defaults,
+user configuration, the environment, or the CLI. Invalid or non-positive budget
+values are rejected as configuration errors rather than ignored. A
+resource-limit failure reports `Manifest resource budget exhausted` with its
+fixed stage and numeric limit, never template text, context values, or rendered
+secrets. At the runner boundary, this failure has the stable JSON diagnostic
+code `netsuke::runner::manifest_budget_exceeded`; other manifest diagnostics
+retain their existing codes and error handling. `help targets` and other
+manifest-query loads enforce the same ceilings as a build load, although they
+do not record build-shaped budget telemetry.
 
 On Windows, Netsuke normalizes alternate spellings of a configuration path,
 including short and long path forms, before comparing discovered layers. A

@@ -98,6 +98,11 @@ Options:
 
           [default: 50000]
 
+      --manifest-expanded-bytes <BYTES>
+          Limit bytes retained by expanded foreach entries.
+
+          [default: 268435456]
+
       --json
           Emit machine-readable JSON output.
 

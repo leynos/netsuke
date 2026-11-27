@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = 하나의 매니페스트 전�
 cli.flag.manifest_source_bytes.help = 매니페스트마다 소비되는 템플릿 및 매크로 소스 바이트 수를 제한합니다.
 cli.flag.manifest_foreach_cardinality.help = 하나의 foreach 확장에서 처리하는 값의 수를 제한합니다.
 cli.flag.manifest_expanded_entries.help = 하나의 매니페스트에서 확장되는 대상과 작업의 수를 제한합니다.
+cli.flag.manifest_expanded_bytes.help = 확장된 foreach 항목이 보유하는 바이트를 제한합니다.
 cli.flag.json.help = 기계가 읽을 수 있는 JSON을 출력합니다.
 cli.flag.no_input.help = 대화형 입력을 절대 읽지 않습니다.
 cli.flag.color.help = 색상 출력 정책(auto, always, never).

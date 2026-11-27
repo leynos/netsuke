@@ -290,6 +290,7 @@ fn take_project_manifest_budget_request(
         source_bytes: parse_project_policy_field(fields, "manifest_source_bytes")?,
         foreach_cardinality: parse_project_policy_field(fields, "manifest_foreach_cardinality")?,
         expanded_entries: parse_project_policy_field(fields, "manifest_expanded_entries")?,
+        expanded_bytes: parse_project_policy_field(fields, "manifest_expanded_bytes")?,
     };
     for field in [
         "manifest_evaluation_fuel",
@@ -299,6 +300,7 @@ fn take_project_manifest_budget_request(
         "manifest_source_bytes",
         "manifest_foreach_cardinality",
         "manifest_expanded_entries",
+        "manifest_expanded_bytes",
     ] {
         if fields
             .get(field)
@@ -315,6 +317,7 @@ fn take_project_manifest_budget_request(
         "manifest_source_bytes",
         "manifest_foreach_cardinality",
         "manifest_expanded_entries",
+        "manifest_expanded_bytes",
     ] {
         fields.remove(field);
     }

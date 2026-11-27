@@ -21,6 +21,8 @@ pub(super) const DEFAULT_MANIFEST_SOURCE_BYTES: usize = 4_194_304;
 pub(super) const DEFAULT_MANIFEST_FOREACH_CARDINALITY: usize = 10_000;
 /// Safe default aggregate expansion count.
 pub(super) const DEFAULT_MANIFEST_EXPANDED_ENTRIES: usize = 50_000;
+/// Safe default aggregate expansion-byte allowance.
+pub(super) const DEFAULT_MANIFEST_EXPANDED_BYTES: usize = 268_435_456;
 
 /// Validate that all merged manifest-budget limits remain positive.
 ///
@@ -28,14 +30,20 @@ pub(super) const DEFAULT_MANIFEST_EXPANDED_ENTRIES: usize = 50_000;
 ///
 /// Returns a validation error when any resource ceiling is zero.
 pub(super) fn validate_manifest_budget(config: &CliConfig) -> OrthoResult<()> {
-    let valid = config.manifest_evaluation_fuel > 0
-        && config.manifest_fuel > 0
-        && config.manifest_rendered_value_bytes > 0
-        && config.manifest_rendered_manifest_bytes > 0
-        && config.manifest_source_bytes > 0
-        && config.manifest_foreach_cardinality > 0
-        && config.manifest_expanded_entries > 0;
-    if valid {
+    // Grouping the ceilings by type keeps the predicate readable as one
+    // all-positive check per family instead of a long short-circuit chain.
+    let fuel_limits = [config.manifest_evaluation_fuel, config.manifest_fuel];
+    let byte_and_count_limits = [
+        config.manifest_rendered_value_bytes,
+        config.manifest_rendered_manifest_bytes,
+        config.manifest_source_bytes,
+        config.manifest_foreach_cardinality,
+        config.manifest_expanded_entries,
+        config.manifest_expanded_bytes,
+    ];
+    let all_positive = fuel_limits.iter().all(|limit| *limit > 0)
+        && byte_and_count_limits.iter().all(|limit| *limit > 0);
+    if all_positive {
         Ok(())
     } else {
         Err(validation_error(
@@ -69,6 +77,7 @@ mod tests {
             "manifest_source_bytes" => config.manifest_source_bytes = 0,
             "manifest_foreach_cardinality" => config.manifest_foreach_cardinality = 0,
             "manifest_expanded_entries" => config.manifest_expanded_entries = 0,
+            "manifest_expanded_bytes" => config.manifest_expanded_bytes = 0,
             _ => return None,
         }
         Some(config)
@@ -82,6 +91,7 @@ mod tests {
     #[case::source_bytes("manifest_source_bytes")]
     #[case::foreach_cardinality("manifest_foreach_cardinality")]
     #[case::expanded_entries("manifest_expanded_entries")]
+    #[case::expanded_bytes("manifest_expanded_bytes")]
     fn post_merge_rejects_each_zero_manifest_budget_limit(
         merged_config: CliConfig,
         #[case] field: &str,

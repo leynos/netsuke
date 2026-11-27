@@ -209,6 +209,17 @@ fields:
     environment: NETSUKE_MANIFEST_EXPANDED_ENTRIES
     file: manifest_expanded_entries
     merge_strategy: replace
+  - name: manifest_expanded_bytes
+    help_id: cli.flag.manifest_expanded_bytes.help
+    cli:
+      long: manifest-expanded-bytes
+      short: ~
+      value_name: BYTES
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_MANIFEST_EXPANDED_BYTES
+    file: manifest_expanded_bytes
+    merge_strategy: replace
   - name: json
     help_id: cli.flag.json.help
     cli:

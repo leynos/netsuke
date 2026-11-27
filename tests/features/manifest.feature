@@ -79,6 +79,15 @@ Feature: Manifest Parsing
     Then parsing the manifest fails
     And the error message contains "Manifest resource budget exhausted"
 
+  Scenario: Parsing stops foreach expansion at the retained-byte budget
+    Given the manifest budget uses small test limits
+    And the manifest file "tests/data/manifest_budget_foreach_bytes.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "Manifest resource budget exhausted"
+    And the error message contains "expansion_aggregate"
+    And the error message contains "1500"
+
   Scenario: Ordinary manifests retain their rendered behaviour below the budget
     Given the manifest budget uses small test limits
     And the manifest file "tests/data/manifest_budget_ordinary.yml" is parsed

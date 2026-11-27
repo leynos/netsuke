@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = Ограничить общее
 cli.flag.manifest_source_bytes.help = Ограничить число байтов исходного кода шаблонов и макросов, используемых для манифеста.
 cli.flag.manifest_foreach_cardinality.help = Ограничить число значений, обрабатываемых одним расширением foreach.
 cli.flag.manifest_expanded_entries.help = Ограничить число целей и действий, расширяемых из одного манифеста.
+cli.flag.manifest_expanded_bytes.help = Ограничить байты, сохраняемые расширенными записями foreach.
 cli.flag.json.help = Выводить машиночитаемый JSON.
 cli.flag.no_input.help = Никогда не читать интерактивный ввод.
 cli.flag.color.help = Политика цветного вывода (auto, always, never).

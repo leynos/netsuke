@@ -99,6 +99,7 @@ sources = [
   "src/manifest/access_policy/mod.rs",
   "src/manifest/budget/adapter.rs",
   "src/manifest/budget/mod.rs",
+  "src/manifest/budget/retained_size.rs",
   "src/manifest/budget/types.rs",
   "src/manifest/budget/writer.rs",
   "src/manifest/diagnostics/mod.rs",

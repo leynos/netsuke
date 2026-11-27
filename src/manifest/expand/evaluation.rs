@@ -7,7 +7,7 @@ use crate::manifest::budget::adapter::BudgetErrorExt;
 use crate::{
     hex::push_lower_hex_byte,
     localization::{self, keys},
-    manifest::budget::ManifestBudgetStage,
+    manifest::budget::{ManifestBudgetStage, retained_size},
 };
 use anyhow::{Context, Result};
 use minijinja::{context, value::Value};
@@ -36,15 +36,15 @@ pub(super) fn parse_foreach_values(
 
 /// Evaluate a `when` clause and return the entry's expansion outcome.
 pub(super) fn when_allows(
-    map: &mut ManifestMap,
+    map: &ManifestMap,
     context: &ExpansionContext<'_>,
     iteration: Option<(&Value, usize)>,
     retain_filtered_entry: bool,
 ) -> Result<WhenResolution> {
-    let Some(when_val) = map.remove("when") else {
+    let Some(when_val) = map.get("when") else {
         return Ok(WhenResolution::Include);
     };
-    let expr = as_str(&when_val, "when")?;
+    let expr = as_str(when_val, "when")?;
     let expression_context = when_context(map, iteration)?;
     match eval_when(context, expr, &expression_context)? {
         WhenEvaluation::Include => Ok(WhenResolution::Include),
@@ -61,11 +61,14 @@ pub(super) fn when_allows(
 }
 
 /// Inject `item` and `index` into a target's `vars`, creating the map when absent.
+///
+/// Returns the modelled bytes of the serialized item so the caller can charge
+/// any growth beyond the pre-serialization estimate.
 pub(super) fn inject_iteration_vars(
     map: &mut ManifestMap,
     item: &Value,
     index: usize,
-) -> Result<()> {
+) -> Result<usize> {
     let vars_value = match map.entry("vars") {
         Entry::Vacant(slot) => slot.insert(ManifestValue::Object(ManifestMap::new())),
         Entry::Occupied(slot) => match slot.into_mut() {
@@ -85,16 +88,16 @@ pub(super) fn inject_iteration_vars(
             localization::message(keys::MANIFEST_VARS_ENTRY_NOT_OBJECT)
         )
     })?;
-    vars.insert(
-        "item".into(),
-        serde_json::to_value(item)
-            .context(localization::message(keys::MANIFEST_FOREACH_SERIALISE_ITEM))?,
-    );
+    let serialized_item = serde_json::to_value(item)
+        .context(localization::message(keys::MANIFEST_FOREACH_SERIALISE_ITEM))?;
+    let serialized_bytes =
+        retained_size::json_value_bytes(&serialized_item, usize::MAX).unwrap_or(usize::MAX);
+    vars.insert("item".into(), serialized_item);
     vars.insert(
         "index".into(),
         ManifestValue::Number(JsonNumber::from(index as u64)),
     );
-    Ok(())
+    Ok(serialized_bytes)
 }
 
 /// Evaluate a `when` clause as an expression or a bounded template.

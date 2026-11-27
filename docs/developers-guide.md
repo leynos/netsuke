@@ -14177,6 +14177,53 @@ registration, which suppresses budget-exhaustion telemetry at the loading
 boundary and omits the expansion-report observer, while other instrumentation
 remains owned by the boundaries that invoke it.
 
+`ManifestBudgetLimits::expanded_bytes` bounds the structural size of `foreach`
+entries retained by expansion. `manifest::budget::retained_size` models each
+retained node as one `serde_json::Value` slot, each string's byte length, and
+each order-preserving map entry as a key `String`, an index slot, a control
+byte, and the key bytes. A `MiniJinja` item uses the same node cost: bytes
+become one numeric node per byte, a non-string map key adds its own estimate
+plus a string node, undefined and null share one node, and an unknown plain
+object charges one node. Both value families drive one `Work` stack with
+checked arithmetic, and stop as soon as the running total would pass the
+ceiling. The traversal does allocate: the work stack itself and one boxed child
+iterator per visited sequence or map. Because those allocations are tied to
+charged nodes, the running total caps them, so the estimator cannot recurse
+without bound and its own memory stays proportional to the allowance rather
+than to arbitrary input nesting. The result is a structural model: it is
+neither an allocator heap measurement nor a serialized size.
+
+The charge order in `expand_foreach_item` is: per-`foreach` cardinality;
+aggregate expanded-entry count; the source estimate's availability (refused
+only once an item exists, so an empty `foreach` succeeds); item estimate
+against the remaining allowance; `when` evaluated against the borrowed source;
+aggregate byte charge of the source estimate, the item estimate, and the
+injected-key overhead; clone the source while skipping `foreach` and `when`;
+inject `vars.item` and `vars.index`. Filtered items therefore retain nothing,
+but an item larger than the remaining allowance is refused before its condition
+is evaluated. After serialization, any modelled growth of `vars.item` beyond
+the item estimate is charged separately. The source estimate is computed once
+per `foreach` entry, outside the item loop.
+
+Adding a manifest-budget setting grows all eight inventories together:
+`ManifestBudgetLimits` and its default, the runtime `ManifestBudgetState`
+counter, the `ManifestBudgetKind` vocabulary, `CliConfig` and the `Cli` flag
+with its `Default` literal, `ProjectManifestBudgetRequest`,
+`reconcile_manifest_budget`, and the `ManifestBudgetField` test inventory.
+Missing one leaves either an unconfigurable ceiling or a value that project
+configuration cannot narrow. Because `ManifestBudgetLimits` is public, adding a
+field is also a breaking change for downstream code that builds it with a
+complete struct literal; the workspace's own complete literals live in the
+budget tests and the BDD step module.
+
+Residual constraints: the estimate cannot see allocator overhead or mapped
+capacity; the temporary `when` context clones the source `vars` and serializes
+the item before the charge; `serde_json::to_value` remains recursive; a lazy
+item iterator is consumed by the estimate, and a custom one-shot iterator may
+behave differently when `when` or injection serializes it again. The pinned
+MiniJinja 2.24.0 and serde_json 1.0.151 serializer internals were not verified
+against their sources for a tighter charge.
+
 The runner boundary promotes a budget exhaustion to the typed
 `RunnerError::ManifestBudgetExceeded` variant. Its localized terminal
 diagnostic carries only the fixed stage and numeric limit; JSON serialization

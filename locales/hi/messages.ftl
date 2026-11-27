@@ -27,6 +27,7 @@ cli.flag.manifest_rendered_manifest_bytes.help = एक मैनिफ़ेस
 cli.flag.manifest_source_bytes.help = प्रत्येक मैनिफ़ेस्ट के लिए उपयोग किए गए टेम्पलेट और मैक्रो स्रोत बाइट्स की सीमा तय करें।
 cli.flag.manifest_foreach_cardinality.help = एक foreach विस्तार द्वारा संसाधित मानों की सीमा तय करें।
 cli.flag.manifest_expanded_entries.help = एक मैनिफ़ेस्ट से विस्तारित लक्ष्यों और कार्रवाइयों की सीमा तय करें।
+cli.flag.manifest_expanded_bytes.help = विस्तारित foreach प्रविष्टियों द्वारा रखे गए बाइट्स को सीमित करें।
 cli.flag.json.help = मशीन-पठनीय JSON निर्गत करें।
 cli.flag.no_input.help = संवादात्मक इनपुट कभी न पढ़ें।
 cli.flag.color.help = रंगीन निर्गम की नीति (auto, always, never)।

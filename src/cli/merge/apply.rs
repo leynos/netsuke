@@ -38,6 +38,7 @@ pub(super) fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         manifest_source_bytes: config.manifest_source_bytes,
         manifest_foreach_cardinality: config.manifest_foreach_cardinality,
         manifest_expanded_entries: config.manifest_expanded_entries,
+        manifest_expanded_bytes: config.manifest_expanded_bytes,
         json: config.json,
         interaction: InteractionArgs {
             no_input: config.no_input.is_enabled(),

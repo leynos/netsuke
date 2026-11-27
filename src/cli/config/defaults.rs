@@ -8,9 +8,10 @@
 //! one produced by `CliConfig::default()` cannot drift apart.
 
 use super::budget::{
-    DEFAULT_MANIFEST_EVALUATION_FUEL, DEFAULT_MANIFEST_EXPANDED_ENTRIES,
-    DEFAULT_MANIFEST_FOREACH_CARDINALITY, DEFAULT_MANIFEST_FUEL, DEFAULT_MANIFEST_RENDERED_BYTES,
-    DEFAULT_MANIFEST_RENDERED_VALUE_BYTES, DEFAULT_MANIFEST_SOURCE_BYTES,
+    DEFAULT_MANIFEST_EVALUATION_FUEL, DEFAULT_MANIFEST_EXPANDED_BYTES,
+    DEFAULT_MANIFEST_EXPANDED_ENTRIES, DEFAULT_MANIFEST_FOREACH_CARDINALITY, DEFAULT_MANIFEST_FUEL,
+    DEFAULT_MANIFEST_RENDERED_BYTES, DEFAULT_MANIFEST_RENDERED_VALUE_BYTES,
+    DEFAULT_MANIFEST_SOURCE_BYTES,
 };
 use super::{
     AccessibilityPolicy, CliConfig, ColourPolicy, CommandConfigs, EmojiPolicy, NoInput,
@@ -39,6 +40,7 @@ impl Default for CliConfig {
             manifest_source_bytes: DEFAULT_MANIFEST_SOURCE_BYTES,
             manifest_foreach_cardinality: DEFAULT_MANIFEST_FOREACH_CARDINALITY,
             manifest_expanded_entries: DEFAULT_MANIFEST_EXPANDED_ENTRIES,
+            manifest_expanded_bytes: DEFAULT_MANIFEST_EXPANDED_BYTES,
             json: false,
             no_input: NoInput::default(),
             color: ColourPolicy::Auto,
