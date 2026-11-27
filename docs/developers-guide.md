@@ -1696,17 +1696,19 @@ the working directory once, into a canonical `Utf8Path` and a `Dir` handle, and
 `execute_build` passes that one value to the refusal and the reset so no second
 lookup can answer differently. `policy.rs` owns the refusal, its proof, and the
 verification the reset runs. `resolve.rs::resolves_into_reserved_state` answers
-whether one spelling reaches reserved state: it first cancels `.` and `..`
-lexically the way Ninja does, because Ninja removes a `..` against a component
-that need not exist, then resolves links, then checks every existing ancestor
-so a path that passes through the namespace and leaves it again is still
-refused. It reports every canonicalization failure other than an absent
-component rather than folding the failure into "not reserved": a permission or
-symbolic-link error must stop the build, because a guard that failed open would
-delete the output it exists to protect. Resolution only reads; the removal
-always goes through the verified namespace handles. A refused build reports the
-same reservation diagnostic generation uses, because it is the same rule.
-Publication, pruning, and the reset are sequenced by
+whether one spelling reaches reserved state. It judges the spelling as written
+first: the filesystem reading follows a link before applying `..`, the folded
+reading answers for components that do not exist yet, and every existing
+ancestor is checked so a path that passes through the namespace and leaves it
+again is still refused. It then cancels `.` and `..` lexically, the way Ninja
+does, because Ninja removes a `..` against a component that need not exist, and
+judges that spelling the same way. It reports every canonicalization failure
+other than an absent component rather than folding the failure into "not
+reserved": a permission or symbolic-link error must stop the build, because a
+guard that failed open would delete the output it exists to protect. Resolution
+only reads; the removal always goes through the verified namespace handles. A
+refused build reports the same reservation diagnostic generation uses, because
+it is the same rule. Publication, pruning, and the reset are sequenced by
 `refuse_publish_prune_and_reset` in `src/runner/generated_state.rs`, which
 `execute_build` in `src/runner/mod.rs` calls once, so the order is a named
 function rather than a set of comments; the publication lease it returns stays
@@ -9837,17 +9839,20 @@ pins the crashing shape end to end. See
 return it, but it must not publish any filesystem state.
 `src/runner/dyndep/publication.rs` owns the `materialize_dyndep_bundle`
 command, which every `build`, `clean`, and `generate` boundary must call before
-writing or invoking the main file. It takes the caller's verified `Workspace`,
-so publication writes into the directory the reservation refusal judged; the
-Ninja tool path, which holds no workspace, uses `materialize_dyndep_bundle_in`
-and `prune_dyndep_bundle_in` with the handle it opened for that invocation.
-Either form injects the directory handle into
-`src/runner/process/dyndep/files/mod.rs`, which owns atomic sidecar writes and
-content verification. The materializer may only use that injected `Dir`; it
-must not inspect CLI state or reopen ambient authority. It verifies existing
-content, then uses a same-directory temporary file plus atomic rename. Keep
-generated sidecars content-addressed and idempotent; corruption is an error,
-not a reason to overwrite an unknown file.
+writing or invoking the main file. It takes the caller's resolved `Workspace`,
+so publication writes into the directory that caller resolved. On `build` that
+directory is the one the reservation refusal judged, because
+`refuse_publish_prune_and_reset` refuses before it publishes; `generate` and
+the Ninja tool paths resolve a workspace but do not run the refusal, so their
+publication carries no reservation guarantee. The Ninja tool path, which holds
+no workspace, uses `materialize_dyndep_bundle_in` and `prune_dyndep_bundle_in`
+with the handle it opened for that invocation. Either form injects the
+directory handle into `src/runner/process/dyndep/files/mod.rs`, which owns
+atomic sidecar writes and content verification. The materializer may only use
+that injected `Dir`; it must not inspect CLI state or reopen ambient authority.
+It verifies existing content, then uses a same-directory temporary file plus
+atomic rename. Keep generated sidecars content-addressed and idempotent;
+corruption is an error, not a reason to overwrite an unknown file.
 
 `src/runner/process/dyndep/directory/mod.rs` establishes the generated-state
 directory. `.netsuke` and `.netsuke/dyndep` are project-controlled, so a
