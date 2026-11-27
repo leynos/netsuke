@@ -29,7 +29,7 @@ pub(in crate::manifest::expand::property_tests) use condition::Condition;
 use condition::VAR_NAMES;
 pub(in crate::manifest::expand::property_tests) use generate::{
     document_spec_strategy, entry_spec_strategy, foreach_entry_spec_strategy,
-    static_condition_entry_spec_strategy, static_entry_spec_strategy,
+    static_condition_entry_spec_strategy, static_document_spec_strategy,
 };
 pub(in crate::manifest::expand::property_tests) use layout::ControlOrder;
 pub(in crate::manifest::expand::property_tests) use spec::{BodySpec, DocumentSpec, EntrySpec};

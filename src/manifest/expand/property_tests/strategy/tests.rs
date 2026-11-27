@@ -1,7 +1,9 @@
 //! Generator self-checks: reachability and legality of what is drawn.
 
 use super::generate::entry_spec_strategy;
+use super::layout::ControlLayout;
 use super::*;
+use proptest::sample::Index;
 use proptest::strategy::ValueTree;
 use proptest::test_runner::TestRunner;
 use std::collections::BTreeSet;
@@ -78,4 +80,85 @@ fn every_section_and_foreach_form_is_reachable() -> Result<(), String> {
         return Err(format!("reached {seen:?}, expected {expected:?}"));
     }
     Ok(())
+}
+
+/// Draw one `Index` for a body whose `vars` is absent, where it is unused.
+fn any_index() -> Result<Index, String> {
+    let mut runner = TestRunner::deterministic();
+    any::<Index>()
+        .new_tree(&mut runner)
+        .map(|tree| tree.current())
+        .map_err(|error| error.to_string())
+}
+
+/// Build a two-control entry with the given slots and order.
+fn two_control_body(
+    first_slot: ControlLayout,
+    second_slot: ControlLayout,
+    order: ControlOrder,
+) -> Result<BodySpec, String> {
+    Ok(BodySpec {
+        fields: vec![("name".to_owned(), ManifestValue::String("x".to_owned()))],
+        vars: None,
+        vars_position: any_index()?,
+        foreach: Some((ForeachForm::InlineArray, Items::Integers(vec![1]))),
+        when: Some((Condition::Literal(true), false)),
+        control_layout: first_slot,
+        second_control_layout: second_slot,
+        control_order: order,
+        bindings: Bindings::with_count(0, 0),
+    })
+}
+
+/// Render the control keys of one body, in order.
+fn rendered_control_keys(body: &BodySpec) -> Vec<String> {
+    body.control_key_sequence()
+}
+
+#[rstest::rstest]
+#[case::foreach_first(ControlOrder::ForeachFirst, &["foreach", "when"])]
+#[case::when_first(ControlOrder::WhenFirst, &["when", "foreach"])]
+fn tied_control_slots_keep_the_recorded_order(
+    #[case] order: ControlOrder,
+    #[case] expected: &[&str],
+) -> Result<(), String> {
+    let body = two_control_body(ControlLayout::Last, ControlLayout::Last, order)?;
+    let rendered = rendered_control_keys(&body);
+    if rendered != expected {
+        return Err(format!(
+            "a tied layout rendered {rendered:?}, expected {expected:?}"
+        ));
+    }
+    Ok(())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
+    /// Both draw orders render the key written first before the other.
+    ///
+    /// The two slots are drawn independently, so a reversed pair occurs
+    /// whenever the first draw is the higher of the two; the assignment must
+    /// still place the first-written key at the lower slot.
+    #[test]
+    fn independently_drawn_slots_render_in_the_recorded_order(
+        first in any::<Index>(),
+        second in any::<Index>(),
+        order in ControlOrder::strategy(),
+    ) {
+        let body = two_control_body(
+            ControlLayout::drawn(first),
+            ControlLayout::drawn(second),
+            order,
+        )
+        .map_err(TestCaseError::fail)?;
+        let expected: &[&str] = match order {
+            ControlOrder::ForeachFirst => &["foreach", "when"],
+            ControlOrder::WhenFirst => &["when", "foreach"],
+        };
+        prop_assert_eq!(
+            rendered_control_keys(&body),
+            expected.iter().map(|key| (*key).to_owned()).collect::<Vec<_>>()
+        );
+    }
 }

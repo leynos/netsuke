@@ -43,9 +43,9 @@ impl BodySpec {
 
     /// The authored key sequence with the control keys in place.
     ///
-    /// Each control key has its own drawn slot. The key written first always
-    /// takes the lower slot, and a tie inserts it after the other, so the
-    /// recorded order and the observed sequence cannot disagree.
+    /// Each control key has its own drawn slot. The key written first takes
+    /// the lower slot, and a tie inserts it after the other, so the recorded
+    /// order and the observed sequence cannot disagree.
     fn authored_entries(&self) -> Vec<(String, ManifestValue)> {
         let mut entries = self.fields_with_vars();
         let base = entries.len();
@@ -63,6 +63,15 @@ impl BodySpec {
         entries.insert(high_slot.min(entries.len()), second);
         entries.insert(low_slot.min(entries.len()), first);
         entries
+    }
+
+    /// The authored control-key sequence, for the layout regressions.
+    pub(in crate::manifest::expand::property_tests) fn control_key_sequence(&self) -> Vec<String> {
+        self.authored_entries()
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|key| key == "foreach" || key == "when")
+            .collect()
     }
 
     /// The authored fields with the `vars` object spliced in at its position.
@@ -113,32 +122,6 @@ impl BodySpec {
     fn when_control(&self) -> Option<(String, ManifestValue)> {
         let (condition, template) = self.when?;
         Some(("when".to_owned(), rendered_condition(condition, template)))
-    }
-
-    /// The authored control block's rendered order.
-    ///
-    /// This is derived from the slots after the first-written key is placed,
-    /// so a classifier reads what the entry actually renders rather than what
-    /// it intended.
-    pub(in crate::manifest::expand::property_tests) fn rendered_control_order(
-        &self,
-    ) -> Option<ControlOrder> {
-        let rendered: Vec<String> = self
-            .authored_entries()
-            .into_iter()
-            .map(|(key, _)| key)
-            .filter(|key| key == "foreach" || key == "when")
-            .collect();
-        match rendered
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>()
-            .as_slice()
-        {
-            ["foreach", "when"] => Some(ControlOrder::ForeachFirst),
-            ["when", "foreach"] => Some(ControlOrder::WhenFirst),
-            _ => None,
-        }
     }
 
     /// The entry-level key sequence an expanded entry must carry.

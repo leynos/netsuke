@@ -98,23 +98,32 @@ pub(super) const DOCUMENT_CLASSES: &[&str] = &[
     "actions-entry-unevaluated",
 ];
 
-/// Classes the static-entry generator must reach.
+/// Classes the transformed foreach-order input must reach.
 ///
-/// This is the strategy the static-survival property draws from. It carries no
-/// `foreach`, so the entry-level list's iteration classes cannot occur; the
-/// classes here are the ones that property depends on.
-pub(super) const STATIC_ENTRY_CLASSES: &[&str] = &[
-    "targets",
-    "actions",
-    "static",
-    "vars",
-    "no-vars",
-    "condition",
-    "no-condition",
-    "condition-expression",
-    "condition-template",
-    "condition-reads-vars",
+/// The property removes `when` before expanding, so only the `foreach` control
+/// key's position remains; the classes here are the positions that placement
+/// can take.
+pub(super) const FOREACH_ORDER_CLASSES: &[&str] = &[
     "control-last",
     "control-one-following",
     "control-two-or-more-following",
+    "foreach-array",
+    "foreach-string",
+];
+
+/// Classes the static-document strategy must reach.
+///
+/// Its entries never iterate, so `document-foreach` and the unevaluated
+/// verdicts cannot occur; the per-section held, failed, and absent classes can,
+/// and are exactly what `OBL-STATIC-WHEN` names.
+pub(super) const STATIC_DOCUMENT_CLASSES: &[&str] = &[
+    "targets-entries",
+    "actions-entries",
+    "document-static",
+    "targets-entry-held",
+    "targets-entry-failed",
+    "targets-entry-absent",
+    "actions-entry-held",
+    "actions-entry-failed",
+    "actions-entry-absent",
 ];

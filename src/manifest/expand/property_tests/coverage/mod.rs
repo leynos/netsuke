@@ -13,10 +13,11 @@
 
 use super::strategy::{
     document_spec_strategy, entry_spec_strategy, foreach_entry_spec_strategy,
-    static_condition_entry_spec_strategy, static_entry_spec_strategy,
+    static_condition_entry_spec_strategy, static_document_spec_strategy,
 };
 use classes::{
-    DOCUMENT_CLASSES, ENTRY_CLASSES, INJECT_CLASSES, STATIC_CLASSES, STATIC_ENTRY_CLASSES,
+    DOCUMENT_CLASSES, ENTRY_CLASSES, FOREACH_ORDER_CLASSES, INJECT_CLASSES, STATIC_CLASSES,
+    STATIC_DOCUMENT_CLASSES,
 };
 use classifiers::{
     document_classes, entry_classes, forced_control_classes, injection_classes, static_classes,
@@ -162,14 +163,29 @@ fn static_condition_generator_reaches_every_verdict_class() -> Result<(), String
 
 /// Classify the strategy the static-survival property draws from.
 ///
-/// This strategy decides whether a condition is present, so it must reach both
-/// the condition-free and condition-carrying classes, and for the latter the
-/// verdict and shape families that property asserts over.
+/// The property draws whole documents of static entries, so the per-section
+/// verdict classes the obligation names are exactly the document classifier's.
 #[test]
-fn static_entry_generator_reaches_every_shape_class() -> Result<(), String> {
-    let (tally, draws) = tally(&static_entry_spec_strategy(), entry_classes)?;
-    report("static-entry", &tally);
-    check_floors(&tally, STATIC_ENTRY_CLASSES, draws)
+fn static_document_generator_reaches_every_verdict_class() -> Result<(), String> {
+    let (tally, draws) = tally(&static_document_spec_strategy(), document_classes)?;
+    report("static-document", &tally);
+    check_floors(&tally, STATIC_DOCUMENT_CLASSES, draws)
+}
+
+/// Classify the transformed entry the foreach order property actually expands.
+///
+/// That property removes `when` before expansion, which changes how many keys
+/// follow the remaining control key; classifying the untransformed entry would
+/// credit a class the property never reaches.
+#[test]
+fn foreach_order_generator_reaches_every_control_class() -> Result<(), String> {
+    let transformed = foreach_entry_spec_strategy().prop_map(|spec| super::strategy::EntrySpec {
+        section: spec.section,
+        body: spec.body.without_condition(),
+    });
+    let (tally, draws) = tally(&transformed, entry_classes)?;
+    report("foreach-order", &tally);
+    check_floors(&tally, FOREACH_ORDER_CLASSES, draws)
 }
 
 #[test]

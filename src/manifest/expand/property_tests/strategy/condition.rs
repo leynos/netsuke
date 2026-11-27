@@ -190,6 +190,19 @@ impl Condition {
         matches!(self, Self::ItemCmp(..))
     }
 
+    /// Name the shape's family for the coverage tally.
+    pub(in crate::manifest::expand::property_tests) const fn family(self) -> &'static str {
+        match self {
+            Self::Literal(_) => "shape-literal",
+            Self::Flag(_) => "shape-flag",
+            Self::NotFlag(_) => "shape-not-flag",
+            Self::Count(_) => "shape-count",
+            Self::VarCmp(..) => "shape-var-cmp",
+            Self::IndexCmp(..) => "shape-index-cmp",
+            Self::ItemCmp(..) => "shape-item-cmp",
+        }
+    }
+
     /// Report whether the shape reads either iteration binding.
     pub(in crate::manifest::expand::property_tests) const fn reads_iteration(self) -> bool {
         self.reads_index() || self.reads_item()

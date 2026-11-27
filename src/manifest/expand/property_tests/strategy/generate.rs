@@ -292,26 +292,41 @@ pub(in crate::manifest::expand::property_tests) fn foreach_entry_spec_strategy()
     condition_presence().prop_flat_map(|has_when| entry_with_controls(true, has_when))
 }
 
-/// Generate one static entry, with or without a condition.
-pub(in crate::manifest::expand::property_tests) fn static_entry_spec_strategy()
--> impl Strategy<Value = EntrySpec> {
-    (Section::strategy(), any::<bool>(), any::<bool>()).prop_flat_map(
-        |(section, has_when, verdict_holds)| {
-            let drawn = if has_when {
-                static_verdict_body(verdict_holds).boxed()
-            } else {
-                body_strategy(false, false).boxed()
-            };
-            drawn.prop_map(move |body| EntrySpec { section, body })
-        },
-    )
-}
-
 /// Generate one static entry that always carries a condition.
 pub(in crate::manifest::expand::property_tests) fn static_condition_entry_spec_strategy()
 -> impl Strategy<Value = EntrySpec> {
     (Section::strategy(), any::<bool>()).prop_flat_map(|(section, verdict_holds)| {
         static_verdict_body(verdict_holds).prop_map(move |body| EntrySpec { section, body })
+    })
+}
+
+/// Generate a document whose entries are all static.
+///
+/// `OBL-STATIC-WHEN` is stated over documents with static entries in both
+/// sections, so the property draws whole documents rather than one entry.
+pub(in crate::manifest::expand::property_tests) fn static_document_spec_strategy()
+-> impl Strategy<Value = DocumentSpec> {
+    let entries = || {
+        proptest::collection::vec(
+            (any::<bool>()).prop_flat_map(|has_when| body_strategy(false, has_when)),
+            0..=MAX_ENTRIES,
+        )
+    };
+    (entries(), entries()).prop_map(|(targets, actions)| DocumentSpec {
+        targets: targets
+            .into_iter()
+            .map(|body| EntrySpec {
+                section: Section::Targets,
+                body,
+            })
+            .collect(),
+        actions: actions
+            .into_iter()
+            .map(|body| EntrySpec {
+                section: Section::Actions,
+                body,
+            })
+            .collect(),
     })
 }
 

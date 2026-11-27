@@ -4,9 +4,7 @@
 //! lists those properties require live in `classes.rs`; this module only
 //! counts what a draw contains.
 
-use super::super::strategy::{
-    BodySpec, ControlOrder, DocumentSpec, EntrySpec, ForeachForm, Items, Section,
-};
+use super::super::strategy::{BodySpec, DocumentSpec, EntrySpec, ForeachForm, Items, Section};
 use super::{ClassSet, count};
 use crate::manifest::ManifestValue;
 
@@ -76,14 +74,28 @@ fn condition_classes(body: &super::super::strategy::BodySpec, tally: &mut ClassS
     };
     count(tally, "condition");
     count(tally, condition_form_class(body));
+    count(tally, condition.family());
     if condition.variable().is_some() {
         count(tally, "condition-reads-vars");
     }
+    count(tally, section_verdict_class(body));
     if condition.reads_index() {
         count(tally, "condition-reads-index");
     }
     if condition.reads_item() {
         count(tally, "condition-reads-item");
+    }
+}
+
+/// Name a static entry's verdict class, for the static-survival strategy.
+///
+/// The strategy always has one entry per draw in one section, so the class is
+/// its section and whether the condition held.
+fn section_verdict_class(body: &BodySpec) -> &'static str {
+    if super::super::model::expected_filtered(body).is_empty() {
+        "single-entry-held"
+    } else {
+        "single-entry-failed"
     }
 }
 
@@ -106,11 +118,19 @@ fn control_classes(body: &BodySpec, tally: &mut ClassSet) {
 /// Name which control key the entry writes first, if it writes both.
 fn control_order_class(body: &BodySpec) -> &'static str {
     match (body.is_foreach(), body.has_condition()) {
-        (true, true) => match body.rendered_control_order() {
-            Some(ControlOrder::ForeachFirst) => "control-both-foreach-first",
-            Some(ControlOrder::WhenFirst) => "control-both-when-first",
-            None => "control-both-single-key",
-        },
+        (true, true) => {
+            let rendered = body.control_key_sequence();
+            match rendered
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .as_slice()
+            {
+                ["foreach", "when"] => "control-both-foreach-first",
+                ["when", "foreach"] => "control-both-when-first",
+                _ => "control-both-single-key",
+            }
+        }
         _ => "control-single",
     }
 }
@@ -173,8 +193,8 @@ fn value_and_vars_classes(body: &super::super::strategy::BodySpec, tally: &mut C
 
 /// Count the classes of a sample whose control block is forced to the end.
 ///
-/// This is the negative control's classifier: it can never reach
-/// `control-two-or-more-following`, so the floor check must report that class.
+/// The negative control's classifier: it can never reach
+/// `control-two-or-more-following`, so the floor check must report it.
 pub(super) fn forced_control_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool {
     let forced = spec.body.clone().with_control_last();
     let class = match forced.following_key_count() {
@@ -240,12 +260,9 @@ pub(super) fn document_classes(spec: &DocumentSpec, tally: &mut ClassSet) -> boo
 
 /// Name one entry's condition verdicts within its section.
 ///
-/// `OBL-WHEN-REMOVED` requires, per section, entries whose condition held,
-/// entries whose condition failed, and entries with no condition. The
-/// verdict is per *evaluated iteration*, not per entry: an empty `foreach`
-/// evaluates no condition and so is neither held nor failed, and a mixed
-/// iteration reaches both classes at once. One draw may therefore contribute
-/// two classes, which is why this appends to the set rather than returning one
+/// The verdict is per *evaluated iteration*: an empty `foreach` evaluates no
+/// condition and is neither held nor failed, and a mixed iteration reaches both
+/// classes, which is why this appends to the set rather than returning one
 /// name.
 fn section_verdict_classes(section: Section, body: &BodySpec, tally: &mut ClassSet) {
     if !body.has_condition() {
