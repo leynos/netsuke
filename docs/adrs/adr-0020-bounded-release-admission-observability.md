@@ -574,14 +574,18 @@ beside it. An enforcing run admits a document only when
 `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` is exactly `true` and the digest
 is 64 lowercase hexadecimal characters equal to the SHA-256 of the bytes the
 gate read, compared in constant time. The workflow still ships the literal as
-`false`, so publication stays refused with `untrusted_evidence` whatever the
-digest says. Issue #598 requires one admitted and one refused live publishing
-run before the literal changes, and neither has been demonstrated. Only this
-repository's workflow can name the producer job's output, so a document that a
-caller uploads under the artefact name does not match the digest. A caller that
-pre-empts the artefact name makes the producer's own upload fail, which fails
-the producer job and so prevents admission. Observation mode ignores both
-conditions.
+`false`, so no manifest is admitted whatever the digest says. The reported
+category depends on the check that refuses first. The gate judges identity and
+results before attribution, so a document reaches `untrusted_evidence` only
+once it names the candidate and reports every required result as successful.
+Until `history_scan` and `release_candidate` have producers, an enforcing run
+refuses with `missing_evidence` before attribution is checked. Issue #598
+requires one admitted and one refused live publishing run before the literal
+changes, and neither has been demonstrated. Only this repository's workflow can
+name the producer job's output, so a document that a caller uploads under the
+artefact name does not match the digest. A caller that pre-empts the artefact
+name makes the producer's own upload fail, which fails the producer job and so
+prevents admission. Observation mode ignores both conditions.
 
 The binding ties the document to a job output of this workflow file. It does
 not authenticate a producer against a caller that replaces the whole workflow,
@@ -611,8 +615,9 @@ release tag, and an admitted run also needs the two missing producers. This
 addendum does not record that demonstration as done.
 
 The sequence this addendum requires cannot start yet. While the interim block
-stands, an enforcing run refuses every manifest with `untrusted_evidence`, so
-no admitted live publishing run is possible while the literal
+stands, an enforcing run admits no manifest. A manifest that passes every
+earlier check is refused with `untrusted_evidence`, so no admitted live
+publishing run is possible while the literal
 `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` is `false`. No route to the
 admitted demonstration exists yet. Any route needs a controlled procedure, for
 example a demonstration-only branch or fork in which the literal is `true`, and

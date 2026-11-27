@@ -11,6 +11,15 @@ emit_failure_event() {
     "$1" "$2" >&2
 }
 
+# Succeed when $1 is a GitHub `owner/name`. The subshell pins the C locale:
+# in a UTF-8 locale a bracket range such as `A-Z` also matches accented
+# letters, which GitHub names never contain.
+is_github_repository() (
+  LC_ALL=C
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$ ]] \
+    && [[ "${1#*/}" != "." && "${1#*/}" != ".." ]]
+)
+
 candidate_revision="${NETSUKE_CANDIDATE_REVISION:-}"
 emit_event candidate_revision_validation started
 if [[ ! "${candidate_revision}" =~ ^[[:xdigit:]]{40}$ ]]; then
@@ -19,6 +28,19 @@ if [[ ! "${candidate_revision}" =~ ^[[:xdigit:]]{40}$ ]]; then
   exit 1
 fi
 emit_event candidate_revision_validation success
+
+# The repository the revision was resolved in. A reusable-workflow caller's
+# candidate may exist only there, so a fixed upstream would fail the fetch. It
+# is checked as `owner/name` before it reaches Git, so it cannot become an
+# option or a path, and it names only github.com.
+candidate_repository="${NETSUKE_CANDIDATE_REPOSITORY:-}"
+emit_event candidate_repository_validation started
+if ! is_github_repository "${candidate_repository}"; then
+  emit_failure_event candidate_repository_validation invalid_candidate_repository
+  echo 'candidate repository must be a GitHub owner/name' >&2
+  exit 1
+fi
+emit_event candidate_repository_validation success
 
 candidate_root="$(mktemp -d "${RUNNER_TEMP}/netsuke-candidate-XXXXXX")"
 candidate_bin_dir="${candidate_root}/bin"
@@ -34,7 +56,8 @@ mkdir -p "${candidate_source_dir}" "${candidate_bin_dir}"
 emit_event git_fetch started
 if ! {
   git -C "${candidate_source_dir}" init --quiet
-  git -C "${candidate_source_dir}" remote add origin https://github.com/leynos/netsuke.git
+  git -C "${candidate_source_dir}" remote add origin \
+    "https://github.com/${candidate_repository}.git"
   git -C "${candidate_source_dir}" fetch --depth 1 origin -- "${candidate_revision}"
 }; then
   emit_failure_event git_fetch git_fetch_failed

@@ -65,6 +65,8 @@ ADMISSION_GUARD = (
     "needs.release-admission-evidence.result == 'success'"
 )
 RESOLVER_SCRIPT = "gate/.github/scripts/resolve_release_candidate.py"
+#: The candidate repository: the one whose refs the resolver read.
+CANDIDATE_REPOSITORY = "${{ needs.release-candidate.outputs.repository }}"
 #: The release-candidate job's resolver checkout, sparse to the scripts.
 RESOLVER_CHECKOUT = {
     "repository": "leynos/netsuke",
@@ -260,4 +262,25 @@ def test_release_candidate_runs_this_repositorys_resolver() -> None:
     )
     assert "--no-config" in str(resolve.get("run")), (
         "the caller's uv configuration must not apply"
+    )
+
+
+@pytest.mark.parametrize("job", CANARY_JOBS)
+def test_canaries_fetch_the_candidate_from_the_resolvers_repository(job: str) -> None:
+    """The installer fetches from the repository the candidate was resolved in.
+
+    Scenario: a reusable-workflow caller resolves a commit that only its own
+    repository holds. Invariant: the release-candidate job publishes the
+    repository its checkout came from, and each canary passes that output on,
+    so the installer never fetches a fixed upstream.
+    """
+    outputs = require_mapping(
+        workflow_job(_release(), "release-candidate").get("outputs"), "outputs"
+    )
+    assert outputs.get("repository") == "${{ github.repository }}", (
+        "the resolver reads the caller's checkout, so that is the repository"
+    )
+    canary = require_mapping(_step(job, "Run the downstream canary").get("with"), "")
+    assert canary.get("netsuke-repository") == CANDIDATE_REPOSITORY, (
+        f"{job} must fetch the candidate from the resolver's repository"
     )

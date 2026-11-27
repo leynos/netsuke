@@ -21,18 +21,25 @@ each phase is visible in the job log:
 The steps share a small JSON state file. Statuses are drawn from a closed
 vocabulary and command output stays in the job log, so the provenance record
 never carries unbounded text.
+
+The decisions are pure functions of their inputs: lane isolation and the
+``run`` step's exit status in ``downstream_canary_isolation``, and the record
+and summary a report writes in :func:`compose_report`. The step handlers are
+the edges that read files, launch tools, and print. They receive the
+environment and the executable lookup as a :class:`Host` built once in
+:func:`main`; every process launch goes through ``downstream_canary_process``,
+and the shared state through ``downstream_canary_state``.
 """
 
+import functools
 import json
-import os
 import re
-import shutil
 import sys
 import typing as typ
 
-from cuprum import ExecutionContext, Program, ProgramCatalogue, SafeCmd, sh
-from cuprum.catalogue import ProjectSettings
 from downstream_canary_arguments import build_parser, normalize_lists
+from downstream_canary_isolation import judge_isolation, run_status
+from downstream_canary_process import Host, observed_head, run_tool
 from downstream_canary_provenance import (
     FAILED,
     NOT_RUN,
@@ -41,11 +48,13 @@ from downstream_canary_provenance import (
     provenance_record,
     summary_line,
 )
+from downstream_canary_state import save_state, state_or_nothing_run
 
 if typ.TYPE_CHECKING:
     import argparse
     import collections.abc as cabc
-    from pathlib import Path
+
+    from downstream_canary_process import Which
 
 #: The generated manifest, relative to the downstream checkout.
 MANIFEST = "build.ninja"
@@ -88,139 +97,21 @@ def parse_assignments(pairs: cabc.Iterable[str]) -> dict[str, str]:
     return selectors
 
 
-def forbidden_matches(manifest: str, patterns: cabc.Iterable[str]) -> list[str]:
-    r"""Return the patterns that occur in a generated Ninja manifest.
-
-    A lane's non-interference contract is that no other lane's commands
-    survive manifest-time expansion, so a match is a canary failure.
-
-    Parameters
-    ----------
-    manifest
-        The generated manifest's text.
-    patterns
-        Literal substrings the manifest must not contain.
-
-    Returns
-    -------
-    list[str]
-        The patterns found, in the order given.
-
-    Examples
-    --------
-    >>> forbidden_matches("build test: phony\n", ["postgres", "test"])
-    ['test']
-    """
-    return [pattern for pattern in patterns if pattern in manifest]
-
-
-def load_state(path: Path) -> dict[str, object]:
-    """Read the shared step state, or an empty state when none is usable.
-
-    ``report`` always runs, so a missing, unreadable, or damaged state file
-    must still yield a record, with every unreached phase ``not_run``.
-
-    Parameters
-    ----------
-    path
-        The state file.
-
-    Returns
-    -------
-    dict[str, object]
-        The recorded state, or ``{}``.
-    """
-    try:
-        state = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, ValueError:
-        return {}
-    return state if isinstance(state, dict) else {}
-
-
-def save_state(path: Path, state: cabc.Mapping[str, object]) -> None:
-    """Write the shared step state.
-
-    Parameters
-    ----------
-    path
-        The state file.
-    state
-        The state to record.
-    """
-    path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
-
-
-def allowlisted(program: str, *arguments: str) -> SafeCmd:
-    """Build a Cuprum command whose catalogue allows exactly ``program``.
-
-    The canary's executables are resolved at run time -- the candidate
-    ``netsuke`` and the selected ``ninja`` are absolute paths -- so a static
-    catalogue cannot name them; one built per launch holds only the resolved
-    path, and Cuprum refuses anything else.
-
-    Returns
-    -------
-    SafeCmd
-        The command, ready to run.
-
-    Examples
-    --------
-    >>> allowlisted("/usr/bin/git", "--version").argv
-    ('--version',)
-    """
-    catalogue = ProgramCatalogue(
-        projects=(
-            ProjectSettings(
-                name="downstream-canary",
-                programs=(Program(program),),
-                documentation_locations=(),
-                noise_rules=(),
-            ),
-        )
-    )
-    return sh.make(Program(program), catalogue=catalogue)(*arguments)
-
-
-def run_tool(command: cabc.Sequence[str], workdir: Path, env: dict[str, str]) -> bool:
-    """Run one tool in the downstream checkout, streaming its output.
-
-    Parameters
-    ----------
-    command
-        The program and its arguments.
-    workdir
-        The downstream checkout.
-    env
-        The complete child environment.
-
-    Returns
-    -------
-    bool
-        ``True`` when the tool exits successfully.
-    """
-    print(f"::group::{' '.join(command)}", flush=True)
-    try:
-        result = allowlisted(*command).run_sync(
-            capture=False, context=ExecutionContext(env=env, cwd=workdir)
-        )
-    except OSError as error:
-        print(f"cannot start {command[0]}: {error}", file=sys.stderr)
-        return False
-    finally:
-        print("::endgroup::", flush=True)
-    return result.exit_code == 0
-
-
-def child_environment(arguments: argparse.Namespace) -> dict[str, str]:
+def child_environment(
+    arguments: argparse.Namespace, inherited: cabc.Mapping[str, str]
+) -> dict[str, str]:
     """Return the inherited environment with the canary's assignments applied.
 
     Lane selectors are recorded in the provenance; the extra environment, such
     as a service connection string, reaches the tools but is never recorded.
+    Selectors are applied last, so they win over both.
 
     Parameters
     ----------
     arguments
         Parsed ``generate`` or ``run`` arguments.
+    inherited
+        The environment the step itself received.
 
     Returns
     -------
@@ -228,33 +119,95 @@ def child_environment(arguments: argparse.Namespace) -> dict[str, str]:
         The child process environment.
     """
     return {
-        **os.environ,
+        **inherited,
         **parse_assignments(arguments.environment),
         **parse_assignments(arguments.selector),
     }
 
 
-def generate(arguments: argparse.Namespace) -> int:
+def resolve_ninja(env: cabc.Mapping[str, str], which: Which) -> str:
+    """Return the Ninja executable the child environment selects.
+
+    Ninja is looked up on the ``PATH`` it will run with, so an
+    ``--environment`` override selects the executable as well as reaching it.
+
+    Parameters
+    ----------
+    env
+        The child environment the tool will run with.
+    which
+        The executable lookup.
+
+    Returns
+    -------
+    str
+        The resolved path, or bare ``ninja`` when the lookup finds none.
+
+    Examples
+    --------
+    >>> resolve_ninja({"PATH": "/opt"}, lambda name, *, path=None: f"{path}/{name}")
+    '/opt/ninja'
+    >>> resolve_ninja({}, lambda name, *, path=None: None)
+    'ninja'
+    """
+    return which("ninja", path=env.get("PATH")) or "ninja"
+
+
+class Report(typ.NamedTuple):
+    """What a ``report`` step writes: the record and its job-summary line."""
+
+    record: dict[str, object]
+    summary: str
+
+
+def compose_report(
+    identity: CanaryIdentity,
+    state: cabc.Mapping[str, object],
+    downstream_head: str | None,
+) -> Report:
+    """Build the provenance record and summary line from the step's inputs.
+
+    Parameters
+    ----------
+    identity
+        The run's identity.
+    state
+        The shared step state, or ``{}`` when it was unusable.
+    downstream_head
+        The checkout's observed ``HEAD``, or ``None``.
+
+    Returns
+    -------
+    Report
+        The record and its summary line.
+    """
+    record = provenance_record(identity, state, downstream_head)
+    return Report(record, summary_line(identity, record))
+
+
+def generate(arguments: argparse.Namespace, *, host: Host) -> int:
     """Generate the downstream Ninja manifest with the candidate.
 
     Parameters
     ----------
     arguments
         Parsed ``generate`` arguments.
+    host
+        The step's environment and executable lookup.
 
     Returns
     -------
     int
         ``0`` when generation succeeds, otherwise ``1``.
     """
-    env = child_environment(arguments)
+    env = child_environment(arguments, host.environment)
     command = [arguments.netsuke, "--verbose", "generate", "--output", MANIFEST]
     passed = run_tool(command, arguments.workdir, env)
     save_state(arguments.state, {"generate": PASSED if passed else FAILED})
     return 0 if passed else 1
 
 
-def run_targets(arguments: argparse.Namespace) -> int:
+def run_targets(arguments: argparse.Namespace, *, host: Host) -> int:
     """Check lane isolation, then run every requested target.
 
     A manifest that reaches another lane runs nothing, since its targets would
@@ -266,45 +219,47 @@ def run_targets(arguments: argparse.Namespace) -> int:
     ----------
     arguments
         Parsed ``run`` arguments.
+    host
+        The step's environment and executable lookup.
 
     Returns
     -------
     int
         ``0`` when isolation holds and every target passes, otherwise ``1``.
     """
-    state = load_state(arguments.state)
+    state = state_or_nothing_run(arguments.state)
     manifest = (arguments.workdir / MANIFEST).read_text(encoding="utf-8")
-    found = forbidden_matches(manifest, arguments.forbid)
-    for pattern in found:
+    isolation = judge_isolation(manifest, arguments.forbid)
+    for pattern in isolation.found:
         print(f"{MANIFEST} contains another lane's {pattern!r}", file=sys.stderr)
-    state["isolation"] = FAILED if found else PASSED
     statuses = (
-        dict.fromkeys(arguments.target, NOT_RUN)
-        if found
-        else run_each_target(arguments)
+        run_each_target(arguments, host=host)
+        if isolation.holds
+        else dict.fromkeys(arguments.target, NOT_RUN)
     )
-    state["targets"] = statuses
-    save_state(arguments.state, state)
-    return 1 if found or FAILED in statuses.values() else 0
+    save_state(
+        arguments.state, {**state, "isolation": isolation.status, "targets": statuses}
+    )
+    return run_status(isolation, statuses)
 
 
-def run_each_target(arguments: argparse.Namespace) -> dict[str, str]:
+def run_each_target(arguments: argparse.Namespace, *, host: Host) -> dict[str, str]:
     """Run each requested target through Ninja and record its status.
 
     Parameters
     ----------
     arguments
         Parsed ``run`` arguments.
+    host
+        The step's environment and executable lookup.
 
     Returns
     -------
     dict[str, str]
         Each target's ``passed`` or ``failed`` status, in request order.
     """
-    env = child_environment(arguments)
-    # Look Ninja up on the PATH it will run with: an `--environment` override
-    # must select the executable as well as reach it.
-    ninja = shutil.which("ninja", path=env.get("PATH")) or "ninja"
+    env = child_environment(arguments, host.environment)
+    ninja = resolve_ninja(env, host.which)
     return {
         target: PASSED
         if run_tool([ninja, "-f", MANIFEST, target], arguments.workdir, env)
@@ -313,33 +268,15 @@ def run_each_target(arguments: argparse.Namespace) -> dict[str, str]:
     }
 
 
-def observed_head(workdir: Path) -> str | None:
-    """Return the downstream checkout's ``HEAD`` commit, if Git can read it.
-
-    Parameters
-    ----------
-    workdir
-        The downstream checkout.
-
-    Returns
-    -------
-    str | None
-        The full commit identifier, or ``None`` when the checkout is missing.
-    """
-    git = shutil.which("git")
-    if git is None or not workdir.is_dir():
-        return None
-    result = allowlisted(git, "-C", str(workdir), "rev-parse", "HEAD").run_sync()
-    return (result.stdout or "").strip() if result.exit_code == 0 else None
-
-
-def report(arguments: argparse.Namespace) -> int:
+def report(arguments: argparse.Namespace, *, host: Host) -> int:
     """Write the provenance record and the job-summary line.
 
     Parameters
     ----------
     arguments
         Parsed ``report`` arguments.
+    host
+        The step's environment and executable lookup.
 
     Returns
     -------
@@ -356,33 +293,47 @@ def report(arguments: argparse.Namespace) -> int:
         selectors=parse_assignments(arguments.selector),
         targets=tuple(arguments.target),
     )
-    record = provenance_record(
-        identity, load_state(arguments.state), observed_head(arguments.workdir)
+    git = host.which("git", path=host.environment.get("PATH"))
+    written = compose_report(
+        identity,
+        state_or_nothing_run(arguments.state),
+        observed_head(arguments.workdir, git),
     )
     arguments.provenance.write_text(
-        json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(written.record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     if arguments.summary is not None:
         with arguments.summary.open("a", encoding="utf-8") as summary:
-            summary.write(summary_line(identity, record))
-    print(json.dumps(record, sort_keys=True))
+            summary.write(written.summary)
+    print(json.dumps(written.record, sort_keys=True))
     return 0
 
 
-def main(argv: cabc.Sequence[str] | None = None) -> int:
+def main(argv: cabc.Sequence[str] | None = None, host: Host | None = None) -> int:
     """Run one canary step.
 
     Parameters
     ----------
     argv
         Arguments excluding the program name, or ``None`` for ``sys.argv``.
+    host
+        The environment and executable lookup, or ``None`` for this process's
+        own; the only place the ambient host is read.
 
     Returns
     -------
     int
         The step's exit status.
     """
-    handlers = {"generate": generate, "run": run_targets, "report": report}
+    resolved = Host.ambient() if host is None else host
+    handlers = {
+        name: functools.partial(handler, host=resolved)
+        for name, handler in (
+            ("generate", generate),
+            ("run", run_targets),
+            ("report", report),
+        )
+    }
     arguments = build_parser(handlers).parse_args(argv)
     try:
         normalize_lists(arguments)

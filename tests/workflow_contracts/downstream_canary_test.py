@@ -148,11 +148,12 @@ def test_candidate_is_built_from_the_resolved_commit_and_version() -> None:
     """The candidate installer receives exactly the resolved identity.
 
     Scenario: the canary must exercise the release candidate, not a nearby
-    build. Invariant: the installer is driven by the commit and version
-    inputs, and refuses a binary reporting any other version.
+    build. Invariant: the installer is driven by the repository, commit, and
+    version inputs, and refuses a binary reporting any other version.
     """
     build = step("Build the Netsuke candidate")
     assert require_mapping(build.get("env"), "env") == {
+        "NETSUKE_CANDIDATE_REPOSITORY": "${{ inputs.netsuke-repository }}",
         "NETSUKE_CANDIDATE_REVISION": "${{ inputs.netsuke-commit }}",
         "NETSUKE_CANDIDATE_VERSION": "${{ inputs.netsuke-version }}",
     }, "the installer must build the resolved commit and version"

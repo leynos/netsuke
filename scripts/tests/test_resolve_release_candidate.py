@@ -157,6 +157,50 @@ def test_version_key_ignores_non_version_tags(tag: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "tag",
+    [
+        pytest.param("v0.1.0\n", id="release-newline"),
+        pytest.param("v0.1.0-rc1\n", id="rc-newline"),
+        pytest.param("v0.1.0-rc.2\n", id="dotted-rc-newline"),
+        pytest.param("v\u0661.0.0", id="arabic-indic-major"),
+        pytest.param("v0.\uff11.0", id="fullwidth-minor"),
+        pytest.param("v0.1.0-rc.1\u0662", id="arabic-indic-prerelease"),
+        pytest.param("v0.1.0-rc\u0663", id="arabic-indic-rc-number"),
+    ],
+)
+def test_version_key_refuses_newlines_and_non_ascii_digits(tag: str) -> None:
+    r"""Only ASCII digits form a version, and nothing may follow it.
+
+    ``$`` would accept a trailing newline, and ``\d`` (which ``int`` agrees
+    with) would accept any Unicode decimal digit; SemVer allows neither.
+    """
+    assert resolver.version_key(tag) is None, f"{tag!r} is not a version tag"
+
+
+@pytest.mark.parametrize(
+    ("tags", "expected"),
+    [
+        pytest.param(["v0.1.0", "v0.1.0\n"], "v0.1.0", id="newline-suffix"),
+        pytest.param(["v1.0.0-rc.2", "v1.0.0-rc.1\u0662"], "v1.0.0-rc.2", id="unicode"),
+        pytest.param(["v0.1.0-rc.2", "v0.1.0-rc.10"], "v0.1.0-rc.10", id="ascii"),
+    ],
+)
+def test_latest_version_tag_skips_malformed_tags(
+    tags: list[str], expected: str
+) -> None:
+    """A malformed tag is never selected, and ASCII ordering is unchanged."""
+    assert resolver.latest_version_tag(tags) == expected, f"latest of {tags!r}"
+
+
+def test_auto_ignores_a_release_candidate_with_non_ascii_digits() -> None:
+    """``auto`` does not prefer ``rc.1٢`` over ``rc.2``: it is not a tag at all."""
+    assert resolver.select_auto_ref(["v1.0.0-rc.2", "v1.0.0-rc.1\u0662"]) == (
+        "refs/tags/v1.0.0-rc.2",
+        "rc-tag",
+    ), "a tag with a non-ASCII digit must not be selected"
+
+
+@pytest.mark.parametrize(
     ("tags", "expected"),
     [
         (["v0.1.0-beta3", "v0.1.0-rc1"], ("refs/tags/v0.1.0-rc1", "rc-tag")),

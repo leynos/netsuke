@@ -1780,9 +1780,8 @@ targets, and the retained Makefile boundaries; this section covers the tooling.
   catalogue allowing exactly that executable, as `docs/scripting-standards.md`
   requires, and reports a failing command as `GitCommandError`. It imports
   Cuprum inside `run_git`, because `lint-workflow-scripts` loads every module
-  there without its dependencies. `scripts/run_downstream_canary.py` launches
-  its tools the same way, with a catalogue holding only the resolved `netsuke`,
-  `ninja`, or `git` path.
+  there without its dependencies. The canary runner launches its tools the same
+  way, through `scripts/downstream_canary_process.py`, described below.
 - The [downstream-canary action][downstream-canary-action] is the shared
   bootstrap. The caller checks out only `.github/actions/` and `scripts/` from
   `leynos/netsuke` at `job.workflow_sha`, so a reusable-workflow caller cannot
@@ -1794,18 +1793,42 @@ targets, and the retained Makefile boundaries; this section covers the tooling.
   closure check resolves. The action reaches its scripts through
   `GITHUB_ACTION_PATH`.
 - The [install-release-candidate action][release-candidate-action] builds the
-  candidate. It fetches the exact `revision`, verifies the resolved commit,
-  builds with `RUSTFLAGS` assigned as `make release` does, so the development
-  `mold` linker never reaches a hosted runner, and refuses a binary whose
-  `netsuke --version` differs from `expected-version`. It outputs the `binary`
-  path, `revision`, and `version`, choosing `netsuke.exe` on Windows. It stays
-  public, so a downstream project can run its own gates against a candidate.
+  candidate. It fetches the exact `revision` from the GitHub `repository`
+  (default `leynos/netsuke`; the canaries pass the repository the resolver
+  read, so a reusable-workflow caller's candidate is reachable), verifies the
+  resolved commit, builds with `RUSTFLAGS` assigned as `make release` does, so
+  the development `mold` linker never reaches a hosted runner, and refuses a
+  binary whose `netsuke --version` differs from `expected-version`. It outputs
+  the `binary` path, `revision`, and `version`, choosing `netsuke.exe` on
+  Windows. It stays public, so a downstream project can run its own gates
+  against a candidate.
 - `scripts/run_downstream_canary.py` runs the `generate`, `run`, and `report`
-  phases, sharing a JSON state file. Argument parsing lives in
-  `scripts/downstream_canary_arguments.py`, and the provenance schema and its
-  closed status vocabulary in `scripts/downstream_canary_provenance.py`.
+  phases. Its handlers are thin edges over pure decisions, and its siblings
+  each own one concern. The runner is their only caller, so they are not a
+  general library:
+  - `scripts/downstream_canary_arguments.py` parses the arguments.
+  - `scripts/downstream_canary_provenance.py` owns the provenance schema and
+    its closed status vocabulary.
+  - `scripts/downstream_canary_isolation.py` judges lane isolation and the
+    `run` step's exit status.
+  - `scripts/downstream_canary_state.py` reads and writes the JSON state the
+    steps share. Its loader raises `StateUnreadableError` for an unusable file,
+    and the edges decide that such a file means nothing ran.
+  - `scripts/downstream_canary_process.py` is the only process and host
+    boundary. Each tool runs through a Cuprum catalogue allowing exactly the
+    resolved `netsuke`, `ninja`, or `git` path, with its output echoed to the
+    job log. The environment and executable lookup reach the handlers as a
+    `Host`, which `main` builds once. Tests inject their own.
   `make test-downstream-canary` tests the resolver, the runner, and the
   evidence producer below, and CI runs it.
+  `scripts/tests/test_downstream_canary_core.py` checks the pure decisions and
+  the injected host directly. `scripts/tests/test_run_downstream_canary.py`
+  drives the runner end to end against fake executables. Beside the example
+  tables, it runs two Hypothesis property modules:
+  `scripts/tests/test_release_candidate_properties.py` (version-tag ordering,
+  and the refusal of trailing newlines and non-ASCII digits) and
+  `scripts/tests/test_downstream_canary_properties.py` (list splitting, the
+  status vocabulary, and selector parsing).
 - `.github/scripts/write_release_admission_evidence.py` is the evidence
   producer, run by the `release-admission-evidence` job. It reads each canary's
   provenance record from the `downstream-canary-provenance-*` artefacts,
@@ -3344,17 +3367,21 @@ it. The producer job publishes the SHA-256 of the manifest it wrote as its
 when that value is a 64-character lowercase hexadecimal digest equal to the
 SHA-256 of the bytes the gate read, compared in constant time. Only this
 repository's workflow can name the producer's job output, so a caller cannot
-supply a digest for a document it uploaded: an enforcing run refuses such a
-document with `untrusted_evidence`, and so it refuses an unset, empty, or
-malformed digest.
+supply a digest for a document it uploaded: an enforcing run cannot admit such
+a document, and it treats an unset, empty, or malformed digest the same way.
+Attribution is judged after identity and results, so the refusal is reported as
+`untrusted_evidence` only for a document that passes those checks. Until
+`history_scan` and `release_candidate` have producers, the refusal is
+`missing_evidence`.
 
 The digest does not lift the interim publication block. The workflow still ships
 `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED` as `false`, and an enforcing run
-requires it to be exactly `true` as well as the digest to match, so it refuses
-even the producer's own document with `untrusted_evidence`. Issue #598 requires
-one admitted and one refused live publishing run to be demonstrated before that
-literal changes. Observation mode ignores both conditions, so a rehearsal still
-reports the manifest it read and the read-only lane stays reachable.
+requires it to be exactly `true` as well as the digest to match. So it does not
+admit even the producer's own document, and refuses one that passes the earlier
+checks with `untrusted_evidence`. Issue #598 requires one admitted and one
+refused live publishing run to be demonstrated before that literal changes.
+Observation mode ignores both conditions, so a rehearsal still reports the
+manifest it read and the read-only lane stays reachable.
 `scripts/tests/test_release_admission_producer_trust.py` pins the refusal for
 unset, empty, malformed, foreign, and `true` digests, the block's refusal of an
 attributed document, the admitting case for the producer's own digest once the
@@ -5981,8 +6008,11 @@ deliberately outside the slice. The broader `netsuke::cli::discovery` module
 remains under the capability policy; no `build_script_build` exception is
 required. The behavioural step definitions, CLI integration tests, and shared
 workflow-reading helper that stage fixtures ambiently are scoped the same way.
-A crate-level entry is justified only when the ambient access lives in the
-crate root itself, where a path entry would be no narrower — that covers the
+The helper's entries name each workflow contract crate that includes it, so the
+release-canary contracts (`tests/workflow_release_canaries.rs`) add
+`workflow_release_canaries::common`. The crate itself stays under the policy. A
+crate-level entry is justified only when the ambient access lives in the crate
+root itself, where a path entry would be no narrower — that covers the
 enumerated integration-test crates. The `test_support` crate uses
 capability-backed fixture helpers and remains linted by Whitaker under its own
 narrow policy.
@@ -6442,11 +6472,12 @@ Python gate. It uses the repository's Python 3.14 baseline and provisions
 `pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
 `cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
 `cyclopts==4.25.3` for the entry point the tests import. The target runs the
-twenty-five runtime modules with `python -m pytest`, `-c /dev/null`,
+twenty-six runtime modules with `python -m pytest`, `-c /dev/null`,
 `--rootdir=.`, and `-p no:cacheprovider`, so the test run is isolated from
 repository-local pytest configuration and cache state:
 
 - `scripts/tests/test_release_admission_metrics.py`
+- `scripts/tests/test_release_admission_attribution_properties.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
 - `scripts/tests/test_release_admission_invalid_configuration.py`
 - `scripts/tests/test_release_admission_metric_boundedness.py`

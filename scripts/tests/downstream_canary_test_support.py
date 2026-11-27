@@ -17,8 +17,11 @@ SCRIPTS = Path(__file__).resolve().parents[1]
 RUNNER = SCRIPTS / "run_downstream_canary.py"
 
 #: Records its arguments and lane, writes the manifest, and exits as asked.
+#: It also writes one line to each output stream, which the job log must show.
 FAKE_NETSUKE = """\
 import os, pathlib, sys
+print("fake-netsuke stdout", flush=True)
+print("fake-netsuke stderr", file=sys.stderr, flush=True)
 default = "build ok: phony\\n"
 pathlib.Path("build.ninja").write_text(os.environ.get("FAKE_MANIFEST", default))
 lane = os.environ.get("MXD_BACKEND", "-")
@@ -28,8 +31,11 @@ with pathlib.Path(os.environ["FAKE_LOG"]).open("a") as log:
 sys.exit(int(os.environ.get("FAKE_NETSUKE_STATUS", "0")))
 """
 #: Records its arguments and lane, and fails the targets named in the fixture.
+#: Like the fake Netsuke, it writes one line to each output stream.
 FAKE_NINJA = """\
 import os, pathlib, sys
+print(f"fake-ninja stdout {sys.argv[-1]}", flush=True)
+print(f"fake-ninja stderr {sys.argv[-1]}", file=sys.stderr, flush=True)
 lane = os.environ.get("MXD_BACKEND", "-")
 with pathlib.Path(os.environ["FAKE_LOG"]).open("a") as log:
     url = os.environ.get("POSTGRES_TEST_URL", "-")

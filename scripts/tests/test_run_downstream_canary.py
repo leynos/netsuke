@@ -213,3 +213,37 @@ def test_ninja_is_resolved_on_the_child_environment_path(canary: Canary) -> None
         .splitlines()[-1]
         .startswith("child-ninja -f build.ninja lint")
     ), "the Ninja on the child environment's PATH must be the one that runs"
+
+
+def test_tool_output_reaches_the_job_log(canary: Canary) -> None:
+    """Both output streams of Netsuke and of Ninja reach the runner's own.
+
+    A failed downstream gate is diagnosed from the job log, so the runner must
+    stream each tool's output rather than capture or discard it; Cuprum
+    discards a stream that is neither captured nor echoed.
+    """
+    generated = canary.completed_step(
+        "generate",
+        "--netsuke",
+        str(canary.netsuke),
+        "--selector",
+        "MXD_BACKEND=sqlite",
+    )
+    ran = canary.completed_step(
+        "run", "--target", "lint", "--selector", "MXD_BACKEND=sqlite"
+    )
+
+    assert generated.returncode == 0, generated.stderr
+    assert ran.returncode == 0, ran.stderr
+    assert "fake-netsuke stdout" in generated.stdout, (
+        f"Netsuke's stdout must be streamed: {generated.stdout!r}"
+    )
+    assert "fake-netsuke stderr" in generated.stderr, (
+        f"Netsuke's stderr must be streamed: {generated.stderr!r}"
+    )
+    assert "fake-ninja stdout lint" in ran.stdout, (
+        f"Ninja's stdout must be streamed: {ran.stdout!r}"
+    )
+    assert "fake-ninja stderr lint" in ran.stderr, (
+        f"Ninja's stderr must be streamed: {ran.stderr!r}"
+    )

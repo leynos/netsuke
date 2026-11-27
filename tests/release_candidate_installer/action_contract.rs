@@ -22,25 +22,40 @@ pub(crate) fn release_candidate_action() -> Result<YamlValue> {
     serde_yaml::from_str(&contents).context("parse release-candidate composite action")
 }
 
-/// Require the composite action to expose both required candidate inputs.
+/// Return whether the action declares `name` as a required input.
+fn is_required_input(inputs: &Mapping, name: &str) -> bool {
+    mapping_value(inputs, name)
+        .and_then(YamlValue::as_mapping)
+        .and_then(|input| mapping_value(input, "required"))
+        .and_then(YamlValue::as_bool)
+        == Some(true)
+}
+
+/// Require the composite action's candidate inputs.
+///
+/// `revision` and `expected-version` are required. `repository` is optional
+/// and defaults to the upstream, so a downstream workflow written before the
+/// input existed keeps working; the canaries always pass it.
 pub(crate) fn require_candidate_inputs(root: &Mapping) -> Result<()> {
     let inputs = mapping_value(root, "inputs")
         .and_then(YamlValue::as_mapping)
         .context("release-candidate composite action should declare inputs")?;
+    let repository = mapping_value(inputs, "repository")
+        .and_then(YamlValue::as_mapping)
+        .context("release-candidate composite action should declare a repository input")?;
 
     ensure!(
-        inputs.len() == 2
-            && mapping_value(inputs, "revision")
-                .and_then(YamlValue::as_mapping)
-                .and_then(|input| mapping_value(input, "required"))
-                .and_then(YamlValue::as_bool)
-                == Some(true)
-            && mapping_value(inputs, "expected-version")
-                .and_then(YamlValue::as_mapping)
-                .and_then(|input| mapping_value(input, "required"))
-                .and_then(YamlValue::as_bool)
-                == Some(true),
+        inputs.len() == 3
+            && ["revision", "expected-version"]
+                .into_iter()
+                .all(|name| is_required_input(inputs, name)),
         "the composite action should require its revision and expected-version inputs"
+    );
+    ensure!(
+        !is_required_input(inputs, "repository")
+            && mapping_value(repository, "default").and_then(YamlValue::as_str)
+                == Some("leynos/netsuke"),
+        "the repository input should be optional and default to the upstream"
     );
 
     Ok(())
@@ -69,12 +84,15 @@ pub(crate) fn require_candidate_installer_step(root: &Mapping) -> Result<()> {
         "the composite action should invoke the installer covered by this harness"
     );
     ensure!(
-        environment.len() == 2
+        environment.len() == 3
+            && mapping_value(environment, "NETSUKE_CANDIDATE_REPOSITORY")
+                .and_then(YamlValue::as_str)
+                == Some("${{ inputs.repository }}")
             && mapping_value(environment, "NETSUKE_CANDIDATE_REVISION").and_then(YamlValue::as_str)
                 == Some("${{ inputs.revision }}")
             && mapping_value(environment, "NETSUKE_CANDIDATE_VERSION").and_then(YamlValue::as_str)
                 == Some("${{ inputs.expected-version }}"),
-        "the composite action should map both candidate inputs into the installer environment"
+        "the composite action should map every candidate input into the installer environment"
     );
 
     Ok(())

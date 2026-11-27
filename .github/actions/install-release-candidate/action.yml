@@ -2,6 +2,12 @@ name: Install Netsuke release candidate
 description: Build one exact Netsuke revision and expose its binary to a downstream canary
 
 inputs:
+  repository:
+    description: >-
+      GitHub `owner/name` repository to fetch the candidate from: the one the
+      revision was resolved in. A fork's candidate needs the fork named here.
+    required: false
+    default: leynos/netsuke
   revision:
     description: Full Git revision of the proposed Netsuke release candidate
     required: true
@@ -27,6 +33,7 @@ runs:
       id: install
       shell: bash
       env:
+        NETSUKE_CANDIDATE_REPOSITORY: ${{ inputs.repository }}
         NETSUKE_CANDIDATE_REVISION: ${{ inputs.revision }}
         NETSUKE_CANDIDATE_VERSION: ${{ inputs.expected-version }}
       run: bash "${GITHUB_ACTION_PATH}/install.sh"

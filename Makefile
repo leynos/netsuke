@@ -443,12 +443,15 @@ test-downstream-canary: ## Validate the downstream migration-canary tooling
 		scripts/tests/test_release_candidate_properties.py \
 		scripts/tests/test_downstream_canary_properties.py \
 		scripts/tests/test_run_downstream_canary.py \
+		scripts/tests/test_downstream_canary_core.py \
 		scripts/tests/test_downstream_canary_arguments.py \
 		scripts/tests/test_write_release_admission_evidence.py \
 		.github/scripts/resolve_release_candidate.py \
 		.github/scripts/write_release_admission_evidence.py \
 		scripts/run_downstream_canary.py scripts/downstream_canary_arguments.py \
-		scripts/downstream_canary_provenance.py --doctest-modules -c /dev/null \
+		scripts/downstream_canary_provenance.py scripts/downstream_canary_process.py \
+		scripts/downstream_canary_isolation.py scripts/downstream_canary_state.py \
+		--doctest-modules -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 test-coverage-artifact: ## Test hostile LCOV artefact validation

@@ -1,4 +1,4 @@
-"""Check the release-candidate resolver's SemVer ordering against generated tags.
+r"""Check the release-candidate resolver's SemVer ordering against generated tags.
 
 The resolver chooses which Netsuke commit the downstream canaries build, and
 its ``auto`` rule depends on ``latest_version_tag`` returning the highest
@@ -9,7 +9,8 @@ The ordering properties draw SemVer-canonical pre-release identifiers, meaning
 numeric identifiers carry no leading zero, because that is the form SemVer 2.0
 defines precedence for. ``VERSION_TAG`` refuses a zero-padded numeric
 identifier, and the last property here holds it to that: such a tag is not a
-version tag, so it cannot share a key with the tag it pads.
+version tag, so it cannot share a key with the tag it pads. The final two
+hold every generated version tag to the ``\Z`` anchor and to ASCII digits.
 """
 
 import importlib.util
@@ -146,4 +147,32 @@ def test_leading_zero_identifier_is_not_a_version_tag(number: int) -> None:
     )
     assert resolver.version_key(f"v1.0.0-rc.0{number}") is None, (
         f"rc.0{number} has a leading zero and must not be read as a version"
+    )
+
+
+#: Unicode decimal digits other than ASCII ``0``-``9``: ``\d`` and ``int``
+#: both accept them, and SemVer does not.
+NON_ASCII_DIGIT = st.characters(categories=["Nd"]).filter(lambda c: not c.isascii())
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(tag=VERSION_TAGS)
+def test_a_trailing_newline_is_never_a_version_tag(tag: str) -> None:
+    """A version tag followed by a newline is not a version tag."""
+    assert resolver.version_key(f"{tag}\n") is None, (
+        f"{tag!r} with a trailing newline must not be read as a version"
+    )
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(tag=VERSION_TAGS, digit=NON_ASCII_DIGIT, data=st.data())
+def test_a_non_ascii_digit_is_never_part_of_a_version(
+    tag: str, digit: str, data: st.DataObject
+) -> None:
+    """Replacing any ASCII digit of a version tag with a non-ASCII one refuses it."""
+    positions = [index for index, char in enumerate(tag) if char.isdigit()]
+    position = data.draw(st.sampled_from(positions), label="position")
+    damaged = f"{tag[:position]}{digit}{tag[position + 1 :]}"
+    assert resolver.version_key(damaged) is None, (
+        f"{damaged!r} carries a non-ASCII digit and must not be read as a version"
     )

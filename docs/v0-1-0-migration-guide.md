@@ -260,10 +260,12 @@ version that the candidate must report:
 ```
 
 The required `revision` and `expected-version` inputs cause the installer to
-build the exact checked-out candidate. It exposes verified `binary`,
-`revision`, and `version` outputs only after the resolved commit and
-`netsuke --version` match. On Windows, `binary` names the built `netsuke.exe`;
-invoke that output directly rather than constructing a platform-specific path.
+build the exact checked-out candidate. The optional `repository` input names
+the GitHub `owner/name` to fetch it from, and defaults to `leynos/netsuke`. It
+exposes verified `binary`, `revision`, and `version` outputs only after the
+resolved commit and `netsuke --version` match. On Windows, `binary` names the
+built `netsuke.exe`; invoke that output directly rather than constructing a
+platform-specific path.
 
 Netsuke's own v0.1.0 release is admitted by three pinned downstream migration
 canaries, which its release workflow runs against the exact candidate; see
@@ -1537,23 +1539,25 @@ running after a failed package or a refused admission.
 
 The gate refuses with `error_category=missing_evidence` while the run has no
 `release-admission-evidence` manifest, or while the manifest lacks a required
-result. It refuses with `error_category=untrusted_evidence` when the manifest's
-bytes do not hash to the digest the producer job published, and, while the
-interim block stands, for every manifest. The release workflow's
-`release-admission-evidence` job writes the manifest after the downstream
-canary jobs conclude, including skipped ones, and records a canary whose
-provenance record is missing as that canary's failure. A produced manifest is
-therefore not proof that every canary ran: a canary counts as successful only
-when its job succeeded and its provenance record names this candidate and
-reports a pass. Both refusals are deliberate: the path that published without
-evidence is closed, and a same-run document that the producer did not write is
-refused. A caller of the reusable `release.yml` needs no new input, because the
-producer runs inside the workflow; a caller that expected a publish to proceed
-now sees the admission job fail and every job that writes skipped. The
-admission job also runs the gate from this repository's own workflow commit, so
-a calling workflow cannot supply an older or modified gate that reports a more
-favourable decision. The `history_scan` and `release_candidate` results still
-have no producer, so publication stays unavailable until both exist.
+result. Attribution is checked after identity and results. A manifest that
+passes those checks is refused with `error_category=untrusted_evidence` when
+its bytes do not hash to the digest the producer job published. While the
+interim block stands, every manifest that passes them is refused that way. The
+release workflow's `release-admission-evidence` job writes the manifest after
+the downstream canary jobs conclude, including skipped ones, and records a
+canary whose provenance record is missing as that canary's failure. A produced
+manifest is therefore not proof that every canary ran: a canary counts as
+successful only when its job succeeded and its provenance record names this
+candidate and reports a pass. Both refusals are deliberate: the path that
+published without evidence is closed, and a same-run document that the producer
+did not write is refused. A caller of the reusable `release.yml` needs no new
+input, because the producer runs inside the workflow; a caller that expected a
+publish to proceed now sees the admission job fail and every job that writes
+skipped. The admission job also runs the gate from this repository's own
+workflow commit, so a calling workflow cannot supply an older or modified gate
+that reports a more favourable decision. The `history_scan` and
+`release_candidate` results still have no producer, so publication stays
+unavailable until both exist.
 
 See [Install Netsuke](users-guide.md#install-netsuke) for the caller-visible
 rules and the conditions the manifest must satisfy.

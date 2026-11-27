@@ -632,6 +632,10 @@ jobs:
       commit: ${{ steps.resolve.outputs.commit }}
       version: ${{ steps.resolve.outputs.version }}
       source: ${{ steps.resolve.outputs.source }}
+      # The repository whose refs the resolver read: the caller's checkout
+      # below. The canaries fetch the candidate from here, so a commit that
+      # only a reusable-workflow caller holds is still reachable.
+      repository: ${{ github.repository }}
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -774,7 +778,8 @@ jobs:
           # checkout: the provenance the evidence producer trusts must come
           # from this action, so a reusable-workflow caller cannot substitute
           # one that reports passing gates it never ran. The candidate itself
-          # is fetched by the installer at the resolved commit.
+          # is fetched by the installer at the resolved commit, from the
+          # repository the resolver read.
           repository: leynos/netsuke
           ref: ${{ job.workflow_sha }}
           sparse-checkout: |
@@ -790,6 +795,7 @@ jobs:
           ref: ${{ matrix.ref }}
           targets: ${{ matrix.targets }}
           platform: linux
+          netsuke-repository: ${{ needs.release-candidate.outputs.repository }}
           netsuke-commit: ${{ needs.release-candidate.outputs.commit }}
           netsuke-version: ${{ needs.release-candidate.outputs.version }}
           selectors: ${{ matrix.selectors }}
@@ -843,6 +849,7 @@ jobs:
           ref: ${{ matrix.ref }}
           targets: ${{ matrix.targets }}
           platform: windows
+          netsuke-repository: ${{ needs.release-candidate.outputs.repository }}
           netsuke-commit: ${{ needs.release-candidate.outputs.commit }}
           netsuke-version: ${{ needs.release-candidate.outputs.version }}
 

@@ -35,9 +35,10 @@ every canary:
    reusable-workflow caller's, so the provenance the evidence producer trusts
    always comes from this action.
 2. Build the candidate with the
-   [release-candidate installer][installer], which fetches the exact commit,
-   builds it in the shipped release shape, and refuses a binary that reports a
-   version other than the candidate's.
+   [release-candidate installer][installer], which fetches the exact commit
+   from the repository the resolver read, builds it in the shipped release
+   shape, and refuses a binary that reports a version other than the
+   candidate's.
 3. Install only the tools that canary names, from a closed set.
 4. Run `netsuke --verbose generate --output build.ninja` in the checkout, then
    `ninja -f build.ninja <target>` for each selected target.
@@ -140,9 +141,11 @@ The job publishes the SHA-256 of the manifest bytes it wrote as its
 the gate admits the uploaded document only when its bytes hash to it. The
 digest is the attribution: only this repository's workflow can name the
 producer's output, so a document that a caller uploads under the same artefact
-name is refused as `untrusted_evidence`. An interim block stays beside that
-check: the workflow refuses every manifest, attributed or not, until #598's
-live admitted and refused publishing runs are demonstrated.
+name cannot be admitted. The gate checks attribution after identity and
+results, so such a document is refused as `untrusted_evidence` only if it
+passes those checks. An interim block stays beside that check: the workflow
+admits no manifest, attributed or not, until #598's live admitted and refused
+publishing runs are demonstrated.
 
 The producer declares the downstream results only. The `history_scan` and
 `release_candidate` results have no producer yet, so an enforcing run still

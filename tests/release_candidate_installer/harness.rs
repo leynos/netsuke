@@ -15,6 +15,8 @@ use tempfile::TempDir;
 use test_support::{fs as test_fs, write_exec_with_content};
 
 pub(crate) const CANDIDATE_REVISION: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+/// The repository the candidate revision was resolved in.
+pub(crate) const CANDIDATE_REPOSITORY: &str = "leynos/netsuke";
 /// Stand in for Git, recording each invocation.
 const FAKE_GIT_SCRIPT: &str = include_str!("../data/release_candidate_installer/fake_git.sh");
 /// Stand in for Cargo, resolving its output directory as Cargo does.
@@ -22,8 +24,9 @@ const FAKE_CARGO_SCRIPT: &str = include_str!("../data/release_candidate_installe
 pub(crate) const CANDIDATE_VERSION: &str = "0.1.0-beta2";
 const TEST_PATH: &str = "/usr/bin:/bin";
 const TEST_TOKEN: &str = "installer-test-token";
-const INSTALLER_OPERATIONS: [&str; 5] = [
+const INSTALLER_OPERATIONS: [&str; 6] = [
     "candidate_revision_validation",
+    "candidate_repository_validation",
     "git_fetch",
     "candidate_revision_verification",
     "locked_cargo_build",
@@ -120,6 +123,7 @@ impl InstallerHarness {
             .arg(installer_script())
             .env("BASH_ENV", &self.bash_env_path)
             .env("GITHUB_OUTPUT", &self.github_output_path)
+            .env("NETSUKE_CANDIDATE_REPOSITORY", CANDIDATE_REPOSITORY)
             .env("NETSUKE_CANDIDATE_REVISION", inputs.candidate_revision)
             .env("NETSUKE_CANDIDATE_VERSION", CANDIDATE_VERSION)
             .env("NETSUKE_CARGO_ARGS", &self.cargo_args_path)

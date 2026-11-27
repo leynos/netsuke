@@ -182,15 +182,16 @@ hashes to the digest the producer job published. The identity fields are
 compared with the run, which shows the manifest agrees with the candidate. The
 digest is a content binding, not a statement of who uploaded the document: a
 manifest whose bytes differ from the producer's output does not hash to the
-published digest, so an enforcing run refuses it with `untrusted_evidence`.
-Identical bytes from another job hash to the same digest, so the digest does
-not identify the uploading job. Attribution of the uploader rests on the
-producer's job output being nameable only by this workflow, together with the
-interim block, `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`, which the workflow
-ships as `false`. Until #598's live publishing runs are demonstrated, that
-block refuses every manifest with that category, the producer's own included.
-Observation mode is unaffected: a pull-request dry run still reports the
-manifest it read.
+published digest, so an enforcing run cannot admit it. If the manifest passes
+the identity and result checks, which run first, the refusal is reported as
+`untrusted_evidence`. Identical bytes from another job hash to the same digest,
+so the digest does not identify the uploading job. Attribution of the uploader
+rests on the producer's job output being nameable only by this workflow,
+together with the interim block, `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`,
+which the workflow ships as `false`. Until #598's live publishing runs are
+demonstrated, that block refuses every manifest with that category, the
+producer's own included. Observation mode is unaffected: a pull-request dry run
+still reports the manifest it read.
 
 When a publication is interrupted, rerun the crates.io publisher job. It
 re-probes the registry before any mutation: an absent version is published from
@@ -559,9 +560,11 @@ the proposed candidate, including its expected package version:
 ```
 
 The required `revision` input is fetched and checked out, then compared with
-the resolved Git commit. The action builds that checkout with
-`cargo build --locked --release --bin netsuke`, in the same shape as a shipped
-release, so a hosted runner needs no `mold` linker, and runs
+the resolved Git commit. It is fetched from the GitHub `owner/name` named by
+the optional `repository` input, which defaults to `leynos/netsuke`. Name the
+fork when testing a candidate that exists only there. The action builds that
+checkout with `cargo build --locked --release --bin netsuke`, in the same shape
+as a shipped release, so a hosted runner needs no `mold` linker, and runs
 `netsuke --version`. It fails before exposing outputs if either the revision or
 the reported version does not match the inputs, or if the locked build fails.
 

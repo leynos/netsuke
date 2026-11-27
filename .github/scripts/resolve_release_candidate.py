@@ -40,14 +40,16 @@ AUTO_REF = "auto"
 #: The remote-tracking ref that ``auto`` falls back to.
 MAIN_REF = "refs/remotes/origin/main"
 #: A SemVer pre-release identifier: a number without leading zeros, or text.
-_PRERELEASE_IDENTIFIER = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
+#: Digits are spelled ``[0-9]`` throughout: ``\d`` also matches non-ASCII
+#: decimal digits, which ``int`` accepts and SemVer does not.
+_PRERELEASE_IDENTIFIER = r"(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
 #: ``v`` and a SemVer version, no build metadata; ``\Z`` refuses a trailing ``\n``.
 VERSION_TAG = re.compile(
-    r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
     rf"(?:-({_PRERELEASE_IDENTIFIER}(?:\.{_PRERELEASE_IDENTIFIER})*))?\Z"
 )
 #: The pre-release component of a release-candidate tag, such as ``rc1``.
-RELEASE_CANDIDATE = re.compile(r"^rc\.?\d+$")
+RELEASE_CANDIDATE = re.compile(r"^rc\.?[0-9]+\Z")
 #: A full hexadecimal commit identifier.
 COMMIT_ID = re.compile(r"^[0-9a-f]{40}$")
 

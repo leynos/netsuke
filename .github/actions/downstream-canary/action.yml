@@ -47,6 +47,11 @@ inputs:
       Bash on Linux, PowerShell on Windows. Recipes themselves run under the
       shell Netsuke selects for the platform.
     required: true
+  netsuke-repository:
+    description: >-
+      The `owner/name` repository the candidate was resolved in, which the
+      installer fetches `netsuke-commit` from.
+    required: true
   netsuke-commit:
     description: The resolved Netsuke candidate commit.
     required: true
@@ -146,6 +151,7 @@ runs:
       # which would tie this action to the caller's checkout layout.
       shell: bash
       env:
+        NETSUKE_CANDIDATE_REPOSITORY: ${{ inputs.netsuke-repository }}
         NETSUKE_CANDIDATE_REVISION: ${{ inputs.netsuke-commit }}
         NETSUKE_CANDIDATE_VERSION: ${{ inputs.netsuke-version }}
       run: bash "$GITHUB_ACTION_PATH/../install-release-candidate/install.sh"
