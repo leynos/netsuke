@@ -72,7 +72,15 @@ impl BuildGraph {
     }
 
     /// Store `edge` once in Kani's bounded graph model.
+    ///
+    /// Skipped by `cargo-mutants`: this implementation exists only under
+    /// `cfg(kani)`, so it is absent from the binaries the ordinary test lane
+    /// runs and no mutation of it could ever fail a test there. Its
+    /// `cfg(not(kani))` counterpart above stays selected. Proof-only behaviour
+    /// is verified by the Kani lane, which judges it by proving harnesses
+    /// rather than by running tests.
     #[cfg(kani)]
+    #[mutants::skip]
     pub fn insert_edge(&mut self, edge: BuildEdge) -> EdgeId {
         self.insert_canonical_edge(edge)
     }
@@ -133,7 +141,15 @@ impl BuildGraph {
     }
 
     /// Return the bounded output index for Kani lowering harnesses.
+    ///
+    /// Skipped by `cargo-mutants` because it is compiled only under
+    /// `cfg(kani)`, so the ordinary test lane never links it and cannot observe
+    /// a mutation. Unlike [`Self::edge_id_for_output`] this accessor has no
+    /// production twin — the production duplicate-output scan reads the target
+    /// map directly — so the skip removes the name entirely rather than only
+    /// one half of a pair.
     #[cfg(kani)]
+    #[mutants::skip]
     pub(super) fn output_index(&self) -> &IrHashMap<Utf8PathBuf, EdgeId> {
         &self.targets
     }
@@ -146,7 +162,15 @@ impl BuildGraph {
     }
 
     /// Return the canonical edge identity for `output` in Kani's path model.
+    ///
+    /// Skipped by `cargo-mutants`: only the `cfg(not(kani))` counterpart above
+    /// is linked into the ordinary test binaries, so a mutation here would
+    /// survive for want of a caller rather than for want of a test. A
+    /// function-name exclusion would also remove the production half, and a
+    /// location-qualified one would be pinned to line numbers; the skip is per
+    /// item for both reasons.
     #[cfg(kani)]
+    #[mutants::skip]
     #[must_use]
     pub fn edge_id_for_output(&self, output: &Utf8Path) -> Option<EdgeId> {
         self.targets
@@ -188,7 +212,13 @@ impl BuildGraph {
     }
 
     /// Resolve `output` through Kani's bounded path-key model.
+    ///
+    /// Skipped by `cargo-mutants`: this is the `cfg(kani)` half of a
+    /// same-named pair, and it is absent from the binaries the ordinary test
+    /// lane runs. Its `cfg(not(kani))` counterpart above stays selected, so
+    /// the shared executable behaviour the graph promises is still judged.
     #[cfg(kani)]
+    #[mutants::skip]
     #[must_use]
     pub fn target_for_output(&self, output: &Utf8Path) -> Option<(&Utf8Path, &BuildEdge)> {
         self.targets

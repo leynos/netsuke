@@ -156,6 +156,14 @@ time = { version = "0.3.44", features = ["formatting", "macros", "parsing", "ser
 ureq = { version = "3.4.0" }
 wait-timeout = "0.2"
 url = "^2.5.0"
+# `#[mutants::skip]` marks `#[cfg(kani)]`-only graph implementations that the
+# ordinary `cargo test` lane cannot judge, because those items are absent from
+# the binaries it runs. The attribute is inert in every build; cargo-mutants
+# reads it while enumerating mutants. The path still has to resolve where
+# `cfg(kani)` holds, which is why this is a regular dependency rather than a
+# `build` or `dev` one. See docs/developers-guide.md, "Mutation-testing
+# workflow contract tests".
+mutants = "0.0.4"
 ortho_config = { version = "0.10.0", features = ["serde_json"] }
 sys-locale = "0.3.2"
 unicode-width = "0.2.1"
@@ -207,6 +215,15 @@ regex = "1.12.2"
 # comment or a literal quoting the same name is not one. Full syntax, because
 # the items being read are ordinary source files.
 syn = { version = "2", features = ["full", "visit"] }
+# The mutation-selection contract renders a self type and a cfg predicate back
+# to tokens, so two implementations of the same nominal type stay distinct
+# whether they differ by module path, generic arguments, or implemented trait.
+# `quote` is already in the graph through `syn`; naming it here makes the
+# contract's own dependency explicit.
+quote = "1.0.47"
+# The identity renderer joins punctuation token by token, which needs the token
+# types themselves. Like `quote`, this is already in the graph through `syn`.
+proc-macro2 = "1.0.47"
 # Plural-selection tests pass numeric arguments to Fluent through
 # `ortho_config::LocalizationArgs`. `ortho_config` re-exports `FluentValue`, so
 # the tests reach the value type through it rather than depending on

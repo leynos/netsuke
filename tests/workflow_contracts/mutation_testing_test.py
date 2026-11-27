@@ -8,6 +8,14 @@ the shared workflow loader and pin the contract it must uphold, so drift
 Kani-module excludes, the feature args, or the mold provisioning) fails CI
 on the pull request rather than surfacing in a scheduled or manual run.
 
+The excludes are pinned as a *whole-file* set, and a separate assertion
+refuses the mixed production/Kani file ``src/ir/graph/mod.rs``. That file's
+proof-only implementations are excluded one at a time by a source attribute
+instead, because ``exclude-globs`` is path-scoped and would take the
+``cfg(not(kani))`` counterparts with it. See issue #1038 and the
+"Ordinary selection and proof-specific verification" section of
+``docs/developers-guide.md``.
+
 The caller must reference the correct reusable workflow at a commit SHA;
 Dependabot owns the SHA value, so this test asserts the shape of the pin
 (a 40-character lowercase hex commit SHA) rather than a specific SHA.
@@ -35,7 +43,7 @@ Run via ``make test-workflow-contracts``.
 
 import copy
 
-import pytest
+from mutation_caller_support import mutation_with_block, require_str
 from workflow_loading import (
     MUTATION_TESTING_WORKFLOW_PATH,
     load_workflow,
@@ -47,12 +55,25 @@ EXPECTED_USES_PATH = "leynos/shared-actions/.github/workflows/mutation-cargo.yml
 #: Kani-only verification modules gated behind ``#[cfg(kani)]`` mod
 #: declarations; cargo-mutants does not evaluate that cfg, so their
 #: survivors would be noise.
+#:
+#: This list is deliberately *whole files only*. ``exclude-globs`` is
+#: path-scoped, so it cannot remove a proof-only item from a file that also
+#: holds the production counterpart the ordinary lane must keep judging.
+#: That mixed-file case is covered by the per-item ``#[mutants::skip]``
+#: attributes in ``src/ir/graph/mod.rs`` instead; see issue #1038 and
+#: ``docs/developers-guide.md``. Adding a mixed file here would take its
+#: production counterparts out of the lane as well, which
+#: ``test_mixed_kani_file_is_not_excluded_wholesale`` refuses.
 KANI_EXCLUDES = (
     "src/ir/cycle/verification.rs",
     "src/ir/cmd_interpolate/verification.rs",
     "src/ir/from_manifest/verification.rs",
     "src/ir/graph/kani_map.rs",
 )
+
+#: The mixed production/Kani file whose proof-only items are excluded one at a
+#: time rather than by path.
+MIXED_KANI_FILE = "src/ir/graph/mod.rs"
 
 #: The shared workflow input that installs the pinned linker.
 INSTALL_MOLD_INPUT = "install-mold"
@@ -272,50 +293,9 @@ def test_flag_guard_rejects_a_seeded_override() -> None:
     )
 
 
-def _mutation_with_block() -> dict[str, object]:
-    """Return the caller's ``with:`` block."""
-    return require_mapping(
-        _mutation_job(load_workflow(MUTATION_TESTING_WORKFLOW_PATH)).get("with"),
-        "jobs.mutation.with",
-    )
-
-
-def _require_str(value: object, description: str, consequence: str = "") -> str:
-    """Return ``value`` as a string, failing the test when it is not one.
-
-    The caller supplies the consequence rather than this helper, because
-    only the caller knows *why* the type matters: for ``install-mold`` a
-    YAML boolean is an argument-type error at workflow-call time, whereas
-    for ``setup-commands`` any non-string is simply the wrong shape.
-
-    Parameters
-    ----------
-    value
-        The parsed YAML value to narrow.
-    description
-        How to name the value in a failure, e.g. the caller's dotted path.
-    consequence
-        A clause appended to the failure message explaining why the type
-        matters. Empty when the wrong shape is self-evidently wrong.
-
-    Returns
-    -------
-    str
-        ``value`` itself, narrowed to ``str``.
-    """
-    match value:
-        case str() as text:
-            return text
-        case other:
-            pytest.fail(
-                f"{description} must be a string, got {other!r} "
-                f"({type(other).__name__}){consequence}"
-            )
-
-
 def test_with_block_carries_the_caller_configuration() -> None:
     """The caller passes exactly the documented configuration."""
-    with_block = _mutation_with_block()
+    with_block = mutation_with_block()
     assert with_block == EXPECTED_WITH, (
         "jobs.mutation.with must be exactly the documented configuration "
         "(the #[cfg(kani)] module excludes, --all-features to match the CI "
@@ -334,8 +314,8 @@ def test_install_mold_is_enabled_in_the_type_the_shared_workflow_declares() -> N
     would be rejected, so the value's type is asserted and not just its
     truthiness.
     """
-    value = _require_str(
-        _mutation_with_block().get(INSTALL_MOLD_INPUT),
+    value = require_str(
+        mutation_with_block().get(INSTALL_MOLD_INPUT),
         f"jobs.mutation.with.{INSTALL_MOLD_INPUT}",
         "; the shared workflow declares it type: string, and a YAML boolean "
         "would be rejected at workflow-call time",
@@ -356,8 +336,8 @@ def test_setup_commands_verify_the_build_tool_pins_before_the_baseline() -> None
     printed variables are what the run log carries for the open question
     about which flag source selects the linker.
     """
-    value = _require_str(
-        _mutation_with_block().get(SETUP_COMMANDS_INPUT),
+    value = require_str(
+        mutation_with_block().get(SETUP_COMMANDS_INPUT),
         f"jobs.mutation.with.{SETUP_COMMANDS_INPUT}",
     )
     assert BUILD_TOOLS_TARGET in value, (

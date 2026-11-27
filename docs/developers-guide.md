@@ -6596,13 +6596,116 @@ The caller passes two configuration inputs, each carrying intent:
 
 - `exclude-globs` — `src/ir/cycle/verification.rs`,
   `src/ir/from_manifest/verification.rs`, `src/ir/graph/kani_map.rs`, and
-  `src/ir/cmd_interpolate/verification.rs`: modules gated behind
+  `src/ir/cmd_interpolate/verification.rs`: whole modules gated behind
   `#[cfg(kani)] mod` declarations. `cargo-mutants` does not evaluate that cfg,
   so mutants inserted there would compile to nothing and survive as noise
-  rather than genuine test gaps.
+  rather than genuine test gaps. The glob is *file*-scoped, so it covers those
+  four files and nothing else; proof-only items inside a file that also holds
+  production code need the per-item attribute described under *Ordinary
+  selection and proof-specific verification* below.
 - `extra-args` — `--all-features`, so the mutation run matches the `make test`
   CI baseline; a mismatch would report feature-gated code (the `legacy-digests`
   feature) as untested.
+
+### Ordinary selection and proof-specific verification
+
+The two lanes answer different questions, and a survivor from one is not
+evidence about the other:
+
+- the **ordinary lane** mutates a source item and runs the ordinary
+  `cargo test` binaries. A mutant survives when those binaries still pass. That
+  answers "would the tests notice this defect?".
+- the **proof lane** runs `cargo kani` over harnesses under `cfg(kani)`. A
+  harness fails when the bounded model checker finds a counterexample. That
+  answers "is there an input, within the bound, that violates the property?".
+
+A `cfg(kani)` item is compiled into neither the ordinary binaries nor the
+ordinary mutant's judging run, so mutating it there cannot change any test
+outcome. cargo-mutants has no proof-aware runner: its `TestTool` supports the
+Cargo and Nextest runners, and setting `RUSTFLAGS="--cfg kani"` does not turn
+either into `cargo kani`, because the `kani` crate is not a dependency and the
+`#[kani::proof]` harnesses do not resolve. Reporting such a mutant as a
+survivor therefore says nothing about test quality.
+
+`exclude-globs` cannot repair that inside a *mixed* file. It is path-scoped, so
+excluding the file would also remove the `cfg(not(kani))` counterparts that the
+ordinary lane genuinely judges.
+
+A regex exclusion is awkward for a different reason. `--exclude-re` and
+`mutants::exclude_re` match the *fully qualified* mutant name, which in
+cargo-mutants 27.1.0 includes the source location — `allows_mutant` filters on
+`Mutant::name(true)`, and the `true` is the line-and-column flag. A pattern
+anchored on a line can therefore separate the two halves of a same-named pair.
+It is a poor tool here all the same, on two counts: a pattern naming only the
+function matches **both** implementations, which is the failure the issue
+describes; and a location-qualified pattern is pinned to line numbers, so it
+stops matching the moment anything above it is edited. The item-level attribute
+needs no line numbers and cannot drift.
+
+The mechanism that can distinguish them is an item-level attribute, which is
+what [`src/ir/graph/mod.rs`](../src/ir/graph/mod.rs) uses for the four
+proof-only implementations reported in issue #1038:
+
+```rust
+#[cfg(kani)]
+#[mutants::skip]
+pub fn target_for_output(&self, output: &Utf8Path) -> Option<(&Utf8Path, &BuildEdge)> {
+```
+
+`#[mutants::skip]` is inert in every build and is read by cargo-mutants while
+it enumerates mutants. `mutants` is therefore a regular dependency rather than a
+`build` or `dev` one: an ordinary build strips the item before the path is
+resolved, but a `cfg(kani)` build resolves it and would fail with `E0433`
+without the dependency. The book documents the attribute under
+<https://mutants.rs/attrs.html>, and the pinned release is cargo-mutants
+27.1.0, the version the shared workflow installs.
+
+Two properties keep the exclusion narrow, and
+[`tests/mutation_selection_contract_tests.rs`](../tests/mutation_selection_contract_tests.rs)
+holds both:
+
+- every skip in the graph module is on a `cfg(kani)` item, so a skip cannot land
+  on code the ordinary lane genuinely judges;
+- every name with a production counterpart — `insert_edge`, `edge_id_for_output`
+  and `target_for_output` — still has a selected, non-skipped implementation,
+  so a future edit cannot widen a skip into a whole-name exclusion.
+
+`output_index` is the fourth skipped name and is the exception: it has no
+`cfg(not(kani))` twin, because the production duplicate-output scan reads the
+target map directly. Its skip therefore removes the name from the ordinary lane
+entirely rather than removing one half of a pair, and there is no counterpart
+to keep selected.
+
+The contract's reader mirrors cargo-mutants' own rule rather than a looser one.
+It accepts `#[mutants::skip]` and a `cfg_attr` whose condition is a *bare
+path*, and it deliberately does not treat `cfg_attr(any(), mutants::skip)` as a
+skip: cargo-mutants parses the `cfg_attr` arguments as nested metadata, rejects
+an argument list, and drops the skip silently. A contract that counted that
+spelling would certify an exclusion the pinned tool does not perform. The
+fixture under
+[`tests/data/mutation_selection/`](../tests/data/mutation_selection) is the
+negative control: it holds a same-named pair whose Kani half is skipped and a
+same-named pair whose production half is skipped, so a reader that only asked
+"does this name carry a skip?" fails.
+
+Removing an item from the ordinary lane is **not** a claim of improved proof
+strength, and it does not turn a survivor into a killed mutant. The proof
+lane's own evidence — the harnesses, the proof inventory in
+[`tools/kani/proof-scope.toml`](../tools/kani/proof-scope.toml), and the
+mutation-evidence compile gate that ADR-0073 describes — is unchanged, and it
+remains the only evidence about proof-only code. Judging those implementations
+by mutation would need a proof-aware execution path that runs `cargo kani` per
+mutant with real harness verification and negative controls; that does not
+exist here, and this boundary records its absence rather than papering over it.
+
+To inspect the selection, run the pinned version over the file:
+
+```sh
+cargo mutants --list --all-features --file src/ir/graph/mod.rs
+```
+
+The `--list` inventory is the durable evidence: it shows the current selection
+without compiling or running a single mutant.
 
 The caller does not set `extra-crate-dirs`, the input reserved for crate
 directories outside the Cargo workspace. Netsuke is the only publishable crate,
