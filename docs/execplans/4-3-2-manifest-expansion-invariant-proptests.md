@@ -1076,10 +1076,17 @@ Run every command from the root of the checkout that holds branch
 `4-3-2-manifest-expansion-invariant-proptests`. Capture long output with `tee`,
 and run gates sequentially, never in parallel:
 
-```sh
+```bash
+set -o pipefail
 BRANCH="$(git branch --show-current)"
 for gate in check-fmt typecheck lint doc-coverage markdownlint nixie test; do
-  make "$gate" 2>&1 | tee "/tmp/${gate}-netsuke-${BRANCH}.out" || break
+  log="/tmp/${gate}-netsuke-${BRANCH}.out"
+  make "$gate" 2>&1 | tee "$log"
+  status=${PIPESTATUS[0]}
+  if [ "$status" -ne 0 ]; then
+    printf 'gate %s failed with status %s; see %s\n' "$gate" "$status" "$log" >&2
+    break
+  fi
 done
 ```
 

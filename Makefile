@@ -311,11 +311,11 @@ test-rfc-stdlib-coverage: check-build-tools ## Check the RFC 0006 split and its 
 # them. Both suffixes appear in the tree (`helper_proptests` and
 # `hex::property_tests`), and they diverge at index four, so a single
 # substring cannot cover both. To measure the selection, list the repository's
-# tests with this filter and count them:
+# tests with this filter and count them. `$(PROPTEST_FILTER)` is a Make
+# variable, so a shell copy spells the filter out:
 #
 #   cargo nextest list --workspace --all-targets --all-features \
-#     -E '$(PROPTEST_FILTER)'
-#
+#     -E 'test(/(^|::)[a-z0-9_]*proptests($|::)/) | test(/(^|::)[a-z0-9_]*property_tests($|::)/)'
 # which prints exactly the corpus the recipe runs. Dropping `--workspace`
 # shrinks both the listed corpus and the selection, which is why the discharge
 # reads the recipe's own flags.
