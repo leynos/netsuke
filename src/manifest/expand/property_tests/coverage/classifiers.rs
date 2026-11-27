@@ -193,8 +193,7 @@ fn value_and_vars_classes(body: &super::super::strategy::BodySpec, tally: &mut C
 
 /// Count the classes of a sample whose control block is forced to the end.
 ///
-/// The negative control's classifier: it can never reach
-/// `control-two-or-more-following`, so the floor check must report it.
+/// The negative control: it can never reach `control-two-or-more-following`.
 pub(super) fn forced_control_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool {
     let forced = spec.body.clone().with_control_last();
     let class = match forced.following_key_count() {
