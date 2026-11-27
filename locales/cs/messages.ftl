@@ -201,6 +201,12 @@ manifest.console_dependency_only = Položky obsahující pouze závislosti nemoh
 # Chyby mezikódu.
 ir.rule_not_found = Pravidlo „{ $rule }“, na které odkazuje cíl „{ $target }“, nebylo nalezeno.
 ir.multiple_rules = Cíl „{ $target }“ musí odkazovat právě na jedno pravidlo, obdrženo { $rules }.
+ir.multiple_rules_truncated = Cíl „{ $target }“ musí odkazovat právě na jedno pravidlo, obdrženo { $rules } a { $omitted ->
+    [one] { $omitted } další název.
+    [few] { $omitted } další názvy.
+    [many] { $omitted } dalšího názvu.
+   *[other] { $omitted } dalších názvů.
+}
 ir.empty_rule = Cíl „{ $target }“ musí odkazovat na pravidlo.
 ir.duplicate_outputs = Byly zjištěny duplicitní výstupy: { $outputs }.
 ir.circular_dependency = Byla zjištěna cyklická závislost: { $cycle }.

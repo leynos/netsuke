@@ -201,6 +201,9 @@ manifest.console_dependency_only = Entri yang hanya menyatakan dependensi tidak 
 # Galat representasi antara.
 ir.rule_not_found = Aturan "{ $rule }" yang dirujuk target "{ $target }" tidak ditemukan.
 ir.multiple_rules = Target "{ $target }" harus merujuk tepat satu aturan, tetapi diperoleh { $rules }.
+ir.multiple_rules_truncated = Target "{ $target }" harus merujuk tepat satu aturan, tetapi diperoleh { $rules } dan { $omitted ->
+   *[other] { $omitted } nama lain.
+}
 ir.empty_rule = Target "{ $target }" harus merujuk sebuah aturan.
 ir.duplicate_outputs = Terdeteksi keluaran ganda: { $outputs }.
 ir.circular_dependency = Terdeteksi ketergantungan melingkar: { $cycle }.

@@ -201,6 +201,9 @@ manifest.console_dependency_only = 종속성만 지정하는 항목은 콘솔 �
 # 중간 표현 오류.
 ir.rule_not_found = 대상 '{ $target }'이(가) 참조하는 규칙 '{ $rule }'을(를) 찾을 수 없습니다.
 ir.multiple_rules = 대상 '{ $target }'은(는) 규칙 하나만 참조해야 하지만 { $rules }이(가) 나왔습니다.
+ir.multiple_rules_truncated = 대상 '{ $target }'은(는) 규칙 하나만 참조해야 하지만 { $rules }이(가) 나왔습니다. { $omitted ->
+   *[other] 그 밖에 { $omitted }개의 이름이 더 있습니다.
+}
 ir.empty_rule = 대상 '{ $target }'은(는) 규칙을 참조해야 합니다.
 ir.duplicate_outputs = 중복된 출력이 발견되었습니다: { $outputs }.
 ir.circular_dependency = 순환 의존성이 발견되었습니다: { $cycle }.

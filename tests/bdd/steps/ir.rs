@@ -211,6 +211,20 @@ fn ir_cycle_is(world: &TestWorld, path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Assert that the captured `MultipleRules` error reported `count` names.
+#[then("the MultipleRules error reports {count:usize} rule names")]
+fn multiple_rules_error_reports(world: &TestWorld, count: usize) -> Result<()> {
+    let reported = world
+        .generation_rule_count
+        .get()
+        .context("IR generation should have reported a MultipleRules error")?;
+    ensure!(
+        reported == count,
+        "expected the MultipleRules error to report {count} rule names, got {reported}"
+    );
+    Ok(())
+}
+
 #[then("the graph target {target:string} has inputs {paths:string}")]
 fn graph_target_inputs(world: &TestWorld, target: &str, paths: &str) -> Result<()> {
     assert_target_paths(world, target, paths, TargetPathField::Inputs)
@@ -227,6 +241,11 @@ fn graph_target_implicit_deps(world: &TestWorld, target: &str, paths: &str) -> R
 
 /// Compile a manifest file to IR, storing result or error in state.
 fn compile_manifest_impl(world: &TestWorld, path: &str) {
+    // Each compilation is the only evidence the later assertions may read, so
+    // a count captured by an earlier compilation must not survive into this
+    // one. Without this, a scenario that first compiled a multi-rule manifest
+    // and then one failing differently would still report the old count.
+    world.generation_rule_count.clear();
     // The manifest path is absolute; manifest parsing injects the manifest
     // directory as the glob base, so relative glob patterns resolve against
     // that directory regardless of the process working directory.
@@ -264,6 +283,12 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
         world
             .generation_cycle
             .set(cycle.iter().map(ToString::to_string).collect());
+    }
+    if let Err(error) = &result
+        && let Some(netsuke::ir::IrGenError::MultipleRules { rules, .. }) =
+            error.downcast_ref::<netsuke::ir::IrGenError>()
+    {
+        world.generation_rule_count.set(rules.len());
     }
     let outcome = result.map_err(|error| error.to_string());
     store_parse_outcome(&world.build_graph, &world.generation_error, outcome);

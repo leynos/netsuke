@@ -201,6 +201,10 @@ manifest.console_dependency_only = Items die alleen afhankelijkheden aangeven, k
 # Fouten in de tussenrepresentatie.
 ir.rule_not_found = De regel ‘{ $rule }’ waarnaar doel ‘{ $target }’ verwijst, is niet gevonden.
 ir.multiple_rules = Doel ‘{ $target }’ moet naar precies één regel verwijzen, maar gaf { $rules }.
+ir.multiple_rules_truncated = Doel ‘{ $target }’ moet naar precies één regel verwijzen, maar gaf { $rules } en nog { $omitted ->
+    [one] { $omitted } naam.
+   *[other] { $omitted } namen.
+}
 ir.empty_rule = Doel ‘{ $target }’ moet naar een regel verwijzen.
 ir.duplicate_outputs = Dubbele uitvoer aangetroffen: { $outputs }.
 ir.circular_dependency = Circulaire afhankelijkheid aangetroffen: { $cycle }.

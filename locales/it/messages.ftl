@@ -202,6 +202,10 @@ manifest.console_dependency_only = Le voci che dichiarano solo dipendenze non po
 # Errori della rappresentazione intermedia.
 ir.rule_not_found = La regola «{ $rule }» referenziata dal target «{ $target }» non è stata trovata.
 ir.multiple_rules = Il target «{ $target }» deve referenziare una sola regola, ricevuto { $rules }.
+ir.multiple_rules_truncated = Il target «{ $target }» deve referenziare una sola regola, ricevuto { $rules } e { $omitted ->
+    [one] { $omitted } altro nome.
+   *[other] { $omitted } altri nomi.
+}
 ir.empty_rule = Il target «{ $target }» deve referenziare una regola.
 ir.duplicate_outputs = Rilevati output duplicati: { $outputs }.
 ir.circular_dependency = Rilevata dipendenza circolare: { $cycle }.

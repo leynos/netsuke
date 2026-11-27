@@ -200,6 +200,9 @@ manifest.console_dependency_only = 僅宣告相依項目的項目無法選取主
 # 中介表示法的錯誤。
 ir.rule_not_found = 找不到目標「{ $target }」所參照的規則「{ $rule }」。
 ir.multiple_rules = 目標「{ $target }」必須只參照一條規則，卻得到 { $rules }。
+ir.multiple_rules_truncated = 目標「{ $target }」必須只參照一條規則，卻得到 { $rules }。{ $omitted ->
+   *[other] 另外還有 { $omitted } 個名稱。
+}
 ir.empty_rule = 目標「{ $target }」必須參照一條規則。
 ir.duplicate_outputs = 偵測到重複的輸出：{ $outputs }。
 ir.circular_dependency = 偵測到循環相依：{ $cycle }。

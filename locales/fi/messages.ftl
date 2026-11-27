@@ -201,6 +201,10 @@ manifest.console_dependency_only = Vain riippuvuuksia ilmoittavat tietueet eivä
 # Välimuotoesityksen virheet.
 ir.rule_not_found = Sääntöä ”{ $rule }”, johon kohde ”{ $target }” viittaa, ei löytynyt.
 ir.multiple_rules = Kohteen ”{ $target }” on viitattava täsmälleen yhteen sääntöön, mutta saatiin { $rules }.
+ir.multiple_rules_truncated = Kohteen ”{ $target }” on viitattava täsmälleen yhteen sääntöön, mutta saatiin { $rules } ja { $omitted ->
+    [one] { $omitted } nimi lisää.
+   *[other] { $omitted } nimeä lisää.
+}
 ir.empty_rule = Kohteen ”{ $target }” on viitattava sääntöön.
 ir.duplicate_outputs = Havaittiin päällekkäisiä tulosteita: { $outputs }.
 ir.circular_dependency = Havaittiin kehäriippuvuus: { $cycle }.

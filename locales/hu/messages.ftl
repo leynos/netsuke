@@ -201,6 +201,10 @@ manifest.console_dependency_only = A csak függőségeket megadó bejegyzések n
 # A köztes ábrázolás hibái.
 ir.rule_not_found = A(z) „{ $target }” cél által hivatkozott „{ $rule }” szabály nem található.
 ir.multiple_rules = A(z) „{ $target }” célnak pontosan egy szabályra kell hivatkoznia, de ez érkezett: { $rules }.
+ir.multiple_rules_truncated = A(z) „{ $target }” célnak pontosan egy szabályra kell hivatkoznia, de ez érkezett: { $rules }, és { $omitted ->
+    [one] { $omitted } további név.
+   *[other] { $omitted } további név.
+}
 ir.empty_rule = A(z) „{ $target }” célnak szabályra kell hivatkoznia.
 ir.duplicate_outputs = Ismétlődő kimenetek találhatók: { $outputs }.
 ir.circular_dependency = Körkörös függőség található: { $cycle }.

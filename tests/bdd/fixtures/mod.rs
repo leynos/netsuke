@@ -78,6 +78,8 @@ pub struct TestWorld {
     pub generation_error: Slot<String>,
     /// Canonical cycle paths captured from an IR generation error.
     pub generation_cycle: Slot<Vec<String>>,
+    /// Number of rule names a `MultipleRules` error reported.
+    pub generation_rule_count: Slot<usize>,
 
     // Ninja state (Clone)
     /// Generated Ninja file content.

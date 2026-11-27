@@ -246,14 +246,19 @@ not a general-purpose string-sorting utility.
 
 Kani-friendly deterministic sorting and comparison helpers, owned by
 `src/ir/from_manifest/support/mod.rs` (which declares `mod sort_utils;`). It
-provides `insertion_sort_by`, `sort_strings`, `sort_paths`, and
-`has_seen_output`, which the manifest-to-IR rule-resolution and
-duplicate-output detection paths consume. Its Kani `string_cmp` adapts rule
-names to the `cycle::support::first_byte_cmp` contract; it must not duplicate
-or redefine that byte-ordering semantics. Keep the local sorting algorithms
-dependency-free and deterministic so the Kani harnesses in
-`src/ir/from_manifest/verification.rs` can verify bounded symbolic input, and
-do not move them out to a shared utility crate.
+provides `insertion_sort_by` (non-Kani builds only), `smallest_names`,
+`MAX_REPORTED_RULE_SELECTORS`, `sort_paths`, and `has_seen_output`, which the
+manifest-to-IR rule-resolution and duplicate-output detection paths consume.
+`smallest_names` owns the rule-resolution path: it keeps at most eight names in
+stable ascending order in a single pass, so rejecting a multi-name selector
+never sorts the whole list and its diagnostic stays bounded. A
+`cfg(all(test, not(kani)))` comparison counter records each `string_cmp` call
+on the test thread, which is how the unit tests pin that cost. Its Kani
+`string_cmp` adapts rule names to the `cycle::support::first_byte_cmp`
+contract; it must not duplicate or redefine that byte-ordering semantics. Keep
+the local sorting algorithms dependency-free and deterministic so the Kani
+harnesses in `src/ir/from_manifest/verification.rs` can verify bounded symbolic
+input, and do not move them out to a shared utility crate.
 
 ### `src/ir/from_manifest/support/command_resolution.rs`
 

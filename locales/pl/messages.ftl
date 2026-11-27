@@ -201,6 +201,12 @@ manifest.console_dependency_only = Wpisy, które deklarują wyłącznie zależno
 # Błędy reprezentacji pośredniej.
 ir.rule_not_found = Nie znaleziono reguły „{ $rule }”, do której odwołuje się cel „{ $target }”.
 ir.multiple_rules = Cel „{ $target }” musi odwoływać się do dokładnie jednej reguły, otrzymano { $rules }.
+ir.multiple_rules_truncated = Cel „{ $target }” musi odwoływać się do dokładnie jednej reguły, otrzymano { $rules } oraz { $omitted ->
+    [one] { $omitted } dalszą nazwę.
+    [few] { $omitted } dalsze nazwy.
+    [many] { $omitted } dalszych nazw.
+   *[other] { $omitted } dalszej nazwy.
+}
 ir.empty_rule = Cel „{ $target }” musi odwoływać się do reguły.
 ir.duplicate_outputs = Wykryto zduplikowane wyjścia: { $outputs }.
 ir.circular_dependency = Wykryto zależność cykliczną: { $cycle }.

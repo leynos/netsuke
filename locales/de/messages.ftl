@@ -201,6 +201,10 @@ manifest.console_dependency_only = Einträge, die nur Abhängigkeiten angeben, k
 # Fehler der Zwischendarstellung.
 ir.rule_not_found = Die vom Ziel „{ $target }“ referenzierte Regel „{ $rule }“ wurde nicht gefunden.
 ir.multiple_rules = Das Ziel „{ $target }“ muss genau eine Regel referenzieren, erhalten wurde { $rules }.
+ir.multiple_rules_truncated = Das Ziel „{ $target }“ muss genau eine Regel referenzieren, erhalten wurde { $rules } und { $omitted ->
+    [one] { $omitted } weiterer Name.
+   *[other] { $omitted } weitere Namen.
+}
 ir.empty_rule = Das Ziel „{ $target }“ muss eine Regel referenzieren.
 ir.duplicate_outputs = Doppelte Ausgaben erkannt: { $outputs }.
 ir.circular_dependency = Zyklische Abhängigkeit erkannt: { $cycle }.

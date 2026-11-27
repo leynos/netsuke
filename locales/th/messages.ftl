@@ -201,6 +201,9 @@ manifest.console_dependency_only = รายการที่ระบุเฉ
 # ข้อผิดพลาดของรูปแทนระดับกลาง
 ir.rule_not_found = ไม่พบกฎ “{ $rule }” ที่เป้าหมาย “{ $target }” อ้างถึง
 ir.multiple_rules = เป้าหมาย “{ $target }” ต้องอ้างถึงกฎเพียงข้อเดียว แต่ได้ { $rules }
+ir.multiple_rules_truncated = เป้าหมาย “{ $target }” ต้องอ้างถึงกฎเพียงข้อเดียว แต่ได้ { $rules } { $omitted ->
+   *[other] และอีก { $omitted } ชื่อ
+}
 ir.empty_rule = เป้าหมาย “{ $target }” ต้องอ้างถึงกฎหนึ่งข้อ
 ir.duplicate_outputs = พบผลลัพธ์ซ้ำกัน: { $outputs }
 ir.circular_dependency = พบการพึ่งพาแบบวงกลม: { $cycle }

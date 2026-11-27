@@ -202,6 +202,10 @@ manifest.console_dependency_only = Οι εγγραφές που δηλώνουν
 # Σφάλματα της ενδιάμεσης αναπαράστασης.
 ir.rule_not_found = Ο κανόνας «{ $rule }» στον οποίο παραπέμπει ο στόχος «{ $target }» δεν βρέθηκε.
 ir.multiple_rules = Ο στόχος «{ $target }» πρέπει να παραπέμπει σε έναν μόνο κανόνα· ελήφθη { $rules }.
+ir.multiple_rules_truncated = Ο στόχος «{ $target }» πρέπει να παραπέμπει σε έναν μόνο κανόνα· ελήφθη { $rules } και { $omitted ->
+    [one] { $omitted } ακόμη όνομα.
+   *[other] { $omitted } ακόμη ονόματα.
+}
 ir.empty_rule = Ο στόχος «{ $target }» πρέπει να παραπέμπει σε κανόνα.
 ir.duplicate_outputs = Εντοπίστηκαν διπλότυπες έξοδοι: { $outputs }.
 ir.circular_dependency = Εντοπίστηκε κυκλική εξάρτηση: { $cycle }.

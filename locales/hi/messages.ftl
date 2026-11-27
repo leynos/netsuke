@@ -201,6 +201,10 @@ manifest.console_dependency_only = केवल निर्भरताएँ �
 # मध्यवर्ती निरूपण की त्रुटियाँ।
 ir.rule_not_found = लक्ष्य “{ $target }” जिस नियम “{ $rule }” का संदर्भ देता है वह नहीं मिला।
 ir.multiple_rules = लक्ष्य “{ $target }” को ठीक एक नियम का संदर्भ देना चाहिए, किंतु { $rules } मिला।
+ir.multiple_rules_truncated = लक्ष्य “{ $target }” को ठीक एक नियम का संदर्भ देना चाहिए, किंतु { $rules } मिले; { $omitted ->
+    [one] { $omitted } अतिरिक्त नाम भी मिला।
+   *[other] { $omitted } अतिरिक्त नाम भी मिले।
+}
 ir.empty_rule = लक्ष्य “{ $target }” को किसी नियम का संदर्भ देना चाहिए।
 ir.duplicate_outputs = दोहरे निर्गम मिले: { $outputs }।
 ir.circular_dependency = चक्रीय निर्भरता मिली: { $cycle }।

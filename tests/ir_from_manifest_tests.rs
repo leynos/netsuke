@@ -377,3 +377,6 @@ mod dependency_order;
 
 #[path = "ir_from_manifest_tests/isolation.rs"]
 mod isolation;
+
+#[path = "ir_from_manifest_tests/rule_selectors.rs"]
+mod rule_selectors;

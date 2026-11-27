@@ -122,6 +122,7 @@ define_keys! {
     RUNNER_IO_DYNDEP_OPEN => "runner.io.dyndep.open",
     IR_RULE_NOT_FOUND => "ir.rule_not_found",
     IR_MULTIPLE_RULES => "ir.multiple_rules",
+    IR_MULTIPLE_RULES_TRUNCATED => "ir.multiple_rules_truncated",
     IR_EMPTY_RULE => "ir.empty_rule",
     IR_DUPLICATE_OUTPUTS => "ir.duplicate_outputs",
     IR_CIRCULAR_DEPENDENCY => "ir.circular_dependency",

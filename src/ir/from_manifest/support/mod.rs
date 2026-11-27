@@ -198,28 +198,32 @@ pub(super) fn to_paths(sol: &StringOrList) -> Vec<Utf8PathBuf> {
 }
 
 /// Resolve a target rule selector into its single rule template.
+///
+/// A selector names exactly one rule, as a scalar or a one-element list. The
+/// fallback therefore rejects rather than searches, and it inspects the variant
+/// directly: rejecting after cloning the whole selector would make a compact
+/// invalid manifest cost the process a full copy and sort of every name.
 pub(super) fn resolve_rule(
     rule: &StringOrList,
     rule_map: &IrHashMap<String, Arc<Rule>>,
     target_name: &str,
 ) -> Result<Arc<Rule>, IrGenError> {
-    rule.as_single().map_or_else(
-        || {
-            let mut rules = rule.to_string_vec();
-            if rules.is_empty() {
-                Err(empty_rule_error(target_name))
-            } else {
-                sort_utils::sort_strings(&mut rules);
-                Err(multiple_rules_error(target_name, rules))
-            }
-        },
-        |name| {
-            rule_map
-                .get(name)
-                .cloned()
-                .ok_or_else(|| rule_not_found_error(target_name, name))
-        },
-    )
+    if let Some(name) = rule.as_single() {
+        return rule_map
+            .get(name)
+            .cloned()
+            .ok_or_else(|| rule_not_found_error(target_name, name));
+    }
+    match rule {
+        StringOrList::List(names) if !names.is_empty() => {
+            let rules = sort_utils::smallest_names(names, sort_utils::MAX_REPORTED_RULE_SELECTORS);
+            let omitted = names.len() - rules.len();
+            Err(multiple_rules_error(target_name, rules, omitted))
+        }
+        // `String` and one-element lists are answered by `as_single`, so only
+        // the empty shapes reach this arm.
+        _ => Err(empty_rule_error(target_name)),
+    }
 }
 
 /// Build the empty-rule error for a target that selected no rule.
@@ -231,10 +235,13 @@ fn empty_rule_error(target_name: &str) -> IrGenError {
 }
 
 /// Build the multiple-rules error for a target selecting several rules.
-fn multiple_rules_error(target_name: &str, rules: Vec<String>) -> IrGenError {
+///
+/// `rules` is the bounded sorted sample and `omitted` counts the names the
+/// sample leaves out, so the error carries both halves of the diagnostic.
+fn multiple_rules_error(target_name: &str, rules: Vec<String>, omitted: usize) -> IrGenError {
     IrGenError::MultipleRules {
         target_name: target_name.to_owned(),
-        message: multiple_rules_message(target_name, &rules),
+        message: multiple_rules_message(target_name, &rules, omitted),
         rules,
     }
 }
@@ -258,10 +265,29 @@ fn empty_rule_message(target_name: &str) -> localization::LocalizedMessage {
 }
 
 /// Localize the multiple-rules message with the target and rule names.
-fn multiple_rules_message(target_name: &str, rules: &[String]) -> localization::LocalizedMessage {
-    let message = localization::message(keys::IR_MULTIPLE_RULES);
+///
+/// A selector reported in full keeps the existing message exactly; only a
+/// truncated sample switches to the message that states how many names it
+/// leaves out. The count is attached with [`localization::LocalizedMessage::with_count`]
+/// so Fluent can select its plural variant, rather than as pre-rendered text.
+fn multiple_rules_message(
+    target_name: &str,
+    rules: &[String],
+    omitted: usize,
+) -> localization::LocalizedMessage {
+    let key = if omitted == 0 {
+        keys::IR_MULTIPLE_RULES
+    } else {
+        keys::IR_MULTIPLE_RULES_TRUNCATED
+    };
+    let message = localization::message(key);
     let with_target = add_arg(message, "target", target_name);
-    add_debug_arg(with_target, "rules", rules)
+    let with_rules = add_debug_arg(with_target, "rules", rules);
+    if omitted == 0 {
+        with_rules
+    } else {
+        with_rules.with_count("omitted", omitted)
+    }
 }
 
 /// Localize the rule-not-found message with the target and rule names.

@@ -12,6 +12,8 @@ use test_support::{EnLocalizer, en_localizer};
 
 #[path = "tests/fixtures.rs"]
 mod fixtures;
+#[path = "tests/rule_selectors.rs"]
+mod rule_selectors;
 
 use fixtures::{
     Entries, RejectionCase, assert_unfinished_region_rejected, lower_shared_power_shell_list,

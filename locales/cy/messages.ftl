@@ -201,6 +201,14 @@ manifest.console_dependency_only = Ni all cofnodion sy'n cynnwys dibyniaethau yn
 # Gwallau'r cynrychioliad canolradd.
 ir.rule_not_found = Ni chafwyd hyd i'r rheol ‘{ $rule }’ y cyfeirir ati gan y targed ‘{ $target }’.
 ir.multiple_rules = Rhaid i'r targed ‘{ $target }’ gyfeirio at un rheol yn unig, ond cafwyd { $rules }.
+ir.multiple_rules_truncated = Rhaid i'r targed ‘{ $target }’ gyfeirio at un rheol yn unig, ond cafwyd { $rules } a { $omitted ->
+    [zero] dim enw arall.
+    [one] { $omitted } enw arall.
+    [two] { $omitted } enw arall.
+    [few] { $omitted } enw arall.
+    [many] { $omitted } enw arall.
+   *[other] { $omitted } enw arall.
+}
 ir.empty_rule = Rhaid i'r targed ‘{ $target }’ gyfeirio at reol.
 ir.duplicate_outputs = Canfuwyd allbynnau dyblyg: { $outputs }.
 ir.circular_dependency = Canfuwyd dibyniaeth gylchol: { $cycle }.
