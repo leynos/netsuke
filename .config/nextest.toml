@@ -65,6 +65,23 @@ success-output = "immediate"
 filter = 'test(/^coverage_map_status_is_reported($|::)/)'
 success-output = "immediate"
 
+[[profile.default.overrides]]
+# These cases create their build file through `NamedTempFile::new()`, which
+# the Windows runner's shared `%TEMP%` intermittently denies. The fixture
+# retries a transient `PermissionDenied` a bounded number of times and prints
+# `temp_file retry:` to standard error before each backoff. Immediate success
+# output puts that line in the Windows Test step log on a passing run instead
+# of withholding it until the final report.
+#
+# One filter carries three selectors rather than one selector naming three
+# tests: the contract in `nextest_child_cargo_group_invariants.py` admits only
+# a single-name anchored selector, and a top-level union keeps every arm
+# replayable by `.github/scripts/verify_nextest_anchored_filters.py`.
+#
+# See "Windows temp-file fixture retries" in docs/developers-guide.md.
+filter = 'test(/^runner::process::configure::tests::build_configuration_preserves_argument_order($|::)/) | test(/^runner::process::configure::tests::build_configuration_terminates_multi_target_operands($|::)/) | test(/^runner::process::configure::tests::tool_configuration_preserves_argument_order($|::)/)'
+success-output = "immediate"
+
 [profile.ci]
 # The CI-only profile. It exists solely to carry the whole-run budget, and
 # inherits everything else from `default`, including that profile's
