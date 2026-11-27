@@ -1077,17 +1077,20 @@ Run every command from the root of the checkout that holds branch
 and run gates sequentially, never in parallel:
 
 ```bash
-set -o pipefail
-BRANCH="$(git branch --show-current)"
-for gate in check-fmt typecheck lint doc-coverage markdownlint nixie test; do
-  log="/tmp/${gate}-netsuke-${BRANCH}.out"
-  make "$gate" 2>&1 | tee "$log"
-  status=${PIPESTATUS[0]}
-  if [ "$status" -ne 0 ]; then
-    printf 'gate %s failed with status %s; see %s\n' "$gate" "$status" "$log" >&2
-    break
-  fi
-done
+(
+  set -o pipefail
+  BRANCH="$(git branch --show-current)"
+  for gate in check-fmt typecheck lint doc-coverage markdownlint nixie test; do
+    log="/tmp/${gate}-netsuke-${BRANCH}.out"
+    if make "$gate" 2>&1 | tee "$log"; then
+      :
+    else
+      status=$?
+      printf 'gate or log failed with status %s; see %s\n' "$status" "$log" >&2
+      exit "$status"
+    fi
+  done
+)
 ```
 
 A build that prints `[build-limits] … waiting for a compile slot` is queued,
@@ -2545,9 +2548,11 @@ The eleven-target set is green for `efe5161d3`: `check-fmt`, `lint`,
 
 `30c1694a2` then changed comments and module headers only, and `check-fmt`,
 `lint`, `doc-coverage` (98.41%), `proptest` (284), and `test` (6,833 plus
-doctests) passed again there. The commits after it touch this ExecPlan alone;
-`check-fmt` and `markdownlint` were re-run at the head that records this
-paragraph.
+doctests) passed again there. `99ec40974` changed this ExecPlan's gate-loop
+example and one Makefile comment; `check-fmt`, `lint`, `markdownlint`, and
+`mbake validate Makefile` passed there. The commits after it touch this
+ExecPlan alone, and `check-fmt` and `markdownlint` were re-run at the head that
+records this paragraph.
 
 Two earlier runs are on this branch and both were green for their revision.
 `869f363ae` was the last code revision before the reduction, when the static
