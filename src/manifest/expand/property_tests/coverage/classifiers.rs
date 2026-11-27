@@ -4,7 +4,7 @@
 //! lists those properties require live in `classes.rs`; this module only
 //! counts what a draw contains.
 
-use super::super::strategy::{BodySpec, DocumentSpec, EntrySpec, ForeachForm, Items, Section};
+use super::super::strategy::{BodySpec, EntrySpec, ForeachForm, Items, Section};
 use super::{ClassSet, count};
 use crate::manifest::ManifestValue;
 
@@ -232,79 +232,6 @@ pub(super) fn static_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool {
         count(tally, "reads-vars");
     }
     true
-}
-
-/// Classify a whole document's sections and entry mix.
-pub(super) fn document_classes(spec: &DocumentSpec, tally: &mut ClassSet) -> bool {
-    if !spec.targets.is_empty() {
-        count(tally, "targets-entries");
-    }
-    if !spec.actions.is_empty() {
-        count(tally, "actions-entries");
-    }
-    for section in [Section::Targets, Section::Actions] {
-        for entry in spec.entries(section) {
-            count(
-                tally,
-                if entry.body.is_foreach() {
-                    "document-foreach"
-                } else {
-                    "document-static"
-                },
-            );
-            section_verdict_classes(section, &entry.body, tally);
-        }
-    }
-    true
-}
-
-/// Name one entry's condition verdicts within its section.
-///
-/// The verdict is per *evaluated iteration*: an empty `foreach` evaluates no
-/// condition and is neither held nor failed, and a mixed iteration reaches both
-/// classes, which is why this appends to the set rather than returning one
-/// name.
-fn section_verdict_classes(section: Section, body: &BodySpec, tally: &mut ClassSet) {
-    if !body.has_condition() {
-        count(tally, section_class(section, "absent"));
-        return;
-    }
-    if let Some(items) = body.items() {
-        let verdicts: Vec<bool> = (0..items.len())
-            .map(|index| body.condition_holds(items.value_at(index).as_i64(), index))
-            .collect();
-        if verdicts.is_empty() {
-            // No iteration ran, so no condition was evaluated.
-            count(tally, section_class(section, "unevaluated"));
-        }
-        if verdicts.iter().any(|held| *held) {
-            count(tally, section_class(section, "held"));
-        }
-        if verdicts.iter().any(|held| !*held) {
-            count(tally, section_class(section, "failed"));
-        }
-        return;
-    }
-    let verdict = if body.condition_holds(None, 0) {
-        "held"
-    } else {
-        "failed"
-    };
-    count(tally, section_class(section, verdict));
-}
-
-/// Name one section-and-verdict class.
-fn section_class(section: Section, verdict: &'static str) -> &'static str {
-    match (section, verdict) {
-        (Section::Targets, "absent") => "targets-entry-absent",
-        (Section::Targets, "held") => "targets-entry-held",
-        (Section::Targets, "failed") => "targets-entry-failed",
-        (Section::Targets, _) => "targets-entry-unevaluated",
-        (Section::Actions, "absent") => "actions-entry-absent",
-        (Section::Actions, "held") => "actions-entry-held",
-        (Section::Actions, "failed") => "actions-entry-failed",
-        (Section::Actions, _) => "actions-entry-unevaluated",
-    }
 }
 
 /// Classify one foreach entry for the injection obligations.

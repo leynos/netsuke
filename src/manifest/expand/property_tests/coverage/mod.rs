@@ -19,13 +19,13 @@ use classes::{
     DOCUMENT_CLASSES, ENTRY_CLASSES, FOREACH_ORDER_CLASSES, INJECT_CLASSES, STATIC_CLASSES,
     STATIC_DOCUMENT_CLASSES,
 };
-use classifiers::{
-    document_classes, entry_classes, forced_control_classes, injection_classes, static_classes,
-};
+use classifiers::{entry_classes, forced_control_classes, injection_classes, static_classes};
+use document_classes::document_classes;
 use proptest::strategy::Strategy;
 
 mod classes;
 mod classifiers;
+mod document_classes;
 use proptest::test_runner::{Config, RngSeed, TestRunner};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};

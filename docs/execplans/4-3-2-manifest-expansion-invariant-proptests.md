@@ -2072,6 +2072,8 @@ property's input), the static-document strategy (the static-survival property's
 input), and the transformed entry the foreach-order property expands.
 
 ```plaintext
+document:         mixed documents: per-section held 303, failed 170-185,
+                  absent 191-198, unevaluated 99-102
 entry:            static 276, foreach 236, vars 462, no-vars 50,
                   condition 399, expression 207, template 192,
                   reads-vars 158, reads-index 51, reads-item 54,
@@ -2087,11 +2089,12 @@ foreach:          array 247, string 265, empty 158, all-included 218,
 static-condition: 8 verdict x section x form classes 51-82,
                   shape families 26-318, control classes 131-244
 static-document:  targets-entries 412, actions-entries 413, static 495,
-                  held 278/282, failed 95/100, absent 308/310
+                  held 278/282, failed 95/100, absent 308/310,
+                  per-section form x verdict classes 45-187, reads-vars 281
 foreach-order:    control classes 123-316, array 247, string 265
 ```
 
-`make proptest` wall time: about 11 s for all 280 selected property tests,
+`make proptest` wall time: about 10 s for all 284 selected property tests,
 which include the witness cases and the oracle's regression tests because both
 live under the suite's `property_tests` path. The 145-test `manifest::expand`
 tree runs in about 2 s.
@@ -2512,21 +2515,28 @@ Delivered in seventeen commits on
 **Final evidence.** The eleven-target closure set passed at `7c771a36d` after
 the branch was rebased onto `origin/main` `865ca23ae`: `check-fmt`, `typecheck`,
 `lint` (all four substages, including Whitaker's four passes), `doc-coverage`
-(98.38%), `markdownlint` including spelling, `nixie`, `test` (6,737 nextest
+(98.41%), `markdownlint` including spelling, `nixie`, `test` (6,833 nextest
 tests plus doctests), `proptest` (284), `mbake validate Makefile`,
 `test-workflow-contracts` (2,561 plus 69), and `test-kani-mutations` (prewarm,
-negative guard, and compile guard). Only this ExecPlan changed afterwards, at
-`799b9dce9` and the closure-record commit that follows it, and `make check-fmt`,
-`make markdownlint`, and the ExecPlan status contract were re-run there.
+negative control, and compile guard). Only this ExecPlan changed afterwards, and
+`make check-fmt`, `make markdownlint`, and the ExecPlan status contract were
+re-run there. Earlier closure runs at `731241b49`, `f93d43173`, and `251ee49ef`
+are historical; each was green for the revision it measured.
 
-**Scope tolerance.** The plan allows at most 50 non-ExecPlan files and 3,500
-net lines of code and other documentation, with file moves counted once.
-Measured against `56d1e0a22`, the diff is exactly 50 files. A raw `--numstat`
-sum reports 3,588 net lines because the two `git mv` moves of the relocated
-generated tests appear as whole-file additions; with each move counted once, as
-the plan requires, the net is 3,161 lines. Both counts are within tolerance.
-The measurement treats the mutation patches and the YAML fixtures as planned
-files, which the plan's own file list does.
+**Scope tolerance: open decision.** The plan allows at most 50 non-ExecPlan
+files and 3,500 net lines of code and other documentation, with file moves
+counted once. Measured against the current base `865ca23ae`, the diff is
+exactly 50 files and 3,859 net lines, of which 83 are mutation patches (unified
+diffs of production lines already counted under `src/`) and 36 are YAML
+fixtures, leaving 3,740 authored Rust and Markdown lines. Every reading is
+above the 3,500 allowance. The file count is exactly at its limit and every
+file is in the plan's own planned list, but the line allowance is exceeded.
+
+The plan requires this to stop and escalate, and the decision is the user's:
+accept the larger scope, reduce the suite, or move part of the work into a
+prerequisite pull request. This paragraph records the measurement and the
+pending decision; it does not record an acceptance. The growth came from four
+review rounds that each required additional tests and evidence.
 
 **Residual gaps.** Those recorded under *Residual gaps* above, unchanged: query
 mode, post-error document state, non-object static `vars`, `glob()` and stdlib
