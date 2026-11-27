@@ -213,6 +213,7 @@ pub(super) fn static_classes(spec: &EntrySpec, tally: &mut ClassSet) -> bool {
         return false;
     }
     control_classes(body, tally);
+    condition_classes(body, tally);
     let verdict_holds = super::super::model::expected_filtered(body).is_empty();
     let class = match (spec.section, verdict_holds, body.condition_is_template()) {
         (Section::Targets, true, false) => "targets-held-expression",
