@@ -17,6 +17,10 @@ use test_support::{fs as test_fs, write_exec_with_content};
 pub(crate) const CANDIDATE_REVISION: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 /// The repository the candidate revision was resolved in.
 pub(crate) const CANDIDATE_REPOSITORY: &str = "leynos/netsuke";
+
+/// A candidate repository value handed to the installer, valid or not.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CandidateRepository(pub(crate) &'static str);
 /// Stand in for Git, recording each invocation.
 const FAKE_GIT_SCRIPT: &str = include_str!("../data/release_candidate_installer/fake_git.sh");
 /// Stand in for Cargo, resolving its output directory as Cargo does.
@@ -98,6 +102,11 @@ impl InstallerHarness {
         self.command(inputs)
             .output()
             .context("run release-candidate installer")
+    }
+
+    /// Run a valid Linux installation that fetches from `repository`.
+    pub(crate) fn run_from(&self, repository: CandidateRepository) -> Result<Output> {
+        self.run_inheriting(&[("NETSUKE_CANDIDATE_REPOSITORY", repository.0)])
     }
 
     /// Run a valid Linux installation that inherits the given environment.
