@@ -1338,75 +1338,81 @@ Failure set (17):
 Shrunk input:
 
 ```plaintext
-thread 'manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field' (2842907) panicked at src/manifest/expand/property_tests/preserve.rs:12:1:
+thread 'manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field' (2470644) panicked at src/manifest/expand/property_tests/preserve.rs:12:1:
     Test failed: assertion failed: `(left == right)`
-      left: `["vars"]`,
-     right: `["m", "vars", "phony"]`: entry key sequence at src/manifest/expand/property_tests/preserve.rs:27.
+      left: `["command", "vars"]`,
+     right: `["command", "script", "vars", "u9m__", "sources", "always"]`: entry key sequence at src/manifest/expand/property_tests/preserve.rs:27.
     minimal failing input: spec = EntrySpec {
         section: Targets,
         body: BodySpec {
             fields: [
                 (
-                    "m",
-                    Number(18446744073709551615),
+                    "command",
+                    Number(-3189875418931628069),
                 ),
                 (
-                    "phony",
-                    Object {},
+                    "script",
+                    Array [
+                        Array [],
+                    ],
+                ),
+                (
+                    "u9m__",
+                    Array [
+                        Object {
+                            "": Number(-4771686077812146459),
+                            "wxl": String("{{ item }}"),
+                        },
+                        Array [],
+                    ],
+                ),
+                (
+                    "sources",
+                    Number(-9223372036854775808),
+                ),
+                (
+                    "always",
+                    Number(18446744073709551615),
                 ),
             ],
             vars: Some(
-                [
-                    (
-                        "w0",
-                        Bool(false),
-                    ),
-                    (
-                        "w3",
-                        String("e_1_"),
-                    ),
-                    (
-                        "w2",
-                        Number(9223372036854775807),
-                    ),
-                    (
-                        "w1",
-                        Number(18446744073709551615),
-                    ),
-                ],
+                [],
             ),
             vars_position: Index(
-                10290398661289040038,
+                8766122689858050575,
             ),
             foreach: Some(
                 (
-                    InlineArray,
-                    Integers(
+                    ListLiteral,
+                    Arbitrary(
                         [
-                            -1,
-                            0,
-                            2,
-                            5,
-                            -1,
+                            Object {
+                                "i": Number(4125.853963324664),
+                            },
                         ],
                     ),
                 ),
             ),
             when: Some(
                 (
-                    NotFlag(
-                        0,
+                    IndexCmp(
+                        Lt,
+                        2,
                     ),
-                    true,
+                    false,
                 ),
             ),
             control_layout: Drawn(
                 Index(
-                    2093209201134512442,
+                    13790146891864876846,
+                ),
+            ),
+            second_control_layout: Drawn(
+                Index(
+                    11345904078866261670,
                 ),
             ),
             control_order: WhenFirst,
-            control_adjacency: Adjacent,
             bindings: Bindings {
                 flags: [
                     false,
@@ -1415,7 +1421,7 @@ thread 'manifest::expand::property_tests::preserve::expansion_copies_every_non_c
                     false,
                 ],
                 counts: [
-                    1,
+                    0,
                     0,
                     0,
                     0,
@@ -1423,7 +1429,7 @@ thread 'manifest::expand::property_tests::preserve::expansion_copies_every_non_c
             },
         },
     }
-    	successes: 3
+    	successes: 13
     	local rejects: 0
     	global rejects: 0
 ```
@@ -1444,59 +1450,50 @@ Failure set (8):
 Shrunk input:
 
 ```plaintext
-thread 'manifest::expand::property_tests::order::foreach_removal_keeps_authoring_key_order' (2713999) panicked at src/manifest/expand/property_tests/order.rs:18:1:
+thread 'manifest::expand::property_tests::order::foreach_removal_keeps_authoring_key_order' (2407392) panicked at src/manifest/expand/property_tests/order.rs:18:1:
     Test failed: assertion failed: `(left == right)`
-      left: `["description", "oix7_", "vars"]`,
-     right: `["description", "vars", "oix7_"]`: entry key sequence at src/manifest/expand/property_tests/order.rs:36.
+      left: `["script", "cnu", "vars"]`,
+     right: `["cnu", "script", "vars"]`: entry key sequence at src/manifest/expand/property_tests/order.rs:36.
     minimal failing input: drawn = EntrySpec {
         section: Targets,
         body: BodySpec {
             fields: [
                 (
-                    "description",
-                    Object {
-                        "ag": Object {
-                            "": String("{{ item }}"),
-                            "z": Number(5226254704213463909),
-                        },
-                    },
+                    "cnu",
+                    Number(-632483510704160449),
                 ),
                 (
-                    "oix7_",
-                    Object {},
+                    "script",
+                    Number(18446744073709551615),
                 ),
             ],
-            vars: Some(
-                [],
-            ),
+            vars: None,
             vars_position: Index(
-                10343849444351811568,
+                11158762593232409114,
             ),
             foreach: Some(
                 (
-                    ListLiteral,
+                    InlineArray,
                     Integers(
                         [
                             0,
+                            9,
                         ],
                     ),
                 ),
             ),
-            when: Some(
-                (
-                    Literal(
-                        false,
-                    ),
-                    false,
-                ),
-            ),
+            when: None,
             control_layout: Drawn(
                 Index(
-                    5127002501699666988,
+                    4794137522691251530,
+                ),
+            ),
+            second_control_layout: Drawn(
+                Index(
+                    15368223835133033825,
                 ),
             ),
             control_order: WhenFirst,
-            control_adjacency: Separated,
             bindings: Bindings {
                 flags: [
                     false,
@@ -1513,7 +1510,7 @@ thread 'manifest::expand::property_tests::order::foreach_removal_keeps_authoring
             },
         },
     }
-    	successes: 1
+    	successes: 0
     	local rejects: 0
     	global rejects: 0
 ```
@@ -1534,54 +1531,62 @@ Failure set (8):
 Shrunk input:
 
 ```plaintext
-thread 'manifest::expand::property_tests::order::when_removal_keeps_authoring_key_order' (2767631) panicked at src/manifest/expand/property_tests/order.rs:18:1:
+thread 'manifest::expand::property_tests::order::when_removal_keeps_authoring_key_order' (2434759) panicked at src/manifest/expand/property_tests/order.rs:18:1:
     Test failed: assertion failed: `(left == right)`
-      left: `["df6_n6t", "zf9_a_0", "vars"]`,
-     right: `["df6_n6t", "vars", "zf9_a_0"]`: entry key sequence at src/manifest/expand/property_tests/order.rs:63.
+      left: `["description", "rule", "vars", "command", "script"]`,
+     right: `["description", "rule", "vars", "script", "command"]`: entry key sequence at src/manifest/expand/property_tests/order.rs:63.
     minimal failing input: spec = EntrySpec {
-        section: Targets,
+        section: Actions,
         body: BodySpec {
             fields: [
                 (
-                    "df6_n6t",
-                    Null,
+                    "description",
+                    Number(5616570378025339598),
                 ),
                 (
-                    "zf9_a_0",
-                    Number(-9223372036854775808),
+                    "rule",
+                    Array [],
+                ),
+                (
+                    "script",
+                    Number(-136670616240122913),
+                ),
+                (
+                    "command",
+                    Number(9223372036854775807),
                 ),
             ],
             vars: Some(
                 [
                     (
-                        "w0",
-                        Bool(false),
-                    ),
-                    (
-                        "w3",
-                        Array [],
+                        "w2",
+                        Number(1),
                     ),
                 ],
             ),
             vars_position: Index(
-                11546097470625972027,
+                9156515671862722225,
             ),
             foreach: None,
             when: Some(
                 (
-                    NotFlag(
-                        0,
+                    Count(
+                        2,
                     ),
                     false,
                 ),
             ),
             control_layout: Drawn(
                 Index(
-                    4835333019593789487,
+                    11479800077598674896,
+                ),
+            ),
+            second_control_layout: Drawn(
+                Index(
+                    11479800077598674896,
                 ),
             ),
             control_order: ForeachFirst,
-            control_adjacency: Separated,
             bindings: Bindings {
                 flags: [
                     false,
@@ -1592,13 +1597,13 @@ thread 'manifest::expand::property_tests::order::when_removal_keeps_authoring_ke
                 counts: [
                     0,
                     0,
-                    0,
+                    1,
                     0,
                 ],
             },
         },
     }
-    	successes: 2
+    	successes: 0
     	local rejects: 0
     	global rejects: 0
 ```
@@ -1641,8 +1646,8 @@ Failure set (30):
 Shrunk input:
 
 ```plaintext
-thread 'manifest::expand::property_tests::when_removed::no_expanded_entry_carries_a_control_key' (2943487) panicked at src/manifest/expand/property_tests/when_removed.rs:12:1:
-    Test failed: expanded actions entry still carries `when`: {"when":"true","vars":{}} at src/manifest/expand/property_tests/when_removed.rs:33.
+thread 'manifest::expand::property_tests::when_removed::no_expanded_entry_carries_a_control_key' (2551182) panicked at src/manifest/expand/property_tests/when_removed.rs:12:1:
+    Test failed: expanded actions entry still carries `when`: {"when":"w0 < 1","vars":{"w0":0,"w3":9223372036854775807,"w1":null,"w2":null}} at src/manifest/expand/property_tests/when_removed.rs:33.
     minimal failing input: spec = DocumentSpec {
         targets: [],
         actions: [
@@ -1651,27 +1656,50 @@ thread 'manifest::expand::property_tests::when_removed::no_expanded_entry_carrie
                 body: BodySpec {
                     fields: [],
                     vars: Some(
-                        [],
+                        [
+                            (
+                                "w0",
+                                Number(0),
+                            ),
+                            (
+                                "w3",
+                                Number(9223372036854775807),
+                            ),
+                            (
+                                "w1",
+                                Null,
+                            ),
+                            (
+                                "w2",
+                                Null,
+                            ),
+                        ],
                     ),
                     vars_position: Index(
-                        6462038354837510584,
+                        13280998906413035705,
                     ),
                     foreach: None,
                     when: Some(
                         (
-                            Literal(
-                                true,
+                            VarCmp(
+                                0,
+                                Lt,
+                                1,
                             ),
                             false,
                         ),
                     ),
                     control_layout: Drawn(
                         Index(
-                            31154,
+                            1036315828984733,
                         ),
                     ),
-                    control_order: ForeachFirst,
-                    control_adjacency: Adjacent,
+                    second_control_layout: Drawn(
+                        Index(
+                            10199786446841476481,
+                        ),
+                    ),
+                    control_order: WhenFirst,
                     bindings: Bindings {
                         flags: [
                             false,
@@ -1721,24 +1749,45 @@ Failure set (18):
 Shrunk input:
 
 ```plaintext
-thread 'manifest::expand::property_tests::inject::each_expansion_carries_its_own_item_and_index' (2649757) panicked at src/manifest/expand/property_tests/inject.rs:15:1:
+thread 'manifest::expand::property_tests::inject::each_expansion_carries_its_own_item_and_index' (2376348) panicked at src/manifest/expand/property_tests/inject.rs:15:1:
     Test failed: assertion failed: `(left == right)`
-      left: `0`,
-     right: `1`: expanded entry count at src/manifest/expand/property_tests/inject.rs:31.
+      left: `1`,
+     right: `2`: expanded entry count at src/manifest/expand/property_tests/inject.rs:31.
     minimal failing input: spec = EntrySpec {
         section: Targets,
         body: BodySpec {
             fields: [
                 (
-                    "conditional",
-                    String("{{ item }}"),
+                    "description",
+                    Object {
+                        "e": Array [
+                            Number(-2707754774717947747),
+                            String("plain text"),
+                        ],
+                        "s": Object {
+                            "": Null,
+                        },
+                        "xjht": Number(-1057.6414179253688),
+                    },
                 ),
                 (
-                    "order_only_deps",
+                    "d444d_n",
+                    Number(18446744073709551615),
+                ),
+                (
+                    "name",
+                    Bool(false),
+                ),
+                (
+                    "conditional",
+                    Number(-9223372036854775808),
+                ),
+                (
+                    "n16op__",
                     Object {},
                 ),
                 (
-                    "deps",
+                    "u__6",
                     Number(9223372036854775807),
                 ),
             ],
@@ -1746,7 +1795,7 @@ thread 'manifest::expand::property_tests::inject::each_expansion_carries_its_own
                 [],
             ),
             vars_position: Index(
-                9577905342736275154,
+                9411135404956503547,
             ),
             foreach: Some(
                 (
@@ -1754,18 +1803,8 @@ thread 'manifest::expand::property_tests::inject::each_expansion_carries_its_own
                     Arbitrary(
                         [
                             Null,
-                            Null,
-                            Number(-731),
-                            Array [
-                                Bool(false),
-                                Object {
-                                    "": Number(4559849100416636647),
-                                    "nlde": Bool(true),
-                                    "p": String("plain text"),
-                                    "rb": Null,
-                                },
-                                Number(-2436893430145674900),
-                            ],
+                            Number(-1127126),
+                            Object {},
                         ],
                     ),
                 ),
@@ -1773,36 +1812,40 @@ thread 'manifest::expand::property_tests::inject::each_expansion_carries_its_own
             when: Some(
                 (
                     IndexCmp(
-                        Gt,
-                        2,
+                        Ne,
+                        1,
                     ),
                     false,
                 ),
             ),
             control_layout: Drawn(
                 Index(
-                    52932725173566466,
+                    447907088932341176,
                 ),
             ),
-            control_order: ForeachFirst,
-            control_adjacency: Separated,
+            second_control_layout: Drawn(
+                Index(
+                    12469836859076188603,
+                ),
+            ),
+            control_order: WhenFirst,
             bindings: Bindings {
                 flags: [
                     false,
                     false,
                     false,
-                    false,
+                    true,
                 ],
                 counts: [
-                    4,
-                    -1,
-                    8,
                     2,
+                    3,
+                    4,
+                    7,
                 ],
             },
         },
     }
-    	successes: 3
+    	successes: 4
     	local rejects: 0
     	global rejects: 0
 ```
@@ -1847,7 +1890,7 @@ Failure set (32):
 Shrunk input:
 
 ```plaintext
-thread 'manifest::expand::property_tests::static_when::static_entries_survive_exactly_when_their_condition_holds' (2887282) panicked at src/manifest/expand/property_tests/static_when.rs:13:1:
+thread 'manifest::expand::property_tests::static_when::static_entries_survive_exactly_when_their_condition_holds' (2504683) panicked at src/manifest/expand/property_tests/static_when.rs:13:1:
     Test failed: assertion failed: `(left == right)`
       left: `1`,
      right: `0`: kept entry count at src/manifest/expand/property_tests/static_when.rs:26.
@@ -1856,25 +1899,18 @@ thread 'manifest::expand::property_tests::static_when::static_entries_survive_ex
         body: BodySpec {
             fields: [],
             vars: Some(
-                [
-                    (
-                        "w0",
-                        Number(6),
-                    ),
-                ],
+                [],
             ),
             vars_position: Index(
-                0,
+                29949267483,
             ),
             foreach: None,
             when: Some(
                 (
-                    VarCmp(
-                        0,
-                        Lt,
-                        5,
+                    Literal(
+                        false,
                     ),
-                    false,
+                    true,
                 ),
             ),
             control_layout: Drawn(
@@ -1882,8 +1918,12 @@ thread 'manifest::expand::property_tests::static_when::static_entries_survive_ex
                     0,
                 ),
             ),
-            control_order: ForeachFirst,
-            control_adjacency: Adjacent,
+            second_control_layout: Drawn(
+                Index(
+                    0,
+                ),
+            ),
+            control_order: WhenFirst,
             bindings: Bindings {
                 flags: [
                     false,
@@ -1892,7 +1932,7 @@ thread 'manifest::expand::property_tests::static_when::static_entries_survive_ex
                     false,
                 ],
                 counts: [
-                    6,
+                    0,
                     0,
                     0,
                     0,
@@ -1900,7 +1940,7 @@ thread 'manifest::expand::property_tests::static_when::static_entries_survive_ex
             },
         },
     }
-    	successes: 0
+    	successes: 4
     	local rejects: 0
     	global rejects: 0
 ```
@@ -1908,7 +1948,9 @@ thread 'manifest::expand::property_tests::static_when::static_entries_survive_ex
 <!-- markdownlint-enable MD013 -->
 
 Every patch also passed `make test-kani-mutations`, and the contract tests
-accept all six stems.
+accept all six stems. The record was regenerated after the second assessment
+round changed the generators; the failure counts moved only because the witness
+cases moved into the suite's path and the verdict classes changed names.
 
 Coverage counts, fixed seed `0x432`, 512 draws per strategy. The tally counts
 each class once per draw, and the floor is a rounded-up 5% of the draws in the
@@ -2079,6 +2121,13 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
 - [x] (2026-11-26) EP-M4 closure gates and PR delivery. The eleven-target
   closure set passed at `f93d43173`; the hosted completeness assessment then
   found six gaps, all repaired at `b0d3f9496` and re-gated.
+- [x] (2026-11-27 02:25Z) Second assessment round. Five further findings were
+  repaired at `7f5adce30`, the eleven-target closure set passed again
+  (`check-fmt`, `typecheck`, `lint`, `doc-coverage` 98.38%, `markdownlint`,
+  `nixie`, `test` 6,737, `proptest` 280, `mbake`, `test-workflow-contracts`
+  2,561 + 69, and `test-kani-mutations` with the prewarm, negative guard, and
+  compile guard all green), and every mutation patch was re-run against the new
+  generators.
 - [ ] Hosted assessment re-check and merge.
 
 ## Surprises & discoveries
