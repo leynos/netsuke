@@ -2099,7 +2099,7 @@ which include the witness cases and the oracle's regression tests because both
 live under the suite's `property_tests` path. The 145-test `manifest::expand`
 tree runs in about 2 s.
 
-### EP-M1 plateau gate run and rebase### EP-M1 plateau gate run and rebase### EP-M1 plateau gate run and rebase
+### EP-M1 plateau gate run and rebase
 
 Run one (candidate `7c69bcf03`, base `b99c9c92b`): `check-fmt`, `typecheck`,
 `doc-coverage`, `markdownlint`, `nixie`, and `test` passed; `make lint` failed
@@ -2512,16 +2512,22 @@ Delivered in seventeen commits on
   stated over key sequences. The one existing test that looked like it covered
   order never reached the defect.
 
-**Final evidence.** The eleven-target closure set passed at `7c771a36d` after
-the branch was rebased onto `origin/main` `865ca23ae`: `check-fmt`, `typecheck`,
+**Final evidence.** The eleven-target closure set passed at `ec46236c9`, the
+commit that reduced the diff to the scope tolerance: `check-fmt`, `typecheck`,
 `lint` (all four substages, including Whitaker's four passes), `doc-coverage`
 (98.41%), `markdownlint` including spelling, `nixie`, `test` (6,833 nextest
 tests plus doctests), `proptest` (284), `mbake validate Makefile`,
 `test-workflow-contracts` (2,561 plus 69), and `test-kani-mutations` (prewarm,
-negative control, and compile guard). Only this ExecPlan changed afterwards, and
-`make check-fmt`, `make markdownlint`, and the ExecPlan status contract were
-re-run there. Earlier closure runs at `731241b49`, `f93d43173`, and `251ee49ef`
-are historical; each was green for the revision it measured.
+negative control, and compile guard).
+
+Two earlier runs are on this branch and both were green for their revision.
+`869f363ae` was the last code revision before the reduction, when the static
+document classes were added. `7c771a36d` predates that: four coverage source
+files changed between it and `869f363ae`, so its result does not cover them.
+`731241b49`, `f93d43173`, and `251ee49ef` are older still and historical. Only
+this ExecPlan changed after `ec46236c9`; `make check-fmt`, `make markdownlint`,
+and the ExecPlan status contract were re-run at the head that records this
+paragraph.
 
 **Scope tolerance: met.** The plan allows at most 50 non-ExecPlan files and
 3,500 net lines of code and other documentation, with file moves counted once.
