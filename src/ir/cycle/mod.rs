@@ -28,11 +28,19 @@ mod participation_tests;
 pub(super) mod support;
 
 mod detector;
+
+mod scan_counter;
 use self::detector::CycleDetector;
 use self::detector::VisitState;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod alias_regression_tests;
+
+#[cfg(test)]
+mod test_fixtures;
 
 /// The result of a cycle-detection pass over the target graph.
 ///

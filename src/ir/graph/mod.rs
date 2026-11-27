@@ -200,6 +200,41 @@ impl BuildGraph {
             })
     }
 
+    /// Resolve `output` to its stored alias, canonical identity, and edge.
+    ///
+    /// Cycle analysis keys traversal by edge identity but reports the alias
+    /// that entered the edge, so it needs both from one index probe.
+    #[cfg(not(kani))]
+    #[must_use]
+    pub(super) fn edge_entry_for_output(
+        &self,
+        output: &Utf8Path,
+    ) -> Option<(&Utf8Path, EdgeId, &BuildEdge)> {
+        self.targets
+            .get_key_value(output)
+            .and_then(|(stored_output, edge_id)| {
+                self.edges
+                    .get(edge_id.0)
+                    .map(|edge| (stored_output.as_path(), *edge_id, edge))
+            })
+    }
+
+    /// Resolve `output` through Kani's bounded path-key model.
+    #[cfg(kani)]
+    #[must_use]
+    pub(super) fn edge_entry_for_output(
+        &self,
+        output: &Utf8Path,
+    ) -> Option<(&Utf8Path, EdgeId, &BuildEdge)> {
+        self.targets
+            .get_key_value_path(output)
+            .and_then(|(stored_output, edge_id)| {
+                self.edges
+                    .get(edge_id.0)
+                    .map(|edge| (stored_output.as_path(), *edge_id, edge))
+            })
+    }
+
     /// Iterate the graph's canonical build edges in arena insertion order.
     pub fn edges(&self) -> impl Iterator<Item = &BuildEdge> {
         self.edges.iter()

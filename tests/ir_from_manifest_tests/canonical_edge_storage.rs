@@ -144,3 +144,84 @@ fn non_first_output_alias_resolves_for_cycle_detection() -> Result<()> {
     );
     Ok(())
 }
+
+/// Number of output aliases and external sources in the alias-budget fixtures.
+const MANY_ALIAS_COUNT: usize = 64;
+
+/// Render the comma-separated aliases or external sources for a fixture.
+fn numbered_names(prefix: &str) -> String {
+    (0..MANY_ALIAS_COUNT)
+        .map(|index| format!("{prefix}{index:02}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Render a manifest whose one target owns many aliases and external sources.
+///
+/// `extra_source` closes a cycle through the second alias when present.
+fn many_alias_manifest(extra_source: Option<&str>) -> String {
+    let aliases = numbered_names("out");
+    let mut sources = numbered_names("external");
+    if let Some(source) = extra_source {
+        sources.push_str(", ");
+        sources.push_str(source);
+    }
+    let mut manifest = format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: [{aliases}]\n    sources: [{sources}]\n    command: echo\n"
+    );
+    if extra_source.is_some() {
+        manifest.push_str("  - name: downstream\n    sources: out01\n    command: echo\n");
+    }
+    manifest
+}
+
+/// Lower one target with many aliases and absent sources to one canonical edge.
+#[test]
+fn many_alias_target_lowers_to_one_canonical_edge() -> Result<()> {
+    let manifest = manifest::from_str(&many_alias_manifest(None))?;
+    let graph = BuildGraph::from_manifest(&manifest)
+        .context("a target with many aliases and external sources must lower")?;
+
+    assert_canonical_output_aliases(&graph, MANY_ALIAS_COUNT)?;
+    ensure!(
+        graph.edge_count() == 1,
+        "many aliases must still own one canonical edge",
+    );
+    Ok(())
+}
+
+/// A cycle closed through a non-first alias reports bounded missing records.
+#[test]
+fn many_alias_cycle_reports_one_record_per_external_source() -> Result<()> {
+    let manifest = manifest::from_str(&many_alias_manifest(Some("downstream")))?;
+    let error = BuildGraph::from_manifest(&manifest)
+        .err()
+        .context("a cycle through the second alias must fail lowering")?;
+    let IrGenError::CircularDependency {
+        cycle,
+        missing_dependencies,
+        ..
+    } = error
+    else {
+        bail!("expected a circular dependency, got {error}");
+    };
+
+    ensure!(
+        missing_dependencies.len() == MANY_ALIAS_COUNT,
+        "one record per external source is expected, got {}: {:?}",
+        missing_dependencies.len(),
+        missing_dependencies,
+    );
+    let entry_alias = Utf8PathBuf::from("out01");
+    ensure!(
+        missing_dependencies
+            .iter()
+            .all(|(alias, _)| alias == &entry_alias),
+        "every record must name the alias that expanded the edge: {missing_dependencies:?}",
+    );
+    ensure!(
+        cycle.contains(&entry_alias),
+        "the witness must name the alias the second target requested: {cycle:?}",
+    );
+    Ok(())
+}

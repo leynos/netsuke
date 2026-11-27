@@ -9601,9 +9601,12 @@ available; the build-script localization slice does not depend on either
 library-side path.
 
 `src/ir/cycle/detector.rs::CycleDetector::visit_known_edge` traverses `inputs`,
-`implicit_deps`, and `order_only_deps` when detecting cycles. Order-only
-dependencies do not trigger a rebuild when they change, but they still have to
-be built first. The decision and whole-manifest scope are recorded in
+`implicit_deps`, and `order_only_deps` when detecting cycles. Each canonical
+edge is expanded once per analysis pass no matter how many output aliases name
+it, and its stack frame carries the alias that entered it so missing records
+and witnesses name real paths. Order-only dependencies do not trigger a rebuild
+when they change, but they still have to be built first. The decision and
+whole-manifest scope are recorded in
 [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md).
 
 ### Serial dependency bundles
@@ -14996,7 +14999,10 @@ arena insertion order. An alias resolves with
 `edge_id_for_output(&Utf8Path) -> Option<EdgeId>` for the identity alone, or
 `target_for_output(&Utf8Path) -> Option<(&Utf8Path, &BuildEdge)>` for the
 stored key and the producing edge; `output_paths()` iterates every alias key.
-The private `insert_canonical_edge` pushes into the arena and then calls
+Cycle detection uses the crate-private
+`edge_entry_for_output(&Utf8Path) -> Option<(&Utf8Path, EdgeId, &BuildEdge)>`,
+which returns the stored alias, canonical identity, and edge from one index
+probe. The private `insert_canonical_edge` pushes into the arena and then calls
 `index_output_aliases`. The Kani and non-Kani lookups stay separate: the Kani
 variants match bounded path keys through `IrHashMap::get_key_value_path`, and
 `index_output` asserts a one-byte key under `#[cfg(kani)]` because those keys
@@ -15037,13 +15043,28 @@ missing dependencies rather than cycle arcs; see
 **`CycleDetector`**
 
 Traversal state is managed by the private `CycleDetector` struct, which owns
-the DFS recursion stack and per-node `VisitState` map. The API surface for
-callers within the `ir` module is:
+the DFS recursion stack and a per-edge `VisitState` map keyed by `EdgeId`. The
+API surface for callers within the `ir` module is:
 
 - `CycleDetector::new(graph)` — borrows the graph for the lifetime of the
   traversal.
-- `CycleDetector::detect()` — iterates over all nodes in sorted order and
-  returns the first detected cycle, or `None`.
+- `CycleDetector::detect()` — iterates over every output alias in sorted order,
+  resolves it to its canonical edge, expands each edge once, and returns the
+  first detected cycle, or `None`.
+
+Each stack frame retains the alias that entered its edge. When a back edge
+requests alias `b` of an active edge, the witness is `b`, then the entry
+aliases of the frames below the target edge, then `b` again. It deliberately
+does not start with the target edge's own entry alias, which the back edge
+never named.
+
+A dependency absent from the output index is recorded once per examined entry,
+under the alias that entered the dependent edge. Recorded pairs are therefore
+bounded by the declared `inputs`, `implicit_deps`, and `order_only_deps`
+entries rather than by the product of alias and dependency counts. The
+`scan_counter` sibling module counts examined entries in test builds only;
+`alias_regression_tests` and `property_tests/multi_alias_property_tests/` use
+it to prove the once-per-edge bound.
 
 `CycleDetector` is a deliberate struct rather than a closure or group of free
 functions:

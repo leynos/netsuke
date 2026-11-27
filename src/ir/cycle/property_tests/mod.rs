@@ -16,6 +16,8 @@ mod edge_oracle;
 
 mod issue322_property_tests;
 
+mod multi_alias_property_tests;
+
 mod participation_tests;
 
 fn path(name: &str) -> camino::Utf8PathBuf {
