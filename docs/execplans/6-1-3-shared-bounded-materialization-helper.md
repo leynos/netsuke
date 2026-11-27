@@ -1343,8 +1343,34 @@ conflict in `Decision log`, and escalate.
     are renumbered; historical statements in this plan keep the serial they
     describe. D-28's entry gains the fourth renumber. The lesson D-26 recorded
     is now measured four times in eight days: a serial is only free until
-    another branch takes it, and the check belongs immediately before
-    publication rather than at the start of the work.
+  - Backtick-in-ANSI-C defect found by the final-commit batch (2026-11-25 to
+    2026-11-27). Running the gate set at `b43408616` failed `make test` on a
+    case proptest had just discovered, and the failure was not in this
+    branch's code: `echo $'`''`\n'` followed by a marker was refused with
+    `recipe marker inside a protected shell region`. Bash expands neither a
+    backtick nor its body inside `$'…'`, so the string closes at the
+    apostrophe after it and the marker is unquoted text; the POSIX traversal
+    toggled a backtick region on any backtick outside single quotes, ANSI-C
+    included. The failing property, its model, and the traversal were all
+    byte-identical to `e9010db84`, where #1173 had merged it that day, and
+    the same 6,688 tests had passed at the preceding head, so this is a base
+    defect the branch surfaced rather than introduced. `12216fae3` guarded
+    the toggle with `opens_backtick_region` and added
+    `backtick_inside_ansi_c_does_not_open_a_region`; removing the guard from
+    the predicate failed two of the four cases, which is the negative
+    control. D-22's tenth amendment records the owner accepting the 41 net
+    lines this adds, taking the tally to 3,427 at that point; the eleventh
+    records it falling to 3,415 once the replay adopted upstream's predicate.
+    - Convergence with upstream (2026-11-27). On the replay onto `865ca23ae`,
+      `src/ir/cmd_interpolate/substitution/posix.rs` conflicted: #999
+      (`46ed6d589`) had independently introduced `is_backtick_delimiter`,
+      which excludes ANSI-C from the toggle with the same rule. Resolving by
+      keeping both would have been two spellings of one policy and a dead
+      method, so the replay adopted upstream's predicate and dropped
+      `opens_backtick_region`; the regression test stayed, and the combined
+      ANSI-C and backtick selection passes 93 of 93 against upstream's code.
+      The defect was found twice in two days and fixed twice; the test is the
+      part worth keeping.
 
 ## Surprises & discoveries
 
@@ -1908,6 +1934,15 @@ conflict in `Decision log`, and escalate.
   leaving it out would leave `make test` failing on roughly one run in three
   until a separate branch merged. The acceptance is for these 3,427 lines and
   no further growth; a later change that raises the figure owes a fresh report.
+  Eleventh amendment of 2026-11-27: the figure falls to **3,415** net. The
+  replay onto `865ca23ae` adopted #999's `is_backtick_delimiter` in place of
+  this branch's `opens_backtick_region`, which removes 12 lines, so
+  `git diff --numstat` over `.rs` paths outside `verus/` now sums to 3,416
+  added and 1 deleted. The file counts are unchanged at 56 changed, 41 with the
+  Verus crate and mutation patches excluded, and 35 with the snapshots excluded
+  too, and the fix now contributes 29 added and 0 deleted. The accepted ceiling
+  is unchanged and the candidate is further inside it; this amendment records
+  the reduction rather than leaving a figure that no longer matches the tree.
 - D-23. Decision: correct the Kani stopping condition rather than leave a cap
   the runs did not obey, and state the two measurements it conflated. The
   correction is recorded here; whether the whole-suite exception is acceptable
@@ -2040,10 +2075,18 @@ conflict in `Decision log`, and escalate.
   sweep of every local and tracking ref puts the next free serial at 0087. The
   collision was invisible to a sweep of `origin` alone only in the sense that
   both branches are on `origin`; what hid it was that nothing re-ran the sweep,
-  which is the part D-26 named. Renumbering rather than contesting is the
-  branch's only available move: #1166 was ready and had minted its serial first
-  in wall-clock terms for the current round, and a published ADR is never
-  renumbered, so the later claimant yields.
+  which is the part D-26 named. Correction of 2026-11-27: this amendment
+  originally said #1166 had minted 0084 first and that "the later claimant
+  yields". Both statements are wrong. This branch minted 0084 in `57f02277f` on
+  2026-11-20 19:06, and #1166 minted it in `45660a3c6` on 2026-11-24 02:24, so
+  #1166 is the later claimant. The documentation style guide then says to
+  "renumber the later one", which would have left 0084 here and put the
+  renumber on #1166. This branch renumbered anyway, because unblocking its own
+  publication was inside its authority while asking another branch to renumber
+  was not, and the resulting allocation is consistent: #1166 keeps 0084
+  uncontested and this branch holds 0087. The lesson is not that the tie-break
+  is ambiguous but that it was inverted under time pressure, which is why issue
+  #1202 asks for the sweep and the tie-break to be written down operationally.
 
 - D-29. Decision: add `verus/configured_shells/main.rs` to
   `.github/workflows/proofs.yml` as a third proof step, and correct every count
