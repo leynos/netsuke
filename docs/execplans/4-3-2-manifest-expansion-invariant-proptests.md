@@ -2525,12 +2525,12 @@ are historical; each was green for the revision it measured.
 
 **Scope tolerance: open decision.** The plan allows at most 50 non-ExecPlan
 files and 3,500 net lines of code and other documentation, with file moves
-counted once. Measured against the current base `865ca23ae`, the diff is
-exactly 50 files and 3,859 net lines, of which 83 are mutation patches (unified
-diffs of production lines already counted under `src/`) and 36 are YAML
-fixtures, leaving 3,740 authored Rust and Markdown lines. Every reading is
-above the 3,500 allowance. The file count is exactly at its limit and every
-file is in the plan's own planned list, but the line allowance is exceeded.
+counted once. Measured against the current base `865ca23ae`, the diff is 51
+files and 3,905 net lines, of which 83 are mutation patches (unified diffs of
+production lines already counted under `src/`) and 36 are YAML fixtures,
+leaving 3,786 authored Rust and Markdown lines. Every reading is above the
+3,500 allowance, and the file count is one over its limit of 50. Every file is
+in the plan's own planned list, but both allowances are exceeded.
 
 The plan requires this to stop and escalate, and the decision is the user's:
 accept the larger scope, reduce the suite, or move part of the work into a
