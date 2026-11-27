@@ -2530,12 +2530,17 @@ seven module headers the reduction had left as bare requirement labels: each
 now states its purpose, what it provides, and its relation to `strategy`,
 `model`, `support`, and `coverage`, with the `OBL-*` and `RM-4.3.2.*`
 identifiers kept as cross-references. Those lines came from compressing inline
-comments, not from dropping a guarantee. At that commit, `check-fmt`, `lint`,
-`doc-coverage` (98.41%), `proptest` (284), and `test` (6,833 plus doctests)
-passed again, and `typecheck`, `markdownlint`, `nixie`,
-`mbake validate Makefile`, `test-workflow-contracts`, and `test-kani-mutations`
-were re-run green at the head that records this paragraph, which differs from
-`e821ba791` only in this ExecPlan.
+comments, not from dropping a guarantee.
+
+The eleven-target set is green for `efe5161d3`: `check-fmt`, `lint`,
+`doc-coverage`, `proptest`, and `test` at `e821ba791`, and the other six at
+`efe5161d3` itself, whose only delta from that commit is this ExecPlan.
+
+`30c1694a2` then changed comments and module headers only, and `check-fmt`,
+`lint`, `doc-coverage` (98.41%), `proptest` (284), and `test` (6,833 plus
+doctests) passed again there. The commits after it touch this ExecPlan alone;
+`check-fmt` and `markdownlint` were re-run at the head that records this
+paragraph.
 
 Two earlier runs are on this branch and both were green for their revision.
 `869f363ae` was the last code revision before the reduction, when the static
