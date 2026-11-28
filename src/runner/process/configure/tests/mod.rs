@@ -8,7 +8,7 @@ use rstest::{fixture, rstest};
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::time::Duration;
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, TempPath};
 
 mod temp_file_retry;
 
@@ -94,34 +94,76 @@ fn expected_base_arguments(build_file: &Utf8Path) -> Result<Vec<OsString>> {
     ])
 }
 
+/// Convert the fixture's temporary file into a UTF-8 build-file path.
+///
+/// The returned [`TempPath`] must stay alive for as long as the path is used:
+/// dropping it deletes the file that command configuration canonicalizes.
+fn utf8_temp_file(temp_file: Result<NamedTempFile>) -> Result<(TempPath, Utf8PathBuf)> {
+    let temp_build_file = temp_file?.into_temp_path();
+    let path = Utf8PathBuf::from_path_buf(temp_build_file.to_path_buf())
+        .map_err(|path| anyhow::anyhow!("tempfile path is not UTF-8: {}", path.display()))?;
+    Ok((temp_build_file, path))
+}
+
+/// The request shape from which a configured Ninja command is built.
+enum NinjaInvocation<'a> {
+    /// A build command carrying its target operands.
+    Build(&'a [String]),
+    /// A tool command naming the tool to run.
+    Tool(&'a str),
+}
+
+/// Configure a Ninja command and return the arguments it produced.
+fn configured_arguments(
+    build_file: &Utf8Path,
+    options: &NinjaProcessOptions,
+    env: &CommandEnv,
+    invocation: NinjaInvocation<'_>,
+) -> Result<Vec<OsString>> {
+    let mut cmd = Command::new("ninja");
+    match invocation {
+        NinjaInvocation::Build(target_names) => {
+            let targets = super::super::BuildTargets::new(target_names);
+            let request = NinjaBuildRequest {
+                program: Utf8Path::new("ninja"),
+                options,
+                build_file,
+                targets: &targets,
+                env,
+                stderr_mode: StderrMode::Forward,
+            };
+            configure_ninja_build_command(&mut cmd, &request)?;
+        }
+        NinjaInvocation::Tool(tool) => {
+            let request = NinjaToolRequest {
+                program: Utf8Path::new("ninja"),
+                options,
+                build_file,
+                tool,
+                env,
+                stderr_mode: StderrMode::Forward,
+            };
+            configure_ninja_tool_command(&mut cmd, &request)?;
+        }
+    }
+    Ok(command_arguments(&cmd))
+}
+
 #[rstest]
 fn build_configuration_preserves_argument_order(
     temp_file: Result<NamedTempFile>,
     options: io::Result<NinjaProcessOptions>,
     env: CommandEnv,
 ) -> Result<()> {
-    let build_file = temp_file?;
-    let temp_build_file = build_file.into_temp_path();
-    let utf8_build_file = Utf8PathBuf::from_path_buf(temp_build_file.to_path_buf())
-        .map_err(|path| anyhow::anyhow!("tempfile path is not UTF-8: {}", path.display()))?;
-    let resolved_options = options?;
-    let target_names = vec![String::from("default")];
-    let targets = super::super::BuildTargets::new(&target_names);
-    let request = NinjaBuildRequest {
-        program: Utf8Path::new("ninja"),
-        options: &resolved_options,
-        build_file: &utf8_build_file,
-        targets: &targets,
-        env: &env,
-        stderr_mode: StderrMode::Forward,
-    };
-    let mut cmd = Command::new("ninja");
-
-    configure_ninja_build_command(&mut cmd, &request)?;
-
-    let mut expected = expected_base_arguments(&utf8_build_file)?;
+    let (_temp_build_file, build_file) = utf8_temp_file(temp_file)?;
+    let actual = configured_arguments(
+        &build_file,
+        &options?,
+        &env,
+        NinjaInvocation::Build(&[String::from("default")]),
+    )?;
+    let mut expected = expected_base_arguments(&build_file)?;
     expected.extend([OsString::from("--"), OsString::from("default")]);
-    let actual = command_arguments(&cmd);
     ensure!(
         actual == expected,
         "build command argument order changed: {actual:?}"
@@ -135,35 +177,29 @@ fn build_configuration_terminates_multi_target_operands(
     options: io::Result<NinjaProcessOptions>,
     env: CommandEnv,
 ) -> Result<()> {
-    let build_file = temp_file?;
-    let temp_build_file = build_file.into_temp_path();
-    let utf8_build_file = Utf8PathBuf::from_path_buf(temp_build_file.to_path_buf())
-        .map_err(|path| anyhow::anyhow!("tempfile path is not UTF-8: {}", path.display()))?;
-    let resolved_options = options?;
-    let target_names = vec![String::from("first"), String::from("second")];
-    let targets = super::super::BuildTargets::new(&target_names);
-    let request = NinjaBuildRequest {
-        program: Utf8Path::new("ninja"),
-        options: &resolved_options,
-        build_file: &utf8_build_file,
-        targets: &targets,
-        env: &env,
-        stderr_mode: StderrMode::Forward,
-    };
-    let mut cmd = Command::new("ninja");
-
-    configure_ninja_build_command(&mut cmd, &request)?;
-
-    let mut expected = expected_base_arguments(&utf8_build_file)?;
-    expected.extend([
-        OsString::from("--"),
-        OsString::from("first"),
-        OsString::from("second"),
-    ]);
-    let actual = command_arguments(&cmd);
+    let (_temp_build_file, build_file) = utf8_temp_file(temp_file)?;
+    let actual = configured_arguments(
+        &build_file,
+        &options?,
+        &env,
+        NinjaInvocation::Build(&[String::from("first"), String::from("second")]),
+    )?;
+    let base = expected_base_arguments(&build_file)?;
     ensure!(
-        actual == expected,
-        "multi-target build command argument order changed: {actual:?}"
+        actual.get(..base.len()) == Some(base.as_slice()),
+        "multi-target build command must preserve the base arguments: {actual:?}"
+    );
+    ensure!(
+        actual.get(base.len()..)
+            == Some(
+                [
+                    OsString::from("--"),
+                    OsString::from("first"),
+                    OsString::from("second"),
+                ]
+                .as_slice()
+            ),
+        "multi-target build command must terminate operands with --: {actual:?}"
     );
     Ok(())
 }
@@ -218,29 +254,18 @@ fn tool_configuration_preserves_argument_order(
     options: io::Result<NinjaProcessOptions>,
     env: CommandEnv,
 ) -> Result<()> {
-    let build_file = temp_file?;
-    let temp_build_file = build_file.into_temp_path();
-    let utf8_build_file = Utf8PathBuf::from_path_buf(temp_build_file.to_path_buf())
-        .map_err(|path| anyhow::anyhow!("tempfile path is not UTF-8: {}", path.display()))?;
-    let resolved_options = options?;
-    let request = NinjaToolRequest {
-        program: Utf8Path::new("ninja"),
-        options: &resolved_options,
-        build_file: &utf8_build_file,
-        tool: "clean",
-        env: &env,
-        stderr_mode: StderrMode::Forward,
-    };
-    let mut cmd = Command::new("ninja");
-
-    configure_ninja_tool_command(&mut cmd, &request)?;
-
-    let mut expected = expected_base_arguments(&utf8_build_file)?;
-    expected.extend([OsString::from("-t"), OsString::from("clean")]);
-    let actual = command_arguments(&cmd);
+    let (_temp_build_file, build_file) = utf8_temp_file(temp_file)?;
+    let actual =
+        configured_arguments(&build_file, &options?, &env, NinjaInvocation::Tool("clean"))?;
+    let base = expected_base_arguments(&build_file)?;
     ensure!(
-        actual == expected,
-        "tool command argument order changed: {actual:?}"
+        actual.get(..base.len()) == Some(base.as_slice()),
+        "tool command must preserve the base arguments: {actual:?}"
+    );
+    ensure!(
+        actual.get(base.len()..)
+            == Some([OsString::from("-t"), OsString::from("clean")].as_slice()),
+        "tool command must append the tool selector: {actual:?}"
     );
     Ok(())
 }

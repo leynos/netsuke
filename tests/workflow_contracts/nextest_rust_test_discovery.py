@@ -72,6 +72,65 @@ TEST_SOURCE_ROOTS = (REPO_ROOT / "src", REPO_ROOT / "tests")
 type RustFunction = tuple[str, str, str, str]
 
 
+def _require_source_root(root: Path) -> None:
+    """Raise when a selected source root is absent or is not a directory.
+
+    A bare glob yields nothing for such a path, so the read refuses it rather
+    than returning an empty corpus: without that check every assertion above
+    it would pass having read no test at all.
+
+    Raises
+    ------
+    WorkflowReadError
+        If ``root`` is absent or is not a directory.
+    """
+    if not root.is_dir():
+        message = f"{root} is not a directory, so no test source was read"
+        raise WorkflowReadError(message)
+
+
+def _read_rust_source(path: Path) -> str:
+    """Read one Rust source, naming the path in any failure.
+
+    Parameters
+    ----------
+    path
+        The source to read.
+
+    Returns
+    -------
+    str
+        The file text.
+
+    Raises
+    ------
+    WorkflowReadError
+        If the source is missing or does not decode as UTF-8.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        message = f"{path} could not be read: {error}"
+        raise WorkflowReadError(message) from error
+
+
+def _sources_beneath(root: Path) -> dict[Path, str]:
+    """Read every Rust source under one validated root.
+
+    Parameters
+    ----------
+    root
+        The tree to read.
+
+    Returns
+    -------
+    dict[Path, str]
+        Each `**/*.rs` path under ``root`` mapped to its text, in path order.
+    """
+    _require_source_root(root)
+    return {path: _read_rust_source(path) for path in sorted(root.rglob("*.rs"))}
+
+
 def rust_test_sources(directory: Path | None = None) -> dict[Path, str]:
     """Return every Rust test source keyed by repository path.
 
@@ -107,15 +166,7 @@ def rust_test_sources(directory: Path | None = None) -> dict[Path, str]:
     roots = TEST_SOURCE_ROOTS if directory is None else (directory,)
     sources: dict[Path, str] = {}
     for root in roots:
-        if not root.is_dir():
-            message = f"{root} is not a directory, so no test source was read"
-            raise WorkflowReadError(message)
-        for path in sorted(root.rglob("*.rs")):
-            try:
-                sources[path] = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as error:
-                message = f"{path} could not be read: {error}"
-                raise WorkflowReadError(message) from error
+        sources.update(_sources_beneath(root))
     return sources
 
 
