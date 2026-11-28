@@ -8,8 +8,7 @@ source, and propagating build capability from a command to its callers, its
 transitive callers, and the tests that consume a helper as a fixture.
 
 The corpus spans both `src/` unit tests and `tests/` integration tests, because
-a Nextest filter can name either tree; reading only `tests/` would report a
-filtered unit test as undeclared.
+a Nextest filter can name either tree.
 
 This is the Rust-source half of the pair. The Nextest-configuration half — the
 filters and the accepted selector grammar — lives in
@@ -117,7 +116,19 @@ def _read_rust_source(path: Path) -> str:
 def _sources_beneath(root: Path) -> dict[Path, str]:
     """Read every Rust source under one validated root, in path order."""
     _require_source_root(root)
-    return {path: _read_rust_source(path) for path in sorted(root.rglob("*.rs"))}
+
+    def fail(error: OSError) -> None:
+        """Raise for an enumeration failure, naming the directory."""
+        message = f"{error.filename or root} could not be enumerated: {error}"
+        raise WorkflowReadError(message) from error
+
+    paths = sorted(
+        directory / name
+        for directory, _, files in root.walk(on_error=fail)
+        for name in files
+        if name.endswith(".rs")
+    )
+    return {path: _read_rust_source(path) for path in paths}
 
 
 def rust_test_sources(directory: Path | None = None) -> dict[Path, str]:
@@ -142,15 +153,9 @@ def rust_test_sources(directory: Path | None = None) -> dict[Path, str]:
     -------
     dict[Path, str]
         Each `**/*.rs` path under the selected roots mapped to its text, in
-        root order and then path order.
-
-    Notes
-    -----
-    Read failures propagate from `_sources_beneath` as `WorkflowReadError`
-    when a source is missing or does not decode as UTF-8, or when a selected
-    root is absent or is not a directory. A contract that could not read a
-    source cannot say anything about the tests it declares, so the failure is
-    raised rather than left to surface as an empty corpus.
+        root order and then path order. Read and enumeration failures
+        propagate as `WorkflowReadError`, so an unreadable corpus cannot pass
+        as an empty one.
     """
     roots = TEST_SOURCE_ROOTS if directory is None else (directory,)
     sources: dict[Path, str] = {}
