@@ -1,0 +1,18 @@
+diff --git a/src/manifest/expand/mod.rs b/src/manifest/expand/mod.rs
+index aef7e79f1..2d9b2216b 100644
+--- a/src/manifest/expand/mod.rs
++++ b/src/manifest/expand/mod.rs
+@@ -212,11 +212,11 @@ fn expand_foreach_target(
+         crate::localization::keys::MANIFEST_FOREACH_NOT_ITERABLE,
+     ))?;
+     let mut expanded = Vec::new();
+-    for (index, item) in iter.enumerate() {
++    for item in iter {
+         let foreach_item = ForeachItem {
+             source: map,
+             item: &item,
+-            index,
++            index: expanded.len(),
+         };
+         if let Some(entry) = expand_foreach_item(&foreach_item, context, report)? {
+             expanded.push(entry);

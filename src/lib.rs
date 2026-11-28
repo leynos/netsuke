@@ -14,6 +14,8 @@ pub mod hex;
 mod host;
 pub(crate) use host::matching as host_matching;
 pub use host::pattern as host_pattern;
+#[cfg(test)]
+mod arbitrary_json_test_support;
 pub mod ir;
 mod json_envelope;
 #[cfg(feature = "lint")]

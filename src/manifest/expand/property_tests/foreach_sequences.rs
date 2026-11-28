@@ -1,14 +1,14 @@
 //! Generated invariants for manifest foreach expansion.
-//!
-//! The fixed cases pin specific regressions, while these properties vary
-//! sequence values, filtering, variable collisions, and source key order.
 
+use super::super::tests::targets;
 use super::super::*;
 use crate::manifest::ManifestBudgetLimits;
 use minijinja::Environment;
 use proptest::prelude::*;
 
 proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
     /// A bounded foreach consumes no more entries than its configured ceiling.
     #[test]
     fn foreach_budget_terminates_deterministically_at_the_cardinality_limit(
@@ -151,44 +151,5 @@ proptest! {
             prop_assert_eq!(vars.get("item").and_then(ManifestValue::as_i64), Some(i64::from(*value)));
             prop_assert_eq!(vars.get("index").and_then(ManifestValue::as_u64), Some(index as u64));
         }
-    }
-
-    /// Expansion removes `foreach` without reordering user-specified map keys.
-    #[test]
-    fn foreach_preserves_generated_source_key_order(order in prop_oneof![
-        Just(vec!["name", "vars", "after"]),
-        Just(vec!["name", "after", "vars"]),
-        Just(vec!["vars", "name", "after"]),
-        Just(vec!["vars", "after", "name"]),
-        Just(vec!["after", "name", "vars"]),
-        Just(vec!["after", "vars", "name"]),
-    ]) {
-        let env = Environment::new();
-        let mut yaml = String::from("targets:\n");
-        for (index, key) in order.iter().enumerate() {
-            yaml.push_str(if index == 0 { "  - " } else { "    " });
-            match *key {
-                "name" => yaml.push_str("name: ordered\n"),
-                "vars" => yaml.push_str("vars:\n      static: keep\n"),
-                "after" => yaml.push_str("after: done\n"),
-                _ => return Err(TestCaseError::fail("property strategy produced an unknown key".to_owned())),
-            }
-        }
-        yaml.push_str("    foreach: [value]");
-        let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)
-            .map_err(|error| TestCaseError::fail(error.to_string()))?;
-        expand_foreach(&mut doc, &env)
-            .map_err(|error| TestCaseError::fail(error.to_string()))?;
-        let expanded = targets(&doc).map_err(|error| TestCaseError::fail(error.to_string()))?;
-
-        prop_assert_eq!(expanded.len(), 1);
-        let entry = expanded.first().ok_or_else(|| {
-            TestCaseError::fail("expected one expanded target after length check".to_owned())
-        })?;
-        let map = entry.as_object().ok_or_else(|| {
-            TestCaseError::fail(format!("expanded target should be an object: {entry:?}"))
-        })?;
-        let keys: Vec<_> = map.keys().map(String::as_str).collect();
-        prop_assert_eq!(keys, order);
     }
 }

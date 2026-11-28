@@ -171,6 +171,13 @@ should lock down these invariants:
 - key order is preserved where the implementation intends to preserve it, and
 - rendering is idempotent once no Jinja syntax remains.[^9]
 
+The first five now exist: clauses `C-1` to `C-5` in `docs/netsuke-design.md`
+section 2.5, verified in `src/manifest/expand/property_tests/` over a shared
+model and an oracle that predicts expansion output without calling production
+code. A fixed-seed coverage tripwire keeps each generator's classes reachable,
+and six mutation patches record that each property fails when its fault is
+seeded. The rendering-idempotence bullet belongs to 4.3.3 and is still open.
+
 ### Optional Verus proof kernel
 
 Verus is optional in phase 1 and remains proof-kernel-only. A proof kernel is a

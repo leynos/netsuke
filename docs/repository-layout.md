@@ -464,6 +464,23 @@ assertions, but it must not be used by production code or the Kani harnesses.
 Keep those proof and production boundaries explicit; move a helper here only
 when it serves more than one command-interpolation property test.
 
+### `src/arbitrary_json_test_support.rs`
+
+Crate-level, `#[cfg(test)]` support holding one Proptest strategy over
+arbitrary JSON values. The shell-selection decoder and the manifest-expansion
+properties share it rather than keeping copies that drift. It carries no
+manifest knowledge: its string leaf is a parameter, and callers compose extra
+leaf kinds themselves. Production code must not depend on it.
+
+### `src/manifest/expand/property_tests/`
+
+The generated suites for manifest expansion, one module per obligation,
+described by the clauses in `docs/netsuke-design.md` section 2.5. `strategy/`
+holds the authored-entry model and generators, `model.rs` the oracle, and
+`support.rs` the expansion driver. `coverage/` is the non-vacuity tripwire. The
+`property_tests` segment is load-bearing: `make proptest` selects suites by it.
+No production code may import it.
+
 ### `src/ir/cmd_interpolate/power_shell_tests.rs`
 
 This test-only module owns the command-interpolation cases for protected

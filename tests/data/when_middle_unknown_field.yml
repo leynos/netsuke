@@ -1,0 +1,7 @@
+netsuke_version: "1.0.0"
+targets:
+  - name: ordered
+    when: "true"
+    zz_first: 1
+    command: echo ordered
+    zz_last: 2

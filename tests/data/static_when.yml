@@ -1,0 +1,24 @@
+netsuke_version: "1.0.0"
+vars:
+  keep: true
+  drop: false
+targets:
+  - name: kept-literal
+    command: echo kept-literal
+    when: "true"
+  - name: dropped-literal
+    command: echo dropped-literal
+    when: "false"
+  - name: kept-by-vars
+    command: echo kept-by-vars
+    when: keep
+  - name: dropped-by-vars
+    command: echo dropped-by-vars
+    when: drop
+actions:
+  - name: kept-action
+    command: echo kept-action
+    when: keep
+  - name: dropped-action
+    command: echo dropped-action
+    when: "false"

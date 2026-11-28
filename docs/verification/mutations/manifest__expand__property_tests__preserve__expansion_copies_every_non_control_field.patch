@@ -1,0 +1,13 @@
+diff --git a/src/manifest/expand/mod.rs b/src/manifest/expand/mod.rs
+index aef7e79f1..8f2241dae 100644
+--- a/src/manifest/expand/mod.rs
++++ b/src/manifest/expand/mod.rs
+@@ -250,7 +250,7 @@ fn expand_foreach_item(
+         .charge_expanded_entry(ManifestBudgetStage::ExpansionAggregate)
+         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
+     let mut entry = foreach_item.source.clone();
+-    entry.shift_remove("foreach");
++    entry.retain(|key, _| matches!(key.as_str(), "name" | "command" | "vars" | "when"));
+     match when_allows(
+         &mut entry,
+         context,

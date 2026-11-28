@@ -744,6 +744,51 @@ Jinja control structures cannot shape the YAML; all templating must occur
 within the string values. The resulting build graph is still fully static and
 behaves the same as if every target were declared explicitly.
 
+#### Expansion invariants
+
+Expansion is a pure transform of the parsed manifest value. The obligations are
+stated as clauses `C-1` to `C-5` so tests, diagnostics, and later design work
+can cite them.
+
+- `C-1` **Verbatim copy.** Every field that is not a control key (`foreach`,
+  `when`) is copied into each generated entry unchanged. `vars` is the only
+  field that expansion itself edits.
+- `C-2` **Authoring key order.** An expanded entry's key sequence is the source
+  key sequence with the control keys deleted, keeping the relative order of
+  every other key. A `foreach` entry that has no `vars` gains `vars` at the end.
+  `item` and `index` are appended to the `vars` key sequence, or keep their
+  position when the author already wrote that key. Static entries gain no keys.
+  Both control-key removals use `shift_remove`, because
+  `serde_json::Map::remove` is a `swap_remove` under `preserve_order` and would
+  move the entry's last key into the vacated slot whenever two or more keys
+  follow the control key.
+- `C-3` **Iteration values.** `item` is the iteration value as the evaluator
+  returns it, and `index` is its zero-based position as a `u64`. Both override
+  colliding user `vars` entries in place. Sequence order is preserved, but the
+  keys of an object `item` arrive sorted, because MiniJinja is built without
+  `preserve_order` and stores maps as a `BTreeMap`; nested key order inside an
+  `item` is therefore outside `C-2`.
+- `C-4` **Conditions.** `when` must be a non-empty string. It is evaluated
+  over the entry's own `vars`, plus `item` and `index` for a `foreach` entry,
+  with manifest-level `vars`, `env`, `glob`, and the standard library available
+  as environment globals. It is removed whether the entry is kept or dropped.
+  The clause covers static and `foreach` entries in both the `targets` and
+  `actions` sections. A static entry whose `vars` is not an object is evaluated
+  against an empty context rather than rejected. A bare undefined name excludes
+  the entry, because `MiniJinja` truthiness reads the undefined value as false;
+  an undefined name that an expression consumes — as an operand, in a
+  comparison, or as a template substitution — is an error under the strict
+  undefined setting.
+- `C-5` **Outside the contract.** Manifest-query mode, where a refused helper
+  leaves an entry `Conditional` and expansion adds the synthetic
+  `conditional: true` field, and the document state observable after an error,
+  are not part of these invariants.
+
+ADR-0003 scopes `foreach` and `when` to "manifest targets" and rejects
+*action-level* control keys: expansion of the steps inside a target's own
+recipe. The top-level `actions` section stays in scope under that reading; it
+is a list of target-shaped entries, and the same pass walks both sections.
+
 ### 2.6 Planned Recipe Ergonomics and Execution Feedback
 
 The string-based recipe model lets authors write ordinary shell syntax without
@@ -1339,17 +1384,17 @@ presenting a stable public API surface. The `serde_json` library is built with
 the `preserve_order` feature so the backing `ManifestMap` retains the insertion
 order observed in the YAML manifest. This guarantees that downstream consumers
 see keys in a stable sequence after foreach expansion, matching the authoring
-intent and keeping diagnostics and serialized output predictable. Targets also
-accept optional `phony` and `always` booleans. They default to `false`, making
-it explicit when an action should run regardless of file timestamps. Targets
-listed in the `actions` section are deserialized using a custom helper so they
-are always treated as `phony` tasks. This ensures preparation actions never
-generate build artefacts. Convenience functions in `src/manifest/mod.rs` load a
-manifest from a string or a file path, returning `anyhow::Result` for
-straightforward error handling. Diagnostics now wrap source and manifest
-identifiers in the `ManifestSource` and `ManifestName` newtypes, allowing
-downstream tooling to reuse the strongly typed strings when producing errors or
-logs.
+intent and keeping diagnostics and serialized output predictable (clause `C-2`,
+*Expansion invariants* in section 2.5). Targets also accept optional `phony` and
+`always` booleans. They default to `false`, making it explicit when an action
+should run regardless of file timestamps. Targets listed in the `actions`
+section are deserialized using a custom helper so they are always treated as
+`phony` tasks. This ensures preparation actions never generate build artefacts.
+Convenience functions in `src/manifest/mod.rs` load a manifest from a string or
+a file path, returning `anyhow::Result` for straightforward error handling.
+Diagnostics now wrap source and manifest identifiers in the `ManifestSource` and
+`ManifestName` newtypes, allowing downstream tooling to reuse the strongly
+typed strings when producing errors or logs.
 
 The ingestion pipeline now parses the manifest as YAML before any Jinja
 evaluation. A dedicated expansion pass handles `foreach` and `when`, and string

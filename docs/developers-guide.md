@@ -9542,6 +9542,30 @@ removing a stem and its patch together can therefore go undetected. When one
 fault demonstrates two properties, register a separate stem and patch for each
 property so both associations remain visible.
 
+#### Manifest expansion suites
+
+The expansion-clause suites for `docs/netsuke-design.md` section 2.5 live in
+`src/manifest/expand/property_tests/`, one module per obligation, behind
+`#[cfg(test)]`. They share `strategy/` (the authored-entry model and its
+generators), `model.rs` (the oracle), and `support.rs` (the strict-undefined
+environment and the expansion driver); a second generator or oracle would
+restate the contract and drift from it.
+
+The oracle reads the model, never the rendered map, and never removes a key
+from a `serde_json::Map`, because the removal is what several properties test.
+Conditions come from a closed set; only boolean-valued shapes have a template
+form, since a template rendering an integer falls back to false.
+
+`coverage/` is the non-vacuity tripwire: it classifies a fixed-seed sample of
+each generator, fails below a five-percent floor per class, and carries a
+negative control. Add a class there when a new property depends on a shape the
+existing lists do not name.
+
+The shared JSON strategy lives in `src/arbitrary_json_test_support.rs` because
+the shell-selection decoder needs it too. It is test-only support owned by the
+crate root, carries no manifest knowledge, takes its string leaf as a
+parameter, and callers compose extra leaves at their own call site.
+
 ### Parametrized unit tests with rstest
 
 Plain `#[rstest]` (not rstest-bdd) is used for exhaustive state-enumeration
@@ -10462,6 +10486,12 @@ metadata, such as a non-object `vars` value, expression parse or evaluation
 failures in `foreach` or `when`, and serialization failures while copying the
 MiniJinja item value into manifest `vars`. Propagate these errors with context
 rather than defaulting to a partially expanded `ManifestValue`.
+
+An entry without `foreach` is not passed through unchanged: it loses `when`,
+which is evaluated and removed, and keeps every other key in authoring order.
+The full contract is stated as clauses `C-1` to `C-5` in
+`docs/netsuke-design.md` section 2.5 and is verified by the suites described
+under *Manifest expansion suites* above.
 
 Minimal target-level example:
 

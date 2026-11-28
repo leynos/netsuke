@@ -1,0 +1,13 @@
+diff --git a/src/manifest/expand/mod.rs b/src/manifest/expand/mod.rs
+index aef7e79f1..fe5e61ae4 100644
+--- a/src/manifest/expand/mod.rs
++++ b/src/manifest/expand/mod.rs
+@@ -289,7 +289,7 @@ fn expand_static_target(
+         WhenResolution::Include => Ok(vec![ManifestValue::Object(map)]),
+         WhenResolution::Exclude(event) => {
+             report.record_filtered_entry(context.section == "targets", event);
+-            Ok(Vec::new())
++            Ok(vec![ManifestValue::Object(map)])
+         }
+         WhenResolution::Conditional => {
+             map.insert("conditional".into(), ManifestValue::Bool(true));

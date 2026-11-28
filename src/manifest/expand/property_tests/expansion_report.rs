@@ -1,11 +1,6 @@
 //! Property-based tests for manifest `foreach`/`when` expansion invariants.
-//!
-//! These complement the example-based cases in `condition_cases.rs` by
-//! checking the expansion contract across generated inputs: entry counts,
-//! index sequencing, `when` determinism, whitespace-only `when` rejection,
-//! and `foreach` key removal.
 
-use super::*;
+use super::super::*;
 use minijinja::Environment;
 use proptest::prelude::*;
 use serde_json::json;
@@ -33,8 +28,7 @@ fn item_names(max: usize) -> impl Strategy<Value = Vec<String>> {
     proptest::collection::vec("[a-z]{1,8}", 0..=max)
 }
 
-/// Strategy producing items drawn from a keep/skip alphabet so `when`
-/// expressions filter a meaningful subset.
+/// Draw items from a keep/skip alphabet so `when` has both verdicts.
 fn keep_skip_items(max: usize) -> impl Strategy<Value = Vec<String>> {
     proptest::collection::vec(
         prop_oneof![Just("keep".to_owned()), Just("skip".to_owned())],
@@ -53,8 +47,9 @@ fn expanded_entries<'a>(
 }
 
 proptest! {
-    /// Absent `when` filtering, a list of `n` items expands to exactly `n`
-    /// entries.
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
+    /// Absent `when` filtering, a list of `n` items expands to `n` entries.
     #[test]
     fn expansion_yields_one_entry_per_item(items in item_names(10)) {
         let env = Environment::new();
@@ -69,8 +64,7 @@ proptest! {
         }
     }
 
-    /// `index` values across expanded entries are unique and form the
-    /// sequence `0..n`.
+    /// `index` values across expanded entries are unique and form `0..n`.
     #[test]
     fn indexes_are_sequential_and_unique(items in item_names(10)) {
         let env = Environment::new();
@@ -93,8 +87,7 @@ proptest! {
         }
     }
 
-    /// Every `foreach` clone keeps its discovery metadata so final rendering
-    /// can resolve the same item-specific description as the target name.
+    /// Every `foreach` clone keeps its discovery metadata for final rendering.
     #[test]
     fn foreach_preserves_description_templates(items in item_names(10)) {
         let env = Environment::new();
@@ -137,8 +130,7 @@ proptest! {
         }
     }
 
-    /// Re-evaluating the same `when` expression on the same input always
-    /// produces the same set of entries.
+    /// Re-evaluating the same `when` expression on the same input agrees.
     #[test]
     fn when_filtering_is_deterministic(items in keep_skip_items(10)) {
         let env = Environment::new();
@@ -195,8 +187,7 @@ proptest! {
         }
     }
 
-    /// Any `when` value composed solely of whitespace characters is rejected,
-    /// regardless of whitespace kind or length.
+    /// Any `when` value of only whitespace characters is rejected outright.
     #[test]
     fn whitespace_only_when_is_rejected(
         ws in proptest::collection::vec(
@@ -215,9 +206,8 @@ proptest! {
         let expr: String = ws.into_iter().collect();
         for section in ["targets", "actions"] {
             let mut doc = foreach_doc(section, &items, Some(&expr));
-            // The whitespace-only check applies on the iteration path and the
-            // plain path alike; with zero items the `when` clause is never
-            // reached, so anchor the non-iterating variant too.
+            // The check applies on both paths; with zero items the `when`
+            // clause is never reached, so anchor the non-iterating variant.
             let mut plain_section = ManifestMap::new();
             plain_section.insert(
                 section.into(),

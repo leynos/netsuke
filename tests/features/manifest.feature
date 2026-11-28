@@ -190,6 +190,27 @@ Feature: Manifest Parsing
     And the action 2 command is "echo 'test'"
     And the action 2 index is 2
 
+  Scenario: Parsing names the first unknown field in authoring order
+    Given the manifest file "tests/data/when_middle_unknown_field.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "unknown field `zz_first`"
+
+  Scenario: Static targets and actions honour when
+    Given the manifest file "tests/data/static_when.yml" is parsed
+    When the manifest is checked
+    Then the manifest has 2 targets
+    And the target 1 name is "kept-literal"
+    And the target 2 name is "kept-by-vars"
+    And the manifest has 1 actions
+    And the action 1 name is "kept-action"
+
+  Scenario: Parsing fails when a when condition is not a string
+    Given the manifest file "tests/data/when_not_string.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "must be a string."
+
   Scenario: Selecting a fallback action when a command is unavailable
     Given the manifest file "tests/data/actions_command_available_absent.yml" is parsed
     When the manifest is checked

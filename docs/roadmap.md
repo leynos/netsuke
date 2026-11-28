@@ -643,13 +643,21 @@ and test workflow intact. See
   The directed regression for the measured crashing shape is
   `src/ninja_gen/determinism/property_tests/ninja_oracle/relay_regression.rs`,
   and the historical seed that reproduced the crash is not committed.
-- [ ] 4.3.2. Add Proptest coverage for manifest expansion invariants. Requires
+- [x] 4.3.2. Add Proptest coverage for manifest expansion invariants. Requires
   4.1.1. See the
   [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).
-  - [ ] Prove `foreach` preserves non-control fields.
-  - [ ] Prove `when` is removed after evaluation.
-  - [ ] Prove `item` and `index` are injected correctly for each expansion.
-  - [ ] Prove static targets still honour `when`.
+  - [x] Prove `foreach` preserves non-control fields.
+  - [x] Prove `when` is removed after evaluation.
+  - [x] Prove `item` and `index` are injected correctly for each expansion.
+  - [x] Prove static targets still honour `when`.
+  Completed:
+  [execplan 4.3.2](execplans/4-3-2-manifest-expansion-invariant-proptests.md)
+  delivers the suites and the `C-1` to `C-5` clauses in
+  [the design document](netsuke-design.md#expansion-invariants). Each
+  obligation has a mutation patch its named property fails on, a coverage
+  tripwire keeps every generator class reachable, and clause `C-2` also fixed a
+  real defect: `swap_remove` reordered keys after a control key, so an
+  unknown-field error could name a later field than the first one written.
 - [ ] 4.3.3. Add Proptest coverage for render stability. Requires 4.3.2. See
   the
   [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).
