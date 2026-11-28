@@ -8922,9 +8922,12 @@ governs the non-doctest pass only, and deliberately stays small:
   `tests/workflow_contracts/nextest_child_cargo_group_invariants.py` reads the
   Nextest configuration and constrains the accepted selector grammar;
   `tests/workflow_contracts/nextest_rust_test_discovery.py` classifies the Rust
-  integration tests as declared, parameterized (those carrying `#[case]`
+  test sources as declared, parameterized (those carrying `#[case]`
   attributes), or build-capable (reaching a child Cargo build directly or
-  through helper and fixture layers).
+  through helper and fixture layers). Its corpus spans the `src/` unit tests
+  and the `tests/` integration tests, because a filter may name either tree;
+  reading only `tests/` would report the three configuration cases that filter
+  the Windows temp-file retry as undeclared.
   `tests/workflow_contracts/nextest_child_cargo_syntax_test.py` consumes the
   discovery helper too, and production code must not import any of them. Those
   contracts read the configuration as text, which is all a static read can do:
@@ -9066,8 +9069,9 @@ to the change under test.
 
 `tempfile` reports the failure through its private `PathError`, whose `Display`
 implementation is `<io error> at path <path>`. That wrapper preserves the
-underlying `io::ErrorKind`, so the fixture can recognise the retryable case.
-The fix is an operation-scoped retry in `src/runner/process/configure/tests.rs`:
+underlying `io::ErrorKind`, so the fixture can recognize the retryable case.
+The fix is an operation-scoped retry in
+`src/runner/process/configure/tests/mod.rs`:
 
 - `NamedTempFile::new()` is attempted at most five times.
 - Only `io::ErrorKind::PermissionDenied` is retried. Every other error returns
