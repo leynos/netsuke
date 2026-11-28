@@ -1,4 +1,4 @@
-"""Classify Rust integration tests for the nested Cargo build contracts.
+"""Classify workspace Rust test sources for the nested Cargo build contracts.
 
 The ``nested-cargo-builds`` Nextest group only serializes a test whose name a
 filter actually selects, so the contract tests need to know which tests exist
@@ -6,6 +6,9 @@ and which of them spawn a build-capable child Cargo command. That classification
 lives here: parsing function attributes and signatures out of masked Rust
 source, and propagating build capability from a command to its callers, its
 transitive callers, and the tests that consume a helper as a fixture.
+
+The corpus spans both `src/` unit tests and `tests/` integration tests, because
+a Nextest filter can name either tree.
 
 This is the Rust-source half of the pair. The Nextest-configuration half — the
 filters and the accepted selector grammar — lives in
@@ -59,15 +62,77 @@ RETAINED_RUST_LITERALS = {
 # by `_calls_build_helper`, and matching it here would attribute the call to an
 # unrelated free function that happens to share the name.
 BARE_BUILD_CALL = re.compile(r"(?<![.:\w])build\s*\(")
-# The corpus is read from this directory unless a caller names another, so a
+# The corpus is read from these directories unless a caller names another, so a
 # probe can point the discovery at a scratch tree and confirm what it finds
-# there without reaching into the production tree.
-TEST_SOURCE_ROOT = REPO_ROOT / "tests"
+# there without reaching into the production tree. Both roots matter: a filter
+# may name a unit test declared under `src/` as well as an integration test
+# under `tests/`.
+TEST_SOURCE_ROOTS = (REPO_ROOT / "src", REPO_ROOT / "tests")
 type RustFunction = tuple[str, str, str, str]
 
 
+def _require_source_root(root: Path) -> None:
+    """Raise when a selected source root is absent or is not a directory.
+
+    A bare glob yields nothing for such a path, so the read refuses it rather
+    than returning an empty corpus: without that check every assertion above
+    it would pass having read no test at all.
+
+    Raises
+    ------
+    WorkflowReadError
+        If ``root`` is absent or is not a directory.
+    """
+    if not root.is_dir():
+        message = f"{root} is not a directory, so no test source was read"
+        raise WorkflowReadError(message)
+
+
+def _read_rust_source(path: Path) -> str:
+    """Read one Rust source, naming the path in any failure.
+
+    Parameters
+    ----------
+    path
+        The source to read.
+
+    Returns
+    -------
+    str
+        The file text.
+
+    Raises
+    ------
+    WorkflowReadError
+        If the source is missing or does not decode as UTF-8.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        message = f"{path} could not be read: {error}"
+        raise WorkflowReadError(message) from error
+
+
+def _sources_beneath(root: Path) -> dict[Path, str]:
+    """Read every Rust source under one validated root, in path order."""
+    _require_source_root(root)
+
+    def fail(error: OSError) -> None:
+        """Raise for an enumeration failure, naming the directory."""
+        message = f"{error.filename or root} could not be enumerated: {error}"
+        raise WorkflowReadError(message) from error
+
+    paths = sorted(
+        directory / name
+        for directory, _, files in root.walk(on_error=fail)
+        for name in files
+        if name.endswith(".rs")
+    )
+    return {path: _read_rust_source(path) for path in paths}
+
+
 def rust_test_sources(directory: Path | None = None) -> dict[Path, str]:
-    """Return every Rust integration-test source keyed by repository path.
+    """Return every Rust test source keyed by repository path.
 
     The read is eager rather than left to a comprehension, so that the error
     names the path that caused it instead of the discovery that asked for it.
@@ -79,33 +144,23 @@ def rust_test_sources(directory: Path | None = None) -> dict[Path, str]:
     Parameters
     ----------
     directory
-        The tree to read; the repository's `tests` directory by default.
+        The tree to read. When omitted, every default source root is read —
+        `src/` for unit tests and `tests/` for integration tests — because a
+        Nextest filter can name either. Naming a directory reads only that
+        tree, so a probe can point the discovery at a scratch tree.
 
     Returns
     -------
     dict[Path, str]
-        Each `**/*.rs` path under ``directory`` mapped to its text, in path
-        order.
-
-    Raises
-    ------
-    WorkflowReadError
-        If a source is missing or does not decode as UTF-8, or if
-        ``directory`` is absent or is not a directory. A contract that could
-        not read a source cannot say anything about the tests it declares, so
-        the failure is raised rather than left to surface as an empty corpus.
+        Each `**/*.rs` path under the selected roots mapped to its text, in
+        root order and then path order. Read and enumeration failures
+        propagate as `WorkflowReadError`, so an unreadable corpus cannot pass
+        as an empty one.
     """
-    root = TEST_SOURCE_ROOT if directory is None else directory
-    if not root.is_dir():
-        message = f"{root} is not a directory, so no test source was read"
-        raise WorkflowReadError(message)
+    roots = TEST_SOURCE_ROOTS if directory is None else (directory,)
     sources: dict[Path, str] = {}
-    for path in sorted(root.rglob("*.rs")):
-        try:
-            sources[path] = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as error:
-            message = f"{path} could not be read: {error}"
-            raise WorkflowReadError(message) from error
+    for root in roots:
+        sources.update(_sources_beneath(root))
     return sources
 
 
@@ -323,10 +378,10 @@ def declared_test_names(directory: Path | None = None) -> dict[str, set[str]]:
     Parameters
     ----------
     directory
-        The tree to read; the repository's `tests` directory by default, and
-        forwarded to `rust_test_sources` so the read boundary stays in one
-        place rather than being reached ambiently from a second caller. The
-        read is fallible in the ways `rust_test_sources` documents.
+        The tree to read; every default source root by default, and forwarded
+        to `rust_test_sources` so the read boundary stays in one place rather
+        than being reached ambiently from a second caller. The read is fallible
+        in the ways `rust_test_sources` documents.
 
     Returns
     -------
