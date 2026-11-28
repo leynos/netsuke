@@ -8926,8 +8926,8 @@ governs the non-doctest pass only, and deliberately stays small:
   attributes), or build-capable (reaching a child Cargo build directly or
   through helper and fixture layers). Its corpus spans the `src/` unit tests
   and the `tests/` integration tests, because a filter may name either tree;
-  reading only `tests/` would report the three configuration cases that filter
-  the Windows temp-file retry as undeclared.
+  reading only `tests/` would report the four cases that filter the Windows
+  temp-file retry as undeclared.
   `tests/workflow_contracts/nextest_child_cargo_syntax_test.py` consumes the
   discovery helper too, and production code must not import any of them. Those
   contracts read the configuration as text, which is all a static read can do:
@@ -9088,7 +9088,7 @@ The fix is an operation-scoped retry in
   `temp_file retry: attempt N/5 failed with <error>; retrying in <delay> ms` to
   standard error.
 
-The three cases that consume the fixture carry `success-output = "immediate"` in
+The four cases that consume the fixture carry `success-output = "immediate"` in
 `.config/nextest.toml`, so that line appears in the Windows `Test` step log on
 a passing run rather than waiting for the final report. Search the Windows log
 for `temp_file retry:` when a pass follows a denial, or when a failure needs to

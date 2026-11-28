@@ -52,7 +52,7 @@ fn temp_file_with(
 
 /// Announce a permission-denied retry on standard error before backing off.
 ///
-/// The three configuration cases carry `success-output = "immediate"` in
+/// The cases that consume the fixture carry `success-output = "immediate"` in
 /// `.config/nextest.toml`, so this line reaches the Windows Test step log on a
 /// passing run rather than being inferred from a pass.
 fn report_temp_file_retry(error: &io::Error, attempt: u32, delay: Duration) {
