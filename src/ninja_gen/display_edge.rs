@@ -1,4 +1,23 @@
-//! Ninja build-edge display rendering.
+//! Render one build edge as the statement or statements Ninja consumes.
+//!
+//! The display layer sits between the graph and the Ninja text and owns the
+//! two shapes an edge can take. An ordinary edge renders as one `build`
+//! statement naming its declared outputs. An executable `phony` edge renders
+//! as two: a hidden statement whose output is a content-addressed path under
+//! `.netsuke/phony`, and a native `phony` alias that publishes the declared
+//! names so dependants and `netsuke clean` still see them. The hidden shape
+//! exists because a user file at a declared name must never look like the
+//! recipe's product.
+//!
+//! Several inputs come from other generated-state owners. `edge_metadata`
+//! decides the edge class and selects the hidden output; `force_run` owns the
+//! shared force node, which [`FORCE_PATH`] names as a render-time implicit
+//! dependency when [`DisplayEdge::needs_force`] is set; and the dyndep render
+//! path supplies lowered serial gates in place of the raw implicit list. The
+//! hidden statement is also the only one that carries the directory-preparation
+//! nodes, as order-only dependencies, because Ninja prepares a real output's
+//! parents itself. A rule-level `restat` is cleared on the hidden statement,
+//! because a hidden output that is never created cannot prune dependants.
 
 use super::CONSOLE_POOL;
 use super::escape::NinjaValue;

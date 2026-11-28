@@ -9842,17 +9842,18 @@ command, which every `build`, `clean`, and `generate` boundary must call before
 writing or invoking the main file. It takes the caller's resolved `Workspace`,
 so publication writes into the directory that caller resolved. On `build` that
 directory is the one the reservation refusal judged, because
-`refuse_publish_prune_and_reset` refuses before it publishes; `generate` and
-the Ninja tool paths resolve a workspace but do not run the refusal, so their
-publication carries no reservation guarantee. The Ninja tool path, which holds
-no workspace, uses `materialize_dyndep_bundle_in` and `prune_dyndep_bundle_in`
-with the handle it opened for that invocation. Either form injects the
-directory handle into `src/runner/process/dyndep/files/mod.rs`, which owns
-atomic sidecar writes and content verification. The materializer may only use
-that injected `Dir`; it must not inspect CLI state or reopen ambient authority.
-It verifies existing content, then uses a same-directory temporary file plus
-atomic rename. Keep generated sidecars content-addressed and idempotent;
-corruption is an error, not a reason to overwrite an unknown file.
+`refuse_publish_prune_and_reset` refuses before it publishes. `generate` also
+resolves a workspace, but it does not run the refusal, so its publication
+carries no reservation guarantee. The Ninja tool path holds no workspace: it
+opens one directory for the invocation and uses `materialize_dyndep_bundle_in`
+and `prune_dyndep_bundle_in` with that handle, so it likewise publishes without
+a reservation guarantee. Either form injects the directory handle into
+`src/runner/process/dyndep/files/mod.rs`, which owns atomic sidecar writes and
+content verification. The materializer may only use that injected `Dir`; it
+must not inspect CLI state or reopen ambient authority. It verifies existing
+content, then uses a same-directory temporary file plus atomic rename. Keep
+generated sidecars content-addressed and idempotent; corruption is an error,
+not a reason to overwrite an unknown file.
 
 `src/runner/process/dyndep/directory/mod.rs` establishes the generated-state
 directory. `.netsuke` and `.netsuke/dyndep` are project-controlled, so a
