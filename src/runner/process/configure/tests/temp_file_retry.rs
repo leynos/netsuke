@@ -13,9 +13,9 @@ use std::collections::VecDeque;
 /// budget is spent.
 ///
 /// This is the seam the unit tests drive: `create` supplies the scripted
-/// results and `before_retry` records the attempt, the error, and the delay.
-/// The hook runs before the sleep, so a test observes the schedule without
-/// having to wait for it.
+/// results and `before_retry` observes the attempt, the error, and the delay.
+/// The hook owns the wait, so the production hook sleeps while a recording
+/// test hook returns immediately.
 ///
 /// # Errors
 ///
@@ -39,7 +39,6 @@ pub(super) fn retry_permission_denied<T>(
             return Err(error);
         };
         before_retry(&error, attempt, delay);
-        std::thread::sleep(delay);
         attempt = attempt.saturating_add(1);
     }
 }

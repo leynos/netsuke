@@ -50,7 +50,7 @@ fn temp_file_with(
     })
 }
 
-/// Announce a permission-denied retry on standard error before backing off.
+/// Announce a permission-denied retry on standard error, then back off.
 ///
 /// The cases that consume the fixture carry `success-output = "immediate"` in
 /// `.config/nextest.toml`, so this line reaches the Windows Test step log on a
@@ -64,6 +64,7 @@ fn report_temp_file_retry(error: &io::Error, attempt: u32, delay: Duration) {
          retrying in {} ms",
         delay.as_millis()
     );
+    std::thread::sleep(delay);
 }
 
 #[fixture]

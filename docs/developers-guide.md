@@ -9047,79 +9047,6 @@ lands the harness test in a group of one-at-a-time build-capable tests. Under
 that group the test is a serial link rather than a slow finisher, and the trim
 is worth more than the 85s this table supports.
 
-#### Windows temp-file fixture retries
-
-Issue 1203 records two failures of the Windows `Test` step caused by this race.
-The signature is:
-
-```text
-Error: Access is denied. (os error 5) at path "C:\Users\RUNNER~1\AppData\Local\Temp\.tmpQ4Fzrr"
-```
-
-It comes from `tempfile::NamedTempFile::new()` in the
-`runner::process::configure::tests` fixture. The occurrences were post-merge
-run 44899907704 for pull request 1142 on 2026-11-21, and pull-request run
-45694259782, job 139487414947, attempt 1, for pull request 922 on 2026-11-26.
-In the second, the failing tree differed from an immediately passing one by two
-Markdown files, `src/runner/` was untouched by the branch, and the identical
-source passed at heads `a025ed6b8` and `7e676502a`. Both failures named a
-different random `.tmpXXXXXX` path. The denial therefore belongs to the
-runner's shared `%TEMP%` directory and the ACL or cleanup race around it, not
-to the change under test.
-
-`tempfile` reports the failure through its private `PathError`, whose `Display`
-implementation is `<io error> at path <path>`. That wrapper preserves the
-underlying `io::ErrorKind`, so the fixture can recognize the retryable case.
-The fix is an operation-scoped retry in
-`src/runner/process/configure/tests/mod.rs`:
-
-- `NamedTempFile::new()` is attempted at most five times.
-- Only `io::ErrorKind::PermissionDenied` is retried. Every other error returns
-  on the first attempt.
-- The delays between attempts are fixed at 10, 20, 40 and 80 ms, with no
-  jitter. The contention is a short ACL or cleanup race, and a jittered
-  schedule would be harder to reason about without protecting against anything
-  more.
-- Each attempt asks for a fresh random name.
-- A denial that survives the fifth attempt is returned unchanged, wrapped in
-  context naming the operation and the attempt count. The original `io::Error`
-  remains the root cause, so a persistent denial still fails the test.
-- Before each backoff the hook prints
-  `temp_file retry: attempt N/5 failed with <error>; retrying in <delay> ms` to
-  standard error.
-
-The four cases that consume the fixture carry `success-output = "immediate"` in
-`.config/nextest.toml`, so that line appears in the Windows `Test` step log on
-a passing run rather than waiting for the final report. Search the Windows log
-for `temp_file retry:` when a pass follows a denial, or when a failure needs to
-be distinguished from this race; the absence of the line means no retry
-occurred. The unit tests pin the attempt bound, the delay schedule, the
-permission-only predicate, the preservation of the final error, and the
-fixture-level context. They run on every lane, so the persistent-denial case is
-exercised even where `%TEMP%` is not contended.
-
-Four alternatives were rejected:
-
-- **Redirect `TMP`/`TEMP` for the Windows `Test` step** to a directory under
-  `$GITHUB_WORKSPACE`. That changes the environment for every test in the job,
-  hides the shared-directory behaviour the fixture exists to survive, and needs
-  a cleanup and ACL policy of its own.
-- **Point the fixture at a workspace-local directory** with
-  `NamedTempFile::new_in`, or with `tempfile`'s `override_temp_dir`. That stops
-  exercising the real `%TEMP%` path and its ACL, which is the condition under
-  test.
-- **Add a Nextest retry.** That re-runs the whole test process, can mask a
-  deterministic failure in any test of the run, and hides the failing operation
-  rather than the environmental race.
-- **Provoke real ACL contention in a test.** That would need the test to
-  create the condition it is testing, which is the nondeterminism the fix
-  removes.
-
-The retry is scoped to this fixture. Do not reuse it in production `file_io.rs`
-or cap-std paths without separate evidence that the same external race exists
-there; a production retry needs its own failure model, deadline, and
-observability.
-
 #### Superseded split-build-dir harness decision
 
 The decision below describes the pre-issue-732 live-build harness. Issue 732
@@ -12965,6 +12892,103 @@ provisioned and run the following in order:
    ```
 
 4. In Git Bash, run `make SHELL=bash test`.
+
+#### Windows temp-file fixture retries
+
+Issue 1203 records two failures of the Windows `Test` step caused by this race.
+The signature is:
+
+```text
+Error: Access is denied. (os error 5) at path "C:\Users\RUNNER~1\AppData\Local\Temp\.tmpQ4Fzrr"
+```
+
+It comes from `tempfile::NamedTempFile::new()` in the
+`runner::process::configure::tests` fixture. The occurrences were post-merge
+run 44899907704 for pull request 1142 on 2026-11-21, and pull-request run
+45694259782, job 139487414947, attempt 1, for pull request 922 on 2026-11-26.
+In the second, the failing tree differed from an immediately passing one by two
+Markdown files, `src/runner/` was untouched by the branch, and the identical
+source passed at heads `a025ed6b8` and `7e676502a`. Both failures named a
+different random `.tmpXXXXXX` path. The denial therefore belongs to the
+runner's shared `%TEMP%` directory and the ACL or cleanup race around it, not
+to the change under test.
+
+`tempfile` reports the failure through its private `PathError`, whose `Display`
+implementation is `<io error> at path <path>`. That wrapper rebuilds the error
+from its kind, so the wrapped error keeps `io::ErrorKind::PermissionDenied` but
+its `raw_os_error()` is `None`; the fixture therefore keys on the kind rather
+than on Windows error code 5. Production `cap-std` paths also report a
+`PermissionDenied` with no raw OS error for a capability escape, which is why
+the retry is scoped to this test fixture rather than offered as a general
+helper.
+
+The fix is an operation-scoped retry in
+`src/runner/process/configure/tests/mod.rs`:
+
+- `NamedTempFile::new()` is attempted at most five times.
+- Only `io::ErrorKind::PermissionDenied` is retried. Every other error returns
+  as soon as it is encountered: an error on the first attempt is returned after
+  one call, while a non-permission error that follows a denial is returned on
+  the attempt that produced it.
+- The delays between attempts are fixed at 10, 20, 40 and 80 ms, with no
+  jitter. The contention is a short ACL or cleanup race, and a jittered
+  schedule would be harder to reason about without protecting against anything
+  more.
+- Each attempt asks for a fresh random name.
+- A denial that survives the fifth attempt is returned unchanged, wrapped in
+  context naming the operation and the attempt count. The original `io::Error`
+  remains the root cause, so a persistent denial still fails the test.
+- Before each backoff the hook prints
+  `temp_file retry: attempt N/5 failed with <error>; retrying in <delay> ms` to
+  standard error, then sleeps for the delay. The injected tests supply
+  recording hooks that do not sleep, so they assert the schedule without
+  waiting on the clock.
+
+The four cases that consume the fixture are
+`build_configuration_preserves_argument_order`,
+`build_configuration_terminates_multi_target_operands`,
+`tool_configuration_preserves_argument_order`, and
+`temp_file_fixture_creates_a_real_file`. They carry
+`success-output = "immediate"` in `.config/nextest.toml`, so the retry line
+appears in the Windows `Test` step log on a passing run rather than waiting for
+the final report. Search the Windows log for `temp_file retry:` when a pass
+follows a denial, or when a failure needs to be distinguished from this race.
+An absent line means that no retry was announced, unless writing to standard
+error failed, which the hook deliberately ignores. A green run without the line
+is not evidence of recovery; it shows only that no denial was announced. A
+`temp_file retry:` line followed by a pass is the direct recovery evidence, and
+the Windows run must execute against the default `%TEMP%` for that evidence to
+apply.
+
+The unit tests pin the attempt bound, the delay schedule, the permission-only
+predicate, the preservation of the final error, and the fixture-level context.
+They run on every lane, so the persistent-denial case is exercised even where
+`%TEMP%` is not contended. The three command-configuration cases now share
+`utf8_temp_file` and `configured_arguments`, so the moved file does not
+duplicate their setup; their target operands, tools, and expected arguments are
+unchanged.
+
+Four alternatives were rejected:
+
+- **Redirect `TMP`/`TEMP` for the Windows `Test` step** to a directory under
+  `$GITHUB_WORKSPACE`. That changes the environment for every test in the job,
+  hides the shared-directory behaviour the fixture exists to survive, and needs
+  a cleanup and ACL policy of its own.
+- **Point the fixture at a workspace-local directory** with
+  `NamedTempFile::new_in`, or with `tempfile`'s `override_temp_dir`. That stops
+  exercising the real `%TEMP%` path and its ACL, which is the condition under
+  test.
+- **Add a Nextest retry.** That re-runs the whole test process, can mask a
+  deterministic failure in any test of the run, and hides the failing operation
+  rather than the environmental race.
+- **Provoke real ACL contention in a test.** That would need the test to
+  create the condition it is testing, which is the nondeterminism the fix
+  removes.
+
+The retry is scoped to this fixture. Do not reuse it in production `file_io.rs`
+or cap-std paths without separate evidence that the same external race exists
+there; a production retry needs its own failure model, deadline, and
+observability.
 
 #### `PATHEXT` normalization
 
