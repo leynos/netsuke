@@ -6595,8 +6595,9 @@ select a branch in that control to exercise a feature branch.
 The caller passes two configuration inputs, each carrying intent:
 
 - `exclude-globs` — `src/ir/cycle/verification.rs`,
-  `src/ir/from_manifest/verification.rs`, `src/ir/graph/kani_map.rs`, and
-  `src/ir/cmd_interpolate/verification.rs`: modules gated behind
+  `src/ir/from_manifest/verification.rs`, `src/ir/graph/kani_map.rs`,
+  `src/ir/cmd_interpolate/verification.rs`, and
+  `src/stdlib/resource_bounds/verification.rs`: modules gated behind
   `#[cfg(kani)] mod` declarations. `cargo-mutants` does not evaluate that cfg,
   so mutants inserted there would compile to nothing and survive as noise
   rather than genuine test gaps.
@@ -8022,8 +8023,9 @@ Use the Make targets for day-to-day formal-verification checks:
 - `make kani-full` runs the complete Kani proof suite through that active-home
   `cargo-kani` executable.
 - `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.
-  It currently delegates to `make kani-full` because all Kani harnesses are IR
-  harnesses.
+  It delegates to `make kani-full`, which now also runs the stdlib
+  resource-bounds harnesses, so the name is historical: the suite is no longer
+  IR-only.
 - `make formal-pr` aliases the pull-request formal-verification smoke path.
 - `make install-verus` and `make verus` delegate to `rust-prover-tools` for
   the optional Verus installer and proof runner. `make verus` defaults to
@@ -8034,6 +8036,22 @@ Use the Make targets for day-to-day formal-verification checks:
   ```bash
   make verus VERUS_FLAGS='--proof-file "verus/first proof.rs" --proof-file verus/second.rs'
   ```
+
+  The repository holds three proofs, and the default selects only one of them.
+  `verus/canonical_value/main.rs` is the default,
+  `verus/configured_shells/main.rs` is the trusted shell-composition rule, and
+  `verus/resource_bounds/main.rs` is the combinatorial and running-total
+  arithmetic. The latter two are run by:
+
+  ```bash
+  make verus VERUS_FLAGS='--proof-file verus/configured_shells/main.rs'
+  make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'
+  ```
+
+  `.github/workflows/proofs.yml` runs all three selections as three steps of the
+  `Verus` job, so a green job means every repository proof verified; the
+  estate prover-tooling rule PT-006 requires CI to run the proofs a repository
+  holds, and the default selection alone does not cover them.
 
   The pinned CLI runs files in order, stops at the first failed proof, and
   returns the verifier's exit status. `make test-prover-tools-integration`
@@ -8057,10 +8075,11 @@ pinned CLI against a fake verifier so the batching contract is checked over
 generated batch lengths, failure positions, and exit statuses: a successful
 batch must run every proof exactly once in order, and a failing batch must run
 exactly the prefix up to and including the failing proof and report that
-proof's status. CI runs the proof through `make verus` (`proofs.yml`), but
-these cases are an optional maintainer lane, so they skip when the pinned
-install is absent; `make test-verus-e2e` sets `NETSUKE_VERUS_E2E_STRICT=1` to
-turn that skip into a failure for a maintainer who means to run them.
+proof's status. CI runs both repository proofs through `make verus`
+(`proofs.yml`, one step per proof), but these cases are an optional maintainer
+lane, so they skip when the pinned install is absent; `make test-verus-e2e` sets
+`NETSUKE_VERUS_E2E_STRICT=1` to turn that skip into a failure for a maintainer
+who means to run them.
 
 `tests/prover_tools_kani_check_tests.rs` holds the boundary around
 `make kani-check`. It requires that the query reads the pin, asks the installed
@@ -8277,27 +8296,60 @@ not select a Netsuke marker. Scanner, protected-placeholder, and guard
 behaviour remains covered by the adversarial Proptest suite over the documented
 256-character, eight-placeholder range.
 
-Table: Kani harnesses for Netsuke's intermediate-representation invariants.
+The resource-bounds harnesses drive the compiled `kernel` functions and
+`RunningTotal` directly. They exist because the Verus proof in
+`verus/resource_bounds/` reasons about a transcription of the same algorithms:
+the proof establishes the mathematics, and these harnesses narrow the
+correspondence gap by checking the production code against an independent
+`u128` oracle or against the admission contract its callers rely on. They
+narrow that gap rather than close it: a harness reaches only its stated bounds,
+and its oracle is a second expression of the same arithmetic rather than
+evidence about the proof. Neither artefact establishes universal correspondence
+between the two: the Verus theorem discharges the contracts it states for the
+transcription it verifies, and these harnesses are the only check that the
+compiled kernel agrees with that arithmetic, within their bounds and no
+further. Each harness bounds its symbolic operands so the arithmetic stays
+decidable, and each bound admits exactly the cases the oracle is exact for.
+Every harness in this module carries a committed mutation patch under
+`docs/verification/mutations/`, named after the harness path.
 
-| Harness                                                     | Module                                   | Property                                                                                                | Bound                 | Notes                                                                                                                                                                     |
-| ----------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `duplicate_output_always_rejected`                          | `src/ir/from_manifest/verification.rs`   | A duplicate path in one target is detected and the reported duplicate path is preserved.                | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
-| `empty_rule_shape_is_rejected`                              | `src/ir/from_manifest/verification.rs`   | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                   | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                      |
-| `multiple_rule_shape_is_rejected`                           | `src/ir/from_manifest/verification.rs`   | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.              | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                    |
-| `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest/verification.rs`   | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.           | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
-| `shell_variable_prefix_does_not_match`                      | `src/ir/cmd_interpolate/verification.rs` | Literal `$in` and `$out` prefixes remain shell text rather than selecting a Netsuke marker.             | `#[kani::unwind(32)]` | Covers every symbolic `$` position in the bounded window, including truncated starts.                                                                                     |
-| `marker_token_match_is_exact`                               | `src/ir/cmd_interpolate/verification.rs` | The real `INS_TOKEN` and `OUTS_TOKEN` match exact text, irrespective of adjacent identifier characters. | `#[kani::unwind(34)]` | Drives both concrete marker constants through `find_substitution`, including prefix, suffix, near-miss, and truncation cases.                                             |
-| `self_dependency_reports_cycle`                             | `src/ir/cycle/verification.rs`           | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
-| `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle/verification.rs`           | A two-node cycle is reported when the `a` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
-| `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle/verification.rs`           | A two-node cycle is reported when the `b` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                              |
-| `implicit_output_alias_cycle_reports_cycle`                 | `src/ir/cycle/verification.rs`           | A dependency on an implicit output resolves to its producing edge and closes a cycle.                   | `#[kani::unwind(6)]`  | Drives production `contains_cycle`; a mutation that omits implicit-output aliases makes the dependency missing and the proof fail.                                        |
-| `order_only_two_node_cycle_reports_cycle`                   | `src/ir/cycle/verification.rs`           | A two-node cycle closed by an order-only dependency is reported by production traversal.                | `#[kani::unwind(6)]`  | Drives production `contains_cycle`; a mutation that omits the order-only dependency visit makes the proof fail.                                                           |
-| `direct_missing_dependency_does_not_report_cycle`           | `src/ir/cycle/verification.rs`           | A single target with an absent dependency is not reported as a cycle.                                   | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that a missing direct dependency does not enter the cycle branch.                                                           |
-| `transitive_missing_dependency_does_not_report_cycle`       | `src/ir/cycle/verification.rs`           | A two-target chain whose deeper dependency is absent is not reported as a cycle.                        | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that an absent dependency below another target does not synthesize a false cycle.                                           |
-| `canonicalize_two_node_cycle_is_canonical`                  | `src/ir/cycle/verification.rs`           | Two-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.   | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs. Direct `Utf8PathBuf` proof attempts exceeded the local 8 GiB cap.             |
-| `canonicalize_three_node_cycle_is_canonical`                | `src/ir/cycle/verification.rs`           | Three-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation. | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
-| `canonicalize_four_node_cycle_is_canonical`                 | `src/ir/cycle/verification.rs`           | Four-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.  | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
-| `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` | `src/ir/cycle/verification.rs`           | The path-bearing wrapper agrees with the `u8` kernel for both two-node path orderings.                  | `#[kani::unwind(6)]`  | Drives production `canonicalize_cycle(Vec<Utf8PathBuf>)` once per concrete two-node ordering and compares the result with the kernel's `u8` output.                       |
+Against a warm `target/kani` the module's seven harnesses verify inside the
+documented eight-minute cap: the two binomial harnesses are the expensive pair
+at about thirty seconds each, the falling-factorial exactness harness takes
+about nine seconds, the product harness about five, and the remaining three
+under two seconds. A cold Kani build is dominated by the toolchain and crate
+build rather than by any harness, so the cap governs the verification phase
+only once the tree has been built under `cfg(kani)` at least once.
+
+Table: Kani harnesses for Netsuke's intermediate-representation and stdlib
+invariants.
+
+| Harness                                                     | Module                                       | Property                                                                                                         | Bound                 | Notes                                                                                                                                                                                                   |
+| ----------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `duplicate_output_always_rejected`                          | `src/ir/from_manifest/verification.rs`       | A duplicate path in one target is detected and the reported duplicate path is preserved.                         | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani.                               |
+| `empty_rule_shape_is_rejected`                              | `src/ir/from_manifest/verification.rs`       | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                            | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                                                    |
+| `multiple_rule_shape_is_rejected`                           | `src/ir/from_manifest/verification.rs`       | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.                       | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                                                  |
+| `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest/verification.rs`       | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.                    | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                                                             |
+| `shell_variable_prefix_does_not_match`                      | `src/ir/cmd_interpolate/verification.rs`     | Literal `$in` and `$out` prefixes remain shell text rather than selecting a Netsuke marker.                      | `#[kani::unwind(32)]` | Covers every symbolic `$` position in the bounded window, including truncated starts.                                                                                                                   |
+| `marker_token_match_is_exact`                               | `src/ir/cmd_interpolate/verification.rs`     | The real `INS_TOKEN` and `OUTS_TOKEN` match exact text, irrespective of adjacent identifier characters.          | `#[kani::unwind(34)]` | Drives both concrete marker constants through `find_substitution`, including prefix, suffix, near-miss, and truncation cases.                                                                           |
+| `self_dependency_reports_cycle`                             | `src/ir/cycle/verification.rs`               | A self-dependency is reported as a cycle by production traversal.                                                | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                                                |
+| `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle/verification.rs`               | A two-node cycle is reported when the `a` node is inserted first.                                                | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                                                  |
+| `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle/verification.rs`               | A two-node cycle is reported when the `b` node is inserted first.                                                | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                                                            |
+| `implicit_output_alias_cycle_reports_cycle`                 | `src/ir/cycle/verification.rs`               | A dependency on an implicit output resolves to its producing edge and closes a cycle.                            | `#[kani::unwind(6)]`  | Drives production `contains_cycle`; a mutation that omits implicit-output aliases makes the dependency missing and the proof fail.                                                                      |
+| `order_only_two_node_cycle_reports_cycle`                   | `src/ir/cycle/verification.rs`               | A two-node cycle closed by an order-only dependency is reported by production traversal.                         | `#[kani::unwind(6)]`  | Drives production `contains_cycle`; a mutation that omits the order-only dependency visit makes the proof fail.                                                                                         |
+| `direct_missing_dependency_does_not_report_cycle`           | `src/ir/cycle/verification.rs`               | A single target with an absent dependency is not reported as a cycle.                                            | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that a missing direct dependency does not enter the cycle branch.                                                                                         |
+| `transitive_missing_dependency_does_not_report_cycle`       | `src/ir/cycle/verification.rs`               | A two-target chain whose deeper dependency is absent is not reported as a cycle.                                 | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that an absent dependency below another target does not synthesize a false cycle.                                                                         |
+| `canonicalize_two_node_cycle_is_canonical`                  | `src/ir/cycle/verification.rs`               | Two-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.            | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs. Direct `Utf8PathBuf` proof attempts exceeded the local 8 GiB cap.                                           |
+| `canonicalize_three_node_cycle_is_canonical`                | `src/ir/cycle/verification.rs`               | Three-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.          | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                                                             |
+| `canonicalize_four_node_cycle_is_canonical`                 | `src/ir/cycle/verification.rs`               | Four-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.           | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                                                             |
+| `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` | `src/ir/cycle/verification.rs`               | The path-bearing wrapper agrees with the `u8` kernel for both two-node path orderings.                           | `#[kani::unwind(6)]`  | Drives production `canonicalize_cycle(Vec<Utf8PathBuf>)` once per concrete two-node ordering and compares the result with the kernel's `u8` output.                                                     |
+| `product_kernel_respects_zero_and_repeat`                   | `src/stdlib/resource_bounds/verification.rs` | A repeat of zero yields `1` and an absorbing zero yields `0`, even behind overflowing operands.                  | `#[kani::unwind(4)]`  | Drives production `kernel::checked_product` over three bounded operands, plus a concrete case that proves the zero scan runs before any multiplication.                                                 |
+| `binomial_kernel_matches_closed_form_for_r_up_to_two`       | `src/stdlib/resource_bounds/verification.rs` | `n choose r` for `r <= 2` equals the `u128` closed form on a small domain, with witnesses at the `u64` boundary. | `#[kani::unwind(3)]`  | Drives production `kernel::checked_binomial` over `n <= 16` and `r <= 2`; the concrete witnesses pair a coefficient that fits `u64` although its `u128` intermediate does not with one that is refused. |
+| `binomial_kernel_never_panics_for_small_r`                  | `src/stdlib/resource_bounds/verification.rs` | The binomial kernel reaches no panic in its `r > n` shortcut or its loop for reduced indices one and two.        | `#[kani::unwind(6)]`  | A symbolic operand with `r = 4` returns before the first division; a concrete-`r` sweep over `n` in `8..=64` keeps each 128-bit division decidable for the solver.                                      |
+| `falling_factorial_kernel_matches_checked_product`          | `src/stdlib/resource_bounds/verification.rs` | The falling factorial equals a checked `u128` product on the bounded domain.                                     | `#[kani::unwind(5)]`  | Drives production `kernel::checked_falling_factorial` over `n <= 16` and `r <= 4`; the oracle multiplies in `u128` so its own arithmetic cannot overflow.                                               |
+| `falling_factorial_boundary_is_pinned`                      | `src/stdlib/resource_bounds/verification.rs` | `20!` is admitted, and both the 21-step case and a huge operand are refused without overflow.                    | `#[kani::unwind(21)]` | Three concrete witnesses straddle the iteration cap; the deep bound costs unrollings rather than symbolic paths because both loops are concrete.                                                        |
+| `admission_never_exceeds_ceiling`                           | `src/stdlib/resource_bounds/verification.rs` | An admitted count never exceeds its ceiling; every refusal reports the exact value and ceiling.                  | Default (6)           | Drives production `kernel::classify` for both an exact and an unrepresentable cardinality; covers a count at the ceiling, one past it, and an unrepresentable count.                                    |
+| `running_total_never_admits_past_its_limit`                 | `src/stdlib/resource_bounds/verification.rs` | No admission pushes a total past its limit, and a refusal leaves the total unchanged.                            | `#[kani::unwind(4)]`  | Drives production `RunningTotal::admit` over three bounded amounts; covers the total reaching its limit exactly, which is the boundary the ceiling admits.                                              |
 
 Under `cfg(kani)`, `src/ir/graph/mod.rs::IrHashMap` is a fixed-capacity
 deterministic compatibility layer used by production IR code under proof. Under
@@ -8506,19 +8558,20 @@ environment mutation unless a guarded helper is already in place.
 
 Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
-optional, proof-kernel-only, and not installed or run by default; any Verus
-work must stay outside ordinary Cargo and is limited to small, self-contained
-kernels. Three are accepted: the cycle canonicalization model derived from
-`src/ir/cycle/mod.rs`, which is not yet committed; the canonical value key and
-equality relation (`src/stdlib/canonical_value/`, proved in
-`verus/canonical_value/main.rs`); and the configured-shell name-sequence rule
+optional, proof-kernel-only, and not installed or run by default. The dedicated
+`Proofs` workflow is the only job that runs Verus; it runs each repository
+proof and is not a required gate. Any Verus work must stay outside ordinary
+Cargo and is limited to small, self-contained kernels. Four are accepted: the
+cycle canonicalization model derived from `src/ir/cycle/mod.rs`, the canonical
+value key and equality relation (`src/stdlib/canonical_value/`, proved in
+`verus/canonical_value/main.rs`), the configured-shell name-sequence rule
 (`verus/configured_shells/main.rs`, described under
-[Configured shell definitions](#configured-shell-definitions) below).
-`make verus` proves `verus/canonical_value/main.rs` by default, so select any
-other kernel by repeating `--proof-file` through `VERUS_FLAGS`. Verus remains
-outside `formal-pr`, which runs Kani only, and outside every routine gate.
-Stateright is deferred entirely until Netsuke gains an accepted stateful
-concurrent subsystem such as a daemon, watch service, remote-execution
+[Configured shell definitions](#configured-shell-definitions) below), and the
+resource-bounds combinatorial and running-total arithmetic
+(`src/stdlib/resource_bounds/`, proved in `verus/resource_bounds/main.rs`).
+Verus remains outside `formal-pr`, which runs Kani only, and outside every
+routine gate. Stateright is deferred entirely until Netsuke gains an accepted
+stateful concurrent subsystem such as a daemon, watch service, remote-execution
 coordinator, actor protocol, or internal scheduler with long-lived mutable
 control-plane state. See
 [`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
@@ -14185,6 +14238,94 @@ freely and the awkward remainders either side of a boundary are covered too.
 `test_support::hash::sha256_hex` is likewise pinned to the published
 empty-input and `"abc"` vectors, since behavioural tests use it as the
 yardstick for production cache keys.
+
+## Resource bounds for template helpers
+
+`src/stdlib/resource_bounds/` owns the RFC 0006 table 3 ceilings, the checked
+arithmetic that decides whether a request fits inside them, and the typed
+refusals a bounded helper reports. It is the single source for all three, so a
+ceiling changes in one place and two helpers cannot disagree about what "the
+same" cardinality is.
+[ADR-0087](adrs/adr-0087-shared-resource-bounds-for-stdlib-helpers.md) records
+the decision and its alternatives.
+
+The public surface is re-exported from `src/stdlib`:
+
+| Name                                      | Role                                                          |
+| ----------------------------------------- | ------------------------------------------------------------- |
+| `INPUT_LENGTH_CEILING` and five siblings  | The RFC 0006 ceilings, as `u64` or `u32` constants            |
+| `CardinalityRequest`                      | Exact cardinality, ceiling, and admission for one request     |
+| `AdmittedCount`                           | An approved tuple count; explicitly not a memory budget       |
+| `CardinalityError`                        | `Exceeded { cardinality, ceiling }` or `Overflow { ceiling }` |
+| `admit_input`                             | Byte-length admission for a parse input                       |
+| `NestingDepth` / `DepthExceeded`          | The depth state machine and its refusal                       |
+| `StreamKind`                              | `MatchCount` or `OutputBytes`, each fixing its own ceiling    |
+| `RunningTotal` / `StreamLimitExceeded`    | The running-total state machine and its refusal               |
+| `collect_matches` / `try_collect_matches` | Bounded collection that pulls at most one item past the limit |
+
+Three rules decide a refusal, and their order is part of the contract: overflow
+is reported before excess, so a cardinality outside `u64` never pretends to
+have a value; a ceiling is inclusive, so the first refusal is the first value
+above it; and `product`'s identity (`repeat == 0` yields one empty tuple,
+whatever the operands) is answered before its zero rule (a zero-length operand
+yields zero tuples when `repeat` is positive), and both before any comparison.
+
+**Re-use policy.** Every helper in `src/stdlib/` that parses untrusted input,
+enumerates a combinatorial space, scans text for matches, or materializes
+output is required to call this module, and the policy below is what a review
+checks. The scope is deliberately the operations ADR-0087 lists: a helper
+bounded only by an I/O limit, such as the file-reading filters above, follows
+the file-reading filter boundary instead and does not adopt these ceilings. No
+helper calls this module yet: it is in place and the consumer tasks adopt it,
+so a helper that predates those tasks is still bounded exactly as it was before.
+
+- No helper re-implements the arithmetic or invents a ceiling. A helper that
+  needs a value this module does not provide adds it here, with its ceiling,
+  its tests, and its proof, rather than locally.
+- Check the input length before parsing, and the depth before each recursive
+  step. `NestingDepth::descend` is the only depth check; a helper must not
+  compare a hand-counted level against `NESTING_DEPTH_CEILING`.
+- Run the output-content check after cardinality admission. Cardinality bounds
+  the number of tuples; `StreamKind::OutputBytes` bounds their materialized
+  size, and a request admitted on the first can still be refused by the second.
+- `AdmittedCount` is a tuple count, not a memory budget. Do not derive a
+  buffer capacity from it.
+- `RunningTotal` is shared by reference across a whole stream. It is neither
+  `Copy` nor `Clone` for that reason: a copied total restarts silently.
+- Only this module constructs a refusal. Consumers map a refusal to their own
+  diagnostic code and wrap it with the helper name and operands, as the mapping
+  table in the 6.1.3 ExecPlan records.
+- `Display` text is never forwarded into `minijinja::Error`. The text is for
+  developers and logs; RFC 0006 assigns the user-facing message to the
+  consumer's Fluent key.
+- Fluent stores numbers as `f64`, so a localized diagnostic that interpolates a
+  cardinality above `2^53` can print an approximation. The comparison is exact;
+  only the rendering is at risk, and the consumer's message design owns it.
+
+I/O byte limits, redirect limits, and the ADR-018 manifest budget are out of
+scope: they have their own owners and different failure semantics, and routing
+them here would give one module two unrelated notions of "too large".
+
+**Depth definition and the `serde_json` difference.** `NestingDepth::root()` is
+level zero, and `descend` admits every level up to and including 128. The level
+counts containers that Netsuke owns, which is not the same as a parser's
+internal recursion: `serde_json` 1.0.154 starts its `remaining_depth` at 128
+and rejects when the decremented value reaches zero, so it admits 127 nested
+containers. A consumer must therefore check depth before recursing and never
+report a depth it did not measure; reconciling the two is roadmap 6.2.1's
+acceptance criterion.
+
+**Canonical-value follow-up candidate.** `src/stdlib/canonical_value/`
+traverses host values without consulting `NestingDepth`, because its
+precondition is that the host value is finite, stable, and acyclic. If a later
+helper needs to key values from an untrusted source depth-first, routing that
+traversal through this state machine is the natural follow-up; it is not part
+of this module's contract today.
+
+**Polonius classification.** `CardinalityRequest` borrows a slice of operand
+lengths and returns owned values; it holds no long-lived borrow and returns no
+reference into its input. It is therefore not a borrow-centric lookup API and
+needs no entry in `docs/polonius.md`.
 
 ## Manifest processing helpers
 

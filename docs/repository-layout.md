@@ -184,12 +184,22 @@ output and some leaf files so the long-lived structure remains visible.
   deliberately do *not* route through it.
 - `src/stdlib/`: Netsuke standard library modules exposed to manifest
   rendering.
+- `src/stdlib/canonical_value/`: The canonical key and equality relation for
+  template values, with the typed `CanonicalValueError` refusal and the
+  stable-deduplication helper.
 - `src/stdlib/command/`: Structured-command wrappers, including
   `child_argument.rs` (renamed from `quote.rs`), which spells one argument for
   the interpreter a structured command runs under, including `cmd.exe`.
 - `src/stdlib/recipe_text/`: The template-facing `shell_quote` and `shell_join`
   filters, with their dialect telemetry. The filter adapter validates arguments
   and resolves the dialect; the encoding itself is `src/shell_word.rs`.
+- `src/stdlib/resource_bounds/`: The RFC 0006 ceilings, checked cardinality and
+  running-total arithmetic, and typed refusals that every bounded template
+  helper is expected to adopt (see
+  [ADR-0087](adrs/adr-0087-shared-resource-bounds-for-stdlib-helpers.md)). No
+  template reaches it yet; the consumer tasks own that wiring, and the re-use
+  policy in the developers' guide states who may call the module and how. Its
+  Kani harnesses live in `verification.rs` behind `#[cfg(kani)]`.
 - `test_support/`: Shared Rust test-support crate used by integration and
   behavioural tests.
 - `test_support/src/terminal/`: Child-process and Unix PTY helpers plus the
@@ -212,12 +222,16 @@ output and some leaf files so the long-lived structure remains visible.
   [ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).
 - `tools/mold/`: Pinned `mold` linker release version and the SHA-256 checksums
   used to verify the downloaded release artefacts.
-- `verus/`: Verus refinement proofs, one self-contained program per proof. A
-  proof states a specification over the same sequence the production code walks
-  and proves its own model walk agrees with it; a repository Rust oracle tests
-  the production function over bounded generated inputs. `configured_shells/`
-  proves the trusted shell-composition rule and `canonical_value/` the
-  action-hash canonicalizer.
+- `verus/`: Optional Verus proof crates, one directory per verified kernel,
+  each with its own crate root. `verus/configured_shells/` proves the trusted
+  shell-composition rule, `verus/canonical_value/` proves the canonical value
+  key and equality relation, and `verus/resource_bounds/` models the stdlib
+  combinatorial and running-total arithmetic. Bare `make verus` selects only
+  the canonical-value proof; the other two run as
+  `make verus VERUS_FLAGS='--proof-file verus/configured_shells/main.rs'` and
+  `make verus VERUS_FLAGS='--proof-file verus/resource_bounds/main.rs'`, and
+  `.github/workflows/proofs.yml` runs all three as separate steps. None is part
+  of the ordinary pull-request gate.
 
 ## Internal support module ownership
 

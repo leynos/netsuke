@@ -1,0 +1,13 @@
+diff --git a/src/stdlib/resource_bounds/kernel.rs b/src/stdlib/resource_bounds/kernel.rs
+index 0ad0ded55..bd4bda1a6 100644
+--- a/src/stdlib/resource_bounds/kernel.rs
++++ b/src/stdlib/resource_bounds/kernel.rs
+@@ -147,7 +147,7 @@ pub(super) const fn classify(
+ ) -> Result<u64, CardinalityError> {
+     match cardinality {
+         None => Err(CardinalityError::Overflow { ceiling }),
+-        Some(value) if value > ceiling => Err(CardinalityError::Exceeded {
++        Some(value) if value >= ceiling => Err(CardinalityError::Exceeded {
+             cardinality: value,
+             ceiling,
+         }),
