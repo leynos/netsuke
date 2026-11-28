@@ -201,3 +201,143 @@ fn retry_returns_other_errors_on_the_first_attempt() -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod proptests {
+    //! Property tests for the bounded retry state machine.
+    //!
+    //! The named tests above pin single examples. These properties generate an
+    //! outcome sequence and check the stopping rule, the retry bound, the delay
+    //! schedule, and error preservation together, so a change that keeps the
+    //! examples and breaks the arithmetic still fails here.
+
+    use super::*;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    /// One generated create outcome.
+    #[derive(Clone, Copy, Debug)]
+    enum CreateOutcome {
+        /// The create succeeds.
+        Success,
+        /// The create fails with a permission denial.
+        Denied,
+        /// The create fails with an unrelated error.
+        Other,
+    }
+
+    /// Generate an outcome sequence long enough for every stopping path.
+    fn create_outcomes() -> impl Strategy<Value = Vec<CreateOutcome>> {
+        vec(
+            prop_oneof![
+                Just(CreateOutcome::Success),
+                Just(CreateOutcome::Denied),
+                Just(CreateOutcome::Other),
+            ],
+            5..=10,
+        )
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
+
+        /// The retry stops on the first success or non-permission error, or
+        /// after five denials, announcing one fixed delay per retry.
+        #[test]
+        fn retry_honours_the_stopping_rule_and_delay_schedule(
+            outcomes in create_outcomes(),
+        ) {
+            let attempt_limit = usize::try_from(TEMP_FILE_ATTEMPTS)
+                .expect("the attempt bound fits usize");
+            let mut index = 0_usize;
+            let mut calls = 0_u32;
+            let mut retries = Vec::new();
+            let result = retry_permission_denied(
+                || {
+                    calls += 1;
+                    let outcome = outcomes
+                        .get(index)
+                        .copied()
+                        .unwrap_or(CreateOutcome::Denied);
+                    index += 1;
+                    match outcome {
+                        CreateOutcome::Success => Ok(calls),
+                        CreateOutcome::Denied => Err(io::Error::new(
+                            io::ErrorKind::PermissionDenied,
+                            format!("denial {calls}"),
+                        )),
+                        CreateOutcome::Other => Err(io::Error::new(
+                            io::ErrorKind::NotFound,
+                            format!("other {calls}"),
+                        )),
+                    }
+                },
+                |error, attempt, delay| retries.push((error.kind(), attempt, delay)),
+            );
+
+            let mut expected_calls = 0_u32;
+            let mut stopping = None;
+            for outcome in outcomes.iter().take(attempt_limit) {
+                expected_calls += 1;
+                if !matches!(outcome, CreateOutcome::Denied) {
+                    stopping = Some(*outcome);
+                    break;
+                }
+            }
+
+            prop_assert_eq!(calls, expected_calls, "create calls before the stop");
+            prop_assert_eq!(
+                retries.len(),
+                usize::try_from(calls.saturating_sub(1)).expect("attempt count fits usize"),
+                "one hook call per retry and none after the final attempt"
+            );
+            let delays: Vec<Duration> = retries.iter().map(|(_, _, delay)| *delay).collect();
+            let expected_delays: Vec<Duration> = TEMP_FILE_RETRY_DELAYS_MILLIS
+                .iter()
+                .take(delays.len())
+                .map(|millis| Duration::from_millis(*millis))
+                .collect();
+            prop_assert_eq!(delays, expected_delays, "fixed retry delay schedule");
+            let attempts: Vec<u32> = retries.iter().map(|(_, attempt, _)| *attempt).collect();
+            let retry_count = u32::try_from(retries.len()).expect("retry count fits u32");
+            let expected_attempts: Vec<u32> = (1..=retry_count).collect();
+            prop_assert_eq!(attempts, expected_attempts, "attempt numbers");
+            prop_assert!(
+                retries
+                    .iter()
+                    .all(|(kind, _, _)| *kind == io::ErrorKind::PermissionDenied),
+                "only permission denials may be retried"
+            );
+
+            match (result, stopping) {
+                (Ok(value), Some(CreateOutcome::Success)) => {
+                    prop_assert_eq!(value, calls, "the success value names the stopping call");
+                }
+                (Err(error), Some(CreateOutcome::Other)) => {
+                    prop_assert_eq!(error.kind(), io::ErrorKind::NotFound, "other error kind");
+                    prop_assert_eq!(
+                        error.to_string(),
+                        format!("other {calls}"),
+                        "the unrelated error is returned unchanged"
+                    );
+                }
+                (Err(error), None) => {
+                    prop_assert_eq!(
+                        error.kind(),
+                        io::ErrorKind::PermissionDenied,
+                        "exhausted denial kind"
+                    );
+                    prop_assert_eq!(
+                        error.to_string(),
+                        format!("denial {calls}"),
+                        "the fifth denial is preserved"
+                    );
+                }
+                (unexpected_result, unexpected_stopping) => prop_assert!(
+                    false,
+                    "unexpected result {unexpected_result:?} for stopping outcome {unexpected_stopping:?}"
+                ),
+            }
+        }
+    }
+}
