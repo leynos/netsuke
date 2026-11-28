@@ -247,3 +247,29 @@ def test_tool_output_reaches_the_job_log(canary: Canary) -> None:
     assert "fake-ninja stderr lint" in ran.stderr, (
         f"Ninja's stderr must be streamed: {ran.stderr!r}"
     )
+
+
+def test_a_repeated_target_keeps_its_first_failure(canary: Canary) -> None:
+    """A target named twice that fails then passes is recorded as failed.
+
+    Folding the runs by name must not let the second, passing run overwrite
+    the first failure, or the step would pass and the provenance would claim
+    a gate that failed.
+    """
+    generate(canary)
+
+    assert run(canary, "lint", "lint", FAKE_NINJA_FAIL_ONCE="lint") == 1, (
+        "a failed run of a repeated target must fail the step"
+    )
+
+    ninja_runs = [
+        line
+        for line in canary.log.read_text(encoding="utf-8").splitlines()
+        if line.startswith("ninja ")
+    ]
+    assert len(ninja_runs) == 2, f"both runs of lint must happen: {ninja_runs!r}"
+    record = canary.report("lint", "lint")
+    assert canary.statuses(record) == {"lint": "failed"}, (
+        "the earlier failure must survive the later pass"
+    )
+    assert record["outcome"] == "failed", "the outcome must fail"

@@ -127,6 +127,32 @@ def test_latest_version_tag_has_maximal_key(tags: list[str], noise: list[str]) -
         )
 
 
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(
+    majors=st.lists(CORE_NUMBER, min_size=2, max_size=2, unique=True).map(sorted),
+    minor=CORE_NUMBER,
+    patch=CORE_NUMBER,
+    prerelease=st.one_of(st.none(), PRERELEASE),
+)
+def test_a_higher_major_version_wins(
+    majors: list[int], minor: int, patch: int, prerelease: str | None
+) -> None:
+    """With everything else equal, the larger major version is the newer tag.
+
+    The ordering properties above hold for any total order, including one
+    that ignores or reverses the major number; this pins its direction.
+    """
+    lower, higher = (_spell_tag(major, minor, patch, prerelease) for major in majors)
+
+    assert _key(lower) < _key(higher), f"{higher!r} must outrank {lower!r}"
+    assert resolver.latest_version_tag([higher, lower]) == higher, (
+        f"latest of {lower!r} and {higher!r} must be {higher!r}"
+    )
+    assert resolver.latest_version_tag([lower, higher]) == higher, (
+        "the input order must not decide the latest tag"
+    )
+
+
 @settings(max_examples=100, deadline=None, derandomize=True)
 @given(tags=st.lists(NON_VERSION_TAG, max_size=5))
 def test_latest_version_tag_is_none_without_version_tags(

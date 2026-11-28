@@ -1809,8 +1809,10 @@ targets, and the retained Makefile boundaries; this section covers the tooling.
   - `scripts/downstream_canary_arguments.py` parses the arguments.
   - `scripts/downstream_canary_provenance.py` owns the provenance schema and
     its closed status vocabulary.
-  - `scripts/downstream_canary_isolation.py` judges lane isolation and the
-    `run` step's exit status.
+  - `scripts/downstream_canary_isolation.py` judges lane isolation, folds
+    each target's runs into one status, and decides the `run` step's exit
+    status. A target named twice keeps any failure, so a later pass cannot
+    hide it.
   - `scripts/downstream_canary_state.py` reads and writes the JSON state the
     steps share. Its loader raises `StateUnreadableError` for an unusable file,
     and the edges decide that such a file means nothing ran.

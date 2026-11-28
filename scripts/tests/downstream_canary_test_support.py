@@ -41,6 +41,12 @@ with pathlib.Path(os.environ["FAKE_LOG"]).open("a") as log:
     url = os.environ.get("POSTGRES_TEST_URL", "-")
     log.write(f"ninja {' '.join(sys.argv[1:])} lane={lane} url={url}\\n")
 failing = os.environ.get("FAKE_NINJA_FAIL", "").split(",")
+# A target in FAKE_NINJA_FAIL_ONCE fails on its first run only.
+once = pathlib.Path(os.environ["FAKE_LOG"] + "." + sys.argv[-1] + ".failed")
+if sys.argv[-1] in os.environ.get("FAKE_NINJA_FAIL_ONCE", "").split(","):
+    if not once.exists():
+        once.touch()
+        sys.exit(1)
 sys.exit(1 if sys.argv[-1] in failing else 0)
 """
 

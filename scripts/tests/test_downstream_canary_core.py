@@ -13,7 +13,12 @@ import typing as typ
 
 import pytest
 import run_downstream_canary as runner
-from downstream_canary_isolation import Isolation, judge_isolation, run_status
+from downstream_canary_isolation import (
+    Isolation,
+    judge_isolation,
+    run_status,
+    target_statuses,
+)
 from downstream_canary_process import Host
 from downstream_canary_provenance import CanaryIdentity
 from downstream_canary_state import (
@@ -99,6 +104,41 @@ def test_run_status_fails_on_isolation_or_any_failed_target(
 ) -> None:
     """``run`` exits non-zero when isolation fails or any target failed."""
     assert run_status(isolation, statuses) == expected, f"status for {statuses!r}"
+
+
+@pytest.mark.parametrize(
+    ("runs", "expected"),
+    [
+        pytest.param(
+            [("lint", True), ("test", True)],
+            {"lint": "passed", "test": "passed"},
+            id="distinct-passing",
+        ),
+        pytest.param(
+            [("lint", False), ("lint", True)],
+            {"lint": "failed"},
+            id="fail-then-pass",
+        ),
+        pytest.param(
+            [("lint", True), ("lint", False)],
+            {"lint": "failed"},
+            id="pass-then-fail",
+        ),
+        pytest.param(
+            [("test", True), ("lint", False), ("test", True)],
+            {"test": "passed", "lint": "failed"},
+            id="first-request-order",
+        ),
+    ],
+)
+def test_target_statuses_keep_any_failure(
+    runs: list[tuple[str, bool]], expected: dict[str, str]
+) -> None:
+    """A target that failed on any run is failed; distinct passes stay passed."""
+    statuses = target_statuses(runs)
+
+    assert statuses == expected, f"statuses for {runs!r}"
+    assert list(statuses) == list(expected), "first-request order must hold"
 
 
 @pytest.mark.parametrize(

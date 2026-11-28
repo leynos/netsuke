@@ -38,7 +38,7 @@ import sys
 import typing as typ
 
 from downstream_canary_arguments import build_parser, normalize_lists
-from downstream_canary_isolation import judge_isolation, run_status
+from downstream_canary_isolation import judge_isolation, run_status, target_statuses
 from downstream_canary_process import Host, observed_head, run_tool
 from downstream_canary_provenance import (
     FAILED,
@@ -256,16 +256,16 @@ def run_each_target(arguments: argparse.Namespace, *, host: Host) -> dict[str, s
     Returns
     -------
     dict[str, str]
-        Each target's ``passed`` or ``failed`` status, in request order.
+        Each target's ``passed`` or ``failed`` status, in request order. A
+        target that failed on any of its runs is ``failed``.
     """
     env = child_environment(arguments, host.environment)
     ninja = resolve_ninja(env, host.which)
-    return {
-        target: PASSED
-        if run_tool([ninja, "-f", MANIFEST, target], arguments.workdir, env)
-        else FAILED
+    runs = [
+        (target, run_tool([ninja, "-f", MANIFEST, target], arguments.workdir, env))
         for target in arguments.target
-    }
+    ]
+    return target_statuses(runs)
 
 
 def report(arguments: argparse.Namespace, *, host: Host) -> int:

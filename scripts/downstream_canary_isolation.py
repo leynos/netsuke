@@ -3,8 +3,9 @@
 The MXD canaries build one workspace three ways, selected by ``MXD_BACKEND``.
 A lane's non-interference contract is that no other lane's commands survive
 manifest-time expansion, so the ``run`` step refuses a manifest that contains
-any of the lane's forbidden patterns before running a target. The verdict and
-the step's exit status are pure functions here; ``run_downstream_canary.py``
+any of the lane's forbidden patterns before running a target. The verdict,
+each target's folded status, and the step's exit status are pure functions
+here; ``run_downstream_canary.py``
 reads the manifest, prints, and records the state.
 """
 
@@ -114,4 +115,39 @@ def run_status(isolation: Isolation, statuses: cabc.Mapping[str, str]) -> int:
     return 0 if isolation.holds and FAILED not in statuses.values() else 1
 
 
-__all__ = ["Isolation", "forbidden_matches", "judge_isolation", "run_status"]
+def target_statuses(results: cabc.Iterable[tuple[str, bool]]) -> dict[str, str]:
+    """Fold each target run into one status per target, failures first.
+
+    A target named twice runs twice. A failure is kept even when a later run
+    of the same target passes, so a repeated target can never turn a failed
+    gate into passing provenance.
+
+    Parameters
+    ----------
+    results
+        Each target run, in order, with whether it passed.
+
+    Returns
+    -------
+    dict[str, str]
+        Each distinct target's status, in first-request order.
+
+    Examples
+    --------
+    >>> target_statuses([("lint", False), ("test", True), ("lint", True)])
+    {'lint': 'failed', 'test': 'passed'}
+    """
+    statuses: dict[str, str] = {}
+    for target, passed in results:
+        if statuses.get(target) != FAILED:
+            statuses[target] = PASSED if passed else FAILED
+    return statuses
+
+
+__all__ = [
+    "Isolation",
+    "forbidden_matches",
+    "judge_isolation",
+    "run_status",
+    "target_statuses",
+]
