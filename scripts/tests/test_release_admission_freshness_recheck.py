@@ -25,10 +25,17 @@ Example (run from the repository root)::
 """
 
 import datetime as dt
+import hashlib
 import itertools
 import json
 import typing as typ
 
+from release_admission_evidence_fixtures import (
+    PRODUCER_TRUST_VARIABLE,
+)
+from release_admission_evidence_fixtures import (
+    REQUIRED_RESULT_NAMES as REQUIRED_RESULTS,
+)
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
     GITHUB_REPOSITORY,
@@ -77,14 +84,11 @@ EVIDENCE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE"
 ENFORCEMENT_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
 #: The variable naming the tag a publishing run is about to release.
 TAG_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TAG"
-#: The variable reporting whether the run can attribute the evidence to a
-#: trusted producer. These cases are about the window, so an enforcing run
-#: states the attribution the workflow will one day report; the interim block
-#: that withholds it is covered by ``test_release_admission_producer_trust``.
-PRODUCER_TRUST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED"
-#: The results the manifest must report, spelled out as the fixtures module does
-#: so that a gate which stopped requiring one cannot agree with this document.
-REQUIRED_RESULTS = ("history_scan", "release_candidate")
+#: The variable carrying the digest the producer job published. These cases
+#: are about the window, so an enforcing run receives the digest of the
+#: document it reads; attribution is covered by
+#: ``test_release_admission_producer_trust``.
+EVIDENCE_DIGEST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256"
 
 
 def test_evidence_that_expires_before_the_decision_is_refused(
@@ -247,7 +251,8 @@ def _run(
     wrapper, served = _scripted_clock(readings)
     adapted.clock.wraps(wrapper)
     evidence = tmp_path / "expiring-evidence.json"
-    evidence.write_bytes(_manifest())
+    document = _manifest()
+    evidence.write_bytes(document)
     environment = {
         **adapted.variables(cmd_mox),
         ENFORCEMENT_VARIABLE: str(is_enforced).lower(),
@@ -256,6 +261,7 @@ def _run(
     }
     if is_enforced:
         environment[TAG_VARIABLE] = RELEASE_TAG
+        environment[EVIDENCE_DIGEST_VARIABLE] = hashlib.sha256(document).hexdigest()
         environment[PRODUCER_TRUST_VARIABLE] = "true"
     return (
         run_gate(

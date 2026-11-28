@@ -21,6 +21,7 @@ from workflow_loading import (
 TARGET = "test-release-admission"
 RUNTIME_MODULES = (
     "scripts/tests/test_release_admission_metrics.py",
+    "scripts/tests/test_release_admission_attribution_properties.py",
     "scripts/tests/test_release_admission_metric_failures.py",
     "scripts/tests/test_release_admission_invalid_configuration.py",
     "scripts/tests/test_release_admission_metric_boundedness.py",

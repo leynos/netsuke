@@ -33,6 +33,7 @@ which reads the first line of the file and its executable bit.
 """
 
 import dataclasses
+import hashlib
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
 import typing as typ
 from pathlib import Path
@@ -40,7 +41,14 @@ from pathlib import Path
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
-from release_admission_evidence_fixtures import MISSING, candidate_for, write_evidence
+from release_admission_evidence_fixtures import (
+    ATTRIBUTED,
+    EVIDENCE_DIGEST_VARIABLE,
+    MISSING,
+    PRODUCER_TRUST_VARIABLE,
+    candidate_for,
+    write_evidence,
+)
 from release_admission_gate_environment import (
     EVIDENCE_FILE_VARIABLE,
     GateInputs,
@@ -152,11 +160,16 @@ def run_gate_request(cmd_mox: CmdMox, request: GateRunRequest) -> GateRun:
             paths,
         ),
     )
-    write_evidence(
+    document = write_evidence(
         _evidence_path(environment, paths, request.cwd),
         request.evidence_state,
         candidate_for(environment),
     )
+    if environment.get(EVIDENCE_DIGEST_VARIABLE) == ATTRIBUTED:
+        environment[EVIDENCE_DIGEST_VARIABLE] = hashlib.sha256(document).hexdigest()
+        # An attributed run is one the block no longer withholds; a case about
+        # the block itself states the variable, which this leaves alone.
+        environment.setdefault(PRODUCER_TRUST_VARIABLE, "true")
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed test target.
         [str(PYTHON_PATH), str(SCRIPT_PATH)],
         capture_output=True,

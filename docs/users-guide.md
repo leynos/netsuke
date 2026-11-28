@@ -161,23 +161,37 @@ the `release-admission-canaries` job admitted this run's candidate: enforcement
 is `true`, the gate outcome is `success`, and the gate's candidate commit is
 the run's own commit. Enforcement follows the run's mode, so a publishing run
 enforces while a pull-request dry run only observes. A publishing run refuses
-with `missing_evidence` and writes nothing until an evidence producer uploads a
-`release-admission-evidence` manifest for the candidate. That producer runs
-inside the release workflow; it is tracked by #598, and a caller supplies no
-new input for it. The admission job runs the gate from this repository's own
-workflow commit, so a calling workflow cannot substitute a gate that reports a
-more favourable decision. It also checks out the caller's candidate separately,
-because the gate fetches the candidate commit from the caller's repository; a
-calling workflow's own commit is therefore judged even when this repository
-does not contain it, and the two checkouts are what let the same job do both.
-The gate admits only evidence that names the repository, commit, tag, and
-workflow run under release, was issued inside its freshness window, and reports
-every required canary as successful. Those fields are compared with the run,
-which shows the manifest agrees with the candidate rather than who produced it.
-Until #598 supplies a producer whose upload the run can attribute, an enforcing
-run therefore refuses every supplied manifest with `untrusted_evidence` as
-well, because a file's contents cannot establish its origin. Observation mode
-is unaffected: a pull-request dry run still reports the manifest it read.
+with `missing_evidence` and writes nothing until the release workflow produces a
+`release-admission-evidence` manifest for the candidate. The workflow's
+`release-admission-evidence` job writes that manifest after the downstream
+canary jobs conclude, including when they were skipped, as on a draft pull
+request's dry run. It records a canary whose provenance record is missing as
+that canary's failure. A produced manifest is therefore not proof that every
+canary ran. A caller supplies no new input for it. The history-scan and
+release-candidate results have no producer yet, so an enforcing run still
+refuses with `missing_evidence` until they exist. The admission job runs the
+gate from this repository's own workflow commit, so a calling workflow cannot
+substitute a gate that reports a more favourable decision. It also checks out
+the caller's candidate separately, because the gate fetches the candidate
+commit from the caller's repository; a calling workflow's own commit is
+therefore judged even when this repository does not contain it, and the two
+checkouts are what let the same job do both. The gate admits only evidence that
+names the repository, commit, tag, and workflow run under release, was issued
+inside its freshness window, reports every required result as successful, and
+hashes to the digest the producer job published. The identity fields are
+compared with the run, which shows the manifest agrees with the candidate. The
+digest is a content binding, not a statement of who uploaded the document: a
+manifest whose bytes differ from the producer's output does not hash to the
+published digest, so an enforcing run cannot admit it. If the manifest passes
+the identity and result checks, which run first, the refusal is reported as
+`untrusted_evidence`. Identical bytes from another job hash to the same digest,
+so the digest does not identify the uploading job. Attribution of the uploader
+rests on the producer's job output being nameable only by this workflow,
+together with the interim block, `NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`,
+which the workflow ships as `false`. Until #598's live publishing runs are
+demonstrated, that block refuses every manifest with that category, the
+producer's own included. Observation mode is unaffected: a pull-request dry run
+still reports the manifest it read.
 
 When a publication is interrupted, rerun the crates.io publisher job. It
 re-probes the registry before any mutation: an absent version is published from
@@ -519,6 +533,52 @@ import, inspect the external help with:
 ```powershell
 Get-Help Netsuke -Full
 ```
+
+## Use a release candidate in downstream CI
+
+Downstream projects can use the public
+`.github/actions/install-release-candidate` action to run their quality gates
+against one exact Netsuke revision. Pin the action reference and both inputs to
+the proposed candidate, including its expected package version:
+
+<!-- tested-example: guide-release-candidate-action -->
+
+```yaml
+- name: Install Netsuke release candidate
+  id: netsuke
+  uses: leynos/netsuke/.github/actions/install-release-candidate@<candidate-sha>
+  with:
+    revision: <candidate-sha>
+    expected-version: 0.1.0-beta4
+
+- name: Run the selected Netsuke gate
+  env:
+    NETSUKE: ${{ steps.netsuke.outputs.binary }}
+  shell: bash
+  run: |
+    "$NETSUKE" build all
+```
+
+The required `revision` input is fetched and checked out, then compared with
+the resolved Git commit. It is fetched from the GitHub `owner/name` named by
+the optional `repository` input, which defaults to `leynos/netsuke`. Name the
+fork when testing a candidate that exists only there. The action builds that
+checkout with `cargo build --locked --release --bin netsuke`, in the same shape
+as a shipped release, so a hosted runner needs no `mold` linker, and runs
+`netsuke --version`. It fails before exposing outputs if either the revision or
+the reported version does not match the inputs, or if the locked build fails.
+
+On success, `steps.netsuke.outputs.binary` is the absolute path to the built
+binary, while `revision` and `version` report the verified commit and package
+version. The action selects `netsuke.exe` on Windows and `netsuke` elsewhere;
+the downstream workflow can therefore pass the same output to its selected gate
+on each platform.
+
+Netsuke's own release is admitted by three downstream migration canaries, which
+its release workflow runs against the exact candidate; see
+[release-admission migration canaries](release-admission-canaries.md). A
+downstream project using this action is testing its own gates, and needs
+nothing from Netsuke's release process to do so.
 
 ## Run the first build
 

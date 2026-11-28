@@ -1,24 +1,26 @@
-r"""Pin the interim block that refuses evidence no producer attests.
+r"""Pin the producer attribution that admits only the producer's own evidence.
 
-The admission gate cannot authenticate the producer of the manifest it reads.
-``actions/download-artifact`` resolves the current run by default, and a
-reusable-workflow caller defines jobs in that same run, so a caller that uploads
-a matching document under ``release-admission-evidence`` reaches the verifier
-indistinguishably from a producer. Identity checks compare the document with the
-candidate; they do not establish who wrote it.
+The admission gate cannot authenticate the producer of the manifest it reads
+from the artefact alone. ``actions/download-artifact`` resolves the current
+run, and a reusable-workflow caller defines jobs in that same run, so a caller
+that uploads a matching document under ``release-admission-evidence`` reaches
+the verifier indistinguishably from a producer. Identity checks compare the
+document with the candidate; they do not establish who wrote it.
 
-The workflow therefore ships ``NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED`` as
-``false``, and an enforcing run refuses every manifest -- including a fresh,
-matching one -- with ``untrusted_evidence`` until #598 supplies a producer that
-attests its upload. These cases run the production gate against a manifest that
-would otherwise be admitted, so the refusal is attributable to the absent
-attribution and nothing else:
+The producer job therefore publishes the SHA-256 of the manifest it wrote as
+its own job output, which only this repository's workflow can name, and the
+workflow hands it to the gate in ``NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256``.
+An enforcing run refuses with ``untrusted_evidence`` every document whose bytes
+do not hash to it. These cases run the production gate against a manifest that
+would otherwise be admitted, so the refusal is attributable to the attribution
+and nothing else:
 
-- every spelling other than ``true`` refuses, including unset and empty, so a
-  configuration the gate half-reads cannot admit;
-- ``true`` admits the same document, which is the positive control that makes
-  the block the deciding input rather than an incidental defect;
-- observation mode still reports what it finds, because the block governs
+- the interim block refuses even an attributed document until it is ``true``;
+- an unset, empty, malformed, or foreign digest refuses, and so does ``true``,
+  the literal that once stood in for attribution;
+- the digest of the document read admits it, which is the positive control
+  that makes the digest the deciding input rather than an incidental defect;
+- observation mode still reports what it finds, because attribution governs
   publication and must not make the read-only lane unreachable.
 
 Example (run from the repository root)::
@@ -30,12 +32,16 @@ Example (run from the repository root)::
         -c /dev/null --rootdir=. -p no:cacheprovider
 """
 
+import hashlib
 import typing as typ
 
 import pytest
 from release_admission_test_support import (
+    ATTRIBUTED,
     CANARY_BY_OPERATION,
+    EVIDENCE_DIGEST_VARIABLE,
     METRICS_VALIDATOR,
+    PRODUCER_TRUST_VARIABLE,
     RELEASE_TAG,
     GateRun,
     expected_gate_labels,
@@ -55,14 +61,27 @@ if typ.TYPE_CHECKING:
 #: The variable selecting admission mode; every case states it explicitly so
 #: the block is exercised against a known mode rather than the harness default.
 ENFORCEMENT_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
-#: The variable reporting whether the run can attribute the evidence to a
-#: trusted producer. The workflow ships it as ``false`` until #598 lands.
-PRODUCER_TRUST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED"
+#: A well-formed digest of some other document: what a same-run upload under
+#: the artefact name would be measured against.
+FOREIGN_DIGEST = hashlib.sha256(b"another producer's manifest").hexdigest()
 #: The variable naming the tag an enforcing run is about to release.
 TAG_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TAG"
 #: A manifest state the verifier admits on its own terms: fresh, matching, and
-#: reporting both required canaries as successful.
+#: reporting every required result as successful.
 ADMITTABLE_EVIDENCE = "fresh"
+
+
+class Attribution(typ.NamedTuple):
+    """Name the two inputs an enforcing run requires before it admits.
+
+    ``digest`` is the producer's published digest, :data:`ATTRIBUTED` for the
+    digest of the document written, or ``None`` to leave the variable unset.
+    ``block`` is the interim block's value, or ``None`` to leave it to the
+    harness, which lifts it only for an attributed run.
+    """
+
+    digest: str | None
+    block: str | None = None
 
 
 def _run(
@@ -70,9 +89,9 @@ def _run(
     tmp_path: pathlib.Path,
     *,
     mode: str,
-    producer_trusted: str | None,
+    attribution: Attribution,
 ) -> GateRun:
-    """Run the gate with an admittable manifest and the named producer state.
+    """Run the gate with an admittable manifest and the named producer digest.
 
     Parameters
     ----------
@@ -83,9 +102,8 @@ def _run(
     mode
         The enforcement mode the child runs under, spelled as the workflow
         spells it.
-    producer_trusted
-        The producer-attribution value to set, or ``None`` to leave the
-        variable unset, which is the state a caller cannot alter.
+    attribution
+        The producer's digest and the interim block's value.
 
     Returns
     -------
@@ -98,8 +116,10 @@ def _run(
         ENFORCEMENT_VARIABLE: mode,
         TAG_VARIABLE: RELEASE_TAG,
     }
-    if producer_trusted is not None:
-        environment[PRODUCER_TRUST_VARIABLE] = producer_trusted
+    if attribution.digest is not None:
+        environment[EVIDENCE_DIGEST_VARIABLE] = attribution.digest
+    if attribution.block is not None:
+        environment[PRODUCER_TRUST_VARIABLE] = attribution.block
     return run_gate(
         cmd_mox,
         tmp_path,
@@ -140,28 +160,49 @@ def _assert_untrusted_refusal(run: GateRun) -> None:
 
 
 @pytest.mark.parametrize(
-    "producer_trusted",
+    "producer_digest",
     [
         pytest.param(None, id="unset"),
         pytest.param("", id="empty"),
-        pytest.param("false", id="false"),
-        pytest.param("True", id="capitalised"),
-        pytest.param("yes", id="other-word"),
+        pytest.param("true", id="former-literal"),
+        pytest.param("f" * 63, id="short"),
+        pytest.param(FOREIGN_DIGEST.upper(), id="uppercase"),
+        pytest.param(FOREIGN_DIGEST, id="foreign-document"),
     ],
 )
 def test_matching_evidence_without_attribution_is_refused(
     cmd_mox: CmdMox,
     tmp_path: pathlib.Path,
-    producer_trusted: str | None,
+    producer_digest: str | None,
 ) -> None:
     """Refuse a manifest the verifier would otherwise admit.
 
     The document is fresh, names this run's repository, commit, tag and run
-    identifier, and reports both required canaries as successful, so every
-    content check passes. Only the attribution is absent, which is exactly the
+    identifier, and reports every required result as successful, so every
+    content check passes. Only the attribution fails, which is exactly the
     same-run supplier the download cannot distinguish from a producer.
     """
-    run = _run(cmd_mox, tmp_path, mode="true", producer_trusted=producer_trusted)
+    run = _run(
+        cmd_mox, tmp_path, mode="true", attribution=Attribution(producer_digest, "true")
+    )
+
+    _assert_untrusted_refusal(run)
+
+
+@pytest.mark.parametrize("block", ["", "false", "True", "yes"])
+def test_the_interim_block_refuses_attributed_evidence(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+    block: str,
+) -> None:
+    """Refuse even the producer's own document while the block stands.
+
+    The digest matches, so only the workflow's literal withholds admission.
+    Issue #598 requires both live demonstrations before that literal changes.
+    """
+    run = _run(
+        cmd_mox, tmp_path, mode="true", attribution=Attribution(ATTRIBUTED, block)
+    )
 
     _assert_untrusted_refusal(run)
 
@@ -170,13 +211,13 @@ def test_attributed_evidence_is_admitted(
     cmd_mox: CmdMox,
     tmp_path: pathlib.Path,
 ) -> None:
-    """Admit the same document once the run reports a trusted producer.
+    """Admit the same document once its digest is the one the producer published.
 
     This is the positive control for the refusal above: the document, the mode
     and the tag are identical, so only the attribution separates them. Without
     it, a gate that refused everything would satisfy the negative cases.
     """
-    run = _run(cmd_mox, tmp_path, mode="true", producer_trusted="true")
+    run = _run(cmd_mox, tmp_path, mode="true", attribution=Attribution(ATTRIBUTED))
 
     assert run.result.returncode == 0, (
         f"an attributed manifest must be admitted; {run.result.stderr}"
@@ -197,11 +238,11 @@ def test_observation_mode_still_reports_the_manifest(
 ) -> None:
     """Keep observing on a rehearsal, where nothing is published either way.
 
-    The block governs publication rather than reporting, so a dry run must
+    Attribution governs publication rather than reporting, so a dry run must
     still reach a verdict on the document. Failing the rehearsal here would
     make the read-only lane report an admission problem it does not have.
     """
-    run = _run(cmd_mox, tmp_path, mode="false", producer_trusted=None)
+    run = _run(cmd_mox, tmp_path, mode="false", attribution=Attribution(None))
 
     assert run.result.returncode == 0, (
         f"a rehearsal must observe rather than fail; {run.result.stderr}"

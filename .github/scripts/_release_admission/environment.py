@@ -77,3 +77,24 @@ def defaulted_only_when_unset(
     if variable not in environment:
         return default
     return environment[variable]
+
+
+def is_exactly_true(environment: cabc.Mapping[str, str], variable: str) -> bool:
+    """Return whether a variable holds the exact text ``true``.
+
+    A switch that lifts a refusal must not be turned on by a near miss, so an
+    unset, empty, capitalized, or otherwise spelled value is false.
+
+    Returns
+    -------
+    bool
+        Whether the variable is set to exactly ``true``.
+
+    Examples
+    --------
+    >>> is_exactly_true({"A": "true"}, "A")
+    True
+    >>> is_exactly_true({"A": "True"}, "A"), is_exactly_true({}, "A")
+    (False, False)
+    """
+    return environment.get(variable) == "true"

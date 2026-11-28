@@ -41,7 +41,10 @@ def check_native_smoke_job(
             }
         },
         "status": {"cancelled": False},
-        "github": {"event": {"action": scenario.event_action}},
+        "github": {
+            "event": {"action": scenario.event_action},
+            "event_name": scenario.arrival.event_name,
+        },
     }
     value = evaluate_field(
         smoke_job.get("if", True),

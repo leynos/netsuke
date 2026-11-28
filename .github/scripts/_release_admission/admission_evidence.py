@@ -24,9 +24,12 @@ it does not show who wrote it, because ``actions/download-artifact`` resolves
 the current run and a reusable-workflow caller defines jobs in that run. An
 enforcing run therefore admits only when the configuration reports that the
 evidence can be attributed to a trusted producer, and refuses with
-``untrusted_evidence`` otherwise. That flag is set by this repository's own
-workflow, so the shipped value keeps publication blocked whatever a same-run
-supplier uploads; binding the evidence to a named producer is #598's work.
+``untrusted_evidence`` otherwise. Attribution is derived, not declared: the
+producer job publishes the SHA-256 of the manifest it wrote as its own job
+output, which only this repository's workflow can name, and the bytes the gate
+read must hash to it. A same-run upload under the artefact name therefore
+cannot be admitted, whatever it says. The interim block stays in force beside
+the digest until #598's live demonstrations lift it, so both must hold.
 
 Nothing here decides policy. Categories come from :mod:`policy`, the schema and
 its classification from :mod:`evidence`, and both effects -- the byte read and
@@ -63,6 +66,8 @@ class Observation(typ.NamedTuple):
 
     manifest: evidence.Manifest | None
     verdict: policy.Classification
+    #: The bytes the check read, kept so attribution judges the same document.
+    document: bytes = b""
 
 
 #: The observation a gate holds before it has checked anything. It carries the
@@ -128,7 +133,9 @@ class AdmissionEvidence:
         parsed = evidence.parse_manifest(raw)
         if parsed.manifest is None:
             return Observation(None, _refusal(parsed.error_category))
-        return Observation(parsed.manifest, self._classify_freshness(parsed.manifest))
+        return Observation(
+            parsed.manifest, self._classify_freshness(parsed.manifest), raw
+        )
 
     def admit(self, observation: Observation) -> policy.Classification:
         """Require the document the check observed to admit the candidate.
@@ -182,9 +189,12 @@ class AdmissionEvidence:
         )
         if verdict.outcome != policy.Outcome.SUCCESS:
             return verdict
+        attributed = configuration.producer_trusted and evidence.is_attributed(
+            observation.document, configuration.evidence_digest
+        )
         if (
             configuration.enforcement == policy.ADMISSION_ENFORCEMENT_MODE
-            and not configuration.producer_trusted
+            and not attributed
         ):
             return _refusal(policy.ErrorCategory.UNTRUSTED_EVIDENCE)
         return self._classify_freshness(manifest)

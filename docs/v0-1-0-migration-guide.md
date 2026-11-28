@@ -239,6 +239,42 @@ be uninstalled first: installing beta5 replaces it in place.
 Nothing else changes. Manifests, the executable name, and the package contents
 are unaffected, and the MSI still ships for both x64 and Arm64.
 
+## Exercise a v0.1.0 release candidate in downstream CI
+
+Run a downstream Netsukefile quality gate against a proposed candidate to find
+migration problems before the release. Pin the installer action reference and
+its `revision` input to the same candidate commit, and state the package
+version that the candidate must report:
+
+```yaml
+- name: Install Netsuke release candidate
+  id: netsuke
+  uses: leynos/netsuke/.github/actions/install-release-candidate@<candidate-sha>
+  with:
+    revision: <candidate-sha>
+    expected-version: 0.1.0-beta4
+
+- name: Run the selected Netsuke gate
+  env:
+    NETSUKE: ${{ steps.netsuke.outputs.binary }}
+  shell: bash
+  run: |
+    "$NETSUKE" build all
+```
+
+The required `revision` and `expected-version` inputs cause the installer to
+build the exact checked-out candidate. The optional `repository` input names
+the GitHub `owner/name` to fetch it from, and defaults to `leynos/netsuke`. It
+exposes verified `binary`, `revision`, and `version` outputs only after the
+resolved commit and `netsuke --version` match. On Windows, `binary` names the
+built `netsuke.exe`; invoke that output directly rather than constructing a
+platform-specific path.
+
+Netsuke's own v0.1.0 release is admitted by three pinned downstream migration
+canaries, which its release workflow runs against the exact candidate; see
+[release-admission migration canaries](release-admission-canaries.md). A
+downstream gate like the one above needs nothing from that process.
+
 ## Netsuke is a build tool, not a library
 
 Netsuke is intended to be used as a command-line build tool. The only surfaces
@@ -1562,11 +1598,11 @@ Existing manifests need no changes, but integrations must not treat a
 conditional catalogue entry as a confirmed selected entry. Full rendering for
 `build`, `generate`, and normal manifest output retains the full standard
 library and its existing semantics; these restrictions apply only to
-manifest-query rendering. See the detailed [help targets documentation]
-(users-guide.md#generate-and-inspect-artefacts). Add `--json` to receive the
-versioned JSON result document; its `result.command` is `help-targets`. The
-command and the new descriptions are beta-series additions and remain subject
-to the stability caveat above.
+manifest-query rendering. See the detailed
+[help targets documentation](users-guide.md#generate-and-inspect-artefacts). Add
+`--json` to receive the versioned JSON result document; its `result.command` is
+`help-targets`. The command and the new descriptions are beta-series additions
+and remain subject to the stability caveat above.
 
 ## Configure shell definitions
 
@@ -1753,21 +1789,27 @@ name the run's own commit. Enforcement follows the run's mode, so a
 pull-request dry run observes rather than enforces and its rehearsal lane keeps
 running after a failed package or a refused admission.
 
-The gate refuses with `error_category=missing_evidence` while no
-`release-admission-evidence` manifest exists in the run, and with
-`error_category=untrusted_evidence` when a manifest exists that the run cannot
-attribute to a trusted producer. Both refusals are deliberate: enforcement
-lands before a producer does, so the path that published without evidence is
-closed first, and the interim block closes the path that published on any
-same-run document. A caller of the reusable `release.yml` needs no new input,
-because the producer runs inside the workflow; a caller that expected a publish
-to proceed now sees the admission job fail and every job that writes skipped.
-The admission job also runs the gate from this repository's own workflow
-commit, so a calling workflow cannot supply an older or modified gate that
-reports a more favourable decision. The producer, its provenance, and the
-downstream canaries are tracked by #598. Publication therefore stays
-unavailable until #598 lands, and it is refused on both counts rather than only
-on the absence of a document.
+The gate refuses with `error_category=missing_evidence` while the run has no
+`release-admission-evidence` manifest, or while the manifest lacks a required
+result. Attribution is checked after identity and results. A manifest that
+passes those checks is refused with `error_category=untrusted_evidence` when
+its bytes do not hash to the digest the producer job published. While the
+interim block stands, every manifest that passes them is refused that way. The
+release workflow's `release-admission-evidence` job writes the manifest after
+the downstream canary jobs conclude, including skipped ones, and records a
+canary whose provenance record is missing as that canary's failure. A produced
+manifest is therefore not proof that every canary ran: a canary counts as
+successful only when its job succeeded and its provenance record names this
+candidate and reports a pass. Both refusals are deliberate: the path that
+published without evidence is closed, and a same-run document that the producer
+did not write is refused. A caller of the reusable `release.yml` needs no new
+input, because the producer runs inside the workflow; a caller that expected a
+publish to proceed now sees the admission job fail and every job that writes
+skipped. The admission job also runs the gate from this repository's own
+workflow commit, so a calling workflow cannot supply an older or modified gate
+that reports a more favourable decision. The `history_scan` and
+`release_candidate` results still have no producer, so publication stays
+unavailable until both exist.
 
 See [Install Netsuke](users-guide.md#install-netsuke) for the caller-visible
 rules and the conditions the manifest must satisfy.

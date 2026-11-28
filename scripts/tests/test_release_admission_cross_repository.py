@@ -47,7 +47,9 @@ from release_admission_cross_repository_layout import (
 )
 from release_admission_test_harness import EVIDENCE_FILE_VARIABLE
 from release_admission_test_support import (
+    ATTRIBUTED,
     CANARY_BY_OPERATION,
+    EVIDENCE_DIGEST_VARIABLE,
     METRICS_VALIDATOR,
     RELEASE_TAG,
     GateRun,
@@ -69,7 +71,6 @@ if typ.TYPE_CHECKING:
 
 ENFORCEMENT_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
 GIT_ADAPTER_VARIABLE = "NETSUKE_RELEASE_ADMISSION_GIT_ADAPTER"
-PRODUCER_TRUST_VARIABLE = "NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED"
 TAG_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TAG"
 #: A manifest the verifier admits on its own terms once the fetch has reached
 #: the candidate: fresh, matching, and reporting both required canaries.
@@ -138,7 +139,7 @@ def _run(
         **_git_isolated_environment(repositories),
         GIT_ADAPTER_VARIABLE: git_binary(),
         ENFORCEMENT_VARIABLE: str(layout.enforce).lower(),
-        PRODUCER_TRUST_VARIABLE: "true",
+        EVIDENCE_DIGEST_VARIABLE: ATTRIBUTED,
         TAG_VARIABLE: RELEASE_TAG,
         "GITHUB_SHA": repositories.candidate,
     }
@@ -269,7 +270,7 @@ def test_a_relative_evidence_file_is_written_where_the_child_reads_it(
         **_git_isolated_environment(repositories),
         GIT_ADAPTER_VARIABLE: git_binary(),
         ENFORCEMENT_VARIABLE: "true",
-        PRODUCER_TRUST_VARIABLE: "true",
+        EVIDENCE_DIGEST_VARIABLE: ATTRIBUTED,
         TAG_VARIABLE: RELEASE_TAG,
         EVIDENCE_FILE_VARIABLE: RELATIVE_EVIDENCE_FILE,
         "GITHUB_SHA": repositories.candidate,

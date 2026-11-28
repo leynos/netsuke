@@ -23,6 +23,20 @@ name: Release Binary
         required: false
         type: boolean
         default: false
+      candidate-ref:
+        description: >-
+          The Netsuke ref the downstream migration canaries build. Empty, the
+          default, builds the commit this run is for. `auto` selects the
+          newest `-rcN` tag while it is also the newest version tag, and
+          otherwise `main`. Any other value is resolved as a Git ref, and a
+          branch name also as its `origin/` remote-tracking branch. A
+          publishing run admits only canaries that built its own commit.
+          No trigger in this repository sets it yet: the pinned release-mode
+          resolver refuses `workflow_dispatch`, so a manual rehearsal that
+          would offer it waits on that support.
+        required: false
+        type: string
+        default: ''
       wix-extension-version:
         description: >-
           Version of the WixToolset.UI.wixext extension to install alongside
@@ -422,7 +436,21 @@ jobs:
         run: sccache --show-stats --stats-format=json
 
   release-admission-canaries:
-    needs: metadata
+    # Waits for the evidence producer, and through it for every downstream
+    # canary, so admission always reads a manifest this run wrote.
+    #
+    # The guard is explicit because GitHub's implicit `success()` also skips a
+    # job whose *transitive* ancestors were skipped: on a draft pull request's
+    # dry run the canaries are skipped, so without it admission would be too,
+    # and the observation lane would never report. The producer still has to
+    # have succeeded, so admission never reads a manifest it did not write.
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.release-admission-evidence.result == 'success'
+    needs:
+      - metadata
+      - release-admission-evidence
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -485,25 +513,22 @@ jobs:
           # contract requires the pin rather than only this comment.
           version: '0.13.2'
           enable-cache: false
-      # No producer uploads this artefact yet (#598 supplies it, together with
-      # the downstream canaries admission is to require). Failing here would
-      # report a missing producer rather than a refused admission, so absence
-      # is tolerated: the verifier then records `missing_evidence`, and an
-      # enforcing run fails closed on that category.
+      # The producer job above uploads this artefact, and this job needs it,
+      # so a missing producer is a broken job graph rather than a refused
+      # admission: nothing here tolerates the artefact's absence.
       #
       # This download is not a provenance boundary: it resolves the current run,
       # and a reusable-workflow caller defines jobs in that same run, so a
       # caller that deliberately uploads under this name arrives here
-      # indistinguishably. The gate therefore stays blocked on the flag below
-      # until the producer attests its upload, which is why publication is
-      # refused even when a matching manifest is present. The verifier checkout
-      # is what keeps that refusal out of the caller's hands: the gate that
-      # reads this file is the one from this repository's own commit.
+      # indistinguishably. The binding is the digest below instead: the gate
+      # admits only bytes that hash to the value the producer job published as
+      # its own output. The verifier checkout is what keeps that check out of
+      # the caller's hands: the gate that reads this file is the one from this
+      # repository's own commit.
       - name: Download the release-admission evidence
         uses: >-
           actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         # v8.0.1
-        continue-on-error: true
         with:
           name: release-admission-evidence
           path: ${{ runner.temp }}/release-admission-evidence
@@ -518,12 +543,18 @@ jobs:
           NETSUKE_RELEASE_ADMISSION_ENFORCE: >-
             ${{ needs.metadata.outputs.should_publish == 'true' }}
           # The interim publication block. While this literal is not `true`, an
-          # enforcing run refuses every manifest -- including one a same-run
-          # supplier uploaded -- with `untrusted_evidence`, because nothing in
-          # the run authenticates the producer. #598 supplies the producer that
-          # attests the upload; only then does this become derivable from its
-          # output, and only this file can change it, never the caller.
+          # enforcing run refuses every manifest with `untrusted_evidence`,
+          # attributed or not. #598 requires a live admitted and a live refused
+          # publishing run to be demonstrated before it changes, and only this
+          # file can change it, never the caller.
           NETSUKE_RELEASE_ADMISSION_PRODUCER_TRUSTED: 'false'
+          # Producer attribution, derived rather than declared: the SHA-256
+          # the producer job published for the manifest it wrote. Only this
+          # workflow file can name that job's output, never the caller, so an
+          # enforcing run refuses with `untrusted_evidence` any document whose
+          # bytes do not hash to it.
+          NETSUKE_RELEASE_ADMISSION_EVIDENCE_SHA256: >-
+            ${{ needs.release-admission-evidence.outputs.evidence_sha256 }}
           NETSUKE_RELEASE_ADMISSION_TAG: ${{ needs.metadata.outputs.release_tag }}
           NETSUKE_RELEASE_ADMISSION_EVIDENCE_FILE: >-
             ${{ runner.temp }}/release-admission-evidence/evidence.json
@@ -580,6 +611,322 @@ jobs:
         with:
           name: release-admission-traces
           path: ${{ env.NETSUKE_RELEASE_ADMISSION_TRACE_FILE }}
+          if-no-files-found: error
+
+  release-candidate:
+    # Resolves the one Netsuke commit every downstream canary builds, and the
+    # version its manifest declares. The downstream canaries below run on the
+    # same events: every release and reusable-workflow call, and a pull
+    # request's dry run only when it is marked ready for review or reopened,
+    # since each canary compiles a whole downstream workspace. Reopening is how
+    # a ready pull request asks for them again after a fix.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.action == 'ready_for_review' ||
+      github.event.action == 'reopened'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      commit: ${{ steps.resolve.outputs.commit }}
+      version: ${{ steps.resolve.outputs.version }}
+      source: ${{ steps.resolve.outputs.source }}
+      # The repository whose refs the resolver read: the caller's checkout
+      # below. The canaries fetch the candidate from here, so a commit that
+      # only a reusable-workflow caller holds is still reachable.
+      repository: ${{ github.repository }}
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          # The caller's repository: every tag and `main`, so `auto` can
+          # choose between them. The resolver reads refs from here.
+          fetch-depth: 0
+          persist-credentials: false
+      # The resolver itself comes from this repository at the workflow's own
+      # commit, as the evidence producer and the admission gate do: a
+      # reusable-workflow caller's tree need not contain it, and must not be
+      # able to supply a different one.
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          repository: leynos/netsuke
+          ref: ${{ job.workflow_sha }}
+          path: gate
+          sparse-checkout: |
+            /.github/scripts/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.14'
+          version: '0.13.2'
+          enable-cache: false
+      - id: resolve
+        name: Resolve the release candidate
+        env:
+          CANDIDATE_REF: ${{ inputs.candidate-ref }}
+        # Run from the caller's checkout, so Git resolves its refs, but with
+        # `--no-config`, so its `uv.toml` cannot redirect uv.
+        run: >-
+          uv run --no-config --no-project --python 3.14
+          gate/.github/scripts/resolve_release_candidate.py
+          --requested "$CANDIDATE_REF" --workflow-sha "$GITHUB_SHA"
+          --output "$GITHUB_OUTPUT"
+
+  downstream-canaries:
+    # The v0.1.0 release-admission canaries: three real downstream
+    # repositories, each checked out at a pinned commit and driven through
+    # its own Netsukefile by the exact candidate. docs/release-admission-canaries.md
+    # records each pin, its targets, and its retained Makefile boundaries.
+    #
+    # GitHub-hosted, not Ubicloud: nothing waits on these jobs during
+    # development, and MXD's PostgreSQL lane needs a service container.
+    # They never gate a pull request: a dry run marks them continue-on-error,
+    # so a downstream failure is visible there without blocking the merge. A
+    # release needs them, and publishes nothing unless every canary passed.
+    name: downstream-canaries (${{ matrix.canary }})
+    needs:
+      - metadata
+      - release-candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - canary: repovec-appliance
+            repository: leynos/repovec-appliance
+            ref: e8f9d709a53f504344230ef52298aeb20b5b7721
+            targets: all
+            tools: whitaker
+            selectors: ''
+            forbid: ''
+            postgres: false
+          - canary: mxd-postgres
+            repository: leynos/mxd
+            ref: 737048017901868a885ae23dcd4c0473242eb765
+            targets: check-fmt lint test
+            tools: nextest libpq
+            selectors: MXD_BACKEND=postgres
+            forbid: --features 'sqlite
+            postgres: true
+          - canary: mxd-sqlite
+            repository: leynos/mxd
+            ref: 737048017901868a885ae23dcd4c0473242eb765
+            targets: check-fmt lint test
+            tools: nextest libsqlite3
+            selectors: MXD_BACKEND=sqlite
+            forbid: |-
+              --features 'postgres
+              'sqlite toml
+            postgres: false
+          - canary: mxd-wireframe-only
+            repository: leynos/mxd
+            ref: 737048017901868a885ae23dcd4c0473242eb765
+            targets: check-fmt lint test
+            tools: nextest libsqlite3
+            selectors: MXD_BACKEND=wireframe-only
+            forbid: |-
+              --features 'postgres
+              'sqlite test-support'
+            postgres: false
+          - canary: ortho-config
+            repository: leynos/ortho-config
+            ref: 2e5c291a53720057d539fb4773efdbf25232f59f
+            targets: check-fmt lint test markdownlint generated-config
+            tools: whitaker markdownlint
+            selectors: ''
+            forbid: ''
+            postgres: false
+    services:
+      postgres:
+        # An empty image starts no service, so only MXD's PostgreSQL lane
+        # pays for one.
+        image: >-
+          ${{ matrix.postgres &&
+          'postgres:15@sha256:724292da1f2e50bdccfc3302ce75bbba7f4a6076701b588cc795fcac65683550'
+          || '' }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          # Only the canary action and the scripts it runs, at the workspace
+          # root so `uses:` names the action by its own path. The non-cone
+          # patterns check out no root file: Cargo and rustup read
+          # `.cargo/config.toml` and `rust-toolchain.toml` from every ancestor
+          # of the downstream checkout, so Netsuke's own must not be there.
+          #
+          # This repository at the workflow's own commit, never the caller's
+          # checkout: the provenance the evidence producer trusts must come
+          # from this action, so a reusable-workflow caller cannot substitute
+          # one that reports passing gates it never ran. The candidate itself
+          # is fetched by the installer at the resolved commit, from the
+          # repository the resolver read.
+          repository: leynos/netsuke
+          ref: ${{ job.workflow_sha }}
+          sparse-checkout: |
+            /.github/actions/
+            /scripts/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Run the downstream canary
+        uses: ./.github/actions/downstream-canary
+        with:
+          canary: ${{ matrix.canary }}
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.ref }}
+          targets: ${{ matrix.targets }}
+          platform: linux
+          netsuke-repository: ${{ needs.release-candidate.outputs.repository }}
+          netsuke-commit: ${{ needs.release-candidate.outputs.commit }}
+          netsuke-version: ${{ needs.release-candidate.outputs.version }}
+          selectors: ${{ matrix.selectors }}
+          environment: >-
+            ${{ matrix.postgres &&
+            'POSTGRES_TEST_URL=postgres://postgres:password@127.0.0.1/test'
+            || '' }}
+          forbid: ${{ matrix.forbid }}
+          tools: ${{ matrix.tools }}
+
+  downstream-canaries-windows:
+    # OrthoConfig's Windows gate on a normal GitHub-hosted Windows runner,
+    # driven through PowerShell. Same events and pull-request policy as the
+    # Linux canaries above.
+    name: downstream-canaries (${{ matrix.canary }})
+    needs:
+      - metadata
+      - release-candidate
+    runs-on: windows-latest
+    timeout-minutes: 90
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - canary: ortho-config-windows
+            repository: leynos/ortho-config
+            ref: 2e5c291a53720057d539fb4773efdbf25232f59f
+            targets: powershell-wrapper-validate
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          # The same pinned, sparse layout as the Linux canaries, for the same
+          # reasons.
+          repository: leynos/netsuke
+          ref: ${{ job.workflow_sha }}
+          sparse-checkout: |
+            /.github/actions/
+            /scripts/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Run the downstream canary
+        uses: ./.github/actions/downstream-canary
+        with:
+          canary: ${{ matrix.canary }}
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.ref }}
+          targets: ${{ matrix.targets }}
+          platform: windows
+          netsuke-repository: ${{ needs.release-candidate.outputs.repository }}
+          netsuke-commit: ${{ needs.release-candidate.outputs.commit }}
+          netsuke-version: ${{ needs.release-candidate.outputs.version }}
+
+  release-admission-evidence:
+    # The release-admission evidence producer. It reads every downstream
+    # canary's provenance record and writes the schema-1 manifest the admission
+    # gate verifies, declaring one result per canary: a failure, never an
+    # omission, when a canary failed, was skipped, or built another candidate.
+    # It runs whatever the canaries concluded, so a failed canary reaches
+    # admission as a refused result rather than as a skipped job.
+    #
+    # The binding to admission is the manifest's SHA-256, published as this
+    # job's output. Only this workflow file can name a job's outputs, so the
+    # gate admits the bytes this job wrote and nothing a same-run caller
+    # uploads under the artefact name. Like the gate, the producer runs this
+    # repository's own script at the workflow's commit, not the caller's copy.
+    if: >-
+      !cancelled() && needs.metadata.result == 'success'
+    needs:
+      - metadata
+      - downstream-canaries
+      - downstream-canaries-windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      evidence_sha256: ${{ steps.write_evidence.outputs.evidence-sha256 }}
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          persist-credentials: false
+          repository: leynos/netsuke
+          ref: ${{ job.workflow_sha }}
+          path: gate
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.14'
+          version: '0.13.2'
+          enable-cache: false
+      # Absent when the canaries did not run, as on a draft pull request; the
+      # producer declares each missing record as that canary's failure.
+      - name: Download the downstream canary provenance
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1
+        continue-on-error: true
+        with:
+          pattern: downstream-canary-provenance-*
+          path: ${{ runner.temp }}/downstream-canary-provenance
+      - id: write_evidence
+        name: Write the release-admission evidence
+        env:
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.candidate_commit }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.release_tag || github.ref_name }}
+          LINUX_RESULT: ${{ needs.downstream-canaries.result }}
+          WINDOWS_RESULT: ${{ needs.downstream-canaries-windows.result }}
+        run: >-
+          uv run --no-config --no-project --script
+          gate/.github/scripts/write_release_admission_evidence.py
+          --repository "$RELEASE_REPOSITORY" --commit "$RELEASE_COMMIT"
+          --tag "$RELEASE_TAG" --run-id "$GITHUB_RUN_ID"
+          --provenance-dir "$RUNNER_TEMP/downstream-canary-provenance"
+          --linux-result "$LINUX_RESULT" --windows-result "$WINDOWS_RESULT"
+          --output "$RUNNER_TEMP/release-admission-evidence/evidence.json"
+          --github-output "$GITHUB_OUTPUT"
+      - name: Upload the release-admission evidence
+        uses: >-
+          actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        # v7.0.1
+        with:
+          name: release-admission-evidence
+          path: ${{ runner.temp }}/release-admission-evidence/evidence.json
           if-no-files-found: error
 
   package-crate:
