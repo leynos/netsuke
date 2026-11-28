@@ -106,6 +106,7 @@ fn utf8_temp_file(temp_file: Result<NamedTempFile>) -> Result<(TempPath, Utf8Pat
 }
 
 /// The request shape from which a configured Ninja command is built.
+#[derive(Clone, Copy)]
 enum NinjaInvocation<'a> {
     /// A build command carrying its target operands.
     Build(&'a [String]),
