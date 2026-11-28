@@ -115,18 +115,7 @@ def _read_rust_source(path: Path) -> str:
 
 
 def _sources_beneath(root: Path) -> dict[Path, str]:
-    """Read every Rust source under one validated root.
-
-    Parameters
-    ----------
-    root
-        The tree to read.
-
-    Returns
-    -------
-    dict[Path, str]
-        Each `**/*.rs` path under ``root`` mapped to its text, in path order.
-    """
+    """Read every Rust source under one validated root, in path order."""
     _require_source_root(root)
     return {path: _read_rust_source(path) for path in sorted(root.rglob("*.rs"))}
 
@@ -155,13 +144,13 @@ def rust_test_sources(directory: Path | None = None) -> dict[Path, str]:
         Each `**/*.rs` path under the selected roots mapped to its text, in
         root order and then path order.
 
-    Raises
-    ------
-    WorkflowReadError
-        If a source is missing or does not decode as UTF-8, or if a selected
-        root is absent or is not a directory. A contract that could not read a
-        source cannot say anything about the tests it declares, so the failure
-        is raised rather than left to surface as an empty corpus.
+    Notes
+    -----
+    Read failures propagate from `_sources_beneath` as `WorkflowReadError`
+    when a source is missing or does not decode as UTF-8, or when a selected
+    root is absent or is not a directory. A contract that could not read a
+    source cannot say anything about the tests it declares, so the failure is
+    raised rather than left to surface as an empty corpus.
     """
     roots = TEST_SOURCE_ROOTS if directory is None else (directory,)
     sources: dict[Path, str] = {}
