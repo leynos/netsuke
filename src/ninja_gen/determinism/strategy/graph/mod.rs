@@ -97,9 +97,12 @@ pub(super) struct EdgePlan {
     pub(super) is_serial: bool,
     /// Whether the edge is marked `always`.
     pub(super) is_always: bool,
-    /// Whether the edge's `phony` field is set. The emitter ignores it; it is
-    /// generated so that the two `always`/`restat` and phony combinations the
-    /// obligations name all occur.
+    /// Whether the edge's `phony` field is set.
+    ///
+    /// The emitter reads it only for an executable edge, where it selects the
+    /// hidden output plus native `phony` alias lowering. It is generated so
+    /// that the `always`/`restat` and phony combinations the obligations name
+    /// all occur.
     pub(super) is_phony: bool,
 }
 

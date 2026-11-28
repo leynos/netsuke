@@ -115,6 +115,37 @@
   Windows drive-relative rooted value such as `\config`
   ([#986](https://github.com/leynos/netsuke/issues/986))
 
+### Fixed
+
+- Run every action, and every target declaring `phony: true`, every time it is
+  reached, even when a file or directory of the same name exists, and stop
+  `netsuke clean` from removing that path. A phony executable edge now
+  publishes its name as a native Ninja `phony` alias over a hidden output under
+  `.netsuke/phony`; an `always: true` edge gains a shared, permanently dirty
+  prerequisite, so its recipe re-runs while an output whose modification time
+  is unchanged still prunes downstream work. `netsuke build` clears a stray
+  path left at that prerequisite's reserved name, so it cannot silently turn
+  forcing off, and creates the parent directories of a phony edge's declared
+  outputs, which Ninja no longer sees on the hidden statement
+  ([#1144](https://github.com/leynos/netsuke/issues/1144), [ADR-0084](docs/adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md))
+- Bound `flatten`'s recursive expansion: one manifest load shares a budget of
+  1,000,000 item visits including containers and 100,000 retained leaves, and
+  rejects nesting deeper than 128 levels, reporting a localized error that
+  names the ceiling. The visit and leaf ceilings are shared by every call, so a
+  template loop cannot multiply the work, and they apply to manifest discovery
+  and full rendering alike, so a compact template graph with shared descendants
+  cannot force an exponential expansion
+  ([#973](https://github.com/leynos/netsuke/issues/973))
+- Bound `shell_join`'s intermediate allocation: the filter appends into one
+  buffer under a fixed 1 MiB ceiling and rejects an over-limit join with
+  `netsuke::jinja::shell::join_limit`, instead of materializing an encoded copy
+  of every member and then the joined string
+  ([#970](https://github.com/leynos/netsuke/issues/970))
+- Install the x64 and Arm64 Windows MSIs under `C:\Program Files\netsuke`
+  rather than `C:\Program Files (x86)\netsuke`, and migrate a v0.1.0-beta4
+  installation out of the 32-bit directory on upgrade
+  ([#1143](https://github.com/leynos/netsuke/issues/1143))
+
 ### Security
 
 - Preserve `script` bytes byte for byte through the `printf %b` transport, so a
@@ -164,27 +195,6 @@
   marker follows the substitution; place the marker before that substitution,
   or pass the word through a variable so the substitution no longer contains
   the header ([#999](https://github.com/leynos/netsuke/issues/999))
-
-<!-- markdownlint-disable-next-line MD024 -->
-### Fixed
-
-- Bound `flatten`'s recursive expansion: one manifest load shares a budget of
-  1,000,000 item visits including containers and 100,000 retained leaves, and
-  rejects nesting deeper than 128 levels, reporting a localized error that
-  names the ceiling. The visit and leaf ceilings are shared by every call, so a
-  template loop cannot multiply the work, and they apply to manifest discovery
-  and full rendering alike, so a compact template graph with shared descendants
-  cannot force an exponential expansion
-  ([#973](https://github.com/leynos/netsuke/issues/973))
-- Bound `shell_join`'s intermediate allocation: the filter appends into one
-  buffer under a fixed 1 MiB ceiling and rejects an over-limit join with
-  `netsuke::jinja::shell::join_limit`, instead of materializing an encoded copy
-  of every member and then the joined string
-  ([#970](https://github.com/leynos/netsuke/issues/970))
-- Install the x64 and Arm64 Windows MSIs under `C:\Program Files\netsuke`
-  rather than `C:\Program Files (x86)\netsuke`, and migrate a v0.1.0-beta4
-  installation out of the 32-bit directory on upgrade
-  ([#1143](https://github.com/leynos/netsuke/issues/1143))
 
 ## [0.1.0-beta4] - 2026-09-26
 

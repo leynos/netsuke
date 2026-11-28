@@ -59,3 +59,54 @@ See the [users' guide](users-guide.md#which-resolver-observability) for the
 counter and label reference and
 [ADR-0024](adrs/adr-0024-require-explicit-recursive-which-search.md) for the
 decision that added the label.
+
+## Expect phony and always work to run
+
+No manifest needs an edit for these two shapes, but they now behave as their
+names promised. One reservation is new: a manifest that already declares a
+target or output inside `.netsuke/phony` must move it because that spelling now
+names generated state. Generation rejects the literal and foldable spellings,
+and it ignores ASCII case, because a case-insensitive volume resolves
+`.NETSUKE/PHONY` to the same tree. A spelling only the working directory can
+resolve, such as an absolute path beneath it, passes that lexical check and is
+refused later, when the build resolves it against the working directory before
+it publishes a dyndep sidecar, prunes an obsolete one, or writes anything else.
+
+Every executable action, and every target declaring `phony: true` with a
+recipe, runs each time it is reached, even when a file or directory of that
+name exists. An action is implicitly phony, so it needs no flag to acquire this
+behaviour. Previously such a path made the edge look up to date, so the recipe
+was skipped after its first run. `netsuke clean` now leaves that path alone and
+removes the generated output under `.netsuke/phony` instead. A dependency-only
+aggregate has no recipe and no generated recipe output; it keeps its
+dependency-only `phony` form whether or not it declares the flag.
+
+A phony recipe may still write a nested output such as `build/report`. The
+generated plan creates that directory just before the recipe runs, and only for
+a target the build actually reaches.
+
+A recipe that previously wrote a file at its declared name left that file
+behind as the edge's declared output. `netsuke clean` no longer removes it, and
+will not remove it after the upgrade either, because the generated
+`.netsuke/phony` output does not replace the old path. Identify stale build
+products from earlier runs and delete only the ones you have confirmed the
+recipe created. A recipe that still writes its declared name recreates it on
+every build. Remove that file on every run only when it is no longer wanted. Do
+not delete unrelated files that merely share a target's name.
+
+A target declaring `always: true` re-runs on every invocation that reaches it,
+even when its inputs and output are unchanged. For a non-phony target, Ninja
+records the output's modification time after the run: an otherwise up-to-date
+dependant rebuilds when that recorded time changes and is skipped when it does
+not. A recipe that rewrites identical bytes and restores the original
+modification time therefore still lets `restat` skip such a dependant, while a
+dependant with another changed input can still run. A target that also declares
+`phony: true` takes the hidden-output lowering instead, where `restat` is
+suppressed and an unchanged same-named file prunes nothing.
+
+Because the generated Ninja text changes shape for these edges, a manifest that
+compares `netsuke generate` output against a stored copy must update that copy.
+A plan saved before the upgrade and still executed must be regenerated: the
+saved file keeps the old edge statements and does not gain these behaviours.
+See the [users' guide](users-guide.md#rely-on-phony-and-always-work-running) and
+[ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).

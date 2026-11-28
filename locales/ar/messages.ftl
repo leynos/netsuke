@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = ‏ تعذّر تطبيق الاحتفاظ بـ dyndep المُنشأ أسفل ‏{ $path }.
 runner.io.dyndep.alias = مسار dyndep المُنشأ { $path } هو رابط رمزي أو نقطة وصل أو ليس دليلاً؛ استبدله بدليل حقيقي.
 runner.io.dyndep.open = تعذّر فتح دليل dyndep المُنشأ { $path }.
+runner.io.phony.inspect = ‏ تعذّر فحص حالة phony المحجوزة في ‏{ $path }.
+runner.io.phony.reset = ‏ تعذّر مسح حالة phony المحجوزة في ‏{ $path }.
 cli.about = يصرّف Netsuke بيانات YAML + Jinja إلى خطط بناء بصيغة Ninja.
 cli.long_about = يحوّل Netsuke بيانات YAML + Jinja إلى رسوم Ninja قابلة لإعادة الإنتاج، ثم ينفّذ Ninja بإعدادات افتراضية آمنة.
 cli.usage = { $usage }

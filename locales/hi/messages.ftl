@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = बनाई गई dyndep को { $path } के नीचे बनाए रखने की प्रक्रिया लागू नहीं की जा सकी।
 runner.io.dyndep.alias = उत्पन्न dyndep पथ { $path } एक सांकेतिक लिंक, जंक्शन है, या निर्देशिका नहीं है; इसे वास्तविक निर्देशिका से बदलें।
 runner.io.dyndep.open = उत्पन्न dyndep निर्देशिका { $path } खोलने में विफल।
+runner.io.phony.inspect = आरक्षित phony स्थिति { $path } पर जाँची नहीं जा सकी।
+runner.io.phony.reset = आरक्षित phony स्थिति { $path } पर साफ़ नहीं की जा सकी।
 cli.about = Netsuke YAML + Jinja मैनिफ़ेस्ट को Ninja की बिल्ड योजनाओं में संकलित करता है।
 cli.long_about = Netsuke YAML + Jinja मैनिफ़ेस्ट को पुनरुत्पादनीय Ninja ग्राफ़ में बदलता है और सुरक्षित डिफ़ॉल्ट मानों के साथ Ninja चलाता है।
 cli.usage = { $usage }

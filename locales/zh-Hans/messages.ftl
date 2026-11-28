@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = 无法应用 { $path } 处生成的 dyndep 保留设置。
 runner.io.dyndep.alias = 生成的 dyndep 路径 { $path } 是符号链接、联接点或不是目录；请将其替换为真实目录。
 runner.io.dyndep.open = 无法打开生成的 dyndep 目录 { $path }。
+runner.io.phony.inspect = 无法检查 { $path } 处保留的 phony 状态。
+runner.io.phony.reset = 无法清除 { $path } 处保留的 phony 状态。
 cli.about = Netsuke 将 YAML + Jinja 清单编译为 Ninja 构建计划。
 cli.long_about = Netsuke 把 YAML + Jinja 清单转换为可复现的 Ninja 图，并以安全的默认设置运行 Ninja。
 cli.usage = { $usage }

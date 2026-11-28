@@ -13,6 +13,7 @@ mod dispatch;
 mod dyndep;
 mod error;
 mod failure_diagnostic;
+mod generated_state;
 mod manifest_structure_telemetry;
 mod reporter;
 #[cfg(test)]
@@ -60,6 +61,7 @@ mod graph;
 mod help;
 mod ninja;
 mod path_helpers;
+mod phony_state;
 mod process;
 mod recipe_shell;
 pub use build_targets::BuildTargets;
@@ -76,9 +78,11 @@ pub use recipe_shell::telemetry::{
     RECIPE_SHELL_RESOLUTIONS_TOTAL,
 };
 
-use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
+use dyndep::{materialize_dyndep_bundle_in, prune_dyndep_bundle_in};
+use generated_state::{BuildStatePlan, refuse_publish_prune_and_reset};
 use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
+use phony_state::Workspace;
 use recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 
 /// Runtime dependencies shared by command dispatch handlers.
@@ -215,11 +219,20 @@ fn execute_build(
         Some(keys::STATUS_TOOL_BUILD.into()),
         graph_generation,
     )?;
-    let (bundle, command_list_targets) = generated.into_build_parts();
-    let console_edge_count = bundle.console_edge_count();
-    let publication = materialize_dyndep_bundle(cli, &bundle)?;
-    prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
-    let ninja = NinjaContent::new(bundle.into_parts().0);
+    let parts = generated.into_build_parts();
+    let console_edge_count = parts.bundle.console_edge_count();
+    // The workspace is resolved once and the same value judges the refusal and
+    // guards the reset, so no second lookup can answer differently. The named
+    // step owns the order: refusal, publication, pruning, reset.
+    let workspace = Workspace::resolve(cli)?;
+    let publication = refuse_publish_prune_and_reset(&BuildStatePlan {
+        workspace: &workspace,
+        bundle: &parts.bundle,
+        manifest: &cli.file,
+        declared: &parts.declared_paths,
+    })?;
+    let ninja = NinjaContent::new(parts.bundle.into_parts().0);
+    let command_list_targets = parts.command_list_targets;
     let targets = if args.targets.is_empty() {
         BuildTargets::new(&cli.default_targets)
     } else {
@@ -313,7 +326,10 @@ fn execute_ninja_tool(
     let bundle =
         generate_ninja_with_shell(cli, context.reporter, Some(tool.key), graph_generation)?
             .into_bundle();
-    let publication = materialize_dyndep_bundle(cli, &bundle)?;
+    // Ninja tools open their own verified directory for the invocation, so
+    // publication and pruning use that same handle.
+    let tool_dir = path_helpers::open_effective_dir(cli)?;
+    let publication = materialize_dyndep_bundle_in(&tool_dir, &bundle)?;
     let (ninja_file, dyndep_files) = bundle.into_parts();
     let ninja = NinjaContent::new(ninja_file);
 
@@ -345,7 +361,7 @@ fn execute_ninja_tool(
     };
     tool_result.map_err(|error| ninja_failure(error, ctx))?;
     if tool.prune_after_success {
-        prune_dyndep_bundle(cli, &dyndep_files, &publication)?;
+        prune_dyndep_bundle_in(&tool_dir, &dyndep_files, &publication)?;
     }
     context.reporter.report_complete(tool.key);
     drop(publication);

@@ -2,11 +2,11 @@
 
 #[cfg(feature = "lint")]
 use super::check;
+use super::dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
 use super::recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 use super::{
-    ExecutionContext, NinjaContent, NinjaToolSpec, generate_ninja_with_shell, graph, handle_build,
-    handle_ninja_tool, help, materialize_dyndep_bundle, process, prune_dyndep_bundle,
-    resolve_output_path,
+    ExecutionContext, NinjaContent, NinjaToolSpec, Workspace, generate_ninja_with_shell, graph,
+    handle_build, handle_ninja_tool, help, process, resolve_output_path,
 };
 #[cfg(feature = "lint")]
 use crate::cli::CheckArgs;
@@ -134,8 +134,9 @@ fn execute_generate(
     );
     let bundle =
         generate_ninja_with_shell(cli, context.reporter, None, &graph_generation)?.into_bundle();
-    let publication = materialize_dyndep_bundle(cli, &bundle)?;
-    prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
+    let workspace = Workspace::resolve(cli)?;
+    let publication = materialize_dyndep_bundle(&workspace, &bundle)?;
+    prune_dyndep_bundle(&workspace, bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(bundle.into_parts().0);
     if let Some(file) = output {
         let output_path = resolve_output_path(cli, file.as_path());

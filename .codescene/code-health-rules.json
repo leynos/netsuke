@@ -90,6 +90,26 @@
           "weight": 0.0
         }
       ]
+    },
+    {
+      "matching_content_path": "test_support/src/ninja_edge.rs",
+      "matching_content_path_doc": "Ninja-text lookup helpers for tests. Every function takes the generated Ninja document and the name of the edge to inspect, and the private helpers take one statement line or a token list: the text is the subject under test, because the module exists to find statements inside output a generator produced. The edge name is a manifest spelling rather than a validated identifier, so a newtype would wrap a borrowed &str without enforcing a grammar, and would add a conversion at every call site. The crate is test-only support with no production caller. Reassess if these helpers gain a non-test caller or begin validating edge names.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
+      "matching_content_path": "tests/bdd/steps/ninja.rs",
+      "matching_content_path_doc": "BDD step definitions for generated Ninja output. Each #[then] step receives its Gherkin captures as &str and appends the shared TestWorld, so the string share follows the step text rather than a missing domain type: a capture is the literal output name or fragment the scenario spells, and wrapping it would put a newtype between the step's pattern and its assertion while constraining nothing. The steps only read the world's Ninja text; none performs a domain operation that a parameter object could name. Reassess if a step begins validating a captured value rather than comparing it.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
     }
   ]
 }

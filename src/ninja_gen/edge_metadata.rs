@@ -1,14 +1,29 @@
 //! Compose the shared rule name, restat flag and progress description for an edge.
 //!
 //! This module is the single owner of edge metadata used by ordinary generation
-//! and dyndep rendering. Keep its callers limited to those two writers so they
-//! emit the same action lookup, progress-label and Ninja-escaping decisions.
+//! and dyndep rendering. Keep its callers limited to those two writers and the
+//! prepared-directory generator so all three emit the same action lookup,
+//! classification, progress-label and Ninja-escaping decisions.
 
 use super::escape::{NinjaValue, escape_metadata_value};
+use super::force_run::{self, edge_needs_force};
 use super::{NinjaGenError, progress_label};
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
+use camino::Utf8PathBuf;
 use ortho_config::Localizer;
+
+/// How one edge's rule is rendered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum EdgeClass {
+    /// A dependency-only action, rendered with Ninja's built-in `phony` rule.
+    DependencyOnly,
+    /// An executable action writing its declared outputs directly.
+    Executable,
+    /// An executable action whose public names are a native `phony` alias
+    /// over a hidden executable output.
+    ExecutablePhony,
+}
 
 /// Carry resolved metadata from either edge writer to `DisplayEdge`.
 pub(super) struct EdgeMetadata<'a> {
@@ -20,6 +35,10 @@ pub(super) struct EdgeMetadata<'a> {
     pub(super) pool: Option<&'a str>,
     /// Optional, validated edge-level description with Ninja dollars escaped.
     pub(super) description: Option<NinjaValue>,
+    /// Hidden executable output replacing the public names on a phony edge.
+    pub(super) hidden_output: Option<Utf8PathBuf>,
+    /// Whether the rendered statement depends on the shared force node.
+    pub(super) needs_force: bool,
 }
 
 /// Resolve and escape the metadata shared by ordinary and dyndep edge writers.
@@ -52,18 +71,58 @@ pub(super) fn for_edge<'a>(
                 message: localization::message(keys::NINJA_GEN_MISSING_ACTION)
                     .with_arg("id", &edge.action_id),
             })?;
-    let action_name = if action.recipe.is_dependency_only() {
-        "phony"
-    } else {
-        &edge.action_id
+    let is_dependency_only = action.recipe.is_dependency_only();
+    let class = classify(edge, is_dependency_only);
+    let action_name = match class {
+        EdgeClass::DependencyOnly => "phony",
+        EdgeClass::Executable | EdgeClass::ExecutablePhony => &edge.action_id,
     };
     let localized_description = progress_label::for_edge(edge, action, localizer);
     let description = escape_metadata_value(localized_description.as_deref())?;
+    let hidden_output = match class {
+        EdgeClass::ExecutablePhony => Some(force_run::hidden_output(edge)),
+        EdgeClass::DependencyOnly | EdgeClass::Executable => None,
+    };
 
     Ok(EdgeMetadata {
         action_name,
         restat: action.restat,
         pool: action.pool.as_deref(),
         description,
+        hidden_output,
+        needs_force: edge_needs_force(edge, is_dependency_only),
     })
+}
+
+/// Return whether one edge is lowered to a hidden executable statement.
+///
+/// Ninja creates an edge's output directories immediately before it runs that
+/// edge's recipe, but an executable `phony` edge's statement names only its
+/// hidden output, and its declared names are a native `phony` alias whose
+/// outputs Ninja never prepares. The prepared-directory generator therefore
+/// asks this predicate which edges write under declared names. The
+/// classification stays here rather than in the caller, because this module
+/// owns the decision about which edges are lowered. An edge whose action is
+/// missing yields `false`: generation reports that fault before any lowering
+/// exists to describe.
+pub(super) fn is_executable_phony(graph: &BuildGraph, edge: &BuildEdge) -> bool {
+    graph.actions.get(&edge.action_id).is_some_and(|action| {
+        classify(edge, action.recipe.is_dependency_only()) == EdgeClass::ExecutablePhony
+    })
+}
+
+/// Classify one edge from its recipe shape and its `phony` flag.
+///
+/// A dependency-only action already renders as Ninja's `phony` rule, so its
+/// edge flag cannot add another lowering. The determinism strategy reads the
+/// same classification so its coverage flags describe the statements that are
+/// actually emitted rather than the raw flags.
+pub(super) const fn classify(edge: &BuildEdge, is_dependency_only: bool) -> EdgeClass {
+    if is_dependency_only {
+        EdgeClass::DependencyOnly
+    } else if edge.phony {
+        EdgeClass::ExecutablePhony
+    } else {
+        EdgeClass::Executable
+    }
 }

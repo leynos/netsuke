@@ -15,7 +15,9 @@ use std::{
     time::Duration,
 };
 use tempfile::{TempDir, tempdir};
-use test_support::{ensure_binaries_available, localizer_test_lock, set_en_localizer};
+use test_support::{
+    ensure_binaries_available, localizer_test_lock, ninja_edge::edge_build_line, set_en_localizer,
+};
 
 /// Snapshot and execute the selected conditional-action dependency graph.
 #[test]
@@ -31,7 +33,7 @@ fn conditional_action_deps_ninja_snapshot() -> Result<()> {
         &ExpectedNinjaEdge {
             output: "fallback-alpha",
             input: "src/alpha.in",
-            implicit_deps: "build/alpha.o shared/action.cfg",
+            implicit_deps: "build/alpha.o shared/action.cfg .netsuke/phony/force",
             order_only_deps: "order/alpha.stamp",
         },
     )?;
@@ -40,7 +42,7 @@ fn conditional_action_deps_ninja_snapshot() -> Result<()> {
         &ExpectedNinjaEdge {
             output: "fallback-beta",
             input: "src/beta.in",
-            implicit_deps: "build/beta.o shared/action.cfg",
+            implicit_deps: "build/beta.o shared/action.cfg .netsuke/phony/force",
             order_only_deps: "order/beta.stamp",
         },
     )?;
@@ -79,11 +81,12 @@ struct ExpectedNinjaEdge<'a> {
 }
 
 /// Assert that a generated edge retains explicit, implicit, and order-only inputs.
+///
+/// An action lowers to a hidden executable statement plus a public `phony`
+/// alias, and the dependency classes sit on the hidden statement, so the
+/// lookup follows the alias.
 fn assert_dependency_classes(ninja_content: &str, expected: &ExpectedNinjaEdge<'_>) -> Result<()> {
-    let build_line = ninja_content
-        .lines()
-        .find(|line| line.starts_with(&format!("build {}:", expected.output)))
-        .with_context(|| format!("expected build line for {}", expected.output))?;
+    let build_line = edge_build_line(ninja_content, expected.output)?;
     ensure!(
         build_line.contains(&format!(
             " {} | {} || {}",

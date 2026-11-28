@@ -9,18 +9,19 @@
 //! The boundary is ownership of the emitted staging shape rather than a line
 //! count: a change to what a stage looks like lands here, while a change to how
 //! bundles are assembled stays in the parent. The reserved-namespace constants
-//! stay in the parent because path rejection needs them too.
+//! live in [`crate::ninja_gen::reserved_paths`] because path rejection owns them.
 //!
 //! Why a sidecar reveals a relay phony instead of the real dependency is
 //! recorded in
 //! [ADR-0058](../../../docs/adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md),
 //! and summarized in [`super`]'s module documentation.
 
-use super::{DYNDEP_NAMESPACE, GeneratedDyndep, SERIAL_NAMESPACE};
+use super::GeneratedDyndep;
 use crate::hex;
 use crate::ir::BuildEdge;
+use crate::ninja_gen::reserved_paths::{DYNDEP_NAMESPACE, SERIAL_NAMESPACE};
 use crate::ninja_gen::{NinjaGenError, validated_ninja_path};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -59,7 +60,7 @@ pub(super) fn render_serial_block(
 ) -> Result<(), NinjaGenError> {
     let parent = parent_identity(edge);
     for (index, dep) in edge.implicit_deps.iter().enumerate() {
-        let gate = parent.join(format!("{index:03}"));
+        let gate = gate_path(&parent, index);
         let relay = parent.join(format!("{RELAY_PREFIX}{index:03}"));
         let content = sidecar_content(&gate, &relay)?;
         let digest = sidecar_digest(&content);
@@ -101,6 +102,24 @@ pub(super) fn render_serial_block(
     Ok(())
 }
 
+/// Return the gate paths the staged statements for `edge` declare.
+///
+/// Any other statement that must wait for the edge's serial dependencies has
+/// to name these gates rather than the raw dependency list. Naming the raw list
+/// would let Ninja start a later stage while an earlier one still runs, which
+/// is exactly what the staging exists to prevent.
+pub(crate) fn serial_gate_paths(edge: &BuildEdge) -> Vec<Utf8PathBuf> {
+    let parent = parent_identity(edge);
+    (0..edge.implicit_deps.len())
+        .map(|index| gate_path(&parent, index))
+        .collect()
+}
+
+/// Name one stage's gate beneath the edge's parent identity.
+fn gate_path(parent: &Utf8Path, index: usize) -> Utf8PathBuf {
+    parent.join(format!("{index:03}"))
+}
+
 /// Derive the stable parent (gate-set) identity for a serial edge.
 ///
 /// The identity is a SHA-256 over the edge canonical output identity and an
@@ -136,8 +155,18 @@ fn sidecar_content(gate: &Utf8PathBuf, relay: &Utf8PathBuf) -> Result<String, Ni
 
 /// Content-address a sidecar by its complete bytes and a format tag.
 fn sidecar_digest(content: &str) -> String {
+    content_digest(DYNDEP_SCHEMA, content)
+}
+
+/// Content-address `content` under an explicit format tag.
+///
+/// The tag separates generations of the addressing scheme, so changing a
+/// generated file's shape names a fresh artefact instead of silently
+/// reinterpreting an old one. Shared with the phony and always lowering, which
+/// derives a hidden output name the same way.
+pub(crate) fn content_digest(schema: &str, content: &str) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(DYNDEP_SCHEMA.as_bytes());
+    hasher.update(schema.as_bytes());
     hasher.update(b"\0");
     hasher.update(content.as_bytes());
     hex::to_lower_hex(&hasher.finalize())

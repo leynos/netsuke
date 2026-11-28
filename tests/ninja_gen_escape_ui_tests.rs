@@ -1,20 +1,17 @@
 //! Compile-time regression tests for the Ninja escaping ownership boundary.
 
-use std::{
-    io,
-    path::{Path, PathBuf},
-    process::{Command, Output},
-};
+use std::{io, path::PathBuf};
 
-use test_support::bounded_process::{COMPILE_DEADLINE, output_within};
+use test_support::ui_fixture::{compile_fixture, stderr};
 
 /// Verify the consuming conversion rejects a second escape attempt at compile time.
 #[test]
 fn ninja_value_cannot_cross_the_escape_boundary_twice() -> io::Result<()> {
     let output_dir = tempfile::tempdir()?;
-    let output = compile_ui_fixture(
-        "tests/ui/ninja_gen_escape_double_escape_compile_fail.rs",
+    let output = compile_fixture(
+        &fixture("ninja_gen_escape_double_escape_compile_fail.rs"),
         &output_dir.path().join("ninja-gen-escape-ui"),
+        &[],
     )?;
 
     if output.status.success() {
@@ -31,31 +28,11 @@ fn ninja_value_cannot_cross_the_escape_boundary_twice() -> io::Result<()> {
     Ok(())
 }
 
-/// Compile one escaping-boundary fixture with the workspace Rust compiler.
-fn compile_ui_fixture(source: &str, output_path: &Path) -> io::Result<Output> {
-    // nested-cargo-allow: timed the spawn is bounded by `output_within`'s deadline
-    let mut compile = Command::new(rustc());
-    compile
-        .arg("--edition=2024")
-        .arg("--crate-type=bin")
-        .arg(manifest_dir().join(source))
-        .arg("-o")
-        .arg(output_path);
-    output_within(&mut compile, COMPILE_DEADLINE)
-}
-
-/// Locate the workspace root containing compile-time fixtures.
-fn manifest_dir() -> PathBuf {
+/// Return the absolute path of one checked-in UI fixture.
+fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
-
-/// Locate the Rust compiler selected for the workspace toolchain.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the direct-rustc test must use Cargo's selected compiler executable"
-)]
-fn rustc() -> PathBuf {
-    std::env::var_os("RUSTC").map_or_else(|| Path::new("rustc").to_path_buf(), PathBuf::from)
+        .join("tests/ui")
+        .join(name)
 }
 
 /// Recognize the compiler diagnostic proving the escape boundary is consuming.
@@ -63,9 +40,4 @@ fn is_escape_boundary_type_mismatch(stderr: &str) -> bool {
     ["E0308", "ShellText", "NinjaValue"]
         .into_iter()
         .all(|expected| stderr.contains(expected))
-}
-
-/// Decode compiler diagnostics for assertion messages.
-fn stderr(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stderr).into_owned()
 }

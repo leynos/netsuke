@@ -369,6 +369,8 @@ operator, user, and contributor references are easier to find.
 - [ADR-0083: Accept environment Boolean digits and case-insensitive policy
   values](adrs/adr-0083-accept-environment-boolean-digits-and-case-insensitive-policies.md):
   Accepted configuration value forms and the indexed-list rejection.
+- [ADR-0084: Declare phony and always work permanently dirty to Ninja](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md):
+  Hidden outputs and a shared force node for `phony` and `always` lowering.
 - [ADR-0085: Bound canonical admission resources](adrs/adr-0085-bound-canonical-admission-resources.md):
   Occurrence-based depth, node, and byte ceilings for canonical admission, so a
   shared host graph is refused rather than expanded without bound.

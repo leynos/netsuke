@@ -1,7 +1,7 @@
 //! Path resolution helpers for the runner module.
 //!
-//! Centralises manifest and output path logic so the main runner module stays
-//! focused on command dispatch.
+//! Centralises manifest, output, and working-directory logic so the main
+//! runner module stays focused on command dispatch.
 
 use crate::cli::Cli;
 use crate::localization::{self, keys};
@@ -58,6 +58,52 @@ pub(super) fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path
     } else {
         Cow::Borrowed(path)
     }
+}
+
+/// Return the working directory `-C/--directory` selects.
+///
+/// `-C/--directory` behaves like a working directory change for the child
+/// process, so every command that inspects or clears generated build state
+/// resolves paths against this directory rather than the caller's process
+/// working directory. An unset option keeps the process working directory.
+pub(super) fn selected_directory(cli: &Cli) -> Utf8PathBuf {
+    cli.directory
+        .clone()
+        .unwrap_or_else(|| Utf8PathBuf::from("."))
+}
+
+/// Open the working directory Ninja will run in, through a capability handle.
+///
+/// # Errors
+///
+/// Returns an error when the directory cannot be opened.
+pub(super) fn open_effective_dir(cli: &Cli) -> Result<Dir> {
+    open_directory(&selected_directory(cli)).map(|(_canonical, dir)| dir)
+}
+
+/// Canonicalize and open one working directory.
+///
+/// Every command that judges or writes generated state goes through this
+/// opener, so publication, the reservation refusal, and the reset all act on
+/// the same canonical directory rather than on their own reading of the
+/// selected path.
+///
+/// # Errors
+///
+/// Returns an error when the directory does not exist, cannot be read,
+/// resolves to a path that is not valid UTF-8, or cannot be opened.
+pub(super) fn open_directory(root: &Utf8Path) -> Result<(Utf8PathBuf, Dir)> {
+    let canonical = root
+        .canonicalize_utf8()
+        .with_context(|| open_context(root))?;
+    let dir = Dir::open_ambient_dir(&canonical, ambient_authority())
+        .with_context(|| open_context(root))?;
+    Ok((canonical, dir))
+}
+
+/// Build the context for a directory that cannot be resolved or opened.
+fn open_context(path: &Utf8Path) -> localization::LocalizedMessage {
+    localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR).with_arg("path", path.as_str())
 }
 
 /// Verify the selected manifest exists, reporting `PipelineStage::ManifestIngestion`

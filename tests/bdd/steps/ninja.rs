@@ -216,6 +216,22 @@ fn ninja_edge_has_console_pool_binding(world: &TestWorld, output: &str) -> Resul
     Ok(())
 }
 
+/// Verify a fragment appears on the statement a named edge actually uses.
+///
+/// An executable `phony` edge relays to a hidden statement, so a fragment
+/// matched against the whole file could belong to a neighbouring edge. This
+/// step resolves the alias first and scopes the assertion to one statement.
+#[then("the Ninja edge {output:string} has a statement containing {fragment:string}")]
+fn ninja_edge_statement_contains(world: &TestWorld, output: &str, fragment: &str) -> Result<()> {
+    let ninja = get_ninja_content(world)?;
+    let statement = test_support::ninja_edge::edge_build_line(&ninja, output)?;
+    ensure!(
+        statement.contains(fragment),
+        "the statement for Ninja edge {output} does not contain {fragment:?}: {statement}"
+    );
+    Ok(())
+}
+
 #[then("shlex splitting command {index:usize} yields {tokens:string}")]
 fn ninja_command_tokens(world: &TestWorld, index: usize, tokens: &str) -> Result<()> {
     let ninja = get_ninja_content(world)?;

@@ -1567,12 +1567,199 @@ edge-level `description`. Named-rule metadata remains on the rule, where its
 description continues to control progress.
 
 `src/ninja_gen/edge_metadata.rs` owns the shared action lookup, rule-name
-selection, `restat` value and escaped progress description for generated edges.
-Its only callers are `generate_into_with_shell` and
-`EdgeRenderer::render_edge`; each passes the graph edge and the localizer
-resolved once for generation, then forwards the returned metadata to
-`DisplayEdge`. Keep action identity, command text, named-rule metadata and
-Ninja text emission outside this helper.
+selection, `restat` value, escaped progress description, and the phony/always
+classification for generated edges. Its only callers are
+`generate_into_with_shell` and `EdgeRenderer::render_edge`; each passes the
+graph edge and the localizer resolved once for generation, then forwards the
+returned metadata to `DisplayEdge`. Keep action identity, command text,
+named-rule metadata and Ninja text emission outside this helper.
+
+`EdgeClass` and `classify` are the classification itself: `DependencyOnly`,
+`Executable`, and `ExecutablePhony`, chosen from the edge and whether its
+recipe is empty. `classify` gives the dependency-only answer precedence over the
+`phony` flag, so an aggregate that declares `phony: true` without a recipe
+stays a plain phony line rather than acquiring a hidden output.
+`is_executable_phony` is the same question exposed to its own module, and is
+what `output_dirs` and the dyndep staging consult; do not re-derive the
+classification at a call site.
+
+Identity derivation has one owner. `content_digest(schema, content)` in
+`src/ninja_gen/dyndep/staging.rs` is the crate-visible, schema-tagged SHA-256
+helper. Its callers are `force_run.rs` (tag `netsuke-phony-v1`),
+`output_dirs/mod.rs` (tag `netsuke-phony-dir-v1`, used for both the node and
+the rule name), and `sidecar_digest` in the same file (tag `DYNDEP_SCHEMA`). A
+new digest must use a new schema tag: the tag is what keeps two identities that
+happen to hash the same content apart, so reusing one silently couples two
+unrelated names. `serial_gate_paths(edge)` in the same module returns one gate
+path per implicit dependency, in index order; only `output_dirs` calls it, and
+only for a staged serial edge, so the preparation edge names the gates the
+recipe statement names instead of the raw list the dyndep sidecars reveal late.
+
+`.codescene/code-health-rules.json` carries two exemptions, for
+`test_support/src/ninja_edge.rs` and `tests/bdd/steps/ninja.rs`. Both waive the
+String Heavy Function Arguments rule, and each entry's
+`matching_content_path_doc` records the reason and the condition that would
+retire it. Read the exemption before adding a third: it exists because the
+subject is Ninja text a test inspects, not because the rule is inconvenient.
+
+### Phony and always lowering
+
+`src/ninja_gen/force_run.rs` owns the reserved force node, the hidden-output
+identity, the graph-level predicate that decides whether the force statement is
+needed, and the statement itself. Three shapes come out of the classification,
+and each is deliberate:
+
+- A **dependency-only** edge is unchanged: a rule-less `build all: phony | dep`
+  line, whatever the edge's own `phony` flag says.
+- An **executable phony** edge moves its recipe onto
+  `.netsuke/phony/edge-<digest>` and republishes its declared names as
+  `build <name>: phony <hidden>`. The alias carries the implicit outputs; the
+  hidden statement carries the recipe, its `description` and `pool`, and no
+  `restat`, because the hidden path is never written.
+- An **always, non-phony** edge keeps its declared output and gains
+  `.netsuke/phony/force` as a render-time implicit dependency, retaining the
+  edge-level `restat` so an unchanged output still prunes dependants.
+
+`write_force_statement` emits `build .netsuke/phony/force: phony` once, after
+the rules and before the first edge, and only when some rendered edge consumes
+it. Both emission paths call it, so the bundle and the string generator agree
+byte for byte; a test asserts that agreement, and another asserts that a graph
+using neither flag keeps its previous bytes. The hidden identity hashes the
+explicit then implicit outputs under the schema tag `netsuke-phony-v1`, with
+NUL-separated paths and a `U+0001` group separator; path validation already
+rejects those characters, so the encoding cannot be forged. Never add the force
+node or a hidden output to the default targets, and never reuse the namespace
+for a user-visible path. See
+[ADR-0084](adrs/adr-0084-declare-phony-and-always-work-permanently-dirty.md).
+
+A fixed case is the readable example of each shape;
+`tests/ninja_phony_lowering_property_tests.rs` carries the combinatorial claim.
+It generates graphs whose action names, output names, commands, `restat` flags,
+`phony` and `always` flags, input lists and edge counts all vary, then requires
+that every rotation and the reversal of the edge set render identically, that
+hidden identities stay distinct, that exactly the forced edges name the force
+node, and that `restat` is cleared on a hidden statement and retained on an
+`always` edge unless its rule already declares it. Extend the properties when a
+new flag feeds the classification; keep the fixed cases for the statement
+shapes a reader can check by eye.
+
+`tests/phony_always_runtime_tests.rs` drives those shapes through the `netsuke`
+CLI against a real Ninja, with `tests/phony_runtime/mod.rs` supplying the
+shared workspace, manifest fixtures, and child environment. Scenarios assert
+observable effects rather than generated text. The child gets a cleared
+environment with `PATH`, `NETSUKE_NINJA`, and an English locale pinned, so a
+host locale cannot change a diagnostic a scenario asserts on.
+
+Clearing the force node belongs to the command layer, not to generation.
+`src/runner/phony_state/reset.rs` opens the working directory, verifies that
+`.netsuke` and `.netsuke/phony` are real directories without following a link,
+and removes whatever occupies `force`, returning a `ResetOutcome` rather than
+logging; the caller reports a removal. `netsuke generate` leaves the path
+alone: writing the plan never removes the node, though the command does
+materialize dyndep sidecars. The reservation check in
+`src/ninja_gen/reserved_paths/mod.rs` is pure for the same reason: it folds the
+graph's own spelling and reads nothing from disk. It also folds ASCII case,
+because a case-insensitive volume treats `.NETSUKE/PHONY` as the reserved tree;
+refusing a case variant on a case-sensitive volume is the fail-closed side of
+that trade. Namespace constants live there alone, and `force_run.rs` and
+`dyndep/staging.rs` import them.
+
+A spelling that needs the working directory cannot be judged by generation, so
+the build command judges it before it publishes a dyndep sidecar, prunes an
+obsolete one, or writes anything else. The refusal covers all three reserved
+namespaces, because the rule is the one reservation, not a phony-only check.
+`GeneratedNinjaWithTargets` carries `BuildParts`, whose `declared_paths` field
+collects every path the graph named, and
+`phony_state::refuse_reserved_declarations` resolves each against the canonical
+working directory: the longest existing ancestor is canonicalized and the
+components that do not exist yet are folded onto it. The selected `--file`
+manifest is checked with them, because it is a path the build owns even though
+the manifest does not declare it. That catches an absolute path, a `..` path
+that leaves the workspace and returns, and a symbolic-link alias, each of which
+names a declared output that a reset or a generated node would otherwise
+occupy. A dangling link is resolved to the path a write through it would
+create, with link traversal bounded; a chain past the bound fails closed. The
+check runs unconditionally, before the force-node reset and before Ninja reads
+the build file, because a first build must refuse as firmly as a later one; a
+check that ran only once `.netsuke` existed would accept a reserved spelling on
+a clean workspace and fail every build after it. Its success value,
+`ReservedStateChecked`, is the only proof `reset_force_node` accepts, so the
+destructive half cannot be called without the refusal; the proof records the
+workspace it judged and the paths it checked, and the reset re-verifies that
+workspace and re-checks those paths, so a proof from another workspace cannot
+authorize a removal. `tests/reserved_state_proof_ui_tests.rs` pins both halves
+by compiling fixtures: the proof's fields are private, and the reset takes two
+arguments.
+
+`src/runner/phony_state/` splits the work by question. `workspace.rs` resolves
+the working directory once, into a canonical `Utf8Path` and a `Dir` handle, and
+`execute_build` passes that one value to the refusal and the reset so no second
+lookup can answer differently. `policy.rs` owns the refusal, its proof, and the
+verification the reset runs. `resolve.rs::resolves_into_reserved_state` answers
+whether one spelling reaches reserved state. It judges the spelling as written
+first: the filesystem reading follows a link before applying `..`, the folded
+reading answers for components that do not exist yet, and every existing
+ancestor is checked so a path that passes through the namespace and leaves it
+again is still refused. It then cancels `.` and `..` lexically, the way Ninja
+does, because Ninja removes a `..` against a component that need not exist, and
+judges that spelling the same way. It reports every canonicalization failure
+other than an absent component rather than folding the failure into "not
+reserved": a permission or symbolic-link error must stop the build, because a
+guard that failed open would delete the output it exists to protect. Resolution
+only reads; the removal always goes through the verified namespace handles. A
+refused build reports the same reservation diagnostic generation uses, because
+it is the same rule. Publication, pruning, and the reset are sequenced by
+`refuse_publish_prune_and_reset` in `src/runner/generated_state.rs`, which
+`execute_build` in `src/runner/mod.rs` calls once, so the order is a named
+function rather than a set of comments; the publication lease it returns stays
+alive until Ninja exits.
+
+Preparing the declared outputs' directories is generated work, not
+command-layer work. Ninja creates the parent directories of the outputs on an
+edge it is about to run, and the hidden statement names only
+`.netsuke/phony/edge-*`, so a phony recipe writing `build/report` would find no
+`build/` on a clean workspace. `src/ninja_gen/output_dirs/mod.rs` therefore
+emits one preparation edge per distinct declared-output parent, and the recipe
+statement lists those nodes after `||` as order-only dependencies. Order-only
+is deliberate: the directory must exist before the recipe runs without the
+directory's absence making the recipe permanently dirty on its own. Three
+properties of the emission matter when changing it. The preparation edge takes
+the recipe's own `inputs`, `implicit_deps` and `order_only_deps` as its normal
+inputs, because Ninja does not order an order-only dependency after the edge's
+other prerequisites; a prerequisite that creates the same directory with a
+non-idempotent `mkdir` therefore still runs first. In the `implicit_deps` role,
+a staged serial edge contributes the same gates the recipe statement names
+rather than the raw dependency list: the raw list is revealed late through the
+dyndep sidecars, so naming it here would expose it immediately and let a later
+stage start while an earlier one still runs.
+`tests/phony_always_runtime_tests/serial_output.rs` proves the ordering with a
+real Ninja. The node's identity is content-addressed over the edge's hidden
+output and the directory, so two recipes sharing a directory share one rule but
+keep distinct nodes. The node is never created, which Ninja reads as
+permanently out of date, so the idempotent command reruns on every build that
+reaches it and a directory deleted since the last build returns; Ninja neither
+warns about the missing output nor cleans it. An edge that is not executable
+`phony`, and an output whose parent is the working directory itself, emit
+nothing, so graphs without a nested phony output keep their previous bytes.
+`ninja_gen::edge_metadata::is_executable_phony` answers the classification
+question, because that module owns which edges are lowered. The generated
+`mkdir` runs in the same shell and interpreter transport as a manifest recipe,
+so quoting and PowerShell encoding have one owner rather than a second, weaker
+encoder in the runner.
+
+A `depfile` on an executable phony edge is a rule binding, so the hidden
+statement inherits it. Without `deps`, Ninja accepts a depfile only when its
+first target equals the edge's first output, now the hidden path; no recipe can
+name that path, because `{{ outs }}` is lowered from the declared names and
+`$out` is a literal shell variable, so that form orders nothing. With `deps`,
+Ninja records the depfile's inputs in its dependency log against the hidden
+output and orders them on later builds. `tests/ninja_phony_depfile_tests.rs`
+pins both outcomes with a real Ninja: a pre-written depfile naming the hidden
+output orders the discovered producer at scan time, a recipe-written depfile
+with `deps` orders it on the next build, and the same recipe without `deps`
+never orders it. The manifest loader never sets `Action.depfile` or
+`Action.deps_format` in beta4, so only programmatic IR construction reaches the
+binding.
 
 ## Adding a lint rule
 
@@ -8493,7 +8680,9 @@ checks that `Cargo.toml` still declares `[package.metadata.kani.flags]`,
 `unexpected_cfgs`, and `check-cfg = ["cfg(kani)"]`, and that the Makefile still
 provides the `kani-ir` alias.
 
-The same test module invokes `rustc` directly for two small UI snippets:
+The same test module compiles its fixtures through
+`test_support::ui_fixture::compile_fixture` with the shared Kani check-cfg
+arguments, rather than invoking `rustc` itself:
 
 - `tests/ui/cfg_kani_compile_pass.rs` must compile with
   `--check-cfg=cfg(kani) -Dunexpected-cfgs`.
@@ -9612,11 +9801,12 @@ be built first. The decision and whole-manifest scope are recorded in
 with more than one dependency. It produces a `GeneratedNinja` bundle: the main
 build-file text plus immutable, content-addressed `GeneratedDyndep` sidecars.
 The generated phony gates live under `.netsuke/serial`; sidecars live under
-`.netsuke/dyndep`. Those are reserved graph namespaces, validated before
-generation. User graph paths in outputs, inputs, implicit dependencies, and
-order-only dependencies cannot use either namespace. A string-only generator
-must return `DyndepFilesRequired` for a graph that needs sidecars rather than
-returning an incomplete build file.
+`.netsuke/dyndep`; the hidden outputs and force node of `phony` and `always`
+lowering live under `.netsuke/phony`. Those are reserved graph namespaces,
+validated before generation. User graph paths in outputs, inputs, implicit
+dependencies, and order-only dependencies cannot use any of them. A string-only
+generator must return `DyndepFilesRequired` for a graph that needs sidecars
+rather than returning an incomplete build file.
 
 Generated bundles need Ninja 1.10 or newer only when a serial direct-dependency
 list has at least two items and therefore needs staged ordering; parallel lists
@@ -9649,8 +9839,15 @@ pins the crashing shape end to end. See
 return it, but it must not publish any filesystem state.
 `src/runner/dyndep/publication.rs` owns the `materialize_dyndep_bundle`
 command, which every `build`, `clean`, and `generate` boundary must call before
-writing or invoking the main file. That command opens the effective
-working-directory capability and injects it into
+writing or invoking the main file. It takes the caller's resolved `Workspace`,
+so publication writes into the directory that caller resolved. On `build` that
+directory is the one the reservation refusal judged, because
+`refuse_publish_prune_and_reset` refuses before it publishes. `generate` also
+resolves a workspace, but it does not run the refusal, so its publication
+carries no reservation guarantee. The Ninja tool path holds no workspace: it
+opens one directory for the invocation and uses `materialize_dyndep_bundle_in`
+and `prune_dyndep_bundle_in` with that handle, so it likewise publishes without
+a reservation guarantee. Either form injects the directory handle into
 `src/runner/process/dyndep/files/mod.rs`, which owns atomic sidecar writes and
 content verification. The materializer may only use that injected `Dir`; it
 must not inspect CLI state or reopen ambient authority. It verifies existing
@@ -10937,6 +11134,18 @@ claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
 
+### `test_support::ninja`
+
+`test_support::ninja::resolve_ninja_program` (`test_support/src/ninja.rs`)
+returns the absolute path of the first executable `ninja` on the ambient
+`PATH`, or `None` when none is found. It is the test-side resolver, distinct
+from the production `src/runner/process/ninja/program.rs` seam. Tests use it so
+that the probe which decides whether a Ninja-backed test can run and the child
+process that test launches select the same executable: both walk `PATH` with
+one executability rule and resolve relative entries against the current
+directory. Invoke it only from tests and test-support code; production code
+must resolve Ninja through its own injected seam.
+
 ### `test_support::ninja_script`
 
 `test_support::ninja_script::write_fake_ninja_script` writes a small fake Ninja
@@ -11053,9 +11262,73 @@ for an ordinary edge. The property test in
 and synthetic-gate assertions. Keep this helper within test-support and test
 code; it does not parse general Ninja syntax.
 
+`test_support::ninja_edge::edge_build_line` returns the generated `build`
+statement that carries an output's dependencies after following one `phony`
+alias hop. An executable `phony` edge renders as an alias over a hidden output,
+so a test written against the manifest name must assert on the hidden
+statement; this helper performs that lookup once so callers do not each
+re-implement it. It returns borrowed text from the generated file, so a failure
+message can quote the exact statement. Permitted call sites are test-support
+and test code only, and it does not parse general Ninja syntax.
+
 The local `edge_factory` fixture in `src/ninja_gen/tests/console.rs` constructs
 parallel, single-output edges for console generator tests. Keep it within that
 module; other graph shapes use their own fixtures.
+
+### `test_support::ui_fixture`
+
+`test_support::ui_fixture::compile_fixture` (`test_support/src/ui_fixture.rs`)
+compiles one checked-in `tests/ui` fixture with the workspace compiler, and
+`test_support::ui_fixture::stderr` decodes its diagnostics for an assertion
+message. The Rust compiler is the `RUSTC` value read through the injected
+`mockable::Env` seam, defaulting to `rustc` on `PATH`, so the helper follows
+the repository's environment policy rather than reading the process
+environment. Each compilation is bounded by `COMPILE_DEADLINE` from
+`test_support::bounded_process`.
+
+A suite supplies only its fixture, the output path, and any extra compiler
+arguments; it does not construct a `Command`, choose a deadline, or decode
+stderr itself. `tests/kani_cfg_ui_tests.rs`,
+`tests/ninja_gen_escape_ui_tests.rs`, and
+`tests/reserved_state_proof_ui_tests.rs` are the current callers. Fixtures are
+compiled as standalone binaries with no dependencies on this workspace, so a
+compile-time contract can be checked without building the crate it describes.
+
+Because a fixture is standalone, it pins the diagnostic shape it declares, not
+the production API it describes: a fixture that mirrors a crate-private type
+still compiles after that type changes. Production API contracts need an
+in-crate assertion. `tests/reserved_state_proof_ui_tests.rs` covers the
+diagnostic shape of the reservation proof, and the real signature is pinned by
+`the_reset_signature_requires_the_proof` in
+`src/runner/phony_state/tests/mod.rs`, which is the check to extend when the
+reset's inputs change.
+
+### `runner::path_helpers`
+
+`src/runner/path_helpers.rs` owns how a command turns the selected working
+directory into a path or a handle. `selected_directory` is the single reading of
+`-C`/`--directory`: it returns the configured directory or `.`, and no other
+module re-derives it.
+
+`open_directory` canonicalizes one directory and opens it through a capability
+handle, returning both. `Workspace::open` in `src/runner/phony_state/` wraps
+it, and `open_effective_dir` is this function applied to the selected directory.
+
+A build resolves one `Workspace` and hands it to every step that touches
+generated state: the reservation refusal, dyndep publication and pruning, and
+the force-node reset all use that value's handle, so a `-C` symlink retargeted
+mid-command cannot move one step to a directory another never judged. The Ninja
+tool path has no workspace in scope, so it opens one directory for the
+invocation and publishes and prunes through that handle. Ninja itself is
+launched with the canonical path resolved at startup, because the process API
+takes a path rather than a capability handle; the handle therefore bounds
+Netsuke's own generated-state work, not the directory Ninja later opens.
+
+`open_effective_dir` is therefore for callers that need their own handle to the
+effective working directory; prefer passing a resolved `Workspace` where one
+already exists. Keep manifest resolution (`resolve_manifest_path`), output-path
+resolution (`resolve_output_path`), and the manifest-existence check in this
+module too, so the runner's path arithmetic has one home.
 
 ### Temporary Ninja build files
 

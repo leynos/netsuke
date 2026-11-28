@@ -1,0 +1,6 @@
+netsuke_version: '1.0.0'
+actions:
+  - name: check
+    command: echo run >> runs.log
+targets: []
+defaults: [check]

@@ -68,6 +68,7 @@ pub use exit_status::exit_status;
 mod error;
 /// Thread-local tracing capture for integration-test observability assertions.
 pub mod tracing_capture;
+pub mod ui_fixture;
 use anyhow::{Context, Result};
 /// Format an error and its sources (outermost → root) using `Display`, joined
 /// with ": ", to produce deterministic text for test assertions.

@@ -3,6 +3,8 @@
 runner.io.dyndep.retention = Không thể áp dụng việc giữ lại tệp dyndep đã tạo tại { $path }.
 runner.io.dyndep.alias = Đường dẫn dyndep được tạo { $path } là liên kết tượng trưng, điểm nối hoặc không phải thư mục; hãy thay thế bằng thư mục thật.
 runner.io.dyndep.open = Không thể mở thư mục dyndep được tạo { $path }.
+runner.io.phony.inspect = Không thể kiểm tra trạng thái phony được dành riêng tại { $path }.
+runner.io.phony.reset = Không thể xóa trạng thái phony được dành riêng tại { $path }.
 cli.about = Netsuke biên dịch tệp kê khai YAML + Jinja thành kế hoạch dựng Ninja.
 cli.long_about = Netsuke chuyển tệp kê khai YAML + Jinja thành đồ thị Ninja có thể tái lập rồi chạy Ninja với các giá trị mặc định an toàn.
 cli.usage = { $usage }
